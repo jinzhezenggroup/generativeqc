@@ -1368,6 +1368,68 @@ void public_wb97mv_cuda_case(bool unrestricted) {
           "public CUDA WB97M-V force capability was promoted without qualification");
 }
 
+generativeqc_precision_work_detail query_public_precision_work(
+    const generativeqc_calculation* calculation) {
+  generativeqc_precision_work_detail summary{};
+  summary.struct_size = sizeof(summary);
+  summary.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_get_precision_work(
+              calculation, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, nullptr, 0,
+              nullptr, 0) == GENERATIVEQC_STATUS_SUCCESS,
+          "public calculation precision-work size query failed");
+  std::vector<generativeqc_precision_work_event> events(summary.event_count);
+  for (auto& event : events) {
+    event.struct_size = sizeof(event);
+    event.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  std::vector<generativeqc_precision_operator_record> operators(summary.operator_count);
+  for (auto& item : operators) {
+    item.struct_size = sizeof(item);
+    item.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  require(generativeqc_calculation_get_precision_work(
+              calculation, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, events.data(),
+              events.size(), operators.data(), operators.size()) == GENERATIVEQC_STATUS_SUCCESS,
+          "public calculation precision-work copy failed");
+  require(summary.complete && summary.operator_inventory_complete && summary.owner_id != 0 &&
+              summary.returned_solve_epoch != 0 && summary.returned_state_generation != 0 &&
+              !events.empty() && events.back().kind == GENERATIVEQC_PRECISION_EVENT_FINAL_AUDIT &&
+              !operators.empty(),
+          "public calculation precision-work query lost complete execution evidence");
+  return summary;
+}
+
+generativeqc_precision_work_detail query_public_precision_work(const generativeqc_batch* batch,
+                                                               std::uint32_t index) {
+  generativeqc_precision_work_detail summary{};
+  summary.struct_size = sizeof(summary);
+  summary.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_batch_get_precision_work(
+              batch, index, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, nullptr, 0,
+              nullptr, 0) == GENERATIVEQC_STATUS_SUCCESS,
+          "public batch precision-work size query failed");
+  std::vector<generativeqc_precision_work_event> events(summary.event_count);
+  for (auto& event : events) {
+    event.struct_size = sizeof(event);
+    event.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  std::vector<generativeqc_precision_operator_record> operators(summary.operator_count);
+  for (auto& item : operators) {
+    item.struct_size = sizeof(item);
+    item.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  require(generativeqc_batch_get_precision_work(
+              batch, index, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, events.data(),
+              events.size(), operators.data(), operators.size()) == GENERATIVEQC_STATUS_SUCCESS,
+          "public batch precision-work copy failed");
+  require(summary.complete && summary.operator_inventory_complete && summary.owner_id != 0 &&
+              summary.returned_solve_epoch != 0 && summary.returned_state_generation != 0 &&
+              !events.empty() && events.back().kind == GENERATIVEQC_PRECISION_EVENT_FINAL_AUDIT &&
+              !operators.empty(),
+          "public batch precision-work query lost complete execution evidence");
+  return summary;
+}
+
 void rejected_api_requests_revoke_tokens() {
   generativeqc_context_descriptor context_spec{sizeof(generativeqc_context_descriptor),
                                                GENERATIVEQC_ABI_VERSION, 0,
@@ -1390,6 +1452,9 @@ void rejected_api_requests_revoke_tokens() {
                                         nullptr,
                                         1e-10,
                                         0};
+  method.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  method.energy_tolerance = 1e-10;
+  method.density_tolerance = 1e-8;
   generativeqc_calculation* raw_calculation{};
   require(generativeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
               GENERATIVEQC_STATUS_SUCCESS,
@@ -1408,6 +1473,11 @@ void rejected_api_requests_revoke_tokens() {
                 methods::detail::dft_final_state_token(*calculation->plan, token, detail) ==
                     GENERATIVEQC_STATUS_SUCCESS,
             "KS calculation failed to publish current token");
+    if (rejected == 0) {
+      const auto work = query_public_precision_work(calculation.get());
+      require(work.complete && work.operator_inventory_complete,
+              "public calculation precision-work query returned partial evidence");
+    }
     if (rejected == 1) ++output.abi_version;
     if (rejected == 2) output.force_count = 1;
     require(
@@ -1436,6 +1506,12 @@ void rejected_api_requests_revoke_tokens() {
     require(generativeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) ==
                 GENERATIVEQC_STATUS_SUCCESS,
             "KS token batch execution failed");
+    if (rejected == 0) {
+      const auto first = query_public_precision_work(batch.get(), 0);
+      const auto second = query_public_precision_work(batch.get(), 1);
+      require(first.complete && second.complete && first.owner_id != second.owner_id,
+              "public batch precision-work query lost original-item ownership");
+    }
     dft::CudaKsFinalStateToken tokens[2];
     for (std::size_t i = 0; i < 2; ++i)
       require(methods::detail::dft_final_state_token(*batch->plan, i, tokens[i], detail) ==
