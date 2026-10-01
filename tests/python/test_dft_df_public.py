@@ -213,11 +213,21 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
         else:
             with pytest.raises(NotImplementedError):
                 NativeKsSnapshot(batch, 0)
+        transport_before_warm = (
+            tuple(batch.ks_transport_diagnostics) if device == "cuda" else None
+        )
         warm = batch.execute(strict=True, properties=("energy",))
         if device == "cuda":
-            # Ordinary SCF and same-geometry replay retain device matrices.
+            # NativeKsSnapshot is an explicit final-state export and its matrices
+            # remain charged to the cumulative legacy matrix_d2h_bytes counter.
+            # The warm SCF replay itself must add no further matrix D2H.
+            transport_after_warm = tuple(batch.ks_transport_diagnostics)
+            assert transport_before_warm is not None
             assert all(
-                item.matrix_d2h_bytes == 0 for item in batch.ks_transport_diagnostics
+                after.matrix_d2h_bytes == before.matrix_d2h_bytes
+                for before, after in zip(
+                    transport_before_warm, transport_after_warm, strict=True
+                )
             )
         updated = batch.execute(
             coordinates=[None, [xyz for _, xyz in moved]],
