@@ -106,10 +106,10 @@ constexpr std::uint64_t kStreamingFockShellClassMask = kCanonicalSpdShellClassMa
 constexpr std::uint64_t kGeneratedStreamingFockShellClassMask =
     kStreamingFockShellClassMask & ~kDdddShellClassMask;
 constexpr std::uint64_t kNativeStreamingFockShellClassMask = kDdddShellClassMask;
-// Fixed-topology ssss retains its handwritten Fock consumer, while generated
-// psss now owns both fixed and bounded production Fock. The generated dddd
-// consumer is rejected above. Exclude only the retained exact routes so the
-// selected generated classes remain single-counted and correct.
+// Fixed-topology ssss retains its native task consumer over compiler-owned ERI
+// and Fock-scatter mathematics, while generated psss owns both fixed and bounded
+// production Fock. The generated dddd standalone consumer is rejected above.
+// Exclude only the retained schedule routes so selected classes stay single-counted.
 constexpr std::uint64_t kFixedTopologyGeneratedFockExclusionMask =
     (std::uint64_t{1} << 0U) | kDdddShellClassMask;
 // The generated resident ppps consumer stages one pp primitive-pair list in
