@@ -866,6 +866,16 @@ class Calculator:
                 or (self._device_name == "cpu" and qualified_basis(self._basis))
             )
         )
+        cuda_df_semilocal_force = (
+            self._device_name == "cuda"
+            and density_fitting_mode != _native.DENSITY_FITTING_NONE
+            and self._precision_mode == _native.PRECISION_FP64
+            and semilocal_force
+            and self._ks_options is not None
+            and not self._ks_options.execution_plan.exchange
+            and self._ks_options.execution_plan.nonlocal_correlation is None
+            and not self._ks_options.execution_plan.post_scf
+        )
         from .ks import cuda_global_hybrid_force_eligible
 
         cuda_hybrid_force = (
@@ -894,12 +904,17 @@ class Calculator:
         )
         if (
             self._capabilities.family == "density_functional"
-            and density_fitting_mode == _native.DENSITY_FITTING_NONE
             and (
-                semilocal_force
-                or named_cpu_all_electron_force
-                or cuda_hybrid_force
-                or cuda_wb97mv_force
+                (
+                    density_fitting_mode == _native.DENSITY_FITTING_NONE
+                    and (
+                        semilocal_force
+                        or named_cpu_all_electron_force
+                        or cuda_hybrid_force
+                        or cuda_wb97mv_force
+                    )
+                )
+                or cuda_df_semilocal_force
             )
             and not (
                 self._device_name == "cuda"
@@ -975,8 +990,9 @@ class Calculator:
                     "DFT automatic precision currently requires CUDA"
                 )
             if density_fitting_mode != _native.DENSITY_FITTING_NONE:
-                # DF changes the Hamiltonian. Keep its backend explicit and do
-                # not advertise the conventional stationary force consumer.
+                # DF changes the Hamiltonian. Keep its backend explicit; only the
+                # structurally qualified CUDA semilocal DF-J force owner above is
+                # advertised, never the conventional Direct derivative contract.
                 if self._precision_mode != _native.PRECISION_FP64:
                     raise NotImplementedError(
                         "DFT density fitting requires precision='fp64'"
