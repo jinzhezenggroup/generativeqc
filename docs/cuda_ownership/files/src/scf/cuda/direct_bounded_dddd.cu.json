@@ -1,7 +1,7 @@
 {
   "path": "src/scf/cuda/direct_bounded_dddd.cu",
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "direct_integrals",
-  "reason": "Separately compiled native direct consumer with unchanged equations, fused bounded work, launch bounds and instantiation set. Conservatively retains the original scientific classification.",
+  "reason": "Bounded dddd page/schedule owner. Fock integral evaluation and scatter are compiler-owned through generated Direct source contraction/Fock accumulation; force roots and derivative primitives are compiler-owned through the shared generated Direct-force path. This file retains pair-class enumeration, page traversal, profiling and launch control.",
   "regions": []
 }
