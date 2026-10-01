@@ -131,8 +131,8 @@ physical-residual, electron-count and maximum-iteration gates before admitting
 the next iteration.
 
 Near a convergence gate the selected path submits one iteration to bound
-speculation. Direct J/XC do not yet have an active-mask seam, so an unexpected
-terminal state in the first slot may enqueue at most one unused J/XC
+speculation. Direct J/K/XC do not yet have an active-mask seam, so an unexpected
+terminal state in the first slot may enqueue at most one unused J/K/XC
 evaluation; downstream Fock, DIIS, eigensolver, density, warm-state and history
 updates for that slot are masked. Ragged batch items retain independent state
 and streams.
