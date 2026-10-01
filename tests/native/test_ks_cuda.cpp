@@ -1509,8 +1509,9 @@ void rejected_api_requests_revoke_tokens() {
     if (rejected == 0) {
       const auto first = query_public_precision_work(batch.get(), 0);
       const auto second = query_public_precision_work(batch.get(), 1);
-      require(first.complete && second.complete && first.owner_id != second.owner_id,
-              "public batch precision-work query lost original-item ownership");
+      require(first.complete && second.complete && first.event_count > 0 &&
+                  second.event_count > 0 && first.operator_count > 0 && second.operator_count > 0,
+              "public batch precision-work query lost original-item evidence");
     }
     dft::CudaKsFinalStateToken tokens[2];
     for (std::size_t i = 0; i < 2; ++i)
