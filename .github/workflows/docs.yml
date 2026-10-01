@@ -32,8 +32,10 @@ jobs:
           enable-cache: true
           cache-dependency-glob: docs/requirements.txt
       - name: Install documentation dependencies
-        run: uv pip install --system -r docs/requirements.txt
+        run: |
+          uv venv --python 3.11
+          uv pip install --python .venv/bin/python -r docs/requirements.txt
       - name: Build documentation with warnings as errors
         env:
           PYTHONPATH: python
-        run: python -m sphinx -W --keep-going -b html docs docs/_build/html
+        run: .venv/bin/python -m sphinx -W --keep-going -b html docs docs/_build/html
