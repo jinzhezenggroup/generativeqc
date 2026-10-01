@@ -551,12 +551,13 @@ def optimize(
         disabled=disabled_passes,
         stop_after=stop_after,
     )
+    diagnostic_bisection = bool(run.disabled or run.stopped_after is not None)
     baseline = run.value
     pruning = _pruning_diagnostics(
         program,
         requested,
         baseline,
-        require_minimal=not (run.disabled or run.stopped_after is not None),
+        require_minimal=not diagnostic_bisection,
     )
     result = reassociate_einsums(baseline) if reassociate_contractions else baseline
     complexity_diagnostics = None
@@ -607,7 +608,7 @@ def optimize(
                 for record in run.records
             ],
         },
-        definitions=result.definitions,
+        definitions=result.definitions if diagnostic_bisection else (),
     )
 
 
@@ -653,10 +654,12 @@ def prepare_for_backend(
         stop_after=stop_after,
     )
     diagnostics = prepared.provenance["optimizer_diagnostics"]
+    diagnostic_bisection = bool(
+        diagnostics["disabled_passes"] or diagnostics["stopped_after"] is not None
+    )
     unchanged = (
         requested_outputs is None
-        and not diagnostics["disabled_passes"]
-        and diagnostics["stopped_after"] is None
+        and not diagnostic_bisection
         and tuple(prepared.outputs) == tuple(program.outputs)
         and prepared.logical_hash == program.logical_hash
         and len(prepared.nodes) == len(program.nodes)
@@ -680,5 +683,5 @@ def prepare_for_backend(
                 ],
             },
         },
-        definitions=prepared.definitions,
+        definitions=prepared.definitions if diagnostic_bisection else (),
     )
