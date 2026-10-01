@@ -44,6 +44,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: default-promotion-inventory
+        name: Check performance default-promotion inventory
+        entry: python3 tools/check_default_promotion_inventory.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: scf-structure
         name: Check shared SCF dependency directions
         entry: python3 tools/check_scf_structure.py
