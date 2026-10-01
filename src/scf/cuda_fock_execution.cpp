@@ -79,11 +79,16 @@ PreparedCudaOccupiedProjectionBinding prepared_cuda_occupied_projection_binding(
       rank > static_cast<std::size_t>(std::numeric_limits<int>::max()) / source->naux)
     return {};
   const bool packed = df_packed_pairs(source->value_storage.pairs);
-  const bool complete_projection = packed ? rank <= source->value_storage.rank_capacity
-                                          : source->auxiliary_tile == source->naux;
+  const bool complete_projection =
+      packed ? rank <= source->value_storage.rank_capacity : source->auxiliary_tile == source->naux;
   if (!complete_projection) return {};
-  return {execution.device_id, execution.stream, execution.source_identity,
-          source->auxiliary_tile_values, source->nbf, source->naux, rank};
+  return {execution.device_id,
+          execution.stream,
+          execution.source_identity,
+          source->auxiliary_tile_values,
+          source->nbf,
+          source->naux,
+          rank};
 }
 
 PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(

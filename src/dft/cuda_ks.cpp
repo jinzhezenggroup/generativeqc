@@ -250,8 +250,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const auto projection =
         scf::prepared_cuda_occupied_projection_binding(provider, occupations[0]);
     if (!projection || projection.device_id != device || projection.stream != stream ||
-        projection.source_identity != occupied_fock_binding.source_identity ||
-        projection.nbf != n)
+        projection.source_identity != occupied_fock_binding.source_identity || projection.nbf != n)
       return;
     // warm_orbitals is the orthonormal-basis C that generated the exact current
     // density consumed by the final K. Preserve its AO representation in the
@@ -1764,7 +1763,8 @@ generativeqc_status CudaKsPlan::resident_final_fitted_projection(
     }
     const auto projection =
         scf::prepared_cuda_occupied_projection_binding(impl_->provider, impl_->occupations[0]);
-    if (!projection || projection.device_id != impl_->device || projection.stream != impl_->stream ||
+    if (!projection || projection.device_id != impl_->device ||
+        projection.stream != impl_->stream ||
         projection.source_identity != impl_->occupied_fock_binding.source_identity ||
         projection.nbf != impl_->n || !impl_->proposal) {
       detail = "CUDA KS fitted occupied projection lease was revoked";
