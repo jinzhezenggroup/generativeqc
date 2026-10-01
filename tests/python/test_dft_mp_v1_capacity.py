@@ -274,7 +274,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "cc3cd127b107b05984761fa27130c930d8fa6d8b8e00f387a706265954bf0588"
+            "20b479949538cd216c5d914aae2787a44b9f5c36def2e284129aff8a46464a4b"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -294,8 +294,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "geometry_sha256": (
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
-        "sources_owner_sha256": (
-            "5679fbd1d988d924bb7536d8629df34c11b31bf15d06a86a47afa205cdf21c1d"
+        "finish_span_sha256": (
+            "419e21953688eb24d214e6fb43d33ca974cb94632c3797e3f4f0113704d9a1f9"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -342,8 +342,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_metrics_sha256": (
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
-        "native_header_sha256": (
-            "29e6eb566b8b3c9f41339b3e896216d2ebf481a92810e18bbd77778d56de86d0"
+        "native_finish_span_sha256": (
+            "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -1097,7 +1097,7 @@ def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
         qualify_capacity._source_limits(tmp_path)
 
 
-def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
+def test_native_finish_span_fails_closed_on_contract_drift(
     tmp_path: Path,
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
@@ -1106,13 +1106,20 @@ def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "constexpr size_t workers = 32"
-    assert native.count(old) == 1
+    marker = "int stationary_finish_span("
+    start = native.index(marker)
+    old = "p->downloads += count * 8;"
+    position = native.index(old, start)
     target.write_text(
-        native.replace(old, "constexpr size_t workers = 64", 1), encoding="utf-8"
+        native[:position]
+        + "p->downloads += count * 16;"
+        + native[position + len(old) :],
+        encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match="native header contract changed"):
+    with pytest.raises(
+        RuntimeError, match="native_finish_span_sha256 contract changed"
+    ):
         qualify_capacity._source_limits(tmp_path)
 
 

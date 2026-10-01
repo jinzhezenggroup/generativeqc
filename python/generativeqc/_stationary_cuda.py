@@ -633,6 +633,14 @@ class _CudaSources:
         lib.stationary_geometry_external_device_molecular_resident_weights_enqueue.argtypes = resident_molecular_resident_weight_args
         lib.stationary_geometry_drain.argtypes = [ct.c_void_p, *tail]
         lib.stationary_finish.argtypes = [ct.c_void_p, _DOUBLE, ct.c_size_t, *tail]
+        lib.stationary_finish_span.argtypes = [
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_size_t,
+            _DOUBLE,
+            ct.c_size_t,
+            *tail,
+        ]
         lib.stationary_finish_reduced.argtypes = [
             ct.c_void_p,
             _DOUBLE,
@@ -1392,6 +1400,36 @@ class _CudaSources:
         out = np.empty((len(self.source_names), self.natom, 3))
         self._call("stationary_finish", self.handle, _ptr(out), out.size)
         return {name: out[i] for i, name in enumerate(self.source_names)}
+
+    def finish_span(self, names: typing.Iterable[str]) -> typing.Any:
+        """Publish one contiguous source interval without downloading unused sources."""
+        self.flush()
+        names = tuple(names)
+        if not names:
+            raise ValueError("stationary source span must not be empty")
+        if len(names) != len(set(names)):
+            raise ValueError("stationary source span contains duplicate names")
+        try:
+            indices = tuple(self.source_names.index(name) for name in names)
+        except ValueError as error:
+            raise ValueError(
+                "stationary source span contains an unknown source"
+            ) from error
+        start = indices[0]
+        if indices != tuple(range(start, start + len(names))):
+            raise ValueError(
+                "stationary source span must be contiguous and in runtime order"
+            )
+        out = np.empty((len(names), self.natom, 3))
+        self._call(
+            "stationary_finish_span",
+            self.handle,
+            start,
+            len(names),
+            _ptr(out),
+            out.size,
+        )
+        return dict(zip(names, out, strict=True))
 
     def reduced(self) -> typing.Any:
         """Return the complete plan-ordered all-electron sum reduced on CUDA."""

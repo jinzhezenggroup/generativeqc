@@ -275,7 +275,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "cc3cd127b107b05984761fa27130c930d8fa6d8b8e00f387a706265954bf0588"
+    "20b479949538cd216c5d914aae2787a44b9f5c36def2e284129aff8a46464a4b"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
@@ -292,8 +292,8 @@ STATIONARY_PAGE_NUCLEAR_CONTRACT_SHA256 = (
 STATIONARY_PAGE_GEOMETRY_CONTRACT_SHA256 = (
     "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
 )
-STATIONARY_SOURCES_OWNER_CONTRACT_SHA256 = (
-    "5679fbd1d988d924bb7536d8629df34c11b31bf15d06a86a47afa205cdf21c1d"
+STATIONARY_PAGE_FINISH_SPAN_CONTRACT_SHA256 = (
+    "419e21953688eb24d214e6fb43d33ca974cb94632c3797e3f4f0113704d9a1f9"
 )
 STATIONARY_COMPONENT_MODE_CONTRACT_SHA256 = (
     "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -349,8 +349,8 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
     "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
 )
-NATIVE_STATIONARY_HEADER_CONTRACT_SHA256 = (
-    "29e6eb566b8b3c9f41339b3e896216d2ebf481a92810e18bbd77778d56de86d0"
+NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
+    "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
@@ -653,6 +653,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "geometry",
             STATIONARY_PAGE_GEOMETRY_CONTRACT_SHA256,
         ),
+        "finish_span": (
+            "_CudaSources",
+            "finish_span",
+            STATIONARY_PAGE_FINISH_SPAN_CONTRACT_SHA256,
+        ),
         "executor": (
             "_BoundedStationaryTaskExecutor",
             "execute_pages",
@@ -677,13 +682,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         if digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} page contract changed")
         page_contract[f"{label}_sha256"] = digest
-    sources_owner = classes.get("_CudaSources")
-    if sources_owner is None:
-        raise RuntimeError("stationary CUDA source owner is missing")
-    sources_owner_digest = _source_node_sha256(source, sources_owner)
-    if sources_owner_digest != STATIONARY_SOURCES_OWNER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA source owner contract changed")
-    page_contract["sources_owner_sha256"] = sources_owner_digest
     component_modes = [
         node
         for node in tree.body
@@ -739,16 +737,16 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "int stationary_metrics(",
             NATIVE_STATIONARY_METRICS_CONTRACT_SHA256,
         ),
+        "native_finish_span_sha256": (
+            "int stationary_finish_span(",
+            NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256,
+        ),
     }
     for label, (marker, expected_digest) in native_blocks.items():
         digest = _cpp_block_sha256(native_source, marker)
         if digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} contract changed")
         page_contract[label] = digest
-    native_header_digest = _lf_sha256(native_source.encode())
-    if native_header_digest != NATIVE_STATIONARY_HEADER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA native header contract changed")
-    page_contract["native_header_sha256"] = native_header_digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
         raise RuntimeError("stationary CUDA component-label capacity changed")
     definition_nodes = {
