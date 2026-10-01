@@ -145,7 +145,7 @@ def test_prepared_rsh_uses_shell_sr_lr_scheduler() -> None:
         "execute_prepared_cuda_direct_shell_full_range_derivatives_device(", begin
     )
     body = source[begin:end]
-    assert "execute_cuda_direct_shell_rsh_derivatives_device(" in body
+    assert "execute_cuda_direct_shell_rsh_energy_derivatives_device(" in body
     assert "p.exchange.coefficient + c.exchange.coefficient" in body
     assert "c.exchange.omega" in body
     assert "unit_long_range" not in body
