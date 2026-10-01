@@ -82,8 +82,11 @@ The opt-in NVIDIA lane/replay matrix covers 2/12/33 atoms (including cap fallbac
 LDA/PBE/r2SCAN/PBE0, both spins, cached/direct centers, generic/cooperative schedules,
 32/256/2048 point capacities, irregular/empty tails, both reset entry points, and
 changed-geometry replay. Run through `tools/run_stationary_cuda_validation.py`,
-including Compute Sanitizer memcheck/initcheck/synccheck. Before promotion also
-run full independent-force oracles and complete cold/warm/changed-geometry endpoint
+including Compute Sanitizer memcheck/initcheck/synccheck. Its
+`--cooperative-becke` option selects the opt-in owner inside existing complete
+force tests through a test-only fixture, preserves explicit matrix choices, and
+fails qualification if an eligible owner silently takes a generic device fallback.
+Before promotion also run full independent-force oracles and complete cold/warm/changed-geometry endpoint
 measurements on the exact integrated head. Host execution or CUDA compilation is
 not a substitute for those device gates. No GPU speedup or 12-atom target wall time
 is established here.

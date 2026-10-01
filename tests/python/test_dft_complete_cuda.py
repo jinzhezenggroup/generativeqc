@@ -21,6 +21,30 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+def cooperative_becke_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Select C inside full-force oracles without changing production defaults.
+
+    Explicit matrix choices still win. Fail qualification if an eligible owner
+    silently takes a generic resource fallback on the allocated NVIDIA device.
+    """
+    if os.environ.get("GENERATIVEQC_TEST_COOPERATIVE_BECKE") != "1":
+        return
+    from generativeqc._stationary_cuda import _CudaSources
+
+    original = _CudaSources.__init__
+
+    def initialize(self: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> None:
+        requested = kwargs.setdefault("cooperative_becke", True)
+        original(self, *args, **kwargs)
+        if requested and 1 < self.natom <= 32:
+            assert self.metrics()["becke_threads_per_point"] == 32, (
+                "cooperative qualification selected the generic device fallback"
+            )
+
+    monkeypatch.setattr(_CudaSources, "__init__", initialize)
+
+
 @pytest.fixture(scope="module")
 def compiler() -> typing.Any:
     from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
