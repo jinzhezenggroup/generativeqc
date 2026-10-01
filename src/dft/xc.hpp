@@ -62,6 +62,7 @@ RksAoCache prepare_rks_ao_cache(const AoBasis& basis, const MolecularGrid& grid,
  */
 struct RksGgaFeatureCache {
   std::size_t points{};
+  std::size_t nao{};
   std::vector<double> values;
 
   [[nodiscard]] std::size_t numeric_capacity_bytes() const noexcept;
