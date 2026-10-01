@@ -1038,7 +1038,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
     if (fitted && ks_fitted_derivative_order(fock_.strategy(), backend_) == 0) {
-      detail = "CUDA density-fitted stationary derivatives require the qualified semilocal DF-J domain";
+      detail =
+          "CUDA density-fitted stationary derivatives require the qualified semilocal DF-J domain";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const bool range_exchange = execution_plan_.range_exchange;
@@ -1083,8 +1084,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "cached CUDA stationary D/W has an incompatible spin or AO shape";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    if (!fitted &&
-        (derivative_source.device_id != device || derivative_source.nbf != nbf)) {
+    if (!fitted && (derivative_source.device_id != device || derivative_source.nbf != nbf)) {
       detail = "CUDA stationary Direct derivative source disagrees with the live KS owner";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
@@ -1140,10 +1140,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
     if (fitted) {
       try {
-        value = spins == 1
-                    ? fock_.retained_energy_derivative(cached_density->at(0))
-                    : fock_.retained_energy_derivative(cached_density->at(0),
-                                                       cached_density->at(1));
+        value = spins == 1 ? fock_.retained_energy_derivative(cached_density->at(0))
+                           : fock_.retained_energy_derivative(cached_density->at(0),
+                                                              cached_density->at(1));
       } catch (const std::bad_alloc&) {
         detail = "CUDA density-fitted stationary response exceeded its retained budget";
         return GENERATIVEQC_STATUS_OUT_OF_MEMORY;

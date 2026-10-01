@@ -821,7 +821,9 @@ class NativeKsSnapshot:
         )
         has_exchange = exchange_approximation is not None
         if has_exchange != bool(self.coefficients[2]):
-            raise ValueError("native KS provider exchange presence disagrees with composition")
+            raise ValueError(
+                "native KS provider exchange presence disagrees with composition"
+            )
         if exchange_approximation is None:
             provider_name = f"native-{self.backend}-{coulomb_approximation}-j-fp64"
         elif exchange_approximation == coulomb_approximation:
@@ -837,8 +839,7 @@ class NativeKsSnapshot:
             "device": -1 if self.backend == "cpu" else device,
             **(
                 {"metric_relative_threshold": metric_threshold}
-                if "density-fitted"
-                in (coulomb_approximation, exchange_approximation)
+                if "density-fitted" in (coulomb_approximation, exchange_approximation)
                 else {}
             ),
             **composition_identity,

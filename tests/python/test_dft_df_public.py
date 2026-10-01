@@ -117,7 +117,9 @@ def pyscf_energy_gradient(
         return result
 
     mol = gto.M(
-        atom=[(label, atom.position) for label, atom in zip(labels, atoms, strict=True)],
+        atom=[
+            (label, atom.position) for label, atom in zip(labels, atoms, strict=True)
+        ],
         basis=basis_dict(calc._basis),
         unit="Bohr",
         cart=True,
@@ -304,10 +306,10 @@ def test_df_cuda_semilocal_force_matches_independent_response(
 
     calc = calculator("cuda", method)
     assert "forces" in calc.capabilities.supported_properties
-    with calc.prepare_batch([atoms], multiplicities=[multiplicity], warm_start=True) as batch:
-        public = batch.execute(
-            strict=True, properties=("energy", "forces")
-        ).items[0]
+    with calc.prepare_batch(
+        [atoms], multiplicities=[multiplicity], warm_start=True
+    ) as batch:
+        public = batch.execute(strict=True, properties=("energy", "forces")).items[0]
         with NativeAO(
             atoms,
             basis=calc._basis,
@@ -330,9 +332,7 @@ def test_df_cuda_semilocal_force_matches_independent_response(
             public.forces, -reference_gradient, atol=3e-7, rtol=0
         )
         np.testing.assert_allclose(public.forces.sum(axis=0), 0, atol=2e-9, rtol=0)
-        replay = batch.execute(
-            strict=True, properties=("energy", "forces")
-        ).items[0]
+        replay = batch.execute(strict=True, properties=("energy", "forces")).items[0]
         np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
 
 
@@ -343,8 +343,7 @@ def test_df_cuda_force_rebinds_auxiliary_response_on_moved_geometry() -> None:
     moved = np.asarray([xyz for _, xyz in WATER], dtype=np.float64)
     moved[1] += (0.02, -0.01, 0.03)
     moved_atoms = [
-        (atom[0], tuple(position))
-        for atom, position in zip(WATER, moved, strict=True)
+        (atom[0], tuple(position)) for atom, position in zip(WATER, moved, strict=True)
     ]
     with calc.prepare_batch([WATER], warm_start=True) as batch:
         cold = batch.execute(strict=True, properties=("energy", "forces")).items[0]
@@ -352,9 +351,7 @@ def test_df_cuda_force_rebinds_auxiliary_response_on_moved_geometry() -> None:
         changed = batch.execute(
             coordinates=(moved,), strict=True, properties=("energy", "forces")
         ).items[0]
-    fresh = calc.singlepoint(
-        moved_atoms, properties=("energy", "forces")
-    )
+    fresh = calc.singlepoint(moved_atoms, properties=("energy", "forces"))
     np.testing.assert_allclose(replay.forces, cold.forces, atol=2e-8, rtol=0)
     assert changed.energy == pytest.approx(fresh.energy, abs=1e-9)
     np.testing.assert_allclose(changed.forces, fresh.forces, atol=3e-8, rtol=0)
