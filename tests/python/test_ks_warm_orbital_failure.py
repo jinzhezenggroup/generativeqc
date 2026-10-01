@@ -36,8 +36,9 @@ def orbital_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         )
     )
     legacy = _method(source, "  bool finish_legacy()")
-    begin = legacy.index("    try {\n      if (output.converged && warm_updates)")
-    end = legacy.index("    previous_energy =", begin)
+    end = legacy.index("    previous_energy =")
+    begin = legacy.rfind("    try {\n", 0, end)
+    assert begin >= 0
     # Compile the actual accepted-proposal copy/exception block and entry
     # guards. Only the CUDA calls and unrelated solver stages are test doubles.
     publication = legacy[begin:end]
@@ -66,6 +67,7 @@ struct Owner {
   bool warm_ready = true, warm_orbitals_ready = false, warm_updates = true;
   bool warm_energy_baseline = false, final_state_ready = false;
   bool fitted_exchange = false, occupied_fitted_factor_ready = false;
+  bool pending_fitted_occupied = false, final_fitted_projection_ready = false;
   double warm_energy = std::numeric_limits<double>::infinity();
   std::size_t elements = 8;
   std::uint64_t final_generation = 0, generation = 7, solve_epoch = 11;
@@ -82,6 +84,7 @@ struct Owner {
   double density[8], proposal[8], warm[8], warm_orbitals[8], tmp2[8];
   void* stream = nullptr;
   std::string scenario;
+  void retain_final_fitted_projection() { final_fitted_projection_ready = true; }
   Owner() {
     std::fill_n(density, 8, 10.0);
     std::fill_n(warm_orbitals, 8, 10.0);
