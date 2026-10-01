@@ -193,7 +193,7 @@ def test_prepared_one_electron_force_borrows_direct_shell_metadata() -> None:
     assert "F(atomic_numbers)" in direct
     assert "F(shell_ao_offsets)" in generated
     assert "execute_prepared_cuda_stationary_one_electron_pair(" in bridge
-    assert "cuda_execution::one_electron_view(shared.batch)" in bridge
+    assert "generated_owner ? exchange->shared->batch : source->batch" in bridge
     assert "constexpr unsigned schedule = 1" in bridge
     assert "auto* output = exchange->force" in bridge
     assert 'trace_counter("host_to_device_bytes", 0)' in bridge
