@@ -243,8 +243,8 @@ void direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
   cudaStream_t stream{};
   check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   std::string detail;
-  const auto status = enqueue_cuda_direct_eri_tile(
-      plan, item, begin, count, output.pointer, elements, stream, detail);
+  const auto status = enqueue_cuda_direct_eri_tile(plan, item, begin, count, output.pointer,
+                                                   elements, stream, detail);
   if (status != GENERATIVEQC_STATUS_SUCCESS) {
     cudaStreamDestroy(stream);
     require(false, detail.c_str());
@@ -262,9 +262,9 @@ void prepared_interaction_source_device(const generativeqc::core::System& system
   PreparedFockPlan prepared(system, nullptr, strategy, 0, 64U * 1024U * 1024U);
   PreparedFockInteractionSourceView source(prepared);
   const auto op = generativeqc::integrals::ElectronInteractionOperator::eri;
-  require(source.supports(op) && !source.supports_host_read(op) &&
-              source.supports_device_read(op, 0),
-          "prepared CUDA interaction source advertised the wrong ERI memory spaces");
+  require(
+      source.supports(op) && !source.supports_host_read(op) && source.supports_device_read(op, 0),
+      "prepared CUDA interaction source advertised the wrong ERI memory spaces");
 
   const std::size_t n = source.nbf();
   const std::array<std::size_t, 4> begin{0, 1, 0, 0};
@@ -279,16 +279,14 @@ void prepared_interaction_source_device(const generativeqc::core::System& system
       index[axis] = begin[axis] + remainder % count[axis];
       remainder /= count[axis];
     }
-    expected[local] =
-        expected_eri[((index[0] * n + index[1]) * n + index[2]) * n + index[3]];
+    expected[local] = expected_eri[((index[0] * n + index[1]) * n + index[2]) * n + index[3]];
   }
 
   DeviceMatrix output(std::vector<double>(elements, 123.0));
   cudaStream_t stream{};
   check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   source.read_device(op, begin, count,
-                     {0, reinterpret_cast<void*>(stream), output.pointer, elements},
-                     elements);
+                     {0, reinterpret_cast<void*>(stream), output.pointer, elements}, elements);
   check(cudaStreamSynchronize(stream));
   check(cudaStreamDestroy(stream));
   output.verify(expected);

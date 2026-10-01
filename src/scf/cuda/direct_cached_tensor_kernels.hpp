@@ -21,8 +21,8 @@ void launch_build_eri_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cu
  */
 void launch_build_eri_tile_kernel(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
                                   const std::array<std::size_t, 4>& begin,
-                                  const std::array<std::size_t, 4>& count,
-                                  std::size_t elements, double* eri);
+                                  const std::array<std::size_t, 4>& count, std::size_t elements,
+                                  double* eri);
 
 /** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 void launch_build_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,

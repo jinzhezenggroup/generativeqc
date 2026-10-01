@@ -27,12 +27,11 @@ int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept;
  * HF screening tolerance, allocate storage, transfer through host memory, or
  * synchronize on success. The plan must outlive completion on caller_stream.
  */
-generativeqc_status enqueue_cuda_direct_eri_tile(
-    CudaDirectJkPlan* plan, std::size_t item,
-    const std::array<std::size_t, 4>& begin,
-    const std::array<std::size_t, 4>& count,
-    double* output, std::size_t elements, cudaStream_t caller_stream,
-    std::string& detail);
+generativeqc_status enqueue_cuda_direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
+                                                 const std::array<std::size_t, 4>& begin,
+                                                 const std::array<std::size_t, 4>& count,
+                                                 double* output, std::size_t elements,
+                                                 cudaStream_t caller_stream, std::string& detail);
 
 /** Enqueue raw, unscaled value J/K against caller-owned device matrices.
  *

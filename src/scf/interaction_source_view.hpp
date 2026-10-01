@@ -127,8 +127,7 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
 
   void read_device(Operator op, const std::array<std::size_t, 4>& begin,
                    const std::array<std::size_t, 4>& count,
-                   integrals::DeviceInteractionTarget target,
-                   std::size_t elements) const override {
+                   integrals::DeviceInteractionTarget target, std::size_t elements) const override {
 #if GENERATIVEQC_HAS_CUDA
     if (!supports_device_read(op, target.device))
       throw std::invalid_argument("prepared Fock owner has no requested device interaction");

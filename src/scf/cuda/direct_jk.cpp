@@ -431,44 +431,38 @@ int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept {
   return plan ? plan->device_id : -1;
 }
 
-generativeqc_status enqueue_cuda_direct_eri_tile(
-    CudaDirectJkPlan* plan, std::size_t item,
-    const std::array<std::size_t, 4>& begin,
-    const std::array<std::size_t, 4>& count,
-    double* output, std::size_t elements, cudaStream_t caller_stream,
-    std::string& detail) {
+generativeqc_status enqueue_cuda_direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
+                                                 const std::array<std::size_t, 4>& begin,
+                                                 const std::array<std::size_t, 4>& count,
+                                                 double* output, std::size_t elements,
+                                                 cudaStream_t caller_stream, std::string& detail) {
   detail.clear();
   try {
     direct_jk_require(plan != nullptr, "null direct ERI source");
     direct_jk_require(output != nullptr && caller_stream != nullptr,
                       "direct ERI tile requires device output and stream");
-    direct_jk_require(item < plan->diagnostic.batch_size,
-                      "direct ERI source item is out of range");
+    direct_jk_require(item < plan->diagnostic.batch_size, "direct ERI source item is out of range");
     const auto n = static_cast<std::size_t>(plan->diagnostic.nbf);
     std::size_t requested = 1;
     for (std::size_t axis = 0; axis < 4; ++axis) {
-      direct_jk_require(count[axis] > 0 && begin[axis] <= n &&
-                            count[axis] <= n - begin[axis],
+      direct_jk_require(count[axis] > 0 && begin[axis] <= n && count[axis] <= n - begin[axis],
                         "direct ERI tile is outside the public AO basis");
       requested = direct_jk_product(requested, count[axis]);
     }
-    direct_jk_require(requested == elements,
-                      "direct ERI tile element count mismatch");
+    direct_jk_require(requested == elements, "direct ERI tile element count mismatch");
 
     direct_jk_check(cudaSetDevice(plan->device_id));
     int current = -1;
     direct_jk_check(cudaGetDevice(&current));
-    direct_jk_require(current == plan->device_id,
-                      "direct ERI current device mismatch");
+    direct_jk_require(current == plan->device_id, "direct ERI current device mismatch");
     cudaPointerAttributes attributes{};
     direct_jk_check(cudaPointerGetAttributes(&attributes, output));
-    direct_jk_require(attributes.type == cudaMemoryTypeDevice &&
-                          attributes.device == current,
+    direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
                       "direct ERI output is not on the prepared CUDA device");
 
-    cuda_execution::launch_build_eri_tile_kernel(
-        caller_stream, plan->batch, static_cast<std::int32_t>(item),
-        begin, count, elements, output);
+    cuda_execution::launch_build_eri_tile_kernel(caller_stream, plan->batch,
+                                                 static_cast<std::int32_t>(item), begin, count,
+                                                 elements, output);
     direct_jk_check(cudaGetLastError());
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const DirectJkFailure& failure) {
