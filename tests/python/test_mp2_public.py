@@ -639,6 +639,14 @@ def test_native_cuda_generation_keeps_each_architecture_and_tile_distinct(
 
     cuda_sources(tmp_path, "75;120-real;120-virtual")
     table = (tmp_path / "mp2_cuda_table.cu").read_text()
+    pair = (tmp_path / "mp2_pair_energy.cuh").read_text()
+    assert "TensorIR logical hash:" in pair
+    assert "__device__ __forceinline__ bool ri_mp2_pair_energy" in pair
+    root = Path(__file__).resolve().parents[2]
+    runtime = (root / "src/posthf/ri_mp2_cuda.cu").read_text()
+    assert '#include "mp2/mp2_pair_energy.cuh"' in runtime
+    assert "generated::ri_mp2_pair_energy(" in runtime
+    assert "direct_value * direct_value / denominator" not in runtime
     assert len(list(tmp_path.glob("*_runtime.cu"))) == 8
     for arch in (75, 120):
         for tile in (1, 2, 4, 8):

@@ -576,10 +576,14 @@ class PreparedBatch:
     def _public_dft_cuda_force(
         self, index: typing.Any, atoms: typing.Any
     ) -> typing.Any:
-        """Execute the qualified seven/nine-source plan against one live item."""
+        """Execute a compiler-selected stationary CUDA force composition."""
         from generativeqc_compiler.dft import NativeAO
 
         from ._dft_gradient import StationaryKsState
+        from ._stationary_composite_cuda import (
+            PreparedCompositeStationaryCudaGradient,
+            requires_composite_stationary_cuda,
+        )
         from ._stationary_cuda import (
             PreparedStationaryCudaExecution,
             PreparedStationaryCudaTopologyMismatch,
@@ -587,38 +591,6 @@ class PreparedBatch:
         )
 
         calculator = self._calculator
-        if getattr(calculator, "_method_name", "").startswith("wb97m-v"):
-            from ._stationary_wb97mv_cuda import PreparedWb97mvCudaGradient
-
-            if self._stationary_cuda_execution is None:
-                self._stationary_cuda_execution = PreparedWb97mvCudaGradient()
-            with NativeAO(
-                atoms,
-                basis=calculator._basis,
-                representation=calculator._representation_name,
-                charge=self._charges[index],
-                multiplicity=self._multiplicities[index],
-            ) as basis:
-                state = StationaryKsState.from_native(self, basis, index=index)
-                try:
-                    return self._stationary_cuda_execution.execute(
-                        state,
-                        basis,
-                        compiler=self._stationary_cuda_compiler(),
-                        cache=Path(
-                            os.environ.get(
-                                "GENERATIVEQC_STATIONARY_CACHE",
-                                ".cache/stationary-cuda",
-                            )
-                        ),
-                        library=Path(str(self._library._name)).resolve(),
-                    )
-                finally:
-                    state._source.close()
-        prepared = self._stationary_cuda_execution
-        if prepared is None:
-            prepared = PreparedStationaryCudaExecution()
-            self._stationary_cuda_execution = prepared
         with NativeAO(
             atoms,
             basis=calculator._basis,
@@ -634,10 +606,36 @@ class PreparedBatch:
                     raise NotImplementedError(
                         "public CUDA DFT forces require a qualified CUDA owner"
                     )
+                if requires_composite_stationary_cuda(state):
+                    prepared = self._stationary_cuda_execution
+                    if not isinstance(
+                        prepared, PreparedCompositeStationaryCudaGradient
+                    ):
+                        if prepared is not None:
+                            prepared.close()
+                        prepared = PreparedCompositeStationaryCudaGradient()
+                        self._stationary_cuda_execution = prepared
+                    return prepared.execute(
+                        state,
+                        basis,
+                        compiler=self._stationary_cuda_compiler(),
+                        cache=Path(
+                            os.environ.get(
+                                "GENERATIVEQC_STATIONARY_CACHE",
+                                ".cache/stationary-cuda",
+                            )
+                        ),
+                        library=Path(str(self._library._name)).resolve(),
+                    )
+
+                prepared = self._stationary_cuda_execution
+                if not isinstance(prepared, PreparedStationaryCudaExecution):
+                    if prepared is not None:
+                        prepared.close()
+                    prepared = PreparedStationaryCudaExecution()
+                    self._stationary_cuda_execution = prepared
                 native_library = Path(str(self._library._name)).resolve()
                 all_electron = state._source.hamiltonian == "all-electron"
-                # Composition-specific hybrid modules use the existing bounded
-                # compiler/cache path; semilocal owners retain their packaged AOT.
                 packaged = (
                     all_electron
                     and not state._source.method_ir.full_range_exact_exchange
@@ -666,7 +664,6 @@ class PreparedBatch:
                     result = complete_rks_cuda_gradient_diagnostic(
                         state, basis, prepared=prepared, **kwargs
                     )
-                # StationaryGradientPlan publishes +dE/dR. Public API is force.
                 return -np.asarray(result.gradient).copy(), dict(result.work)
             finally:
                 state._source.close()

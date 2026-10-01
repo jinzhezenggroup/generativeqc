@@ -1,0 +1,11 @@
+{
+  "source_root": "/workspace/shared/generativeqc-dev/hf-compiler-opt",
+  "commit": "bc94d5a02b75754fc9952edb1bcc306fad67db68",
+  "tree": "a01b157614d2e06c46ed45eb26d0ae4c7cab459d",
+  "source_identity": "8dbad109f3ba2d11fe7259fbb749d5f84d627545a5008db7e08c6c064f6bb6ce",
+  "library_path": "/workspace/shared/generativeqc-dev/hf-compiler-opt/build/cpu-dev/libgenerativeqc.so",
+  "library_sha256": "513d98fcfb26df137ab1f478714300e4a6e3e4368e5cbf4c0977aa3da342f2d2",
+  "library_bytes": 302708712,
+  "generated_header_sha256": "05ad9c705686846b4f13b65615c7bd2bc0843d53cfcf7585ef02938e1a959808",
+  "generated_header_bytes": 3793074
+}

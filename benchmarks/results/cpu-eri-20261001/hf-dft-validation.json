@@ -1,0 +1,38 @@
+[
+  {
+    "case": "water-sto3g",
+    "method": "rhf",
+    "energy_abs_error": 1.4210854715202004e-14,
+    "iterations": 8
+  },
+  {
+    "case": "water-sto3g",
+    "method": "pbe-rks",
+    "energy_abs_error": 1.4210854715202004e-14,
+    "iterations": 8
+  },
+  {
+    "case": "water-sto3g",
+    "method": "pbe0-rks",
+    "energy_abs_error": 2.842170943040401e-14,
+    "iterations": 8
+  },
+  {
+    "case": "water-svp",
+    "method": "rhf",
+    "energy_abs_error": 4.263256414560601e-14,
+    "iterations": 13
+  },
+  {
+    "case": "water-svp",
+    "method": "pbe-rks",
+    "energy_abs_error": 9.947598300641403e-14,
+    "iterations": 13
+  },
+  {
+    "case": "water-svp",
+    "method": "pbe0-rks",
+    "energy_abs_error": 8.526512829121202e-14,
+    "iterations": 12
+  }
+]

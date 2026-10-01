@@ -1,4 +1,9 @@
-"""Complete WB97M-V CUDA stationary composition from a live native KS state.
+"""Complete compiler-planned composite CUDA stationary forces from a live KS state.
+
+The shared stationary CUDA arena owns semilocal sources. This module composes
+the additional providers selected by StationaryGradientPlan, currently the
+qualified range-separated-exchange plus nonlocal-correlation source inventory.
+No method-name dispatch or method-specific scientific kernel lives here.
 
 The native owner evaluates integral derivatives; generated CUDA contracts AO
 jets, semilocal/nonlocal feature adjoints and partition motion. Components that
@@ -28,11 +33,15 @@ from generativeqc_compiler.integral.first_derivative_native import (
 from generativeqc_compiler.method.nonlocal_correlation import (
     NonlocalCorrelationPrimitive,
 )
-from generativeqc_compiler.method.stationary_cuda import compile_stationary_cuda
+from generativeqc_compiler.method.stationary_cuda import (
+    compile_stationary_cuda,
+    stationary_external_provider_sources,
+)
 from generativeqc_compiler.method.stationary_feature_lease import (
     plan_stationary_feature_leases,
 )
 from generativeqc_compiler.method.stationary_gradient import (
+    SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )
@@ -46,6 +55,42 @@ from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
 from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
 
+_COMPOSITE_EXTERNAL_SOURCES = (
+    "exchange_short_range",
+    "exchange_long_range",
+    "nonlocal_ao",
+    "nonlocal_grid",
+    "nonlocal_weight",
+)
+
+
+def _plan_for_state(state: typing.Any) -> StationaryGradientPlan:
+    source = state._source
+    point_model = (
+        source._batch._calculator._ks_options.scf_domain
+        if getattr(source, "nonlocal_density_policy", None)
+        == MOLECULAR_VV10_DENSITY_POLICY
+        else SCF_POINT_MODEL
+    )
+    return StationaryGradientPlan(
+        source.method_ir,
+        StationaryMeanField(point_model, hamiltonian=source.hamiltonian),
+    )
+
+
+def requires_composite_stationary_cuda(state: typing.Any) -> bool:
+    """Select the qualified composite owner or fail closed on unowned sources."""
+    plan = _plan_for_state(state)
+    external_sources = stationary_external_provider_sources(plan)
+    if not external_sources:
+        return False
+    if external_sources != _COMPOSITE_EXTERNAL_SOURCES:
+        raise NotImplementedError(
+            "stationary CUDA external-provider source inventory is not qualified: "
+            + ", ".join(external_sources)
+        )
+    return True
+
 
 def _canonical_gradient_sum(
     plan: StationaryGradientPlan,
@@ -58,16 +103,18 @@ def _canonical_gradient_sum(
     for name in plan.source_names:
         component = np.asarray(components[name])
         if component.dtype != np.float64 or component.shape != (natom, 3):
-            raise ValueError("WB97M-V gradient component shape/dtype mismatch")
+            raise ValueError(
+                "composite stationary gradient component shape/dtype mismatch"
+            )
         if not np.all(np.isfinite(component)):
-            raise ValueError("WB97M-V gradient component is nonfinite")
+            raise ValueError("composite stationary gradient component is nonfinite")
         np.add(gradient, component, out=gradient)
     if not np.all(np.isfinite(gradient)):
-        raise ValueError("WB97M-V final gradient is nonfinite")
+        raise ValueError("composite stationary final gradient is nonfinite")
     return gradient
 
 
-class PreparedWb97mvCudaGradient:
+class PreparedCompositeStationaryCudaGradient:
     """Retain geometry-bound CUDA owners, rebuilding explicitly on geometry change.
 
     Numeric capacity is checked before constructing any derivative owner.
@@ -144,28 +191,34 @@ class PreparedWb97mvCudaGradient:
         if (
             source.backend != "cuda"
             or source.metadata[0] != 8
-            or source.metadata[6] != 4
             or source.hamiltonian != "all-electron"
             or source.nonlocal_density_policy != MOLECULAR_VV10_DENSITY_POLICY
         ):
             raise NotImplementedError(
-                "WB97M-V forces require its complete FP64 CUDA owner"
+                "composite stationary forces require its complete FP64 CUDA owner"
             )
         if (
             basis.identity != state.identity.basis_identity
             or native_ao_geometry_identity(basis) != state.identity.geometry_identity
         ):
-            raise ValueError("WB97M-V stationary basis/geometry mismatch")
+            raise ValueError("composite stationary stationary basis/geometry mismatch")
+        functional = int(source.functional_code)
         n, na, npnt = basis.nao, basis.natom, len(state.grid.points)
         if not (1 <= n <= 1024 and 1 <= na <= 128 and 1 <= npnt <= 4_000_000):
-            raise ValueError("WB97M-V CUDA stationary shape exceeds its bounded domain")
-        if any(shell.angular_momentum > 2 for shell in basis.shells):
-            raise NotImplementedError("WB97M-V CUDA forces currently qualify s/p/d AOs")
+            raise ValueError(
+                "composite stationary CUDA stationary shape exceeds its bounded domain"
+            )
+        if any(shell.angular_momentum > 3 for shell in basis.shells):
+            raise NotImplementedError(
+                "composite stationary CUDA forces currently qualify through-f AOs"
+            )
         device = int(source.metadata[12])
-        plan = StationaryGradientPlan(
-            source.method_ir,
-            StationaryMeanField("libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"),
-        )
+        plan = _plan_for_state(state)
+        external_sources = stationary_external_provider_sources(plan)
+        if external_sources != _COMPOSITE_EXTERNAL_SOURCES:
+            raise NotImplementedError(
+                "composite stationary CUDA owner does not cover this source inventory"
+            )
         prepared_plan = compile_stationary_prepared_plan(plan)
         feature_plan = plan_stationary_feature_leases(prepared_plan)
         grid_features = feature_plan.features
@@ -227,7 +280,9 @@ class PreparedWb97mvCudaGradient:
             + native_budget
         )
         if device_bound > max_device_bytes or host_bound > max_host_bytes:
-            raise ValueError("WB97M-V stationary numeric capacity budget exceeded")
+            raise ValueError(
+                "composite stationary stationary numeric capacity budget exceeded"
+            )
         cache = Path(cache)
         identity = (
             basis.identity,
@@ -251,7 +306,7 @@ class PreparedWb97mvCudaGradient:
                 primitive = emit_first_derivative_cuda((("nuclear", ()),))
                 artifact = compile_stationary_cuda(
                     primitive,
-                    functional=4,
+                    functional=functional,
                     plan=plan,
                     iterations=source.grid_spec.partition_iterations,
                     compiler=compiler,
@@ -267,6 +322,7 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        integral_derivatives=False,
                         # The batched nuclear call owns every unordered atom
                         # pair in one deterministic native page.
                         page_work_budget=max(1, na * (na - 1) // 2),
@@ -286,6 +342,7 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        integral_derivatives=False,
                         page_work_budget=1,
                     )
                 )
@@ -330,7 +387,14 @@ class PreparedWb97mvCudaGradient:
             ct.c_size_t,
         ]
         evaluate.restype = ct.c_int
-        integral = np.empty((5, na, 3))
+        range_sources = tuple(source.name for source in plan.range_exchange_sources)
+        integral_names = (
+            "one_electron",
+            "overlap_pulay",
+            "coulomb",
+            *range_sources,
+        )
+        integral = np.empty((len(integral_names), na, 3))
         native_usage = np.zeros(9, dtype=np.uint64)
         _native.check(
             source._library,
@@ -345,20 +409,13 @@ class PreparedWb97mvCudaGradient:
             ),
             context=source._batch._context,
         )
-        names = (
-            "one_electron",
-            "overlap_pulay",
-            "coulomb",
-            "exchange_short_range",
-            "exchange_long_range",
-        )
-        components = dict(zip(names, integral, strict=True))
+        components = dict(zip(integral_names, integral, strict=True))
         component_seconds["integral_derivatives"] = perf_counter() - component_start
         component_start = perf_counter()
         resident_density = source.cuda_resident_density()
         if resident_density is None:
             raise NotImplementedError(
-                "WB97M-V CUDA force requires the resident final-density bridge"
+                "composite stationary CUDA force requires the resident final-density bridge"
             )
         self.grid.set_density_device(
             device_id=resident_density.device,
@@ -390,7 +447,7 @@ class PreparedWb97mvCudaGradient:
             raw_weights=source.atomic_weights,
             tile_points=tile_points,
             ao_count=n,
-            functional=4,
+            functional=functional,
             ingredients=grid_features,
         )
         components.update(resident_parts)
@@ -404,7 +461,7 @@ class PreparedWb97mvCudaGradient:
         component_seconds["reduction_and_validation"] = perf_counter() - component_start
         self.executions += 1
         work = {
-            "execution": "cuda-complete-wb97mv",
+            "execution": "cuda-complete-composite",
             "plan_identity": plan.identity,
             "prepared_plan_identity": prepared_plan.identity,
             "execution_graph_identity": prepared_plan.graph.identity,
@@ -430,8 +487,7 @@ class PreparedWb97mvCudaGradient:
             "two_electron_shell_traversals": None,
             "two_electron_radial_operators": [
                 "full-range",
-                "short-range",
-                "long-range",
+                *(primitive.operator for primitive in plan.range_exchange_primitives),
             ],
             "range_recurrences_per_participating_center": None,
             "two_electron_work_scope": (

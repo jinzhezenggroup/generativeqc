@@ -330,7 +330,7 @@ def test_join_replays_complete_grid_after_reset() -> None:
 
 
 def test_production_driver_uses_shared_pass_accumulators() -> None:
-    driver = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
+    driver = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
     join = (ROOT / "python/generativeqc/_stationary_nonlocal_cuda.py").read_text()
     assert "resident_nonlocal_geometry(" in driver
     assert "nonlocal_sources=self.nonlocal_sources" in driver

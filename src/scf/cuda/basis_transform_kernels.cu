@@ -24,7 +24,8 @@ __global__ void initialize_direct_fock_kernel(std::int32_t batch_size,
 /** First stage of D_cart = C^T D_public C. */
 __global__ void transform_density_to_direct_right_kernel(
     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf, std::int32_t direct_nbf,
-    const double* transform, const double* density, const std::uint8_t* active, double* temporary) {
+    const double* transform, const double* density, const std::uint8_t* active, double* temporary,
+    const std::int32_t* shell_spans) {
   const std::size_t n = static_cast<std::size_t>(nbf);
   const std::size_t direct_n = static_cast<std::size_t>(direct_nbf);
   const std::size_t rectangular_size = n * direct_n;
@@ -40,7 +41,11 @@ __global__ void transform_density_to_direct_right_kernel(
   const std::size_t density_offset = state * n * n;
   const std::size_t transform_offset = system * rectangular_size;
   double value = 0.0;
-  for (std::size_t column = 0; column < n; ++column) {
+  const auto span =
+      2U * (static_cast<std::size_t>(batch_size) * n + system * direct_n + direct_column);
+  const std::size_t begin = shell_spans ? shell_spans[span] : 0U;
+  const std::size_t end = shell_spans ? shell_spans[span + 1U] : n;
+  for (std::size_t column = begin; column < end; ++column) {
     value += density[density_offset + matrix_index(row, column, n)] *
              transform[transform_offset + column + direct_column * n];
   }
@@ -51,7 +56,7 @@ __global__ void transform_density_to_direct_right_kernel(
 __global__ void transform_density_to_direct_left_kernel(
     std::int32_t batch_size, std::int32_t spin_count, std::int32_t nbf, std::int32_t direct_nbf,
     const double* transform, const double* temporary, const std::uint8_t* active,
-    double* direct_density) {
+    double* direct_density, const std::int32_t* shell_spans) {
   const std::size_t n = static_cast<std::size_t>(nbf);
   const std::size_t direct_n = static_cast<std::size_t>(direct_nbf);
   const std::size_t matrix_size = direct_n * direct_n;
@@ -68,7 +73,11 @@ __global__ void transform_density_to_direct_left_kernel(
   const std::size_t transform_offset = system * rectangular_size;
   const std::size_t temporary_offset = state * rectangular_size;
   double value = 0.0;
-  for (std::size_t row = 0; row < n; ++row) {
+  const auto span =
+      2U * (static_cast<std::size_t>(batch_size) * n + system * direct_n + direct_row);
+  const std::size_t begin = shell_spans ? shell_spans[span] : 0U;
+  const std::size_t end = shell_spans ? shell_spans[span + 1U] : n;
+  for (std::size_t row = begin; row < end; ++row) {
     value += transform[transform_offset + row + direct_row * n] *
              temporary[temporary_offset + row + direct_column * n];
   }
@@ -80,7 +89,8 @@ __global__ void transform_direct_fock_left_kernel(std::int32_t batch_size, std::
                                                   std::int32_t nbf, std::int32_t direct_nbf,
                                                   const double* transform,
                                                   const double* direct_fock,
-                                                  const std::uint8_t* active, double* temporary) {
+                                                  const std::uint8_t* active, double* temporary,
+                                                  const std::int32_t* shell_spans) {
   const std::size_t n = static_cast<std::size_t>(nbf);
   const std::size_t direct_n = static_cast<std::size_t>(direct_nbf);
   const std::size_t direct_matrix_size = direct_n * direct_n;
@@ -97,7 +107,10 @@ __global__ void transform_direct_fock_left_kernel(std::int32_t batch_size, std::
   const std::size_t transform_offset = system * rectangular_size;
   const std::size_t direct_offset = state * direct_matrix_size;
   double value = 0.0;
-  for (std::size_t direct_row = 0; direct_row < direct_n; ++direct_row) {
+  const auto span = 2U * (system * n + public_row);
+  const std::size_t begin = shell_spans ? shell_spans[span] : 0U;
+  const std::size_t end = shell_spans ? shell_spans[span + 1U] : direct_n;
+  for (std::size_t direct_row = begin; direct_row < end; ++direct_row) {
     value += transform[transform_offset + public_row + direct_row * n] *
              direct_fock[direct_offset + matrix_index(direct_row, direct_column, direct_n)];
   }
@@ -109,7 +122,7 @@ __global__ void transform_direct_fock_right_kernel(std::int32_t batch_size, std:
                                                    std::int32_t nbf, std::int32_t direct_nbf,
                                                    const double* transform, const double* temporary,
                                                    const double* hcore, const std::uint8_t* active,
-                                                   double* fock) {
+                                                   double* fock, const std::int32_t* shell_spans) {
   const std::size_t n = static_cast<std::size_t>(nbf);
   const std::size_t direct_n = static_cast<std::size_t>(direct_nbf);
   const std::size_t matrix_size = n * n;
@@ -126,7 +139,10 @@ __global__ void transform_direct_fock_right_kernel(std::int32_t batch_size, std:
   const std::size_t transform_offset = system * rectangular_size;
   const std::size_t temporary_offset = state * rectangular_size;
   double value = hcore[system * matrix_size + local];
-  for (std::size_t direct_column = 0; direct_column < direct_n; ++direct_column) {
+  const auto span = 2U * (system * n + public_column);
+  const std::size_t begin = shell_spans ? shell_spans[span] : 0U;
+  const std::size_t end = shell_spans ? shell_spans[span + 1U] : direct_n;
+  for (std::size_t direct_column = begin; direct_column < end; ++direct_column) {
     value += temporary[temporary_offset + public_row + direct_column * n] *
              transform[transform_offset + public_column + direct_column * n];
   }
@@ -145,17 +161,20 @@ void launch_initialize_direct_fock_kernel(dim3 grid, dim3 block, std::size_t sha
 void launch_transform_density_to_direct_right_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
     std::int32_t spin_count, std::int32_t nbf, std::int32_t direct_nbf, const double* transform,
-    const double* density, const std::uint8_t* active, double* temporary) {
+    const double* density, const std::uint8_t* active, double* temporary,
+    const std::int32_t* shell_spans) {
   transform_density_to_direct_right_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, spin_count, nbf, direct_nbf, transform, density, active, temporary);
+      batch_size, spin_count, nbf, direct_nbf, transform, density, active, temporary, shell_spans);
 }
 
 void launch_transform_density_to_direct_left_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, std::int32_t batch_size,
     std::int32_t spin_count, std::int32_t nbf, std::int32_t direct_nbf, const double* transform,
-    const double* temporary, const std::uint8_t* active, double* direct_density) {
+    const double* temporary, const std::uint8_t* active, double* direct_density,
+    const std::int32_t* shell_spans) {
   transform_density_to_direct_left_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, spin_count, nbf, direct_nbf, transform, temporary, active, direct_density);
+      batch_size, spin_count, nbf, direct_nbf, transform, temporary, active, direct_density,
+      shell_spans);
 }
 
 void launch_transform_direct_fock_left_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -163,9 +182,10 @@ void launch_transform_direct_fock_left_kernel(dim3 grid, dim3 block, std::size_t
                                               std::int32_t spin_count, std::int32_t nbf,
                                               std::int32_t direct_nbf, const double* transform,
                                               const double* direct_fock, const std::uint8_t* active,
-                                              double* temporary) {
+                                              double* temporary, const std::int32_t* shell_spans) {
   transform_direct_fock_left_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, spin_count, nbf, direct_nbf, transform, direct_fock, active, temporary);
+      batch_size, spin_count, nbf, direct_nbf, transform, direct_fock, active, temporary,
+      shell_spans);
 }
 
 void launch_transform_direct_fock_right_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -173,9 +193,11 @@ void launch_transform_direct_fock_right_kernel(dim3 grid, dim3 block, std::size_
                                                std::int32_t spin_count, std::int32_t nbf,
                                                std::int32_t direct_nbf, const double* transform,
                                                const double* temporary, const double* hcore,
-                                               const std::uint8_t* active, double* fock) {
+                                               const std::uint8_t* active, double* fock,
+                                               const std::int32_t* shell_spans) {
   transform_direct_fock_right_kernel<<<grid, block, shared_bytes, stream>>>(
-      batch_size, spin_count, nbf, direct_nbf, transform, temporary, hcore, active, fock);
+      batch_size, spin_count, nbf, direct_nbf, transform, temporary, hcore, active, fock,
+      shell_spans);
 }
 
 }  // namespace generativeqc::scf::cuda_execution

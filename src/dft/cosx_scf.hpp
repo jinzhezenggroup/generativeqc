@@ -3,6 +3,7 @@
 
 #include <vector>
 
+#include "dft/ao_grid.hpp"
 #include "dft/cosx_fock_provider.hpp"
 #include "scf/types.hpp"
 
@@ -17,5 +18,20 @@ scf::ScfResult run_cosx_uhf(PreparedCosxFockPlan& plan, const scf::ScfOptions& o
                             const std::vector<double>* initial_density = nullptr);
 
 }  // namespace generativeqc::dft
+
+namespace generativeqc::scf {
+
+/** Internal host-controlled PBE0 RKS over explicit RI/direct-J + COSX-K.
+ * Public/AUTO provider selection remains unchanged. */
+ScfResult run_pbe0_cosx_rks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const std::vector<double>* initial_density = nullptr);
+
+/** Spin-polarized counterpart of run_pbe0_cosx_rks. */
+ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const std::vector<double>* initial_density = nullptr);
+
+}  // namespace generativeqc::scf
 
 #endif

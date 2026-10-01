@@ -1,0 +1,42 @@
+{
+  "family": "cpu-eri-coulomb-20261001",
+  "family_metadata": {
+    "owner": "cpu-eri-coulomb-20261001",
+    "reason": "Reviewed compact scientific and negative evidence for the focused compiler Coulomb-root reuse increment. Exact original text records, including failures and outliers, are deterministically compressed, with mechanically reproducible duplicate observation aggregates omitted and a non-task ambient setup inventory replaced by task-specific dependency versions. No source binary/build artifact or retention-policy exception is introduced.",
+    "review_document": "benchmarks/results/cpu-eri-coulomb-20261001/README.md"
+  },
+  "files": [
+    {
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/normalized-campaign.json.gz",
+      "family": "cpu-eri-coulomb-20261001",
+      "bytes": 597414,
+      "sha256": "871bf7a8f09c92fb08ab413e7048445c92c2f9ff9fbf676a74c7de4b079cbc16",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete primary normalized 960-endpoint numerical/timing observations, individual process outputs and logs, all-repeat errors, provenance and frozen inputs; only the byte-exact reconstructible duplicate observations aggregate is omitted."
+    },
+    {
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/pilot-campaign.json.gz",
+      "family": "cpu-eri-coulomb-20261001",
+      "bytes": 343092,
+      "sha256": "75854daee5495f7346cc4c8f2c110ea3ea6145caf2d73435cc371fe23f8f636c",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Complete retained 432-endpoint pilot, including outliers, original source/library identities and diagnostics; its unequal Python bytecode state disqualifies causal cold-speedup claims and the pilot is not pooled with the normalized campaign."
+    },
+    {
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/auxiliary-validation.json.gz",
+      "family": "cpu-eri-coulomb-20261001",
+      "bytes": 311664,
+      "sha256": "4c26a144db43d8c483b13faa4717f77cd6dca3f63ef5c94020e4d28c04d6417e",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All six final untimed HF/PBE/PBE0 checks, both failed oracle pilots, exact per-attempt scripts, independent convergence checks and self-refinement history; no failed attempt is relabeled as passing."
+    },
+    {
+      "path": "benchmarks/results/cpu-eri-coulomb-20261001/supporting-evidence.json.gz",
+      "family": "cpu-eri-coulomb-20261001",
+      "bytes": 425678,
+      "sha256": "9b51375c88ba0bac93e87d198fc258d190073927c68a8b3d39e99cccde016009",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
+    }
+  ]
+}

@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from tools.render_public_methods_doc import render_public_methods_source
+from tools.sphinx_repository_links import setup_repository_links
 
 project = "GenerativeQC"
 author = "GenerativeQC contributors"
@@ -59,4 +60,5 @@ def _render_public_methods(app: typing.Any, docname: str, source: list[str]) -> 
 
 def setup(app: typing.Any) -> dict[str, bool]:
     app.connect("source-read", _render_public_methods)
+    setup_repository_links(app)
     return {"parallel_read_safe": True, "parallel_write_safe": True}

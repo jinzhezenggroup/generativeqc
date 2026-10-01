@@ -181,9 +181,10 @@ The performance schedule for these paths is compiler-owned.
 capacity to paired direct/exchange jobs that share one AO source traversal and
 selects full-resident versus bounded-B CUDA RI-MP2 execution from dimensions and
 the declared numeric budget. `tools/generate_mp2_native.py` emits those choices
-into `src/posthf/mp2_schedule_generated.hpp`; native post-HF code retains exact
-provider resource accounting, allocations, library calls and scientific
-execution. The ownership rationale is recorded in
+into `src/posthf/mp2_schedule_generated.hpp`; native post-HF code retains exact provider resource accounting, allocations,
+library calls, block traversal and reductions. The scalar RI-MP2 denominator
+and OS/SS pair-energy arithmetic is emitted from the same compiler-owned MP2
+scientific inventory. The ownership rationale is recorded in
 `.agents/notes/implemented/performance/2026-09-21-mp2-compiler-residency-schedule.md`.
 
 Each entire tile equation executes natively on the selected correlation

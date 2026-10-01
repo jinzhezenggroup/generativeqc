@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-01",
+  "master_base": "5891a0e0253b2ad6f74447a808d7b3271f0952b2",
+  "pr1637_head": "6795097b003a30f9f5e9ab8c34e0705dddbf2427",
+  "native_patch_sha256": "eed6af42b6ed9bb4d1d95c695bb14295a7a5a3d10f28f4861c977e49d59701bf",
+  "native_library_sha256": "76c5c3cc04637e96eb6c41b5d150ba0a05521c2abe59fe369c51acade2960290",
+  "complete_endpoint_gates": {
+    "energy_hartree": 1e-8,
+    "force_absolute_hartree_per_bohr": 1e-7,
+    "translation_hartree_per_bohr": 2e-8,
+    "finite_difference_steps_bohr": [1e-3, 3e-4, 1e-4],
+    "finite_difference_first_step_error": 1e-5,
+    "finite_difference_smaller_step_errors": 2e-6,
+    "grid_shape": [12, 4, 8],
+    "vv10_density_threshold_both_engines": 1e-8,
+    "final_state_density_pulay_d2h_bytes": 0
+  },
+  "accepted_cases": [
+    {
+      "case": "geometry-only spherical def2-TZVP nuclear pair",
+      "slurm_job": "11938",
+      "case_outcome": "passed",
+      "job_outcome": "canceled after the named RKS case passed",
+      "log_sha256": "1b67f35dc12fd40dd9f8b5f4703bcaa8b71a4ef7970bb59bacb29201427b02ea"
+    },
+    {
+      "case": "RKS water / named spherical def2-TZVP",
+      "slurm_job": "11938",
+      "case_outcome": "passed",
+      "job_outcome": "canceled during the following local-basis case",
+      "log_sha256": "1b67f35dc12fd40dd9f8b5f4703bcaa8b71a4ef7970bb59bacb29201427b02ea"
+    },
+    {
+      "case": "RKS water / full local spherical def2-TZVPD",
+      "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+      "slurm_job": "11940",
+      "case_outcome": "passed",
+      "job_outcome": "failed only in the following OH reference SCF",
+      "log_sha256": "535dff212b188746ab10ff72a8a058c4cb916d5f2c7271cc203bf30c9cdaf356"
+    },
+    {
+      "case": "UKS NH2 doublet / named spherical def2-TZVP",
+      "pytest_id": "wb97m-v-uks-nh2-def2-tzvp",
+      "slurm_job": "11947",
+      "case_outcome": "passed",
+      "job_outcome": "passed",
+      "test_seconds": 2121.59,
+      "log_sha256": "1d83276595d4d7fdbafbf11f7a262f32552aaab65f0d2511bf1a9e3577cb50d8"
+    }
+  ],
+  "focused_host_regressions": {
+    "passed": 110,
+    "skipped": 16,
+    "seconds": 8.21,
+    "log_sha256": "c00423c40d2c6f7936b6274fe598895ef984e006e1113e140ba01ea6a79fb4f8"
+  },
+  "existing_cpu_nonconvergence": {
+    "pytest_id": "grid_shape1-water-rks",
+    "reproduced_with_unmodified_pr_python_sources": true,
+    "native_library_unchanged": true,
+    "threads": 8,
+    "log_sha256": "b63a506b1111e73f62c9d9c9b19f3ef61f3ca2f81ec6e7b5086a3b0cff53f4ce"
+  },
+  "excluded_uks_fixture": {
+    "case": "OH doublet / named def2-TZVP",
+    "reason": "independent GPU4PySCF SCF nonconvergence; no tolerance relaxation or OH numerical acceptance"
+  }
+}

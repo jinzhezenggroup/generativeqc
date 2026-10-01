@@ -16,6 +16,7 @@ from generativeqc_compiler.method.nonlocal_pair import (
     PAIR_INPUT_ORDER,
     PAIR_OUTPUT_ORDER,
     build_nonlocal_pair_program,
+    native_local_scale_cpp,
 )
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -50,6 +51,9 @@ def native_header() -> str:
                     caller_owned_checks=True,
                     ordered_native_sums=True,
                     output_dependency_order=True,
+                )
+                body = body.replace("std::sqrt(", "::sqrt(").replace(
+                    "std::pow(", "::pow("
                 )
                 bodies.append(
                     f"// TensorIR logical hash: {program.logical_hash}\n"
@@ -97,6 +101,8 @@ struct PairValues {
 };
 
 """
+        + native_local_scale_cpp()
+        + "\n"
         + "\n".join(bodies)
         + """
 template <Vv10Variant Variant, bool Features, bool Geometry, bool Preconditioned = false>

@@ -10,6 +10,8 @@ repos:
         # Source reconstruction patches contain significant diff context markers.
         exclude: ^benchmarks/results/.*\.patch$
       - id: end-of-file-fixer
+        # Keep archived Basis Set Exchange response bytes unchanged.
+        exclude: ^benchmarks/results/.*\.bse\.json$
       - id: check-yaml
       - id: check-json
       - id: check-added-large-files

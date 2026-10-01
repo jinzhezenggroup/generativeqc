@@ -86,6 +86,10 @@ int main(int argc,char** argv) {
    f.backend=scf::FockBackend::Cpu;state.model.device=-1;
    if(mode=="cpu-scaled")state.model.semilocal_exchange_scale=0.75;
  }
+ else if(mode=="df-jk") {
+   f.spec.coulomb.approximation=scf::FockApproximation::DensityFitted;
+   f.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
+ }
  else if(mode=="df-j")f.spec.coulomb.approximation=scf::FockApproximation::DensityFitted;
  else if(mode=="df-k")f.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
  else if(mode=="range-k")f.spec.exchange.op=scf::FockOperator::LongRange;
@@ -174,6 +178,9 @@ def model_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             for mode in ("exact", "no-exchange")
             for family in (0, 1, 2)
         ),
+        ("df-jk", 1, True),
+        ("df-jk", 0, False),
+        ("df-jk", 2, False),
         *(
             (mode, 1, False)
             for mode in (

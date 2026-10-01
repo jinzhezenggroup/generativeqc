@@ -11,6 +11,9 @@
 #include <utility>
 
 #include "dft/ao_grid.hpp"
+#if GENERATIVEQC_HAS_CUDA
+#include "dft/cosx_scf.hpp"
+#endif
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -256,6 +259,9 @@ struct IncrementalPbeRksState {
   double noise_density_rms{};
   std::size_t stagnation_iterations{};
   dft::IncrementalXcDiagnostic& diagnostic;
+  bool retain_anchor_features{};
+  const dft::RksAoCache* ao_cache{};
+  dft::RksGgaFeatureCache anchor_features;
   Matrix anchor_density;
   std::optional<IncrementalPbeRksAnchorIdentity> anchor_identity;
   std::size_t updates_since_rebuild{};
@@ -264,7 +270,10 @@ struct IncrementalPbeRksState {
   bool rebuild_for_stagnation{};
   bool strict_only{};
 
-  std::size_t numeric_capacity() const noexcept { return runtime::vector_bytes(anchor_density); }
+  std::size_t numeric_capacity() const noexcept {
+    return runtime::add_capacity(runtime::vector_bytes(anchor_density),
+                                 anchor_features.numeric_capacity_bytes());
+  }
 
   void validate_identity(const IncrementalPbeRksModelIdentity& current) const {
     if (!(current == model))
@@ -288,8 +297,20 @@ struct IncrementalPbeRksState {
                              bool periodic, bool drift, bool noise, bool stagnation, bool fallback,
                              bool strict_final, bool replace_anchor) {
     const auto old_anchor_bytes = numeric_capacity();
-    auto full = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, density, tile, {},
-                                                        exchange_scale, correlation_scale);
+    dft::XcIntegral full;
+    dft::RksGgaFeatureCache replacement_features;
+    if (replace_anchor && retain_anchor_features) {
+      auto retained = dft::integrate_pbe_rks_with_tail_scaled_retaining_features(
+          basis, grid, density, tile, {}, exchange_scale, correlation_scale, ao_cache);
+      full = std::move(retained.integral);
+      replacement_features = std::move(retained.features);
+    } else if (ao_cache) {
+      full = dft::integrate_pbe_rks_with_tail_scaled_cached(
+          basis, grid, density, tile, {}, exchange_scale, correlation_scale, *ao_cache);
+    } else {
+      full = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, density, tile, {}, exchange_scale,
+                                                     correlation_scale);
+    }
     ++diagnostic.full_builds;
     diagnostic.periodic_rebuilds += periodic ? 1U : 0U;
     diagnostic.drift_rebuilds += drift ? 1U : 0U;
@@ -298,14 +319,16 @@ struct IncrementalPbeRksState {
     diagnostic.fallback_rebuilds += fallback ? 1U : 0U;
     diagnostic.strict_final_builds += strict_final ? 1U : 0U;
     if (replace_anchor) {
-      // Construct both replacement pieces before mutating the accepted anchor.
-      // If allocation/full evaluation fails, the preceding anchor stays valid.
+      // Construct the replacement density, exact linear features and identity
+      // before mutating the accepted anchor. Any failure leaves it untouched.
       Matrix replacement_density = density;
       if (diagnostic.anchor_generation == std::numeric_limits<std::uint64_t>::max())
         throw std::overflow_error("incremental XC anchor generation exhausted");
       const IncrementalPbeRksAnchorIdentity replacement_identity{model,
                                                                  diagnostic.anchor_generation + 1};
-      const auto replacement_bytes = runtime::vector_bytes(replacement_density);
+      const auto replacement_bytes =
+          runtime::add_capacity(runtime::vector_bytes(replacement_density),
+                                replacement_features.numeric_capacity_bytes());
       diagnostic.peak_replacement_overlap_bytes =
           std::max(diagnostic.peak_replacement_overlap_bytes,
                    runtime::add_capacity(old_anchor_bytes, replacement_bytes));
@@ -314,8 +337,10 @@ struct IncrementalPbeRksState {
           runtime::add_capacity(runtime::add_capacity(old_anchor_bytes, replacement_bytes),
                                 full.density_diagnostic.owned_numeric_bytes)));
       anchor_density.swap(replacement_density);
+      anchor_features = std::move(replacement_features);
       anchor_identity = replacement_identity;
       diagnostic.anchor_generation = replacement_identity.source_generation;
+      diagnostic.anchor_feature_builds += anchor_features.values.empty() ? 0U : 1U;
       diagnostic.retained_anchor_bytes = numeric_capacity();
       updates_since_rebuild = 0;
       rebuild_for_stagnation = false;
@@ -356,13 +381,16 @@ struct IncrementalPbeRksState {
     diagnostic.peak_update_buffer_bytes =
         std::max(diagnostic.peak_update_buffer_bytes, update_bytes);
     try {
+      const auto* retained_features = anchor_features.values.empty() ? nullptr : &anchor_features;
       auto incremental = dft::integrate_pbe_rks_incremental_exact(
-          basis, grid, anchor_density, delta, tile, exchange_scale, correlation_scale);
+          basis, grid, anchor_density, delta, tile, exchange_scale, correlation_scale,
+          retained_features, ao_cache);
       runtime::sample_cpu_capacity(runtime::add_capacity(
           external_retained_bytes,
           runtime::add_capacity(runtime::add_capacity(numeric_capacity(), update_bytes),
                                 incremental.total.density_diagnostic.owned_numeric_bytes)));
       ++diagnostic.incremental_updates;
+      diagnostic.anchor_feature_reuses += retained_features ? 1U : 0U;
       ++updates_since_rebuild;
       return std::move(incremental.total);
     } catch (const std::domain_error&) {
@@ -391,6 +419,7 @@ struct IncrementalPbeRksState {
     strict_only = true;
     Matrix empty;
     anchor_density.swap(empty);
+    anchor_features = {};
     anchor_identity.reset();
     updates_since_rebuild = 0;
     diagnostic.retained_anchor_bytes = 0;
@@ -433,13 +462,13 @@ dft::XcIntegral evaluate_cam_b3lyp_xc_rks(const dft::AoBasis& basis, const dft::
   return dft::integrate_cam_b3lyp_rks(basis, grid, density, tile, source);
 }
 
-RksEvaluation evaluate_rks(const PreparedFockPlan& plan,
-                           const PreparedFockPlan* long_range_correction, const dft::AoBasis& basis,
-                           const dft::MolecularGrid& grid, const Matrix& density,
-                           RksXcEvaluator evaluate_xc, const char* method_name,
-                           dft::XcDensitySource source, std::size_t retained_capacity,
-                           std::size_t tile, double exchange_scale, double correlation_scale,
-                           dft::nlc::Vv10Plan* nonlocal_correlation,
+template <class PrimaryPlan>
+RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
+                           const dft::AoBasis& basis, const dft::MolecularGrid& grid,
+                           const Matrix& density, RksXcEvaluator evaluate_xc,
+                           const char* method_name, dft::XcDensitySource source,
+                           std::size_t retained_capacity, std::size_t tile, double exchange_scale,
+                           double correlation_scale, dft::nlc::Vv10Plan* nonlocal_correlation,
                            dft::nlc::Vv10DensityDomain nonlocal_domain,
                            const dft::RksAoCache* ao_cache,
                            std::optional<dft::XcIntegral> xc_override = std::nullopt) {
@@ -498,9 +527,10 @@ RksEvaluation evaluate_rks(const PreparedFockPlan& plan,
   return result;
 }
 
+template <class PrimaryPlan>
 ScfResult run_rks(
-    const PreparedFockPlan& plan, const PreparedFockPlan* long_range_correction,
-    const dft::AoBasis& basis, const dft::MolecularGrid& grid, const ScfOptions& options,
+    PrimaryPlan& plan, const PreparedFockPlan* long_range_correction, const dft::AoBasis& basis,
+    const dft::MolecularGrid& grid, const ScfOptions& options,
     const std::vector<double>* initial_density, RksXcEvaluator evaluate_xc, const char* method_name,
     dft::nlc::Vv10Plan* nonlocal_correlation,
     dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive) {
@@ -513,15 +543,22 @@ ScfResult run_rks(
   const auto& ints = plan.one_electron();
   if (options.compute_forces)
     throw std::invalid_argument(std::string(method_name) + " RKS forces are not implemented");
-  if (strategy.backend != FockBackend::Cpu || strategy.spec.spin != FockSpin::Restricted ||
-      strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
-      strategy.spec.coulomb.coefficient != 1.0 ||
-      (strategy.spec.exchange.present &&
-       (strategy.spec.exchange.op != FockOperator::FullRange ||
-        (strategy.spec.exchange.approximation != FockApproximation::Exact &&
-         strategy.spec.exchange.approximation != FockApproximation::DensityFitted))))
-    throw std::invalid_argument(std::string(method_name) +
-                                " RKS requires a CPU full-range exact or fitted J/K Fock strategy");
+  const bool ordinary_primary =
+      strategy.backend == FockBackend::Cpu &&
+      (!strategy.spec.exchange.present ||
+       (strategy.spec.exchange.op == FockOperator::FullRange &&
+        (strategy.spec.exchange.approximation == FockApproximation::Exact ||
+         strategy.spec.exchange.approximation == FockApproximation::DensityFitted)));
+  const bool cosx_primary =
+      strategy.backend == FockBackend::Cuda && strategy.spec.exchange.present &&
+      strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx;
+  if (strategy.spec.spin != FockSpin::Restricted || strategy.spec.derivative_order != 0 ||
+      !strategy.spec.coulomb.present || strategy.spec.coulomb.coefficient != 1.0 ||
+      (!ordinary_primary && !cosx_primary))
+    throw std::invalid_argument(
+        std::string(method_name) +
+        " RKS requires a CPU exact/DF or explicit CUDA COSX full-range J/K Fock strategy");
   if (long_range_correction) {
     const auto& correction = long_range_correction->strategy();
     validate_resolved_fock_build(correction);
@@ -621,7 +658,7 @@ ScfResult run_rks(
   // workloads keep the existing tile-streaming recomputation path.
   constexpr std::size_t kCpuRksAoCacheMaximumBytes = 64ULL * 1024ULL * 1024ULL;
   std::optional<dft::RksAoCache> ao_cache;
-  if (!incremental_xc && evaluate_xc.cached_direct) {
+  if (evaluate_xc.cached_direct) {
     const auto cache_bytes = dft::rks_ao_cache_bytes(basis, grid, ks.ao_order);
     if (cache_bytes <= kCpuRksAoCacheMaximumBytes) {
       try {
@@ -631,6 +668,12 @@ ScfResult run_rks(
         ao_cache.reset();
       }
     }
+  }
+  if (incremental_state) {
+    constexpr std::size_t kCpuIncrementalXcFeatureCacheMaximumBytes = 64ULL * 1024ULL * 1024ULL;
+    incremental_state->retain_anchor_features =
+        grid.point_count() <= kCpuIncrementalXcFeatureCacheMaximumBytes / (4ULL * sizeof(double));
+    incremental_state->ao_cache = ao_cache ? &*ao_cache : nullptr;
   }
   std::shared_ptr<const OccupiedDensityFactor> factor;
   DensityFactorIdentity identity{};
@@ -974,6 +1017,29 @@ ScfResult run_pbe_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
   return run_rks(plan, nullptr, basis, grid, options, initial_density,
                  RksXcEvaluator(evaluate_pbe_xc_rks, evaluate_pbe_xc_rks_cached), "PBE", nullptr);
 }
+
+#if GENERATIVEQC_HAS_CUDA
+ScfResult run_pbe0_cosx_rks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const std::vector<double>* initial_density) {
+  const auto& strategy = plan.strategy();
+  const bool pbe0_exchange =
+      strategy.backend == FockBackend::Cuda && strategy.spec.spin == FockSpin::Restricted &&
+      strategy.spec.derivative_order == 0 && strategy.spec.coulomb.present &&
+      strategy.spec.coulomb.coefficient == 1.0 && strategy.spec.exchange.present &&
+      strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx &&
+      strategy.spec.exchange.coefficient == -0.125;
+  if (!pbe0_exchange || options.semilocal_exchange_scale != 0.75 ||
+      options.semilocal_correlation_scale != 1.0)
+    throw std::invalid_argument(
+        "PBE0 COSX RKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
+  return run_rks(plan, nullptr, basis, grid, options, initial_density,
+                 RksXcEvaluator(evaluate_pbe_xc_rks, evaluate_pbe_xc_rks_cached), "PBE0-COSX",
+                 nullptr);
+}
+
+#endif
 
 ScfResult run_pbe_rks_nonlocal(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                                const dft::MolecularGrid& grid, const ScfOptions& options,

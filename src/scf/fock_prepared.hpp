@@ -53,7 +53,8 @@ class PreparedFockPlan {
   PreparedFockPlan(const core::System& orbital, const core::System* auxiliary,
                    ResolvedFockBuild strategy, int device_id = -1,
                    std::size_t device_budget_bytes = 0,
-                   unsigned retained_direct_derivative_order = 0);
+                   unsigned retained_direct_derivative_order = 0,
+                   unsigned retained_fitted_derivative_order = 0);
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
@@ -96,6 +97,11 @@ class PreparedFockPlan {
                          const std::vector<double>& beta = {}) const;
   std::vector<double> energy_derivative(const std::vector<double>& density,
                                         const std::vector<double>& beta = {}) const;
+  /** Execute a first derivative retained alongside a value-only prepared model.
+   * The underlying provider is revalidated at derivative_order=1, preserving the
+   * exact scientific approximation while keeping the SCF identity value-only. */
+  std::vector<double> retained_energy_derivative(const std::vector<double>& density,
+                                                 const std::vector<double>& beta = {}) const;
   /** Exact comparison of immutable source inputs and execution controls.
    * Convergence thresholds, DIIS history and warm density are deliberately
    * excluded: they do not alter the prepared mathematical operator. */

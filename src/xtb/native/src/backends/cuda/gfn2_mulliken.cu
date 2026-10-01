@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "backends/cuda/gfn2_mulliken.cuh"
+#include "generated_gfn2_electronic_native.cuh"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace {
@@ -415,11 +416,14 @@ __global__ void shell_population_kernel(Gfn2MullikenDeviceBatch batch,
       finite = false;
     }
     if (finite) {
-      sum = fma(-density, overlap, sum);
-      if (!isfinite(sum)) {
+      double updated = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_population_update_cuda_tensor(
+              density, overlap, sum, updated)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2MullikenDeviceError::kNonfiniteContraction);
         finite = false;
+      } else {
+        sum = updated;
       }
     }
   }
@@ -504,11 +508,14 @@ __global__ void multipole_population_kernel(Gfn2MullikenDeviceBatch batch,
         finite = false;
       }
       if (finite) {
-        sum[component] = fma(-density, integral, sum[component]);
-        if (!isfinite(sum[component])) {
+        double updated = 0.0;
+        if (!generativeqc::xtb::generated::gfn2_population_update_cuda_tensor(
+                density, integral, sum[component], updated)) {
           record_system_error(system_errors, system, device_error,
                               Gfn2MullikenDeviceError::kNonfiniteContraction);
           finite = false;
+        } else {
+          sum[component] = updated;
         }
       }
     }
@@ -656,11 +663,14 @@ __global__ void spin_shell_population_kernel(
       finite = false;
     }
     if (finite) {
-      sum = fma(-density, overlap, sum);
-      if (!isfinite(sum)) {
+      double updated = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_population_update_cuda_tensor(
+              density, overlap, sum, updated)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2MullikenDeviceError::kNonfiniteContraction);
         finite = false;
+      } else {
+        sum = updated;
       }
     }
   }
@@ -744,11 +754,14 @@ __global__ void spin_multipole_population_kernel(
         finite = false;
       }
       if (finite) {
-        sum[component] = fma(-density, integral, sum[component]);
-        if (!isfinite(sum[component])) {
+        double updated = 0.0;
+        if (!generativeqc::xtb::generated::gfn2_population_update_cuda_tensor(
+                density, integral, sum[component], updated)) {
           record_system_error(system_errors, system, device_error,
                               Gfn2MullikenDeviceError::kNonfiniteContraction);
           finite = false;
+        } else {
+          sum[component] = updated;
         }
       }
     }
