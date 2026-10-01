@@ -20,8 +20,9 @@ def test_cpu_rks_ao_cache_is_counted_as_retained_memory() -> None:
     assert "numeric_capacity_bytes() const noexcept" in XC
 
 
-def test_cpu_rks_ao_cache_does_not_overlap_incremental_xc() -> None:
-    assert "if (!incremental_xc && evaluate_xc.cached_direct)" in RKS
+def test_cpu_rks_ao_cache_can_feed_incremental_xc() -> None:
+    assert "if (evaluate_xc.cached_direct)" in RKS
+    assert "incremental_state->ao_cache = ao_cache ? &*ao_cache : nullptr;" in RKS
 
 
 def test_pbe_rks_binds_cached_and_streamed_evaluators() -> None:
