@@ -166,22 +166,26 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
         if step.virtual or node.op in ("input", "constant") or not node.spec.size:
             continue
         contract = gemm_contract(node)
+        reduction_provider = cooperative_reduction_provider(plan, index)
         if step.gemm != "none" and contract is not None:
             is_gemm = True
             uses_cublas = contract.k > 0
+            operation = "gemm"
             shape = (contract.batch, contract.m, contract.n, contract.k)
+        elif reduction_provider is not None:
+            is_gemm = False
+            uses_cublas = False
+            operation = "reduce"
+            shape = (node.spec.size, reduction_extent(node))
         else:
             is_gemm = False
             uses_cublas = False
-            shape = (
-                (node.spec.size, reduction_extent(node))
-                if node.op == "reduce"
-                else tuple(node.spec.shape)
-            )
+            operation = node.op
+            shape = tuple(node.spec.shape)
         value_precision = plan.precision_by_node.get(node)
         request = LoweringRequest(
             consumer="tensor.cuda",
-            operation="gemm" if is_gemm else node.op,
+            operation=operation,
             backend="cuda",
             dtype=node.spec.dtype,
             accumulation_dtype=(
@@ -195,7 +199,6 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
                 ("site_hash", _site_hash(plan, index)),
             ),
         )
-        reduction_provider = cooperative_reduction_provider(plan, index)
         if uses_cublas:
             providers = (CUBLAS_PROVIDER, GENERATED_CUDA_PROVIDER)
             implementation = f"tensor-gemm-{step.gemm}"
