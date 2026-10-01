@@ -1921,15 +1921,17 @@ class Calculator:
             warm_start=False,
         ) as batch:
             batch.execute(strict=True, properties=("energy",))
-            with NativeAO(
-                atoms,
-                basis=self._basis,
-                representation=self._representation_name,
-                charge=charge,
-                multiplicity=multiplicity,
-            ) as basis:
-                with NativeRKSResponse.from_native(batch, basis) as operator:
-                    return operation(operator)
+            with (
+                NativeAO(
+                    atoms,
+                    basis=self._basis,
+                    representation=self._representation_name,
+                    charge=charge,
+                    multiplicity=multiplicity,
+                ) as basis,
+                NativeRKSResponse.from_native(batch, basis) as operator,
+            ):
+                return operation(operator)
 
     def hessian_vector_product(
         self,

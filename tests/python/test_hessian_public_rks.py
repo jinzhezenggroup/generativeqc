@@ -6,7 +6,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell, method_capabilities
+from generativeqc import (
+    Calculator,
+    GridSpec,
+    KsOptions,
+    Primitive,
+    Shell,
+    method_capabilities,
+)
 from generativeqc.response_solver import GMRESOptions
 
 if TYPE_CHECKING:
@@ -101,7 +108,9 @@ def test_public_hessian_rejects_output_budget_before_scf(
     calculator = _calculator()
 
     def forbidden(*args: object, **kwargs: object) -> object:
-        raise AssertionError("SCF preparation must not run after output preflight failure")
+        raise AssertionError(
+            "SCF preparation must not run after output preflight failure"
+        )
 
     monkeypatch.setattr(calculator, "prepare_batch", forbidden)
     with pytest.raises(ValueError, match="output_budget_bytes"):
