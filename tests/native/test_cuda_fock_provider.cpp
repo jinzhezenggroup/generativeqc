@@ -17,6 +17,8 @@
 #include "scf/cuda_direct_jk.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/fock_prepared.hpp"
+#include "scf/interaction_source_view.hpp"
 
 namespace {
 using namespace generativeqc::scf;
