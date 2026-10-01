@@ -264,6 +264,20 @@ macro(generativeqc_register_host_generated_sources target)
       COMMENT "Generating compiler-owned CUDA SCF density kernel")
   endif()
 
+  set(GENERATIVEQC_NONLOCAL_PAIR_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_nonlocal_pair_native.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_nonlocal_pair_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_nonlocal_pair_native.py"
+    OUTPUTS "${GENERATIVEQC_NONLOCAL_PAIR_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/nonlocal_pair.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/nonlocal_correlation.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
+    ARGS --output "${GENERATIVEQC_NONLOCAL_PAIR_HEADER}"
+    COMMENT "Generating shared CPU/CUDA nonlocal correlation pair algebra")
+
   set(GENERATIVEQC_GFN2_PAIR_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_pair_native.hpp")
   generativeqc_register_generated_sources(

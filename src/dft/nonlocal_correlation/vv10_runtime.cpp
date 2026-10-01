@@ -8,6 +8,8 @@
 #include <numbers>
 #include <stdexcept>
 
+#include "generated_nonlocal_pair_native.hpp"
+
 namespace generativeqc::dft::nlc {
 namespace {
 
@@ -56,50 +58,21 @@ Vv10ResourceUsage resource_usage(generativeqc_backend backend, std::uint32_t poi
                            point_count, static_cast<std::uint32_t>(tile)};
 }
 
-struct PairValues {
-  double phi{};
-  double dphi_dr2{};
-  double dphi_domega_i{};
-  double dphi_dkappa_i{};
-};
+using PairValues = generated::PairValues;
 
 template <bool ComputeRadialDerivative>
 PairValues pair_values(double r2, double omega_i, double omega_j, double kappa_i, double kappa_j,
                        Vv10Variant variant) {
-  PairValues result;
-  if (variant == Vv10Variant::rvv10) {
-    const auto ai = omega_i / kappa_i;
-    const auto aj = omega_j / kappa_j;
-    const auto zi = 1.0 + ai * r2;
-    const auto zj = 1.0 + aj * r2;
-    const auto kappa_product = kappa_i * kappa_j;
-    const auto denominator = std::pow(kappa_product, 1.5) * zi * zj * (zi + zj);
-    result.phi = -1.5 / denominator;
-    const auto factor_z = 1.0 / zi + 1.0 / (zi + zj);
-    result.dphi_domega_i = -result.phi * r2 / kappa_i * factor_z;
-    result.dphi_dkappa_i = result.phi / kappa_i * (-1.5 + (zi - 1.0) * factor_z);
-    if constexpr (ComputeRadialDerivative) {
-      const auto logarithmic = ai / zi + aj / zj + (ai + aj) / (zi + zj);
-      result.dphi_dr2 = -result.phi * logarithmic;
-    }
-  } else {
-    const auto gi = omega_i * r2 + kappa_i;
-    const auto gj = omega_j * r2 + kappa_j;
-    result.phi = -1.5 / (gi * gj * (gi + gj));
-    const auto dphi_dgi = -result.phi * (1.0 / gi + 1.0 / (gi + gj));
-    result.dphi_domega_i = dphi_dgi * r2;
-    result.dphi_dkappa_i = dphi_dgi;
-    if constexpr (ComputeRadialDerivative) {
-      const auto logarithmic = omega_i / gi + omega_j / gj + (omega_i + omega_j) / (gi + gj);
-      result.dphi_dr2 = -result.phi * logarithmic;
-    }
-  }
-  return result;
+  if (variant == Vv10Variant::rvv10)
+    return generated::pair_values<Vv10Variant::rvv10, true, ComputeRadialDerivative>(
+        r2, omega_i, omega_j, kappa_i, kappa_j);
+  return generated::pair_values<Vv10Variant::vv10, true, ComputeRadialDerivative>(
+      r2, omega_i, omega_j, kappa_i, kappa_j);
 }
 
 bool finite_pair(const PairValues& value) {
   return std::isfinite(value.phi) && std::isfinite(value.dphi_dr2) &&
-         std::isfinite(value.dphi_domega_i) && std::isfinite(value.dphi_dkappa_i);
+         std::isfinite(value.dphi_domega) && std::isfinite(value.dphi_dkappa);
 }
 
 }  // namespace
@@ -330,8 +303,8 @@ generativeqc_status Vv10Plan::execute(
           sum_phi += partner * pair.phi;
           if (MaskZeroWeights || want_features) {
             const auto dphi_drho =
-                pair.dphi_domega_i * domega_drho_[i] + pair.dphi_dkappa_i * dkappa_drho_[i];
-            const auto dphi_dsigma = pair.dphi_domega_i * domega_dsigma_[i];
+                pair.dphi_domega * domega_drho_[i] + pair.dphi_dkappa * dkappa_drho_[i];
+            const auto dphi_dsigma = pair.dphi_domega * domega_dsigma_[i];
             sum_rho += partner * dphi_drho;
             sum_sigma += partner * dphi_dsigma;
           }

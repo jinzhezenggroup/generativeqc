@@ -15,7 +15,7 @@ from math import isfinite
 
 from .ir import TRANSCENDENTALS, Node
 from .optimize import prepare_for_backend
-from .program import Program
+from .program import Program, _topological
 
 SCALAR_CPP_PRIMITIVES = frozenset(
     {
@@ -88,6 +88,9 @@ def emit_scalar_cpp(
     direct_scaled_bilinear: bool = False,
     check_intermediates: bool = True,
     fused_accumulation: bool = False,
+    caller_owned_checks: bool = False,
+    ordered_native_sums: bool = False,
+    output_dependency_order: bool = False,
 ) -> str:
     """Lower a scalar FP64 Program to one checked inline C++ function.
 
@@ -98,6 +101,22 @@ def emit_scalar_cpp(
     fused_accumulation explicitly contracts single-use product addends with
     coefficient +/-1 into std::fma, retaining the addend order and finite result
     checks. It is opt-in because fused rounding is part of the caller contract.
+
+    caller_owned_checks transfers all runtime finite/domain checks to the caller.
+    Exceptional arithmetic and outputs are preserved, including zero times
+    infinity and zero divided by zero; the returned bool is always true. This
+    mode requires direct_scaled_bilinear for that primitive, whose robust helper
+    otherwise owns its own checks. ordered_native_sums starts each sum with its
+    first term and spells unit coefficients as identity/unary minus. This is an
+    explicit signed-zero lowering contract rather than TensorIR's initial +0
+    accumulator for the sums remaining after normal production preparation;
+    constant-only folds retain TensorIR semantics. Neither option enables
+    reassociation or FMA contraction.
+
+    output_dependency_order schedules definitions depth-first from output_order
+    (or sorted output names), visiting dependencies in their existing operand
+    order and emitting shared values once. It changes only the emission schedule;
+    the default retains the canonical depth/hash order of Program.live_nodes.
     """
 
     if not isinstance(program, Program):
@@ -110,6 +129,15 @@ def emit_scalar_cpp(
     unsupported = sorted({node.op for node in nodes} - SCALAR_CPP_PRIMITIVES)
     if unsupported:
         raise ValueError(f"unsupported scalar C++ primitives: {unsupported}")
+    if (
+        caller_owned_checks
+        and not direct_scaled_bilinear
+        and any(node.op == "scaled_bilinear" for node in nodes)
+    ):
+        raise ValueError("caller_owned_checks requires direct_scaled_bilinear")
+    check_runtime = not caller_owned_checks
+    check_values = check_runtime and check_intermediates
+    simplify_bounded = check_runtime and not check_intermediates
 
     inputs: dict[str, Node] = {}
     for node in nodes:
@@ -129,6 +157,9 @@ def emit_scalar_cpp(
         raise ValueError("output_order must name every scalar output exactly once")
     for name in ordered_outputs:
         _identifier(name, "output name")
+
+    if output_dependency_order:
+        nodes = _topological(program.outputs[name] for name in ordered_outputs)
 
     uses: dict[Node, list[tuple[Node, int]]] = {}
     for parent in nodes:
@@ -171,7 +202,7 @@ def emit_scalar_cpp(
     ):
         lines.append(_scaled_bilinear_helper(function_name))
     lines.append(f"inline bool {function_name}({', '.join(parameters)}) noexcept {{")
-    if ordered_inputs:
+    if ordered_inputs and check_runtime:
         condition = " || ".join(
             f"!std::isfinite({input_parameters[name]})" for name in ordered_inputs
         )
@@ -193,43 +224,66 @@ def emit_scalar_cpp(
             continue
         if node.op == "add":
             terms = list(zip(node.inputs, attrs["coefficients"], strict=True))
-            if not check_intermediates:
+            if simplify_bounded:
                 terms = [
                     (child, coefficient)
                     for child, coefficient in terms
                     if Fraction(*coefficient) != 0 and _scalar_constant(child) != 0
                 ]
-            lines.append(f"  double {name} = 0.0;")
-            for child, coefficient in terms:
+            if not ordered_native_sums or not terms:
+                lines.append(f"  double {name} = 0.0;")
+            for term_index, (child, coefficient) in enumerate(terms):
+                first_native_term = ordered_native_sums and term_index == 0
+                factor = Fraction(*coefficient)
                 if child in fused_products:
                     left, right = child.inputs
-                    sign = "-" if Fraction(*coefficient) == -1 else ""
-                    lines.append(
-                        f"  {name} = std::fma({sign}{ref(left)}, {ref(right)}, {name});"
-                    )
-                    if check_intermediates:
+                    sign = "-" if factor == -1 else ""
+                    if first_native_term:
+                        lines.append(
+                            f"  double {name} = {sign}{ref(left)} * {ref(right)};"
+                        )
+                    else:
+                        lines.append(
+                            f"  {name} = std::fma({sign}{ref(left)}, {ref(right)}, {name});"
+                        )
+                    if check_values:
                         lines.append(f"  if (!std::isfinite({name})) return false;")
+                elif ordered_native_sums:
+                    term = (
+                        ref(child)
+                        if factor == 1
+                        else f"-{ref(child)}"
+                        if factor == -1
+                        else f"{_literal(coefficient)} * {ref(child)}"
+                    )
+                    if first_native_term:
+                        lines.append(f"  double {name} = {term};")
+                    elif factor == -1:
+                        lines.append(f"  {name} -= {ref(child)};")
+                    else:
+                        lines.append(f"  {name} += {term};")
                 else:
                     lines.append(f"  {name} += {_literal(coefficient)} * {ref(child)};")
         elif node.op == "multiply":
             left, right = node.inputs
-            if not check_intermediates and (
+            if simplify_bounded and (
                 _scalar_constant(left) == 0 or _scalar_constant(right) == 0
             ):
                 lines.append(f"  const double {name} = 0.0;")
-            elif not check_intermediates and _scalar_constant(left) == 1:
+            elif simplify_bounded and _scalar_constant(left) == 1:
                 lines.append(f"  const double {name} = {ref(right)};")
-            elif not check_intermediates and _scalar_constant(right) == 1:
+            elif simplify_bounded and _scalar_constant(right) == 1:
                 lines.append(f"  const double {name} = {ref(left)};")
             else:
                 lines.append(f"  const double {name} = {ref(left)} * {ref(right)};")
         elif node.op == "divide":
             numerator, denominator_node = node.inputs
             denominator = ref(denominator_node)
-            lines.append(f"  if ({denominator} == 0.0) return false;")
-            if not check_intermediates and _scalar_constant(numerator) == 0:
+            if check_runtime:
+                lines.append(f"  if ({denominator} == 0.0) return false;")
+            if simplify_bounded and _scalar_constant(numerator) == 0:
                 lines.append(f"  const double {name} = 0.0;")
-            elif not check_intermediates and _scalar_constant(denominator_node) == 1:
+            elif simplify_bounded and _scalar_constant(denominator_node) == 1:
                 lines.append(f"  const double {name} = {ref(numerator)};")
             else:
                 lines.append(
@@ -239,18 +293,19 @@ def emit_scalar_cpp(
             if direct_scaled_bilinear:
                 a_node, b_node, c_node, d_node, _e_node, _f_node = node.inputs
                 a, b, c, d, e, f = (ref(child) for child in node.inputs)
-                lines.append(f"  if ({e} == 0.0 || {f} == 0.0) return false;")
+                if check_runtime:
+                    lines.append(f"  if ({e} == 0.0 || {f} == 0.0) return false;")
                 left_zero = (
                     _scalar_constant(a_node) == 0 or _scalar_constant(b_node) == 0
                 )
                 right_zero = (
                     _scalar_constant(c_node) == 0 or _scalar_constant(d_node) == 0
                 )
-                if not check_intermediates and left_zero and right_zero:
+                if simplify_bounded and left_zero and right_zero:
                     expression = "0.0"
-                elif not check_intermediates and left_zero:
+                elif simplify_bounded and left_zero:
                     expression = f"-({c} * {d}) / ({e} * {f})"
-                elif not check_intermediates and right_zero:
+                elif simplify_bounded and right_zero:
                     expression = f"({a} * {b}) / ({e} * {f})"
                 else:
                     expression = f"({a} * {b} - {c} * {d}) / ({e} * {f})"
@@ -264,26 +319,31 @@ def emit_scalar_cpp(
         elif node.op in TRANSCENDENTALS:
             child = ref(node.inputs[0])
             if node.op == "sqrt":
-                lines.append(f"  if ({child} < 0.0) return false;")
+                if check_runtime:
+                    lines.append(f"  if ({child} < 0.0) return false;")
                 expression = f"std::sqrt({child})"
             elif node.op == "log":
-                lines.append(f"  if (!({child} > 0.0)) return false;")
+                if check_runtime:
+                    lines.append(f"  if (!({child} > 0.0)) return false;")
                 expression = f"std::log({child})"
             elif node.op == "power":
-                lines.append(f"  if (!({child} > 0.0)) return false;")
+                if check_runtime:
+                    lines.append(f"  if (!({child} > 0.0)) return false;")
                 expression = f"std::pow({child}, {_literal(attrs['exponent'])})"
             else:
                 expression = f"std::exp({child})"
             lines.append(f"  const double {name} = {expression};")
         else:
             raise AssertionError(node.op)
-        if check_intermediates:
+        if check_values:
             lines.append(f"  if (!std::isfinite({name})) return false;")
 
-    for output_name in ordered_outputs:
-        value = ref(program.outputs[output_name])
-        lines.append(f"  if (!std::isfinite({value})) return false;")
-    # Validate the complete result before modifying any caller-owned reference.
+    if check_runtime:
+        for output_name in ordered_outputs:
+            value = ref(program.outputs[output_name])
+            lines.append(f"  if (!std::isfinite({value})) return false;")
+    # The default validates all outputs transactionally; caller-owned checking
+    # instead publishes the native exceptional values for the enclosing runtime.
     for output_name in ordered_outputs:
         value = ref(program.outputs[output_name])
         lines.append(f"  {output_parameters[output_name]} = {value};")

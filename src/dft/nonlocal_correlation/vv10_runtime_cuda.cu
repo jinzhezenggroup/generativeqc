@@ -10,6 +10,7 @@
 
 #include "dft/grid_task_view.cuh"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
+#include "generated_nonlocal_pair_native.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_resources.cuh"
 
@@ -18,45 +19,14 @@ namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
-struct PairKernelValues {
-  double phi{};
-  double dphi_domega{};
-  double dphi_dkappa{};
-  double dphi_dr2{};
-};
+// Scientific pair formulas and output-demand closures have one compiler owner.
+using PairKernelValues = generated::PairValues;
 
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, double ki,
                                                double kj, double row_inverse_kappa) {
-  PairKernelValues result{};
-  if constexpr (Variant == Vv10Variant::rvv10) {
-    const double zi = wi * r2 + 1.0;
-    const double zj = wj * r2 + 1.0;
-    result.phi = -1.5 / (ki * kj * zi * zj * (zi + zj));
-    if constexpr (Features) {
-      const double factor_z = 1.0 / zi + 1.0 / (zi + zj);
-      result.dphi_domega = -result.phi * r2 * row_inverse_kappa * factor_z;
-      result.dphi_dkappa = result.phi * row_inverse_kappa * (-1.5 + (zi - 1.0) * factor_z);
-    }
-    if constexpr (Geometry) {
-      const double logarithmic = wi / zi + wj / zj + (wi + wj) / (zi + zj);
-      result.dphi_dr2 = -result.phi * logarithmic;
-    }
-  } else {
-    const double gi = wi * r2 + ki;
-    const double gj = wj * r2 + kj;
-    result.phi = -1.5 / (gi * gj * (gi + gj));
-    if constexpr (Features) {
-      const double dphi_dgi = -result.phi * (1.0 / gi + 1.0 / (gi + gj));
-      result.dphi_domega = dphi_dgi * r2;
-      result.dphi_dkappa = dphi_dgi;
-    }
-    if constexpr (Geometry) {
-      const double logarithmic = wi / gi + wj / gj + (wi + wj) / (gi + gj);
-      result.dphi_dr2 = -result.phi * logarithmic;
-    }
-  }
-  return result;
+  return generated::pair_values<Variant, Features, Geometry, true>(r2, wi, wj, ki, kj,
+                                                                   row_inverse_kappa);
 }
 
 unsigned launch_blocks(std::size_t count, unsigned threads) {
