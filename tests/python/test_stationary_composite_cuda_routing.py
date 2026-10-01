@@ -2,6 +2,16 @@
 
 from pathlib import Path
 
+from generativeqc_compiler.method import resolve_method
+from generativeqc_compiler.method.stationary_cuda import (
+    stationary_external_provider_sources,
+)
+from generativeqc_compiler.method.stationary_gradient import (
+    SCF_POINT_MODEL,
+    StationaryGradientPlan,
+    StationaryMeanField,
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 BATCH = (ROOT / "python/generativeqc/batch.py").read_text()
 DRIVER = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
@@ -41,3 +51,31 @@ def test_compiler_owns_external_provider_inventory() -> None:
     assert "def stationary_external_provider_sources(" in COMPILER
     assert "stationary_runtime_sources(plan)" in COMPILER
     assert '"ecp_local", "ecp_nonlocal"' in COMPILER
+
+
+def test_external_provider_inventory_follows_method_ir_primitives() -> None:
+    pbe = StationaryGradientPlan(
+        resolve_method("PBE", spin="unpolarized"),
+        StationaryMeanField(SCF_POINT_MODEL),
+    )
+    rsh = StationaryGradientPlan(
+        resolve_method("CAM-B3LYP", spin="unpolarized"),
+        StationaryMeanField(SCF_POINT_MODEL),
+    )
+    nonlocal_rsh = StationaryGradientPlan(
+        resolve_method("WB97M-V", spin="unpolarized"),
+        StationaryMeanField("libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"),
+    )
+
+    assert stationary_external_provider_sources(pbe) == ()
+    assert stationary_external_provider_sources(rsh) == (
+        "exchange_short_range",
+        "exchange_long_range",
+    )
+    assert stationary_external_provider_sources(nonlocal_rsh) == (
+        "exchange_short_range",
+        "exchange_long_range",
+        "nonlocal_ao",
+        "nonlocal_grid",
+        "nonlocal_weight",
+    )
