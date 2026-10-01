@@ -270,8 +270,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                  scf::PrecisionDtype reduction = scf::PrecisionDtype::Fp64) {
     if (!count) return;
     auto& operators = output.precision_work.operators;
-    const scf::PrecisionOperatorRecord signature{
-        kind, storage, compute, accumulation, reduction, arithmetic_mode, 0};
+    const scf::PrecisionOperatorRecord signature{kind,      storage,         compute, accumulation,
+                                                 reduction, arithmetic_mode, 0};
     auto found = std::find_if(operators.begin(), operators.end(), [&](const auto& item) {
       return item.kind == signature.kind && item.storage == signature.storage &&
              item.compute == signature.compute && item.accumulation == signature.accumulation &&
@@ -312,46 +312,37 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
       // Exact/fitted full-range exchange and an optional range correction stay
       // strict FP64 on every currently admitted CUDA-KS path.
-      const std::uint64_t exchange_builds =
-          static_cast<std::uint64_t>(has_exchange) +
-          static_cast<std::uint64_t>(has_range_correction);
-      record_precision_operator(scf::PrecisionOperatorKind::ExchangeK,
-                                scf::PrecisionDtype::Fp64,
+      const std::uint64_t exchange_builds = static_cast<std::uint64_t>(has_exchange) +
+                                            static_cast<std::uint64_t>(has_range_correction);
+      record_precision_operator(scf::PrecisionOperatorKind::ExchangeK, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict, exchange_builds);
 
       // CudaXcDensityPrecision is the execution owner's actual arithmetic
       // contract: AUTO lowers the density-times-AO products to FP32 with FP64
       // storage/accumulation/reduction; strict iterations remain all FP64.
       record_precision_operator(scf::PrecisionOperatorKind::Xc, compute, mode);
-      record_precision_operator(scf::PrecisionOperatorKind::FockAssembly,
-                                scf::PrecisionDtype::Fp64,
+      record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
-                                scf::PrecisionDtype::Fp64,
-                                scf::PrecisionArithmeticMode::Strict);
+                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
 
       // enqueue_legacy executes four products for FDS-SDF and three around the
       // generalized eigensolve. UKS occupation stabilization adds two more.
       const std::uint64_t matrix_products = stabilize_occupations ? 9U : 7U;
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                scf::PrecisionDtype::Fp64,
-                                scf::PrecisionArithmeticMode::Strict, matrix_products);
+                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
+                                matrix_products);
       if (!final_closure)
-        record_precision_operator(scf::PrecisionOperatorKind::Diis,
-                                  scf::PrecisionDtype::Fp64,
+        record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
       if (stabilize_occupations)
         record_precision_operator(scf::PrecisionOperatorKind::OccupationStabilization,
-                                  scf::PrecisionDtype::Fp64,
-                                  scf::PrecisionArithmeticMode::Strict);
-      record_precision_operator(scf::PrecisionOperatorKind::Eigensolver,
-                                scf::PrecisionDtype::Fp64,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
+      record_precision_operator(scf::PrecisionOperatorKind::Eigensolver, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
-      record_precision_operator(scf::PrecisionOperatorKind::DensityBuild,
-                                scf::PrecisionDtype::Fp64,
+      record_precision_operator(scf::PrecisionOperatorKind::DensityBuild, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
-      record_precision_operator(scf::PrecisionOperatorKind::Diagnostics,
-                                scf::PrecisionDtype::Fp64,
+      record_precision_operator(scf::PrecisionOperatorKind::Diagnostics, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
     }
 
@@ -360,8 +351,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // recurrence count; strict logical work is represented by CoulombJ above.
     if (mixed && mixed_coulomb_recurrences)
       record_precision_operator(scf::PrecisionOperatorKind::CoulombRecurrence,
-                                scf::PrecisionDtype::Fp32,
-                                scf::PrecisionArithmeticMode::Mixed,
+                                scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed,
                                 mixed_coulomb_recurrences);
   }
 
@@ -1495,8 +1485,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           // that executed audit; it does not invent another Fock build or kernel.
           work.events.push_back({scf::PrecisionWorkEventKind::FinalAudit,
                                  scf::PrecisionWorkPhase::Finalization,
-                                 static_cast<std::uint64_t>(work.events.size()),
-                                 output.iterations, owner, solve_epoch, final_generation});
+                                 static_cast<std::uint64_t>(work.events.size()), output.iterations,
+                                 owner, solve_epoch, final_generation});
           ++output.precision.final_residual_audits;
           work.complete = true;
           work.operator_inventory_complete = true;

@@ -1057,22 +1057,23 @@ void precision_work_census_case(bool restricted, int precision_mode) {
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
   const auto result = plan.run(nullptr, false, false);
   const bool mixed = precision_mode == GENERATIVEQC_PRECISION_AUTO;
-  require(result.converged && !plan.failed(),
-          "CUDA PBE precision-work solve did not converge");
-  require(result.precision.mixed_stage_fock_builds == (mixed ? result.precision.mixed_stage_fock_builds : 0) &&
-              result.precision.strict_stage_fock_builds > 0 &&
-              result.precision.mixed_stage_fock_builds + result.precision.strict_stage_fock_builds ==
-                  result.fock_builds,
-          "CUDA PBE aggregate Fock accounting is incomplete");
+  require(result.converged && !plan.failed(), "CUDA PBE precision-work solve did not converge");
+  require(
+      result.precision.mixed_stage_fock_builds ==
+              (mixed ? result.precision.mixed_stage_fock_builds : 0) &&
+          result.precision.strict_stage_fock_builds > 0 &&
+          result.precision.mixed_stage_fock_builds + result.precision.strict_stage_fock_builds ==
+              result.fock_builds,
+      "CUDA PBE aggregate Fock accounting is incomplete");
   if (mixed)
     require(result.precision.mixed_stage_fock_builds > 0 &&
                 result.precision.strict_refinement_applied &&
                 result.precision.refinement_iterations > 0,
             "CUDA PBE AUTO did not execute mixed work and strict refinement");
   else
-    require(!result.precision.strict_refinement_applied &&
-                result.precision.refinement_iterations == 0,
-            "strict CUDA PBE unexpectedly reported mixed refinement");
+    require(
+        !result.precision.strict_refinement_applied && result.precision.refinement_iterations == 0,
+        "strict CUDA PBE unexpectedly reported mixed refinement");
 
   const auto& work = result.precision_work;
   require(work.complete && work.operator_inventory_complete &&
@@ -1093,8 +1094,8 @@ void precision_work_census_case(bool restricted, int precision_mode) {
       ++mixed_events;
     } else if (event.kind == scf::PrecisionWorkEventKind::StrictFock) {
       strict_seen = true;
-      require(event.phase == (mixed ? scf::PrecisionWorkPhase::Refinement
-                                    : scf::PrecisionWorkPhase::Scf),
+      require(event.phase ==
+                  (mixed ? scf::PrecisionWorkPhase::Refinement : scf::PrecisionWorkPhase::Scf),
               "strict CUDA-KS Fock work has the wrong phase");
       ++strict_events;
     } else if (event.kind == scf::PrecisionWorkEventKind::Retry) {
@@ -1133,16 +1134,15 @@ void precision_work_census_case(bool restricted, int precision_mode) {
               operator_count(scf::PrecisionOperatorKind::Xc, strict) ==
                   result.precision.strict_stage_fock_builds,
           "CUDA-KS J/XC operator census disagrees with Fock stages");
-  for (const auto kind : {scf::PrecisionOperatorKind::FockAssembly,
-                          scf::PrecisionOperatorKind::PhysicalResidual,
-                          scf::PrecisionOperatorKind::Eigensolver,
-                          scf::PrecisionOperatorKind::DensityBuild,
-                          scf::PrecisionOperatorKind::Diagnostics})
+  for (const auto kind :
+       {scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionOperatorKind::PhysicalResidual,
+        scf::PrecisionOperatorKind::Eigensolver, scf::PrecisionOperatorKind::DensityBuild,
+        scf::PrecisionOperatorKind::Diagnostics})
     require(operator_count(kind, strict) == result.fock_builds,
             "CUDA-KS strict per-iteration operator census is incomplete");
-  require(operator_count(scf::PrecisionOperatorKind::MatrixProduct, strict) >=
-              7U * result.fock_builds,
-          "CUDA-KS matrix-product census missed mandatory physical work");
+  require(
+      operator_count(scf::PrecisionOperatorKind::MatrixProduct, strict) >= 7U * result.fock_builds,
+      "CUDA-KS matrix-product census missed mandatory physical work");
   require(operator_count(scf::PrecisionOperatorKind::Diis, strict) > 0 &&
               operator_count(scf::PrecisionOperatorKind::Diis, strict) <= result.fock_builds &&
               operator_count(scf::PrecisionOperatorKind::ExchangeK, strict) == 0,
