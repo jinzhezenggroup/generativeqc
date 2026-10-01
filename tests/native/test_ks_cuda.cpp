@@ -1141,9 +1141,9 @@ void precision_work_census_case(bool restricted, int precision_mode) {
         scf::PrecisionOperatorKind::Diagnostics})
     require(operator_count(kind, strict) == result.fock_builds,
             "CUDA-KS strict per-iteration operator census is incomplete");
-  require(operator_count(scf::PrecisionOperatorKind::MatrixProduct, strict) >=
-              7U * result.fock_builds,
-          "CUDA-KS matrix-product census missed mandatory explicit physical work");
+  require(
+      operator_count(scf::PrecisionOperatorKind::MatrixProduct, strict) >= 7U * result.fock_builds,
+      "CUDA-KS matrix-product census missed mandatory explicit physical work");
   require(operator_count(scf::PrecisionOperatorKind::Diis, strict) > 0 &&
               operator_count(scf::PrecisionOperatorKind::Diis, strict) <= result.fock_builds &&
               operator_count(scf::PrecisionOperatorKind::ExchangeK, strict) == 0,
