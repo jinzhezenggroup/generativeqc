@@ -73,8 +73,7 @@ class ElectronInteractionSource {
    * No synchronization or host publication is implied.
    */
   virtual void read_device(Operator op, const std::array<std::size_t, 4>& begin,
-                           const std::array<std::size_t, 4>& count,
-                           DeviceInteractionTarget target,
+                           const std::array<std::size_t, 4>& count, DeviceInteractionTarget target,
                            std::size_t elements) const {
     (void)op;
     (void)begin;

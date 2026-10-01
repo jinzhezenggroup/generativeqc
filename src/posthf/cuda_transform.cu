@@ -107,8 +107,8 @@ void validate(BatchTransform& p) {
   p.validated = true;
 }
 
-std::pair<std::array<size_t, 4>, size_t> batch_tile(
-    const BatchTransform& p, const size_t* begin, const size_t* counts) {
+std::pair<std::array<size_t, 4>, size_t> batch_tile(const BatchTransform& p, const size_t* begin,
+                                                    const size_t* counts) {
   if (!begin || !counts) throw std::invalid_argument("null MO batch tile shape");
   std::array<size_t, 4> shape{};
   size_t elements = 1;

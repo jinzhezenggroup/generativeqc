@@ -258,9 +258,8 @@ std::vector<std::vector<double>> NativeBlockProvider::get_many(
                                              &source_device, &capacity, error, sizeof(error)));
             if (source_device != device || capacity < elements)
               throw std::logic_error("native MO device-source tile binding mismatch");
-            source_.read_device(
-                integrals::ElectronInteractionOperator::eri, begin, current,
-                {source_device, stream, device_values, capacity}, elements);
+            source_.read_device(integrals::ElectronInteractionOperator::eri, begin, current,
+                                {source_device, stream, device_values, capacity}, elements);
 #else
             throw std::logic_error("device interaction source selected without CUDA support");
 #endif
