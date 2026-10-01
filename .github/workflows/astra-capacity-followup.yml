@@ -2,7 +2,9 @@ name: Scoped capacity follow-up
 on:
   push:
     branches: [agent/astra-capacity-followup-20261001]
-    paths: [.github/workflows/astra-capacity-followup.yml]
+    paths:
+      - .github/workflows/astra-capacity-followup.yml
+      - tests/python/test_dft_mp_v1_hybrid_route.py
 permissions:
   contents: write
 jobs:
