@@ -58,8 +58,15 @@ class Mp2Prepared final : public PreparedCalculation {
     last_.reset();
   }
   Result execute(bool compute_forces) override {
+    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
+  }
+
+  Result execute_with_reference_seed(
+      bool compute_forces, const std::vector<double>* initial_density,
+      bool* warm_start_fallback, std::optional<scf::HfWarmState>* retained_warm_state) {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
+    if (warm_start_fallback) *warm_start_fallback = false;
     try {
       const bool cuda = context_.requested_backend == GENERATIVEQC_BACKEND_CUDA;
       const bool execution_cuda = density_fitted_ ? fitted_cuda_ : cuda;
@@ -78,28 +85,52 @@ class Mp2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
 #endif
       scf::PreparedFockPlan* prepared_exact = nullptr;
-      scf::ScfResult hf;
-      if (!density_fitted_ && !cuda) {
-        if (!cpu_exact_plan_) {
-          const auto strategy =
-              scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
-                                      scf::FockBackend::Cpu, options_.screening_tolerance);
-          cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
+      const auto run_reference = [&](const std::vector<double>* seed) {
+        scf::ScfResult candidate;
+        if (!density_fitted_ && !cuda) {
+          if (!cpu_exact_plan_) {
+            const auto strategy =
+                scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
+                                        scf::FockBackend::Cpu, options_.screening_tolerance);
+            cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
+          }
+          prepared_exact = cpu_exact_plan_.get();
+          auto execution = options_;
+          execution.resolved_fock_build = prepared_exact->strategy();
+          candidate = scf::run_prepared_fock_strategy(*prepared_exact, execution, seed);
+        } else {
+          candidate =
+              density_fitted_
+                  ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
+                                        system_, *auxiliary_, options_, context_.device_id, seed)
+                                  : scf::run_rhf_density_fitting(system_, *auxiliary_, options_, seed))
+                  : scf::run_rhf_cuda(system_, options_, context_.device_id, seed);
         }
-        prepared_exact = cpu_exact_plan_.get();
-        auto execution = options_;
-        execution.resolved_fock_build = prepared_exact->strategy();
-        hf = scf::run_prepared_fock_strategy(*prepared_exact, execution);
-      } else {
-        hf = density_fitted_
-                 ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, options_,
-                                                                     context_.device_id)
-                                 : scf::run_rhf_density_fitting(system_, *auxiliary_, options_))
-                 : scf::run_rhf_cuda(system_, options_, context_.device_id);
+        return candidate;
+      };
+
+      scf::ScfResult hf = run_reference(initial_density);
+      if (initial_density && (!hf.converged || !hf.reference)) {
+        if (warm_start_fallback) *warm_start_fallback = true;
+        hf = run_reference(nullptr);
       }
       if (!hf.converged || !hf.reference)
         throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
                           "HF did not converge; no MP2 energy evaluated");
+
+      if (retained_warm_state) {
+        scf::HfWarmState state;
+        state.density = hf.density;
+        state.coordinates.reserve(3 * system_.atoms.size());
+        for (const auto& atom : system_.atoms)
+          state.coordinates.insert(state.coordinates.end(), atom.position.begin(),
+                                   atom.position.end());
+        state.energy = hf.energy;
+        state.energy_change = hf.energy_change;
+        state.density_rms = hf.density_rms;
+        state.iterations = static_cast<int>(hf.iterations);
+        *retained_warm_state = std::move(state);
+      }
       const auto& ref = *hf.reference;
       // Release the iterative density. The exact CPU prepared owner remains
       // alive when present so correlation can borrow its already-built ERIs.
@@ -264,8 +295,12 @@ class Mp2PreparedBatch final : public PreparedBatch {
  public:
   Mp2PreparedBatch(Capabilities capabilities, core::ContextState& context,
                    std::vector<core::System> systems,
-                   const generativeqc_method_descriptor& descriptor)
-      : capabilities_(capabilities), context_(&context), systems_(std::move(systems)) {
+                   const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
+      : capabilities_(capabilities),
+        context_(&context),
+        systems_(std::move(systems)),
+        warm_starts_enabled_(warm_starts_enabled),
+        warm_states_(systems_.size()) {
     descriptor_ = descriptor;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.ks_options = nullptr;
@@ -308,7 +343,18 @@ class Mp2PreparedBatch final : public PreparedBatch {
           owners_[index] = std::move(candidate);
           owner_coordinates_[index] = std::move(target_coordinates);
         }
-        result.calculation = owners_[index]->execute(compute_forces);
+
+        const bool has_warm_state = warm_starts_enabled_ && warm_states_[index].has_value();
+        result.warm_start_used = has_warm_state;
+        bool warm_start_fallback = false;
+        std::optional<scf::HfWarmState> next_warm_state;
+        auto& owner = static_cast<Mp2Prepared&>(*owners_[index]);
+        result.calculation = owner.execute_with_reference_seed(
+            compute_forces, has_warm_state ? &warm_states_[index]->density : nullptr,
+            &warm_start_fallback,
+            warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
+        result.warm_start_fallback = warm_start_fallback;
+        if (next_warm_state) warm_states_[index].swap(next_warm_state);
         result.status = GENERATIVEQC_STATUS_SUCCESS;
       } catch (...) {
         result.status = item_exception_status();
@@ -325,21 +371,46 @@ class Mp2PreparedBatch final : public PreparedBatch {
   }
 
   void clear_warm_starts() override {
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "MP2 batch does not support warm starts");
+    for (auto& state : warm_states_) state.reset();
   }
-  [[nodiscard]] std::size_t warm_density_size(std::size_t) const override { return 0; }
-  [[nodiscard]] const std::optional<scf::HfWarmState>& warm_state(std::size_t) const override {
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "MP2 batch does not support warm starts");
+
+  [[nodiscard]] std::size_t warm_density_size(std::size_t index) const override {
+    const auto n = molecule::ao_count(systems_.at(index));
+    if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n / sizeof(double))
+      throw std::invalid_argument("MP2 warm density dimensions overflow");
+    return n * n;
   }
-  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>>) override {
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "MP2 batch does not support warm starts");
+
+  [[nodiscard]] const std::optional<scf::HfWarmState>& warm_state(
+      std::size_t index) const override {
+    return warm_states_.at(index);
   }
-  void set_warm_start_updates(bool) override {
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "MP2 batch does not support warm starts");
+
+  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
+    if (!warm_starts_enabled_ || states.size() != size())
+      throw std::invalid_argument(
+          "checkpoint restore requires a matching warm-enabled MP2 batch");
+
+    for (std::size_t index = 0; index < size(); ++index) {
+      if (!states[index]) continue;
+      const auto& state = *states[index];
+      if (state.density.size() != warm_density_size(index) ||
+          !valid_positions(state.coordinates, systems_[index]) || state.iterations < 0 ||
+          !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||
+          !std::isfinite(state.density_rms) || state.density_rms < 0)
+        throw std::invalid_argument("invalid MP2 checkpoint state dimensions or diagnostics");
+
+      auto source = systems_[index];
+      set_positions(source, state.coordinates);
+      scf::validate_hf_warm_density(source, GENERATIVEQC_METHOD_RHF, state.density);
+    }
+
+    for (std::size_t index = 0; index < size(); ++index)
+      if (states[index]) warm_states_[index].swap(states[index]);
+  }
+
+  void set_warm_start_updates(bool enabled) override {
+    warm_start_updates_enabled_ = enabled;
   }
   [[nodiscard]] std::optional<std::vector<DirectShellClassProfileEntry>>
   last_direct_shell_class_profile() const override {
@@ -365,6 +436,9 @@ class Mp2PreparedBatch final : public PreparedBatch {
   Capabilities capabilities_;
   core::ContextState* context_{};
   std::vector<core::System> systems_;
+  bool warm_starts_enabled_{};
+  bool warm_start_updates_enabled_{true};
+  std::vector<std::optional<scf::HfWarmState>> warm_states_;
   generativeqc_method_descriptor descriptor_{};
   std::vector<std::unique_ptr<PreparedCalculation>> owners_;
   std::vector<std::vector<double>> owner_coordinates_;
@@ -527,9 +601,7 @@ std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilitie
                                                  std::vector<core::System> systems,
                                                  const generativeqc_method_descriptor& descriptor,
                                                  generativeqc_batch_flags flags) {
-  if ((flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0)
-    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                      "MP2 batch does not support warm starts");
+  const bool warm_starts_enabled = (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0;
   constexpr generativeqc_batch_flags profiling_flags =
       GENERATIVEQC_BATCH_ENABLE_SHELL_CLASS_PROFILING |
       GENERATIVEQC_BATCH_ENABLE_INACTIVE_EIGENSOLVER_PROFILING;
@@ -544,6 +616,7 @@ std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilitie
   if (descriptor.density_fitting_auxiliary_basis)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "conventional MP2 batch does not accept an auxiliary basis");
-  return std::make_unique<Mp2PreparedBatch>(capabilities, context, std::move(systems), descriptor);
+  return std::make_unique<Mp2PreparedBatch>(capabilities, context, std::move(systems), descriptor,
+                                             warm_starts_enabled);
 }
 }  // namespace generativeqc::methods::detail
