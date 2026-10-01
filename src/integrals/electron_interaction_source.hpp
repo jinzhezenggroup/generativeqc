@@ -52,7 +52,13 @@ class ElectronInteractionSource {
    * resident value tensors merely because they are immutable or shared.
    */
   virtual std::size_t retained_numeric_bytes() const = 0;
+  /** Logical operator capability, independent of publication memory space. */
   virtual bool supports(Operator op) const noexcept = 0;
+
+  /** Existing sources are host-readable by default. Device-only adapters
+   * override this explicitly instead of making supports() lie about semantics.
+   */
+  virtual bool supports_host_read(Operator op) const noexcept { return supports(op); }
 
   /** Optional device-resident value path. False means callers must use read().
    * This capability never changes operator semantics or authorizes screening.
