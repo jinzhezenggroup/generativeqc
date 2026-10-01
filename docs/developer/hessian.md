@@ -641,6 +641,16 @@ downloaded once. The raw symmetry check still occurs on the published matrix and
 no post-hoc symmetrization is applied. CPU/host assembly remains the default and
 all CUDA providers/compilers are explicit; unsupported combinations fail closed.
 
+The installed semilocal RKS HVP/full-Hessian consumer now reuses the same #178
+CUDA second-derivative provider as an independently selectable mixed-backend
+stage. `second_backend="cuda"` requires an explicit `CudaCompilerAdapter`; the
+one-electron, Coulomb and overlap/Pulay fixed-weight second-integral HVP tiles
+execute on CUDA and only compact coordinate HVP tiles return to the host.
+The response-weight first-integral contractions, CPKS/XC mixed geometry,
+nuclear term and molecular assembly remain host-owned in this slice. Therefore
+this is **not** a complete CUDA DFT Hessian claim and `Calculator` CUDA Hessian
+capability remains off. CPU remains the default and CUDA selection never falls
+back to the CPU second-integral compiler.
 This is a **device-final-assembly** path, not a claim that every Hessian stage is
 device-resident. Directional H1/S1 are still published to host, nuclear-RHS and
 metric preparation remain host-owned, projected GMRES least-squares/scalars are

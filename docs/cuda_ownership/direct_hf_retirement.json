@@ -27,29 +27,6 @@
       ]
     },
     {
-      "id": "bounded-direct-native-exceptions",
-      "status": "performance-exception",
-      "capability": "Exact bounded native schedules retained for the dddd production exception and low-order ssss/psss force execution.",
-      "current_selector": "The bounded runtime uses class-specific exact execution where the native schedule remains selected or where generated mathematics deliberately reuses the qualified native page scheduler. These paths are not the generic uncovered-class fallback.",
-      "generated_alternative": "Generated shell-class consumers and weighted-ERI derivative callables already overlap these classes; retirement depends on matching the exact page/stream schedule and complete endpoint behavior, not on source emission alone.",
-      "schedule_requirements": "Preserve direct pair-class enumeration, page-local screening, shared primitive work, bounded state, and single-counted force/Fock scatter while replacing only duplicate scientific algebra.",
-      "resource_profile": "Retained routes exist because queue materialization or generated class schedules can regress endpoint/resource behavior; promotion requires register/stack/shared-memory and complete-endpoint evidence.",
-      "evidence": [
-        "docs/developer/shell_codegen.md",
-        "docs/developer/weighted_eri.md",
-        "python/generativeqc_compiler/integral/production_shell_classes.json"
-      ],
-      "required_compiler_capabilities": [
-        "#832 profitability/resource planning",
-        "#833 reusable schedule vocabulary"
-      ],
-      "retirement_condition": "Retire each class-specific native scientific body when its generated consumer preserves the qualified streaming/page schedule and passes RHF/UHF numerical, resource and endpoint gates; scheduler-only runtime may remain native.",
-      "files": [
-        "src/scf/cuda/direct_bounded_dddd.cu",
-        "src/scf/cuda/direct_bounded_exact_force.cu"
-      ]
-    },
-    {
       "id": "native-fock-and-jk",
       "status": "performance-exception",
       "capability": "Retained scientific Direct J/K and materialized/packed Fock consumers for public-AO/reference domains. Order-two and generic quartet production adapters are runtime-only over compiler-owned recurrence, shell canonicalization and Fock scatter.",
@@ -123,7 +100,8 @@
         "src/scf/cuda/direct_schwarz_kernels.cu",
         "src/scf/cuda/direct_screening.cuh",
         "src/scf/cuda/direct_bounded_pages.cu",
-        "src/scf/cuda/direct_bounded_tasks.cu"
+        "src/scf/cuda/direct_bounded_tasks.cu",
+        "src/scf/cuda/direct_bounded_dddd.cu"
       ]
     },
     {

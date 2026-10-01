@@ -55,6 +55,24 @@ struct RksAoCache {
                                              unsigned order);
 RksAoCache prepare_rks_ao_cache(const AoBasis& basis, const MolecularGrid& grid, unsigned order);
 
+/** Immutable linear GGA fields for one accepted RKS density.
+ *
+ * Values are point-major [rho, grad_x, grad_y, grad_z]. They are valid only
+ * for the exact basis/grid/density identity owned by the caller.
+ */
+struct RksGgaFeatureCache {
+  std::size_t points{};
+  std::size_t nao{};
+  std::vector<double> values;
+
+  [[nodiscard]] std::size_t numeric_capacity_bytes() const noexcept;
+};
+
+struct XcIntegralWithRksGgaFeatures {
+  XcIntegral integral;
+  RksGgaFeatureCache features;
+};
+
 struct SpinXcIntegral {
   double energy{};
   std::array<double, 2> electrons{};
@@ -65,9 +83,10 @@ struct SpinXcIntegral {
 /** Fixed-model exact incremental PBE prototype for #237.
  *
  * anchor_density is the accepted reference state and delta_density is a signed
- * AO-matrix increment. Linear grid features are contracted independently from
- * D0 and delta-D, then added before any nonlinear invariant/functional
- * evaluation. potential_difference is Vxc[D0+delta-D] - Vxc[D0], assembled
+ * AO-matrix increment. Linear D0 grid features come from the accepted anchor
+ * (retained or freshly contracted); signed delta-D features are contracted
+ * independently and added before any nonlinear invariant/functional evaluation.
+ * potential_difference is Vxc[D0+delta-D] - Vxc[D0], assembled
  * from exact coefficient differences; no fxc linearization or local skipping
  * is used.
  */
@@ -81,7 +100,8 @@ struct ExactIncrementalXcIntegral {
 ExactIncrementalXcIntegral integrate_pbe_rks_incremental_exact(
     const AoBasis& basis, const MolecularGrid& grid, const std::vector<double>& anchor_density,
     const std::vector<double>& delta_density, std::size_t tile_points = 256,
-    double exchange_scale = 1.0, double correlation_scale = 1.0);
+    double exchange_scale = 1.0, double correlation_scale = 1.0,
+    const RksGgaFeatureCache* anchor_features = nullptr, const RksAoCache* cache = nullptr);
 
 /** Integrate unpolarized PBE for an RHF total AO density. */
 XcIntegral integrate_pbe_rks(const AoBasis& basis, const MolecularGrid& grid,
@@ -103,6 +123,15 @@ XcIntegral integrate_pbe_rks_with_tail_scaled_cached(
     const AoBasis& basis, const MolecularGrid& grid, const std::vector<double>& density,
     std::size_t tile_points, XcDensitySource source, double exchange_scale,
     double correlation_scale, const RksAoCache& cache);
+
+/** Full PBE build that retains the exact linear GGA fields from the same
+ * traversal. Used by safeguarded incremental XC so anchor replacement does not
+ * require a second AO/density contraction.
+ */
+XcIntegralWithRksGgaFeatures integrate_pbe_rks_with_tail_scaled_retaining_features(
+    const AoBasis& basis, const MolecularGrid& grid, const std::vector<double>& density,
+    std::size_t tile_points, XcDensitySource source, double exchange_scale,
+    double correlation_scale, const RksAoCache* cache = nullptr);
 
 /** Integrate unpolarized LDA_XC_PW for an RHF total AO density. */
 XcIntegral integrate_lda_xc_pw_rks(const AoBasis& basis, const MolecularGrid& grid,

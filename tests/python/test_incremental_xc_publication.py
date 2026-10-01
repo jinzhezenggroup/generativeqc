@@ -51,12 +51,16 @@ struct MolecularGrid {
 };
 struct Diagnostic {std::size_t npoint{},ingredient_mask{},active_ao{},borrowed_density_bytes{};};
 struct XcIntegral {std::vector<double> potential;std::size_t points{};Diagnostic density_diagnostic;double energy{},electrons{};};
+struct RksAoCache {unsigned order{};std::size_t points{},nao{};std::vector<double> jets;};
+struct RksGgaFeatureCache {std::size_t points{},nao{};std::vector<double> values;};
 struct ExactIncrementalXcIntegral {XcIntegral total;double anchor_energy{},energy_difference{};std::vector<double> potential_difference;};
 namespace runtime {
 std::size_t add_capacity(std::size_t a,std::size_t b){return a+b;}
 std::size_t vector_bytes(const std::vector<double>& v){return v.capacity()*sizeof(double);}
 }
 void validate_density_matrix(const AoBasis&,const MolecularGrid&,const std::vector<double>&,std::size_t){}
+void validate_rks_ao_cache(const AoBasis&,const MolecularGrid&,const RksAoCache&,unsigned){}
+void validate_rks_gga_feature_cache(const AoBasis&,const MolecularGrid&,const RksGgaFeatureCache&){}
 void sample_xc_capacity(XcIntegral&,const std::vector<double>&,std::size_t){}
 std::array<double,5> rks_features(const double*,const std::array<const double*,3>&,
     std::size_t,const std::vector<double>& d,const void*,unsigned){return {d[0],0,0,0,0};}
@@ -79,7 +83,7 @@ int main(){
   const std::vector<double> anchor{scenario==2 ? 1e308 : 1.0};
   const std::vector<double> delta{scenario==1 ? 1.0 : 0.0};
   try {
-    (void)integrate_pbe_rks_incremental_exact(basis,grid,anchor,delta,1,1.0,1.0);
+    (void)integrate_pbe_rks_incremental_exact(basis,grid,anchor,delta,1,1.0,1.0,nullptr,nullptr);
   } catch(const std::runtime_error&){return scenario==3 ? 1 : 0;}
   return scenario==3 ? 0 : 1;
 }

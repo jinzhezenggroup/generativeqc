@@ -1,0 +1,290 @@
+[
+  {
+    "case": "h2-sto3g",
+    "engine": "baseline",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 1.3196666019975964,
+    "json_file": "h2-sto3g-baseline-1.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "candidate",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 1.3222911970005953,
+    "json_file": "h2-sto3g-candidate-1.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "pyscf-auto",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 1.1757282329999725,
+    "json_file": "h2-sto3g-pyscf-auto-1.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "baseline",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 2.3401030439999886,
+    "json_file": "water-sto3g-baseline-1.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "candidate",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 1.4317945209986647,
+    "json_file": "water-sto3g-candidate-1.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "pyscf-auto",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 0.9788623320018814,
+    "json_file": "water-sto3g-pyscf-auto-1.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "baseline",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 6.721441178997338,
+    "json_file": "water-svp-baseline-1.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "candidate",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 2.6958329009976296,
+    "json_file": "water-svp-candidate-1.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "pyscf-auto",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 1.3222301499990863,
+    "json_file": "water-svp-pyscf-auto-1.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "baseline",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 69.91153255899917,
+    "json_file": "formaldehyde-svp-baseline-1.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "candidate",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 5.0209588470024755,
+    "json_file": "formaldehyde-svp-candidate-1.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "pyscf-auto",
+    "repeat": 1,
+    "returncode": 0,
+    "process_wall_seconds": 1.2264327609991597,
+    "json_file": "formaldehyde-svp-pyscf-auto-1.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "pyscf-auto",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 0.8180107829975896,
+    "json_file": "h2-sto3g-pyscf-auto-2.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "candidate",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.2230262029988808,
+    "json_file": "h2-sto3g-candidate-2.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "baseline",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.372198536999349,
+    "json_file": "h2-sto3g-baseline-2.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "pyscf-auto",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.0697095320028893,
+    "json_file": "water-sto3g-pyscf-auto-2.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "candidate",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.2734100839988969,
+    "json_file": "water-sto3g-candidate-2.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "baseline",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.621846624002501,
+    "json_file": "water-sto3g-baseline-2.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "pyscf-auto",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.0384017459982715,
+    "json_file": "water-svp-pyscf-auto-2.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "candidate",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.7751028269995004,
+    "json_file": "water-svp-candidate-2.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "baseline",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 8.434767261998786,
+    "json_file": "water-svp-baseline-2.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "pyscf-auto",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 1.4243519700030447,
+    "json_file": "formaldehyde-svp-pyscf-auto-2.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "candidate",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 5.242238937000366,
+    "json_file": "formaldehyde-svp-candidate-2.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "baseline",
+    "repeat": 2,
+    "returncode": 0,
+    "process_wall_seconds": 59.572348577999946,
+    "json_file": "formaldehyde-svp-baseline-2.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "baseline",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 2.7951622209984635,
+    "json_file": "h2-sto3g-baseline-3.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "candidate",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 1.5727637370000593,
+    "json_file": "h2-sto3g-candidate-3.json"
+  },
+  {
+    "case": "h2-sto3g",
+    "engine": "pyscf-auto",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 1.5656807689993002,
+    "json_file": "h2-sto3g-pyscf-auto-3.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "baseline",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 3.0316783559974283,
+    "json_file": "water-sto3g-baseline-3.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "candidate",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 1.7857892229985737,
+    "json_file": "water-sto3g-candidate-3.json"
+  },
+  {
+    "case": "water-sto3g",
+    "engine": "pyscf-auto",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 1.222702720999223,
+    "json_file": "water-sto3g-pyscf-auto-3.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "baseline",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 13.10402402100226,
+    "json_file": "water-svp-baseline-3.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "candidate",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 2.1325769190007122,
+    "json_file": "water-svp-candidate-3.json"
+  },
+  {
+    "case": "water-svp",
+    "engine": "pyscf-auto",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 1.1724956370017026,
+    "json_file": "water-svp-pyscf-auto-3.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "baseline",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 62.42650086900176,
+    "json_file": "formaldehyde-svp-baseline-3.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "candidate",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 5.504009527998278,
+    "json_file": "formaldehyde-svp-candidate-3.json"
+  },
+  {
+    "case": "formaldehyde-svp",
+    "engine": "pyscf-auto",
+    "repeat": 3,
+    "returncode": 0,
+    "process_wall_seconds": 3.19754672199997,
+    "json_file": "formaldehyde-svp-pyscf-auto-3.json"
+  }
+]

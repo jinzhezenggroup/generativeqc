@@ -4,23 +4,31 @@
 #include <array>
 #include <cstddef>
 #include <limits>
+#include <new>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "integrals/electron_interaction_source.hpp"
 #include "scf/fock_prepared.hpp"
+#if GENERATIVEQC_HAS_CUDA
+#include "scf/cuda_direct_jk_device.hpp"
+#endif
 
 namespace generativeqc::scf {
 
-/** Read-only AO interaction view over one prepared CPU Fock owner.
+/** Read-only AO interaction view over one prepared Fock owner.
  *
  * This adapter does not change the prepared plan's scientific identity or
- * allocate another integral tensor. Exact CPU owners can expose their resident
- * four-center ERI; density-fitted CPU owners expose the resident metric and
- * three-center tensors. CUDA owners deliberately expose no host interaction
- * tensors through this view.
+ * allocate another integral tensor. Exact CPU owners expose their resident
+ * four-center ERI. Exact CUDA owners expose the same unscreened full-range ERI
+ * semantics through bounded device tiles generated from their retained Direct
+ * basis/geometry metadata; they do not materialize or publish a host N^4 tensor.
+ * Density-fitted CPU owners retain the existing metric/three-center view.
  *
- * The PreparedFockPlan must outlive this view and all consumers borrowing it.
+ * The PreparedFockPlan must outlive this view and all device work borrowed
+ * through it. The device consumer is responsible for completing its stream
+ * before releasing the view/plan.
  */
 class PreparedFockInteractionSourceView final : public integrals::ElectronInteractionSource {
  public:
@@ -32,7 +40,12 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
     const auto* fitted = plan_.cpu_fitted_data();
     return fitted ? fitted->raw.naux : 0;
   }
-  std::size_t retained_numeric_bytes() const override { return plan_.cpu_observation_capacity(); }
+  std::size_t retained_numeric_bytes() const override {
+    auto bytes = plan_.cpu_observation_capacity();
+    if (plan_.cuda_direct_source())
+      bytes = checked_add(bytes, plan_.diagnostic().direct.device_bytes);
+    return bytes;
+  }
 
   bool supports(Operator op) const noexcept override {
     const auto n = nbf();
@@ -43,7 +56,7 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
       case Operator::hcore:
         return matches_size(one.hcore, n, n);
       case Operator::eri:
-        return matches_size(one.eri, n, n, n, n);
+        return matches_size(one.eri, n, n, n, n) || plan_.cuda_direct_source() != nullptr;
       case Operator::metric: {
         const auto* fitted = plan_.cpu_fitted_data();
         return fitted && matches_size(fitted->raw.metric, fitted->raw.naux, fitted->raw.naux);
@@ -55,6 +68,24 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
       }
     }
     return false;
+  }
+
+  bool supports_host_read(Operator op) const noexcept override {
+    if (op != Operator::eri) return supports(op);
+    const auto n = nbf();
+    return matches_size(plan_.one_electron().eri, n, n, n, n);
+  }
+
+  bool supports_device_read(Operator op, int device) const noexcept override {
+#if GENERATIVEQC_HAS_CUDA
+    auto* source = plan_.cuda_direct_source();
+    return op == Operator::eri && source != nullptr && device >= 0 &&
+           cuda_direct_jk_device(source) == device;
+#else
+    (void)op;
+    (void)device;
+    return false;
+#endif
   }
 
   void read(Operator op, const std::array<std::size_t, 4>& begin,
@@ -94,6 +125,43 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
     }
   }
 
+  void read_device(Operator op, const std::array<std::size_t, 4>& begin,
+                   const std::array<std::size_t, 4>& count,
+                   integrals::DeviceInteractionTarget target, std::size_t elements) const override {
+#if GENERATIVEQC_HAS_CUDA
+    if (!supports_device_read(op, target.device))
+      throw std::invalid_argument("prepared Fock owner has no requested device interaction");
+    if (!target.values || !target.stream || target.capacity < elements)
+      throw std::invalid_argument("prepared device interaction target is invalid");
+    const auto n = nbf();
+    std::size_t requested = 1;
+    for (std::size_t axis = 0; axis < 4; ++axis) {
+      if (!count[axis] || begin[axis] > n || count[axis] > n - begin[axis])
+        throw std::invalid_argument("prepared device interaction tile out of bounds");
+      requested = checked_mul(requested, count[axis]);
+    }
+    if (requested != elements)
+      throw std::invalid_argument("prepared device interaction element count mismatch");
+
+    std::string detail;
+    const auto status = enqueue_cuda_direct_eri_tile(
+        plan_.cuda_direct_source(), 0, begin, count, target.values, elements,
+        reinterpret_cast<cudaStream_t>(target.stream), detail);
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+    if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT)
+      throw std::invalid_argument(detail.empty() ? "prepared device ERI tile rejected" : detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS)
+      throw std::runtime_error(detail.empty() ? "prepared device ERI tile failed" : detail);
+#else
+    (void)op;
+    (void)begin;
+    (void)count;
+    (void)target;
+    (void)elements;
+    throw std::invalid_argument("prepared device interactions require CUDA support");
+#endif
+  }
+
  private:
   static std::size_t checked_add(std::size_t a, std::size_t b) {
     if (b > std::numeric_limits<std::size_t>::max() - a)
@@ -120,8 +188,8 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
 
   const std::vector<double>& values_for(Operator op, std::array<std::size_t, 4>& extent,
                                         std::size_t& rank) const {
-    if (!supports(op))
-      throw std::invalid_argument("prepared Fock owner does not retain requested interaction");
+    if (!supports_host_read(op))
+      throw std::invalid_argument("prepared Fock owner does not retain requested host interaction");
     const auto n = nbf();
     const auto& one = plan_.one_electron();
     switch (op) {

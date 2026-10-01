@@ -88,6 +88,7 @@ function(generativeqc_attach_cuda_implib target)
     cudaStreamCreateWithFlags
     cudaStreamDestroy
     cudaStreamEndCapture
+    cudaStreamGetFlags
     cudaStreamIsCapturing
     cudaStreamSynchronize
     cudaStreamWaitEvent

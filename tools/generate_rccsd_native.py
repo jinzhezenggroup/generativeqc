@@ -17,89 +17,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
     sys.path.insert(0, str(ROOT / "python"))
 
-# Build-time generation must remain independent of the NumPy-backed TensorIR
-# interpreter and tools.generativeqc_cc.__init__. Load the immutable compiler
-# modules needed to build and optimize #148's algebra, then expose their small
-# public surface to the equation modules. Production preparation is compiler-only
-# and must remain NumPy-free.
-import types
 from fractions import Fraction
-
-import generativeqc_compiler
-
-_tensor_path = ROOT / "python" / "generativeqc_compiler" / "tensor"
-_tensor_package = types.ModuleType("generativeqc_compiler.tensor")
-_tensor_package.__path__ = [str(_tensor_path)]
-_tensor_package.__package__ = "generativeqc_compiler.tensor"
-sys.modules["generativeqc_compiler.tensor"] = _tensor_package
-generativeqc_compiler.tensor = _tensor_package
-
-from generativeqc_compiler.tensor.ad_program import (
-    JVPProgram,
-    VJPProgram,
-    linearize,
-    transpose_program,
-)
-from generativeqc_compiler.tensor.ir import (
-    add,
-    broadcast,
-    constant,
-    divide,
-    einsum,
-    gather,
-    input_tensor,
-    multiply,
-    reduce_sum,
-    runtime_indexed_select,
-    slice_tensor,
-    transpose,
-)
-from generativeqc_compiler.tensor.optimize import optimize, prepare_for_backend
-from generativeqc_compiler.tensor.program import Program
-from generativeqc_compiler.tensor.types import Index, IndexSpace, Symmetry, TensorSpec
-
-
-class _BuildOnlyPackedLayout:
-    @classmethod
-    def from_spec(cls, *_args: typing.Any, **_kwargs: typing.Any) -> typing.NoReturn:
-        raise RuntimeError(
-            "packed layouts are not part of RCCSD AOT equation generation"
-        )
-
-
-for _name, _value in {
-    "Index": Index,
-    "IndexSpace": IndexSpace,
-    "Symmetry": Symmetry,
-    "TensorSpec": TensorSpec,
-    "Program": Program,
-    "add": add,
-    "broadcast": broadcast,
-    "constant": constant,
-    "divide": divide,
-    "einsum": einsum,
-    "execute": lambda *args, **kwargs: (_ for _ in ()).throw(
-        RuntimeError("build-only RCCSD generator does not execute TensorIR")
-    ),
-    "gather": gather,
-    "input_tensor": input_tensor,
-    "multiply": multiply,
-    "reduce_sum": reduce_sum,
-    "runtime_indexed_select": runtime_indexed_select,
-    "slice_tensor": slice_tensor,
-    "transpose": transpose,
-    "PackedLayout": _BuildOnlyPackedLayout,
-    "JVPProgram": JVPProgram,
-    "VJPProgram": VJPProgram,
-    "linearize": linearize,
-    "transpose_program": transpose_program,
-    "optimize": optimize,
-}.items():
-    setattr(_tensor_package, _name, _value)
-
-# Compiler-owned CC equation modules import the real canonical evidence module. Its numerical
-# comparison routines load NumPy only when executed; no module replacement is
-# required for immutable AOT equation construction.
 
 from generativeqc_compiler.cc.doubles import build_ccsd_program
 from generativeqc_compiler.cc.gradient_equations import (
@@ -115,6 +33,19 @@ from generativeqc_compiler.cc.lambda_equations import (
     build_parameter_vjp,
 )
 from generativeqc_compiler.cc.triples_tiles import build_runtime_tile_triples_program
+from generativeqc_compiler.tensor.ad_program import (
+    transpose_program,
+)
+from generativeqc_compiler.tensor.ir import (
+    add,
+    divide,
+    input_tensor,
+)
+from generativeqc_compiler.tensor.optimize import prepare_for_backend
+from generativeqc_compiler.tensor.program import Program
+
+if typing.TYPE_CHECKING:
+    from generativeqc_compiler.tensor.types import Index, TensorSpec
 
 REPRESENTATIVE = (2, 3)
 REPRESENTATIVE_ORBITALS = sum(REPRESENTATIVE)

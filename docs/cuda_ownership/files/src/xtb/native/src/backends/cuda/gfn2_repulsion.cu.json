@@ -1,6 +1,6 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_repulsion.cu",
-  "reason": "Vendored transitional GFN2 CUDA source for #560 native backend admission; counted conservatively as handwritten scientific ownership until generated/GenerativeQC-native replacements retire the equivalent path.",
+  "reason": "Compiler-generated pair repulsion energy/radial derivatives replace the scalar formula. Native code still composes element-pair alpha and charge, selects the light-pair policy, and maps the radial derivative to Cartesian forces. Retain this scientific composition; traversal, reduction, validation and publication remain runtime responsibilities.",
   "regions": [],
   "role": "scientific",
   "subsystem": "gfn2"

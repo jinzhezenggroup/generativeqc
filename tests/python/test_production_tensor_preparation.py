@@ -79,7 +79,7 @@ def test_production_generators_cannot_restore_private_optimizer_bypasses() -> No
     assert "preserve_reduction_order=True" in scf
 
     stationary = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
-    wb97mv = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
+    wb97mv = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
     assert "plan_cuda(" in stationary
     # WB97M-V components are host-resident at the final composition boundary.
     # Keep the compiler-owned complete-source coverage gate without forcing a

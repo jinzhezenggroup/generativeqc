@@ -253,6 +253,32 @@ generativeqc_status generativeqc_ks_snapshot_hamiltonian_v1(
   }
 }
 
+generativeqc_status generativeqc_ks_snapshot_fock_provider_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint32_t* coulomb_approximation, std::uint32_t* exchange_approximation,
+    double* metric_relative_threshold) {
+  if (!batch || !snapshot || !coulomb_approximation || !exchange_approximation ||
+      !metric_relative_threshold)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    const auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    const auto& model = snapshot->token.identity.determinant.model;
+    const auto absent = std::numeric_limits<std::uint32_t>::max();
+    *coulomb_approximation = model.spec.coulomb.present
+                                 ? static_cast<std::uint32_t>(model.spec.coulomb.approximation)
+                                 : absent;
+    *exchange_approximation = model.spec.exchange.present
+                                  ? static_cast<std::uint32_t>(model.spec.exchange.approximation)
+                                  : absent;
+    *metric_relative_threshold = model.metric_relative_threshold;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_xc_response_create_v1(generativeqc_batch* batch,
                                                           const generativeqc_ks_snapshot* snapshot,
                                                           std::size_t tile_points,
