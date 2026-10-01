@@ -83,8 +83,7 @@ struct GeneratedExchangePlan {
  */
 std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool force_capability = false,
-    bool allow_force_only_shell_classes = false);
+    std::size_t budget, bool force_capability = false, bool allow_force_only_shell_classes = false);
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.

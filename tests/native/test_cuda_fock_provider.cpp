@@ -547,12 +547,12 @@ void canonical_one_electron_reuse() {
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
-      require(plan->generated_exchange && plan->generated_exchange->force_capability &&
-                  plan->generated_exchange->shared &&
-                  !plan->generated_exchange->shared->value_capability &&
-                  plan->batch.shell_ao_offsets && plan->batch.shell_pair_first &&
-                  plan->batch.shell_pair_second,
-              "through-f owner did not retain the force-only shell lease and one-electron metadata");
+      require(
+          plan->generated_exchange && plan->generated_exchange->force_capability &&
+              plan->generated_exchange->shared &&
+              !plan->generated_exchange->shared->value_capability && plan->batch.shell_ao_offsets &&
+              plan->batch.shell_pair_first && plan->batch.shell_pair_second,
+          "through-f owner did not retain the force-only shell lease and one-electron metadata");
       auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
       value_spec.derivative_order = 0;
       require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
@@ -600,7 +600,8 @@ void canonical_one_electron_reuse() {
       weights.verify(weighted_density);
     }
   }
-  std::cout << "CUDA through-f shell RSH + HF one-electron reuse/CPU gradient/zero-H2D gates PASS\n";
+  std::cout
+      << "CUDA through-f shell RSH + HF one-electron reuse/CPU gradient/zero-H2D gates PASS\n";
 }
 
 /** Boundary fixtures include empty rows, equal keys, underflow and exact products.
