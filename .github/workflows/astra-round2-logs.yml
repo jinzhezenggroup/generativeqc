@@ -1,0 +1,49 @@
+name: Round-two failure diagnostics
+on:
+  push:
+    branches: [agent/astra-review-round2-20261001]
+    paths: [.github/workflows/astra-round2-logs.yml]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+  checks: read
+jobs:
+  diagnostics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Read selected job diagnostics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+          from pathlib import Path
+          out=Path(os.environ['RUNNER_TEMP'])/'round2-logs';out.mkdir()
+          base='https://api.github.com/repos/jinzhezenggroup/generativeqc/'
+          def read(path):
+            r=urllib.request.Request(base+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
+            with urllib.request.urlopen(r,timeout=90) as f:return f.read().decode('utf-8-sig')
+          for number,job in [(1510,109975875326),(1633,110167728482),(1634,110169636646),(1635,110169915286),(1637,110188749882),(1640,110212742455),(1641,110215733184),(1642,110215257740)]:
+            try:
+              log=read(f'actions/jobs/{job}/logs')
+              log=re.sub(r'(?m)^\d{4}-\d\d-\d\dT\S+ ', '', log)
+              (out/f'{number}.log').write_text(log)
+              failed='\n'.join(l for l in log.splitlines() if l.startswith('FAILED ') or l.startswith('ERROR ') or re.search(r'^=+ .*(failed|passed)',l))
+              print(number,job,failed,flush=True)
+            except Exception as e: print(number,str(e),flush=True)
+          prs=json.loads(read('pulls?state=open&per_page=100'))
+          compact=[]
+          for p in prs:
+            n=p['number']; h=p['head']['sha']; checks=json.loads(read(f'commits/{h}/check-runs?per_page=100'))
+            compact.append({'number':n,'title':p['title'],'draft':p['draft'],'head':h,'head_ref':p['head']['ref'],'base':p['base']['ref'],'checks':[{'name':c['name'],'status':c['status'],'conclusion':c['conclusion']} for c in checks['check_runs']]})
+          (out/'current.json').write_text(json.dumps(compact,indent=2))
+          print(json.dumps(compact),flush=True)
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: astra-round2-failure-diagnostics
+          path: ${{ runner.temp }}/round2-logs/
+          retention-days: 1
