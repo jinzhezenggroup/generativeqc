@@ -10,6 +10,7 @@
 #include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
 #include "scf/fock_build.hpp"
+#include "scf/precision_work.hpp"
 
 namespace generativeqc::scf {
 
@@ -195,6 +196,9 @@ struct ScfResult {
    * leaves the FP64 defaults in place.
    */
   PrecisionProvenance precision{};
+  /** Execution-owned detailed precision timeline/operator census. It may remain
+   * partial even when the aggregate provenance above is available. */
+  PrecisionWork precision_work{};
   std::shared_ptr<const PhysicalReference> reference;
   /** Current immutable RKS factor when explicitly requested, including on a
    * nonconverged return. Its witness matches the returned density exactly. */
