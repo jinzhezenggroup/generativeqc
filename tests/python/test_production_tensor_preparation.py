@@ -21,6 +21,15 @@ def test_prepare_for_backend_folds_constants_without_numpy_interpreter() -> None
     assert prepared.outputs["value"].attrs["values"] == ((5, 1),)
 
 
+def test_portable_preparation_records_shared_host_device_domain() -> None:
+    program = Program({"value": add(constant(2), constant(3))})
+    prepared = prepare_for_backend(program, "portable")
+    assert prepared.outputs["value"].op == "constant"
+    record = prepared.provenance["production_preparation"]
+    assert record["backend"] == "portable"
+    assert record["reassociation_enabled"] is True
+
+
 def test_prepare_for_backend_is_site_package_independent() -> None:
     script = f"""
 import sys
@@ -91,9 +100,11 @@ def test_gfn2_generators_use_shared_production_preparation() -> None:
     assert cuda.count("prepare_for_backend(") >= 3
     assert 'backend="cuda"' in cuda
 
-    # Pair/ES2 emit one source shared by host and device, so use the
-    # backend-neutral scalar preparation domain rather than a CUDA-only route.
+    # Pair/ES2 emit one scientific source compiled by both host and device, so
+    # keep that shared lowering domain explicit instead of labeling it scalar/CPU/CUDA.
     assert pair.count("prepare_for_backend(") >= 2
-    assert 'backend="scalar"' in pair
+    assert 'backend="portable"' in pair
+    assert 'backend="scalar"' not in pair
     assert es2.count("prepare_for_backend(") >= 4
-    assert 'backend="scalar"' in es2
+    assert 'backend="portable"' in es2
+    assert 'backend="scalar"' not in es2
