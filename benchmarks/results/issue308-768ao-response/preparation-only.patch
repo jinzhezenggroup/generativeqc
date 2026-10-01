@@ -4,7 +4,7 @@ index 5423bac..e7f6a54 100644
 +++ b/benchmarks/compare_gpu4pyscf_batch.py
 @@ -14,10 +14,12 @@ its AO convention.
  from __future__ import annotations
- 
+
  import argparse
 +import json
  import statistics
@@ -13,7 +13,7 @@ index 5423bac..e7f6a54 100644
  from contextlib import contextmanager
 +from pathlib import Path
  from typing import Any
- 
+
  import numpy as np
 @@ -513,6 +515,11 @@ def main() -> None:
          default=".artifacts/benchmarks/compare_gpu4pyscf_batch.json",
@@ -30,7 +30,7 @@ index 5423bac..e7f6a54 100644
 @@ -541,6 +548,20 @@ def main() -> None:
      if args.maximum_force_error is not None and args.maximum_force_error < 0.0:
          raise ValueError("--maximum-force-error must be non-negative")
- 
+
 +    def progress(stage: str, **record: Any) -> None:
 +        """Preserve completed work if a later large endpoint fails or times out."""
 +        if args.progress_output:
@@ -67,14 +67,14 @@ index 5423bac..e7f6a54 100644
          gpu_cold_convergence = gpu_convergence_payload(gpu_objects, gpu_cold_trackers)
 +        progress("gpu4pyscf_cold", seconds=gpu_cold, convergence=gpu_cold_convergence)
          gpu_warm_densities = [engine.make_rdm1().copy() for engine in gpu_objects]
- 
+
          # Establish a steady resident-state path before starting the captured
 @@ -664,6 +692,7 @@ def main() -> None:
          vibeqc_prime = _vibeqc_sample(batch, cp, -1, compute_forces)
          gpu_prime = _gpu_sample(gpu_objects, gpu_warm_densities, cp, -1, compute_forces)
          warm_start_priming = warm_start_priming_metadata(vibeqc_prime, gpu_prime)
 +        progress("primed", **warm_start_priming)
- 
+
          if args.capture_warm_range:
              cp.cuda.profiler.start()
 @@ -673,6 +702,7 @@ def main() -> None:
@@ -141,7 +141,7 @@ index ce4ea22..7214f0a 100644
 +++ b/benchmarks/issue308_response_timeline.py
 @@ -23,7 +23,7 @@ from vibeqc import Calculator, _native
  from vibeqc.autotune import source_identity
- 
+
  from benchmarks._cases import benchmark_cases
 -from benchmarks.compare_gpu4pyscf_batch import scaled_geometries
 +from benchmarks.compare_gpu4pyscf_batch import convergence_payload, scaled_geometries
@@ -377,7 +377,7 @@ index 3cc6159..7a0e07d 100644
 +++ b/src/scf/rhf.cpp
 @@ -1,6 +1,7 @@
  #include "scf/rhf.hpp"
- 
+
  #include <algorithm>
 +#include <charconv>
  #include <cmath>
@@ -394,7 +394,7 @@ index 3cc6159..7a0e07d 100644
 @@ -79,10 +81,16 @@ initial_guess::InitialOrbitalRequest df_initial_orbital_request() {
               : initial_guess::InitialOrbitalRequest::ColdDensityOnly;
  }
- 
+
 -/** Assemble immutable DF state from already-evaluated one- and three-center data. */
 +/** Assemble immutable DF state from already-evaluated one- and three-center data.
 + * CUDA plans factor the raw metric and transform A on their own device stream.
@@ -432,9 +432,9 @@ index 3cc6159..7a0e07d 100644
 +  }
    return data;
  }
- 
+
 @@ -171,6 +184,20 @@ void bind_generated_one_electron(DensityFittingScfData& data, const core::System
- 
+
  /** Reserve half a constrained DF request for the generated force bridge. */
  [[maybe_unused]] std::size_t df_response_budget(std::size_t requested) {
 +  // Isolate response tiling from the value-provider choice during endpoint
@@ -505,10 +505,10 @@ index da4028b..e200e3b 100644
 +++ b/tests/python/test_df_property_budget_cuda.py
 @@ -7,6 +7,7 @@ import pytest
  from vibeqc import Calculator
- 
+
  from benchmarks._cases import benchmark_cases
 +from benchmarks.df_component_ledger import aggregate_host, read_host_trace, read_trace
- 
+
  pytestmark = pytest.mark.skipif(
      os.environ.get("VIBEQC_RESOURCE_CUDA_TEST") != "1",
 @@ -73,3 +74,59 @@ def test_property_replay_replans_value_storage_with_complete_forces(

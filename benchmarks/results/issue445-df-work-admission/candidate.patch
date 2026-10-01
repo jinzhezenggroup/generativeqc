@@ -7,7 +7,7 @@ index 580d349..9e024d7 100644
  #include <stdexcept>
  #include <string_view>
 +#include <utility>
- 
+
  #include "molecule/basis.hpp"
 +#include "runtime/cuda_architecture.hpp"
  #include "runtime/cuda_component_trace.hpp"
@@ -18,7 +18,7 @@ index 580d349..9e024d7 100644
  #include "scf/cuda_density_fitting.hpp"
  #include "scf/cuda_df_gradient.hpp"
 +#include "scf/df_derivative_policy.hpp"
- 
+
  namespace vibeqc::scf {
  namespace {
 @@ -705,32 +708,29 @@ vibeqc_status execute_cuda_df_hf_gradient(
@@ -126,7 +126,7 @@ index f7236c7..7d973de 100644
 --- a/src/scf/cuda/df_shell_derivatives.cu
 +++ b/src/scf/cuda/df_shell_derivatives.cu
 @@ -8,6 +8,7 @@
- 
+
  #include "generated_df_production.hpp"
  #include "molecule/basis.hpp"
 +#include "runtime/cuda_architecture.hpp"
@@ -144,7 +144,7 @@ index f7236c7..7d973de 100644
 +  if (error == cudaSuccess) error = runtime::cuda_architecture(device, architecture);
    return error;
  }
- 
+
 diff --git a/src/runtime/cuda_architecture.hpp b/src/runtime/cuda_architecture.hpp
 new file mode 100644
 index 0000000..09ada5c

@@ -152,7 +152,7 @@ index 00cdf64..1503f54 100644
 +++ b/tests/native/test_final_state.cpp
 @@ -4,11 +4,20 @@
  #include <stdexcept>
- 
+
  #include "scf/solver/final_state.hpp"
 +#ifdef VIBEQC_TEST_DEVICE_FINAL_STATE
 +#include <cuda_runtime_api.h>
@@ -162,7 +162,7 @@ index 00cdf64..1503f54 100644
 +#include "scf/cuda_density_fitting.hpp"
 +#include "scf/cuda_density_fitting_final_state.hpp"
 +#endif
- 
+
  namespace {
  using namespace vibeqc::scf;
  using namespace vibeqc::scf::solver;
@@ -188,7 +188,7 @@ index 00cdf64..1503f54 100644
 +                              force, backend);
    }
  };
- 
+
 @@ -205,6 +214,10 @@ void physical_reference_caps() {
    a.f.spins[0] = {-1e-8 + 1e-15, 0, 0, 3};
    a.d = {{2e8, 0, 0, 0}};
@@ -228,7 +228,7 @@ index 00cdf64..1503f54 100644
                result.fock_evaluations == 5 && result.eigen_solves == 4 &&
                result.density_updates == 4 && result.candidate_rejections == 4,
 @@ -322,6 +335,21 @@ void provider_failure_and_nonlinear_exhaustion() {
- 
+
  int main() {
    try {
 +#ifdef VIBEQC_TEST_DEVICE_FINAL_STATE

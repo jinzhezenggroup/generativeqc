@@ -229,7 +229,7 @@ index 23a939f..4784656 100644
 @@ -14,10 +14,17 @@ struct DfShellBasisView {
    std::size_t begin[4]{}, count[4]{};
  };
- 
+
 +/** Ordered dense reference, folded dense shell pairs, or folded packed AOs.
 + * packed stores W_ii once and W_ij+W_ji at i*(i+1)/2+j (i>j), auxiliary-major.
 + * It therefore includes the off-diagonal multiplicity before AO expansion.

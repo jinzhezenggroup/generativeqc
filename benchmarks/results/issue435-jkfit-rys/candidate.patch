@@ -4,7 +4,7 @@ index 3807c44..b99bd02 100644
 +++ b/benchmarks/df_policy_endpoint.py
 @@ -21,7 +21,11 @@ import numpy as np
  from vibeqc import Calculator, _native
- 
+
  from benchmarks._cases import benchmark_cases
 -from benchmarks.compare_gpu4pyscf_batch import convergence_payload, scaled_geometries
 +from benchmarks.compare_gpu4pyscf_batch import (
@@ -13,12 +13,12 @@ index 3807c44..b99bd02 100644
 +    scaled_geometries,
 +)
  from benchmarks.df_component_ledger import aggregate, read_host_trace, read_trace
- 
+
  CASES = {
 @@ -92,6 +96,67 @@ def independent_reference(reference, aos, energies, forces, basis_metadata):
      return expected_energy, expected_forces
- 
- 
+
+
 +def cpu_reference(case, orbital_basis, auxiliary_basis):
 +    """Build an independent explicit-basis oracle outside all native timers."""
 +    import pyscf
@@ -124,7 +124,7 @@ index 3807c44..b99bd02 100644
 +    ):
          parser.error("skip-cold requires a frozen checkpoint and independent reference")
      from vibeqc.resources_hf import _CUDA_SCHEDULE_VARIABLES
- 
+
 @@ -197,6 +280,26 @@ def main():
              parser.error("cold-control requires a known CUDA schedule NAME=VALUE")
          cold_controls[name] = value
@@ -187,7 +187,7 @@ index 3807c44..b99bd02 100644
 +        },
          "samples": [],
      }
- 
+
 @@ -271,13 +384,13 @@ def main():
      os.environ.update(cold_controls)
      calculator = Calculator(
@@ -292,7 +292,7 @@ index 3c68071..4ba4fda 100644
 --- a/benchmarks/df_shell_work_ledger.py
 +++ b/benchmarks/df_shell_work_ledger.py
 @@ -2,8 +2,8 @@
- 
+
  Run after a VIBEQC_DF_SHELL_WORK=1 component capture. Counts describe emitted
  source operations, not hardware instructions or elapsed-time percentages.
 -The supported headline cases share orbital/auxiliary bases; general sparse
@@ -300,16 +300,16 @@ index 3c68071..4ba4fda 100644
 +Explicit unequal auxiliary bases retain separate orbital/auxiliary shell
 +domains; sparse counter correctness is tested by the native shell-pair oracle.
  """
- 
+
  from __future__ import annotations
 @@ -26,11 +26,12 @@ from vibeqc_compiler.integral.df_shell_derivatives import (
  )
- 
+
  from benchmarks._cases import benchmark_cases
 +from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis
  from benchmarks.df_component_ledger import read_trace
  from benchmarks.df_policy_endpoint import CASES
- 
+
  # Historical seven-class coverage grouping from #394. This is not an
 -# availability mask: generated Rys execution currently supports only 000.
 +# availability mask: availability is owned by the compiler, not this report.
@@ -318,12 +318,12 @@ index 3c68071..4ba4fda 100644
      (0, 0, 1),
 @@ -74,7 +75,7 @@ WORK_FIELDS = (
  )
- 
- 
+
+
 -def reconstruct_domain(shells, panels, pair_mode):
 +def reconstruct_domain(shells, panels, pair_mode, auxiliary_shells=None):
      """Count implicit signature products using only public host shell metadata.
- 
+
      Each shell row is (angular, primitives, public AO offset, public AO count).
 @@ -84,6 +85,7 @@ def reconstruct_domain(shells, panels, pair_mode):
      """
@@ -344,8 +344,8 @@ index 3c68071..4ba4fda 100644
                  for third, nthird in third_groups.items():
 @@ -192,7 +194,7 @@ def kernel_activity(database_path, record):
      }
- 
- 
+
+
 -def reduce_work(record, shells):
 +def reduce_work(record, shells, auxiliary_shells=None):
      """Require complete class/signature counters and conserved primitive work."""
@@ -478,7 +478,7 @@ index 3ea006f..6d2adc5 100644
 @@ -25,6 +25,18 @@ COMPONENT_RYS_SHELL_CLASSES = (
      (2, 0, 0),
  )
- 
+
 +# Practical s/p/d orbital bases with f auxiliary shells need only the existing
 +# independently qualified three/four-root quadrature for these five classes.
 +# The d-d-f class needs five roots and deliberately retains its polynomial
@@ -721,10 +721,10 @@ index a52a75c..2234545 100644
 @@ -6,7 +6,7 @@ from pathlib import Path
  import numpy as np
  import pytest
- 
+
 -from benchmarks.df_policy_endpoint import CASES, independent_reference
 +from benchmarks.df_policy_endpoint import CASES, endpoint_errors, independent_reference
- 
+
  EVIDENCE = (
      Path(__file__).resolve().parents[2] / "benchmarks/results/issue377-379-df/gpu4pyscf"
 @@ -137,3 +137,24 @@ def test_coupled_policies_reject_incomplete_or_non_schedule_arms(
@@ -829,11 +829,11 @@ index 9f62de9..96bde60 100644
 +    shell_rys_roots,
  )
  from vibeqc_compiler.integral.df_shell_derivatives import emit_df_shell_derivatives_cuda
- 
+
 @@ -200,8 +202,8 @@ def test_independent_high_precision_center_differentiation(
  ):
      """Differentiate the closed SSS integral; no generated DAG or Rys oracle.
- 
+
 -    Cartesian p/d functions are center derivatives of an s Gaussian (d also
 -    includes its lower-order correction). High precision resolves the tiny
 +    Cartesian p/d/f functions are center derivatives of an s Gaussian (d/f
