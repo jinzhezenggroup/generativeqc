@@ -1,9 +1,11 @@
 # Split-global-hybrid CUDA acceptance
 
 M06-2X and MN15 expose generated RKS/UKS selectors qualified for CUDA,
-strict-FP64, direct J/K and device-fused XC execution. Public all-electron
-forces use the composed global-hybrid stationary consumer and require the
-additional force gates below. Their
+direct J/K and device-fused XC execution. Strict FP64 remains the audit baseline;
+component-wise AUTO may lower the qualified Direct Coulomb J stage while exact K,
+semilocal arithmetic without an independent mixed qualification, and the final
+stationary force state remain FP64. Public all-electron forces use the composed
+global-hybrid stationary consumer and require the additional force gates below. Their
 component-level `cuda-point-validated` label does not admit arbitrary bulk XC
 compositions or CPU execution. Source generation, ABI tests, CUDA compilation,
 and interior-point agreement alone are not acceptance: retain every gate below
