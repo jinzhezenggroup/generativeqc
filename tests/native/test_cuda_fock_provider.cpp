@@ -616,8 +616,7 @@ void direct_providers(bool through_f_response) {
       if (derivatives) {
         auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
         value_spec.derivative_order = 0;
-        require(direct_jk_generated_exchange_value_available(*plan, value_spec) ==
-                    (angular <= 2),
+        require(direct_jk_generated_exchange_value_available(*plan, value_spec) == (angular <= 2),
                 "force-capable owner changed generated exchange value eligibility");
         value_spec.derivative_order = 1;
         require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
