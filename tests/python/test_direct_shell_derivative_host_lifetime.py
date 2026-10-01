@@ -14,10 +14,10 @@ def _extract_function(source: str, symbol: str) -> str:
     opening = source.index("{", start)
     depth = 0
     for index in range(opening, len(source)):
-        token = source[index]
-        if token == "{":
+        character = source[index]
+        if character == "{":
             depth += 1
-        elif token == "}":
+        elif character == "}":
             depth -= 1
             if depth == 0:
                 return source[start : index + 1]
