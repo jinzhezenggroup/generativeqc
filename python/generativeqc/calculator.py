@@ -866,15 +866,18 @@ class Calculator:
                 or (self._device_name == "cpu" and qualified_basis(self._basis))
             )
         )
-        from .ks import cuda_global_hybrid_force_eligible
+        from .ks import SPLIT_HYBRID_SCF_DOMAIN, cuda_global_hybrid_force_eligible
 
         cuda_hybrid_force = (
             self._device_name == "cuda"
             and not basis_has_ecp
-            and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
             and self._ks_options.xc_schedule == "device_fused"
             and cuda_global_hybrid_force_eligible(self._ks_options.method_ir)
+            and (
+                self._precision_mode == _native.PRECISION_FP64
+                or self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN
+            )
         )
         cuda_wb97mv_force = (
             self._device_name == "cuda"
