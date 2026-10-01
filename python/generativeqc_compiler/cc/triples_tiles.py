@@ -27,7 +27,6 @@ from generativeqc_compiler.tensor import (
     broadcast,
     divide,
     einsum,
-    execute,
     gather,
     input_tensor,
     multiply,
@@ -732,6 +731,8 @@ def runtime_tile_triples_energy_tensorir(
     denominator_threshold: typing.Any = 1e-10,
 ) -> float:
     """CPU-reference execution of one reusable runtime-indexed tile graph."""
+    from generativeqc_compiler.tensor import execute
+
     _validate(
         nocc,
         nvir,
@@ -772,6 +773,8 @@ def tile_triples_energy_tensorir(
     denominator_threshold: typing.Any = 1e-10,
 ) -> typing.Any:
     """Build and execute the tile TensorIR lowering; returns the E_T scalar."""
+    from generativeqc_compiler.tensor import execute
+
     _validate(nocc, nvir, ovvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v)
     _check_denominators(eps_o, eps_v, denominator_threshold)
     program = build_tile_triples_program(nocc, nvir, vir_chunk=vir_chunk)
