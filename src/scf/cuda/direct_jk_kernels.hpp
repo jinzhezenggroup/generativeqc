@@ -2,6 +2,7 @@
 
 #include <cuda_runtime.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
@@ -19,6 +20,14 @@ constexpr unsigned kIndependentJkThreads = 32;
 /** Device-only validity reduction for the allocation-free provider seam. */
 void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* values,
                                          std::size_t count, int* failure);
+
+/** Exact unscreened public-AO ERI tile for prepared interaction-source consumers.
+ * The output is row-major [i,j,k,l] with l fastest. Caller owns storage/stream.
+ */
+void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
+                                 const std::array<std::size_t, 4>& begin,
+                                 const std::array<std::size_t, 4>& count,
+                                 std::size_t elements, double* eri);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
