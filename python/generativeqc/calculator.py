@@ -924,20 +924,20 @@ class Calculator:
             and not basis_has_ecp
             and (
                 isinstance(self._basis, str)
-            or (
-                isinstance(self._basis, BasisSet)
-                and all(
-                    shell.angular_momentum <= 3
-                    for element in self._basis.elements
-                    for shell in element.shells
+                or (
+                    isinstance(self._basis, BasisSet)
+                    and all(
+                        shell.angular_momentum <= 3
+                        for element in self._basis.elements
+                        for shell in element.shells
+                    )
+                )
+                or (
+                    not isinstance(self._basis, BasisSet)
+                    and not isinstance(self._basis, str)
+                    and all(shell.angular_momentum <= 3 for shell in self._basis)
                 )
             )
-            or (
-                not isinstance(self._basis, BasisSet)
-                and not isinstance(self._basis, str)
-                and all(shell.angular_momentum <= 3 for shell in self._basis)
-            )
-        )
         )
         public_rks_second_order = (
             self._device_name == "cpu"
