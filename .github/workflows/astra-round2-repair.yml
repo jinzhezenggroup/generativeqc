@@ -1,0 +1,82 @@
+name: Round-two bounded PR repairs
+on:
+  push:
+    branches: [agent/astra-review-round2-20261001]
+    paths: [.github/workflows/astra-round2-repair.yml]
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml ruff==0.16.9
+      - name: Validate before each bounded branch update
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess, tempfile
+          from pathlib import Path
+          root=Path.cwd();out=Path(os.environ['RUNNER_TEMP'])/'repairs';out.mkdir()
+          specs=[
+            (1633,'agent/1187-hybrid-capacity-contract','cef0dd007e0ec75c607741a0421a3bc4657534ef',['test_dft_mp_v1_capacity.py']),
+            (1634,'perf/1479-fuse-mgga-density-jets','8ab39e0b4f6e0fc92541a218424bbdf1ef4b65bc',['test_xc_matrix_schedule.py']),
+            (1635,'feat/1303-cuda-ks-precision-work','4c1974d10ae12b60b575950af27d0b6da13805bf',['test_ks_warm_orbital_failure.py']),
+            (1637,'fix/wb97mv-f-shell-forces','6795097b003a30f9f5e9ab8c34e0705dddbf2427',['test_dft_mp_v1_capacity.py','test_stationary_cuda_d_shell.py','test_stationary_cuda_merge_boundary.py','test_wb97mv_complete_cuda.py']),
+            (1640,'agent/1500-device-source-seam','17f331b05f5cb1e933b062fba25956116d2d81bf',['test_posthf_cuda_transform_validation.py','test_posthf_prepared_source_lifetime.py']),
+            (1641,'agent/1500-prepared-cuda-eri-source','cd614d3179c4de3c3babd5626cdf501cf0490d69',['test_posthf_cuda_transform_validation.py','test_posthf_prepared_source_lifetime.py']),
+            (1642,'chatgpt/180-rks-hessian-cuda-second','201dafc06f3c3661fa1e30978f5a90f88aa60f3f',['test_hessian_rks_output_budget.py']),
+          ]
+          allowed={
+            1633:{'tests/python/test_dft_mp_v1_capacity.py'},
+            1634:{'tests/python/test_xc_matrix_schedule.py'},
+            1635:{'tests/python/test_ks_warm_orbital_failure.py'},
+            1637:{'tests/python/test_stationary_cuda_d_shell.py','tests/python/test_stationary_cuda_merge_boundary.py','tests/python/test_dft_mp_v1_capacity.py','tools/dft_mp_v1/qualify_capacity.py'},
+            1640:{'tests/python/test_posthf_cuda_transform_validation.py'},
+            1641:{'tests/python/test_posthf_cuda_transform_validation.py'},
+            1642:{'python/generativeqc/rks_hessian_integrals.py'},
+          }
+          results=[]
+          def run(*args,cwd=root,check=True,env=None):
+            p=subprocess.run(args,cwd=cwd,capture_output=True,text=True,env=env)
+            if check and p.returncode:raise RuntimeError((p.stderr+p.stdout)[-6000:])
+            return p
+          for n,branch,head,tests in specs:
+            result={'pr':n,'branch':branch,'before':head};d=out/str(n);d.mkdir()
+            try:
+              live=run('git','ls-remote','origin','refs/heads/'+branch).stdout.split()
+              if not live or live[0]!=head:raise RuntimeError('head moved; no changes made')
+              with tempfile.TemporaryDirectory(prefix='round2-') as temp:
+                work=Path(temp)/'source';run('git','worktree','add','--detach',str(work),head)
+                try:
+                  run('python3',str(root/'.github/round2-repair.py'),str(n),str(work))
+                  files=run('git','diff','--name-only',cwd=work).stdout.splitlines()
+                  if set(files)!=allowed[n]:raise RuntimeError('unexpected changed file set')
+                  run('python3','-m','ruff','check','--fix',*files,cwd=work)
+                  run('python3','-m','ruff','format',*files,cwd=work)
+                  env=dict(os.environ);env['PYTHONPATH']=str(work/'python')+os.pathsep+str(work)
+                  tested=run('python3','-m','pytest','-q','-o','addopts=','--import-mode=importlib',*['tests/python/'+v for v in tests],cwd=work,env=env,check=False)
+                  (d/'tests.log').write_text(tested.stdout+tested.stderr)
+                  result['test_returncode']=tested.returncode;result['summary']='\n'.join((tested.stdout+tested.stderr).splitlines()[-12:])
+                  if tested.returncode:raise RuntimeError('regression tests failed; no push')
+                  run('git','diff','--check',cwd=work);run('git','add','--',*files,cwd=work)
+                  message=f'fix(review): preserve regression contracts for PR #{n}\n\nRepair inspected API/fixture integration without weakening scientific\nassertions, capacity limits or mutation guards. Focused tests pass;\nfull PR CI and any separate GPU scientific gates remain required.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                  run('git','-c','user.name=ChatGPT','-c','user.email=chatgpt@users.noreply.github.com','commit','-m',message,cwd=work)
+                  result['commit']=run('git','rev-parse','HEAD',cwd=work).stdout.strip();result['tree']=run('git','rev-parse','HEAD^{tree}',cwd=work).stdout.strip()
+                  (d/'repair.patch').write_text(run('git','diff',head,result['commit'],cwd=work).stdout)
+                  run('git','push','origin','HEAD:refs/heads/'+branch,cwd=work);result['pushed']=True
+                finally:run('git','worktree','remove','--force',str(work),check=False)
+            except Exception as e:result['error']=str(e)
+            results.append(result);(out/'report.json').write_text(json.dumps(results,indent=2)+'\n');print(json.dumps(result),flush=True)
+          if any('error' in v for v in results):raise SystemExit(1)
+          PY
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: astra-round2-repairs
+          path: ${{ runner.temp }}/repairs/
+          retention-days: 1
