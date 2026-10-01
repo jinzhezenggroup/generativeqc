@@ -124,6 +124,88 @@ struct PreparedCenterGeometry {
   }
 };
 
+
+// Point-dependent state belongs to one point worker only. The cooperative
+// schedule retains it until every reverse pair has consumed the forward pass.
+struct PointPair {
+  std::array<double, 2> ratio;
+  std::array<double, 2> factor;
+  std::array<double, 2> logarithm[2];
+};
+static_assert(sizeof(PointPair) == 8 * sizeof(double));
+template <bool RetainLogs = true, class Geometry, class Log, class Pair>
+GENERATIVEQC_GRID_HD PointPair point_pair(double difference, size_t a, size_t b,
+                                         double separation, Geometry geometry,
+                                         Log logarithm, Pair pair) {
+  const auto r = geometry.coordinate(difference, a, b, separation);
+  const bool clipped = portable_abs(r[0]) >= 1;
+  auto f = pair(std::clamp(r[0], -1.0, 1.0));
+  if (clipped || f[0] < 0 || f[0] > 1) f[1] = 0;
+  f[0] = std::clamp(f[0], 0.0, 1.0);
+  PointPair result{{r[1], r[2]}, f, {}};
+  for (size_t side = 0; side < 2; ++side) {
+    const double v = side ? 1 - f[0] : f[0];
+    if constexpr (RetainLogs)
+      if (v > 0) result.logarithm[side] = logarithm(v);
+  }
+  return result;
+}
+template <bool RetainedLogs, class Log>
+GENERATIVEQC_GRID_HD inline double pair_adjoint(const PointPair& state, size_t a, size_t b,
+                                                const double* logs, const double* products,
+                                                const double* bar_product, const size_t* zeros,
+                                                double maximum, Log logarithm) {
+  // Saturated branches have exactly zero pullback. Skip before exponentiation
+  // to avoid inf*0. One exact zero leaves the other factors; two kill the JVP.
+  if (state.factor[1] == 0) return 0;
+  double bar_mu = 0;
+  for (size_t side = 0; side < 2; ++side) {
+    const size_t atom = side ? b : a;
+    const double v = side ? 1 - state.factor[0] : state.factor[0];
+    double derivative = 0;
+    if (!zeros[atom]) {
+      if constexpr (RetainedLogs) derivative = products[atom] * state.logarithm[side][1];
+      else derivative = products[atom] * logarithm(v)[1];
+    }
+    else if (zeros[atom] == 1 && v == 0)
+      derivative = portable_exp(logs[atom] - maximum);
+    bar_mu += (side ? -1 : 1) * bar_product[atom] * derivative * state.factor[1];
+  }
+  return bar_mu;
+}
+
+GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, const double* logs,
+                                                          const size_t* zeros) {
+  double maximum = -std::numeric_limits<double>::infinity();
+  for (size_t a = 0; a < na; ++a)
+    if (!zeros[a]) maximum = std::max(maximum, logs[a]);
+  return maximum;
+}
+template <class Ratio>
+GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, double seed,
+    const double* logs, double* products, double* bar_product, const size_t* zeros,
+    double maximum, Ratio ratio) {
+  double total = 0;
+  for (size_t a = 0; a < na; ++a) {
+    products[a] = zeros[a] ? 0 : portable_exp(logs[a] - maximum);
+    total += products[a];
+  }
+  // The selected objective uses the SAME ratio graph. A frozen log scale
+  // cancels between numerator and denominator.
+  const auto objective = ratio(products[owner], total);
+  for (size_t a = 0; a < na; ++a)
+    bar_product[a] = seed * (objective[2] + (a == owner ? objective[1] : 0));
+}
+GENERATIVEQC_GRID_HD inline void point_motion_adjoint(size_t na, size_t owner,
+    const double* bar_distance, const std::array<double, 4>* distances, double* gradient) {
+  for (size_t a = 0; a < na; ++a)
+    for (size_t k = 0; k < 3; ++k) {
+      const double value = bar_distance[a] * distances[a][k + 1];
+      gradient[3 * a + k] -= value;
+      gradient[3 * owner + k] += value;
+    }
+}
+
 template <class Norm, class Ratio, class Log, class Pair, class Geometry>
 GENERATIVEQC_GRID_HD bool contract_point_impl(const double* point, const double* centers, size_t na,
                                    size_t owner, double seed, double* gradient, double* logs,
@@ -137,75 +219,40 @@ GENERATIVEQC_GRID_HD bool contract_point_impl(const double* point, const double*
   for (size_t a = 0; a < na; ++a) logs[a] = 0;
   for (size_t a = 0; a < na; ++a) zeros[a] = 0;
   for (size_t a = 0; a < na; ++a) bar_distance[a] = 0;
-  auto factor = [&](size_t a, size_t b, double separation) {
-    auto r = geometry.coordinate(distances[a][0] - distances[b][0], a, b, separation);
-    const bool clipped = portable_abs(r[0]) >= 1;
-    auto f = pair(std::clamp(r[0], -1.0, 1.0));
-    if (clipped || f[0] < 0 || f[0] > 1) f[1] = 0;
-    f[0] = std::clamp(f[0], 0.0, 1.0);
-    return f;
-  };
   for (size_t a = 0; a < na; ++a)
     for (size_t b = 0; b < a; ++b) {
       const double separation = geometry.separation(a, b, valid)[0];
-      const auto f = factor(a, b, separation);
+      const auto state = point_pair(distances[a][0] - distances[b][0], a, b, separation,
+                                    geometry, logarithm, pair);
+      const auto& f = state.factor;
       for (size_t side = 0; side < 2; ++side) {
         const size_t atom = side ? b : a;
         const double v = side ? 1 - f[0] : f[0];
         if (v > 0)
-          logs[atom] += logarithm(v)[0];
+          logs[atom] += state.logarithm[side][0];
         else
           ++zeros[atom];
       }
     }
-  double maximum = -std::numeric_limits<double>::infinity();
-  for (size_t a = 0; a < na; ++a)
-    if (!zeros[a]) maximum = std::max(maximum, logs[a]);
+  const double maximum = maximum_log_product(na, logs, zeros);
   if (!std::isfinite(maximum)) return false;
-  double total = 0;
-  for (size_t a = 0; a < na; ++a) {
-    products[a] = zeros[a] ? 0 : portable_exp(logs[a] - maximum);
-    total += products[a];
-  }
-  // The selected normalized-product objective uses the SAME ratio
-  // graph. A frozen log scale cancels between numerator/denominator.
-  auto objective = ratio(products[owner], total);
-  for (size_t a = 0; a < na; ++a)
-    bar_product[a] = seed * (objective[2] + (a == size_t(owner) ? objective[1] : 0));
+  normalized_product_adjoint(na, owner, seed, logs, products, bar_product, zeros, maximum, ratio);
   for (size_t a = 0; a < na; ++a)
     for (size_t b = 0; b < a; ++b) {
       const auto separation = geometry.separation(a, b, valid);
-      const auto r = geometry.coordinate(distances[a][0] - distances[b][0], a, b, separation[0]);
-      const auto f = factor(a, b, separation[0]);
-      // Saturated branches have exactly zero pullback. Skip before
-      // exponentiation to avoid the undefined numerical form inf*0.
-      if (f[1] == 0) continue;
-      double bar_mu = 0;
-      for (size_t side = 0; side < 2; ++side) {
-        const size_t atom = side ? b : a;
-        const double v = side ? 1 - f[0] : f[0];
-        double derivative = 0;
-        if (!zeros[atom]) derivative = products[atom] * logarithm(v)[1];
-        // ONE exact zero leaves the product of all other factors;
-        // two zeros kill the first derivative. Never divide by zero.
-        else if (zeros[atom] == 1 && v == 0)
-          derivative = portable_exp(logs[atom] - maximum);
-        bar_mu += (side ? -1 : 1) * bar_product[atom] * derivative * f[1];
-      }
-      bar_distance[a] += bar_mu * r[1];
-      bar_distance[b] -= bar_mu * r[1];
+      const auto state = point_pair<false>(distances[a][0] - distances[b][0], a, b, separation[0],
+                                    geometry, logarithm, pair);
+      if (state.factor[1] == 0) continue;
+      const double bar_mu = pair_adjoint<false>(state, a, b, logs, products, bar_product, zeros, maximum, logarithm);
+      bar_distance[a] += bar_mu * state.ratio[0];
+      bar_distance[b] -= bar_mu * state.ratio[0];
       for (size_t k = 0; k < 3; ++k) {
-        const double value = bar_mu * r[2] * separation[k + 1];
+        const double value = bar_mu * state.ratio[1] * separation[k + 1];
         gradient[3 * a + k] += value;
         gradient[3 * b + k] -= value;
       }
     }
-  for (size_t a = 0; a < na; ++a)
-    for (size_t k = 0; k < 3; ++k) {
-      const double value = bar_distance[a] * distances[a][k + 1];
-      gradient[3 * a + k] -= value;
-      gradient[3 * owner + k] += value;
-    }
+  point_motion_adjoint(na, owner, bar_distance, distances, gradient);
   return valid;
 }
 // Keep the bounded direct route for owners without retained geometry capacity.
@@ -232,6 +279,117 @@ GENERATIVEQC_GRID_HD bool contract_point_prepared(const double* point, const dou
   return contract_point_impl(point, centers, na, owner, seed, gradient, logs, products,
                              bar_product, bar_distance, zeros, distances, norm, ratio,
                              logarithm, pair, PreparedCenterGeometry<PreparedRatio>{pairs, prepared_ratio});
+}
+
+// A full block owns one point worker. No floating-point atomic operations and
+// no cross-point state: barriers delimit distance, forward, reverse and gather
+// lifetimes. Team::sync is a block barrier (also host-thread emulatable).
+template <class Team, class Norm, class Ratio, class Log, class Pair, class Geometry>
+GENERATIVEQC_GRID_HD bool contract_point_cooperative_impl(
+    const double* point, const double* centers, size_t na, size_t owner, double seed,
+    double* gradient, double* logs, double* products, double* bar_product,
+    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
+    PointPair* states, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
+    Geometry geometry) {
+  for (size_t a = team.rank(); a < na; a += team.size()) {
+    bool valid = true;
+    distances[a] = distance(point, centers + 3 * a, norm, valid);
+    if (!valid) distances[a][0] = 0;
+  }
+  team.sync();
+  // Every participant makes the same decision, including inactive atom lanes.
+  for (size_t a = 0; a < na; ++a)
+    if (!(distances[a][0] > 0)) return false;
+  if (na == 1) { team.sync(); return true; }
+  const size_t count = na * (na - 1) / 2;
+  for (size_t index = team.rank(); index < count; index += team.size()) {
+    size_t a = 1;
+    while (a * (a + 1) / 2 <= index) ++a;
+    const size_t b = index - center_pair_index(a, 0);
+    bool valid = true;
+    const auto separation = geometry.separation(a, b, valid);
+    states[index] = point_pair(distances[a][0] - distances[b][0], a, b, separation[0],
+                               geometry, logarithm, pair);
+    if (!valid) states[index].factor[0] = std::numeric_limits<double>::quiet_NaN();
+  }
+  team.sync();
+  for (size_t index = 0; index < count; ++index)
+    if (!std::isfinite(states[index].factor[0])) return false;
+  for (size_t atom = team.rank(); atom < na; atom += team.size()) {
+    logs[atom] = 0;
+    zeros[atom] = 0;
+    // For one atom this is exactly its subsequence of the triangular traversal.
+    for (size_t other = 0; other < na; ++other) {
+      if (other == atom) continue;
+      const size_t a = std::max(atom, other), b = std::min(atom, other);
+      const size_t side = atom == b;
+      const auto& state = states[center_pair_index(a, b)];
+      const double v = side ? 1 - state.factor[0] : state.factor[0];
+      if (v > 0) logs[atom] += state.logarithm[side][0];
+      else ++zeros[atom];
+    }
+  }
+  team.sync();
+  const double maximum = maximum_log_product(na, logs, zeros);
+  if (!std::isfinite(maximum)) return false;
+  if (team.rank() == 0)
+    normalized_product_adjoint(na, owner, seed, logs, products, bar_product, zeros, maximum, ratio);
+  team.sync();
+  for (size_t index = team.rank(); index < count; index += team.size()) {
+    size_t a = 1;
+    while (a * (a + 1) / 2 <= index) ++a;
+    const size_t b = index - center_pair_index(a, 0);
+    auto& state = states[index];
+    std::array<double, 4> pullback{};
+    bool valid = true;
+    const auto separation = geometry.separation(a, b, valid);
+    // Do not multiply zero slope by a potentially infinite ratio derivative.
+    if (state.factor[1] != 0) {
+      const double bar_mu = pair_adjoint<true>(state, a, b, logs, products, bar_product, zeros, maximum, logarithm);
+      pullback[0] = bar_mu * state.ratio[0];
+      for (size_t k = 0; k < 3; ++k)
+        pullback[k + 1] = bar_mu * state.ratio[1] * separation[k + 1];
+    }
+    // Forward fields have one reverse consumer. Reuse their shared bytes only
+    // after that consumer finishes; the following barrier publishes pullbacks.
+    state.ratio = {pullback[0], pullback[1]};
+    state.factor = {pullback[2], pullback[3]};
+  }
+  team.sync();
+  for (size_t atom = team.rank(); atom < na; atom += team.size()) {
+    bar_distance[atom] = 0;
+    for (size_t other = 0; other < na; ++other) {
+      if (other == atom) continue;
+      const size_t a = std::max(atom, other), b = std::min(atom, other);
+      const auto& state = states[center_pair_index(a, b)];
+      const double sign = atom == a ? 1 : -1;
+      bar_distance[atom] += sign * state.ratio[0];
+      gradient[3 * atom] += sign * state.ratio[1];
+      gradient[3 * atom + 1] += sign * state.factor[0];
+      gradient[3 * atom + 2] += sign * state.factor[1];
+    }
+  }
+  team.sync();
+  // This cheap ordered final traversal keeps owner movement accumulation in the
+  // original order and avoids any concurrent writers to the selected center.
+  if (team.rank() == 0) point_motion_adjoint(na, owner, bar_distance, distances, gradient);
+  team.sync();
+  return true;
+}
+template <class Team, class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
+GENERATIVEQC_GRID_HD bool contract_point_cooperative(
+    const double* point, const double* centers, size_t na, size_t owner, double seed,
+    double* gradient, double* logs, double* products, double* bar_product,
+    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
+    PointPair* states, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
+    const CenterPair* pairs, PreparedRatio prepared_ratio) {
+  if (pairs)
+    return contract_point_cooperative_impl(point, centers, na, owner, seed, gradient, logs,
+        products, bar_product, bar_distance, zeros, distances, states, team, norm, ratio,
+        logarithm, pair, PreparedCenterGeometry<PreparedRatio>{pairs, prepared_ratio});
+  return contract_point_cooperative_impl(point, centers, na, owner, seed, gradient, logs,
+      products, bar_product, bar_distance, zeros, distances, states, team, norm, ratio,
+      logarithm, pair, DirectCenterGeometry<Norm, Ratio>{centers, norm, ratio});
 }
 }  // namespace generativeqc_grid_adjoint
 #undef GENERATIVEQC_GRID_HD

@@ -1042,8 +1042,14 @@ def test_cuda_ks_resource_plan_accounts_for_public_force_staging() -> None:
     "method,functional", [("LDA_XC_PW", 0), ("PBE", 1), ("R2SCAN", 2), ("PBE0", 1)]
 )
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+@pytest.mark.parametrize("atom_count", [2, 12, 33])
 def test_cuda_geometry_lane_budget_tail_and_changed_geometry_replay(
-    compiler: typing.Any, method: str, functional: int, spin: str, tmp_path: Path
+    compiler: typing.Any,
+    method: str,
+    functional: int,
+    spin: str,
+    atom_count: int,
+    tmp_path: Path,
 ) -> None:
     """Compare actual multi-block point work with the bounded 32-lane fallback.
 
@@ -1070,8 +1076,14 @@ def test_cuda_geometry_lane_budget_tail_and_changed_geometry_replay(
         stationary_cuda_allocation_bytes,
     )
 
-    atoms = [("H", (0.13, -0.17, -0.71)), ("H", (-0.09, 0.11, 0.79))]
-    changed = [("H", (0.15, -0.15, -0.73)), ("H", (-0.08, 0.09, 0.82))]
+    atoms = [
+        ("H", (0.7 * i, 0.4 * np.sin(i), 0.3 * np.cos(i))) for i in range(atom_count)
+    ]
+    changed = [
+        (symbol, tuple(np.array(xyz) + [0.02 * np.sin(i + 1), -0.01, 0.01 * np.cos(i)]))
+        for i, (symbol, xyz) in enumerate(atoms)
+    ]
+    pairs = atom_count * (atom_count - 1) // 2
     plan = StationaryGradientPlan(
         resolve_method(method, spin=spin), StationaryMeanField(SCF_POINT_MODEL)
     )
@@ -1090,7 +1102,7 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
     point_capacity = 2083
     rng = np.random.default_rng(1479)
     relative_points = rng.normal(size=(point_capacity, 3)) * 0.4
-    owners = np.arange(point_capacity, dtype=np.int64) % 2
+    owners = np.arange(point_capacity, dtype=np.int64) % atom_count
     weights = np.full(point_capacity, 0.013)
     raw = np.full(point_capacity, 0.019)
     with ExitStack() as stack:
@@ -1100,13 +1112,11 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             np.eye(basis.nao)[None, :, :] * 0.2, plan.spin_blocks, axis=0
         )
         sources = []
-        for lanes, cached in (
-            (32, False),
-            (32, True),
-            (256, False),
-            (256, True),
-            (2048, False),
-            (2048, True),
+        for lanes, cached, cooperative in (
+            (lanes, cached, cooperative)
+            for lanes in (32, 256, 2048)
+            for cached in (False, True)
+            for cooperative in (False, True)
         ):
             budget = stationary_cuda_allocation_bytes(
                 atoms=basis.natom,
@@ -1130,11 +1140,19 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                     budget,
                     spin_blocks=plan.spin_blocks,
                     source_names=stationary_runtime_sources(plan),
+                    cooperative_becke=cooperative,
                 )
             )
             assert owner.metrics()["geometry_lane_capacity"] == lanes
             assert owner.metrics()["owned_device_bytes"] == budget
-            assert owner.metrics()["center_geometry_bytes"] == (48 if cached else 0)
+            assert owner.metrics()["center_geometry_bytes"] == (
+                48 * pairs if cached else 0
+            )
+            selected = cooperative and atom_count <= 32
+            assert owner.metrics()["becke_threads_per_point"] == (32 if selected else 1)
+            assert owner.metrics()["becke_shared_bytes"] == (
+                16 + 64 * pairs if selected else 0
+            )
             with pytest.raises((ValueError, RuntimeError)):
                 owner.reset_geometry(-1.0)
             sources.append(owner)
@@ -1152,7 +1170,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         for repeat, current_basis in enumerate(
             (basis, basis, moved_basis, moved_basis, basis, moved_basis, basis)
         ):
-            centers = np.ascontiguousarray(current_basis.packed[:6].reshape(2, 3))
+            centers = np.ascontiguousarray(
+                current_basis.packed[: 3 * atom_count].reshape(atom_count, 3)
+            )
             grid._rebind_centers(centers)
             grid.set_density(density[0] if plan.spin_blocks == 1 else density)
             points = np.ascontiguousarray(relative_points + centers[owners])
@@ -1192,10 +1212,14 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 cached = metrics_after["center_geometry_bytes"] != 0
                 assert metrics_after["center_distance_evaluations"] - metrics_before[
                     "center_distance_evaluations"
-                ] == (1 if cached else 1 + 2 * point_capacity)
+                ] == pairs * (1 if cached else 1 + 2 * point_capacity)
                 assert metrics_after["center_geometry_preparations"] - metrics_before[
                     "center_geometry_preparations"
                 ] == int(cached)
+                selected = metrics_after["becke_threads_per_point"] > 1
+                assert metrics_after["becke_pair_state_evaluations"] - metrics_before[
+                    "becke_pair_state_evaluations"
+                ] == pairs * point_capacity * (1 if selected else 2)
                 # Preparation is device-only and adds no center table upload.
                 expected_upload = 3 * basis.natom * 8 + 3 * point_capacity * 8
                 if not repeat % 2:
