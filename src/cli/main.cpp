@@ -10,6 +10,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -45,14 +46,18 @@ struct RunOptions {
   std::string method_name{"gfn2-xtb"};
   generativeqc_method method{GENERATIVEQC_METHOD_GFN2_XTB};
   std::string basis_name{"sto-3g"};
+  std::string auxiliary_basis_name;
   generativeqc_basis_representation representation{GENERATIVEQC_BASIS_CARTESIAN};
+  generativeqc_density_fitting_mode density_fitting{GENERATIVEQC_DENSITY_FITTING_NONE};
   generativeqc_backend backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   int device_id{0};
   int charge{0};
   std::uint32_t multiplicity{1};
   bool input_angstrom{true};
   bool basis_explicit{false};
+  bool auxiliary_basis_explicit{false};
   bool representation_explicit{false};
+  bool density_fitting_explicit{false};
   bool forces{false};
   bool json{false};
 };
@@ -202,6 +207,8 @@ void print_usage(std::ostream& out) {
          "  --method gfn2-xtb|rhf|uhf  Native method (default: gfn2-xtb)\n"
          "  --basis NAME             Bundled Gaussian basis for RHF/UHF (default: sto-3g)\n"
          "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
+         "  --density-fitting none|cpu|cuda|auto  HF Coulomb/exchange approximation (default: none)\n"
+         "  --auxiliary-basis NAME   Optional bundled auxiliary basis; default is orbital basis\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
          "  --charge N               Molecular charge (default: 0)\n"
@@ -279,7 +286,23 @@ std::string_view representation_name(generativeqc_basis_representation represent
   return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
 }
 
-generativeqc_method_descriptor method_descriptor(const RunOptions& options) {
+std::string_view density_fitting_name(generativeqc_density_fitting_mode mode) {
+  switch (mode) {
+    case GENERATIVEQC_DENSITY_FITTING_NONE:
+      return "none";
+    case GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE:
+      return "cpu";
+    case GENERATIVEQC_DENSITY_FITTING_CUDA:
+      return "cuda";
+    case GENERATIVEQC_DENSITY_FITTING_AUTO:
+      return "auto";
+    default:
+      return "unknown";
+  }
+}
+
+generativeqc_method_descriptor method_descriptor(
+    const RunOptions& options, const generativeqc::System* auxiliary_basis = nullptr) {
   generativeqc_method_descriptor descriptor{};
   descriptor.struct_size = sizeof(descriptor);
   descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
@@ -289,7 +312,9 @@ generativeqc_method_descriptor method_descriptor(const RunOptions& options) {
   descriptor.energy_tolerance = is_gfn2(options) ? 1.0e-10 : 1.0e-12;
   descriptor.density_tolerance = is_gfn2(options) ? 1.0e-8 : 1.0e-10;
   descriptor.screening_tolerance = is_gfn2(options) ? 0.0 : 1.0e-14;
-  descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
+  descriptor.density_fitting_mode = options.density_fitting;
+  descriptor.density_fitting_auxiliary_basis =
+      auxiliary_basis == nullptr ? nullptr : auxiliary_basis->get();
   descriptor.density_fitting_relative_threshold = 1.0e-10;
   descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
   descriptor.mp2_denominator_threshold = 1.0e-10;
@@ -340,6 +365,24 @@ RunOptions parse_run(int argc, char** argv) {
       else
         throw UsageError("--representation must be cartesian or spherical");
       options.representation_explicit = true;
+    } else if (option == "--density-fitting") {
+      const std::string selected = lower(std::string(value()));
+      if (selected == "none")
+        options.density_fitting = GENERATIVEQC_DENSITY_FITTING_NONE;
+      else if (selected == "cpu")
+        options.density_fitting = GENERATIVEQC_DENSITY_FITTING_CPU_REFERENCE;
+      else if (selected == "cuda")
+        options.density_fitting = GENERATIVEQC_DENSITY_FITTING_CUDA;
+      else if (selected == "auto")
+        options.density_fitting = GENERATIVEQC_DENSITY_FITTING_AUTO;
+      else
+        throw UsageError("--density-fitting must be none, cpu, cuda, or auto");
+      options.density_fitting_explicit = true;
+    } else if (option == "--auxiliary-basis") {
+      options.auxiliary_basis_name = lower(std::string(value()));
+      std::replace(options.auxiliary_basis_name.begin(), options.auxiliary_basis_name.end(), '_',
+                   '-');
+      options.auxiliary_basis_explicit = true;
     } else if (option == "--backend") {
       const std::string selected = lower(std::string(value()));
       if (selected == "cpu")
@@ -371,8 +414,14 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
-  if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit))
-    throw UsageError("GFN2-xTB owns its intrinsic basis; --basis/--representation apply to RHF/UHF");
+  if (is_gfn2(options) &&
+      (options.basis_explicit || options.representation_explicit ||
+       options.density_fitting_explicit || options.auxiliary_basis_explicit))
+    throw UsageError(
+        "GFN2-xTB owns its intrinsic basis; Gaussian-basis and density-fitting flags apply to RHF/UHF");
+  if (options.auxiliary_basis_explicit &&
+      options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
+    throw UsageError("--auxiliary-basis requires density fitting");
   return options;
 }
 
@@ -406,7 +455,32 @@ int run(const RunOptions& options) {
       is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system(context, system_descriptor);
 
-  const generativeqc_method_descriptor method = method_descriptor(options);
+  generativeqc::cli::NativeBasisData auxiliary_basis_data;
+  std::optional<generativeqc::System> auxiliary_basis;
+  if (!is_gfn2(options) && options.auxiliary_basis_explicit) {
+    try {
+      auxiliary_basis_data = generativeqc::cli::expand_bundled_basis(
+          options.auxiliary_basis_name, atoms, options.representation);
+    } catch (const std::invalid_argument& error) {
+      throw UsageError(error.what());
+    }
+    const generativeqc_system_descriptor auxiliary_descriptor{
+        sizeof(generativeqc_system_descriptor),
+        GENERATIVEQC_ABI_VERSION,
+        atoms.data(),
+        static_cast<std::uint32_t>(atoms.size()),
+        auxiliary_basis_data.shells.data(),
+        static_cast<std::uint32_t>(auxiliary_basis_data.shells.size()),
+        auxiliary_basis_data.primitives.data(),
+        static_cast<std::uint32_t>(auxiliary_basis_data.primitives.size()),
+        options.charge,
+        options.multiplicity,
+        options.representation};
+    auxiliary_basis.emplace(context, auxiliary_descriptor);
+  }
+
+  const generativeqc_method_descriptor method =
+      method_descriptor(options, auxiliary_basis ? &*auxiliary_basis : nullptr);
   generativeqc::Calculation calculation(context, system, method);
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
@@ -419,7 +493,13 @@ int run(const RunOptions& options) {
     if (!is_gfn2(options)) {
       std::cout << ",\"basis\":\"" << options.basis_name << "\","
                 << "\"representation\":\"" << representation_name(options.representation)
+                << "\",\"density_fitting\":\"" << density_fitting_name(options.density_fitting)
                 << "\"";
+      if (options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
+        std::cout << ",\"auxiliary_basis\":\""
+                  << (options.auxiliary_basis_explicit ? options.auxiliary_basis_name
+                                                      : "same-as-orbital")
+                  << "\"";
     }
     std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
@@ -439,7 +519,13 @@ int run(const RunOptions& options) {
               << "backend: " << backend_name(result.executed_backend) << '\n';
     if (!is_gfn2(options)) {
       std::cout << "basis: " << options.basis_name << '\n'
-                << "representation: " << representation_name(options.representation) << '\n';
+                << "representation: " << representation_name(options.representation) << '\n'
+                << "density_fitting: " << density_fitting_name(options.density_fitting) << '\n';
+      if (options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
+        std::cout << "auxiliary_basis: "
+                  << (options.auxiliary_basis_explicit ? options.auxiliary_basis_name
+                                                      : "same-as-orbital")
+                  << '\n';
     }
     std::cout << "energy_hartree: " << result.energy << '\n'
               << "iterations: " << result.iterations << '\n';
