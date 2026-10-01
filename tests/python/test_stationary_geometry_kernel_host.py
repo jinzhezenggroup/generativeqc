@@ -18,6 +18,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
 #include <algorithm>
+#include <atomic>
+#include <barrier>
+#include <string>
+#include <thread>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -25,14 +29,16 @@ PREFIX = r"""
 #include <vector>
 using std::isfinite;
 #define __global__
-struct { size_t x{}; } threadIdx;
+thread_local struct { size_t x{}; } threadIdx;
 constexpr size_t workers = 32;
+std::barrier geometry_barrier(workers);
+void __syncthreads() { geometry_barrier.arrive_and_wait(); }
 constexpr int stationary_functional = 1, stationary_coefficients = 4, stationary_jets = 4;
 constexpr size_t stationary_shift[4][3]{{1,2,3},{4,5,6},{5,7,8},{6,8,9}};
-int atomicExch(int* p, int v) { const int old=*p; *p=v; return old; }
+int atomicExch(int* p, int v) { return std::atomic_ref<int>(*p).exchange(v); }
 double finite(double v, int* error, double fallback) {
   if (isfinite(v)) return v;
-  *error=1; return fallback;
+  atomicExch(error, 1); return fallback;
 }
 namespace generativeqc::dft {
 struct GridTaskView {
@@ -64,14 +70,21 @@ bool contract_point(const double*,const double*,size_t,int64_t owner,double scal
 """
 
 MAIN = r"""
-int main(int argc,char**) {
+int main(int argc,char** argv) {
   // Ambiguity here rejects a stale forward declaration, even though C++ would
   // otherwise accept a mismatching definition as a new overload.
   auto* kernel=&geometry_kernel;
   constexpr size_t na=3,ppa=41,total=na*ppa,n=2;
   const int64_t ao_atoms[n]{0,2};
   const double centers[3*na]{};
-  const bool external=argc==2 || argc==4, arbitrary=argc>=3;
+  bool external=false, arbitrary=false;
+  std::string fault;
+  for(int a=1;a<argc;++a) {
+    const std::string option=argv[a];
+    external |= option=="external";
+    arbitrary |= option=="arbitrary";
+    if(option=="bad-weight" || option=="producer-error") fault=option;
+  }
   std::vector<double> expected(9*na),reference;
   for (size_t tile : {size_t(17),size_t(47),total}) {
     for (bool implicit : {false,true}) {
@@ -92,21 +105,28 @@ int main(int argc,char**) {
               expected[3*na+3*owners[p]+k]+=(begin+p+1)*(k+1);
           }
         }
-        int error=0,producer_error=0;
+        int error=0,producer_error=fault=="producer-error" ? 1 : 0;
+        if(fault=="bad-weight") weights.back()=NAN;
+        const auto unpublished=result;
         generativeqc::dft::GridTaskView view{np,n,n,features.data(),ao.data(),points.data(),
                                            nullptr,&producer_error};
         std::vector<double> partial(workers*9*na),scratch(workers*9*na);
+        std::vector<std::thread> lanes;
         for(size_t lane=0;lane<workers;++lane) {
-          threadIdx.x=lane;
-          kernel(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),
-                 implicit?begin:0,implicit?ppa:0,centers,na,weights.data(),raw.data(),
-                 external?seeds.data():nullptr,total+7,begin+3,
-                 partial.data(),scratch.data(),&error);
+          lanes.emplace_back([&,lane] {
+            threadIdx.x=lane;
+            kernel(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),
+                   implicit?begin:0,implicit?ppa:0,centers,na,weights.data(),raw.data(),
+                   external?seeds.data():nullptr,total+7,begin+3,
+                   partial.data(),scratch.data(),result.data(),&error);
+          });
         }
-        if(error) return 1;
-        for(size_t lane=0;lane<workers;++lane)
-          for(size_t j=0;j<9*na;++j) result[j]+=partial[lane*9*na+j];
+        for(auto& lane : lanes) lane.join();
+        if(!fault.empty()) {
+          if(!error || result!=unpublished) return 4;
+        } else if(error) return 1;
       }
+      if(!fault.empty()) continue;
       if(reference.empty()) reference=result;
       if(result!=reference) return 2;
       if(external && result!=expected) return 3;
@@ -132,7 +152,7 @@ def _kernel_source() -> str:
     )
     source = ast.literal_eval(assignment.value)
     begin = source.index("__global__ void geometry_kernel(")
-    end = source.index("__global__ void geometry_reduce(", begin)
+    end = source.index("}  // namespace generativeqc_stationary_cuda", begin)
     return source[begin:end]
 
 
@@ -150,7 +170,8 @@ def geometry_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     compiled = subprocess.run(
         [
             compiler,
-            "-std=c++17",
+            "-std=c++20",
+            "-pthread",
             "-O2",
             "-Werror=uninitialized",
             str(source),
@@ -181,3 +202,18 @@ def test_emitted_geometry_owner_routes(
         check=False,
     )
     assert process.returncode == 0, (arguments, process.returncode, process.stderr)
+
+
+@pytest.mark.parametrize("fault", ["bad-weight", "producer-error"])
+@pytest.mark.parametrize("external", [False, True])
+def test_fused_geometry_failure_reaches_barrier_without_publication(
+    geometry_probe: Path, fault: str, external: bool
+) -> None:
+    result = subprocess.run(
+        [str(geometry_probe), fault, *(["external"] if external else [])],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

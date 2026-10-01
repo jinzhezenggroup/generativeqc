@@ -915,7 +915,10 @@ jobs:
     # not need duplicate performance instrumentation.
     if: github.event_name != 'schedule' && github.event_name != 'merge_group'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # Leave enough headroom for a fully cold hosted-runner build before
+    # CodSpeed starts; performance checks should not become false negatives just
+    # because the ccache entry is missing.
+    timeout-minutes: 15
     env:
       CCACHE_MAXSIZE: 1G
       OMP_NUM_THREADS: 1
@@ -936,10 +939,16 @@ jobs:
             git diff --name-only --no-renames \
               "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" --
           )"
+          # Maintenance manifests are audit/bookkeeping data and do not affect
+          # generated/runtime DFT paths. Keep them from promoting the expensive
+          # WB97M-V endpoint while preserving all other manifest-triggered coverage.
+          performance_changed_files="$(
+            grep -Ev '^manifests/maintenance/' <<<"$changed_files" || true
+          )"
           extra_cases=""
           if grep -Eq \
             '^(benchmarks/test_cpu_codspeed\.py$|\.github/workflows/ci\.yml$|src/dft/|src/scf/|src/methods/|src/integrals/|include/generativeqc([./])|python/generativeqc/|python/generativeqc_compiler/(dft|xc)/|python/generativeqc_compiler/(method|integral)/|manifests/|upstream/libxc/|tools/(generate_xc|libxc))' \
-            <<<"$changed_files"; then
+            <<<"$performance_changed_files"; then
             extra_cases="wb97mv"
           fi
           echo "GENERATIVEQC_CODSPEED_EXTRA_CASES=${extra_cases}" >> "$GITHUB_ENV"

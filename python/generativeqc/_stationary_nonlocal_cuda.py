@@ -171,11 +171,15 @@ def resident_nonlocal_geometry(
                     begin,
                 )
         if phase == 0:
-            local = sources.finish()
+            # Preserve individual source arrays/canonical final summation while
+            # avoiding D2H publication of unused one-electron/Coulomb slots.
+            local = sources.finish_span(
+                ("xc_ao", "xc_grid", "xc_weight", "overlap_pulay", "nuclear")
+            )
 
     if local is None or seeds is None:
         raise RuntimeError("resident nonlocal geometry did not complete")
-    nonlocal_parts = nonlocal_sources.finish()
+    nonlocal_parts = nonlocal_sources.finish_span(("xc_ao", "xc_grid", "xc_weight"))
     components = {
         name: local[name] for name in ("xc_ao", "xc_grid", "xc_weight", "nuclear")
     }
@@ -225,6 +229,10 @@ def resident_nonlocal_geometry(
         "nonlocal_active_count_scope": "device-only; not measured by host scheduler",
         "ao_collocation_point_visits": geometry_passes * count,
         "geometry_point_visits": 2 * count,
+        "stationary_source_d2h_policy": "contiguous-live-spans",
+        "semilocal_stationary_source_d2h_bytes": 5 * 3 * sources.natom * 8,
+        "nonlocal_stationary_source_d2h_bytes": 3 * 3 * sources.natom * 8,
+        "stationary_source_full_arena_d2h_bytes_avoided": 6 * 3 * sources.natom * 8,
     }
     # Detailed profiling deliberately uses the retained explicit-owner / host
     # weight route. Each geometry consumer visits the complete grid exactly once,

@@ -274,7 +274,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "cc3cd127b107b05984761fa27130c930d8fa6d8b8e00f387a706265954bf0588"
+            "20b479949538cd216c5d914aae2787a44b9f5c36def2e284129aff8a46464a4b"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -294,8 +294,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "geometry_sha256": (
             "d469560a2b776a9b86ff5082ba35d3f8ae956c0d63df76aec1ab39550ab92a30"
         ),
-        "sources_owner_sha256": (
-            "5679fbd1d988d924bb7536d8629df34c11b31bf15d06a86a47afa205cdf21c1d"
+        "finish_span_sha256": (
+            "419e21953688eb24d214e6fb43d33ca974cb94632c3797e3f4f0113704d9a1f9"
         ),
         "component_mode_sha256": (
             "8d9819961d3014d161aff8c5c798f926fe6f1d9de54b84a725fdf2f6694b76bb"
@@ -310,7 +310,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "29bbb20f1db0233b102e3b823abf7ee026ab7b9ee50f3628e2ad83f16c6d3e58"
+            "11cd95520b07a7a5e16df64ccea35b3a45035b528b8c69efca9a7e6e8750e052"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
@@ -331,10 +331,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "2874742b4a3cf4910edf6a2b38a294dea9aa0fbd72ae5c8785969328436f9a4d"
+            "658dcb1c0dc16e46f01f99f9902bb92a68fcb25c7969a9f1db600506c666b810"
         ),
         "native_geometry_enqueue_sha256": (
-            "830d8f4a28806ca4b378f0cd55bc16d91cf5695fc82f311e4ef38336978d721e"
+            "75da921d9ccd76d29b2623b29f7f57a4c939112b1b3c48a024e6020caec5d52f"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -342,8 +342,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_metrics_sha256": (
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
-        "native_header_sha256": (
-            "2f7bd6d3415599c646361d1e8b8bda5e278792030020828d9b6fd5f04d2b810d"
+        "native_finish_span_sha256": (
+            "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -1097,7 +1097,7 @@ def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
         qualify_capacity._source_limits(tmp_path)
 
 
-def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
+def test_native_finish_span_fails_closed_on_contract_drift(
     tmp_path: Path,
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
@@ -1106,13 +1106,20 @@ def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "constexpr size_t workers = 32"
-    assert native.count(old) == 1
+    marker = "int stationary_finish_span("
+    start = native.index(marker)
+    old = "p->downloads += count * 8;"
+    position = native.index(old, start)
     target.write_text(
-        native.replace(old, "constexpr size_t workers = 64", 1), encoding="utf-8"
+        native[:position]
+        + "p->downloads += count * 16;"
+        + native[position + len(old) :],
+        encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match="native header contract changed"):
+    with pytest.raises(
+        RuntimeError, match="native_finish_span_sha256 contract changed"
+    ):
         qualify_capacity._source_limits(tmp_path)
 
 

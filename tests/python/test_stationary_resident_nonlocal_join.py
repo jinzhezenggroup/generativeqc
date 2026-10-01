@@ -176,14 +176,20 @@ def fixture(
             events.append(("raw_pointer", begin))
             events.append(("external", begin))
 
-        def finish(self) -> dict[str, np.ndarray]:
+        def finish_span(self, names: tuple[str, ...]) -> dict[str, np.ndarray]:
             events.append((self.label + "_finish",))
+            events.append((self.label + "_finish_span", names))
             self.finishes += 1
+            inventory = (
+                "xc_ao",
+                "xc_grid",
+                "xc_weight",
+                "overlap_pulay",
+                "nuclear",
+            )
             return {
-                key: np.full((2, 3), self.base + index, dtype=float)
-                for index, key in enumerate(
-                    ("xc_ao", "xc_grid", "xc_weight", "nuclear")
-                )
+                key: np.full((2, 3), self.base + inventory.index(key), dtype=float)
+                for key in names
             }
 
     args = {
@@ -261,6 +267,15 @@ def test_complete_join_collocates_each_grid_tile_once() -> None:
     ]
     assert work["ao_collocation_point_visits"] == 6
     assert work["geometry_point_visits"] == 12
+    assert (
+        "local_finish_span",
+        ("xc_ao", "xc_grid", "xc_weight", "overlap_pulay", "nuclear"),
+    ) in events
+    assert ("nonlocal_finish_span", ("xc_ao", "xc_grid", "xc_weight")) in events
+    assert work["stationary_source_d2h_policy"] == "contiguous-live-spans"
+    assert work["semilocal_stationary_source_d2h_bytes"] == 240
+    assert work["nonlocal_stationary_source_d2h_bytes"] == 144
+    assert work["stationary_source_full_arena_d2h_bytes_avoided"] == 288
     assert work["nonlocal_dense_pair_capacity"] == 36
     assert "nonlocal_pair_evaluations" not in work
     assert "resident_feature_seed_enqueue" in seconds
