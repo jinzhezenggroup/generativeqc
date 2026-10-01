@@ -29,6 +29,7 @@ def test_public_cuda_force_routing_has_no_method_name_special_case() -> None:
 
 def test_composite_route_is_selected_from_compiler_source_inventory() -> None:
     assert "stationary_external_provider_sources(plan)" in DRIVER
+    assert "external-provider source inventory is not qualified" in DRIVER
     assert "_COMPOSITE_EXTERNAL_SOURCES" in DRIVER
     assert "source.method_ir" in DRIVER
     assert "_method_name" not in DRIVER
