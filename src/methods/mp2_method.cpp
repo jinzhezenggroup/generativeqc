@@ -61,9 +61,10 @@ class Mp2Prepared final : public PreparedCalculation {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
-  Result execute_with_reference_seed(
-      bool compute_forces, const std::vector<double>* initial_density,
-      bool* warm_start_fallback, std::optional<scf::HfWarmState>* retained_warm_state) {
+  Result execute_with_reference_seed(bool compute_forces,
+                                     const std::vector<double>* initial_density,
+                                     bool* warm_start_fallback,
+                                     std::optional<scf::HfWarmState>* retained_warm_state) {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     if (warm_start_fallback) *warm_start_fallback = false;
@@ -101,9 +102,10 @@ class Mp2Prepared final : public PreparedCalculation {
         } else {
           candidate =
               density_fitted_
-                  ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
-                                        system_, *auxiliary_, options_, context_.device_id, seed)
-                                  : scf::run_rhf_density_fitting(system_, *auxiliary_, options_, seed))
+                  ? (fitted_cuda_
+                         ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, options_,
+                                                             context_.device_id, seed)
+                         : scf::run_rhf_density_fitting(system_, *auxiliary_, options_, seed))
                   : scf::run_rhf_cuda(system_, options_, context_.device_id, seed);
         }
         return candidate;
@@ -400,8 +402,7 @@ class Mp2PreparedBatch final : public PreparedBatch {
 
   void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
     if (!warm_starts_enabled_ || states.size() != size())
-      throw std::invalid_argument(
-          "checkpoint restore requires a matching warm-enabled MP2 batch");
+      throw std::invalid_argument("checkpoint restore requires a matching warm-enabled MP2 batch");
 
     for (std::size_t index = 0; index < size(); ++index) {
       if (!states[index]) continue;
@@ -421,9 +422,7 @@ class Mp2PreparedBatch final : public PreparedBatch {
       if (states[index]) warm_states_[index].swap(states[index]);
   }
 
-  void set_warm_start_updates(bool enabled) override {
-    warm_start_updates_enabled_ = enabled;
-  }
+  void set_warm_start_updates(bool enabled) override { warm_start_updates_enabled_ = enabled; }
   [[nodiscard]] std::optional<std::vector<DirectShellClassProfileEntry>>
   last_direct_shell_class_profile() const override {
     return std::nullopt;
@@ -629,6 +628,6 @@ std::unique_ptr<PreparedBatch> prepare_mp2_batch(const Capabilities& capabilitie
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "conventional MP2 batch does not accept an auxiliary basis");
   return std::make_unique<Mp2PreparedBatch>(capabilities, context, std::move(systems), descriptor,
-                                             warm_starts_enabled);
+                                            warm_starts_enabled);
 }
 }  // namespace generativeqc::methods::detail
