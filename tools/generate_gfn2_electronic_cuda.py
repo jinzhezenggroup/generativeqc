@@ -175,6 +175,7 @@ def cuda_header() -> str:
             input_order=("density", "integral", "accumulator"),
             output_order=("updated",),
             fused_accumulation=True,
+            ordered_native_sums=True,
         ),
         "gfn2_population_update_cuda_tensor",
     )
