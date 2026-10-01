@@ -33,6 +33,20 @@ package-specific `LD_LIBRARY_PATH`.
 Method discovery comes from the same generated native method registry used by
 the C and C++ APIs.
 
+## Discover bundled Gaussian bases
+
+The native CLI basis catalog is generated at build time from the same bundled
+Basis Set Exchange subset used by the Python frontend:
+
+```bash
+/opt/generativeqc/bin/generativeqc basis list
+/opt/generativeqc/bin/generativeqc basis list --json
+```
+
+The installed executable contains generated C++ constants and does not read
+`basis_pack.json` or start Python at runtime. This slice exposes discovery only;
+subsequent native CLI layers use the same generated table for shell expansion.
+
 ## Run GFN2-xTB from XYZ
 
 The first direct native CLI calculation path is GFN2-xTB. It is a useful
