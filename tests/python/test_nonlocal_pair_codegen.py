@@ -71,6 +71,13 @@ assert not any(name.split(".")[0] in {"numpy", "generativeqc", "pyscf", "torch",
 def test_nonlocal_pair_generation_is_standalone_and_deterministic(
     tmp_path: Path,
 ) -> None:
+    from generativeqc_compiler.method.nonlocal_pair import (
+        PAIR_INPUT_ORDER,
+        PAIR_OUTPUT_ORDER,
+        build_nonlocal_pair_program,
+    )
+    from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+
     first = _generate(tmp_path / "first.hpp", hash_seed=1)
     second_directory = tmp_path / "other-cwd"
     second_directory.mkdir()
@@ -86,6 +93,38 @@ def test_nonlocal_pair_generation_is_standalone_and_deterministic(
     assert "std::isfinite" not in first
     assert "return false" not in first
     assert "std::fma" not in first
+    # Every generated specialization uses legacy root scheduling: energy,
+    # omega feature, kappa feature, then radial. The generic emitter's default
+    # remains canonical depth/hash order for its other consumers.
+    for (variant, prepared), features, geometry in itertools.product(
+        (("vv10", False), ("rvv10", False), ("rvv10", True)),
+        (False, True),
+        (False, True),
+    ):
+        program = build_nonlocal_pair_program(
+            variant, preconditioned=prepared, features=features, geometry=geometry
+        )
+        inputs = {
+            node.attrs["name"] for node in program.live_nodes if node.op == "input"
+        }
+        name = f"pair_{variant}_{'prepared' if prepared else 'raw'}_f{int(features)}_g{int(geometry)}"
+        body = emit_scalar_cpp(
+            program,
+            function_name=name,
+            input_order=tuple(name for name in PAIR_INPUT_ORDER if name in inputs),
+            output_order=tuple(
+                name for name in PAIR_OUTPUT_ORDER if name in program.outputs
+            ),
+            caller_owned_checks=True,
+            ordered_native_sums=True,
+            output_dependency_order=True,
+        )
+        assert (
+            body.replace(
+                "inline bool ", "GENERATIVEQC_NONLOCAL_PAIR_HD inline bool ", 1
+            )
+            in first
+        )
 
 
 @pytest.mark.parametrize("variant,preconditioned,features,geometry", MODES)

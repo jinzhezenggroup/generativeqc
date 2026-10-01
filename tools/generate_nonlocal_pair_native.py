@@ -65,6 +65,7 @@ def native_header() -> str:
                     output_order=output_order,
                     caller_owned_checks=True,
                     ordered_native_sums=True,
+                    output_dependency_order=True,
                 )
                 bodies.append(
                     f"// TensorIR logical hash: {program.logical_hash}\n"

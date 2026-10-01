@@ -25,7 +25,9 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
-def _compiled(tmp_path: Path, name: str) -> typing.Any:
+def _compiled(
+    tmp_path: Path, name: str, *, output_dependency_order: bool = False
+) -> typing.Any:
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("C++ compiler unavailable")
@@ -34,6 +36,7 @@ def _compiled(tmp_path: Path, name: str) -> typing.Any:
         Program({"a": x, "b": multiply(x, x)}),
         function_name="scalar_probe",
         check_intermediates=False,
+        output_dependency_order=output_dependency_order,
     )
     path = tmp_path / "probe.cpp"
     path.write_text(
@@ -64,25 +67,134 @@ def test_scalar_input_names_cannot_collide_with_emitter(
     assert (a.value, b.value) == (2.0, 4.0)
 
 
-def test_scalar_failure_preserves_all_output_references(tmp_path: Path) -> None:
-    call = _compiled(tmp_path, "x")
+@pytest.mark.parametrize("output_dependency_order", (False, True))
+def test_scalar_failure_preserves_all_output_references(
+    tmp_path: Path, output_dependency_order: bool
+) -> None:
+    call = _compiled(tmp_path, "x", output_dependency_order=output_dependency_order)
     a, b = ct.c_double(-7), ct.c_double(-9)
     assert call(1e200, ct.byref(a), ct.byref(b)) == 0
     assert (a.value, b.value) == (-7.0, -9.0)
 
 
-def test_fma_lowering_is_opt_in_and_does_not_hide_shared_products() -> None:
+def test_default_scalar_schedule_retains_generated_bytes() -> None:
+    spec = TensorSpec((), role="input")
+    x, y = (input_tensor(name, spec) for name in ("x", "y"))
+    shared = multiply(x, x)
+    program = Program({"first": multiply(shared, x), "last": add(shared, y)})
+    options = {
+        "function_name": "probe",
+        "input_order": ("x", "y"),
+        "output_order": ("last", "first"),
+    }
+    # Frozen before output-dependent scheduling was introduced. Opt-in must
+    # not change source identities for any existing default-mode consumer.
+    expected = """inline bool probe(double tensor_input_0, double tensor_input_1, double& tensor_output_0, double& tensor_output_1) noexcept {
+  if (!std::isfinite(tensor_input_0) || !std::isfinite(tensor_input_1)) return false;
+  const double v0 = tensor_input_0;
+  const double v1 = tensor_input_1;
+  const double v2 = v0 * v0;
+  if (!std::isfinite(v2)) return false;
+  double v3 = 0.0;
+  v3 += 0x1.0000000000000p+0 * v2;
+  v3 += 0x1.0000000000000p+0 * v1;
+  if (!std::isfinite(v3)) return false;
+  const double v4 = v2 * v0;
+  if (!std::isfinite(v4)) return false;
+  if (!std::isfinite(v3)) return false;
+  if (!std::isfinite(v4)) return false;
+  tensor_output_0 = v3;
+  tensor_output_1 = v4;
+  return true;
+}
+"""
+    assert emit_scalar_cpp(program, **options) == expected
+    assert (
+        emit_scalar_cpp(program, **options, output_dependency_order=False) == expected
+    )
+
+
+@pytest.mark.parametrize(
+    "output_order",
+    (("first", "last", "alias"), ("last", "first", "alias"), None),
+)
+def test_output_dependency_schedule_preserves_root_order_and_shared_values(
+    output_order: tuple[str, ...] | None,
+) -> None:
+    spec = TensorSpec((), role="input")
+    x, y = (input_tensor(name, spec) for name in ("x", "y"))
+    shared = multiply(x, x)
+    outputs = {"first": multiply(shared, x), "last": add(shared, y), "alias": shared}
+    program = Program(outputs)
+    original = program.dumps()
+    options = {
+        "function_name": "probe",
+        "input_order": ("x", "y"),
+        "output_order": output_order,
+        "caller_owned_checks": True,
+        "output_dependency_order": True,
+    }
+    source = emit_scalar_cpp(program, **options)
+    if output_order is None or output_order[0] == "first":
+        expected_body = """  const double v0 = tensor_input_0;
+  const double v1 = v0 * v0;
+  const double v2 = v1 * v0;
+  const double v3 = tensor_input_1;
+  double v4 = 0.0;
+  v4 += 0x1.0000000000000p+0 * v1;
+  v4 += 0x1.0000000000000p+0 * v3;
+"""
+        roots = {"first": "v2", "last": "v4", "alias": "v1"}
+    else:
+        expected_body = """  const double v0 = tensor_input_0;
+  const double v1 = v0 * v0;
+  const double v2 = tensor_input_1;
+  double v3 = 0.0;
+  v3 += 0x1.0000000000000p+0 * v1;
+  v3 += 0x1.0000000000000p+0 * v2;
+  const double v4 = v1 * v0;
+"""
+        roots = {"first": "v4", "last": "v3", "alias": "v1"}
+    for index, name in enumerate(
+        sorted(outputs) if output_order is None else output_order
+    ):
+        expected_body += f"  tensor_output_{index} = {roots[name]};\n"
+    expected_body += "  return true;\n}\n"
+    assert source.split("\n", 1)[1] == expected_body
+    assert program.dumps() == original
+    assert (
+        emit_scalar_cpp(Program(dict(reversed(tuple(outputs.items())))), **options)
+        == source
+    )
+
+
+@pytest.mark.parametrize("output_dependency_order", (False, True))
+def test_fma_lowering_is_opt_in_and_does_not_hide_shared_products(
+    output_dependency_order: bool,
+) -> None:
     spec = TensorSpec((), role="input")
     a, b, c = (input_tensor(name, spec) for name in ("a", "b", "c"))
     product = multiply(a, b)
     program = Program({"out": add(c, product)})
-    default = emit_scalar_cpp(program, function_name="default")
-    fused = emit_scalar_cpp(program, function_name="fused", fused_accumulation=True)
+    default = emit_scalar_cpp(
+        program,
+        function_name="default",
+        output_dependency_order=output_dependency_order,
+    )
+    fused = emit_scalar_cpp(
+        program,
+        function_name="fused",
+        fused_accumulation=True,
+        output_dependency_order=output_dependency_order,
+    )
     assert "std::fma" not in default
     assert "std::fma" in fused
     shared = Program({"out": add(c, product), "product": product})
     assert "std::fma" not in emit_scalar_cpp(
-        shared, function_name="shared", fused_accumulation=True
+        shared,
+        function_name="shared",
+        fused_accumulation=True,
+        output_dependency_order=output_dependency_order,
     )
 
 
@@ -133,15 +245,17 @@ def _compile_program(
     return call, source
 
 
+@pytest.mark.parametrize("output_dependency_order", (False, True))
 @pytest.mark.parametrize("ordered", (False, True))
 def test_ordered_native_sums_preserve_signed_zero_and_unary_minus(
-    tmp_path: Path, ordered: bool
+    tmp_path: Path, ordered: bool, output_dependency_order: bool
 ) -> None:
     x = input_tensor("x", TensorSpec((), role="input"))
     call, source = _compile_program(
         tmp_path,
         Program({"negated": add(x, coefficients=(-1,)), "sum": add(x, x)}),
         ordered_native_sums=ordered,
+        output_dependency_order=output_dependency_order,
     )
     for value in (-0.0, 0.0):
         outputs = (ct.c_double * 2)(-7.0, -9.0)
@@ -158,7 +272,10 @@ def test_ordered_native_sums_preserve_signed_zero_and_unary_minus(
         assert " = 0.0;" not in source
 
 
-def test_ordered_native_sums_keep_term_order(tmp_path: Path) -> None:
+@pytest.mark.parametrize("output_dependency_order", (False, True))
+def test_ordered_native_sums_keep_term_order(
+    tmp_path: Path, output_dependency_order: bool
+) -> None:
     spec = TensorSpec((), role="input")
     x, y, z = (input_tensor(name, spec) for name in ("x", "y", "z"))
     call, _ = _compile_program(
@@ -167,12 +284,14 @@ def test_ordered_native_sums_keep_term_order(tmp_path: Path) -> None:
             {"ordered": add(x, y, z), "scaled": add(x, y, z, coefficients=(1, -1, 2))}
         ),
         ordered_native_sums=True,
+        output_dependency_order=output_dependency_order,
     )
     outputs = (ct.c_double * 2)()
     assert call((ct.c_double * 3)(1e16, -1e16, 1.0), outputs) == 1
     assert list(outputs) == [1.0, 2e16]
 
 
+@pytest.mark.parametrize("output_dependency_order", (False, True))
 @pytest.mark.parametrize("check_intermediates", (False, True))
 @pytest.mark.parametrize(
     ("operation", "value", "expected"),
@@ -195,6 +314,7 @@ def test_caller_owned_checks_publish_native_exceptional_arithmetic(
     operation: str,
     value: float,
     expected: str,
+    output_dependency_order: bool,
 ) -> None:
     x = input_tensor("x", TensorSpec((), role="input"))
     expressions = {
@@ -215,6 +335,7 @@ def test_caller_owned_checks_publish_native_exceptional_arithmetic(
         check_intermediates=check_intermediates,
         caller_owned_checks=True,
         ordered_native_sums=True,
+        output_dependency_order=output_dependency_order,
     )
     output = (ct.c_double * 1)(-7.0)
     assert call((ct.c_double * 1)(value), output) == 1
@@ -230,9 +351,10 @@ def test_caller_owned_checks_publish_native_exceptional_arithmetic(
         assert output[0] == 0.0 and math.copysign(1.0, output[0]) == -1.0
 
 
+@pytest.mark.parametrize("output_dependency_order", (False, True))
 @pytest.mark.parametrize("operation", ("divide", "sqrt", "log", "power"))
 def test_default_domain_checks_preserve_output_references(
-    tmp_path: Path, operation: str
+    tmp_path: Path, operation: str, output_dependency_order: bool
 ) -> None:
     x = input_tensor("x", TensorSpec((), role="input"))
     expressions = {
@@ -241,7 +363,11 @@ def test_default_domain_checks_preserve_output_references(
         "log": log(x),
         "power": power(x, "3/2"),
     }
-    call, _ = _compile_program(tmp_path, Program({"out": expressions[operation]}))
+    call, _ = _compile_program(
+        tmp_path,
+        Program({"out": expressions[operation]}),
+        output_dependency_order=output_dependency_order,
+    )
     output = (ct.c_double * 1)(-7.0)
     value = 0.0 if operation == "divide" else -1.0
     assert call((ct.c_double * 1)(value), output) == 0

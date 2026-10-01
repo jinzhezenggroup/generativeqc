@@ -15,7 +15,7 @@ from math import isfinite
 
 from .ir import TRANSCENDENTALS, Node
 from .optimize import prepare_for_backend
-from .program import Program
+from .program import Program, _topological
 
 SCALAR_CPP_PRIMITIVES = frozenset(
     {
@@ -90,6 +90,7 @@ def emit_scalar_cpp(
     fused_accumulation: bool = False,
     caller_owned_checks: bool = False,
     ordered_native_sums: bool = False,
+    output_dependency_order: bool = False,
 ) -> str:
     """Lower a scalar FP64 Program to one checked inline C++ function.
 
@@ -111,6 +112,11 @@ def emit_scalar_cpp(
     accumulator for the sums remaining after normal production preparation;
     constant-only folds retain TensorIR semantics. Neither option enables
     reassociation or FMA contraction.
+
+    output_dependency_order schedules definitions depth-first from output_order
+    (or sorted output names), visiting dependencies in their existing operand
+    order and emitting shared values once. It changes only the emission schedule;
+    the default retains the canonical depth/hash order of Program.live_nodes.
     """
 
     if not isinstance(program, Program):
@@ -151,6 +157,9 @@ def emit_scalar_cpp(
         raise ValueError("output_order must name every scalar output exactly once")
     for name in ordered_outputs:
         _identifier(name, "output name")
+
+    if output_dependency_order:
+        nodes = _topological(program.outputs[name] for name in ordered_outputs)
 
     uses: dict[Node, list[tuple[Node, int]]] = {}
     for parent in nodes:

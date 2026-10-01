@@ -222,5 +222,125 @@ artifacts remain local; no archive/release was published.
 
 This is controlled-grid, small-system, single-thread CPU qualification. It does
 not establish default-grid convergence, large-molecule/multithread or force
-performance. Local CUDA toolkit/GPU and full Python-suite execution are absent;
-CUDA compiler/device qualification remains a separate CI/real-device gate.
+performance. At this initial qualification stage, no local CUDA toolkit/GPU or full
+Python-suite execution was available. The follow-up below adds an isolated
+release compiler comparison; actual device execution remains unavailable.
+
+## Follow-up: performance validation exposed a scheduling issue
+
+The architecture-only change was subsequently subjected to a stronger
+performance nonregression check. All raw measurements are retained, including
+those that are inconclusive or unfavorable; they are not pooled to select a
+preferred result.
+
+### CPU observations and limits
+
+A predeclared second wall-time campaign used fixed binaries, one pinned visible
+CPU, balanced baseline/candidate process order, twelve process pairs per water
+case and twenty for OH. Each process performed cold, two warm and changed-
+geometry endpoints. All **272 corresponding energies and full diagnostics**
+matched exactly. Warm calls were collapsed to one process median before paired
+log-ratio bootstrap analysis, avoiding treating them as independent processes.
+
+The shared host remained too variable to establish the requested strict
+one-sided 95% upper bound of 3% for every case/phase. Every two-sided interval
+included zero, but several upper bounds were wide. In particular:
+
+- OH changed geometry: paired median +0.219% time; one-sided upper bound +2.060%
+- OH warm: +0.754%; upper bound +5.476%, so the strict bound is inconclusive
+- Water/STO-3G medium warm: -0.531%; upper bound +5.476%, also inconclusive
+- Water/STO-3G large cold: +5.550%; upper bound +18.378%, not a performance pass
+
+A separate instrumented campaign covered four process pairs for each STO-3G
+water grid, eight for def2-SVP and twelve for OH, with cold/warm/changed phases.
+All **96 paired endpoint outputs and semantic work counters** matched exactly.
+It recorded both component wall and thread CPU time. Variability also affected
+unchanged AO work; for example, the four medium-water changed-geometry pairs
+had a +31.3% paired AO CPU-time median. Such small diagnostic samples do not
+establish causal regressions or precise confidence bounds. OH changed-geometry
+total CPU time was +0.237% with one-sided bootstrap upper bound +2.436%.
+**These data do not establish a universal <3% endpoint nonregression bound.**
+
+Independent compiled-code inspection provides a narrower, stronger fact: the
+bounded CPU weighted-VV10 E/V hot loop has exactly the same normalized
+69-instruction sequence in baseline, initial shared emitter and output-ordered
+emitter. A fixed register bijection, stack-slot relocation and corresponding
+branch labels explain all differences. All have three FP divides, 25 reads,
+five conditional branches, no calls and no FP spills. Encoded loop lengths are
+346 / 347 / 336 bytes. This establishes no added hot-loop work or dependencies,
+not a complete-endpoint wall-time guarantee.
+
+CodSpeed for initial published head `3e18722` versus `076bdf1` classified all
+three measured benchmarks as untouched: WB97M-V 2.5/2.5 s, RHF 474.9/475 ms,
+and PBE 6.7/6.7 s (rounded displays), with 5% reporting thresholds. These are
+**CPU Simulation**, despite the benchmark function's walltime name. The page
+warned of different runtime CPUs (EPYC 7763 versus EPYC 9V74); eight skipped
+benchmarks reused their baselines. This is supporting evidence only.
+
+### Release CUDA compilation and the actual fix
+
+An evidence-local NVIDIA CUDA 12.9.1 redistributable prefix supplied NVCC
+12.9.86, matching CI, plus cudart/CCCL headers and binary inspection tools.
+Every official archive's published length and SHA256 were verified against
+`https://developer.download.nvidia.com/compute/cuda/redist/redistrib_12.9.1.json`.
+No system/repository headers, compiler defaults, driver or workflow changed.
+
+The complete native CUDA translation unit was compiled at the same source
+filename/include roots for baseline and candidate, using C++20, `-O3`,
+`--Ofast-compile=0`, `-arch=sm_120`, `--fmad=true`, `--ftz=false`,
+`--prec-div=true` and `--prec-sqrt=true`. Local GCC 14.2 differs from CI GCC 13.3.
+A documented evidence-local copy of glibc's `bits/mathcalls.h` suppressed only
+its new sinpi/cospi declaration macros while under NVCC, addressing the known
+CUDA12.9/glibc2.41 noexcept conflict (NVIDIA/cuda-samples#378). Toolkit headers
+and all used arithmetic stayed unchanged; neither PTX referenced these names.
+The same overlay was applied to both revisions and original/patched hashes
+were retained.
+
+The initial depth/hash emission order **did** produce a static performance risk:
+unmasked rVV10 geometry-only increased from 68 to 74 registers. NVIDIA's
+occupancy model at the existing 128-thread launch predicted seven to six
+blocks/SM (58.3% to 50% occupancy upper bound). Compilation success alone would
+not have detected this. The initial candidate is therefore not the selected
+final emission schedule.
+
+The fix adds an opt-in `output_dependency_order` to the existing scalar emitter.
+It reuses Program's iterative topological traversal, starting from the explicit
+phi, feature-omega, feature-kappa, radial output order. Shared definitions emit
+once; operands, mathematical serialization, CSE and failure/publication
+semantics remain unchanged. Defaults remain byte-identical, checked across
+632 old/new emission comparisons. This is a generic compiler scheduling option,
+not a backend-specific copy of the pair equations.
+
+The implementation checkpoint is `32a32a37c00583ab29355b4722f320e2a4cba402`;
+`262500c20ed1d06b1e3b9caec79737d8449a3075` only adds tests. For this schedule:
+
+- All 27 compiled kernels retain identical register, stack, spill, shared/local
+  and constant-memory usage; the 68-register/seven-block bracket is restored
+- All eight VV10 pair specializations and eleven non-pair kernels have identical
+  machine instruction bytes (19 of 27 entries)
+- The eight rVV10 kernels retain machine-code differences with the same static
+  arithmetic counts/resources. Geometry-only changes are six commutative DMUL
+  source-operand swaps per kernel; other modes change scheduling/register
+  allocation and some MOV/NOP instructions
+- All 27 constant banks and parameter ABI records are unchanged; instruction-
+  offset metadata moves where corresponding EXIT instructions move
+- All 22 native code-relocation sections are empty/unchanged. Mercury
+  relocations retain symbol/type/count while code offsets/addends move; six
+  opaque Mercury code-finalization sections remain different and are not
+  certified as harmless metadata or globally equivalent
+
+This removes the identified register/occupancy regression and establishes
+byte-identical VV10 device kernels for the qualified compiler/architecture.
+It does **not** establish whole-cubin equality, rVV10 machine-code identity,
+real-device numerical execution or GPU endpoint timing. CuMetal PR probes do
+not execute VV10, and the existing release grid/XC resource report excludes
+its pair kernel, so those CI jobs are not substitutes for these missing gates.
+
+The final ordered CPU library is
+`77043c8d5ad1af4693e728e3bca87cc1357b5867317275ea58d0c67317424823`.
+The earlier timing campaigns used `46cc71f7...`; the compiled-loop comparison
+covers both binaries. Final validation on that ordered library passed 57/57 native tests, 303 focused
+Python tests (6 CUDA skips), and the five matched-grid PySCF fixtures with the
+same error bounds above. An updated host FMA-enabled comparison passed all
+61,824 outputs. Final endpoint replays refer to this library explicitly.
+No CPU/GPU speedup is claimed for this change.

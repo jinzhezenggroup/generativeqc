@@ -55,8 +55,10 @@ scientific algebra implementation.
 `method.nonlocal_pair` owns the scalar VV10/rVV10 pair energy and analytic
 feature/radial derivative expressions as TensorIR. The build generates one
 `generated_nonlocal_pair_native.hpp` for CPU and CUDA consumers. Requested
-output roots determine the generated arithmetic; runtime policy determines
-which roots must remain observable for numerical-failure compatibility.
+output roots determine the generated arithmetic; their explicit dependency-first
+emission schedule keeps the energy producer ahead of derivative consumers.
+Runtime policy determines which roots must remain observable for numerical-failure
+compatibility.
 
 The CPU raw rVV10 and CUDA preconditioned rVV10 representations remain explicit
 lowering choices. They retain their established ordered FP64 arithmetic rather
