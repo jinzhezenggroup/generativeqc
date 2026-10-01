@@ -26,8 +26,8 @@ void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* valu
  */
 void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
                                  const std::array<std::size_t, 4>& begin,
-                                 const std::array<std::size_t, 4>& count,
-                                 std::size_t elements, double* eri);
+                                 const std::array<std::size_t, 4>& count, std::size_t elements,
+                                 double* eri);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,

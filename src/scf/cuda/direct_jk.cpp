@@ -460,8 +460,8 @@ generativeqc_status enqueue_cuda_direct_eri_tile(CudaDirectJkPlan* plan, std::si
                       "direct ERI output is not on the prepared CUDA device");
 
     cuda_execution::launch_independent_eri_tile(caller_stream, plan->batch,
-                                                 static_cast<std::int32_t>(item), begin, count,
-                                                 elements, output);
+                                                static_cast<std::int32_t>(item), begin, count,
+                                                elements, output);
     direct_jk_check(cudaGetLastError());
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const DirectJkFailure& failure) {
