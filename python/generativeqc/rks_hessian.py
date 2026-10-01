@@ -35,6 +35,7 @@ from .rks_hessian_directional import (
 )
 from .rks_hessian_integrals import (
     checked_direction,
+    checked_second_hvp_options,
     generated_weighted_first_integral_gradient,
     generated_weighted_second_integral_hvp,
     nuclear_hvp_from_topology,
@@ -241,6 +242,9 @@ def _integral_source_hvp(
     direction: np.ndarray,
     cache: Path,
     integral_budget_bytes: int,
+    second_backend: str,
+    second_compiler: typing.Any,
+    second_device_id: int,
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     """Apply one plan-owned integral source as d(weight)dI + weight d2I(v)."""
     if source_name in ("one_electron", "overlap_pulay"):
@@ -258,6 +262,9 @@ def _integral_source_hvp(
             pair_weights=fixed,
             cache=cache,
             budget_bytes=integral_budget_bytes,
+            backend=second_backend,
+            compiler=second_compiler,
+            device_id=second_device_id,
         )
     elif source_name == "coulomb":
 
@@ -280,6 +287,9 @@ def _integral_source_hvp(
             eri_shell_weights=fixed_weights,
             cache=cache,
             budget_bytes=integral_budget_bytes,
+            backend=second_backend,
+            compiler=second_compiler,
+            device_id=second_device_id,
         )
     else:
         raise ValueError("unknown semilocal RKS integral HVP source")
@@ -288,7 +298,8 @@ def _integral_source_hvp(
         raise FloatingPointError("nonfinite semilocal RKS integral HVP source")
     diagnostic = {
         **diagnostic,
-        "response_first_integral": "generated-plan-weighted",
+        "response_first_integral": "cpu-generated-plan-weighted",
+        "second_integral_backend": diagnostic["backend"],
         "stationary_hvp_plan": plan.identity,
     }
     return immutable(total), diagnostic
@@ -318,6 +329,9 @@ def _rks_hvp_with_response(
     execution: str,
     integral_budget_bytes: int,
     plan_weight_workspace_bytes: int,
+    second_backend: str,
+    second_compiler: typing.Any,
+    second_device_id: int,
     public_calculator_endpoint: bool = False,
 ) -> RKSHVPResult:
     """Assemble one complete HVP from an already solved directional response."""
@@ -336,6 +350,9 @@ def _rks_hvp_with_response(
                 context.direction,
                 cache,
                 integral_budget_bytes,
+                second_backend,
+                second_compiler,
+                second_device_id,
             )
             provider_diagnostics[source_name] = diagnostic
             return value
@@ -428,6 +445,11 @@ def _rks_hvp_with_response(
             "integral_providers": deepcopy(provider_diagnostics),
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace_bytes,
+            "response_first_integral_backend": "cpu",
+            "second_integral_backend": second_backend,
+            "execution_residency": (
+                "mixed-host-device" if second_backend == "cuda" else "host"
+            ),
             "xc_second_order": "native-scf-point-response/analytic-grid-mixed",
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,
@@ -453,6 +475,9 @@ def rks_hvp(
     cache: typing.Any = ".artifacts",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    second_backend: str = "cpu",
+    second_compiler: typing.Any = None,
+    second_device_id: int = 0,
     _public_calculator_endpoint: bool = False,
 ) -> RKSHVPResult:
     """Apply the complete bounded direct LDA/PBE RKS molecular Hessian once."""
@@ -460,6 +485,9 @@ def rks_hvp(
         raise TypeError("RKS molecular HVP requires NativeRKSResponse")
     if solver_options is not None and not isinstance(solver_options, GMRESOptions):
         raise TypeError("solver_options must be GMRESOptions")
+    checked_second_hvp_options(
+        second_backend, second_compiler, second_device_id, integral_budget_bytes
+    )
     plan = _checked_plan(operator)
     plan_weight_workspace = _checked_integral_budget(operator, integral_budget_bytes)
     vector = checked_direction(direction, operator.xc_kernel.basis.natom)
@@ -478,9 +506,16 @@ def rks_hvp(
         cache=cache_path,
         response_driver_identity="native-rks-shared-cpks-direction-v1",
         nuclear_response_solves=1,
-        execution="bounded-cpu-native-rks-hvp-v2",
+        execution=(
+            "bounded-mixed-cuda-second-rks-hvp-v1"
+            if second_backend == "cuda"
+            else "bounded-cpu-native-rks-hvp-v2"
+        ),
         integral_budget_bytes=integral_budget_bytes,
         plan_weight_workspace_bytes=plan_weight_workspace,
+        second_backend=second_backend,
+        second_compiler=second_compiler,
+        second_device_id=second_device_id,
         public_calculator_endpoint=_public_calculator_endpoint,
     )
 
@@ -493,6 +528,9 @@ def rks_hvp_many(
     strategy: str = "recycled",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    second_backend: str = "cpu",
+    second_compiler: typing.Any = None,
+    second_device_id: int = 0,
     _public_calculator_endpoint: bool = False,
 ) -> RKSHVPBatchResult:
     """Apply complete RKS HVPs after one shared sequential/blocked/recycled solve."""
@@ -502,6 +540,9 @@ def rks_hvp_many(
         raise ValueError("strategy must be sequential, blocked or recycled")
     if solver_options is not None and not isinstance(solver_options, GMRESOptions):
         raise TypeError("solver_options must be GMRESOptions")
+    checked_second_hvp_options(
+        second_backend, second_compiler, second_device_id, integral_budget_bytes
+    )
     plan = _checked_plan(operator)
     plan_weight_workspace = _checked_integral_budget(operator, integral_budget_bytes)
     natom = operator.xc_kernel.basis.natom
@@ -535,9 +576,16 @@ def rks_hvp_many(
             cache=cache_path,
             response_driver_identity="native-rks-shared-cpks-multi-rhs-v1",
             nuclear_response_solves=0,
-            execution="bounded-cpu-native-rks-hvp-multi-rhs-v1",
+            execution=(
+                "bounded-mixed-cuda-second-rks-hvp-multi-rhs-v1"
+                if second_backend == "cuda"
+                else "bounded-cpu-native-rks-hvp-multi-rhs-v1"
+            ),
             integral_budget_bytes=integral_budget_bytes,
             plan_weight_workspace_bytes=plan_weight_workspace,
+            second_backend=second_backend,
+            second_compiler=second_compiler,
+            second_device_id=second_device_id,
             public_calculator_endpoint=_public_calculator_endpoint,
         )
         for vector, response in zip(vectors, directional.responses, strict=True)
@@ -568,9 +616,18 @@ def rks_hvp_many(
             "rank_deficient_rhs": directional.solve_result.rank_deficient_rhs,
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace,
+            "response_first_integral_backend": "cpu",
+            "second_integral_backend": second_backend,
+            "execution_residency": (
+                "mixed-host-device" if second_backend == "cuda" else "host"
+            ),
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,
-            "execution": "bounded-cpu-native-rks-hvp-multi-rhs-v1",
+            "execution": (
+                "bounded-mixed-cuda-second-rks-hvp-multi-rhs-v1"
+                if second_backend == "cuda"
+                else "bounded-cpu-native-rks-hvp-multi-rhs-v1"
+            ),
             "public_calculator_endpoint": _public_calculator_endpoint,
         }
     )
@@ -594,6 +651,9 @@ def rks_hessian(
     output_budget_bytes: int = 64 << 20,
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    second_backend: str = "cpu",
+    second_compiler: typing.Any = None,
+    second_device_id: int = 0,
     _public_calculator_endpoint: bool = False,
 ) -> RKSHessianResult:
     """Assemble the raw bounded semilocal RKS Hessian from block HVP columns.
@@ -609,6 +669,9 @@ def rks_hessian(
         raise ValueError("strategy must be sequential, blocked or recycled")
     if solver_options is not None and not isinstance(solver_options, GMRESOptions):
         raise TypeError("solver_options must be GMRESOptions")
+    checked_second_hvp_options(
+        second_backend, second_compiler, second_device_id, integral_budget_bytes
+    )
     if type(output_budget_bytes) is not int or not 0 < output_budget_bytes < 2**63:
         raise ValueError("output_budget_bytes must be a positive int64 byte count")
 
@@ -644,6 +707,9 @@ def rks_hessian(
             strategy=strategy,
             integral_budget_bytes=integral_budget_bytes,
             solver_options=solver_options,
+            second_backend=second_backend,
+            second_compiler=second_compiler,
+            second_device_id=second_device_id,
             _public_calculator_endpoint=_public_calculator_endpoint,
         )
         matrix[:, begin:end] = result.values.reshape(end - begin, coordinates).T
@@ -685,6 +751,11 @@ def rks_hessian(
             "output_peak_bound_bytes": output_peak_bound,
             "output_budget_bytes": output_budget_bytes,
             "integral_budget_bytes": integral_budget_bytes,
+            "response_first_integral_backend": "cpu",
+            "second_integral_backend": second_backend,
+            "execution_residency": (
+                "mixed-host-device" if second_backend == "cuda" else "host"
+            ),
             "raw_symmetry_error": symmetry_error,
             "posthoc_symmetrization": False,
             "blocks": tuple(blocks),
