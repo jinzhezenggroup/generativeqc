@@ -44,6 +44,8 @@ struct IncrementalXcDiagnostic {
   std::size_t final_audits{};
   std::size_t audit_failures{};
   std::uint64_t anchor_generation{};
+  std::size_t anchor_feature_builds{};
+  std::size_t anchor_feature_reuses{};
   double max_anchor_delta_rms{};
   std::size_t retained_anchor_bytes{};
   std::size_t peak_update_buffer_bytes{};

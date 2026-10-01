@@ -430,6 +430,55 @@ int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept {
   return plan ? plan->device_id : -1;
 }
 
+generativeqc_status enqueue_cuda_direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
+                                                 const std::array<std::size_t, 4>& begin,
+                                                 const std::array<std::size_t, 4>& count,
+                                                 double* output, std::size_t elements,
+                                                 cudaStream_t caller_stream, std::string& detail) {
+  detail.clear();
+  try {
+    direct_jk_require(plan != nullptr, "null direct ERI source");
+    direct_jk_require(output != nullptr && caller_stream != nullptr,
+                      "direct ERI tile requires device output and stream");
+    direct_jk_require(item < plan->diagnostic.batch_size, "direct ERI source item is out of range");
+    const auto n = static_cast<std::size_t>(plan->diagnostic.nbf);
+    std::size_t requested = 1;
+    for (std::size_t axis = 0; axis < 4; ++axis) {
+      direct_jk_require(count[axis] > 0 && begin[axis] <= n && count[axis] <= n - begin[axis],
+                        "direct ERI tile is outside the public AO basis");
+      requested = direct_jk_product(requested, count[axis]);
+    }
+    direct_jk_require(requested == elements, "direct ERI tile element count mismatch");
+
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    int current = -1;
+    direct_jk_check(cudaGetDevice(&current));
+    direct_jk_require(current == plan->device_id, "direct ERI current device mismatch");
+    cudaPointerAttributes attributes{};
+    direct_jk_check(cudaPointerGetAttributes(&attributes, output));
+    direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
+                      "direct ERI output is not on the prepared CUDA device");
+
+    cuda_execution::launch_independent_eri_tile(caller_stream, plan->batch,
+                                                static_cast<std::int32_t>(item), begin, count,
+                                                elements, output);
+    direct_jk_check(cudaGetLastError());
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const DirectJkFailure& failure) {
+    detail = failure.detail;
+    return failure.status;
+  } catch (const std::bad_alloc&) {
+    detail = "direct ERI tile extent exceeds numeric capacity";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (cudaError_t error) {
+    detail = cudaGetErrorString(error);
+    return source_cuda_status(error);
+  } catch (const std::exception& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+}
+
 static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,

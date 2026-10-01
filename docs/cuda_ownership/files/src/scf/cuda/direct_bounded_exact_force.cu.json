@@ -1,7 +1,7 @@
 {
   "path": "src/scf/cuda/direct_bounded_exact_force.cu",
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "direct_integrals",
-  "reason": "Separately compiled native direct consumer with unchanged equations, fused bounded work, launch bounds and instantiation set. Conservatively retains the original scientific classification.",
+  "reason": "Bounded low-order exact-page scheduler. SSSS/PSSS force mathematics is compiler-owned and consumed through the shared generated low-order force adapters; this file retains page traversal, screening delegation, profiling, launch and publication control.",
   "regions": []
 }

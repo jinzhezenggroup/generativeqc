@@ -3,7 +3,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DRIVER = (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
+DRIVER = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
 SNAPSHOT = (ROOT / "python/generativeqc/_ks_snapshot.py").read_text()
 GRID = (ROOT / "python/generativeqc_compiler/dft/cuda.py").read_text()
 NATIVE_GRID = (ROOT / "src/dft/cuda_grid.cu").read_text()

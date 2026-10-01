@@ -66,6 +66,23 @@ def stationary_runtime_sources(plan: StationaryGradientPlan) -> tuple[str, ...]:
     )
 
 
+_NATIVE_EXTERNAL_PROVIDER_SOURCES = frozenset(("ecp_local", "ecp_nonlocal"))
+
+
+def stationary_external_provider_sources(
+    plan: StationaryGradientPlan,
+) -> tuple[str, ...]:
+    """Return plan sources intentionally owned outside the shared CUDA arena."""
+    if not isinstance(plan, StationaryGradientPlan):
+        raise TypeError("stationary source inventory requires StationaryGradientPlan")
+    runtime = set(stationary_runtime_sources(plan))
+    return tuple(
+        source
+        for source in plan.source_names
+        if source not in runtime and source not in _NATIVE_EXTERNAL_PROVIDER_SOURCES
+    )
+
+
 def _runtime_layout_cuda(plan: StationaryGradientPlan) -> str:
     sources = stationary_runtime_sources(plan)
     integral_slots = [

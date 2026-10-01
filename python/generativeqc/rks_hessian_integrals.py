@@ -57,6 +57,7 @@ from generativeqc_compiler.integral.weighted_eri import build_weighted_eri_ir
 __all__ = [
     "RKSIntegralTopology",
     "checked_direction",
+    "checked_second_hvp_options",
     "generated_directional_semilocal_rks_integral_first_order",
     "generated_weighted_first_integral_gradient",
     "generated_weighted_second_integral_hvp",
@@ -384,7 +385,7 @@ def _compile_cached(
     key: object,
     build_ir: typing.Any,
     ir_extra: dict[str, object],
-    adapter: CppCompilerAdapter,
+    adapter: typing.Any,
     cache: Path,
     output_indices: tuple[int, ...],
     component_indices: tuple[int, ...],
@@ -480,7 +481,7 @@ def _run_kernel_hvp(
                 artifact,
                 record_capacity=8,
                 budget=data["resource_budget"],
-                device_id=0,
+                device_id=data["device_id"],
             ) as plan:
                 result = plan.contract(stream, profile=True)
             data["second_executions"].append(result.diagnostics)
@@ -493,14 +494,59 @@ def _run_kernel_hvp(
     )
 
 
+def checked_second_hvp_options(
+    backend: str,
+    compiler: typing.Any,
+    device_id: int,
+    budget_bytes: int,
+) -> tuple[typing.Any, int, ResourceBudget]:
+    """Validate one explicit generated second-integral HVP execution backend."""
+    if backend not in ("cpu", "cuda"):
+        raise ValueError("second-integral backend must be cpu or cuda")
+    if type(budget_bytes) is not int or not 0 < budget_bytes < 2**63:
+        raise ValueError(
+            "integral_budget_bytes (second-integral budget) must be a positive int64"
+        )
+    if backend == "cuda":
+        from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+
+        if not isinstance(compiler, CudaCompilerAdapter):
+            raise TypeError(
+                "CUDA second-integral HVPs require an explicit CudaCompilerAdapter"
+            )
+        if type(device_id) is not int or not 0 <= device_id < 2**31:
+            raise ValueError("CUDA second-integral device_id must be a nonnegative int")
+        return (
+            compiler,
+            device_id,
+            ResourceBudget(
+                host_bytes=budget_bytes,
+                device_bytes=budget_bytes,
+                per_device_bytes=((device_id, budget_bytes),),
+            ),
+        )
+    if compiler is not None:
+        raise ValueError("second-integral compiler is only meaningful for CUDA")
+    return (
+        CppCompilerAdapter(Path(shutil.which("c++") or "c++")),
+        0,
+        ResourceBudget(host_bytes=budget_bytes, device_bytes=0),
+    )
+
+
 def _second_data(
     topology: RKSIntegralTopology,
     cache: typing.Any,
     budget_bytes: int,
+    *,
+    backend: str = "cpu",
+    compiler: typing.Any = None,
+    device_id: int = 0,
 ) -> dict[str, typing.Any]:
     topology.check_current()
-    if type(budget_bytes) is not int or not 0 < budget_bytes < 2**63:
-        raise ValueError("second-integral budget must be a positive int64")
+    adapter, provider_device, resource_budget = checked_second_hvp_options(
+        backend, compiler, device_id, budget_bytes
+    )
     natom = len(topology.atoms)
     output_bytes = natom * 3 * np.dtype(np.float64).itemsize
     if output_bytes > budget_bytes:
@@ -524,23 +570,32 @@ def _second_data(
         "state": geometry,
         "shells": topology.shells,
         "primitives": primitives,
-        "adapter": CppCompilerAdapter(Path(shutil.which("c++") or "c++")),
-        "cache": Path(cache) / "second-cache-cpu",
-        "backend": "cpu",
-        "device_id": None,
+        "adapter": adapter,
+        "cache": Path(cache) / f"second-cache-{backend}",
+        "backend": backend,
+        "device_id": provider_device,
         "budget_bytes": budget_bytes,
         "output_accumulator_bytes": output_bytes,
-        "resource_budget": ResourceBudget(host_bytes=budget_bytes, device_bytes=0),
+        "resource_budget": resource_budget,
         "second_executions": [],
     }
 
 
 def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
     executions = data["second_executions"]
+    cuda = data["backend"] == "cuda"
+    chunks = sum(item["chunks"] for item in executions)
+    timing_names = ("device_ms", "input_ms", "output_ms", "kernel_ms")
+    timing = {
+        name: sum(
+            (item.get("device_timing") or {}).get(name, 0.0) for item in executions
+        )
+        for name in timing_names
+    }
     return {
-        "backend": "cpu-generated-weighted-hvp",
-        "provider_backend": "cpu",
-        "device_id": None,
+        "backend": f"{data['backend']}-generated-weighted-hvp",
+        "provider_backend": data["backend"],
+        "device_id": data["device_id"] if cuda else None,
         "budget_bytes": data["budget_bytes"],
         "output_accumulator_bytes": data["output_accumulator_bytes"],
         "program_identities": tuple(
@@ -551,17 +606,22 @@ def _second_diagnostics(data: dict[str, typing.Any]) -> dict[str, typing.Any]:
         ),
         "executions": len(executions),
         "primitive_records": sum(item["records"] for item in executions),
-        "record_batches": sum(item["chunks"] for item in executions),
-        "record_batch_uploads": 0,
-        "result_tile_downloads": 0,
+        "record_batches": chunks,
+        "record_batch_uploads": chunks if cuda else 0,
+        "result_tile_downloads": chunks if cuda else 0,
         "raw_hessian_downloads": 0,
         "intermediate_matrix_downloads": 0,
         "peak_host_bytes": max(
             (item["resources"]["peak_bytes"].get("host", 0) for item in executions),
             default=0,
         ),
-        "peak_device_bytes": 0,
-        "device_timing_ms": None,
+        "peak_device_bytes": max(
+            (item["resources"]["peak_bytes"].get("device", 0) for item in executions),
+            default=0,
+        )
+        if cuda
+        else 0,
+        "device_timing_ms": timing if cuda else None,
     }
 
 
@@ -676,10 +736,20 @@ def generated_weighted_second_integral_hvp(
     eri_shell_weights: typing.Any = None,
     cache: typing.Any = ".artifacts",
     budget_bytes: int = 64 << 20,
+    backend: str = "cpu",
+    compiler: typing.Any = None,
+    device_id: int = 0,
 ) -> tuple[np.ndarray, dict[str, typing.Any]]:
     if source_name not in ("one_electron", "coulomb", "overlap_pulay"):
         raise ValueError("unknown stationary second-integral source")
-    data = _second_data(topology, cache, budget_bytes)
+    data = _second_data(
+        topology,
+        cache,
+        budget_bytes,
+        backend=backend,
+        compiler=compiler,
+        device_id=device_id,
+    )
     vector = checked_direction(direction, data["state"].nat)
     if source_name == "coulomb":
         if pair_weights is not None or not callable(eri_shell_weights):

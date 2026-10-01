@@ -2,6 +2,6 @@
   "path": "src/scf/cuda/direct_bounded_dddd.cu",
   "role": "scientific",
   "subsystem": "direct_integrals",
-  "reason": "Separately compiled native direct consumer with unchanged equations, fused bounded work, launch bounds and instantiation set. Conservatively retains the original scientific classification.",
+  "reason": "Bounded dddd traversal delegates integral roots, Fock scatter and derivative primitives to compiler/shared owners, but still owns the initial physical Schwarz acceptance predicate. Retain this scientific screening policy; page enumeration, profiling and launch control are runtime work, not duplicate ERI algebra.",
   "regions": []
 }

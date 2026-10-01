@@ -1,6 +1,6 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_pairlist.cu",
-  "reason": "Vendored transitional GFN2 CUDA source for #560 native backend admission; counted conservatively as handwritten scientific ownership until generated/GenerativeQC-native replacements retire the equivalent path.",
+  "reason": "Pair-list topology and descriptor transport are runtime; coordination-pair scalar mathematics is compiler-generated. Native code still computes pair distances, applies the physical cutoff and composes the radial CN derivative with inverse distance. These remaining scientific representation/force policies are not retired by the generated scalar helper.",
   "regions": [],
   "role": "scientific",
   "subsystem": "gfn2"

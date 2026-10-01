@@ -10,12 +10,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _work_fields() -> dict[str, ast.expr]:
     module = ast.parse(
-        (ROOT / "python/generativeqc/_stationary_wb97mv_cuda.py").read_text()
+        (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
     )
     owner = next(
         node
         for node in module.body
-        if isinstance(node, ast.ClassDef) and node.name == "PreparedWb97mvCudaGradient"
+        if isinstance(node, ast.ClassDef)
+        and node.name == "PreparedCompositeStationaryCudaGradient"
     )
     execute = next(
         node
@@ -62,8 +63,10 @@ def test_unavailable_route_is_disclosed_without_losing_radial_identity() -> None
     assert "unavailable" in scope
     assert "native execution route is not exported" in scope
     assert "public-AO capability fallback" in scope
-    assert ast.literal_eval(fields["two_electron_radial_operators"]) == [
-        "full-range",
-        "short-range",
-        "long-range",
-    ]
+    radial = ast.unparse(fields["two_electron_radial_operators"])
+    assert any(
+        isinstance(item, ast.Constant) and item.value == "full-range"
+        for item in ast.walk(fields["two_electron_radial_operators"])
+    )
+    assert "plan.range_exchange_primitives" in radial
+    assert "primitive.operator" in radial

@@ -26,6 +26,8 @@
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 
+extern "C" void ks_cuda_fail_next_runtime_for_test_v1();
+
 namespace {
 using namespace generativeqc;
 using scf::reference::Matrix;
@@ -1104,36 +1106,46 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
             << " residual=" << result.dft_diagnostic.physical_residual << '\n';
 }
 
-void mixed_precision_work_census_case() {
-  const auto system = hydrogens(2, true);
+void precision_work_census_case(bool restricted, int precision_mode) {
+  const auto system = hydrogens(2, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
   const dft::MolecularGrid grid(system, grid_spec);
-  const scf::PreparedFockPlan gpu(system, nullptr, strategy(true, scf::FockBackend::Cuda), 0);
+  const scf::PreparedFockPlan gpu(system, nullptr, strategy(restricted, scf::FockBackend::Cuda), 0);
   scf::ScfOptions options;
   options.compute_forces = false;
   options.energy_tolerance = 1e-10;
   options.density_tolerance = 1e-8;
   options.max_iterations = 150;
-  options.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  options.precision_mode = precision_mode;
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
-  const auto result = plan.run(nullptr, false, false);
-  require(result.converged && !plan.failed(),
-          "CUDA PBE AUTO precision-work solve did not converge");
+  const bool mixed = precision_mode == GENERATIVEQC_PRECISION_AUTO;
+  const auto result = plan.run(nullptr, false, restricted && mixed);
+  require(result.converged && !plan.failed(), "CUDA PBE precision-work solve did not converge");
   require(
-      result.precision.mixed_stage_fock_builds > 0 &&
+      (mixed || result.precision.mixed_stage_fock_builds == 0) &&
           result.precision.strict_stage_fock_builds > 0 &&
           result.precision.mixed_stage_fock_builds + result.precision.strict_stage_fock_builds ==
-              result.fock_builds &&
-          result.precision.strict_refinement_applied,
-      "CUDA PBE AUTO aggregate Fock accounting is incomplete");
+              result.fock_builds,
+      "CUDA PBE aggregate Fock accounting is incomplete");
+  if (mixed)
+    require(result.precision.mixed_stage_fock_builds > 0 &&
+                result.precision.strict_refinement_applied &&
+                result.precision.refinement_iterations > 0,
+            "CUDA PBE AUTO did not execute mixed work and strict refinement");
+  else
+    require(
+        !result.precision.strict_refinement_applied && result.precision.refinement_iterations == 0,
+        "strict CUDA PBE unexpectedly reported mixed refinement");
 
   const auto& work = result.precision_work;
-  require(!work.complete && !work.operator_inventory_complete &&
-              result.precision.operator_work_counters_valid == 0,
-          "partial CUDA-KS precision census was incorrectly certified complete");
-  std::uint64_t mixed_events = 0, strict_events = 0;
+  require(work.complete && work.operator_inventory_complete &&
+              result.precision.operator_work_counters_valid == 1 &&
+              result.precision.final_residual_audits == 1,
+          "qualified CUDA-KS precision census was not certified complete");
+
+  std::uint64_t mixed_events = 0, strict_events = 0, retry_events = 0, final_audits = 0;
   bool strict_seen = false;
   for (std::size_t i = 0; i < work.events.size(); ++i) {
     const auto& event = work.events[i];
@@ -1141,42 +1153,132 @@ void mixed_precision_work_census_case() {
                 event.state_generation != 0,
             "CUDA-KS precision event lost execution identity or ordering");
     if (event.kind == scf::PrecisionWorkEventKind::MixedFock) {
-      require(!strict_seen && event.phase == scf::PrecisionWorkPhase::Scf,
+      require(mixed && !strict_seen && event.phase == scf::PrecisionWorkPhase::Scf,
               "mixed CUDA-KS work appeared after strict refinement");
       ++mixed_events;
     } else if (event.kind == scf::PrecisionWorkEventKind::StrictFock) {
       strict_seen = true;
-      require(event.phase == scf::PrecisionWorkPhase::Refinement,
-              "AUTO strict CUDA-KS Fock work lost refinement phase");
+      require(event.phase ==
+                  (mixed ? scf::PrecisionWorkPhase::Refinement : scf::PrecisionWorkPhase::Scf),
+              "strict CUDA-KS Fock work has the wrong phase");
       ++strict_events;
+    } else if (event.kind == scf::PrecisionWorkEventKind::Retry) {
+      require(mixed && event.phase == scf::PrecisionWorkPhase::Retry,
+              "strict CUDA-KS unexpectedly recorded a precision retry");
+      ++retry_events;
     } else {
-      require(event.kind == scf::PrecisionWorkEventKind::Retry,
-              "CUDA-KS partial precision timeline published an unsupported event");
+      require(event.kind == scf::PrecisionWorkEventKind::FinalAudit &&
+                  event.phase == scf::PrecisionWorkPhase::Finalization,
+              "CUDA-KS precision timeline published an unsupported event");
+      ++final_audits;
+      require(i + 1 == work.events.size(),
+              "CUDA-KS final physical audit did not terminate the precision timeline");
     }
   }
   require(mixed_events == result.precision.mixed_stage_fock_builds &&
-              strict_events == result.precision.strict_stage_fock_builds,
-          "CUDA-KS detailed Fock timeline disagrees with aggregate counters");
+              strict_events == result.precision.strict_stage_fock_builds &&
+              retry_events == result.precision.execution_retries && final_audits == 1,
+          "CUDA-KS detailed timeline disagrees with aggregate counters");
+
+  const auto operator_count = [&](scf::PrecisionOperatorKind kind,
+                                  scf::PrecisionArithmeticMode mode) {
+    std::uint64_t count = 0;
+    for (const auto& item : work.operators)
+      if (item.kind == kind && item.arithmetic_mode == mode) count += item.count;
+    return count;
+  };
+  const auto strict = scf::PrecisionArithmeticMode::Strict;
+  const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
+  require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) ==
+                  result.precision.mixed_stage_fock_builds &&
+              operator_count(scf::PrecisionOperatorKind::CoulombJ, strict) ==
+                  result.precision.strict_stage_fock_builds &&
+              operator_count(scf::PrecisionOperatorKind::Xc, mixed_mode) == 0 &&
+              operator_count(scf::PrecisionOperatorKind::Xc, strict) == result.fock_builds &&
+              operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) ==
+                  result.precision.mixed_stage_fock_builds,
+          "CUDA-KS J/XC operator census disagrees with executed arithmetic");
+  for (const auto kind :
+       {scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionOperatorKind::PhysicalResidual,
+        scf::PrecisionOperatorKind::Eigensolver, scf::PrecisionOperatorKind::DensityBuild,
+        scf::PrecisionOperatorKind::Diagnostics})
+    require(operator_count(kind, strict) == result.fock_builds,
+            "CUDA-KS strict per-iteration operator census is incomplete");
+  require(
+      operator_count(scf::PrecisionOperatorKind::MatrixProduct, strict) >= 7U * result.fock_builds,
+      "CUDA-KS matrix-product census missed mandatory explicit physical work");
+  require(operator_count(scf::PrecisionOperatorKind::Diis, strict) > 0 &&
+              operator_count(scf::PrecisionOperatorKind::Diis, strict) <= result.fock_builds &&
+              operator_count(scf::PrecisionOperatorKind::ExchangeK, strict) == 0,
+          "CUDA-KS pure-PBE control/exchange census is inconsistent");
 
   const auto recurrence = std::find_if(
       work.operators.begin(), work.operators.end(),
       [](const auto& item) { return item.kind == scf::PrecisionOperatorKind::CoulombRecurrence; });
-  require(recurrence != work.operators.end() && recurrence->count > 0 &&
-              recurrence->storage == scf::PrecisionDtype::Fp64 &&
-              recurrence->compute == scf::PrecisionDtype::Fp32 &&
-              recurrence->accumulation == scf::PrecisionDtype::Fp64 &&
-              recurrence->reduction == scf::PrecisionDtype::Fp64 &&
-              recurrence->arithmetic_mode == scf::PrecisionArithmeticMode::Mixed,
-          "CUDA-KS mixed Coulomb recurrence census lost its executed arithmetic identity");
+  if (mixed) {
+    require(recurrence != work.operators.end() && recurrence->count > 0 &&
+                recurrence->storage == scf::PrecisionDtype::Fp64 &&
+                recurrence->compute == scf::PrecisionDtype::Fp32 &&
+                recurrence->accumulation == scf::PrecisionDtype::Fp64 &&
+                recurrence->reduction == scf::PrecisionDtype::Fp64 &&
+                recurrence->arithmetic_mode == mixed_mode,
+            "CUDA-KS mixed Coulomb recurrence census lost its executed arithmetic identity");
+  } else {
+    require(recurrence == work.operators.end(),
+            "strict CUDA-KS fabricated a recurrence count that the provider did not measure");
+  }
+  for (const auto& item : work.operators) {
+    require(item.storage == scf::PrecisionDtype::Fp64 &&
+                item.accumulation == scf::PrecisionDtype::Fp64 &&
+                item.reduction == scf::PrecisionDtype::Fp64 && item.count > 0,
+            "CUDA-KS precision operator lost FP64 storage/reduction or execution count");
+    if (item.arithmetic_mode == mixed_mode)
+      require(item.compute == scf::PrecisionDtype::Fp32,
+              "mixed CUDA-KS operator did not report FP32 compute");
+    else
+      require(item.arithmetic_mode == strict && item.compute == scf::PrecisionDtype::Fp64,
+              "strict CUDA-KS operator did not report FP64 compute");
+  }
 
   dft::CudaKsFinalStateToken token;
   std::string detail;
   require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  const auto& audit = work.events.back();
   require(
       work.owner_id == token.identity.model.owner &&
           work.returned_solve_epoch == token.identity.determinant.solve_epoch &&
-          work.returned_state_generation == token.identity.determinant.factor.density_generation,
-      "CUDA-KS precision work does not identify the returned final state");
+          work.returned_state_generation == token.identity.determinant.factor.density_generation &&
+          audit.owner_id == work.owner_id && audit.solve_epoch == work.returned_solve_epoch &&
+          audit.state_generation == work.returned_state_generation,
+      "CUDA-KS precision work/final audit does not identify the returned final state");
+
+  if (restricted && mixed) {
+    const auto previous_epoch = work.returned_solve_epoch;
+    ks_cuda_fail_next_runtime_for_test_v1();
+    bool injected_failure = false;
+    try {
+      (void)plan.run(nullptr, false, false);
+    } catch (const std::exception&) {
+      injected_failure = true;
+    }
+    require(injected_failure && plan.failed(),
+            "CUDA-KS one-shot runtime failure did not fail the new solve");
+    const auto failed = plan.result(false);
+    require(!failed.precision_work.complete && !failed.precision_work.operator_inventory_complete &&
+                failed.precision.operator_work_counters_valid == 0 &&
+                failed.precision.final_residual_audits == 0 &&
+                failed.precision_work.returned_solve_epoch == 0 &&
+                failed.precision_work.returned_state_generation == 0 &&
+                failed.precision_work.events.empty() && failed.precision_work.operators.empty(),
+            "failed CUDA-KS begin leaked precision evidence from the prior solve");
+
+    const auto recovered = plan.run(nullptr, false, false);
+    require(recovered.converged && !plan.failed() && recovered.precision_work.complete &&
+                recovered.precision_work.operator_inventory_complete &&
+                recovered.precision.operator_work_counters_valid == 1 &&
+                recovered.precision_work.returned_solve_epoch != previous_epoch,
+            "CUDA-KS recovery did not publish fresh complete precision evidence");
+  }
 }
 
 /** Exercise the C validation layer, which can reject a request before the
@@ -1334,6 +1436,68 @@ void public_wb97mv_cuda_case(bool unrestricted) {
           "public CUDA WB97M-V force capability was promoted without qualification");
 }
 
+generativeqc_precision_work_detail query_public_precision_work(
+    const generativeqc_calculation* calculation) {
+  generativeqc_precision_work_detail summary{};
+  summary.struct_size = sizeof(summary);
+  summary.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_calculation_get_precision_work(
+              calculation, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, nullptr, 0,
+              nullptr, 0) == GENERATIVEQC_STATUS_SUCCESS,
+          "public calculation precision-work size query failed");
+  std::vector<generativeqc_precision_work_event> events(summary.event_count);
+  for (auto& event : events) {
+    event.struct_size = sizeof(event);
+    event.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  std::vector<generativeqc_precision_operator_record> operators(summary.operator_count);
+  for (auto& item : operators) {
+    item.struct_size = sizeof(item);
+    item.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  require(generativeqc_calculation_get_precision_work(
+              calculation, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, events.data(),
+              events.size(), operators.data(), operators.size()) == GENERATIVEQC_STATUS_SUCCESS,
+          "public calculation precision-work copy failed");
+  require(summary.complete && summary.operator_inventory_complete && summary.owner_id != 0 &&
+              summary.returned_solve_epoch != 0 && summary.returned_state_generation != 0 &&
+              !events.empty() && events.back().kind == GENERATIVEQC_PRECISION_EVENT_FINAL_AUDIT &&
+              !operators.empty(),
+          "public calculation precision-work query lost complete execution evidence");
+  return summary;
+}
+
+generativeqc_precision_work_detail query_public_precision_work(const generativeqc_batch* batch,
+                                                               std::uint32_t index) {
+  generativeqc_precision_work_detail summary{};
+  summary.struct_size = sizeof(summary);
+  summary.abi_version = GENERATIVEQC_ABI_VERSION;
+  require(generativeqc_batch_get_precision_work(
+              batch, index, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, nullptr, 0,
+              nullptr, 0) == GENERATIVEQC_STATUS_SUCCESS,
+          "public batch precision-work size query failed");
+  std::vector<generativeqc_precision_work_event> events(summary.event_count);
+  for (auto& event : events) {
+    event.struct_size = sizeof(event);
+    event.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  std::vector<generativeqc_precision_operator_record> operators(summary.operator_count);
+  for (auto& item : operators) {
+    item.struct_size = sizeof(item);
+    item.abi_version = GENERATIVEQC_ABI_VERSION;
+  }
+  require(generativeqc_batch_get_precision_work(
+              batch, index, GENERATIVEQC_PRECISION_WORK_DETAIL_VERSION, &summary, events.data(),
+              events.size(), operators.data(), operators.size()) == GENERATIVEQC_STATUS_SUCCESS,
+          "public batch precision-work copy failed");
+  require(summary.complete && summary.operator_inventory_complete && summary.owner_id != 0 &&
+              summary.returned_solve_epoch != 0 && summary.returned_state_generation != 0 &&
+              !events.empty() && events.back().kind == GENERATIVEQC_PRECISION_EVENT_FINAL_AUDIT &&
+              !operators.empty(),
+          "public batch precision-work query lost complete execution evidence");
+  return summary;
+}
+
 void rejected_api_requests_revoke_tokens() {
   generativeqc_context_descriptor context_spec{sizeof(generativeqc_context_descriptor),
                                                GENERATIVEQC_ABI_VERSION, 0,
@@ -1356,6 +1520,9 @@ void rejected_api_requests_revoke_tokens() {
                                         nullptr,
                                         1e-10,
                                         0};
+  method.precision_mode = GENERATIVEQC_PRECISION_AUTO;
+  method.energy_tolerance = 1e-10;
+  method.density_tolerance = 1e-8;
   generativeqc_calculation* raw_calculation{};
   require(generativeqc_calculation_prepare(context.get(), &system, &method, &raw_calculation) ==
               GENERATIVEQC_STATUS_SUCCESS,
@@ -1374,6 +1541,11 @@ void rejected_api_requests_revoke_tokens() {
                 methods::detail::dft_final_state_token(*calculation->plan, token, detail) ==
                     GENERATIVEQC_STATUS_SUCCESS,
             "KS calculation failed to publish current token");
+    if (rejected == 0) {
+      const auto work = query_public_precision_work(calculation.get());
+      require(work.complete && work.operator_inventory_complete,
+              "public calculation precision-work query returned partial evidence");
+    }
     if (rejected == 1) ++output.abi_version;
     if (rejected == 2) output.force_count = 1;
     require(
@@ -1402,6 +1574,13 @@ void rejected_api_requests_revoke_tokens() {
     require(generativeqc_batch_execute(batch.get(), nullptr, 0, outputs, 2) ==
                 GENERATIVEQC_STATUS_SUCCESS,
             "KS token batch execution failed");
+    if (rejected == 0) {
+      const auto first = query_public_precision_work(batch.get(), 0);
+      const auto second = query_public_precision_work(batch.get(), 1);
+      require(first.complete && second.complete && first.event_count > 0 &&
+                  second.event_count > 0 && first.operator_count > 0 && second.operator_count > 0,
+              "public batch precision-work query lost original-item evidence");
+    }
     dft::CudaKsFinalStateToken tokens[2];
     for (std::size_t i = 0; i < 2; ++i)
       require(methods::detail::dft_final_state_token(*batch->plan, i, tokens[i], detail) ==
@@ -1451,7 +1630,11 @@ int main() {
   try {
     prepared_cuda_fock_seam();
     registered_functional_code_seam();
-    mixed_precision_work_census_case();
+    precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO);
+    precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO);
+    // UKS avoids the optional strict-RKS device-chunk route even if the test
+    // environment preselects it, so this also qualifies a complete FP64 census.
+    precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64);
     if (std::getenv("GENERATIVEQC_CUDA_KS_CHUNK") == nullptr) {
       require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
               "could not enable CUDA RKS chunk qualification");
