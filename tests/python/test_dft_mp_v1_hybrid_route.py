@@ -79,7 +79,7 @@ def _promoted(*, precision: int, method: str = "PBE0", spin: str = "unpolarized"
         owner._method = -1
     for name, expression in (("cuda_hybrid_force", assignment.value),
                              ("promoted", promotion.test)):
-        scope[name] = eval(
+        scope[name] = eval(  # noqa: S307 - execute only the trusted repository predicate
             compile(ast.Expression(expression), "<Calculator force route>", "eval"),
             {"__builtins__": {}}, scope,
         )
@@ -89,7 +89,7 @@ def _promoted(*, precision: int, method: str = "PBE0", spin: str = "unpolarized"
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("method", ("PBE0", "B3LYP", "M06-2X", "MN15"))
-def test_audited_hybrid_route_admits_both_precision_requests(precision, spin, method):
+def test_audited_hybrid_route_admits_both_precision_requests(precision: int, spin: str, method: str) -> None:
     assert _promoted(precision=precision, spin=spin, method=method)
 
 
@@ -98,13 +98,13 @@ def test_audited_hybrid_route_admits_both_precision_requests(precision, spin, me
     "cpu", "ecp", "missing-options", "reference-xc", "density-fitting",
     "wrong-family", "unregistered-method",
 ))
-def test_auto_force_route_preserves_nonprecision_boundaries(precision, blocked):
+def test_auto_force_route_preserves_nonprecision_boundaries(precision: int, blocked: str) -> None:
     assert not _promoted(precision=precision, blocked=blocked)
 
 
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
 @pytest.mark.parametrize("method", ("PBE", "CAM-B3LYP", "WB97M-V"))
-def test_hybrid_promotion_does_not_admit_other_source_contracts(precision, method):
+def test_hybrid_promotion_does_not_admit_other_source_contracts(precision: int, method: str) -> None:
     assert not _promoted(precision=precision, method=method)
 
 
@@ -113,7 +113,7 @@ def test_hybrid_promotion_does_not_admit_other_source_contracts(precision, metho
     "self._ks_options is not None", 'self._ks_options.xc_schedule == "device_fused"',
     "cuda_global_hybrid_force_eligible(self._ks_options.method_ir)",
 ))
-def test_capacity_audit_rejects_a_changed_hybrid_guard(tmp_path, guard):
+def test_capacity_audit_rejects_a_changed_hybrid_guard(tmp_path: Path, guard: str) -> None:
     source, assignment, _ = _nodes()
     segment = ast.get_source_segment(source, assignment)
     assert segment is not None and segment.count(guard) == 1
