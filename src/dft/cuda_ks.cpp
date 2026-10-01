@@ -253,6 +253,42 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return reinterpret_cast<std::uint64_t*>(scalar_records + 1);
   }
 
+  bool complete_precision_inventory_domain() const noexcept {
+    // Version-1 detailed census covers the ordinary host-controlled CUDA-KS
+    // schedule with device-resident semilocal XC. Device chunks have a separate
+    // replay owner, host-unfused XC has CPU arithmetic, and nonlocal correlation
+    // needs its own operator identity before any of them can be certified.
+    return !device_chunk_mode && !nonlocal_correlation &&
+           options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+  }
+
+  void record_precision_operator(scf::PrecisionOperatorKind kind, scf::PrecisionDtype compute,
+                                 scf::PrecisionArithmeticMode arithmetic_mode,
+                                 std::uint64_t count = 1,
+                                 scf::PrecisionDtype storage = scf::PrecisionDtype::Fp64,
+                                 scf::PrecisionDtype accumulation = scf::PrecisionDtype::Fp64,
+                                 scf::PrecisionDtype reduction = scf::PrecisionDtype::Fp64) {
+    if (!count) return;
+    auto& operators = output.precision_work.operators;
+    const scf::PrecisionOperatorRecord signature{kind,      storage,         compute, accumulation,
+                                                 reduction, arithmetic_mode, 0};
+    auto found = std::find_if(operators.begin(), operators.end(), [&](const auto& item) {
+      return item.kind == signature.kind && item.storage == signature.storage &&
+             item.compute == signature.compute && item.accumulation == signature.accumulation &&
+             item.reduction == signature.reduction &&
+             item.arithmetic_mode == signature.arithmetic_mode;
+    });
+    if (found == operators.end()) {
+      auto record = signature;
+      record.count = count;
+      operators.push_back(record);
+      return;
+    }
+    if (count > std::numeric_limits<std::uint64_t>::max() - found->count)
+      throw std::overflow_error("CUDA KS precision operator census overflow");
+    found->count += count;
+  }
+
   void record_fock_precision_work(std::uint64_t mixed_coulomb_recurrences) {
     auto& work = output.precision_work;
     const bool mixed = pending_mixed_j;
@@ -263,30 +299,67 @@ struct CudaKsPlan::Impl : KsStateStorage {
         {mixed ? scf::PrecisionWorkEventKind::MixedFock : scf::PrecisionWorkEventKind::StrictFock,
          phase, static_cast<std::uint64_t>(work.events.size()), output.iterations, owner,
          solve_epoch, generation});
-    if (!mixed || mixed_coulomb_recurrences == 0) return;
 
-    constexpr scf::PrecisionOperatorRecord signature{scf::PrecisionOperatorKind::CoulombRecurrence,
-                                                     scf::PrecisionDtype::Fp64,
-                                                     scf::PrecisionDtype::Fp32,
-                                                     scf::PrecisionDtype::Fp64,
-                                                     scf::PrecisionDtype::Fp64,
-                                                     scf::PrecisionArithmeticMode::Mixed,
-                                                     0};
-    auto found = std::find_if(work.operators.begin(), work.operators.end(), [&](const auto& item) {
-      return item.kind == signature.kind && item.storage == signature.storage &&
-             item.compute == signature.compute && item.accumulation == signature.accumulation &&
-             item.reduction == signature.reduction &&
-             item.arithmetic_mode == signature.arithmetic_mode;
-    });
-    if (found == work.operators.end()) {
-      auto record = signature;
-      record.count = mixed_coulomb_recurrences;
-      work.operators.push_back(record);
-    } else {
-      if (mixed_coulomb_recurrences > std::numeric_limits<std::uint64_t>::max() - found->count)
-        throw std::overflow_error("CUDA KS mixed Coulomb recurrence census overflow");
-      found->count += mixed_coulomb_recurrences;
+    if (complete_precision_inventory_domain()) {
+      const auto mode =
+          mixed ? scf::PrecisionArithmeticMode::Mixed : scf::PrecisionArithmeticMode::Strict;
+      const auto compute = mixed ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
+
+      // One prepared Coulomb provider is invoked per physical Fock build. In
+      // AUTO its ERI recurrence computes in FP32 while density/storage and
+      // accumulation/reduction remain FP64.
+      record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, compute, mode);
+
+      // Exact/fitted full-range exchange and an optional range correction stay
+      // strict FP64 on every currently admitted CUDA-KS path.
+      const std::uint64_t exchange_builds = static_cast<std::uint64_t>(has_exchange) +
+                                            static_cast<std::uint64_t>(has_range_correction);
+      record_precision_operator(scf::PrecisionOperatorKind::ExchangeK, scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict, exchange_builds);
+
+      // Pointwise XC, Vxc and scalar reductions remain FP64 even in AUTO.
+      // The reduced arithmetic is confined to the density-times-AO contraction,
+      // which is recorded separately as a MatrixProduct logical contraction.
+      record_precision_operator(scf::PrecisionOperatorKind::Xc, scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict);
+      record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict);
+      record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
+                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
+
+      // enqueue_legacy executes four explicit matrix products for FDS-SDF and
+      // three around the generalized eigensolve. UKS occupation stabilization
+      // adds two more. Strict XC internals stay represented by the XC owner
+      // above; only the independently instrumented AUTO density-times-AO
+      // contraction is split out here because its arithmetic mode differs.
+      const std::uint64_t strict_matrix_products = stabilize_occupations ? 9U : 7U;
+      record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
+                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
+                                strict_matrix_products);
+      if (mixed)
+        record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
+                                  scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed);
+      if (!final_closure)
+        record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
+                                  scf::PrecisionArithmeticMode::Strict);
+      if (stabilize_occupations)
+        record_precision_operator(scf::PrecisionOperatorKind::OccupationStabilization,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
+      record_precision_operator(scf::PrecisionOperatorKind::Eigensolver, scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict);
+      record_precision_operator(scf::PrecisionOperatorKind::DensityBuild, scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict);
+      record_precision_operator(scf::PrecisionOperatorKind::Diagnostics, scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict);
     }
+
+    // The provider-owned mixed recurrence counter is exact after screening and
+    // zero-density rejection. There is deliberately no inferred strict
+    // recurrence count; strict logical work is represented by CoulombJ above.
+    if (mixed && mixed_coulomb_recurrences)
+      record_precision_operator(scf::PrecisionOperatorKind::CoulombRecurrence,
+                                scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed,
+                                mixed_coulomb_recurrences);
   }
 
   void record_precision_retry() {
@@ -696,6 +769,15 @@ struct CudaKsPlan::Impl : KsStateStorage {
     ++solve_epoch;
     is_active = false;
     is_failed = true;
+    // A new attempt invalidates execution evidence immediately, before any
+    // device selection, injected runtime failure, or seed validation can
+    // escape.  Never leave the prior successful solve's precision receipt
+    // observable after a failed begin().
+    output.precision = {};
+    output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
+    output.precision_work = {};
+    output.precision_work.owner_id = owner;
+    output.precision_work.operators.reserve(14);
     current_device();
 #if defined(GENERATIVEQC_TEST_HOOKS)
     if (fail_next_ks_runtime) {
@@ -732,7 +814,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     refinement_iterations = 0;
     output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
     output.precision_work.owner_id = owner;
-    output.precision_work.operators.reserve(1);
+    output.precision_work.operators.reserve(14);
     pending_iterations = 0;
     // The bounded device-control prototype is qualified only for strict-FP64
     // direct all-electron RKS. AUTO must stay on the legacy host-controlled
@@ -1422,6 +1504,29 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
     previous_energy = output.energy;
+    try {
+      if (output.converged && complete_precision_inventory_domain()) {
+        auto& work = output.precision_work;
+        // The diagnostics kernel of this final strict physical F[D] iteration
+        // already evaluated the residual/convergence gates. FinalAudit records
+        // that executed audit; it does not invent another Fock build or kernel.
+        work.events.push_back({scf::PrecisionWorkEventKind::FinalAudit,
+                               scf::PrecisionWorkPhase::Finalization,
+                               static_cast<std::uint64_t>(work.events.size()), output.iterations,
+                               owner, solve_epoch, final_generation});
+        ++output.precision.final_residual_audits;
+        work.complete = true;
+        work.operator_inventory_complete = true;
+        output.precision.operator_work_counters_valid = 1U;
+      }
+    } catch (...) {
+      is_active = false;
+      is_failed = true;
+      output.converged = false;
+      final_state_ready = false;
+      occupied_fitted_factor_ready = false;
+      throw;
+    }
     return is_active;
   }
 
