@@ -742,13 +742,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // so exact K can remain inside the same bounded SolverRegion. Graph replay
     // stays disabled for global hybrids until the exchange provider is
     // independently capture-qualified.
-    const bool pure_semilocal_chunk =
-        !has_exchange && options.semilocal_exchange_scale == 1.0 &&
-        options.semilocal_correlation_scale == 1.0;
-    const bool pbe0_chunk =
-        has_exchange && is_semilocal_family(functional, SemilocalFamily::Pbe) &&
-        options.semilocal_exchange_scale == 0.75 &&
-        options.semilocal_correlation_scale == 1.0 && exchange_coefficient == -0.125;
+    const bool pure_semilocal_chunk = !has_exchange && options.semilocal_exchange_scale == 1.0 &&
+                                      options.semilocal_correlation_scale == 1.0;
+    const bool pbe0_chunk = has_exchange && is_semilocal_family(functional, SemilocalFamily::Pbe) &&
+                            options.semilocal_exchange_scale == 0.75 &&
+                            options.semilocal_correlation_scale == 1.0 &&
+                            exchange_coefficient == -0.125;
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
         !fitted_coulomb && !has_range_correction && !nonlocal_correlation && !mixed_j &&
@@ -823,12 +822,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // CUDA-Graph replay remains limited to the semilocal body qualified by
     // #1437. Global-hybrid chunks may use the shared bounded SolverRegion
     // without capturing the exact-exchange provider.
-    const bool replay_semilocal_only =
-        !has_exchange && !has_range_correction && !nonlocal_correlation && !fitted_coulomb &&
-        !mixed_j && options.semilocal_exchange_scale == 1.0 &&
-        options.semilocal_correlation_scale == 1.0;
-    const bool replay = configured_replay_enabled() && replay_semilocal_only &&
-                        replay_functional &&
+    const bool replay_semilocal_only = !has_exchange && !has_range_correction &&
+                                       !nonlocal_correlation && !fitted_coulomb && !mixed_j &&
+                                       options.semilocal_exchange_scale == 1.0 &&
+                                       options.semilocal_correlation_scale == 1.0;
+    const bool replay = configured_replay_enabled() && replay_semilocal_only && replay_functional &&
                         n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     auto graph = device_chunk_binding();
     graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";

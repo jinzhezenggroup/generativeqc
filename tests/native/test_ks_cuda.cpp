@@ -666,13 +666,13 @@ void compare_pbe0_chunk_history() {
   options.semilocal_exchange_scale = 0.75;
   options.semilocal_correlation_scale = 1.0;
 
-  const scf::PreparedFockPlan cpu(
-      system, nullptr, exact_exchange_strategy(true, scf::FockBackend::Cpu));
+  const scf::PreparedFockPlan cpu(system, nullptr,
+                                  exact_exchange_strategy(true, scf::FockBackend::Cpu));
   const auto solve = [&](const char* width) {
     require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", width, 1) == 0,
             "could not select CUDA PBE0 history route");
-    const scf::PreparedFockPlan gpu(
-        system, nullptr, exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
+    const scf::PreparedFockPlan gpu(system, nullptr,
+                                    exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
     dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
     auto result = plan.run(nullptr, false, false);
     return std::pair{std::move(result), plan.transfers()};
@@ -695,8 +695,8 @@ void compare_pbe0_chunk_history() {
         std::abs(left[i].energy_change - right[i].energy_change) < 1e-13;
     require(left[i].iteration == right[i].iteration && energy_change_equal &&
                 std::abs(left[i].components.total() - right[i].components.total()) < 1e-13 &&
-                std::abs(left[i].components.exact_exchange -
-                         right[i].components.exact_exchange) < 1e-13 &&
+                std::abs(left[i].components.exact_exchange - right[i].components.exact_exchange) <
+                    1e-13 &&
                 std::abs(left[i].density_change - right[i].density_change) < 1e-13 &&
                 std::abs(left[i].physical_residual - right[i].physical_residual) < 1e-13 &&
                 left[i].occupation_stabilized == right[i].occupation_stabilized,
