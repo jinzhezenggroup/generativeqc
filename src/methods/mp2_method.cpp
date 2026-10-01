@@ -109,9 +109,21 @@ class Mp2Prepared final : public PreparedCalculation {
         return candidate;
       };
 
-      scf::ScfResult hf = run_reference(initial_density);
-      if (initial_density && (!hf.converged || !hf.reference)) {
-        if (warm_start_fallback) *warm_start_fallback = true;
+      scf::ScfResult hf;
+      if (initial_density) {
+        bool retried_cold = false;
+        try {
+          hf = run_reference(initial_density);
+        } catch (...) {
+          retried_cold = true;
+          if (warm_start_fallback) *warm_start_fallback = true;
+          hf = run_reference(nullptr);
+        }
+        if (!retried_cold && (!hf.converged || !hf.reference)) {
+          if (warm_start_fallback) *warm_start_fallback = true;
+          hf = run_reference(nullptr);
+        }
+      } else {
         hf = run_reference(nullptr);
       }
       if (!hf.converged || !hf.reference)
