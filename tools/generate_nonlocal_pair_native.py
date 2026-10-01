@@ -68,6 +68,9 @@ def native_header() -> str:
                     ordered_native_sums=True,
                     output_dependency_order=True,
                 )
+                body = body.replace("std::sqrt(", "::sqrt(").replace(
+                    "std::pow(", "::pow("
+                )
                 bodies.append(
                     f"// TensorIR logical hash: {program.logical_hash}\n"
                     + body.replace(
