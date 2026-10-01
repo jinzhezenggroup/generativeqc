@@ -63,7 +63,7 @@ index c2ec6dbc..8edff55e 100644
 @@ -26,13 +26,35 @@ source emission alone does not select a production route.
  | External psss weights | Generated precontracted Hermite DAG | One primitive record carries all x/y/z weights; optional independent fallback |
  | External unmigrated s/p/d/f weights | Unscreened Hermite/Dual3 primitive fallback | One explicit component per record, with the caller's actual external weight |
- 
+
 -Total angular order zero/one no longer has a generic AO-quartet scientific fallback.
 +For forces, total angular order zero/one no longer has a generic AO-quartet scientific fallback.
  The fixed, resident, and bounded dispatchers consume generated `ssss_force` /
@@ -71,7 +71,7 @@ index c2ec6dbc..8edff55e 100644
  `contract_two_electron_force_quartet_subtile` now rejects `AngularOrder < 2`
  at compile time. The obsolete `direct_native_order01_gradient.cuh` body is
  therefore deleted rather than retained as a dead alternate implementation.
- 
+
 +### Bounded Direct-HF coverage and diagnostics
 +
 +The bounded Fock route covers canonical s/p/d/f classes. Generated and native
@@ -108,7 +108,7 @@ index 78f36573..3422d580 100644
 +#include "scf/cuda/direct_queue_profile.cuh"
  #include "scf/cuda/direct_screening.cuh"
  #include "scf/cuda/packed_basis.hpp"
- 
+
 @@ -31,7 +32,8 @@ __global__ void contract_bounded_exact_low_order_force_page_kernel(
      unsigned high_pair_class, unsigned low_pair_class, double screening_tolerance,
      std::uint64_t page_begin, std::uint32_t page_capacity, std::uint32_t bra_ordinal_begin,
@@ -175,9 +175,9 @@ index de19dfa4..ac69423e 100644
 --- a/src/scf/cuda/direct_bounded_exact_force.hpp
 +++ b/src/scf/cuda/direct_bounded_exact_force.hpp
 @@ -11,7 +11,7 @@
- 
+
  namespace vibeqc::scf::cuda_execution {
- 
+
 -/** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 +/** Forward the native route and optional final-density work ledger. */
  void launch_contract_bounded_exact_low_order_force_page_kernel(
@@ -190,7 +190,7 @@ index de19dfa4..ac69423e 100644
 -    const double* density, double* forces, std::uint32_t* bra_head);
 +    const double* density, double* forces, std::uint32_t* bra_head,
 +    DeviceShellClassProfileEntry* profile);
- 
+
  }  // namespace vibeqc::scf::cuda_execution
 diff --git a/src/scf/cuda/direct_bounded_fallback.cu b/src/scf/cuda/direct_bounded_fallback.cu
 index 24ddd73e..e5ca5ce3 100644
@@ -212,7 +212,7 @@ index 24ddd73e..e5ca5ce3 100644
 @@ -266,4 +270,30 @@ void launch_bounded_direct_shell_quartet_kernel(
    }
  }
- 
+
 +void launch_bounded_direct_fock_shell_quartet_kernel(
 +    bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
 +    DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
@@ -245,9 +245,9 @@ index 5214073f..1d3b1e9f 100644
 --- a/src/scf/cuda/direct_bounded_fallback.hpp
 +++ b/src/scf/cuda/direct_bounded_fallback.hpp
 @@ -11,7 +11,7 @@
- 
+
  namespace vibeqc::scf::cuda_execution {
- 
+
 -/** Forward the resolved native route with unchanged geometry and borrowed buffers. */
 +/** Force-output fallback; purpose selects screening semantics, not the scientific output. */
  void launch_bounded_direct_shell_quartet_kernel(
@@ -256,7 +256,7 @@ index 5214073f..1d3b1e9f 100644
 @@ -22,4 +22,15 @@ void launch_bounded_direct_shell_quartet_kernel(
      const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
      unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile);
- 
+
 +/** Consume only Fock registry gaps through the bounded hierarchical dispatcher. */
 +void launch_bounded_direct_fock_shell_quartet_kernel(
 +    bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
@@ -276,7 +276,7 @@ index 86ffd570..425a2691 100644
 @@ -397,8 +397,17 @@ bool aot_shell_class_selection_override_requested() noexcept {
    return selection != nullptr && *selection != '\0' && std::strcmp(selection, "all") != 0;
  }
- 
+
 +DirectTileValidationPolicy resolve_direct_tile_validation_policy() noexcept {
 +  const bool requested = selected("VIBEQC_DIRECT_TILE_VALIDATION", "validate");
 +  return {
@@ -290,7 +290,7 @@ index 86ffd570..425a2691 100644
 -  return selected("VIBEQC_DIRECT_TILE_VALIDATION", "validate");
 +  return resolve_direct_tile_validation_policy().requested;
  }
- 
+
  double converged_fock_reuse_density_rms(double density_tolerance) noexcept {
 diff --git a/src/scf/cuda/rhf_policy.hpp b/src/scf/cuda/rhf_policy.hpp
 index fb8215c7..782d64e1 100644
@@ -322,13 +322,13 @@ index f0f48ab8..3cc70c7d 100644
 --- a/src/scf/cuda_hf_entry.cpp
 +++ b/src/scf/cuda_hf_entry.cpp
 @@ -4,6 +4,7 @@
- 
+
  #include "scf/cuda_batch.hpp"
  #include "scf/rhf.hpp"
 +#include "vibeqc/vibeqc.hpp"
- 
+
  namespace vibeqc::scf {
- 
+
 @@ -25,6 +26,11 @@ ScfResult run_rhf_cuda(const core::System& system, const ScfOptions& options, in
    if (status == VIBEQC_STATUS_INVALID_ARGUMENT) {
      throw std::invalid_argument("CUDA RHF received invalid arguments");
@@ -439,7 +439,7 @@ index c558c5e0..af74d67a 100644
 @@ -2278,8 +2304,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
      error = consume_generated_wave(bounded_direct_generated_retry_task_offsets);
      if (error != cudaSuccess) return error;
- 
+
 -    return launch_bounded_streaming_fock(is_unrestricted, quartet_density, quartet_fock,
 -                                         allow_mixed_precision);
 +    error = launch_bounded_streaming_fock(is_unrestricted, quartet_density, quartet_fock,
@@ -484,7 +484,7 @@ index 410d78f9..20708c68 100644
 @@ -526,6 +526,45 @@ void verify_one_electron_provider_policy() {
    }
  }
- 
+
 +void verify_direct_tile_validation_policy() {
 +  using vibeqc::scf::cuda_policy::direct_tile_validation_requested;
 +  using vibeqc::scf::cuda_policy::resolve_direct_tile_validation_policy;
@@ -680,8 +680,8 @@ index 4af2adbc..7779ce89 100644
 +++ b/tests/python/test_codegen.py
 @@ -1686,6 +1686,50 @@ def test_bounded_force_registry_gaps_use_exact_runtime_fallback() -> None:
      assert "return cudaErrorNotSupported;" not in source[dispatch:dispatch_end]
- 
- 
+
+
 +def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
 +    """Keep high-l bounded Fock correct without an unbounded descriptor arena."""
 +

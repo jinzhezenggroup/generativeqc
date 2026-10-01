@@ -105,7 +105,7 @@ index aec1056..8357f6e 100644
 @@ -222,6 +222,14 @@ uploads with `tensor_host_to_device_bytes` and `response_host_to_device_bytes`.
  Transfer, regeneration, derivative contraction and synchronization costs remain
  part of the complete force endpoint.
- 
+
 +The exchange metric contraction uses the plan's existing cuBLAS handle to dot
 +the bounded raw panel against each density response. Its output stride updates
 +the existing metric response, preserving Coulomb and both spin contributions.
@@ -115,7 +115,7 @@ index aec1056..8357f6e 100644
 +propagate through stream cleanup; they do not select the serial calculation.
 +
  ### Compact DIIS and numerical recovery
- 
+
  Production CUDA DF SCF honors the requested DIIS history inside the compact
 diff --git a/src/scf/cuda/df_force_response.cpp b/src/scf/cuda/df_force_response.cpp
 index 3537493..9a1cce3 100644
@@ -147,7 +147,7 @@ index e22199e..221fc1b 100644
 +#include <cstdlib>
  #include <limits>
  #include <stdexcept>
- 
+
 @@ -336,7 +337,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
      const std::vector<double>& inverse, std::span<const DensityFittingDensityResponse> terms,
      double relative_threshold, unsigned schedule, std::size_t maximum_bytes,
@@ -196,7 +196,7 @@ index 8297130..3d9860d 100644
 @@ -8,9 +8,10 @@ namespace {
  constexpr unsigned threads = 128;
  unsigned blocks(std::size_t size) { return static_cast<unsigned>((size + threads - 1) / threads); }
- 
+
 -/** All small contractions keep a fixed summation order per output element.
 - * They intentionally avoid atomics and unbounded GEMM workspace. Integral
 - * generation and the derivative consumer remain the existing #142/#143 paths.
@@ -251,15 +251,15 @@ index 74706fa..f8a726f 100644
 @@ -1,6 +1,7 @@
  #ifndef VIBEQC_SCF_CUDA_DF_RESPONSE_WEIGHTS_CUH
  #define VIBEQC_SCF_CUDA_DF_RESPONSE_WEIGHTS_CUH
- 
+
 +#include <cublas_v2.h>
  #include <cuda_runtime.h>
- 
+
  #include <functional>
 @@ -11,6 +12,11 @@
- 
+
  namespace vibeqc::scf {
- 
+
 +/** Preserve the provider status across the bridge's stream-draining cleanup. */
 +struct CudaDfResponseBlasFailure {
 +  cublasStatus_t status;
@@ -286,7 +286,7 @@ index 74706fa..f8a726f 100644
 +    const std::function<void(std::size_t, double*)>& read_values,
      const std::function<void(unsigned, runtime::StridedRange, std::size_t, const double*)>&
          consume);
- 
+
 diff --git a/src/scf/cuda_df_gradient.hpp b/src/scf/cuda_df_gradient.hpp
 index 229f401..d29e5f3 100644
 --- a/src/scf/cuda_df_gradient.hpp
@@ -322,10 +322,10 @@ index 2301a87..895f158 100644
 +    method, representation, budget, metric_dot, monkeypatch, tmp_path
  ):
      """Switch only force-weight placement, including reuse of a warm value plan.
- 
+
 @@ -29,6 +30,9 @@ def test_response_route_and_host_ablation(
      from pyscf import gto, scf
- 
+
      assert os.environ.get("SLURM_JOB_ID")
 +    monkeypatch.setenv(
 +        "VIBEQC_DF_SERIAL_RESPONSE_DOT", "1" if metric_dot == "serial" else "0"

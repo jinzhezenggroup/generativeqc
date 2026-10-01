@@ -96,7 +96,7 @@ index fd0deae..820e68c 100644
 --- a/docs/df_shell_derivatives.md
 +++ b/docs/df_shell_derivatives.md
 @@ -2,9 +2,20 @@
- 
+
  `VIBEQC_DF_WEIGHTED_EXECUTION=shell` selects generated weighted three-center
  derivatives across all 64 s/p/d/f shell classes. `shell-sp` retains the original
 -seven non-SSS s/p classes as a comparison subset. The default remains `generic`
@@ -116,19 +116,19 @@ index fd0deae..820e68c 100644
 +substantial scaling work still remaining. The selection evidence, numerical
 +gates and qualification scope are retained in
 +`benchmarks/results/issue308-shell-schedules/`.
- 
+
  The scalar and shell consumers use the same generated primitive geometry and
  Boys routine. The compiler builds each shell class's axis-moment cache from
 @@ -79,11 +90,18 @@ metric/subspace response cases, bounded budgets, and memory sanitization.
- 
+
  Two additional controls isolate the measured response bottlenecks:
- 
+
 -| Control | Default | Alternative |
 +| Control | Default outside the qualified regime | Alternative |
  | --- | --- | --- |
  | `VIBEQC_DF_RESPONSE_ALGEBRA` | `scalar` | `blas`: parallel charge GEMV and density GEMM |
  | `VIBEQC_DF_RAW_STAGING` | `pageable` | `pinned-panels`: two bounded host panels |
- 
+
 +All four selectors override their respective defaults independently. To request
 +the complete original comparison route, set `VIBEQC_DF_WEIGHTED_EXECUTION=generic`,
 +`VIBEQC_DF_SHELL_SCHEDULE=warp`, `VIBEQC_DF_RESPONSE_ALGEBRA=scalar` and

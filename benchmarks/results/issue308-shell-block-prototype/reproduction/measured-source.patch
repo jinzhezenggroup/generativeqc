@@ -22,7 +22,7 @@ index e1f16e1..3351b66 100644
 +  target_sources(vibeqc PRIVATE "${VIBEQC_DF_DERIVATIVE_HEADER}" "${VIBEQC_DF_DERIVATIVE_POLICY_HEADER}" "${VIBEQC_DF_DERIVATIVE_SCHEDULE_HEADER}" "${VIBEQC_DF_SHELL_DERIVATIVE_HEADER}"
 +                 src/scf/cuda/df_derivatives.cu src/scf/cuda/df_shell_derivatives.cu src/scf/cuda/df_gradient_bridge.cu
                   src/scf/cuda/df_response_weights.cu)
- 
+
    # One-electron lowering is compiled in its own TU, keeping the generic HF
 diff --git a/python/vibeqc/resources_hf.py b/python/vibeqc/resources_hf.py
 index 1c8db54..42a40f1 100644
@@ -35,7 +35,7 @@ index 1c8db54..42a40f1 100644
 +    "VIBEQC_DF_WEIGHTED_EXECUTION",
      "VIBEQC_DF_EXCHANGE",
  )
- 
+
 diff --git a/python/vibeqc_compiler/integral/df_derivatives_cuda.py b/python/vibeqc_compiler/integral/df_derivatives_cuda.py
 index 1a13cc4..cfb5fc4 100644
 --- a/python/vibeqc_compiler/integral/df_derivatives_cuda.py
@@ -244,7 +244,7 @@ index 208de13..45b806e 100644
 +++ b/src/scf/cuda/df_derivatives.cu
 @@ -29,7 +29,7 @@ __device__ Policy::Accumulator cooperative_contract(const products::Factor (&fac
  }
- 
+
  /** Full dense weights count once; shared atoms are summed by the runtime sink. */
 -template <unsigned Lanes = 1>
 +template <unsigned Lanes = 1, bool SkipSpShells = false>
@@ -339,7 +339,7 @@ index 47b923e..d8d4600 100644
 +#include <memory>
  #include <stdexcept>
  #include <string_view>
- 
+
 @@ -11,6 +13,7 @@
  #include "runtime/resource_cuda.cuh"
  #include "scf/cuda/df_derivatives.cuh"
@@ -347,7 +347,7 @@ index 47b923e..d8d4600 100644
 +#include "scf/cuda/df_shell_derivatives.cuh"
  #include "scf/cuda_density_fitting.hpp"
  #include "scf/cuda_df_gradient.hpp"
- 
+
 @@ -120,6 +123,48 @@ struct Arena {
              upload(b.term_coefficients), upload(b.exponents),   upload(b.coefficients)};
    }
@@ -904,7 +904,7 @@ index 1fb0bb5..0fc9516 100644
              df_derivative_inventory,
 @@ -58,6 +59,12 @@ def main() -> None:
          from vibeqc_compiler.integral.df_policy import emit_df_derivative_schedule_cuda
- 
+
          write_if_changed(args.schedule_output, emit_df_derivative_schedule_cuda())
 +    if args.shell_output:
 +        from vibeqc_compiler.integral.df_shell_derivatives import (

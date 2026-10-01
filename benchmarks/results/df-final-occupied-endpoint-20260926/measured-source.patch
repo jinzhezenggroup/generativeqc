@@ -456,7 +456,7 @@ index de13dc61..470340c2 100644
 --- a/docs/developer/df_occupied_cuda.md
 +++ b/docs/developer/df_occupied_cuda.md
 @@ -104,20 +104,23 @@ validation must be disabled for clean endpoint timing.
- 
+
  `VIBEQC_DF_FINAL_EXCHANGE=dense|occupied|auto` independently controls final
  physical Fock evaluation. Unset/`auto` selects occupied K whenever the same
 -resident or streamed work/capacity and provenance gates qualify it; `occupied`
@@ -482,11 +482,11 @@ index de13dc61..470340c2 100644
 +and final-state gates still run. Other resident layouts keep dense K for
 +correction generations. Missing/stale provenance and failed reconstruction
 +retain the checked dense fallback. No previous physical Fock is reused.
- 
+
  The seed iteration stores
  the exact C that constructs the next D before the convergence update. Each
 @@ -349,20 +352,43 @@ the existing source, metric, library and SCF reservations.
- 
+
  The explicit `packed-single` experiment retains only fitted B in the same
  lower-pair order. It generates raw A once in bounded panels during setup, but
 -does not retain those panels. J/K reuses B; force response regenerates raw from
@@ -511,7 +511,7 @@ index de13dc61..470340c2 100644
  resource inventory currently supports `packed` but not `packed-single`.
  The [single-owner qualification note](../../.agents/notes/implemented/performance/2026-09-25-single-fitted-df-owner.md)
  records the numerical gates and complete-endpoint evidence.
- 
+
 +For the qualified full-rank fitted occupied consumer,
 +`VIBEQC_DF_OCCUPIED_METRIC=auto|retained-root|spectral` controls the second
 +metric transformation. `auto` and `retained-root` apply the plan's immutable
@@ -547,7 +547,7 @@ index e50a9d66..763b1ea4 100644
      "VIBEQC_DF_RESPONSE_SPACE",
 +    "VIBEQC_DF_OCCUPIED_METRIC",
  )
- 
+
  # These runtime switches are read by CUDA HF/DF policy code. Preserve even
 diff --git a/python/vibeqc_compiler/method/df_occupied_response_cuda.py b/python/vibeqc_compiler/method/df_occupied_response_cuda.py
 index 662384a6..1bc880f8 100644
@@ -555,17 +555,17 @@ index 662384a6..1bc880f8 100644
 +++ b/python/vibeqc_compiler/method/df_occupied_response_cuda.py
 @@ -1,7 +1,7 @@
  """Compiler-owned batched occupied projection and small metric layout lowering.
- 
+
  The runtime reuses the existing DF occupied adjoint; this module only emits
 -three dense contractions. No runtime, oracle or device import is required.
 +dense contractions. No runtime, oracle or device import is required.
  """
- 
+
  from __future__ import annotations
 @@ -70,6 +70,24 @@ inline cublasStatus_t df_occupied_to_metric_eigenbasis(
                       &zero, eigenfactors, auxiliary);
  }
- 
+
 +/** Full-rank fitted B already contains one inverse root. Apply the immutable
 + * plan's symmetric second root to S[aux,occ,occ] in one contraction. This
 + * never constructs M^-1 or reconstructs a discarded metric direction.
@@ -597,7 +597,7 @@ index 37e26a70..3f2acca5 100644
  #include <limits>
 +#include <stdexcept>
 +#include <string_view>
- 
+
  #include "generated_df_hf_response.cuh"
  #include "generated_symmetric_matrix_function.cuh"
 @@ -603,6 +606,16 @@ static cudaError_t contract_occupied_response(
@@ -739,7 +739,7 @@ index 989f71b4..e0e4f7cb 100644
 @@ -137,12 +137,95 @@ void lifecycle(bool uhf) {
    force(&token, false);
  }
- 
+
 +/** Single-B final K must prove identity/capacity independently of force parity.
 + * Compare accepted exact/corrected factors against CPU raw-integral J/K and
 + * require every rejected attempt to revoke any preceding raw projection lease.
@@ -940,8 +940,8 @@ index 9571f899..c6b25c90 100644
 +  return vibeqc::scf::generated::df_occupied_apply_metric_root(nullptr,a,rr,x,s,out);
 +}
  """
- 
- 
+
+
 @@ -134,6 +139,8 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
      lib.tile_size.restype = ct.c_size_t
      lib.small_metric.argtypes = [ct.c_int] * 2 + [ptr] * 5 + [ct.c_int]
@@ -949,10 +949,10 @@ index 9571f899..c6b25c90 100644
 +    lib.retained_metric.argtypes = [ct.c_int] * 2 + [ptr] * 3 + [ct.c_int]
 +    lib.retained_metric.restype = ct.c_int
      return lib
- 
- 
+
+
 @@ -183,7 +190,10 @@ def test_projected_panel_layout_and_tails(
- 
+
  @pytest.mark.parametrize("a,r", [(1, 1), (3, 2), (9, 3), (17, 5)])
  @pytest.mark.parametrize("condition", [1.0, 1e3, 1e6, 1e10])
 -def test_small_metric_layout(native: ct.CDLL, a: int, r: int, condition: float) -> None:
@@ -989,8 +989,8 @@ index 9571f899..c6b25c90 100644
 +    assert native.retained_metric(3, 4, pointer(x), pointer(s), pointer(out), 1) == 13
 +    assert np.isnan(out).all()
 +    assert native.retained_metric(3, 4, pointer(x), pointer(s), pointer(s), 0) == 7
- 
- 
+
+
  def test_96_atom_capacity_and_overflow(native: ct.CDLL) -> None:
 @@ -223,8 +250,15 @@ def test_96_atom_capacity_and_overflow(native: ct.CDLL) -> None:
  @pytest.mark.parametrize("n,r,a", [(4, 1, 3), (7, 3, 9), (12, 5, 13), (16, 8, 17)])

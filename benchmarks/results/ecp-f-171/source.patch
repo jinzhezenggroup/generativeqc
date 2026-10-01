@@ -3,7 +3,7 @@ index 18b1b1f..5cfead3 100644
 --- a/cmake/VibeQCTests.cmake
 +++ b/cmake/VibeQCTests.cmake
 @@ -41,6 +41,7 @@ macro(vibeqc_add_native_tests)
- 
+
    vibeqc_native_test(vibeqc_fock_build_tests tests/native/test_fock_build.cpp)
    vibeqc_native_test(vibeqc_ecp_projector_tests tests/native/test_ecp_projector.cpp NO_VIBEQC)
 +  vibeqc_native_test(vibeqc_ecp_capability_tests tests/native/test_ecp_capabilities.cpp)
@@ -36,8 +36,8 @@ index 30ea917..d416518 100644
 +                    "ECP execution supports orbital s/p/d/f shells"
 +                )
      return tuple(cores), tuple(terms)
- 
- 
+
+
 diff --git a/python/vibeqc_compiler/integral/ecp.py b/python/vibeqc_compiler/integral/ecp.py
 index d53abdf..f14c3df 100644
 --- a/python/vibeqc_compiler/integral/ecp.py
@@ -84,12 +84,12 @@ index b2be6a8..cb0908e 100644
 +++ b/python/vibeqc_compiler/integral/ecp_grid.py
 @@ -8,6 +8,7 @@ The independent CPU ECP oracle deliberately retains its own implementation.
  import math
- 
+
  from .expr import Graph
 +from .ir import ECP_MAX_ORBITAL_ANGULAR
  from .scalar_c import ScalarCEmitter
  from .shell_spec import cartesian_components
- 
+
 @@ -159,7 +160,7 @@ def emit_ecp_grid_cpp():
          "}",
          "inline double ecp_component_coefficient(unsigned x, unsigned y, unsigned z, double coefficient) {",
@@ -114,14 +114,14 @@ index 51e8d33..52ca5d4 100644
 +++ b/python/vibeqc_compiler/integral/ir.py
 @@ -25,6 +25,9 @@ class KernelConsumer(str, Enum):
      FORCE = "force"
- 
- 
+
+
 +ECP_MAX_ORBITAL_ANGULAR = 3
 +
 +
  class OperatorFamily(str, Enum):
      """Backend-neutral integral operator families known to the compiler."""
- 
+
 @@ -542,10 +545,12 @@ class IntegralIR:
          ):
              raise ValueError("scalar ECP requires its explicit quadrature lowering")
@@ -142,7 +142,7 @@ index c45bfbf..c67072d 100644
 --- a/src/api/c_api_ecp.cpp
 +++ b/src/api/c_api_ecp.cpp
 @@ -5,6 +5,7 @@
- 
+
  #include "api/error.hpp"
  #include "api/handles.hpp"
 +#include "generated_ecp_ao.cuh"
@@ -302,7 +302,7 @@ index 1d681ca..a32fa30 100644
 +      if (std::isfinite(value)) throw std::runtime_error("unsupported ECP AO silently aliased");
 +  }
  }
- 
+
  void check_weighted_consumer() {
 diff --git a/tests/python/test_ecp.py b/tests/python/test_ecp.py
 index 2545f7f..d40c00b 100644
@@ -310,8 +310,8 @@ index 2545f7f..d40c00b 100644
 +++ b/tests/python/test_ecp.py
 @@ -12,12 +12,18 @@ from vibeqc.ecp import ecp_integrals, resolve_ecp
  from vibeqc.profiles import canonical_hash
- 
- 
+
+
 -def fixture(*, representation="spherical", d_shell=False, spin=0):
 +def fixture(
 +    *, representation="spherical", d_shell=False, f_shell=False, f_on_h=False, spin=0
@@ -330,13 +330,13 @@ index 2545f7f..d40c00b 100644
      mol = gto.M(
 @@ -197,7 +203,7 @@ def test_parameters_invalidate_identity_and_malformed_channels_fail():
          resolve_ecp(bad, tuple(Atom.from_value(a) for a in atoms))
- 
- 
+
+
 -def detached_native(xyz, *, device="cpu", power=2, d_projector=False):
 +def detached_native(xyz, *, device="cpu", power=2, d_projector=False, orbital=0):
      """An ECP atom with no Gaussian shell tests its independent center motion."""
      from vibeqc import _native
- 
+
 @@ -215,7 +221,7 @@ def detached_native(xyz, *, device="cpu", power=2, d_projector=False):
          *(_native.AtomDescriptor(z, *r) for z, r in zip((11, 1, 2), xyz))
      )
@@ -358,8 +358,8 @@ index 2545f7f..d40c00b 100644
              library.vibeqc_system_ecp_integrals(
 @@ -272,7 +279,7 @@ def detached_native(xyz, *, device="cpu", power=2, d_projector=False):
          library.vibeqc_context_destroy(context)
- 
- 
+
+
 -def detached_reference(xyz, *, power=2, d_projector=False):
 +def detached_reference(xyz, *, power=2, d_projector=False, orbital=0):
      gto = pytest.importorskip("pyscf.gto")
@@ -381,8 +381,8 @@ index 2545f7f..d40c00b 100644
 -    return np.array([local, nonlocal_])
 +    norms = np.sqrt(mol.intor("int1e_ovlp").diagonal())
 +    return np.array([local, nonlocal_]) / norms[None, :, None] / norms[None, None, :]
- 
- 
+
+
  def test_ecp_and_basis_centers_move_independently():
 diff --git a/tests/python/test_ecp_f.py b/tests/python/test_ecp_f.py
 new file mode 100644
@@ -562,7 +562,7 @@ index 07eee95..3cf44f9 100644
 --- a/tests/python/test_ecp_ir.py
 +++ b/tests/python/test_ecp_ir.py
 @@ -102,7 +102,7 @@ def test_ecp_center_and_versioned_roundtrip(weighted):
- 
+
  def test_generated_center_derivatives_independent_finite_difference():
      rng = np.random.default_rng(171)
 -    for l in range(3):
@@ -571,7 +571,7 @@ index 07eee95..3cf44f9 100644
              graph, roots = gaussian_roots(component)
              for xyz in (np.zeros(3), rng.normal(size=3)):
 @@ -125,7 +125,7 @@ def test_generated_center_derivatives_independent_finite_difference():
- 
+
  def test_invalid_ecp_lowerings_fail_closed():
      term = EcpRadialTerm(-1, 2, 1.0, 1.0)
 -    for angular in ((0,), (0, 3)):
@@ -581,8 +581,8 @@ index 07eee95..3cf44f9 100644
      with pytest.raises(ValueError):
 @@ -140,6 +140,19 @@ def test_invalid_ecp_lowerings_fail_closed():
              replace(term, **kwargs)
- 
- 
+
+
 +@pytest.mark.parametrize("angular", [(0, 3), (3, 2), (3, 3)])
 +@pytest.mark.parametrize("weighted", [False, True])
 +def test_f_orbital_ir_derivative_contract(angular, weighted):
@@ -605,10 +605,10 @@ index fffac1b..b410137 100644
 +++ b/tests/python/test_ecp_validation.py
 @@ -1,6 +1,7 @@
  """Scalar ECP preflight, independent of native libraries and reference packages."""
- 
+
  import json
 +from dataclasses import replace
- 
+
  import pytest
  from vibeqc import Atom, BasisProvenance, BasisSet, BasisShell, ElementBasis
 @@ -75,3 +76,30 @@ def test_highest_singleton_channel_is_local():

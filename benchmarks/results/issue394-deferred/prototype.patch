@@ -26,7 +26,7 @@ index 5bc48cc..924036b 100644
 +  target_sources(vibeqc PRIVATE "${VIBEQC_DF_DERIVATIVE_HEADER}" "${VIBEQC_DF_DERIVATIVE_POLICY_HEADER}" "${VIBEQC_DF_DERIVATIVE_SCHEDULE_HEADER}" "${VIBEQC_DF_SHELL_DERIVATIVE_HEADER}" "${VIBEQC_DF_RYS_HEADER}" "${VIBEQC_DF_RYS_SHELL_HEADER}" "${VIBEQC_DF_RYS_POLICY_HEADER}"
                   src/scf/cuda/df_derivatives.cu src/scf/cuda/df_shell_derivatives.cu src/scf/cuda/df_gradient_bridge.cu
                   src/scf/cuda/df_response_weights.cu)
- 
+
 diff --git a/benchmarks/df_shell_work_ledger.py b/benchmarks/df_shell_work_ledger.py
 index 07383b4..298fffc 100644
 --- a/benchmarks/df_shell_work_ledger.py
@@ -36,8 +36,8 @@ index 07383b4..298fffc 100644
      "orbital_local_accumulations",
  )
 +RYS_WORK_FIELDS = ("rys_evaluations", "rys_roots", "recurrence_states")
- 
- 
+
+
  def reconstruct_domain(shells, panels, pair_mode):
 @@ -145,15 +146,47 @@ def kernel_activity(database_path, record):
              )
@@ -267,8 +267,8 @@ index dd7c671..ec11c58 100644
 +++ b/python/vibeqc_compiler/integral/df_derivatives_cuda.py
 @@ -26,6 +26,38 @@ def df_derivative_inventory():
      }
- 
- 
+
+
 +def emit_df_geometry_cuda(
 +    name="prepare_geometry",
 +    *,
@@ -303,7 +303,7 @@ index dd7c671..ec11c58 100644
 +
  def emit_df_derivatives_cuda():
      """Share base axis moments and Boys values across all independent centers.
- 
+
 @@ -110,20 +142,7 @@ __device__ double dot(unsigned da,const double* a,unsigned db,const double* b,
  struct Geometry {
    double pa[3],pb[3],dx[3],sx,sy,ip,iq,prefactor,f[11];
@@ -412,7 +412,7 @@ index c50e91e..a87862f 100644
 @@ -7,6 +7,7 @@
  #include <stdexcept>
  #include <string_view>
- 
+
 +#include "generated_df_rys_policy.hpp"
  #include "molecule/basis.hpp"
  #include "runtime/cuda_component_trace.hpp"
@@ -422,7 +422,7 @@ index c50e91e..a87862f 100644
  #include "scf/cuda_density_fitting.hpp"
  #include "scf/cuda_df_gradient.hpp"
 +#include "scf/df_shell_math_policy.hpp"
- 
+
  namespace vibeqc::scf {
  namespace {
 @@ -504,7 +506,7 @@ vibeqc_status execute_cuda_df_hf_gradient(
@@ -506,7 +506,7 @@ index b6b2a7e..02e0c48 100644
  #include <cstdlib>
  #include <limits>
 +#include <type_traits>
- 
+
 -#include "generated_df_shell_derivatives.cuh"
 +#include "generated_df_rys_shell.cuh"
  #include "molecule/basis.hpp"
@@ -731,7 +731,7 @@ index b6b2a7e..02e0c48 100644
 @@ -293,7 +343,7 @@ struct SignaturePacket {
  // and scalar arguments. Driver-copied parameters need no mutable device queue.
  static_assert(sizeof(SignaturePacket) + 2 * sizeof(DfShellBasisView) + 128 <= 4096);
- 
+
 -template <unsigned A, unsigned B, unsigned C, unsigned Variant>
 +template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false>
  __global__ void shell_panel(DfShellBasisView first, DfShellBasisView second,
@@ -747,7 +747,7 @@ index b6b2a7e..02e0c48 100644
 +                                             weights, gradient, counters, pairs, triangle, task,
 +                                             tasks, work);
  }
- 
+
 -template <unsigned A, unsigned B, unsigned C, unsigned Variant>
 +template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false>
  __global__ void shell_packet(DfShellBasisView orbital, DfShellBasisView auxiliary,
@@ -763,7 +763,7 @@ index b6b2a7e..02e0c48 100644
        slice.triangle, task, slice.tasks,
        work ? work + low * DfShellDiagnostics::row_elements : nullptr);
  }
- 
+
  /** Resource values are maxima within an operation, not sums over its launches. */
 -template <unsigned A, unsigned B, unsigned C, unsigned Variant, class Kernel>
 +template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false, class Kernel>
@@ -781,7 +781,7 @@ index b6b2a7e..02e0c48 100644
 @@ -377,7 +429,7 @@ cudaError_t profile_resources(Kernel kernel) {
    return cudaSuccess;
  }
- 
+
 -template <unsigned A, unsigned B, unsigned C, unsigned Variant>
 +template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false>
  cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
@@ -809,7 +809,7 @@ index b6b2a7e..02e0c48 100644
 @@ -486,7 +539,7 @@ cudaError_t launch_packets(std::span<const DfShellBasisView> orbital,
    return error;
  }
- 
+
 -template <unsigned A, unsigned B, unsigned C, unsigned Variant>
 +template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false>
  cudaError_t launch_group(DfShellBasisView first, DfShellBasisView second, DfShellBasisView x,
@@ -835,7 +835,7 @@ index b6b2a7e..02e0c48 100644
 @@ -534,39 +587,48 @@ cudaError_t launch_group(DfShellBasisView first, DfShellBasisView second, DfShel
    return error;
  }
- 
+
 -template <unsigned A, unsigned B, unsigned C, unsigned Variant>
 +template <unsigned A, unsigned B, unsigned C, unsigned Variant, bool Rys = false>
  cudaError_t launch(DfShellBasisView o, DfShellBasisView x, const double* positions,
@@ -860,7 +860,7 @@ index b6b2a7e..02e0c48 100644
 +  return function.template operator()<false>();
  }
  }  // namespace
- 
+
 -cudaError_t launch_df_shell_derivative_panel(DfShellBasisView o, DfShellBasisView x,
 -                                             const double* positions, std::size_t begin,
 -                                             std::size_t count, const double* weights,
@@ -1003,7 +1003,7 @@ index c0560ec..8f405ee 100644
 +    double* gradient, unsigned long long* counters, cudaStream_t stream, bool full_domain = false,
 +    unsigned variant = 0, DfDerivativePairs pairs = DfDerivativePairs::full,
 +    DfShellDiagnostics* diagnostics = nullptr, std::uint64_t rys_classes = 0);
- 
+
  /** Launch one primitive-signature shell-group product.
   * The first/second orbital views each contain exactly one angular/signature
   * slice; the auxiliary view may be clipped to one response panel. ``triangle``
@@ -1040,7 +1040,7 @@ index c0560ec..8f405ee 100644
 +    std::size_t count, const double* weights, double* gradient, unsigned long long* counters,
 +    cudaStream_t stream, bool full_domain, unsigned variant, DfDerivativePairs pairs,
 +    DfShellDiagnostics* diagnostics = nullptr, std::uint64_t rys_classes = 0);
- 
+
  }  // namespace vibeqc::scf
 diff --git a/src/scf/cuda/df_shell_diagnostics.cuh b/src/scf/cuda/df_shell_diagnostics.cuh
 index b598ae5..f422f25 100644
@@ -1072,7 +1072,7 @@ index b598ae5..f422f25 100644
 +                        "rys_evaluations",
 +                        "rys_roots",
 +                        "recurrence_states"};
- 
+
  /** Fixed diagnostic storage reused after each bounded signature packet.
   * Shards distribute diagnostic atomics; each owner publishes aggregated work
 diff --git a/src/scf/cuda_density_fitting.hpp b/src/scf/cuda_density_fitting.hpp
@@ -1084,7 +1084,7 @@ index 00e74f8..623c75f 100644
  struct DensityFittingDensityResponse;
  struct DfGradientResources;
 +struct DfShellMathPolicy;
- 
+
  /** Bind a native orbital snapshot to this immutable physical plan and item.
   * Recreating the plan changes its identity even if dimensions match. The SCF
 @@ -64,6 +65,8 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
@@ -1103,7 +1103,7 @@ index 00e74f8..623c75f 100644
 -    const CudaDfFinalStateToken* final_state = nullptr);
 +    const CudaDfFinalStateToken* final_state = nullptr,
 +    const DfShellMathPolicy* shell_math = nullptr);
- 
+
  /**
   * Prepare a device-resident source for bounded DF tile generation.
 diff --git a/src/scf/cuda_density_fitting_stub.cpp b/src/scf/cuda_density_fitting_stub.cpp
@@ -1169,11 +1169,11 @@ index 1e0d887..8bee97a 100644
 +++ b/src/scf/density_fitting.hpp
 @@ -7,6 +7,7 @@
  #include <vector>
- 
+
  #include "integrals/s_integrals.hpp"
 +#include "scf/df_shell_math_policy.hpp"
  #include "scf/fock_build.hpp"
- 
+
  namespace vibeqc::scf {
 @@ -53,6 +54,7 @@ struct DensityFittingScfData {
    // generated two-electron response is selected. Both bases keep real owners.
@@ -1181,7 +1181,7 @@ index 1e0d887..8bee97a 100644
    unsigned df_gradient_mapping{};
 +  DfShellMathPolicy df_shell_math;
    std::size_t df_gradient_budget{};
- 
+
    /** A fused response retains topology instead of AO derivative tensors.
 diff --git a/src/scf/fock_prepared.cpp b/src/scf/fock_prepared.cpp
 index c15c29f..e7cfc58 100644
@@ -1213,11 +1213,11 @@ index 79eb7b7..3f88ecd 100644
 +++ b/src/scf/fock_prepared.hpp
 @@ -4,6 +4,7 @@
  #include <memory>
- 
+
  #include "scf/cuda_fock_provider.hpp"
 +#include "scf/df_shell_math_policy.hpp"
  #include "scf/initial_guess/eigen_operation.hpp"
- 
+
  namespace vibeqc::scf {
 @@ -15,6 +16,7 @@ class OverlapOrthogonalizer;
   * remains in ResolvedFockBuild::spec. These switches never authorize DF. */
@@ -1226,7 +1226,7 @@ index 79eb7b7..3f88ecd 100644
 +  DfShellMathPolicy df_shell_math;
    bool operator==(const FockExecutionVariant&) const = default;
  };
- 
+
 diff --git a/src/scf/rhf.cpp b/src/scf/rhf.cpp
 index fe16952..203bb3b 100644
 --- a/src/scf/rhf.cpp
@@ -1264,7 +1264,7 @@ index a88d991..eadccbc 100644
 @@ -23,6 +23,46 @@ void require(bool ok, const char* message) {
  }
  void check(cudaError_t error) { require(error == cudaSuccess, cudaGetErrorString(error)); }
- 
+
 +/** Prove the public expansion contract independently of generated indexing.
 + * Products of these one-to-one maps remain injective after a triangle/panel
 + * removes tuples. Spherical d/f deliberately demonstrate collisions and must
@@ -1311,7 +1311,7 @@ index a88d991..eadccbc 100644
 @@ -104,7 +144,79 @@ struct Storage {
    }
  };
- 
+
 -void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) {
 +using Signature = std::array<std::size_t, 6>;
 +// A/B/C scatter counts, shared/distinct physical-atom updates, local additions,
@@ -1584,10 +1584,10 @@ index 951269c..526a98f 100644
 +++ b/tests/python/test_df_shell_derivatives_cuda.py
 @@ -1,6 +1,7 @@
  """Execution and complete-force qualification of generated shell reuse."""
- 
+
  import os
 +import re
- 
+
  import numpy as np
  import pytest
 @@ -65,6 +66,7 @@ def test_shell_execution_and_return_to_generic(
@@ -1669,8 +1669,8 @@ index bbd4a78..ced028d 100644
 +++ b/tests/python/test_df_shell_work_ledger.py
 @@ -100,6 +100,40 @@ def test_work_ledger_preserves_counts_groups_and_domain_hash(sss_record):
      assert result == reduce_work(copy.deepcopy(sss_record), [(0, 2, 0, 1)])
- 
- 
+
+
 +def test_rys_work_replaces_boys_and_polynomial_counts(sss_record):
 +    """Eight SSS primitives produce eight nodes and 48 independent moments."""
 +    counters = sss_record["counters"]
@@ -1822,7 +1822,7 @@ index 0fc9516..64e99d0 100644
              df_derivative_inventory,
 @@ -65,6 +79,18 @@ def main() -> None:
          )
- 
+
          write_if_changed(args.shell_output, emit_df_shell_derivatives_cuda())
 +    if args.rys_output:
 +        from vibeqc_compiler.integral.df_rys import emit_df_rys_cuda
