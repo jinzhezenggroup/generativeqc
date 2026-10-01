@@ -198,7 +198,8 @@ struct HostOnly final : ElectronInteractionSource {
 
 int main() {
   HostOnly source;
-  if (source.supports_device_read(ElectronInteractionOperator::eri, 0)) return 1;
+  if (!source.supports_host_read(ElectronInteractionOperator::eri)) return 1;
+  if (source.supports_device_read(ElectronInteractionOperator::eri, 0)) return 2;
   std::array<std::size_t, 4> begin{0, 0, 0, 0}, count{1, 1, 1, 1};
   try {
     source.read_device(ElectronInteractionOperator::eri, begin, count,
@@ -206,7 +207,7 @@ int main() {
   } catch (const std::invalid_argument&) {
     return 0;
   }
-  return 2;
+  return 3;
 }
 """
     )
@@ -245,6 +246,7 @@ def test_native_provider_keeps_host_fallback_and_device_handoff() -> None:
     transform_cuda = (ROOT / "src/posthf/cuda_transform.cu").read_text()
 
     assert "source_.supports_device_read(" in provider
+    assert "source_.supports_host_read(" in provider
     assert "source_.read_device(" in provider
     assert "source_.read(" in provider
     assert "posthf_cuda_batch_input_v1(" in provider
