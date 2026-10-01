@@ -661,8 +661,7 @@ ScfResult run_rks(
   if (incremental_state) {
     constexpr std::size_t kCpuIncrementalXcFeatureCacheMaximumBytes = 64ULL * 1024ULL * 1024ULL;
     incremental_state->retain_anchor_features =
-        grid.point_count() <=
-        kCpuIncrementalXcFeatureCacheMaximumBytes / (4ULL * sizeof(double));
+        grid.point_count() <= kCpuIncrementalXcFeatureCacheMaximumBytes / (4ULL * sizeof(double));
     incremental_state->ao_cache = ao_cache ? &*ao_cache : nullptr;
   }
   std::shared_ptr<const OccupiedDensityFactor> factor;
