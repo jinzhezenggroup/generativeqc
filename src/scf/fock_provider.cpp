@@ -247,6 +247,30 @@ std::vector<double> BasicFockPlanView<Provider>::energy_derivative(
   return result;
 }
 
+template <class Provider>
+FockEnergyDerivativeComponents BasicFockPlanView<Provider>::energy_derivative_components(
+    const std::vector<double>& density, const std::vector<double>& beta) const {
+  validate_density(density, beta, true);
+  auto derivative_spec = strategy_.spec;
+  derivative_spec.derivative_order = 1;
+  const auto derivative_strategy =
+      resolve_fock_build(derivative_spec, strategy_.backend, strategy_.screening_tolerance,
+                         strategy_.metric_relative_threshold);
+  FockEnergyDerivativeComponents result{std::vector<double>(ncoord_),
+                                        std::vector<double>(ncoord_)};
+  if (coulomb_) {
+    coulomb_->validate(derivative_strategy);
+    result.coulomb =
+        coulomb_->derivative(selected(derivative_spec, true, false), density, beta);
+  }
+  if (exchange_) {
+    if (!coulomb_ || *exchange_ != *coulomb_) exchange_->validate(derivative_strategy);
+    result.exchange =
+        exchange_->derivative(selected(derivative_spec, false, true), density, beta);
+  }
+  return result;
+}
+
 template class BasicFockPlanView<CpuFockProviderView>;
 template class BasicFockPlanView<CudaFockProviderView>;
 

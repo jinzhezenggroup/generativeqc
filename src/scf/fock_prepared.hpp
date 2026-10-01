@@ -53,7 +53,8 @@ class PreparedFockPlan {
   PreparedFockPlan(const core::System& orbital, const core::System* auxiliary,
                    ResolvedFockBuild strategy, int device_id = -1,
                    std::size_t device_budget_bytes = 0,
-                   unsigned retained_direct_derivative_order = 0);
+                   unsigned retained_direct_derivative_order = 0,
+                   unsigned retained_fitted_derivative_order = 0);
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
@@ -96,12 +97,15 @@ class PreparedFockPlan {
                          const std::vector<double>& beta = {}) const;
   std::vector<double> energy_derivative(const std::vector<double>& density,
                                         const std::vector<double>& beta = {}) const;
+  FockEnergyDerivativeComponents energy_derivative_components(
+      const std::vector<double>& density, const std::vector<double>& beta = {}) const;
   /** Exact comparison of immutable source inputs and execution controls.
    * Convergence thresholds, DIIS history and warm density are deliberately
    * excluded: they do not alter the prepared mathematical operator. */
   bool matches(const core::System& orbital, const core::System* auxiliary,
                const ResolvedFockBuild& strategy, int device_id, std::size_t device_budget_bytes,
-               unsigned minimum_direct_derivative_order = 0) const noexcept;
+               unsigned minimum_direct_derivative_order = 0,
+               unsigned minimum_fitted_derivative_order = 0) const noexcept;
 
  private:
   struct Impl;

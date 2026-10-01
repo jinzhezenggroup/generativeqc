@@ -11,6 +11,11 @@ namespace generativeqc::scf {
 template <class Provider>
 class BasicFockPlanView;
 
+struct FockEnergyDerivativeComponents {
+  std::vector<double> coulomb;
+  std::vector<double> exchange;
+};
+
 /** Typed, non-owning view of one immutable CPU provider's prepared integrals.
  * The enclosing geometry cache owns the data and must outlive this view and
  * every plan using it. Replacing geometry, AO representation, auxiliary basis,
@@ -68,6 +73,11 @@ class BasicFockPlanView {
    * assembly remains in the method. Uses exactly the value-side providers. */
   std::vector<double> energy_derivative(const std::vector<double>& density,
                                         const std::vector<double>& beta = {}) const;
+  /** Split fixed-density first derivatives by physical J/K source. This may
+   * consume derivative capability retained by the prepared owner even when the
+   * value-side strategy itself is derivative-order zero. */
+  FockEnergyDerivativeComponents energy_derivative_components(
+      const std::vector<double>& density, const std::vector<double>& beta = {}) const;
 
  private:
   void validate_density(const std::vector<double>& density, const std::vector<double>& beta,
