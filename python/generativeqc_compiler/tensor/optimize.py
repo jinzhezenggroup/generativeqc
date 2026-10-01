@@ -680,4 +680,5 @@ def prepare_for_backend(
                 ],
             },
         },
+        definitions=prepared.definitions,
     )
