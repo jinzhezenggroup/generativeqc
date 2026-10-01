@@ -1,0 +1,154 @@
+name: Scoped open PR repairs
+on:
+  push:
+    branches: [agent/astra-open-pr-round-20261002]
+    paths: [.github/workflows/astra-open-pr-repairs.yml]
+permissions:
+  contents: read
+jobs:
+  repair:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        pr: [1651, 1652, 1653, 1654, 1657, 1659, 1661, 1664]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Isolate review test dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/review-venv"
+          "$RUNNER_TEMP/review-venv/bin/pip" install numpy scipy pytest pyyaml ruff==0.16.9
+      - name: Validate exact repair and publish isolated result ref
+        env:
+          REVIEW_PR: ${{ matrix.pr }}
+          OMP_NUM_THREADS: 1
+          OPENBLAS_NUM_THREADS: 1
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, os, subprocess, tempfile
+          from pathlib import Path
+          root=Path.cwd()
+          number=os.environ['REVIEW_PR']
+          out=Path(os.environ['RUNNER_TEMP'])/('review-repair-'+number)
+          out.mkdir()
+          report={'pr':int(number)}
+          def run(*args,cwd=root,check=True,env=None,input=None):
+              result=subprocess.run(args,cwd=cwd,capture_output=True,text=True,env=env,input=input)
+              if check and result.returncode:
+                  raise RuntimeError((result.stdout+result.stderr)[-14000:])
+              return result
+          try:
+              encoded=(root/'.github/astra-open-pr-repairs.b64').read_text().strip()
+              # Normalize three identified copy-transport insertions, then require
+              # the exact locally reviewed decoded bytes, not a best-effort payload.
+              for old,new in [('fzXG7bbrug7','fzXG7rug7'),('hsBG0FUFFyj','hsBG0UFFyj'),('PB9mbLqBqB5','PB9mbLqB5')]:
+                  encoded=encoded.replace(old,new)
+              decoded=gzip.decompress(base64.b64decode(encoded,validate=True))
+              expected='2dd7f58a16ff27a8c61749ebb0d3a5d2afc050f80b62e78e5c77778b85b1daa2'
+              if hashlib.sha256(decoded).hexdigest()!=expected:
+                  raise RuntimeError('review payload integrity check failed')
+              record=json.loads(decoded)[number]
+              head=record['head']; branch=record['branch']
+              report.update(original_head=head,branch=branch)
+              remote=run('git','ls-remote','origin','refs/heads/'+branch).stdout.split()
+              if not remote or remote[0]!=head:
+                  raise RuntimeError('original head moved; no original branch or result changed')
+              result_branch='agent/astra-fixed-'+number+'-20261002'
+              if run('git','ls-remote','origin','refs/heads/'+result_branch).stdout.strip():
+                  raise RuntimeError('isolated result ref already exists; refusing overwrite')
+              run('git','fetch','--no-tags','origin',head)
+              allowed=set(record['paths'])|set(record.get('restore',[]))
+              if any(Path(p).is_absolute() or '..' in Path(p).parts for p in allowed):
+                  raise RuntimeError('unsafe reviewed path')
+              with tempfile.TemporaryDirectory(prefix='review-'+number+'-') as temporary:
+                  work=Path(temporary)/'checkout'
+                  run('git','worktree','add','--detach',str(work),head)
+                  try:
+                      if number=='1651':
+                          baseline=record['restore_from']
+                          run('git','fetch','--no-tags','origin',baseline,record['previous_head'])
+                          concurrent=set(run('git','diff','--name-only',record['previous_head'],head).stdout.splitlines())
+                          publication='benchmarks/results/bounded-direct-945-20260923/publication.json'
+                          if concurrent!={publication}:
+                              raise RuntimeError('unreviewed concurrent evidence changes')
+                          for name in record['restore']:
+                              original=subprocess.check_output(['git','show',baseline+':'+name],cwd=work)
+                              current=(work/name).read_bytes()
+                              if name.endswith('.patch'):
+                                  normalize=lambda value: b'\n'.join(line.rstrip() for line in value.splitlines())
+                                  if normalize(original)!=normalize(current):
+                                      raise RuntimeError('historical evidence has non-whitespace changes: '+name)
+                              (work/name).write_bytes(original)
+                      run('git','apply','--index','-',cwd=work,input=record['patch'])
+                      pyfiles=sorted(p for p in allowed if p.endswith('.py'))
+                      ruff=str(Path(os.environ['RUNNER_TEMP'])/'review-venv/bin/ruff')
+                      if pyfiles:
+                          run(ruff,'check','--fix',*pyfiles,cwd=work)
+                          run(ruff,'format',*pyfiles,cwd=work)
+                          run(ruff,'check',*pyfiles,cwd=work)
+                      python=str(Path(os.environ['RUNNER_TEMP'])/'review-venv/bin/python')
+                      env=dict(os.environ)
+                      env['PYTHONPATH']=os.pathsep.join([str(work/'python'),str(work),str(work/'tests/python')])
+                      tests=['tests/python/'+name for name in record['tests']]
+                      tested=run(python,'-m','pytest','-q','-o','addopts=',*tests,cwd=work,env=env,check=False)
+                      (out/'tests.log').write_text(tested.stdout+tested.stderr)
+                      report['test_returncode']=tested.returncode
+                      report['test_summary']='\n'.join((tested.stdout+tested.stderr).splitlines()[-16:])
+                      if tested.returncode:
+                          raise RuntimeError('focused regressions failed; result not published')
+                      extras=[]
+                      if number=='1651':
+                          extras=[[python,'tools/evidence.py','check-change','--base',record['restore_from']],[python,'tools/evidence.py','check']]
+                      if number=='1653':
+                          extras=[[python,'tools/report_cuda_ownership.py','--check'],[python,'tools/check_direct_hf_retirement.py']]
+                      if number=='1657':
+                          extras=[[python,'tools/check_compiler_structure.py']]
+                      for index,command in enumerate(extras):
+                          checked=run(*command,cwd=work,env=env,check=False)
+                          (out/('extra-'+str(index)+'.log')).write_text(checked.stdout+checked.stderr)
+                          if checked.returncode:
+                              raise RuntimeError('additional review check failed; result not published')
+                      run('git','add','--',*sorted(allowed),cwd=work)
+                      actual=set(run('git','diff','--cached','--name-only',cwd=work).stdout.splitlines())
+                      unstaged=run('git','diff','--name-only',cwd=work).stdout.strip()
+                      if not actual or not actual<=allowed or unstaged:
+                          raise RuntimeError('unexpected changed paths')
+                      # Archived patch context lines deliberately preserve original
+                      # trailing bytes. Check source/test changes independently.
+                      source_paths=sorted(p for p in actual if not p.endswith('.patch'))
+                      run('git','diff','--cached','--check','--',*source_paths,cwd=work)
+                      message=record['title']+'\n\nApply the scoped review repair and preserve numerical limits, failure\npublication and original branch history. Focused regressions passed;\nfull protected-branch CI and review remain required.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                      run('git','-c','user.name=ChatGPT','-c','user.email=chatgpt@users.noreply.github.com','commit','-m',message,cwd=work)
+                      commit=run('git','rev-parse','HEAD',cwd=work).stdout.strip()
+                      tree=run('git','rev-parse','HEAD^{tree}',cwd=work).stdout.strip()
+                      if run('git','rev-parse','HEAD^',cwd=work).stdout.strip()!=head:
+                          raise RuntimeError('unexpected commit parent')
+                      report.update(commit=commit,tree=tree,result_branch=result_branch,changed_paths=sorted(actual))
+                      (out/'repair.patch').write_text(run('git','diff','--binary',head,commit,cwd=work).stdout)
+                      report['sha256']={}
+                      for name in sorted(actual):
+                          path=out/'files'/name;path.parent.mkdir(parents=True,exist_ok=True)
+                          path.write_bytes((work/name).read_bytes())
+                          report['sha256'][name]=hashlib.sha256(path.read_bytes()).hexdigest()
+                      run('git','push','origin','HEAD:refs/heads/'+result_branch,cwd=work)
+                      report['published_result']=True
+                  finally:
+                      run('git','worktree','remove','--force',str(work),check=False)
+          except Exception as error:
+              report['error']=str(error)
+          (out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
+          print(json.dumps(report),flush=True)
+          if 'error' in report: raise SystemExit(1)
+          PY
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: astra-repair-${{ matrix.pr }}
+          path: ${{ runner.temp }}/review-repair-${{ matrix.pr }}/
+          retention-days: 1
