@@ -77,6 +77,11 @@ bundle directories that may still be used by live processes. The cache root
 uses `GENERATIVEQC_PROFILE_CACHE` first, then `XDG_CACHE_HOME`, then
 `~/.cache/generativeqc/profiles`, matching the Python frontend contract.
 
+This migration only covers cache administration. The native `run` path still
+uses the library selected by its native installation/linkage and does not yet
+discover or switch to a cached local profile library. Native local-profile
+selection is a separate runtime migration.
+
 ## Stable subcommand namespace
 
 The top-level CLI keeps one stable subcommand layout while implementations move
