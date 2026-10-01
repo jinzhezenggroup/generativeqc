@@ -51,16 +51,16 @@ def native_header() -> str:
     primal = build_gfn2_es2_pair_primal()
     vjp = build_gfn2_es2_pair_vjp()
     potential = prepare_for_backend(
-        build_gfn2_es2_potential_update_program(), backend="scalar"
+        build_gfn2_es2_potential_update_program(), backend="portable"
     )
     energy = prepare_for_backend(
-        build_gfn2_es2_energy_update_program(), backend="scalar"
+        build_gfn2_es2_energy_update_program(), backend="portable"
     )
     weight = prepare_for_backend(
-        build_gfn2_es2_cached_gradient_weight_program(), backend="scalar"
+        build_gfn2_es2_cached_gradient_weight_program(), backend="portable"
     )
     projection = prepare_for_backend(
-        build_gfn2_es2_gradient_projection_program(), backend="scalar"
+        build_gfn2_es2_gradient_projection_program(), backend="portable"
     )
 
     potential_body = _host_device(

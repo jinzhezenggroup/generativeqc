@@ -74,11 +74,11 @@ def native_header() -> str:
         _subprogram(
             kernel, COORDINATION_OUTPUT_ORDER, "gfn2-runtime-coordination-pair"
         ),
-        backend="scalar",
+        backend="portable",
     )
     repulsion = prepare_for_backend(
         _subprogram(kernel, REPULSION_OUTPUT_ORDER, "gfn2-runtime-repulsion-pair"),
-        backend="scalar",
+        backend="portable",
     )
     # Production GFN2 validates finite parameters and 0 < r <= 25 bohr before
     # entering these helpers. In that bounded domain the AD quotient products
