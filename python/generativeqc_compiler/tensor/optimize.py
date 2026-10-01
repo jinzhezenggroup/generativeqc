@@ -585,7 +585,7 @@ def optimize(
     )
 
 
-PRODUCTION_BACKENDS = frozenset(("cpu", "cuda", "scalar"))
+PRODUCTION_BACKENDS = frozenset(("cpu", "cuda", "portable", "scalar"))
 
 
 def prepare_for_backend(
@@ -597,7 +597,9 @@ def prepare_for_backend(
 ) -> Program:
     """Prepare one production TensorIR program before backend-specific lowering.
 
-    Exact optimizer passes always run. CPU/CUDA lowering additionally applies
+    Portable preparation denotes one generated scientific source compiled for both
+    CPU and CUDA; it is a provenance/lowering domain, not a third execution backend.
+    Exact optimizer passes always run. CPU/CUDA/portable lowering additionally applies
     only compiler-proven strict symbolic-degree contraction reassociation unless
     the caller explicitly preserves the source reduction tree. Explicit
     precision-execution programs keep their original tree until precision for
@@ -611,7 +613,7 @@ def prepare_for_backend(
     if type(preserve_reduction_order) is not bool:
         raise TypeError("preserve_reduction_order must be a Boolean")
     allow_reassociation = (
-        backend in ("cpu", "cuda")
+        backend in ("cpu", "cuda", "portable")
         and not preserve_reduction_order
         and program.provenance.get("precision_execution") is None
     )

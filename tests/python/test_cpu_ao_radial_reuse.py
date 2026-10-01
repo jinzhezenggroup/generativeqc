@@ -32,9 +32,37 @@ def test_cpu_ao_radial_factor_is_reused_across_requested_jets() -> None:
 def test_legal_jet_extents_do_not_restore_value_only_runtime_dispatch() -> None:
     body = _evaluate_body()
     assert "std::array<double, JetCount> values{};" in body
-    assert "JetCount == 1 ? 0U : derivatives[jet][k]" in body
+    value_only, _ = body.split("if constexpr (JetCount == 1) {", 1)[1].split(
+        "} else {", 1
+    )
+    assert "values[0] += term;" in value_only
+    assert "differentiated_power(" in value_only
+    assert "0, alpha, r[k]" in " ".join(value_only.split())
+    assert "derivatives[" not in value_only
+    assert "powers[" not in value_only
     for jets in (1, 4, 10, 20):
         assert f"evaluate_jets.template operator()<{jets}>()" in body
+
+
+def test_cpu_ao_axis_derivatives_are_reused_before_the_jet_loop() -> None:
+    body = _evaluate_body()
+    powers = body.index("powers[k][derivative] = differentiated_power(")
+    jet_loop = body.index("for (std::size_t jet = 0; jet < JetCount; ++jet)", powers)
+    accumulate = body.index("values[jet] += term;", jet_loop)
+    assert powers < jet_loop < accumulate
+    assert "term *= powers[k][derivatives[jet][k]];" in body[jet_loop:accumulate]
+    assert "differentiated_power(" not in body[jet_loop:accumulate]
+
+
+def test_zero_derivative_keeps_horner_without_coefficient_storage() -> None:
+    source = SOURCE.read_text()
+    fast_path = source.split("if (derivative == 0) {", 1)[1].split(
+        "std::array<double, 7> coefficients{};", 1
+    )[0]
+    assert "double result = 1;" in fast_path
+    assert "result = result * x + 0.0;" in fast_path
+    assert "return result;" in fast_path
+    assert "std::array" not in fast_path
 
 
 def test_cpu_ao_radial_exp_work_census() -> None:
