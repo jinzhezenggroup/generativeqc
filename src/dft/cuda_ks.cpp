@@ -317,21 +317,32 @@ struct CudaKsPlan::Impl : KsStateStorage {
       record_precision_operator(scf::PrecisionOperatorKind::ExchangeK, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict, exchange_builds);
 
-      // CudaXcDensityPrecision is the execution owner's actual arithmetic
-      // contract: AUTO lowers the density-times-AO products to FP32 with FP64
-      // storage/accumulation/reduction; strict iterations remain all FP64.
-      record_precision_operator(scf::PrecisionOperatorKind::Xc, compute, mode);
-      record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
+      // Pointwise XC, Vxc and scalar reductions remain FP64 even in AUTO.
+      // The reduced arithmetic is confined to the density-times-AO contraction,
+      // which is recorded separately as a MatrixProduct logical contraction.
+      record_precision_operator(scf::PrecisionOperatorKind::Xc, scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict);
+      record_precision_operator(scf::PrecisionOperatorKind::FockAssembly,
+                                scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
-                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
+                                scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict);
 
       // enqueue_legacy executes four products for FDS-SDF and three around the
       // generalized eigensolve. UKS occupation stabilization adds two more.
-      const std::uint64_t matrix_products = stabilize_occupations ? 9U : 7U;
+      // Device-fused XC additionally executes one logical density-times-AO
+      // contraction using the selected density precision.
+      const std::uint64_t strict_matrix_products =
+          (stabilize_occupations ? 9U : 7U) + (mixed ? 0U : 1U);
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
-                                scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
-                                matrix_products);
+                                scf::PrecisionDtype::Fp64,
+                                scf::PrecisionArithmeticMode::Strict,
+                                strict_matrix_products);
+      if (mixed)
+        record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
+                                  scf::PrecisionDtype::Fp32,
+                                  scf::PrecisionArithmeticMode::Mixed);
       if (!final_closure)
         record_precision_operator(scf::PrecisionOperatorKind::Diis, scf::PrecisionDtype::Fp64,
                                   scf::PrecisionArithmeticMode::Strict);
