@@ -5,13 +5,18 @@ they do not load a native library or claim AUTO numerical qualification.
 """
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from generativeqc import _generated_methods as method_manifest
 from generativeqc import _native
-from generativeqc.ks import SPLIT_HYBRID_SCF_DOMAIN, cuda_global_hybrid_force_eligible
+from generativeqc.ks import (
+    SPLIT_HYBRID_SCF_DOMAIN,
+    _scf_domain_for_ir,
+    cuda_global_hybrid_force_eligible,
+)
 from generativeqc_compiler.method import resolve_method
 
 from tools.dft_mp_v1 import qualify_capacity
@@ -59,16 +64,22 @@ def _promoted(
     method: str = "PBE0",
     spin: str = "unpolarized",
     blocked: str | None = None,
+    renamed: bool = False,
 ) -> bool:
     _, assignment, promotion = _nodes()
     options = SimpleNamespace(
         xc_schedule="device_fused",
         method_ir=resolve_method(method, spin=spin),
-        scf_domain=(
-            SPLIT_HYBRID_SCF_DOMAIN
-            if method in ("M06-2X", "MN15")
-            else "qualified-non-split"
-        ),
+    )
+    if renamed:
+        options.method_ir = replace(options.method_ir, identifier="opaque-hybrid-alias")
+    # Resolve the actual native domain instead of inferring it from a label.
+    # Ineligible graphs must short-circuit without querying their native domain;
+    # CAM-B3LYP deliberately has no native semilocal lowerer.
+    options.scf_domain = (
+        _scf_domain_for_ir(options.method_ir)
+        if cuda_global_hybrid_force_eligible(options.method_ir)
+        else None
     )
     owner = SimpleNamespace(
         _device_name="cuda",
@@ -135,6 +146,16 @@ def test_generated_split_hybrid_force_keeps_auto_fail_closed(
     assert not _promoted(precision=_native.PRECISION_AUTO, spin=spin, method=method)
 
 
+@pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize("method", ("PBE0", "B3LYP", "M06-2X", "MN15"))
+def test_auto_force_admission_uses_resolved_domain_under_renaming(
+    spin: str, method: str
+) -> None:
+    assert _promoted(
+        precision=_native.PRECISION_AUTO, spin=spin, method=method, renamed=True
+    ) is (method in ("PBE0", "B3LYP"))
+
+
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
 @pytest.mark.parametrize(
     "blocked",
@@ -170,6 +191,8 @@ def test_hybrid_promotion_does_not_admit_other_source_contracts(
         "self._ks_options is not None",
         'self._ks_options.xc_schedule == "device_fused"',
         "cuda_global_hybrid_force_eligible(self._ks_options.method_ir)",
+        "self._precision_mode == _native.PRECISION_FP64",
+        "self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN",
     ),
 )
 def test_capacity_audit_rejects_a_changed_hybrid_guard(

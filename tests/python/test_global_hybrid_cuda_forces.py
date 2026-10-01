@@ -126,7 +126,9 @@ def test_split_hybrid_auto_force_remains_fail_closed(name: str, spin: str) -> No
     ),
 )
 @pytest.mark.parametrize("spin", ("rks", "uks"))
-def test_public_cuda_global_hybrid_force(name: str, spin: str, precision: str) -> None:
+def test_public_cuda_global_hybrid_force(
+    name: str, spin: str, precision: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from generativeqc import Calculator, GridSpec, KsOptions
     from generativeqc._dft_gradient import StationaryKsState
     from generativeqc_compiler.dft import NativeAO
@@ -174,6 +176,17 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str, precision: str) -
     with calc.prepare_batch(
         [atoms], multiplicities=[multiplicity], warm_start=True
     ) as batch:
+        # Retain the executed owner evidence without changing the force route.
+        # A descriptor count alone cannot establish which native source ran.
+        force_work = []
+        force_consumer = batch._public_dft_cuda_force
+
+        def observed_force(index: int, force_atoms: object) -> tuple:
+            forces, work = force_consumer(index, force_atoms)
+            force_work.append(work)
+            return forces, work
+
+        monkeypatch.setattr(batch, "_public_dft_cuda_force", observed_force)
         with no_cpu_derivatives():
             public = batch.execute(properties=("energy", "forces"), strict=True).items[
                 0
@@ -208,14 +221,31 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str, precision: str) -
             ]
         np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
         assert batch._stationary_cuda_execution._lease.executions == 2
-        # Full-range J'/K' is now owned by the prepared Direct shell source;
-        # the stationary AO descriptor owner retains only one-electron/Pulay
-        # and nuclear work. Exact exchange remains a logical source slot.
+        # Exact exchange remains a logical source slot even though its
+        # derivative arithmetic belongs to the prepared native integral owner.
         assert "exact_exchange" in batch._stationary_cuda_execution.sources.source_names
         # The prepared native integral owner supplies one-electron/Pulay and
         # full-range J'/K'. The generated stationary descriptor owner retains
         # only nuclear pair work; grid geometry is accounted separately.
         per_execution = len(atoms) * (len(atoms) - 1) // 2
+        assert len(force_work) == 2
+        for work in force_work:
+            assert (
+                work["stationary_integral_derivative_route"]
+                == "prepared-native-complete"
+            )
+            assert work["stationary_native_integral_sources"] == (
+                "one_electron",
+                "overlap_pulay",
+                "coulomb",
+                "exact_exchange",
+            )
+            assert work["stationary_task_executor"]["sources"] == ()
+            assert (
+                work["stationary_task_executor"]["logical_primitive_records"]
+                == per_execution
+            )
+            assert work["primitive_records"] == per_execution
         assert (
             batch._stationary_cuda_execution.sources.metrics()["primitive_records"]
             == 2 * per_execution
@@ -277,6 +307,12 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str, precision: str) -
             ),
             "translation_residual": float(np.max(np.abs(public.forces.sum(axis=0)))),
             "primitive_records_per_execution": per_execution,
+            "stationary_integral_derivative_route": force_work[0][
+                "stationary_integral_derivative_route"
+            ],
+            "stationary_native_integral_sources": force_work[0][
+                "stationary_native_integral_sources"
+            ],
             "replay_max_error": float(np.max(np.abs(replay.forces - public.forces))),
             "geometry_reuse_max_error": geometry_reuse_error,
             "finite_difference": estimates,

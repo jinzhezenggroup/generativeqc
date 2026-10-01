@@ -593,11 +593,6 @@ class Calculator:
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
         if (
-            self._method in (_native.METHOD_R2SCAN_RKS, _native.METHOD_R2SCAN_UKS)
-            and self._precision_mode != _native.PRECISION_FP64
-        ):
-            raise NotImplementedError("r2SCAN currently requires strict FP64")
-        if (
             self._method == _native.METHOD_PBE_D4_RKS
             and self._precision_mode != _native.PRECISION_FP64
         ):

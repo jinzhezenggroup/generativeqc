@@ -101,8 +101,10 @@ result = calc.singlepoint(
 The first call compiles a method-specific CUDA wrapper and requires a
 discoverable NVCC toolkit (`CUDACXX` or `CUDA_PATH` can select it). Later calls
 reuse the compiler cache. There is no CPU scientific fallback. Density-fitted,
-range-separated, nonlocal, ECP and mixed-precision hybrid forces remain outside
-this contract. See the [execution and resource limits](../developer/stationary_cuda_diagnostic.md)
+range-separated, nonlocal and ECP hybrid forces remain outside this contract.
+Generated split hybrids additionally require strict FP64 for forces; component
+AUTO is admitted only on the PBE0/B3LYP-style routes described above.
+See the [execution and resource limits](../developer/stationary_cuda_diagnostic.md)
 and [independent force acceptance gate](../maintainer/hybrid_cuda_acceptance.md#public-global-hybrid-force-gate).
 
 ## Direct CUDA HF force state
