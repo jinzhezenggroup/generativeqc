@@ -2414,7 +2414,9 @@ def _complete_rks_cuda_gradient_diagnostic(
         )
         use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
         integral_provider = (
-            fitted_integral_provider if use_fitted_integrals else direct_integral_provider
+            fitted_integral_provider
+            if use_fitted_integrals
+            else direct_integral_provider
         )
         native_integral_budget = max_device_bytes - peak
         if not ecp and native_integral_budget > 0 and callable(integral_provider):

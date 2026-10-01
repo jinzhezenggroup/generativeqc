@@ -279,7 +279,9 @@ def _admit_work(
     # Coulomb always traverses every ordered primitive quartet. Each full- or
     # range-separated exact-exchange source is an independently weighted ERI
     # derivative traversal over that same ordered quartet domain.
-    quartet_passes = 0 if native_fitted_integrals else 1 + int(exact_exchange) + range_exchange
+    quartet_passes = (
+        0 if native_fitted_integrals else 1 + int(exact_exchange) + range_exchange
+    )
     records = (
         pairs
         if native_fitted_integrals
@@ -606,7 +608,9 @@ def complete_rks_gradient_diagnostic(
 
     if native_integral_components is not None:
         components["one_electron"] = np.ascontiguousarray(native_integral_components[0])
-        components["overlap_pulay"] = np.ascontiguousarray(native_integral_components[1])
+        components["overlap_pulay"] = np.ascontiguousarray(
+            native_integral_components[1]
+        )
         components["coulomb"] = np.ascontiguousarray(native_integral_components[2])
         if plan.exchange is not None:
             components["exact_exchange"] = np.ascontiguousarray(

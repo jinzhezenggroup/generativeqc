@@ -256,17 +256,14 @@ FockEnergyDerivativeComponents BasicFockPlanView<Provider>::energy_derivative_co
   const auto derivative_strategy =
       resolve_fock_build(derivative_spec, strategy_.backend, strategy_.screening_tolerance,
                          strategy_.metric_relative_threshold);
-  FockEnergyDerivativeComponents result{std::vector<double>(ncoord_),
-                                        std::vector<double>(ncoord_)};
+  FockEnergyDerivativeComponents result{std::vector<double>(ncoord_), std::vector<double>(ncoord_)};
   if (coulomb_) {
     coulomb_->validate(derivative_strategy);
-    result.coulomb =
-        coulomb_->derivative(selected(derivative_spec, true, false), density, beta);
+    result.coulomb = coulomb_->derivative(selected(derivative_spec, true, false), density, beta);
   }
   if (exchange_) {
     if (!coulomb_ || *exchange_ != *coulomb_) exchange_->validate(derivative_strategy);
-    result.exchange =
-        exchange_->derivative(selected(derivative_spec, false, true), density, beta);
+    result.exchange = exchange_->derivative(selected(derivative_spec, false, true), density, beta);
   }
   return result;
 }

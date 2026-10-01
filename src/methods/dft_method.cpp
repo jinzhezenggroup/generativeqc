@@ -970,15 +970,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
     if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
         !system_.ecp_terms.empty() || execution_plan_.range_exchange ||
         execution_plan_.nonlocal_correlation) {
-      detail =
-          "density-fitted stationary derivatives require all-electron full-range KS";
+      detail = "density-fitted stationary derivatives require all-electron full-range KS";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const auto& strategy = fock_.strategy();
     const auto fitted_term = [](const scf::FockTermSpec& term) {
-      return !term.present ||
-             (term.approximation == scf::FockApproximation::DensityFitted &&
-              term.op == scf::FockOperator::FullRange);
+      return !term.present || (term.approximation == scf::FockApproximation::DensityFitted &&
+                               term.op == scf::FockOperator::FullRange);
     };
     if (!fitted_term(strategy.spec.coulomb) || !fitted_term(strategy.spec.exchange)) {
       detail = "density-fitted stationary derivative provider identity mismatch";
@@ -995,10 +993,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto& one = fock_.one_electron();
     const auto matrix_elements = one.nbf * one.nbf;
     const auto coordinates = 3 * system_.atoms.size();
-    if (spins < 1 || spins > 2 || density.size() != spins ||
-        weighted_density.size() != spins ||
-        one.ncoord != coordinates ||
-        one.hcore_derivative.size() != coordinates * matrix_elements ||
+    if (spins < 1 || spins > 2 || density.size() != spins || weighted_density.size() != spins ||
+        one.ncoord != coordinates || one.hcore_derivative.size() != coordinates * matrix_elements ||
         one.overlap_derivative.size() != coordinates * matrix_elements) {
       detail = "density-fitted stationary D/W or one-electron derivative shape mismatch";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -1029,8 +1025,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const std::vector<double> empty;
     scf::FockEnergyDerivativeComponents two;
     try {
-      two = fock_.energy_derivative_components(
-          density[0], spins == 2 ? density[1] : empty);
+      two = fock_.energy_derivative_components(density[0], spins == 2 ? density[1] : empty);
     } catch (const std::bad_alloc&) {
       detail = "density-fitted stationary response exceeded the prepared resource budget";
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;

@@ -904,10 +904,7 @@ class Calculator:
                 term.operator == "full-range"
                 for term in self._ks_options.execution_plan.exchange
             )
-            and (
-                self._device_name == "cpu"
-                or self._device_name == "cuda"
-            )
+            and (self._device_name == "cpu" or self._device_name == "cuda")
         )
         if (
             self._capabilities.family == "density_functional"

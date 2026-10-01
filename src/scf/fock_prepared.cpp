@@ -50,7 +50,7 @@ std::size_t df_source_bytes(const core::System& orbital, const core::System& aux
                multiply_size(auxiliary_cartesian, molecule::ao_count(auxiliary))));
 }
 FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
-                                      bool retain_df_derivatives = false) {
+                                       bool retain_df_derivatives = false) {
 #if GENERATIVEQC_HAS_CUDA
   if (strategy.backend == FockBackend::Cpu) return {};
   FockExecutionVariant result;

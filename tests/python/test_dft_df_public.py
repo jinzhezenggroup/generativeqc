@@ -182,9 +182,7 @@ def test_df_semilocal_force_matches_independent_reference(
 def test_df_cpu_global_hybrid_force_matches_independent_reference() -> None:
     calc = calculator("cpu", "pbe0-rks")
     result = calc.singlepoint(WATER, properties=("energy", "forces"))
-    assert result.forces == pytest.approx(
-        pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7
-    )
+    assert result.forces == pytest.approx(pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7)
 
 
 def test_df_cuda_global_hybrid_force_matches_independent_reference(device: str) -> None:
@@ -192,9 +190,7 @@ def test_df_cuda_global_hybrid_force_matches_independent_reference(device: str) 
         pytest.skip("CUDA fitted-hybrid qualification")
     calc = calculator("cuda", "pbe0-rks")
     result = calc.singlepoint(WATER, properties=("energy", "forces"))
-    assert result.forces == pytest.approx(
-        pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7
-    )
+    assert result.forces == pytest.approx(pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7)
 
 
 @pytest.mark.parametrize(

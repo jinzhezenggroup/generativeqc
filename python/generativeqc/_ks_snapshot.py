@@ -260,8 +260,7 @@ class NativeKsSnapshot:
                 raise ValueError("native KS snapshot backend/device mismatch")
             self.backend = "cpu" if cpu else "cuda"
             self.density_fitted = (
-                batch._calculator._density_fitting_mode
-                != _native.DENSITY_FITTING_NONE
+                batch._calculator._density_fitting_mode != _native.DENSITY_FITTING_NONE
             )
             values = np.empty(metadata[15], dtype=np.float64)
             _native.check(

@@ -623,8 +623,7 @@ generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1
     auto status = check_current(*batch, *snapshot);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     const auto source_count = 4U;
-    if (count != source_count * 3 * snapshot->atoms)
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    if (count != source_count * 3 * snapshot->atoms) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     std::vector<double> candidate;
     std::array<std::uint64_t, 9> usage{};
     std::string detail;
