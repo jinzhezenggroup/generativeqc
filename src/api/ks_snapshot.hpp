@@ -61,6 +61,12 @@ generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
 
 generativeqc_status generativeqc_ks_snapshot_hamiltonian_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint32_t* kind);
+/** Current primary Fock-provider proof. Approximation values follow the private
+ * FockApproximation enum; an absent exchange term is UINT32_MAX. */
+generativeqc_status generativeqc_ks_snapshot_fock_provider_v1(
+    const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
+    std::uint32_t* coulomb_approximation, std::uint32_t* exchange_approximation,
+    double* metric_relative_threshold);
 /** Private bounded CUDA XC response owner. It copies the successful state's
  * exact density/basis/grid and retains its token. Every execute requires the
  * live batch; no snapshot pointer is borrowed by the native owner. */
