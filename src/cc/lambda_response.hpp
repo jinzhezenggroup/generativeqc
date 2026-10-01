@@ -11,6 +11,18 @@
 
 namespace generativeqc::cc {
 
+namespace detail {
+
+/** Bind one RCCSD Lambda J^T action to the shared method-neutral response contract.
+ *
+ * RCCSD Lambda is deliberately a general operator: matching packed dimensions do
+ * not certify Euclidean symmetry, and CPU/CUDA consumers share this same adapter.
+ */
+response::LinearResponseProblem make_lambda_response_problem(
+    std::size_t dimension, response::LinearOperator apply);
+
+}  // namespace detail
+
 struct LambdaOptions {
   double cc_tolerance{1e-9};
   double lambda_tolerance{1e-9};

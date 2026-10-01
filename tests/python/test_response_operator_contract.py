@@ -98,3 +98,19 @@ def test_mp2_response_adapter_declares_symmetric_operator() -> None:
     adapter = source[start:end]
 
     assert "response::LinearResponseSymmetry::Symmetric" in adapter
+
+
+def test_rccsd_lambda_cpu_cuda_use_shared_general_response_problem() -> None:
+    cpu = (ROOT / "src/cc/lambda_response.cpp").read_text()
+    cuda = (ROOT / "src/cc/lambda_response_cuda.cu").read_text()
+
+    start = cpu.index("response::LinearResponseProblem make_lambda_response_problem")
+    end = cpu.index("}  // namespace detail", start)
+    adapter = cpu[start:end]
+
+    assert "response::LinearResponseSymmetry::General" in adapter
+    for source in (cpu, cuda):
+        assert "detail::make_lambda_response_problem" in source
+        assert "response::prepare_response(" in source
+        assert "response::solve_response(" in source
+        assert "response::solve_gmres(" not in source

@@ -5,8 +5,10 @@
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <utility>
 
 #include "generated_rccsd_cpu.hpp"
+#include "response/solve.hpp"
 
 namespace generativeqc::cc {
 namespace {
@@ -124,6 +126,15 @@ std::size_t vector_capacity_bytes(const std::vector<double>& values) {
 
 }  // namespace
 
+namespace detail {
+
+response::LinearResponseProblem make_lambda_response_problem(
+    std::size_t dimension, response::LinearOperator apply) {
+  return {dimension, std::move(apply), response::LinearResponseSymmetry::General};
+}
+
+}  // namespace detail
+
 void validate_lambda_options(const LambdaOptions& options) {
   if (!std::isfinite(options.cc_tolerance) || options.cc_tolerance <= 0.0 ||
       options.cc_tolerance > 1e-9 || !std::isfinite(options.lambda_tolerance) ||
@@ -189,7 +200,6 @@ static LambdaResult solve_lambda_cpu_impl(const Problem& p, const SolverResult& 
                 generated::lambda_transpose_arena_elements(p.nocc, p.nvir),
                 generated::lambda_independent_rhs_arena_elements(p.nocc, p.nvir),
                 generated::lambda_independent_transpose_arena_elements(p.nocc, p.nvir)});
-  const auto gmres_plan = response::prepare_gmres(layout.dimension(), options.gmres);
   const auto in = inputs(p, cc);
 
   layout.initialize();
@@ -235,7 +245,10 @@ static LambdaResult solve_lambda_cpu_impl(const Problem& p, const SolverResult& 
     layout.pack_weighted({action.t1, layout.n1}, {action.t2, layout.n2}, output);
   };
 
-  auto solved = response::solve_gmres(gmres_plan, apply, rhs);
+  const auto response_problem =
+      detail::make_lambda_response_problem(layout.dimension(), std::move(apply));
+  const auto response_plan = response::prepare_response(response_problem, options.gmres);
+  auto solved = response::solve_response(response_plan, response_problem, rhs);
   if (!solved.converged()) throw std::runtime_error("RCCSD Lambda GMRES did not converge");
 
   layout.unpack_weighted(solved.solution, dense_one, dense_two);
