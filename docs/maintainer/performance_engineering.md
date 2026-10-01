@@ -21,6 +21,41 @@ When system size or a smaller budget changes a tile shape, compare actual work
 counts before interpreting a kernel slowdown. A sudden endpoint cliff often
 means the executed algorithm changed its amount of work.
 
+## Audit native high-order scalar work
+
+Run `python tools/audit_native_complexity.py` to inventory leaf native loop nests
+with depth four or greater. The default audit covers GenerativeQC production
+sources under `src/` and excludes the vendored xTB native tree; use
+`--include-vendored` for a broader diagnostic scan. `--format json` emits a
+machine-readable inventory.
+
+The audit separately classifies an avoidable rank-2 matrix-chain candidate when
+a high-order scalar reduction writes a rank-2 target from at least three
+pairwise-indexed inputs spanning four loop indices, without a genuine
+three-/four-index source access. This distinguishes patterns such as a scalar
+`C^T A C` implementation from an exact four-index ERI/J/K contraction. The
+pre-commit `native-complexity-audit` hook runs
+`--fail-on-matrix-chain`, so a reintroduced quartic rank-2 transform fails CI
+and must move to TensorIR or the shared dense-linear-algebra owner.
+
+The source audit is deliberately conservative: unclassified high-order loops are
+reported, not automatically rewritten. Reports include both lexical loop depth and
+an effective depth that removes simple fixed extents such as spin=2 or xyz=3. The
+action classes are:
+
+- `matrix-chain-candidate`: conservative structural match for a pure-algebra rank-2 scalar matrix chain; CI-blocking;
+- `high-rank-output-materialization`: high-rank permutation/symmetrization pass;
+  inspect producer/consumer fusion to remove a complete traversal/materialization;
+- `high-rank-source-contraction`: genuine high-rank source access; inspect
+  provider/factorization or fuse-consume ownership without assuming lower formal scaling;
+- `fixed-extent-inner-loop`: lexical depth inflated by bounded constant dimensions;
+  consider unrolling/fusion but do not label it O(N^depth);
+- `high-order-loop`: report-only fallback requiring algebra/profile review.
+
+TensorIR symbolic complexity remains the proof-carrying path for legal contraction
+reassociation; native findings are review prompts for code that still sits outside
+that IR.
+
 ## Prefer source-driven reuse
 
 Expensive source work should normally be produced once and consumed by multiple
