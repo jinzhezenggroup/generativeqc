@@ -90,10 +90,14 @@ def pyscf_energy(
     return mf.e_tot
 
 
-def pyscf_force(
-    calc: Calculator, raw_atoms: Any, multiplicity: int, functional: str
-) -> np.ndarray:
-    """Independent DF analytic force on the identical AO/aux/grid model."""
+def pyscf_energy_gradient(
+    calc: Calculator,
+    state: Any,
+    raw_atoms: Any,
+    multiplicity: int,
+    functional: str,
+) -> tuple[float, np.ndarray]:
+    """Independent DF-SCF plus auxiliary/metric and moving-grid response."""
     pyscf = pytest.importorskip("pyscf")
     from pyscf import dft, gto
 
@@ -113,7 +117,10 @@ def pyscf_force(
         return result
 
     mol = gto.M(
-        atom=[(label, atom.position) for label, atom in zip(labels, atoms)],
+        atom=[
+            (label, atom.position)
+            for label, atom in zip(labels, atoms, strict=True)
+        ],
         basis=basis_dict(calc._basis),
         unit="Bohr",
         cart=True,
@@ -123,20 +130,31 @@ def pyscf_force(
     mf = (dft.RKS(mol) if multiplicity == 1 else dft.UKS(mol)).density_fit(
         auxbasis=basis_dict(calc._auxiliary_basis)
     )
-    grid = MolecularGrid(
-        atoms, spec=calc.ks_options.grid, multiplicity=multiplicity
-    ).explicit()
+    points = np.asarray(state.grid.points)
+    weights = np.asarray(state.grid.weights)
+    owners = np.asarray(state.grid.owners)
+    atomic_weights = np.asarray(state._source.atomic_weights)
     mf.xc = functional
-    mf.grids.coords = np.asarray(grid.points)
-    mf.grids.weights = np.asarray(grid.weights)
+    mf.grids.coords = points
+    mf.grids.weights = weights
+    mf.grids.radii_adjust = None
+    atomic_grid = {
+        mol.atom_symbol(a): (
+            points[owners == a] - mol.atom_coord(a),
+            atomic_weights[owners == a],
+        )
+        for a in range(mol.natm)
+    }
+    mf.grids.gen_atomic_grids = lambda *args, **kwargs: atomic_grid
     mf.small_rho_cutoff = 0
     mf.conv_tol = 1e-13
     mf.conv_tol_grad = 1e-10
     mf.max_cycle = 200
     mf.kernel()
     assert mf.converged
-    # PySCF returns dE/dR; GenerativeQC's public contract is force = -dE/dR.
-    return -np.asarray(mf.nuc_grad_method().kernel())
+    gradient = mf.nuc_grad_method()
+    gradient.grid_response = True
+    return mf.e_tot, np.asarray(gradient.kernel())
 
 
 @pytest.mark.parametrize(
@@ -162,35 +180,59 @@ def test_df_semilocal_matches_independent_reference(
 
 
 @pytest.mark.parametrize(
-    "method,functional",
+    "method,functional,atoms,multiplicity,has_exchange",
     [
-        ("pbe-rks", "PBE"),
-        ("r2scan-rks", "R2SCAN"),
+        ("pbe-rks", "PBE", WATER, 1, False),
+        ("r2scan-rks", "R2SCAN", WATER, 1, False),
+        ("pbe-uks", "PBE", [("Li", (0.0, 0.0, 0.0))], 2, False),
+        ("pbe0-rks", "PBE0", WATER, 1, True),
     ],
 )
-def test_df_semilocal_force_matches_independent_reference(
-    device: str, method: str, functional: str
+def test_df_force_matches_independent_response(
+    device: str,
+    method: str,
+    functional: str,
+    atoms: Any,
+    multiplicity: int,
+    has_exchange: bool,
 ) -> None:
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
+
     calc = calculator(device, method)
-    result = calc.singlepoint(WATER, properties=("energy", "forces"))
-    assert result.converged and result.forces is not None
-    assert result.forces == pytest.approx(
-        pyscf_force(calc, WATER, 1, functional), abs=2e-7
-    )
-
-
-def test_df_cpu_global_hybrid_force_matches_independent_reference() -> None:
-    calc = calculator("cpu", "pbe0-rks")
-    result = calc.singlepoint(WATER, properties=("energy", "forces"))
-    assert result.forces == pytest.approx(pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7)
-
-
-def test_df_cuda_global_hybrid_force_matches_independent_reference(device: str) -> None:
-    if device != "cuda":
-        pytest.skip("CUDA fitted-hybrid qualification")
-    calc = calculator("cuda", "pbe0-rks")
-    result = calc.singlepoint(WATER, properties=("energy", "forces"))
-    assert result.forces == pytest.approx(pyscf_force(calc, WATER, 1, "PBE0"), abs=2e-7)
+    assert "forces" in calc.capabilities.supported_properties
+    with calc.prepare_batch(
+        [atoms], multiplicities=[multiplicity], warm_start=True
+    ) as batch:
+        public = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        with NativeAO(
+            atoms,
+            basis=calc._basis,
+            representation=calc._representation_name,
+            multiplicity=multiplicity,
+        ) as basis:
+            state = StationaryKsState.from_native(batch, basis)
+            try:
+                coulomb, exchange, threshold = state._source.fock_provider_proof()
+                assert coulomb == "density-fitted"
+                assert exchange == ("density-fitted" if has_exchange else None)
+                assert threshold == calc._density_fitting_relative_threshold
+                reference_energy, reference_gradient = pyscf_energy_gradient(
+                    calc, state, atoms, multiplicity, functional
+                )
+            finally:
+                state._source.close()
+        assert public.executed_backend == (
+            "cuda" if device == "cuda" else "cpu_reference"
+        )
+        assert public.converged
+        assert public.energy == pytest.approx(reference_energy, abs=1e-8)
+        np.testing.assert_allclose(
+            public.forces, -reference_gradient, atol=3e-7, rtol=0
+        )
+        np.testing.assert_allclose(public.forces.sum(axis=0), 0, atol=2e-9, rtol=0)
+        replay = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
 
 
 @pytest.mark.parametrize(
