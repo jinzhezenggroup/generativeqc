@@ -8,7 +8,6 @@
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
-#include "scf/cuda/direct_cached_tensor_kernels.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/metadata_upload.hpp"
@@ -460,7 +459,7 @@ generativeqc_status enqueue_cuda_direct_eri_tile(CudaDirectJkPlan* plan, std::si
     direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
                       "direct ERI output is not on the prepared CUDA device");
 
-    cuda_execution::launch_build_eri_tile_kernel(caller_stream, plan->batch,
+    cuda_execution::launch_independent_eri_tile(caller_stream, plan->batch,
                                                  static_cast<std::int32_t>(item), begin, count,
                                                  elements, output);
     direct_jk_check(cudaGetLastError());
