@@ -134,13 +134,14 @@ split compilation, and SDK details.
 
 Stable native ABI IDs, providers and compatibility selectors are generated from
 `manifests/public_methods.json`; see the
-[native ABI registry](docs/public_methods.md). DFT scientific names and
+[public method catalog](docs/public_methods.md). DFT scientific names and
 compositions are discovered from the compiler MethodIR catalog, including
 generated metadata from the pinned Libxc sources. `Calculator(method=...)`
 accepts qualified `<method>-rks` / `<method>-uks` selectors without requiring
 one ABI-manifest row per functional.
 
-Run the Python frontend (`python -m generativeqc methods`) for the current MethodIR-aware\ndiscovery set. MethodIR representation is
+Run the Python frontend (`python -m generativeqc methods`) for the current MethodIR-aware
+public discovery set. MethodIR representation is
 not by itself an execution promise: missing primitive lowerers, unsupported
 backends/models, or method-specific requirements such as an explicit hybrid
 grid fail closed. The Python API also accepts the composite selectors

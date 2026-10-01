@@ -15,13 +15,14 @@ from generativeqc_compiler.integral.eri_cpu import (
     COMPONENTS,
     emit_eri_cpu,
     eri_cpu_component_map,
+    eri_cpu_coulomb_layout,
     eri_cpu_inventory,
 )
 
 
 def test_complete_spd_value_inventory_and_lossless_symmetry_map() -> None:
     inventory = eri_cpu_inventory()
-    assert inventory["version"] == 2
+    assert inventory["version"] == 3
     assert inventory["maximum_angular"] == 2
     assert inventory["maximum_coulomb_order"] == 8
     assert inventory["derivative_order"] == 0
@@ -36,10 +37,21 @@ def test_complete_spd_value_inventory_and_lossless_symmetry_map() -> None:
         "boys_value_count": 9,
     }
     assert inventory["component_schedule"] == {
-        "kind": "prepared_geometry_symmetry_representatives",
+        "kind": "prepared_geometry_coulomb_symmetry_representatives",
         "record_bits": 16,
         "maximum_shell_component_count": 1296,
         "component_scratch_owner": "native_caller",
+    }
+    assert inventory["coulomb_reuse"] == {
+        "abi_version": 1,
+        "reuse_scope": "primitive_quartet",
+        "maximum_order": 8,
+        "scalar_count": 165,
+        "readiness": "matching_maximum_order",
+        "order_prefix_counts": [1, 4, 10, 20, 35, 56, 84, 120, 165],
+        "scratch_owner": "native_caller",
+        "initialization": "requested_graded_prefix_only",
+        "compatibility_schedule": "component_local_factored_dag",
     }
     assert len(inventory["values"]) == 81
     assert all(item["derivative"] is None for item in inventory["values"])
@@ -61,6 +73,17 @@ def test_complete_spd_value_inventory_and_lossless_symmetry_map() -> None:
         assert transformed == tuple(COMPONENTS[i] for i in representatives[record >> 6])
 
 
+def test_coulomb_axis_map_preserves_every_graded_prefix() -> None:
+    orders, mappings = eri_cpu_coulomb_layout()
+    assert len(orders) == 165
+    assert [sum(order) for order in orders] == sorted(sum(order) for order in orders)
+    for axes, mapping in zip(AXIS_PERMUTATIONS, mappings, strict=True):
+        assert sorted(mapping) == list(range(165))
+        for order, mapped in zip(orders, mapping, strict=True):
+            assert tuple(orders[mapped][original] for original in axes) == order
+            assert sum(orders[mapped]) == sum(order)
+
+
 @pytest.fixture(scope="module")
 def generated_source() -> str:
     return emit_eri_cpu()
@@ -68,7 +91,9 @@ def generated_source() -> str:
 
 def test_deterministic_bounded_host_emission(generated_source: str) -> None:
     assert generated_source == emit_eri_cpu()
-    assert len(generated_source.encode()) < 4 * 1024 * 1024
+    # Two schedules share 313 generated mathematical representatives. The
+    # component-local schedule prevents eager-table work in f+ compatibility.
+    assert len(generated_source.encode()) < 6 * 1024 * 1024
     assert generated_source.count("static inline double component_") == 313
     assert "__device__" not in generated_source
     assert "__forceinline__" not in generated_source
@@ -77,6 +102,16 @@ def test_deterministic_bounded_host_emission(generated_source: str) -> None:
     assert "double boys[9]" in generated_source
     assert "double boys[10]" not in generated_source
     assert generated_source.count("boys_values<") == 9
+    assert "double values[165]; unsigned maximum_order = 9U;" in generated_source
+    assert "primitive_dispatch<false>(geometry, nullptr, record)" in generated_source
+    assert "primitive_dispatch<true>(geometry, &coulomb, record)" in generated_source
+    preparation = generated_source.split("inline void prepare_coulomb", 1)[1]
+    preparation = preparation.split("inline constexpr std::uint8_t", 1)[0]
+    assert preparation.count("coulomb.values[") >= 165
+    assert preparation.index("maximum_order == 0U") < preparation.index(
+        "coulomb.values[1]"
+    )
+    assert "boys_values<" not in preparation
     components = generated_source.split("static inline double component_", 1)[1]
     components = components.split("inline constexpr unsigned center_permutations", 1)[0]
     assert "boys_values<" not in components
@@ -84,6 +119,9 @@ def test_deterministic_bounded_host_emission(generated_source: str) -> None:
     assert "centers[" not in components
     assert "exp(" not in components
     assert "sqrt(" not in components
+    for component in components.split("static inline double component_"):
+        local = component.split("  } else {", 1)[1]
+        assert "coulomb->" not in local
 
 
 @pytest.fixture(scope="module")
@@ -102,8 +140,13 @@ def compiled_evaluator(
         (
             "evaluate_prepared",
             ", unsigned maximum_order",
-            "  const auto geometry = make_geometry(e,c,maximum_order);\n",
-            "prepared_primitive(geometry,component_record(components))",
+            (
+                "  const auto geometry = make_geometry(e,c,maximum_order);\n"
+                "  CoulombValues coulomb;\n"
+                "  for (double& value : coulomb.values) value = NAN;\n"
+                "  prepare_coulomb(geometry,coulomb);\n"
+            ),
+            "prepared_primitive(geometry,coulomb,component_record(components))",
         ),
     ):
         evaluators.append(
@@ -124,10 +167,44 @@ def compiled_evaluator(
         '#include "generated_eri_cpu.hpp"\n'
         "using namespace generativeqc::integrals::generated_eri_cpu;\n"
         + "".join(evaluators)
-        + 'extern "C" double unsupported(unsigned scenario) {\n'
+        + 'extern "C" void evaluate_reused(const double* exponents, const double* centers, double* output) {\n'
+        "  const unsigned orders[]{8,0,4,1,7,2,8,3,6,5,0};\n"
+        "  CoulombValues coulomb;\n"
+        "  for (unsigned step=0; step<11; ++step) {\n"
+        "    double e[4], c[4][3];\n"
+        "    for (unsigned i=0; i<4; ++i) {\n"
+        "      e[i] = exponents[i] * (1.0 + 0.013*(step+1)*(i+1));\n"
+        "      for (unsigned a=0; a<3; ++a)\n"
+        "        c[i][a] = centers[3*i+a] + 0.007*(step+1)*(i+1)*(a+1);\n"
+        "    }\n"
+        "    const auto geometry = make_geometry(e,c,orders[step]);\n"
+        "    prepare_coulomb(geometry,coulomb);\n"
+        "    for (unsigned a=0; a<10; ++a) for (unsigned b=0; b<10; ++b)\n"
+        "      for (unsigned d=0; d<10; ++d) for (unsigned f=0; f<10; ++f) {\n"
+        "        const unsigned components[4]{a,b,d,f};\n"
+        "        output[step*10000+((a*10+b)*10+d)*10+f] =\n"
+        "          prepared_primitive(geometry,coulomb,component_record(components));\n"
+        "      }\n"
+        "  }\n"
+        "}\n"
+        + 'extern "C" void coulomb_prefix(unsigned maximum_order, double* output) {\n'
+        "  const double e[4]{0.6,0.8,1.1,0.9};\n"
+        "  const double c[4][3]{{0.13,-0.31,0.24},{-0.43,0.27,0.51},\n"
+        "                       {0.68,-0.14,-0.22},{-0.21,0.48,-0.63}};\n"
+        # Hold Boys inputs fixed: this gate checks the requested Coulomb prefix,
+        # not bitwise equality between distinct-order Boys evaluation schedules.
+        "  auto geometry = make_geometry(e,c,8);\n"
+        "  geometry.maximum_order = maximum_order;\n"
+        "  CoulombValues coulomb;\n"
+        "  for (double& value : coulomb.values) value = NAN;\n"
+        "  prepare_coulomb(geometry,coulomb);\n"
+        "  for (unsigned i=0; i<165; ++i) output[i] = coulomb.values[i];\n"
+        "}\n" + 'extern "C" double unsupported(unsigned scenario) {\n'
         "  const double e[4]{1,1,1,1}, c[4][3]{};\n"
         "  const unsigned components[4]{10,0,0,0}, dddd[4]{4,4,4,4};\n"
         "  const auto geometry = make_geometry(e,c,8);\n"
+        "  CoulombValues coulomb;\n"
+        "  if (scenario != 6) prepare_coulomb(geometry,coulomb);\n"
         "  switch (scenario) {\n"
         "    case 0: return primitive(e,c,components);\n"
         "    case 1: return prepared_primitive(geometry,component_record(components));\n"
@@ -135,6 +212,11 @@ def compiled_evaluator(
         "    case 3: return prepared_primitive(geometry,6U);\n"
         "    case 4: return prepared_primitive(make_geometry(e,c,7),component_record(dddd));\n"
         "    case 5: return prepared_primitive(make_geometry(e,c,9),0U);\n"
+        "    case 6: return prepared_primitive(geometry,coulomb,0U);\n"
+        "    case 7: return prepared_primitive(make_geometry(e,c,7),coulomb,0U);\n"
+        "    case 8: return prepared_primitive(geometry,coulomb,313U << 6);\n"
+        "    case 9: return prepared_primitive(geometry,coulomb,6U);\n"
+        "    case 10: return prepared_primitive(make_geometry(e,c,9),coulomb,0U);\n"
         "  }\n"
         "  return 0.0;\n"
         "}\n"
@@ -164,8 +246,12 @@ def compiled_evaluator(
         ctypes.c_uint
     ]
     loaded.evaluate_prepared.restype = None
+    loaded.evaluate_reused.argtypes = [ctypes.POINTER(ctypes.c_double)] * 3
+    loaded.evaluate_reused.restype = None
     loaded.unsupported.argtypes = [ctypes.c_uint]
     loaded.unsupported.restype = ctypes.c_double
+    loaded.coulomb_prefix.argtypes = [ctypes.c_uint, ctypes.POINTER(ctypes.c_double)]
+    loaded.coulomb_prefix.restype = None
     return loaded
 
 
@@ -180,11 +266,56 @@ _CENTERS = np.array(
 _EXPONENTS = np.array([0.6, 0.8, 1.1, 0.9])
 
 
-@pytest.mark.parametrize("scenario", range(6))
+def test_coulomb_scratch_reuse_with_changed_geometry_and_order(
+    compiled_evaluator: ctypes.CDLL,
+) -> None:
+    pointer = ctypes.POINTER(ctypes.c_double)
+    orders = [8, 0, 4, 1, 7, 2, 8, 3, 6, 5, 0]
+    actual = np.empty((len(orders), 10000))
+    compiled_evaluator.evaluate_reused(
+        _EXPONENTS.ctypes.data_as(pointer),
+        _CENTERS.ctypes.data_as(pointer),
+        actual.ctypes.data_as(pointer),
+    )
+    component_orders = np.array(
+        [sum(map(len, components)) for components in product(COMPONENTS, repeat=4)]
+    )
+    for step, maximum_order in enumerate(orders):
+        exponents = _EXPONENTS * (1 + 0.013 * (step + 1) * np.arange(1, 5))
+        centers = _CENTERS + 0.007 * (step + 1) * np.outer(
+            np.arange(1, 5), np.arange(1, 4)
+        )
+        expected = np.empty(10000)
+        compiled_evaluator.evaluate(
+            exponents.ctypes.data_as(pointer),
+            centers.ctypes.data_as(pointer),
+            expected.ctypes.data_as(pointer),
+        )
+        supported = component_orders <= maximum_order
+        assert np.all(np.isnan(actual[step, ~supported]))
+        np.testing.assert_allclose(
+            actual[step, supported], expected[supported], rtol=2e-11, atol=3e-12
+        )
+
+
+@pytest.mark.parametrize("scenario", range(11))
 def test_invalid_prepared_inputs_return_nan(
     compiled_evaluator: ctypes.CDLL, scenario: int
 ) -> None:
     assert np.isnan(compiled_evaluator.unsupported(scenario))
+
+
+@pytest.mark.parametrize("maximum_order", range(9))
+def test_coulomb_preparation_initializes_only_requested_prefix(
+    compiled_evaluator: ctypes.CDLL, maximum_order: int
+) -> None:
+    pointer = ctypes.POINTER(ctypes.c_double)
+    complete, actual = np.empty(165), np.empty(165)
+    compiled_evaluator.coulomb_prefix(8, complete.ctypes.data_as(pointer))
+    compiled_evaluator.coulomb_prefix(maximum_order, actual.ctypes.data_as(pointer))
+    count = (maximum_order + 1) * (maximum_order + 2) * (maximum_order + 3) // 6
+    np.testing.assert_array_equal(actual[:count], complete[:count])
+    assert np.all(np.isnan(actual[count:]))
 
 
 @pytest.mark.parametrize("maximum_order", range(9))

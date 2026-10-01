@@ -14,10 +14,12 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cc/cuda_solver_support.cuh"
 #include "generated_rccsd_cpu.hpp"
+#include "response/solve.hpp"
 #include "tensor/cuda_error.hpp"
 
 namespace generativeqc::cc {
@@ -450,8 +452,10 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
     layout.pack_weighted(action_one, action_two, output);
   };
 
-  const auto gmres_plan = response::prepare_gmres(layout.dimension(), options.gmres);
-  auto solved = response::solve_gmres(gmres_plan, apply, rhs);
+  const auto response_problem =
+      detail::make_lambda_response_problem(layout.dimension(), std::move(apply));
+  const auto response_plan = response::prepare_response(response_problem, options.gmres);
+  auto solved = response::solve_response(response_plan, response_problem, rhs);
   if (!solved.converged()) throw std::runtime_error("RCCSD CUDA Lambda GMRES did not converge");
 
   layout.unpack_weighted(solved.solution, seed_one, seed_two);

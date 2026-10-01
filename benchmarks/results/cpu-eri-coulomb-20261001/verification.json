@@ -1,0 +1,13 @@
+{
+  "matched_cpu_evidence.py_ast_equivalent_with_documented_path_adaptation": true,
+  "check_hf_pbe_pbe0.py_ast_equivalent_with_documented_path_adaptation": true,
+  "matched-endpoints-bytecode-normalized_full_summary_reproduced_except_timestamp": true,
+  "matched-endpoints-bytecode-normalized_omitted_observations_byte_exact": true,
+  "matched-endpoints-attempt-01_full_summary_reproduced_except_timestamp": true,
+  "matched-endpoints-attempt-01_omitted_observations_byte_exact": true,
+  "evidence_additions_preserve_candidate_native_source_inventory": true,
+  "all_twelve_process_pair_confidence_intervals_reproduce_exactly": true,
+  "all_793_retained_original_text_records_restore_with_exact_hash_and_byte_count": true,
+  "ambient_setup_inventory_omitted_with_hash_size_reason_and_task_specific_dependency_replacement": true,
+  "publication_cleanup_preserves_all_endpoint_error_timing_configuration_and_original_measured_script_bytes": true
+}
