@@ -29,6 +29,9 @@ from generativeqc_compiler.tensor.cuda_plan import (
     aligned,
     plan_cuda,
 )
+from generativeqc_compiler.tensor.cuda_reduction import (
+    cooperative_reduction_provider,
+)
 
 TARGET = cuda_target_info("sm_80")
 
@@ -221,6 +224,39 @@ def test_streaming_reduction_virtualizes_complete_runtime_domain() -> None:
     # Keep the q-only reduction frontier materialized so CUDA launches one
     # parallel lane kernel before the final scalar reduction.
     assert not next(step for step in streamed.steps if step.node is lane).virtual
+
+
+def test_streamed_einsum_reduction_uses_block_parallel_reduction_axis() -> None:
+    q = Index("q_cooperative", IndexSpace("stream_q_cooperative", "batch", 7))
+    k = Index("k_cooperative", IndexSpace("stream_k_cooperative", "batch", 64))
+    a = input_tensor("stream_a_cooperative", TensorSpec((q, k), role="input"))
+    b = input_tensor("stream_b_cooperative", TensorSpec((q, k), role="input"))
+    virtual_product = multiply(a, b)
+    lane = einsum("qk,qk->q", virtual_product, b)
+    total = reduce_sum(lane, (0,))
+
+    plan = plan_cuda(
+        Program({"total": total}),
+        TARGET,
+        schedule=TensorSchedule(
+            stream_reductions=True,
+            streamed_gemm_reduction=True,
+        ),
+        reassociate_contractions=False,
+    )
+    product_step = next(step for step in plan.steps if step.node is virtual_product)
+    lane_index = next(i for i, step in enumerate(plan.steps) if step.node is lane)
+
+    assert product_step.virtual
+    assert plan.steps[lane_index].gemm == "none"
+    assert cooperative_reduction_provider(plan, lane_index) == "generated"
+
+    source = emit_cuda(plan)
+    assert (
+        "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)"
+        in source
+    )
+    assert "gemm(ctx," not in source
 
 
 def test_streaming_reduction_stops_before_partial_source_consumption() -> None:
