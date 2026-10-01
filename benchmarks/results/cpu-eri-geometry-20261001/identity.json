@@ -1,0 +1,55 @@
+{
+  "baseline": {
+    "source_root": "/workspace/shared/generativeqc-dev/hf-compiler-opt",
+    "commit": "c5b67f4bd908f720fd7b809d0c8dc6fa75f75eb1",
+    "tree": "01e51cd246ae0cd943f04c49cd23ba9734df0759",
+    "working_tree_status": "",
+    "source_identity": "8dbad109f3ba2d11fe7259fbb749d5f84d627545a5008db7e08c6c064f6bb6ce",
+    "library_path": "/workspace/shared/generativeqc-dev/hf-compiler-opt/build/cpu-dev/libgenerativeqc.so",
+    "library_sha256": "513d98fcfb26df137ab1f478714300e4a6e3e4368e5cbf4c0977aa3da342f2d2",
+    "library_bytes": 302708712,
+    "generated_header_sha256": "05ad9c705686846b4f13b65615c7bd2bc0843d53cfcf7585ef02938e1a959808",
+    "generated_header_bytes": 3793074,
+    "published_equivalent_commit": "192829ce9aa8a49d7f260b599d654f20ae976fc0",
+    "native_text_bytes": 19509641
+  },
+  "candidate": {
+    "source_root": "/workspace/shared/generativeqc-dev/eri-geometry-reuse",
+    "commit": "332130e4d803b0efb806dd277ff65238cfa478c3",
+    "tree": "01b5153177c608bffb44d70f48b9782f7c2eeafd",
+    "working_tree_status": "",
+    "source_identity": "66329262ef89b87b8b52044696f2c3ab974b2f81a820369a4f32a15778342a03",
+    "library_path": "/workspace/shared/generativeqc-dev/eri-geometry-reuse/build/cpu-dev/libgenerativeqc.so",
+    "library_sha256": "f726bdcf34f135a9133df269d60b47199ecd4bfcff0f41b0de06808db8f118a5",
+    "library_bytes": 300054088,
+    "generated_header_sha256": "c0c708ec58bdf31cd42310f2a5a62a33383c59f5493ac56da1650a02766e9dda",
+    "generated_header_bytes": 2745678,
+    "base_commit": "5b61b41c04761da596c4b4a6ae9dca4b7ea14b26",
+    "native_text_bytes": 18842893,
+    "published_equivalent_commit": "b18da1e2c95d9b2a58b0657dfda5ec8531fd05fc"
+  },
+  "build": {
+    "compiler": "GCC 14.2.0",
+    "cmake_build_type": "RelWithDebInfo",
+    "cxx_flags": "-O2 -g -DNDEBUG -std=c++20 -fPIC -Wall -Wextra -Wpedantic",
+    "cuda": false,
+    "native_tests": true,
+    "cli": true,
+    "python_wheel": true,
+    "initial_clean_build": {
+      "returncode": 0,
+      "wall_seconds": 795.8659357010001,
+      "maximum_child_rss_kib": 3771032
+    },
+    "final_rebased_rebuild": {
+      "returncode": 0,
+      "wall_seconds": 521.9562250970012,
+      "maximum_child_rss_kib": 3771320
+    }
+  },
+  "reused_protocol_inputs_sha256": {
+    "benchmark.py": "91211fa69c5e7ede5a0f5e2c9a0849cd7a80251553712af172708f8925698ff3",
+    "run.py": "cabe7fddf62dfbd198e34d22f182f96874af04575775adc1290b816234175b7d",
+    "cases.json": "44e5cfd759a0a9da50840e8ef8fb89dfea7489a1c69f25b1a1a4b6ed51ff1f86"
+  }
+}

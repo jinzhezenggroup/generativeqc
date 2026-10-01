@@ -268,6 +268,15 @@ FockEnergyDerivativeComponents BasicFockPlanView<Provider>::energy_derivative_co
   return result;
 }
 
+template <class Provider>
+std::vector<double> BasicFockPlanView<Provider>::retained_energy_derivative(
+    const std::vector<double>& density, const std::vector<double>& beta) const {
+  auto derivative = strategy_;
+  derivative.spec.derivative_order = 1;
+  BasicFockPlanView<Provider> retained(derivative, nbf_, ncoord_, coulomb_, exchange_);
+  return retained.energy_derivative(density, beta);
+}
+
 template class BasicFockPlanView<CpuFockProviderView>;
 template class BasicFockPlanView<CudaFockProviderView>;
 

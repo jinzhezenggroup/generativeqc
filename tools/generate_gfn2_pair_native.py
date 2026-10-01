@@ -15,7 +15,8 @@ if __package__ in (None, ""):
 # Keep build-time codegen independent of NumPy-backed interpreter packages.
 import generativeqc_compiler
 
-for package_name in ("tensor", "geometry"):
+# Geometry still has eager numerical exports; TensorIR imports are canonical.
+for package_name in ("geometry",):
     qualified = f"generativeqc_compiler.{package_name}"
     if qualified not in sys.modules:
         package = types.ModuleType(qualified)

@@ -165,6 +165,7 @@ struct PreparedFockPlan::Impl {
                              strategy.spec.exchange.op == FockOperator::FullRange);
     const bool derivatives =
         strategy.spec.derivative_order != 0 || retained_fitted_derivative_order != 0;
+    const bool df_derivatives = derivatives;
     if (has_df) {
       auxiliary = aux ? *aux : system;
       fitted.emplace();
@@ -236,7 +237,7 @@ struct PreparedFockPlan::Impl {
       df_resource = {memory.free_bytes, memory.total_bytes, memory.available};
 #endif
       df_workload = {diagnostic.nbf, molecule::ao_count(*auxiliary), system.atoms.size(), 1U, 0U,
-                     derivatives};
+                     df_derivatives};
     }
     const auto resolved_df =
         has_df ? resolve_df_budget(df_workload, df_resource, budget) : DfResolvedBudget{};
@@ -258,7 +259,7 @@ struct PreparedFockPlan::Impl {
     if (has_df) {
       const auto resolved = resolve_df_subbudget(df_workload, resolved_df, diagnostic.device_bytes);
       const auto plan_budget = resolved.value_bytes;
-      if (!resolved.feasible || !plan_budget || (derivatives && !resolved.response_bytes))
+      if (!resolved.feasible || !plan_budget || (df_derivatives && !resolved.response_bytes))
         throw std::bad_alloc();
       auto& data = *fitted;
       data.raw.nbf = diagnostic.nbf;
@@ -266,10 +267,12 @@ struct PreparedFockPlan::Impl {
       data.raw.ncoord = diagnostic.ncoord;
       data.metric_relative_threshold = strategy.metric_relative_threshold;
       data.resolved_budget = resolved;
-      data.df_gradient_orbital = system;
-      data.df_gradient_auxiliary = *auxiliary;
-      data.df_gradient_mapping = diagnostic.variant.df_derivative_mapping;
-      data.df_gradient_budget = resolved.response_bytes;
+      if (df_derivatives) {
+        data.df_gradient_orbital = system;
+        data.df_gradient_auxiliary = *auxiliary;
+        data.df_gradient_mapping = diagnostic.variant.df_derivative_mapping;
+        data.df_gradient_budget = resolved.response_bytes;
+      }
       data.value_storage = diagnostic.variant.df_pair_storage;
       // Fixed-density/composed Fock APIs have no occupied-rank promise. An
       // explicit packed owner reserves bounded panels and accepts arbitrary D.
@@ -418,6 +421,11 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
     const std::vector<double>& density, const std::vector<double>& beta) const {
   return impl_->cpu_view ? impl_->cpu_view->energy_derivative_components(density, beta)
                          : impl_->cuda_view->energy_derivative_components(density, beta);
+}
+std::vector<double> PreparedFockPlan::retained_energy_derivative(
+    const std::vector<double>& density, const std::vector<double>& beta) const {
+  return impl_->cpu_view ? impl_->cpu_view->retained_energy_derivative(density, beta)
+                         : impl_->cuda_view->retained_energy_derivative(density, beta);
 }
 bool PreparedFockPlan::matches(const core::System& orbital, const core::System* auxiliary,
                                const ResolvedFockBuild& strategy, int device, std::size_t budget,

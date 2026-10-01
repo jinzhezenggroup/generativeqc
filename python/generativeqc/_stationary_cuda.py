@@ -2860,6 +2860,16 @@ def _complete_rks_cuda_gradient_diagnostic(
         grid_artifact_kind=grid_artifact.metadata.get("artifact_kind", "runtime-jit"),
         artifacts=artifacts_record,
     )
+    if use_fitted_integrals:
+        work["density_fitted_response_resources_included"] = False
+        work["native_integral_resource_scope"] = (
+            "compact-publication-and-host-one-electron-only"
+        )
+        work["additional_device_peak_bound_scope"] = (
+            "stationary-consumer-only; excludes DF-provider response scratch"
+        )
+        work["transfer_work"]["density_fitted_response_included"] = False
+        work["host_scope"] += "; retained H'/S' source contraction"
     timeline_record = timeline.finish()
     work.update(
         endpoint_seconds=timeline_record["endpoint_seconds"],

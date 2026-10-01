@@ -1,0 +1,139 @@
+{
+  "boys": {
+    "status": "pass",
+    "value_count": 1998,
+    "mpmath_decimal_digits": 100,
+    "max_relative": [
+      6.544959361148821e-16,
+      [
+        13.35451562929892,
+        2,
+        0.0010197826711105058,
+        0.0010197826711105065
+      ]
+    ],
+    "max_absolute": [
+      1.5233566098467e-16,
+      [
+        13.35451562929892,
+        0
+      ]
+    ],
+    "header": "/tmp/generativeqc_eri_cpu/generated_eri_cpu.hpp",
+    "header_sha256": "05ad9c705686846b4f13b65615c7bd2bc0843d53cfcf7585ef02938e1a959808",
+    "compile_command": "c++ -std=c++20 -O2 -shared -fPIC /tmp/generativeqc-eri-review/boys.cpp -o /tmp/generativeqc-eri-review/boys.so"
+  },
+  "primitives": {
+    "library": "/tmp/generativeqc_eri_cpu_pytest/eri_cpu0/probe.so",
+    "library_sha256": "0a7b90e0ff3de5f0f2302a20881cd6a39d9861e013c2e42e5f6e08382c335708",
+    "cases": [
+      {
+        "case": "tight",
+        "max_absolute_error": 3.019806626980426e-14,
+        "max_abs_reference": 20.14125246018757,
+        "max_gate_fraction": 0.0009959685267068535,
+        "worst_index": [
+          1,
+          4,
+          7,
+          0
+        ],
+        "worst_actual": 0.05866108400952903,
+        "worst_reference": 0.058661084009524876,
+        "nonfinite_count": 0
+      },
+      {
+        "case": "diffuse_extreme",
+        "max_absolute_error": 1.565316886525947e-18,
+        "max_abs_reference": 0.0001344905529908,
+        "max_gate_fraction": 5.216133279363547e-07,
+        "worst_index": [
+          0,
+          7,
+          4,
+          4
+        ],
+        "worst_actual": 4.571419970899122e-05,
+        "worst_reference": 4.571419970898966e-05,
+        "nonfinite_count": 0
+      },
+      {
+        "case": "mixed_scales",
+        "max_absolute_error": 6.07945517369888e-27,
+        "max_abs_reference": 1.5848937188866873e-13,
+        "max_gate_fraction": 2.0264850578996235e-15,
+        "worst_index": [
+          0,
+          3,
+          0,
+          9
+        ],
+        "worst_actual": -2.242895213229527e-16,
+        "worst_reference": -2.2428952132903216e-16,
+        "nonfinite_count": 0
+      },
+      {
+        "case": "far_pairs",
+        "max_absolute_error": 2.168404344971009e-18,
+        "max_abs_reference": 0.0059852541142372696,
+        "max_gate_fraction": 7.113901144433716e-07,
+        "worst_index": [
+          1,
+          1,
+          4,
+          4
+        ],
+        "worst_actual": 0.002406134197386217,
+        "worst_reference": 0.002406134197386215,
+        "nonfinite_count": 0
+      },
+      {
+        "case": "near_parity_zero",
+        "max_absolute_error": 3.552713678800501e-15,
+        "max_abs_reference": 4.584015854182359,
+        "max_gate_fraction": 3.760716978163955e-05,
+        "worst_index": [
+          4,
+          7,
+          4,
+          4
+        ],
+        "worst_actual": 1.3260789379678168,
+        "worst_reference": 1.3260789379678157,
+        "nonfinite_count": 0
+      },
+      {
+        "case": "translated_1000",
+        "max_absolute_error": 1.580346964402679e-12,
+        "max_abs_reference": 1.3198668163489682,
+        "max_gate_fraction": 0.33886551114456925,
+        "worst_index": [
+          2,
+          7,
+          9,
+          9
+        ],
+        "worst_actual": -0.0549096621606765,
+        "worst_reference": -0.054909662162065234,
+        "nonfinite_count": 0
+      },
+      {
+        "case": "translated_million",
+        "max_absolute_error": 1.225268331239704e-09,
+        "max_abs_reference": 1.3198668168580323,
+        "max_gate_fraction": 127.96539934306014,
+        "worst_index": [
+          9,
+          3,
+          9,
+          9
+        ],
+        "worst_actual": 0.08186385936215133,
+        "worst_reference": 0.08186385995556236,
+        "nonfinite_count": 0
+      }
+    ]
+  },
+  "generated_header_sha256": "05ad9c705686846b4f13b65615c7bd2bc0843d53cfcf7585ef02938e1a959808",
+  "original_native_primitive_evidence": "Independent review extracted the exact unchanged Jet/Hermite/Coulomb primitive and verified bytes against 6ccecb1; million-bohr translation maximum error was 1.33e-9 baseline vs 1.23e-9 candidate, a retained conditioning limitation."
+}

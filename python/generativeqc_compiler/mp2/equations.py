@@ -68,6 +68,35 @@ def energy_program(
     )
 
 
+def pair_energy_program() -> Program:
+    """Return one ordered RHF-MP2 (i,j,a,b) contribution.
+
+    This is the scalar scientific owner used by the streamed RI-MP2 CUDA
+    reduction.  The nested denominator and product/division order deliberately
+    match the qualified native kernel; block traversal and compensated sums
+    remain runtime scheduling/reduction policy.
+    """
+    scalar = TensorSpec((), representation="restricted_spatial", role="input")
+    g, x, ei, ej, ea, eb = (
+        input_tensor(name, scalar) for name in ("g", "x", "ei", "ej", "ea", "eb")
+    )
+    denominator = add(
+        add(add(ei, ej), ea, coefficients=(1, -1)),
+        eb,
+        coefficients=(1, -1),
+    )
+    opposite_spin = divide(multiply(g, g), denominator)
+    same_spin = divide(multiply(g, add(g, x, coefficients=(1, -1))), denominator)
+    return Program(
+        {"opposite_spin": opposite_spin, "same_spin": same_spin},
+        provenance={
+            "kind": "ri-mp2-scalar-pair-energy",
+            "reference": "restricted spatial MP2 ordered ijab",
+            "arithmetic": "native-fp64-order-v1",
+        },
+    )
+
+
 def cpu_capacity(program: typing.Any) -> typing.Any:
     """Conservative numeric capacity including interpreter temporaries.
 

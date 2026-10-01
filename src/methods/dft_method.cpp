@@ -559,6 +559,23 @@ unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
+/** Retain the existing generated DF response only for the semilocal CUDA J
+ * domain. Hybrid/RSH/nonlocal promotion remains a separate provider contract. */
+unsigned ks_fitted_derivative_order(const scf::ResolvedFockBuild& strategy,
+                                    generativeqc_backend backend) noexcept {
+#if GENERATIVEQC_HAS_CUDA
+  if (backend == GENERATIVEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda &&
+      strategy.spec.coulomb.present &&
+      strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+      !strategy.spec.exchange.present)
+    return 1;
+#else
+  (void)strategy;
+  (void)backend;
+#endif
+  return 0;
+}
+
 std::size_t ks_provider_bytes(const core::System& system, generativeqc_backend backend,
                               unsigned direct_derivative_order = 0) {
 #if GENERATIVEQC_HAS_CUDA
@@ -1005,8 +1022,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
         detail = "density-fitted stationary D/W AO shape mismatch";
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
-    const auto output_bytes = 4U * coordinates * sizeof(double);
-    if (!maximum_bytes || output_bytes > maximum_bytes) {
+    // H'/Pulay/J'/K' vectors coexist with the four-source publication buffer.
+    // This allowance covers only compact publication, not DF-provider scratch.
+    if (!maximum_bytes || coordinates > maximum_bytes / (8U * sizeof(double))) {
       detail = "density-fitted stationary derivative publication exceeds its budget";
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
     }
@@ -1042,6 +1060,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
     std::vector<double> candidate;
     candidate.reserve(4 * coordinates);
+    std::size_t publication_remaining_bytes = maximum_bytes;
+    for (const auto* values : {&hcore, &pulay, &two.coulomb, &two.exchange, &candidate}) {
+      if (values->capacity() > publication_remaining_bytes / sizeof(double)) {
+        detail = "density-fitted stationary derivative publication exceeds its budget";
+        return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      }
+      publication_remaining_bytes -= values->capacity() * sizeof(double);
+    }
+    const auto publication_peak_bytes = maximum_bytes - publication_remaining_bytes;
     candidate.insert(candidate.end(), hcore.begin(), hcore.end());
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
     candidate.insert(candidate.end(), two.coulomb.begin(), two.coulomb.end());
@@ -1051,15 +1078,12 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "density-fitted stationary derivative source is nonfinite";
       return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
     }
-    // DF response buffers belong to the already prepared Fock owner. The
-    // publication itself owns only these compact host vectors. CUDA response
-    // may transfer the validated host density into that retained provider.
+    // H'/S' were exported during provider preparation; their contractions here
+    // are host work and perform no force-time one-electron CUDA transfers.
+    // DF response has separate scratch/transfers which this compact publication
+    // bridge does not measure. Do not invent those counts from spin dimensions.
     work[0] = fock_.diagnostic().device_bytes;
-    work[3] = output_bytes;
-    if (backend_ == GENERATIVEQC_BACKEND_CUDA) {
-      work[4] = spins * matrix_elements * sizeof(double);
-      work[5] = 2U * coordinates * sizeof(double);
-    }
+    work[3] = publication_peak_bytes;
     output = std::move(candidate);
     detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
@@ -1116,9 +1140,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
       const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
 #if GENERATIVEQC_HAS_CUDA
-    if (!cuda_ || !system_.ecp_terms.empty() ||
-        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE)
+    if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
+    if (fitted && ks_fitted_derivative_order(fock_.strategy(), backend_) == 0) {
+      detail =
+          "CUDA density-fitted stationary derivatives require the qualified semilocal DF-J domain";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     const bool range_exchange = execution_plan_.range_exchange;
     if (range_exchange != range_strategy_.has_value()) {
       detail = "CUDA stationary integral gradient has inconsistent range-exchange ownership";
@@ -1141,12 +1169,17 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto device = model.device;
     const auto bytes = maximum_bytes;
     const auto derivative_source = scf::prepared_cuda_direct_derivative_binding(fock_);
-    if (!derivative_source) {
+    if (!fitted && !derivative_source) {
       detail = "CUDA integral gradient requires a retained prepared Direct derivative source";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const auto spins = model.spins;
-    const auto matrix_elements = derivative_source.nbf * derivative_source.nbf;
+    const auto nbf = fock_.diagnostic().nbf;
+    const auto matrix_elements = nbf * nbf;
+    if (!nbf) {
+      detail = "CUDA stationary derivative source has an empty AO basis";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
     const auto valid_cached = [&](const auto& blocks) {
       return blocks.size() == spins &&
              std::all_of(blocks.begin(), blocks.end(),
@@ -1156,26 +1189,31 @@ class KsPreparedCalculation final : public PreparedCalculation {
       detail = "cached CUDA stationary D/W has an incompatible spin or AO shape";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
+    if (!fitted && (derivative_source.device_id != device || derivative_source.nbf != nbf)) {
+      detail = "CUDA stationary Direct derivative source disagrees with the live KS owner";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
     dft::CudaKsResidentDensityBinding resident_density;
     status = cuda_->resident_final_density(expected, resident_density, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    if (!resident_density || resident_density.device_id != derivative_source.device_id ||
-        resident_density.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
-      detail = "CUDA stationary derivative density is incompatible with the prepared Direct owner";
+    if (!resident_density || resident_density.device_id != device ||
+        resident_density.matrix_elements != matrix_elements || resident_density.spins != spins) {
+      detail = "CUDA stationary derivative density is incompatible with the prepared Fock owner";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     dft::CudaKsResidentStationaryWeightsBinding resident_weights;
     status = cuda_->resident_final_stationary_weights(expected, resident_weights, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    if (!resident_weights || resident_weights.device_id != derivative_source.device_id ||
-        resident_weights.matrix_elements != derivative_source.nbf * derivative_source.nbf) {
-      detail = "CUDA stationary one-electron D/W is incompatible with the prepared Direct owner";
+    if (!resident_weights || resident_weights.device_id != device ||
+        resident_weights.matrix_elements != matrix_elements || resident_weights.spins != spins) {
+      detail = "CUDA stationary one-electron D/W is incompatible with the prepared Fock owner";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
     const auto transfers_after = cuda_->transfers();
-    // The Direct source belongs to the already-budgeted SCF owner. Report its
-    // retained footprint, but force-time source preparation is now exactly zero.
-    work = {derivative_source.retained_device_bytes,
+    // Both Direct and DF sources belong to the already-budgeted SCF owner.
+    // Report retained provider bytes without charging them again to the
+    // stationary consumer's additional-device allowance.
+    work = {fitted ? fock_.diagnostic().device_bytes : derivative_source.retained_device_bytes,
             0,
             0,
             0,
@@ -1185,18 +1223,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
             transfers_after.final_state_reads - transfers_before.final_state_reads,
             transfers_after.synchronizations - transfers_before.synchronizations};
     scf::OneElectronGradientResources one;
-    // The retained Direct shell owner already has this exact immutable basis,
-    // geometry and stream. Borrow its one-electron view and force scratch so
-    // the hot path performs no pack/allocation/metadata H2D. The standalone
-    // bridge remains a bounded correctness fallback if optional shell state was
-    // not admitted by an unusually small provider budget.
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
     candidate.reserve((range_exchange ? 5 : 4) * nc);
     std::vector<double> hcore, pulay, value;
-    status = scf::execute_prepared_cuda_stationary_one_electron_pair(
-        fock_.cuda_direct_source(), resident_weights.density, resident_weights.weighted_density,
-        resident_weights.matrix_elements, bytes, hcore, pulay, detail, &one);
+    status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    if (!fitted)
+      status = scf::execute_prepared_cuda_stationary_one_electron_pair(
+          fock_.cuda_direct_source(), resident_weights.density, resident_weights.weighted_density,
+          resident_weights.matrix_elements, bytes, hcore, pulay, detail, &one);
     if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
       status = scf::execute_cuda_stationary_one_electron_pair(
           device, system_, {}, {}, 0, bytes, hcore, pulay, detail, &one, resident_weights.density,
@@ -1208,15 +1243,40 @@ class KsPreparedCalculation final : public PreparedCalculation {
     work[5] += one.device_to_host_bytes;
     candidate.insert(candidate.end(), hcore.begin(), hcore.end());
     candidate.insert(candidate.end(), pulay.begin(), pulay.end());
-    status = range_exchange
-                 ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
-                       fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
-                       resident_density.matrix_elements, value, detail)
-                 : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
-                       fock_, resident_density.alpha, resident_density.beta,
-                       resident_density.matrix_elements, value, detail);
-    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    candidate.insert(candidate.end(), value.begin(), value.end());
+    if (fitted) {
+      try {
+        value = spins == 1 ? fock_.retained_energy_derivative(cached_density->at(0))
+                           : fock_.retained_energy_derivative(cached_density->at(0),
+                                                              cached_density->at(1));
+      } catch (const std::bad_alloc&) {
+        detail = "CUDA density-fitted stationary response exceeded its retained budget";
+        return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      } catch (const std::invalid_argument& error) {
+        detail = error.what();
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      } catch (const std::exception& error) {
+        detail = error.what();
+        return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+      }
+      if (value.size() != nc) {
+        detail = "CUDA density-fitted stationary response returned the wrong coordinate shape";
+        return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+      }
+      candidate.insert(candidate.end(), value.begin(), value.end());
+      // Semilocal DF is deliberately J-only. Keep the stationary runtime's
+      // canonical four-source layout without manufacturing exchange work.
+      candidate.insert(candidate.end(), nc, 0.0);
+    } else {
+      status = range_exchange
+                   ? scf::execute_prepared_cuda_direct_rsh_energy_derivatives_device(
+                         fock_, *range_strategy_, resident_density.alpha, resident_density.beta,
+                         resident_density.matrix_elements, value, detail)
+                   : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
+                         fock_, resident_density.alpha, resident_density.beta,
+                         resident_density.matrix_elements, value, detail);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+      candidate.insert(candidate.end(), value.begin(), value.end());
+    }
     output = std::move(candidate);
     return GENERATIVEQC_STATUS_SUCCESS;
 #else

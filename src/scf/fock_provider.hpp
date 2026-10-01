@@ -79,6 +79,12 @@ class BasicFockPlanView {
   FockEnergyDerivativeComponents energy_derivative_components(
       const std::vector<double>& density, const std::vector<double>& beta = {}) const;
 
+  /** Execute a first derivative through capability retained alongside a value-only
+   * scientific strategy. Revalidation with derivative_order=1 is mandatory, so
+   * a plan without an actual derivative source still fails closed. */
+  std::vector<double> retained_energy_derivative(const std::vector<double>& density,
+                                                 const std::vector<double>& beta = {}) const;
+
  private:
   void validate_density(const std::vector<double>& density, const std::vector<double>& beta,
                         bool derivative) const;

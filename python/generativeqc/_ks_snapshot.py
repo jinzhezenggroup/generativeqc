@@ -154,6 +154,7 @@ class NativeKsSnapshot:
     __slots__ = (
         "_arrays",
         "_batch",
+        "_density_fitting_requested",
         "_handle",
         "_identity",
         "_library",
@@ -161,7 +162,6 @@ class NativeKsSnapshot:
         "atomic_weights",
         "backend",
         "coefficients",
-        "density_fitted",
         "ecp_cores",
         "ecp_terms",
         "export_work",
@@ -259,7 +259,7 @@ class NativeKsSnapshot:
             if (metadata[12] == 2**64 - 1) != cpu:
                 raise ValueError("native KS snapshot backend/device mismatch")
             self.backend = "cpu" if cpu else "cuda"
-            self.density_fitted = (
+            self._density_fitting_requested = (
                 getattr(
                     batch._calculator,
                     "_density_fitting_mode",
@@ -300,7 +300,16 @@ class NativeKsSnapshot:
             self._library, "generativeqc_ks_snapshot_fock_provider_v1", None
         )
         if binding is None:
-            if not self.density_fitted:
+            # Older exact-only libraries may omit native provider provenance.
+            # A requested fitted state must never acquire a guessed identity.
+            if (
+                getattr(
+                    self._batch._calculator,
+                    "_density_fitting_mode",
+                    _native.DENSITY_FITTING_NONE,
+                )
+                == _native.DENSITY_FITTING_NONE
+            ):
                 return "exact", ("exact" if self.coefficients[2] else None), 0.0
             raise NotImplementedError(
                 "native library lacks density-fitted KS provider provenance"
@@ -341,6 +350,11 @@ class NativeKsSnapshot:
         if not np.isfinite(threshold.value) or threshold.value < 0:
             raise ValueError("native KS snapshot has an invalid DF metric threshold")
         return names[coulomb.value], exchange_name, float(threshold.value)
+
+    @property
+    def density_fitted(self) -> bool:
+        """Bind derivative fallback policy to the live native provider proof."""
+        return "density-fitted" in self.fock_provider_proof()[:2]
 
     def cuda_resident_grid(self) -> CudaResidentGrid | None:
         """Borrow exact CUDA-generated molecular-grid pointers without host staging."""
@@ -495,7 +509,7 @@ class NativeKsSnapshot:
         atom_count: int,
         maximum_bytes: int,
     ) -> typing.Any:
-        """Execute prepared DF H'/Pulay/J'/K' sources on CPU or CUDA."""
+        """Execute DF sources; resources cover compact publication, not DF scratch."""
         if not self.density_fitted:
             return None
         if type(atom_count) is not int or atom_count < 1:
@@ -539,7 +553,7 @@ class NativeKsSnapshot:
             "retained_device_bytes",
             "source_host_preparation_bytes",
             "one_electron_device_peak_bytes",
-            "one_electron_host_peak_bytes",
+            "compact_source_publication_host_peak_bytes",
             "one_electron_h2d_bytes",
             "one_electron_d2h_bytes",
             "final_state_export_d2h_bytes",
@@ -548,6 +562,8 @@ class NativeKsSnapshot:
         )
         work = dict(zip(names, map(int, usage), strict=True))
         work["density_fitted_provider"] = 1
+        work["density_fitted_one_electron_host_contraction"] = 1
+        work["density_fitted_response_resources_included"] = 0
         return immutable(output), MappingProxyType(work)
 
     def cuda_integral_derivatives(
@@ -887,7 +903,7 @@ class NativeKsSnapshot:
             coulomb_approximation,
             exchange_approximation,
         )
-        if native_fitted != self.density_fitted:
+        if native_fitted != self._density_fitting_requested:
             raise ValueError(
                 "native KS provider approximation disagrees with requested density fitting"
             )

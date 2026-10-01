@@ -2,7 +2,7 @@
 
 `Calculator(method="pbe-rks", device="cuda", density_fitting="auto",
 auxiliary_basis="def2-svp")` selects the shared native DF Coulomb provider for
-KS energy calculations. `auto` follows the calculation backend; explicit
+KS calculations. `auto` follows the calculation backend; explicit
 `cpu`/`cuda` DF selections must match `device`. Omitting the auxiliary basis
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
@@ -22,7 +22,7 @@ from generativeqc import Calculator
 calc = Calculator(method="pbe-rks", basis="sto-3g", device="cuda",
                   density_fitting="auto", auxiliary_basis="def2-svp")
 result = calc.singlepoint([("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))],
-                          properties=("energy",))
+                          properties=("energy", "forces"))
 ```
 
 The prepared owner copies auxiliary shells before the public descriptor is
@@ -44,6 +44,16 @@ Qualified force calculations use token-checked derivative snapshots and the
 prepared DF response provider. The CPU diagnostic requires `execution="native"`
 for a fitted state; the Direct-only reference derivative path is rejected rather
 than differentiating a different Hamiltonian.
+
+This bridge contracts retained host H'/S' derivatives for the one-electron and
+Pulay sources on both backends. The CUDA DF J/K response remains in the existing
+CUDA provider and can upload density terms and other response buffers. It is
+not a zero-upload resident whole-force path. Its resource metadata covers the
+compact source publication and the host one-electron contraction only;
+`density_fitted_response_resources_included=0` explicitly excludes unmeasured
+DF-provider scratch and transfers. These partial diagnostics cannot establish a
+whole-force memory or transport bound. Full DF resource-plan admission remains
+unqualified.
 
 `tests/python/test_dft_df_public.py` compares independently converged PySCF
 energies and analytic gradients with copied orbital/auxiliary primitives and

@@ -631,6 +631,10 @@ def complete_rks_gradient_diagnostic(
             *(("exact_exchange",) if plan.exchange is not None else ()),
         )
         work["native_integral_resources"] = dict(native_integral_resources)
+        work["density_fitted_response_resources_included"] = False
+        work["native_integral_resource_scope"] = (
+            "compact-publication-and-host-one-electron-only"
+        )
 
     range_native = None
     if plan.range_exchange_primitives:

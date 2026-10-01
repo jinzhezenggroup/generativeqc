@@ -50,12 +50,15 @@ bool valid_model(const KsFinalStateIdentity& identity) {
                          model.semilocal_correlation_scale == 1.0 && !model.range_correction &&
                          !model.nonlocal_correlation &&
                          fock.spec.exchange.coefficient == (model.spins == 1 ? -0.125 : -0.25);
-  // Admit the prepared exact-K composition for the three CUDA semilocal
-  // families, while the separately qualified PBE0 scale keeps its own gate.
+  // Admit matching exact J/K for the three qualified CUDA semilocal
+  // families, plus the independently exercised PBE density-fitted J/K route.
+  // Mixed exact/DF ownership remains fail-closed.
   const bool cuda_primary_exchange =
       fock.backend == scf::FockBackend::Cuda && semilocal_family_has_cuda_ks(family) &&
-      fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
-      fock.spec.exchange.approximation == scf::FockApproximation::Exact &&
+      ((fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
+        fock.spec.exchange.approximation == scf::FockApproximation::Exact) ||
+       (pbe && fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+        fock.spec.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
       !model.range_correction && !model.nonlocal_correlation;
   const bool cuda_range_exchange = [&] {
     if (!pbe || fock.backend != scf::FockBackend::Cuda || !model.range_correction ||

@@ -5,15 +5,12 @@
 #include <cmath>
 #include <limits>
 #include <new>
-#include <numbers>
 #include <stdexcept>
 
 #include "generated_nonlocal_pair_native.hpp"
 
 namespace generativeqc::dft::nlc {
 namespace {
-
-constexpr double kFourPiOverThree = 4.0 * std::numbers::pi_v<double> / 3.0;
 
 bool finite_positive(double value) { return std::isfinite(value) && value > 0.0; }
 
@@ -230,20 +227,13 @@ generativeqc_status Vv10Plan::execute(
     const auto y = density_gradient[3 * i + 1];
     const auto z = density_gradient[3 * i + 2];
     const auto sigma = x * x + y * y + z * z;
-    const auto rho2 = rho * rho;
-    const auto rho4 = rho2 * rho2;
-    const auto sigma2 = sigma * sigma;
-    const auto omega2 = c * sigma2 / rho4 + kFourPiOverThree * rho;
-    const auto omega = std::sqrt(omega2);
-    const auto kappa = b * 1.5 * std::numbers::pi_v<double> *
-                       std::pow(rho / (9.0 * std::numbers::pi_v<double>), 1.0 / 6.0);
-    double domega_drho = 0.0, domega_dsigma = 0.0, dkappa_drho = 0.0;
-    if (want_features) {
-      const auto rho5 = rho4 * rho;
-      domega_drho = (kFourPiOverThree - 4.0 * c * sigma2 / rho5) / (2.0 * omega);
-      domega_dsigma = c * sigma / (omega * rho4);
-      dkappa_drho = kappa / (6.0 * rho);
-    }
+    const auto local = want_features ? generated::local_scales_cpu<true>(rho, sigma, b, c)
+                                     : generated::local_scales_cpu<false>(rho, sigma, b, c);
+    const auto omega = local.omega;
+    const auto kappa = local.kappa;
+    const auto domega_drho = local.domega_drho;
+    const auto domega_dsigma = local.domega_dsigma;
+    const auto dkappa_drho = local.dkappa_drho;
     if (!finite_positive(omega) || !finite_positive(kappa) || !std::isfinite(domega_drho) ||
         !std::isfinite(domega_dsigma) || !std::isfinite(dkappa_drho)) {
       detail = "VV10 local scales are nonfinite";

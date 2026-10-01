@@ -234,3 +234,36 @@ def test_stale_source_or_inconsistent_totals_cannot_claim_retirement(
     corrupted["maintained_code_lines"]["scientific"] += 1
     with pytest.raises(ValueError, match="totals differ"):
         compare(tmp_path, report, tmp_path, corrupted)
+
+
+@pytest.mark.parametrize(
+    ("path", "native_anchor"),
+    [
+        (
+            "src/scf/cuda/direct_bounded_dddd.cu",
+            "topology.shell_pair_bounds[bra_pair] * topology.shell_pair_bounds[ket_pair]",
+        ),
+        (
+            "src/xtb/native/src/backends/cuda/gfn2_geometry.cu",
+            "pair.distance_derivative * values->inverse_distance",
+        ),
+        (
+            "src/xtb/native/src/backends/cuda/gfn2_pairlist.cu",
+            "pair.distance_derivative * values->inverse_distance",
+        ),
+        (
+            "src/xtb/native/src/backends/cuda/gfn2_repulsion.cu",
+            "-pair.distance_derivative / distance",
+        ),
+    ],
+)
+def test_generated_pair_roots_do_not_retire_native_scientific_composition(
+    path: str,
+    native_anchor: str,
+) -> None:
+    root = Path(__file__).resolve().parents[2]
+    assert native_anchor in (root / path).read_text()
+    record = json.loads(
+        (root / "docs/cuda_ownership/files" / (path + ".json")).read_text()
+    )
+    assert record["role"] == "scientific"

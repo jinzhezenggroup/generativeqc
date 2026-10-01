@@ -10,6 +10,18 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_cudart_implib_covers_grid_stream_flags() -> None:
+    """Keep wheel-mode host imports in sync with the CUDA grid owner."""
+    grid = (ROOT / "src/dft/cuda_grid.cu").read_text()
+    assert "cudaStreamGetFlags(" in grid
+
+    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
+    symbols = (
+        cmake.split("set(GENERATIVEQC_CUDART_SYMBOLS", 1)[1].split(")", 1)[0].split()
+    )
+    assert "cudaStreamGetFlags" in symbols
+
+
 def test_provider_free_sgemm_declarations_and_imports(
     tmp_path: typing.Any,
 ) -> None:
