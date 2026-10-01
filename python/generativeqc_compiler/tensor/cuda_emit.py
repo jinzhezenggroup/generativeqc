@@ -143,9 +143,7 @@ def _einsum_reduction_term(
             ),
             prefix,
         )
-        for child, labels in zip(
-            step.inputs, node.attrs["labels"], strict=True
-        )
+        for child, labels in zip(step.inputs, node.attrs["labels"], strict=True)
     ]
     scalar = scalar_type(node.spec.dtype)
     mul = scalar.intrinsic("mul")
