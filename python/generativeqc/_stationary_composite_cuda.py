@@ -68,7 +68,7 @@ def _plan_for_state(state: typing.Any) -> StationaryGradientPlan:
     source = state._source
     point_model = (
         source._batch._calculator._ks_options.scf_domain
-        if source.nonlocal_density_policy == MOLECULAR_VV10_DENSITY_POLICY
+        if getattr(source, "nonlocal_density_policy", None) == MOLECULAR_VV10_DENSITY_POLICY
         else SCF_POINT_MODEL
     )
     return StationaryGradientPlan(
