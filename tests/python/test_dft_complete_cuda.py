@@ -200,7 +200,7 @@ def test_complete_cuda_independent_analytic(
         assert result.work["stationary_state_dw_upload_bytes"] == 0
         assert (
             result.work["stationary_integral_derivative_route"]
-            == "prepared-native-complete"
+            == "prepared-native-stationary"
         )
         assert result.work["grid_density_source"] == "exact-final-scf-device-binding"
         assert result.work["grid_density_h2d_bytes"] == 0
@@ -302,7 +302,7 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         assert result.work["stationary_state_dw_upload_bytes"] == 0
         assert (
             result.work["stationary_integral_derivative_route"]
-            == "prepared-native-complete"
+            == "prepared-native-stationary"
         )
         assert result.work["grid_density_source"] == "exact-final-scf-device-binding"
         assert result.work["grid_density_h2d_bytes"] == 0
@@ -509,7 +509,7 @@ def test_cuda_reconverged_finite_differences_and_replay(
         replay = _diagnostic(current, basis, compiler)
         np.testing.assert_allclose(replay.gradient, result.gradient, atol=1e-9, rtol=0)
         with pytest.raises(ValueError, match="work budget"):
-            _diagnostic(current, basis, compiler, max_primitive_records=1)
+            _diagnostic(current, basis, compiler, max_grid_pair_visits=1)
         with pytest.raises(ValueError, match="budget"):
             _diagnostic(current, basis, compiler, max_device_bytes=1)
         with pytest.raises(ValueError, match="current native.*snapshot"):
@@ -611,6 +611,8 @@ def test_cuda_source_failure_zero_tail_and_recovery(compiler: typing.Any) -> Non
                 pytest.raises(RuntimeError, match="invalid stationary CUDA"),
             ):
                 sources.geometry(task, bad, np.ones(3), np.ones(3), pbe=False)
+                # Drain the deferred failure before releasing its borrowed grid lease.
+                sources.finish()
             out = np.full((7, 3, 3), 42.0)
             with pytest.raises(RuntimeError, match="reset"):
                 sources._call("stationary_finish", sources.handle, _ptr(out), out.size)
@@ -662,7 +664,7 @@ def test_cuda_late_owner_replay_and_geometry_replacement(
 
         def replay(sources: typing.Any) -> typing.Any:
             result = finish(sources)
-            batch.execute(strict=True)
+            batch.execute(properties=("energy",), strict=True)
             return result
 
         with monkeypatch.context() as patch:

@@ -97,6 +97,7 @@ int main(int argc,char** argv) {
   const int mode = std::atoi(argv[1]);
   const int device_points = std::atoi(argv[2]);
   GridPlan p;
+  if (mode == 9) p.use_orbitals = p.orbital_ready = true;
   double points[6]{};
   resident_points = points;
   point_buffer = p.points;
@@ -105,24 +106,32 @@ int main(int argc,char** argv) {
   double output[26]{};
   const bool deferred = mode == 4 || mode == 5;
   fault = mode == 4 ? 1 : mode;
-  const auto npoint = mode == 7 ? 0u : 2u;
-  const int status = grid_cuda_run_selected_impl(&p,points,npoint,1,ids,2,
+  const auto npoint = mode == 7 || mode == 9 || mode == 10 ? 0u : 2u;
+  const int status = grid_cuda_run_selected_impl(&p,points,npoint,mode == 10 ? 0 : 1,ids,2,
       mode == 5 ? output : nullptr,nullptr,deferred,device_points,nullptr,0);
-  const bool expected_success = mode == 0 || mode == 4 || mode == 7;
+  const bool expected_success = mode == 0 || mode == 4 || mode == 7 || mode == 9 || mode == 10;
   if ((status == 0) != expected_success) return 2;
   if (p.view_ready != expected_success) return 3;
   if (!expected_success && p.density_jets_ready) return 4;
   if (mode == 4 && (downloads || fences || !*p.context.error || !p.density_jets_ready)) return 5;
   if (mode == 0 && (downloads != 1 || fences != 1 || !p.density_jets_ready)) return 6;
-  if (mode == 7 && (p.density_jets_ready || downloads || fences != 1)) return 7;
+  if ((mode == 7 || mode == 9 || mode == 10) && (p.density_jets_ready != (mode == 7) || downloads || fences != 1)) return 7;
+  if (mode == 7 || mode == 9 || mode == 10) {
+    const double* jets = nullptr;
+    const auto status = grid_cuda_density_jets_v1(&p,p.generation,1,&jets,nullptr,0);
+    if ((status == 0) != (mode == 7)) return 15;
+    if (mode == 7 && jets != p.work) return 16;
+    if (grid_cuda_density_jets_v1(&p,p.generation-1,1,&jets,nullptr,0) == 0) return 17;
+  }
   const double* expected_points = device_points ? points : p.points;
   if (expected_success && p.current_points != expected_points) return 10;
   if ((mode == 0 || mode == 4) && observed_points != expected_points) return 11;
-  if (point_uploads != int(!device_points && mode != 5 && mode != 7 && mode != 8)) return 12;
-  if (pointer_checks != int(device_points && mode != 5 && mode != 7)) return 13;
+  if (point_uploads != int(!device_points && mode != 5 && mode != 7 && mode != 8 && mode != 9 && mode != 10)) return 12;
+  if (pointer_checks != int(device_points && mode != 5 && mode != 7 && mode != 9 && mode != 10)) return 13;
   // A later generation switches backends, clears faults, and publishes the
   // new point source instead of retaining a previous borrowed device pointer.
   fault = 0;
+  p.use_orbitals = p.orbital_ready = false;
   points[0] = 0;
   const int recovery_device_points = !device_points;
   if (grid_cuda_run_selected_impl(&p,points,2,1,ids,2,nullptr,nullptr,0,
@@ -147,9 +156,12 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         depth += (source[end] == "{") - (source[end] == "}")
         end += 1
     body = re.sub(r"<<<.*?>>>", "", source[begin:end], flags=re.DOTALL)
+    getter_begin = source.index("int grid_cuda_density_jets_v1(")
+    getter_end = source.index("\nint grid_cuda_xc_v2(", getter_begin)
+    getter = source[getter_begin:getter_end]
     directory = tmp_path_factory.mktemp("grid-publication")
     path, executable = directory / "probe.cpp", directory / "probe"
-    path.write_text(f"{PREFIX}\n{body}\n{MAIN}")
+    path.write_text(f"{PREFIX}\n{body}\n{getter}\n{MAIN}")
     compiled = subprocess.run(
         [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
         capture_output=True,
@@ -161,7 +173,7 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("mode", range(9))
+@pytest.mark.parametrize("mode", range(11))
 @pytest.mark.parametrize("device_points", [False, True])
 def test_grid_publication_requires_the_selected_error_gate(
     publication_probe: Path, mode: int, device_points: bool
