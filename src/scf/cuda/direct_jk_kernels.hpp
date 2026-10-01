@@ -13,6 +13,34 @@ struct ShellPairDensityBounds;
 
 enum class DirectCoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
 
+/** A borrowed angular-bucket view; null pointers select dense canonical work. */
+struct CanonicalPairRows {
+  const std::int32_t* order{};
+  const std::uint64_t* prefix{};
+};
+
+/** Query CUB's explicit sort/scan storage without allocating on the device. */
+cudaError_t canonical_pair_workspace(int pairs, int segments, int largest_bucket,
+                                     std::size_t& bytes);
+
+/** Sort native FP64 Schwarz keys within each item/angular bucket on this stream. */
+cudaError_t prepare_canonical_pair_order(cudaStream_t stream, DeviceBatch batch,
+                                         const std::int32_t* pairs, const double* bounds,
+                                         int pair_count, int segment_count,
+                                         const int* segment_offsets, double* input_keys,
+                                         std::int32_t* input_order, double* sorted_keys,
+                                         std::int32_t* sorted_order, void* workspace,
+                                         std::size_t workspace_bytes);
+
+/** Prefix only quartets admitted by the original product comparison.
+ * The same-bucket triangle is defined in the sorted order, preserving symmetry.
+ */
+cudaError_t prepare_canonical_pair_rows(cudaStream_t stream, const double* sorted_keys,
+                                        std::size_t first_begin, std::size_t first_count,
+                                        std::size_t second_begin, std::size_t second_count,
+                                        bool same_bucket, double screening, std::uint64_t* prefix,
+                                        void* workspace, std::size_t workspace_bytes);
+
 // Shared one-output-owner reduction width, unchanged from the direct source.
 constexpr unsigned kIndependentJkThreads = 32;
 
@@ -23,7 +51,7 @@ void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* valu
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, DeviceBatch batch, double* bounds,
-                                         int* failure);
+                                         int* failure, bool cartesian = false);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -33,6 +61,19 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
                                   double screening, const double* bounds, const double* density,
                                   const double* beta, double* j_out, double* ka_out, double* kb_out,
                                   std::uint64_t* mixed_coulomb_work_count);
+
+/** Consume one angular-homogeneous block of symmetry-unique public-AO ERIs.
+ * Inputs and outputs use the compiler's interleaved spin scatter ABI. No
+ * four-index tensor or device-to-host staging is retained. */
+void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
+                                std::int32_t system, unsigned angular_order,
+                                const std::int32_t* pairs, CanonicalPairRows rows,
+                                std::size_t first_begin, std::size_t first_count,
+                                std::size_t second_begin, std::size_t second_count,
+                                bool same_bucket, bool want_j, bool want_k, bool unrestricted,
+                                DirectCoulombRange exchange_range, double exchange_omega,
+                                double screening, const double* bounds, const double* density,
+                                double* coulomb, double* exchange, std::uint64_t* work_count);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_derivative_kernel(
@@ -49,6 +90,18 @@ void launch_independent_rsh_derivative_kernel(
     std::size_t coordinates_per_item, std::size_t system_begin, std::size_t source_stride,
     double cj, double short_ck, double long_ck, bool unrestricted, double omega, double screening,
     const double* bounds, const double* density, const double* beta, double* out);
+
+/** Reuse the canonical geometry schedule and the existing RSH derivative algebra. */
+void launch_canonical_rsh_derivative_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
+                                            std::int32_t system, unsigned angular_order,
+                                            const std::int32_t* pairs, CanonicalPairRows rows,
+                                            std::size_t first_begin, std::size_t first_count,
+                                            std::size_t second_begin, std::size_t second_count,
+                                            bool same_bucket, std::size_t source_stride, double cj,
+                                            double short_ck, double long_ck, bool unrestricted,
+                                            double omega, double screening, const double* bounds,
+                                            const double* density, const double* beta, double* out,
+                                            std::uint64_t* work_count);
 
 /** Provider-facing shell derivative seam. Queue/numerical ownership remains in
  * the Direct consumer layer; host source owners borrow only this launch ABI. */

@@ -128,6 +128,34 @@ def test_geometry_reset_ffi_keeps_pointer_and_tolerance_types() -> None:
     ]
 
 
+@pytest.mark.parametrize("integral_derivatives", [False, True])
+def test_geometry_only_owner_does_not_encode_cartesian_derivative_kinds(
+    integral_derivatives: bool,
+) -> None:
+    """Nuclear-only binaries dispatch plain kinds even when the AO basis has f."""
+    from generativeqc._stationary_cuda import _component_mode
+
+    init = next(
+        node for node in _owner().body if getattr(node, "name", None) == "__init__"
+    )
+    binding = next(
+        node
+        for node in ast.walk(init)
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and ast.unparse(node.targets[0]) == "self.component_mode"
+    )
+    owner = SimpleNamespace(expansions=((("xxx", 1.0),),))
+    namespace = {
+        "self": owner,
+        "integral_derivatives": integral_derivatives,
+        "_component_mode": _component_mode,
+    }
+    module = ast.Module(body=[binding], type_ignores=[])
+    exec(compile(module, "<actual component mode>", "exec"), namespace)  # noqa: S102
+    assert owner.component_mode is integral_derivatives
+
+
 def _body(source: str, name: str) -> str:
     begin = source.index("{", source.index("int " + name + "("))
     depth = 0

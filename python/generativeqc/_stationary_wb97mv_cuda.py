@@ -159,8 +159,6 @@ class PreparedWb97mvCudaGradient:
         n, na, npnt = basis.nao, basis.natom, len(state.grid.points)
         if not (1 <= n <= 1024 and 1 <= na <= 128 and 1 <= npnt <= 4_000_000):
             raise ValueError("WB97M-V CUDA stationary shape exceeds its bounded domain")
-        if any(shell.angular_momentum > 2 for shell in basis.shells):
-            raise NotImplementedError("WB97M-V CUDA forces currently qualify s/p/d AOs")
         device = int(source.metadata[12])
         plan = StationaryGradientPlan(
             source.method_ir,
@@ -267,6 +265,7 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        integral_derivatives=False,
                         # The batched nuclear call owns every unordered atom
                         # pair in one deterministic native page.
                         page_work_budget=max(1, na * (na - 1) // 2),
@@ -286,6 +285,7 @@ class PreparedWb97mvCudaGradient:
                         capacity,
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
+                        integral_derivatives=False,
                         page_work_budget=1,
                     )
                 )
