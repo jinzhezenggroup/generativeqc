@@ -349,8 +349,8 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
     "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
 )
-NATIVE_STATIONARY_HEADER_CONTRACT_SHA256 = (
-    "a030bcb9a6a7fd982c1f0d4b9b99ef909da2a5d760a66320432cbbac8377b3d6"
+NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
+    "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
     "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
@@ -737,16 +737,16 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "int stationary_metrics(",
             NATIVE_STATIONARY_METRICS_CONTRACT_SHA256,
         ),
+        "native_finish_span_sha256": (
+            "int stationary_finish_span(",
+            NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256,
+        ),
     }
     for label, (marker, expected_digest) in native_blocks.items():
         digest = _cpp_block_sha256(native_source, marker)
         if digest != expected_digest:
             raise RuntimeError(f"stationary CUDA {label} contract changed")
         page_contract[label] = digest
-    native_header_digest = _lf_sha256(native_source.encode())
-    if native_header_digest != NATIVE_STATIONARY_HEADER_CONTRACT_SHA256:
-        raise RuntimeError("stationary CUDA native header contract changed")
-    page_contract["native_header_sha256"] = native_header_digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
         raise RuntimeError("stationary CUDA component-label capacity changed")
     definition_nodes = {

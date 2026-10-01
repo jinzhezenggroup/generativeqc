@@ -342,8 +342,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_metrics_sha256": (
             "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
         ),
-        "native_header_sha256": (
-            "a030bcb9a6a7fd982c1f0d4b9b99ef909da2a5d760a66320432cbbac8377b3d6"
+        "native_finish_span_sha256": (
+            "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
         ),
     }
     assert result["admission_limits"]["primitive_records_definition"] == (
@@ -1097,7 +1097,7 @@ def test_grid_pair_work_fails_closed_when_native_geometry_consumer_moves(
         qualify_capacity._source_limits(tmp_path)
 
 
-def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
+def test_native_finish_span_fails_closed_on_contract_drift(
     tmp_path: Path,
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
@@ -1106,13 +1106,18 @@ def test_native_stationary_semantic_surface_fails_closed_on_unowned_drift(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "constexpr size_t workers = 32"
-    assert native.count(old) == 1
+    marker = "int stationary_finish_span("
+    start = native.index(marker)
+    old = "p->downloads += count * 8;"
+    position = native.index(old, start)
     target.write_text(
-        native.replace(old, "constexpr size_t workers = 64", 1), encoding="utf-8"
+        native[:position]
+        + "p->downloads += count * 16;"
+        + native[position + len(old) :],
+        encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError, match="native header contract changed"):
+    with pytest.raises(RuntimeError, match="native_finish_span_sha256 contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 
