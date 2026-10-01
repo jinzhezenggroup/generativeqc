@@ -1,78 +1,65 @@
-name: Round-two read-only review snapshot
+name: Round-two Hessian parent reconciliation
 on:
   push:
     branches: [agent/astra-review-round2-20261001]
     paths: [.github/workflows/astra-review-round2.yml]
 permissions:
   contents: read
-  pull-requests: read
-  checks: read
-  actions: read
 jobs:
-  snapshot:
+  reconcile:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-          persist-credentials: false
-      - name: Capture selected heads, source and checks
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
+      - run: python3 -m pip install --disable-pip-version-check pytest numpy scipy pyyaml
+      - name: Preserve exact child delta and current master
         run: |
           python3 - <<'PY'
-          import concurrent.futures, json, os, subprocess, tempfile, urllib.request
+          import json,os,subprocess,tempfile
           from pathlib import Path
-          root = Path.cwd()
-          out = Path(os.environ['RUNNER_TEMP']) / 'round2'
-          out.mkdir()
-          repo = 'jinzhezenggroup/generativeqc'
-          nums = [1510,1623,1632,1633,1634,1635,1636,1637,1638,1639,1640,1641,1642,1643]
-          def run(*args, cwd=root, check=True):
-              p=subprocess.run(args,cwd=cwd,capture_output=True)
-              if check and p.returncode: raise RuntimeError(p.stderr.decode(errors='replace'))
-              return p
-          def api(path):
-              req=urllib.request.Request('https://api.github.com/repos/'+repo+'/'+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})
-              with urllib.request.urlopen(req,timeout=60) as r:return json.load(r)
-          master=run('git','rev-parse','origin/master').stdout.decode().strip()
-          (out/'master.json').write_text(json.dumps({'sha':master}))
-          run('git','archive','--format=tar.gz','--output='+str(out/'master.tar.gz'),master)
-          def capture(n):
-              d=out/str(n);d.mkdir()
-              pr=api('pulls/'+str(n));head=pr['head']['sha'];base=pr['base']['sha']
-              (d/'pr.json').write_text(json.dumps(pr,indent=2))
-              run('git','fetch','--no-tags','origin',head)
-              merge_base=run('git','merge-base',head,base).stdout.decode().strip()
-              for label,older in [('pr',merge_base),('from-master',master)]:
-                  (d/(label+'.patch')).write_bytes(run('git','diff','--binary',older,head).stdout)
-              for label,path in [('reviews','pulls/'+str(n)+'/reviews?per_page=100'),('comments','pulls/'+str(n)+'/comments?per_page=100'),('conversation','issues/'+str(n)+'/comments?per_page=100'),('checks','commits/'+head+'/check-runs?per_page=100'),('status','commits/'+head+'/status'),('runs','actions/runs?head_sha='+head+'&per_page=100')]:
-                  try:(d/(label+'.json')).write_text(json.dumps(api(path),indent=2))
-                  except Exception as e:(d/(label+'-error.txt')).write_text(str(e))
-              with tempfile.TemporaryDirectory() as t:
-                  w=Path(t)/'tree';run('git','worktree','add','--detach',str(w),head)
-                  try:
-                      m=run('git','-c','user.name=ChatGPT','-c','user.email=chatgpt@users.noreply.github.com','-c','merge.conflictStyle=zdiff3','merge','--no-commit','--no-ff',master,cwd=w,check=False)
-                      conflicts=run('git','diff','--name-only','--diff-filter=U',cwd=w).stdout.decode().splitlines()
-                      data={'head':head,'base':base,'merge_base':merge_base,'master':master,'merge_returncode':m.returncode,'conflicts':conflicts}
-                      (d/'merge.json').write_text(json.dumps(data,indent=2))
-                      (d/'conflicts.patch').write_bytes(run('git','diff','--cc',cwd=w).stdout)
-                      for f in conflicts:
-                          p=d/'conflicts'/f;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes((w/f).read_bytes())
-                  finally:run('git','worktree','remove','--force',str(w),check=False)
-              return {'pr':n,'head':head,'draft':pr['draft'],'state':pr['state'],'conflicts':conflicts}
-          results=[]
-          for n in nums:
-              try:results.append(capture(n))
-              except Exception as e:results.append({'pr':n,'error':str(e)})
-              print(json.dumps(results[-1]),flush=True)
-              (out/'inventory.json').write_text(json.dumps(results,indent=2))
+          root=Path.cwd();out=Path(os.environ['RUNNER_TEMP'])/'hessian-restack';out.mkdir()
+          head='e0ea0a1b723de8b1bafa77f828e6030d3da2e041';parent='c8a70a63439d64c3cb9e1f0e20d3af62eb129f9c';branch='chatgpt/180-rks-hessian-cuda-second'
+          report={'pr':1642,'head':head,'original_parent':parent}
+          def run(*args,cwd=root,env=None,check=True,input=None):
+            p=subprocess.run(args,cwd=cwd,env=env,capture_output=True,text=True,input=input)
+            if check and p.returncode:raise RuntimeError((p.stderr+p.stdout)[-6000:])
+            return p
+          try:
+            live=run('git','ls-remote','origin','refs/heads/'+branch).stdout.split()
+            if not live or live[0]!=head:raise RuntimeError('child head moved; no changes made')
+            master=run('git','rev-parse','origin/master').stdout.strip();report['master']=master
+            child_files=set(run('git','diff','--name-only',parent,head).stdout.splitlines())
+            other_files=set(run('git','diff','--name-only',parent,master).stdout.splitlines())
+            report['child_files']=sorted(child_files);report['other_files']=sorted(other_files)
+            if child_files & other_files:raise RuntimeError('upstream overlaps child; manual review required')
+            patch=run('git','diff','--binary',parent,head).stdout
+            with tempfile.TemporaryDirectory(prefix='hessian-parent-') as temp:
+              work=Path(temp)/'source';run('git','worktree','add','--detach',str(work),master)
+              try:
+                run('git','apply','--index','-',cwd=work,input=patch)
+                env=dict(os.environ);env['PYTHONPATH']=str(work/'python')+os.pathsep+str(work)
+                files=['test_hessian_rks_output_budget.py','test_hessian_rks_second_backend.py','test_rks_hessian_production_owner.py','test_hessian_rks_import_contract.py']
+                test=run('python3','-m','pytest','-q','-o','addopts=','--import-mode=importlib',*['tests/python/'+f for f in files],cwd=work,env=env)
+                (out/'tests.log').write_text(test.stdout+test.stderr);report['tests']=test.stdout
+                run('git','diff','--cached','--check',cwd=work)
+                tree=run('git','write-tree',cwd=work).stdout.strip();report['tree']=tree
+                message='fix(hessian): reconcile CUDA second-integral child with landed parent\n\nPreserve current master and replay only the reviewed child delta; parent\nand intervening master file sets are disjoint from the child. Retain both\nhistories and unchanged numerical gates. Backend/output/ownership tests\npass; this does not qualify the new CUDA route on an NVIDIA device.\n\nAgent: ChatGPT\nModel: GPT-6 Astra Pro'
+                commit=run('git','-c','user.name=ChatGPT','-c','user.email=chatgpt@users.noreply.github.com','commit-tree',tree,'-p',head,'-p',master,'-m',message,cwd=work).stdout.strip();report['commit']=commit
+                (out/'master-relative.patch').write_text(run('git','diff',master,commit,cwd=work).stdout)
+                (out/'parent-reconciliation.patch').write_text(run('git','diff',head,commit,cwd=work).stdout)
+                run('git','push','origin',commit+':refs/heads/'+branch,cwd=work);report['pushed']=True
+              finally:run('git','worktree','remove','--force',str(work),check=False)
+          except Exception as e:report['error']=str(e)
+          (out/'report.json').write_text(json.dumps(report,indent=2));print(json.dumps(report),flush=True)
+          if 'error' in report:raise SystemExit(1)
           PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: astra-round2-snapshot
-          path: ${{ runner.temp }}/round2/
+          name: astra-round2-hessian-restack
+          path: ${{ runner.temp }}/hessian-restack/
           retention-days: 1
