@@ -80,5 +80,5 @@ shape-specific schedule rather than relying on an unmeasured static heuristic.
 - `python/generativeqc_compiler/dft/ao_cuda.py`
 - `python/generativeqc_compiler/dft/xc_contraction_cuda.py`
 
-Agent: ChatGPT  
+Agent: ChatGPT
 Model: GPT-5.6 Sol
