@@ -218,6 +218,40 @@ void mixed_coulomb_work_census() {
           "mixed Coulomb census accepted a misaligned counter");
 }
 
+void direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
+                     const std::vector<double>& expected_eri, std::size_t n) {
+  require(plan != nullptr && n >= 2, "invalid raw ERI tile fixture");
+  const std::array<std::size_t, 4> begin{0, 1, 0, 0};
+  const std::array<std::size_t, 4> count{2, 1, 2, 2};
+  const std::size_t elements = 8;
+  std::vector<double> expected(elements);
+  for (std::size_t local = 0; local < elements; ++local) {
+    auto remainder = local;
+    std::array<std::size_t, 4> index{};
+    for (std::size_t reverse = 0; reverse < 4; ++reverse) {
+      const auto axis = 3 - reverse;
+      index[axis] = begin[axis] + remainder % count[axis];
+      remainder /= count[axis];
+    }
+    const auto flat = ((index[0] * n + index[1]) * n + index[2]) * n + index[3];
+    expected[local] = expected_eri[flat];
+  }
+
+  DeviceMatrix output(std::vector<double>(elements, 123.0));
+  cudaStream_t stream{};
+  check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+  std::string detail;
+  const auto status = enqueue_cuda_direct_eri_tile(
+      plan, item, begin, count, output.pointer, elements, stream, detail);
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    cudaStreamDestroy(stream);
+    require(false, detail.c_str());
+  }
+  check(cudaStreamSynchronize(stream));
+  check(cudaStreamDestroy(stream));
+  output.verify(expected);
+}
+
 void direct_value_dispatch_selection() {
   const auto hybrid = direct_jk_value_dispatch(true, true, true, false);
   require(hybrid.generated_coulomb && !hybrid.generic_coulomb && hybrid.generic_exchange,
@@ -613,6 +647,8 @@ void direct_providers(bool through_f_response) {
               detail.c_str());
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
+      direct_eri_tile(plan.get(), 0, ints.eri, n);
+      direct_eri_tile(plan.get(), 1, other.eri, n);
       // A value-only owner may use generated pure J; exact generic capacity
       // must still be a usable fallback. Both consume nonsymmetric densities
       // and independently formed full ERIs, including spherical d projection.
