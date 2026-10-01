@@ -504,7 +504,9 @@ def checked_second_hvp_options(
     if backend not in ("cpu", "cuda"):
         raise ValueError("second-integral backend must be cpu or cuda")
     if type(budget_bytes) is not int or not 0 < budget_bytes < 2**63:
-        raise ValueError("second-integral budget must be a positive int64")
+        raise ValueError(
+            "integral_budget_bytes (second-integral budget) must be a positive int64"
+        )
     if backend == "cuda":
         from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 
