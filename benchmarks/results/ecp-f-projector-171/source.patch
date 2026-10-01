@@ -4,7 +4,7 @@ index 58dcc83..3772317 100644
 +++ b/include/vibeqc/vibeqc.h
 @@ -664,7 +664,7 @@ VIBEQC_API vibeqc_status vibeqc_system_create(vibeqc_context* context,
  VIBEQC_API void vibeqc_system_destroy(vibeqc_system* system);
-
+ 
  /** Scalar Gaussian residual ECP: c r^(power-2) exp(-exponent r^2).
 - * channel=-1 is local, 0..2 is a nonlocal projector difference.
 + * channel=-1 is local, 0..3 is a nonlocal projector difference.
@@ -47,18 +47,18 @@ index cb0908e..d93092b 100644
 @@ -1,4 +1,4 @@
 -"""Compiler-owned bounded ECP host quadrature and real s/p/d harmonics.
 +"""Compiler-owned bounded ECP host quadrature and real s/p/d/f harmonics.
-
+ 
  The root iteration and grid traversal are finite compiler schedules. Scalar
  recurrences, coordinate transforms and normalization use the common DAG.
 @@ -8,7 +8,7 @@ The independent CPU ECP oracle deliberately retains its own implementation.
  import math
-
+ 
  from .expr import Graph
 -from .ir import ECP_MAX_ORBITAL_ANGULAR
 +from .ir import ECP_MAX_ORBITAL_ANGULAR, ECP_MAX_PROJECTOR_ANGULAR
  from .scalar_c import ScalarCEmitter
  from .shell_spec import cartesian_components
-
+ 
 @@ -27,6 +27,13 @@ def harmonic_roots():
          math.sqrt(5 / (16 * math.pi)) * (3 * z * z - 1),
          math.sqrt(15 / (4 * math.pi)) * x * z,
@@ -71,8 +71,8 @@ index cb0908e..d93092b 100644
 +        math.sqrt(105 / (16 * math.pi)) * z * (x * x - y * y),
 +        math.sqrt(35 / (32 * math.pi)) * x * (x * x - 3 * y * y),
      )
-
-
+ 
+ 
 @@ -110,7 +117,9 @@ def emit_ecp_grid_cpp():
          "inline void ecp_harmonics(double x, double y, double z, double* out) {",
      ]
@@ -95,15 +95,15 @@ index a13f1ed..9e6a08d 100644
 -from .ir import EcpRadialTerm
 +from .ir import ECP_MAX_PROJECTOR_ANGULAR, EcpRadialTerm
  from .scalar_c import ScalarCEmitter
-
-
+ 
+ 
 @@ -131,7 +131,7 @@ def _emit_weighted_consumer():
-
-
+ 
+ 
  def emit_ecp_quadrature_cpp():
 -    """Emit the validated s/p/d projector and powers 0..4 domain.
 +    """Emit the validated s/p/d/f projector and powers 0..4 domain.
-
+ 
      Type parameters expose only scalar term/node/jet records. They do not
      select a mathematical backend. The same emitted arithmetic is compiled
 @@ -152,10 +152,12 @@ def emit_ecp_quadrature_cpp():
@@ -143,16 +143,16 @@ index 52ca5d4..04c1d19 100644
 --- a/python/vibeqc_compiler/integral/ir.py
 +++ b/python/vibeqc_compiler/integral/ir.py
 @@ -26,6 +26,7 @@ class KernelConsumer(str, Enum):
-
-
+ 
+ 
  ECP_MAX_ORBITAL_ANGULAR = 3
 +ECP_MAX_PROJECTOR_ANGULAR = 3
-
-
+ 
+ 
  class OperatorFamily(str, Enum):
 @@ -186,8 +187,11 @@ class EcpRadialTerm:
      coefficient: float
-
+ 
      def __post_init__(self):
 -        if type(self.channel) is not int or not -1 <= self.channel <= 2:
 -            raise ValueError("ECP channel must be local (-1) or s/p/d")
@@ -186,7 +186,7 @@ index 3a5af14..237f09c 100644
 +++ b/src/integrals/ecp.cpp
 @@ -79,7 +79,7 @@ std::array<double, 4> evaluate(const AO& ao, const core::System& system,
  }
-
+ 
  // Any orthonormal real basis within l gives the same summed projector.
 -std::array<double, 9> harmonics(double x, double y, double z) {
 +std::array<double, 16> harmonics(double x, double y, double z) {
@@ -208,7 +208,7 @@ index 3a5af14..237f09c 100644
 +          std::sqrt(35 / (32 * pi)) * x * (x * x - 3 * y * y)};
  }
  }  // namespace
-
+ 
 @@ -123,7 +130,7 @@ EcpData ecp_integrals(const core::System& system, unsigned radial, unsigned angu
    struct Point {
      std::array<double, 3> xyz;
@@ -265,7 +265,7 @@ index 06af112..0fb8eb7 100644
 --- a/src/integrals/ecp.hpp
 +++ b/src/integrals/ecp.hpp
 @@ -15,7 +15,7 @@ struct EcpData {
-
+ 
  struct EcpSpherePoint {
    double x, y, z, weight;
 -  double harmonics[9];
@@ -278,7 +278,7 @@ index 8cd9d3d..aae2b58 100644
 --- a/src/integrals/ecp_cuda.cu
 +++ b/src/integrals/ecp_cuda.cu
 @@ -12,6 +12,8 @@
-
+ 
  namespace vibeqc::integrals {
  namespace {
 +static_assert(sizeof(EcpSpherePoint::harmonics) / sizeof(double) == generated::ecp_projector_count);
@@ -413,7 +413,7 @@ index a32fa30..d1e6a7d 100644
 -  return (2 * l + 1) / (4 * pi) * (l == 0 ? 1 : l == 1 ? x : (3 * x * x - 1) / 2);
 +  return (2 * l + 1) / (4 * pi) * std::legendre(l, x);
  }
-
+ 
  void check() {
 @@ -283,6 +283,7 @@ void check() {
                    std::sqrt(3 / (4 * pi)) * z, std::sqrt(15 / (4 * pi)) * x * y,
@@ -444,8 +444,8 @@ index d40c00b..72589b3 100644
 --- a/tests/python/test_ecp.py
 +++ b/tests/python/test_ecp.py
 @@ -13,7 +13,13 @@ from vibeqc.profiles import canonical_hash
-
-
+ 
+ 
  def fixture(
 -    *, representation="spherical", d_shell=False, f_shell=False, f_on_h=False, spin=0
 +    *,
@@ -470,15 +470,15 @@ index d40c00b..72589b3 100644
          atom=atoms,
 @@ -203,7 +212,9 @@ def test_parameters_invalidate_identity_and_malformed_channels_fail():
          resolve_ecp(bad, tuple(Atom.from_value(a) for a in atoms))
-
-
+ 
+ 
 -def detached_native(xyz, *, device="cpu", power=2, d_projector=False, orbital=0):
 +def detached_native(
 +    xyz, *, device="cpu", power=2, d_projector=False, orbital=0, f_projector=False
 +):
      """An ECP atom with no Gaussian shell tests its independent center motion."""
      from vibeqc import _native
-
+ 
 @@ -243,6 +254,8 @@ def detached_native(xyz, *, device="cpu", power=2, d_projector=False, orbital=0)
      records = [(-1, 0.8, -2.0), (0, 0.5, 3.0), (1, 0.4, -1.0)]
      if d_projector:
@@ -490,8 +490,8 @@ index d40c00b..72589b3 100644
      )
 @@ -279,11 +292,15 @@ def detached_native(xyz, *, device="cpu", power=2, d_projector=False, orbital=0)
          library.vibeqc_context_destroy(context)
-
-
+ 
+ 
 -def detached_reference(xyz, *, power=2, d_projector=False, orbital=0):
 +def detached_reference(
 +    xyz, *, power=2, d_projector=False, orbital=0, f_projector=False
@@ -691,8 +691,8 @@ index b410137..673e70e 100644
 +++ b/tests/python/test_ecp_validation.py
 @@ -66,10 +66,18 @@ def test_highest_singleton_channel_is_local():
      assert terms == ((0, -1, 2, 0.8, -2.0), (0, 0, 2, 0.8, -2.0))
-
-
+ 
+ 
 +def test_g_local_label_enables_f_projector_without_g_orbitals():
 +    cores, terms = resolve(
 +        element([potential(angular_momentum=[4]), potential(angular_momentum=[3])])

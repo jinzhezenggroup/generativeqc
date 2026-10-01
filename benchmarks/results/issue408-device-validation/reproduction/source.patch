@@ -47,7 +47,7 @@ index 7f04b13..d782e61 100644
  #include "scf/cuda/eigensolver.hpp"
  #include "scf/cuda_density_fitting_eigen.hpp"
 +#include "scf/cuda_density_fitting_final_state.hpp"
-
+ 
  namespace vibeqc::scf::cuda_df {
  namespace {
 @@ -256,7 +257,8 @@ vibeqc_status solve_cuda_density_fitting_eigen(
@@ -586,7 +586,7 @@ index 48889e0..a6c0057 100644
 +  // Serialized FP64 final validation/projection storage, separate from graphs.
 +  void* final_validation{};
  };
-
+ 
  }  // namespace vibeqc::scf
 diff --git a/src/scf/cuda/df_plan_lifetime.cpp b/src/scf/cuda/df_plan_lifetime.cpp
 index 7cc91d4..4164199 100644
@@ -594,7 +594,7 @@ index 7cc91d4..4164199 100644
 +++ b/src/scf/cuda/df_plan_lifetime.cpp
 @@ -10,6 +10,7 @@
  #include <vector>
-
+ 
  #include "scf/cuda/df_eigensystem.hpp"
 +#include "scf/cuda/df_final_validation.hpp"
  #include "scf/cuda/df_plan_internal.hpp"
@@ -974,12 +974,12 @@ index a7edac3..5ed0f52 100644
 +++ b/src/scf/cuda_density_fitting_final_state.hpp
 @@ -1,5 +1,7 @@
  #pragma once
-
+ 
 +#include <algorithm>
 +#include <cmath>
  #include <limits>
  #include <stdexcept>
-
+ 
 @@ -41,23 +43,63 @@ vibeqc_status cuda_density_fitting_final_state_token(const CudaDensityFittingJkP
  /** Copy only the requested item's active-masked full C/epsilon and actual D.
   * Requires exact current token identity before any transfer. Calls use the
@@ -993,7 +993,7 @@ index a7edac3..5ed0f52 100644
 -                                                    std::string& detail);
 +                                                    std::string& detail,
 +                                                    bool include_density = true);
-
+ 
  /** Try physical J/K from an exact current singleton RHF retained density/frame.
   * Token, device generation and every supplied density entry must match. A
   * correction step, stale token or unsupported plan returns used=false so the
@@ -1044,7 +1044,7 @@ index a7edac3..5ed0f52 100644
 +    throw std::overflow_error("DF final validation storage size overflows");
 +  return static_cast<std::size_t>(bytes);
 +}
-
+ 
  /** Two-spin upper bound shared by native planning and the prepared owner.
   * Full C/epsilon snapshots and generation/info words are per item, unlike
 diff --git a/src/scf/cuda_density_fitting_stub.cpp b/src/scf/cuda_density_fitting_stub.cpp
@@ -1072,7 +1072,7 @@ index 00bca49..9743beb 100644
 @@ -290,4 +290,20 @@ vibeqc_status execute_cuda_density_fitting_occupied_exchange(
    return unavailable(nullptr, detail);
  }
-
+ 
 +solver::PhysicalFockFrame evaluate_cuda_density_fitting_final_fock(
 +    CudaDensityFittingJkPlan*, const solver::FinalStateIdentity&,
 +    const std::vector<reference::Matrix>&, const reference::Matrix&) {
@@ -1431,7 +1431,7 @@ index 6094738..60043b3 100644
 @@ -153,18 +176,18 @@ bool validate_final_state(const FinalStateIdentity& current, const Matrix& overl
    return true;
  }
-
+ 
 -FinalStateSelection select_final_state(FinalStateIdentity current, const Matrix& overlap,
 -                                       const Matrix& hcore, const Matrix& orthogonalizer,
 -                                       double nuclear_energy, std::vector<Matrix> density,
@@ -1577,7 +1577,7 @@ index effeb12..4b37fc4 100644
 --- a/src/scf/solver/final_state.hpp
 +++ b/src/scf/solver/final_state.hpp
 @@ -39,7 +39,10 @@ struct FinalFrameCandidate {
-
+ 
  /** A physical evaluation at exactly the tagged density. Defaults fail closed.
   * Providers must evaluate the passed D on their immutable target model; an
 - * old cached or extrapolated Fock cannot be relabeled as this evaluation. */
@@ -1591,7 +1591,7 @@ index effeb12..4b37fc4 100644
 @@ -64,6 +67,30 @@ struct FinalStateDiagnostic {
    std::vector<EigenFrameDiagnostic> eigenframes;
  };
-
+ 
 +/** Synchronous backend algebra beneath the shared identity, acceptance and
 + * correction policy. An installed provider must supply every operation;
 + * exceptions are observable provider failures, never a reference fallback.
@@ -1625,7 +1625,7 @@ index effeb12..4b37fc4 100644
                            const FinalStateLimits& limits, FinalStateDiagnostic& diagnostic,
 -                          std::string& detail);
 +                          std::string& detail, const FinalStateOperations* operations = nullptr);
-
+ 
  /** Owned, validated output. W is empty unless requested after strict checks;
   * no cached W is accepted as input. Consumers must preserve this identity when
 - * constructing factors or exporting a physical reference. */

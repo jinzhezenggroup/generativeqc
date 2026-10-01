@@ -82,7 +82,7 @@ index 221fc1b..47b923e 100644
  #include <limits>
  #include <stdexcept>
 +#include <string_view>
-
+ 
  #include "molecule/basis.hpp"
  #include "runtime/cuda_component_trace.hpp"
 +#include "runtime/host_component_trace.hpp"
@@ -239,7 +239,7 @@ index 2e9ab6a..4d9aefc 100644
 --- a/tests/python/test_df_derivatives_cuda.py
 +++ b/tests/python/test_df_derivatives_cuda.py
 @@ -174,7 +174,11 @@ def test_mixed_representations_and_permuted_auxiliary_shells(
-
+ 
  @pytest.mark.parametrize("method,charge,multiplicity", [("rhf", 0, 1), ("uhf", 1, 2)])
  @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
 -@pytest.mark.parametrize("budget", [0, 1 << 20, 4 << 20])
@@ -253,8 +253,8 @@ index 2e9ab6a..4d9aefc 100644
  ):
 @@ -242,6 +246,26 @@ def test_complete_hf_replay_two_budgets_and_force_components(
              assert policy["VIBEQC_DF_DERIVATIVE_MAPPING"] == mapping
-
-
+ 
+ 
 +@pytest.mark.parametrize("budget", [1 << 20, 4 << 20])
 +def test_complete_force_rejects_budget_below_provider_workspace_floors(budget):
 +    """Retain the former tiny requests as explicit bounded-allocation failures."""
@@ -308,8 +308,8 @@ index 2e9ab6a..4d9aefc 100644
  ):
 @@ -478,7 +503,7 @@ def test_df_generated_sdf_bucket_preserves_all_geometry_phases(
              np.testing.assert_allclose(right.forces, forces, atol=3e-9, rtol=0)
-
-
+ 
+ 
 -@pytest.mark.parametrize("budget", [0, 1 << 20])
 +@pytest.mark.parametrize("budget", [0, 16 << 20])
  def test_df_generated_failed_item_preserves_successful_neighbor(monkeypatch, budget):
@@ -317,8 +317,8 @@ index 2e9ab6a..4d9aefc 100644
      monkeypatch.setenv("VIBEQC_ONE_ELECTRON_DERIVATIVES", "generated")
 @@ -499,7 +524,7 @@ def test_df_generated_failed_item_preserves_successful_neighbor(monkeypatch, bud
          )
-
-
+ 
+ 
 -@pytest.mark.parametrize("budget", [0, 1 << 20])
 +@pytest.mark.parametrize("budget", [0, 8 << 20])
  def test_df_rank_crossing_is_reported_without_oracle_retry(monkeypatch, budget):
@@ -330,8 +330,8 @@ index 895f158..3092ae2 100644
 +++ b/tests/python/test_df_response_weights_cuda.py
 @@ -15,6 +15,75 @@ pytestmark = pytest.mark.skipif(
  )
-
-
+ 
+ 
 +@pytest.mark.parametrize("method", ("rhf", "uhf"))
 +@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
 +def test_raw_upload_attribution_preserves_complete_response(

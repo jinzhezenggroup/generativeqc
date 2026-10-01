@@ -8,7 +8,7 @@ index 5c5473c..0fa1a9e 100644
  from .profiles import canonical_hash
 -from .resources_hf import _CUDA_SCHEDULE_VARIABLES
 +from .resources_hf import _CUDA_SCHEDULE_EXTENSION_VARIABLES, _CUDA_SCHEDULE_VARIABLES
-
+ 
  _MAGIC = b"VQHFCP01"
  _HEADER = struct.Struct("<8sQ32s")
 @@ -148,7 +148,17 @@ def _validate_controls(controls):
@@ -37,7 +37,7 @@ index 4fc6b31..9fa0624 100644
 @@ -29,7 +29,19 @@ from .resources import (
      plan_resources,
  )
-
+ 
 -# These runtime switches are read by scf/cuda/rhf_policy.cpp. Preserve even
 +# Newly tracked controls may be absent from earlier schema-1 checkpoints.
 +# Preserve that distinction in restart provenance; absence is not a claim
@@ -61,19 +61,19 @@ index 4fc6b31..9fa0624 100644
      "VIBEQC_DF_EXCHANGE",
 +    *_CUDA_SCHEDULE_EXTENSION_VARIABLES,
  )
-
-
+ 
+ 
 diff --git a/python/vibeqc_compiler/integral/df_shell_derivatives.py b/python/vibeqc_compiler/integral/df_shell_derivatives.py
 index 7a0ec18..ccccc07 100644
 --- a/python/vibeqc_compiler/integral/df_shell_derivatives.py
 +++ b/python/vibeqc_compiler/integral/df_shell_derivatives.py
 @@ -47,15 +47,15 @@ def shell_schedule(angular, variant):
-
-
+ 
+ 
  def axis_cache_layout(angular):
 -    """Pack variable-length polynomials, leaving only unused doubly-raised slots.
 +    """Pack moment polynomials with only the first orbital center raised.
-
+ 
 -    The rectangular indexing makes device lookup arithmetic independent of
 -    component tables. Only A or B is raised for a first derivative, so their
 -    jointly raised boundary is reserved but never generated or read.
@@ -232,7 +232,7 @@ index 0e2c793..abd0f41 100644
            blocks_for(tile_elements), kThreads, 0, plan.stream, plan.matrix_elements, plan.naux,
 @@ -346,30 +384,32 @@ vibeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double* densi
        }
-
+ 
        const int tile_count = static_cast<int>(auxiliary_count);
 -      cublasStatus_t blas_status = trace_call("ri_k_gemm", plan.stream, [&] {
 -        return cublasDgemmStridedBatched(
@@ -285,7 +285,7 @@ index 0e60645..342e2e7 100644
 @@ -21,6 +21,22 @@
  namespace vibeqc::scf {
  using namespace cuda_df;
-
+ 
 +void bind_cuda_density_fitting_response_source(CudaDensityFittingJkPlan* plan,
 +                                               const core::System& orbital,
 +                                               const core::System& auxiliary,
@@ -460,9 +460,9 @@ index 850c7ad..7220c88 100644
 --- a/src/scf/cuda/df_jk_kernels.cu
 +++ b/src/scf/cuda/df_jk_kernels.cu
 @@ -14,6 +14,18 @@
-
+ 
  namespace vibeqc::scf::cuda_df {
-
+ 
 +__global__ void mirror_exchange_triangle(std::size_t n, double* matrix) {
 +  const auto k = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
 +  if (k >= n * n) return;
@@ -479,7 +479,7 @@ index 850c7ad..7220c88 100644
  __global__ void sum_spin_density_kernel(std::size_t elements, const double* alpha,
                                          const double* beta, double* total) {
 @@ -88,14 +100,18 @@ __global__ void build_streamed_coulomb_tile_kernel(std::size_t pair_count,
-
+ 
  __global__ void reduce_exchange_tile_kernel(std::size_t matrix_elements,
                                              std::size_t auxiliary_count, std::size_t system,
 -                                            const double* contributions, double* exchange) {
@@ -498,7 +498,7 @@ index 850c7ad..7220c88 100644
 -  exchange[system * matrix_elements + element] += value;
 +  output = continue_sum ? value : output + value;
  }
-
+ 
  __global__ void reduce_exchange_row_tile_kernel(std::size_t nbf, std::size_t row_begin,
 @@ -161,9 +177,10 @@ void launch_build_streamed_coulomb_tile_kernel(dim3 grid, dim3 block, std::size_
  void launch_reduce_exchange_tile_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
@@ -518,9 +518,9 @@ index 018a193..a422b2e 100644
 --- a/src/scf/cuda/df_jk_kernels.hpp
 +++ b/src/scf/cuda/df_jk_kernels.hpp
 @@ -7,6 +7,11 @@
-
+ 
  namespace vibeqc::scf::cuda_df {
-
+ 
 +/** Mirror the computed column-major lower triangle; never average with the
 + * uninitialized upper triangle of a BLAS symmetric rank-k result. */
 +void launch_mirror_exchange_triangle(dim3 grid, dim3 block, cudaStream_t stream, std::size_t n,
@@ -532,7 +532,7 @@ index 018a193..a422b2e 100644
 @@ -42,11 +47,13 @@ void launch_build_streamed_coulomb_tile_kernel(dim3 grid, dim3 block, std::size_
                                                 std::size_t auxiliary_count, const double* tile,
                                                 const double* auxiliary_density, double* coulomb);
-
+ 
 -/** Forward the caller's exact launch configuration on its existing stream. */
 +/** Forward the launch on its existing stream. continue_sum carries the
 + * running auxiliary sum across storage panels without reassociating it. */
@@ -542,7 +542,7 @@ index 018a193..a422b2e 100644
 -                                        const double* contributions, double* exchange);
 +                                        const double* contributions, double* exchange,
 +                                        bool continue_sum = false);
-
+ 
  /** Forward the caller's exact launch configuration on its existing stream. */
  void launch_reduce_exchange_row_tile_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
 diff --git a/src/scf/cuda/df_occupied_exchange.cpp b/src/scf/cuda/df_occupied_exchange.cpp
@@ -553,12 +553,12 @@ index 278ddfa..818cbe7 100644
  #include <algorithm>
 +#include <limits>
  #include <new>
-
+ 
  #include "runtime/cuda_component_trace.hpp"
 @@ -30,6 +31,76 @@ vibeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std::size_
    trace_counter("occupied_factor_bytes", plan.nbf * rank * sizeof(double));
    if (!rank) return VIBEQC_STATUS_SUCCESS;
-
+ 
 +  if (plan.resident_exchange_enabled && !plan.streamed && plan.row_tile == plan.nbf &&
 +      plan.auxiliary_tile == plan.naux &&
 +      plan.naux * rank <= static_cast<std::size_t>(std::numeric_limits<int>::max())) {
@@ -638,7 +638,7 @@ index 94814cd..56f6b7d 100644
 +++ b/src/scf/cuda/df_plan.cpp
 @@ -109,7 +109,16 @@ unsigned cuda_density_fitting_scf_diis_history(const CudaDensityFittingJkPlan* p
  }
-
+ 
  bool cuda_density_fitting_scf_policy_matches(const CudaDensityFittingJkPlan* plan) noexcept {
 +  const char* resident = std::getenv("VIBEQC_DF_RESIDENT_EXCHANGE");
 +  const char* diis = std::getenv("VIBEQC_DF_DIIS_DOTS");
@@ -687,7 +687,7 @@ index 0fec3d9..82fa3ba 100644
 --- a/src/scf/cuda/df_plan_setup.cpp
 +++ b/src/scf/cuda/df_plan_setup.cpp
 @@ -12,6 +12,7 @@
-
+ 
  #include "runtime/cuda_component_trace.hpp"
  #include "runtime/df_progress_trace.hpp"
 +#include "scf/cuda/df_jk_kernels.hpp"
@@ -696,7 +696,7 @@ index 0fec3d9..82fa3ba 100644
  #include "scf/cuda/df_runtime.hpp"
 @@ -176,6 +177,19 @@ vibeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
    }
-
+ 
    const bool occupied_scf_reserved = df_occupied_exchange_requested(nbf, naux, batch_size);
 +  const char* diis_policy = std::getenv("VIBEQC_DF_DIIS_DOTS");
 +  if (diis_policy && std::strcmp(diis_policy, "auto") != 0 &&
@@ -754,7 +754,7 @@ index 2be34d5..7acf175 100644
 @@ -1,4 +1,5 @@
  #include <algorithm>
 +#include <limits>
-
+ 
  #include "runtime/cuda_component_trace.hpp"
  #include "scf/cuda/df_jk_kernels.hpp"
 @@ -75,11 +76,13 @@ __global__ void packed_coulomb_weights(std::size_t n, std::size_t begin, std::si
@@ -773,12 +773,12 @@ index 2be34d5..7acf175 100644
 +  const auto i = begin + element / columns, j = element % columns;
 +  if (j <= i) weights[panel * pair_stride + i * (i + 1) / 2 + j] += (i == j ? 1 : 2) * block[k];
  }
-
+ 
  __global__ void coulomb_metric_kernel(std::size_t a, double coefficient, const double* charges,
 @@ -159,9 +162,12 @@ __global__ void metric_response_kernel(std::size_t a, unsigned stage, CudaDfMetr
    output[ij] = value;
  }
-
+ 
 -__global__ void symmetrize_kernel(std::size_t a, double* values) {
 -  const auto ij = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
 -  if (ij >= a * a || ij / a >= ij % a) return;
@@ -794,7 +794,7 @@ index 2be34d5..7acf175 100644
 @@ -172,8 +178,8 @@ std::size_t cuda_df_response_workspace_elements(std::size_t n, std::size_t a, st
    return 4 * a * a + (3 + 2 * tile) * n * n + 2 * terms * a;
  }
-
+ 
 -/** Reuse the resident plan's three full J/K temporaries, with no new tensor allocation.
 - * Upload raw A once and transpose it to [Q,ij]. For each exchange density,
 +/** Borrow the resident plan's raw view and two full J/K temporaries.
@@ -943,7 +943,7 @@ index 598ccd4..777c16a 100644
 @@ -3,6 +3,7 @@
  #include <limits>
  #include <new>
-
+ 
 +#include "runtime/cuda_component_trace.hpp"
  #include "runtime/df_progress_trace.hpp"
  #include "scf/cuda/df_plan_internal.hpp"
@@ -1030,7 +1030,7 @@ index cd77b10..2dce1b4 100644
 --- a/src/scf/cuda/df_scf_library.cpp
 +++ b/src/scf/cuda/df_scf_library.cpp
 @@ -12,6 +12,7 @@
-
+ 
  #include "runtime/cuda_component_trace.hpp"
  #include "runtime/df_progress_trace.hpp"
 +#include "runtime/host_component_trace.hpp"
@@ -1061,9 +1061,9 @@ index 409afd2..c4de6ad 100644
 --- a/src/scf/cuda/scf_diis_kernels.cu
 +++ b/src/scf/cuda/scf_diis_kernels.cu
 @@ -7,6 +7,58 @@
-
+ 
  namespace vibeqc::scf::cuda_execution {
-
+ 
 +namespace {
 +__global__ void diis_dot_partials_kernel(std::size_t vector_size, std::uint32_t history,
 +                                         const double* residual, const double* residual_history,
@@ -1184,7 +1184,7 @@ index 409afd2..c4de6ad 100644
 @@ -182,19 +257,25 @@ __global__ void update_diis_kernel(std::int32_t batch_size, std::int32_t nbf,
    }
  }
-
+ 
 -void launch_update_diis_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
 -                               std::int32_t batch_size, std::int32_t nbf,
 -                               std::int32_t matrices_per_system, std::uint32_t history_capacity,
@@ -1218,16 +1218,16 @@ index 409afd2..c4de6ad 100644
 +  else
 +    launch.template operator()<false>();
  }
-
+ 
  }  // namespace vibeqc::scf::cuda_execution
 diff --git a/src/scf/cuda/scf_diis_kernels.hpp b/src/scf/cuda/scf_diis_kernels.hpp
 index f6ca8d8..2d3d026 100644
 --- a/src/scf/cuda/scf_diis_kernels.hpp
 +++ b/src/scf/cuda/scf_diis_kernels.hpp
 @@ -7,7 +7,22 @@
-
+ 
  namespace vibeqc::scf::cuda_execution {
-
+ 
 -/** Preserve launch geometry, stream and per-item state routing. */
 +/** Form deterministic block partials for the history including the current
 + * residual, before its circular slot is overwritten. The caller lends
@@ -1255,7 +1255,7 @@ index f6ca8d8..2d3d026 100644
 -                               bool normalize_metric = false);
 +                               bool normalize_metric = false, bool cooperative_dots = false,
 +                               const double* dot_partials = nullptr, std::size_t parts = 0);
-
+ 
  }  // namespace vibeqc::scf::cuda_execution
 diff --git a/src/scf/cuda_density_fitting_stub.cpp b/src/scf/cuda_density_fitting_stub.cpp
 index 137e07b..a2cede2 100644
@@ -1263,7 +1263,7 @@ index 137e07b..a2cede2 100644
 +++ b/src/scf/cuda_density_fitting_stub.cpp
 @@ -3,6 +3,9 @@
  #include "scf/cuda_density_fitting_final_state.hpp"
-
+ 
  namespace vibeqc::scf {
 +void bind_cuda_density_fitting_response_source(CudaDensityFittingJkPlan*, const core::System&,
 +                                               const core::System&,
@@ -1358,9 +1358,9 @@ index c74a00f..528fc30 100644
 --- a/src/scf/df_exchange_policy.hpp
 +++ b/src/scf/df_exchange_policy.hpp
 @@ -6,6 +6,31 @@
-
+ 
  namespace vibeqc::scf {
-
+ 
 +/** Diagnostic legacy contraction requires a new owner: captured J/K nodes
 + * and the immutable raw-buffer lifetime must follow the same frozen policy. */
 +inline bool df_resident_exchange_requested() noexcept {
