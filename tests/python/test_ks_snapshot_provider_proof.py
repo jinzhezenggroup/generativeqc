@@ -5,7 +5,6 @@ import typing
 from types import SimpleNamespace
 
 import pytest
-from generativeqc import _native
 from generativeqc._ks_snapshot import NativeKsSnapshot
 
 

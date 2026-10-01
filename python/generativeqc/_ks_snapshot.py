@@ -905,9 +905,7 @@ class NativeKsSnapshot:
             "owner": owner,
             "device": -1 if self.backend == "cpu" else device,
             **(
-                {"metric_relative_threshold": metric_threshold}
-                if native_fitted
-                else {}
+                {"metric_relative_threshold": metric_threshold} if native_fitted else {}
             ),
             **composition_identity,
         }
