@@ -252,10 +252,7 @@ def test_streamed_einsum_reduction_uses_block_parallel_reduction_axis() -> None:
     assert cooperative_reduction_provider(plan, lane_index) == "generated"
 
     source = emit_cuda(plan)
-    assert (
-        "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)"
-        in source
-    )
+    assert "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)" in source
     assert "gemm(ctx," not in source
 
 
