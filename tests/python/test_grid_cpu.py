@@ -43,6 +43,11 @@ def test_every_jet_and_spin_feature_against_libcint(name: typing.Any) -> None:
     with NativeAO(**basis_arguments(meta)) as basis:
         jets = basis.evaluate(arrays["points"], 3)
         check(jets, arrays["ao_jets"])
+        # The specialized 1/4/10/20-jet traversals must all retain the
+        # independent libcint result for every requested derivative order.
+        for order in range(3):
+            count = len(jet_indices(order))
+            check(basis.evaluate(arrays["points"], order), arrays["ao_jets"][:count])
         feature = density_features(jets, arrays["density"])
         orbital = orbital_features(jets, arrays["coefficients"], arrays["occupations"])
         for key in feature:

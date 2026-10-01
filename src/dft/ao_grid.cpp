@@ -18,6 +18,16 @@ std::size_t multiply(std::size_t a, std::size_t b) {
 // Repeated polynomial differentiation is independent of the CUDA Leibniz
 // formula. Keep the Gaussian exponential outside the polynomial recurrence.
 double differentiated_power(unsigned l, unsigned derivative, double alpha, double x) {
+  if (derivative == 0) {
+    // The initial polynomial is x^l. Keep the original Horner operations,
+    // including addition of zero, without constructing a coefficient array.
+    double result = 1;
+    while (l) {
+      result = result * x + 0.0;
+      --l;
+    }
+    return result;
+  }
   std::array<double, 7> coefficients{};
   coefficients[l] = 1;
   unsigned degree = l;
@@ -134,12 +144,29 @@ void AoBasis::evaluate(const double* points, std::size_t npoint, unsigned order,
           if (radial == 0) continue;
           for (unsigned t = 0; t < static_cast<unsigned>(record[3]); ++t) {
             const double weighted_radial = radial * record[7 + 4 * t];
-            for (std::size_t jet = 0; jet < JetCount; ++jet) {
+            if constexpr (JetCount == 1) {
+              // Value-only work has no derivative reuse and retains its direct
+              // traversal rather than constructing an intermediate array.
               double term = weighted_radial;
               for (unsigned k = 0; k < 3; ++k)
-                term *= differentiated_power(static_cast<unsigned>(record[4 + 4 * t + k]),
-                                             JetCount == 1 ? 0U : derivatives[jet][k], alpha, r[k]);
-              values[jet] += term;
+                term *= differentiated_power(static_cast<unsigned>(record[4 + 4 * t + k]), 0, alpha,
+                                             r[k]);
+              values[0] += term;
+            } else {
+              // Every Cartesian jet reuses one-dimensional derivatives. Keep
+              // their polynomial recurrence and the per-jet multiplication order
+              // unchanged, but evaluate each axis/order pair only once.
+              constexpr unsigned Order = JetCount == 4 ? 1 : JetCount == 10 ? 2 : 3;
+              std::array<std::array<double, Order + 1>, 3> powers{};
+              for (unsigned k = 0; k < 3; ++k)
+                for (unsigned derivative = 0; derivative <= Order; ++derivative)
+                  powers[k][derivative] = differentiated_power(
+                      static_cast<unsigned>(record[4 + 4 * t + k]), derivative, alpha, r[k]);
+              for (std::size_t jet = 0; jet < JetCount; ++jet) {
+                double term = weighted_radial;
+                for (unsigned k = 0; k < 3; ++k) term *= powers[k][derivatives[jet][k]];
+                values[jet] += term;
+              }
             }
           }
         }
