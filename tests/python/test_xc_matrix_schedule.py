@@ -72,7 +72,8 @@ def test_mgga_density_product_reuses_one_density_tile_across_four_jets() -> None
     assert "density_product_fused_jets<false>" in source
     assert "tiled_density_product_fused_jets<false>" in source
     # The ordinary work_jets path remains the explicit LDA/GGA/fallback route.
-    assert "spins*work_jets), block" in source
+    assert "spins*work_jets);" in source
+    assert "const dim3 block(16,16);" in source
     assert "density_product<false>" in source
     # Fused tiled launch owns one z-plane per spin rather than per spin/jet.
     assert "(count+15)/16, spins);" in source
