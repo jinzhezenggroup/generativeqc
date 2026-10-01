@@ -32,6 +32,7 @@ from generativeqc_compiler.method.nonlocal_pair import (
     PAIR_INPUT_ORDER,
     PAIR_OUTPUT_ORDER,
     build_nonlocal_pair_program,
+    native_local_scale_cpp,
 )
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -113,6 +114,8 @@ struct PairValues {
 };
 
 """
+        + native_local_scale_cpp()
+        + "\n"
         + "\n".join(bodies)
         + """
 template <Vv10Variant Variant, bool Features, bool Geometry, bool Preconditioned = false>
