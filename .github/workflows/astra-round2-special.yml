@@ -19,20 +19,23 @@ jobs:
       - name: Validate inspected correctness repairs
         run: |
           python3 - <<'PY'
-          import json, os, runpy, subprocess, tempfile
+          import json, os, subprocess, tempfile
           from pathlib import Path
           root=Path.cwd();out=Path(os.environ['RUNNER_TEMP'])/'special';out.mkdir()
           master='299b641a013c915fed5c8866fa9581ff46ec564f'
-          helper=runpy.run_path(str(root/'.github/round2-special-repair.py'))
+          helper_source=(root/'.github/round2-special-repair.py').read_text()
+          marker=r'\|'*6+' '
+          if helper_source.count(marker)!=1:raise RuntimeError('unexpected parser before-image')
+          helper_source=helper_source.replace(marker,r'\|{7} ',1)
+          helper={'__name__':'reviewed_repair'}
+          exec(compile(helper_source,'.github/round2-special-repair.py','exec'),helper)
           original_edit=helper['edit']
           def scoped_edit(root,path,before,after):
-            # The alias-extraction spelling occurs in two classifiers. Scope
-            # this reviewed insertion to _matrix_chain_lhs's unique signature.
             if path=='tools/audit_native_complexity.py' and before.startswith('    aliases = '):
               prefix='    loop_variables: tuple[str, ...],\n) -> str | None:\n'
               return original_edit(root,path,prefix+before,prefix+after)
             return original_edit(root,path,before,after)
-          helper['scanner'].__globals__['edit']=scoped_edit
+          helper['edit']=scoped_edit
           specs=[
             (1623,'agent/1580-native-complexity-audit','93c0864bfd68670482977e82f81a3721ce715394',['test_native_complexity_audit.py']),
             (1510,'perf/1479-fuse-geometry-reduction','9abc8845760b75b05dff9f8ddacc706d8df6f938',['test_dft_mp_v1_capacity.py','test_stationary_geometry_kernel_host.py','test_stationary_owner_kernel_abi.py','test_stationary_cuda_lowering.py']),
@@ -52,11 +55,23 @@ jobs:
                 try:
                   if n==1510:
                     result['master']=master
-                    merge=run('git','-c','user.name=ChatGPT','-c','user.email=chatgpt@users.noreply.github.com','-c','merge.conflictStyle=zdiff3','merge','--no-commit','--no-ff',master,cwd=work,check=False)
+                    run('git','-c','user.name=ChatGPT','-c','user.email=chatgpt@users.noreply.github.com','-c','merge.conflictStyle=zdiff3','merge','--no-commit','--no-ff',master,cwd=work,check=False)
                     conflicts=set(run('git','diff','--name-only','--diff-filter=U',cwd=work).stdout.splitlines())
                     if conflicts!={'tests/python/test_dft_mp_v1_capacity.py','tools/dft_mp_v1/qualify_capacity.py'}:raise RuntimeError('unexpected merge conflicts')
+                    (d/'before-conflicts.patch').write_text(run('git','diff','--cc',cwd=work).stdout)
                     helper['geometry'](work)
-                  else:helper['scanner'](work)
+                  else:
+                    helper['scanner'](work)
+                    original_edit(work,'tools/audit_native_complexity.py',
+                      '        if name in aliases:\n            if name in seen or not _pure_product(aliases[name], aliases, seen | {name}):\n                return False',
+                      '        if name in aliases and (name in seen or not _pure_product(aliases[name], aliases, seen | {name})):\n            return False')
+                    testfile=work/'tests/python/test_native_complexity_audit.py'
+                    text=testfile.read_text();start=text.index('    "body",\n    [');end=text.index('    ],\n    ids=',start)
+                    lines=text[start:end].splitlines();wrapped=lines[:2]
+                    for i in range(2,len(lines),2):
+                      if i+1>=len(lines) or not lines[i+1].endswith(','):raise RuntimeError('unexpected fixture string pair')
+                      wrapped+=['        (','    '+lines[i],'    '+lines[i+1][:-1],'        ),']
+                    testfile.write_text(text[:start]+'\n'.join(wrapped)+'\n'+text[end:])
                   files=run('git','diff','--name-only',cwd=work).stdout.splitlines()
                   pyfiles=[f for f in files if f.endswith('.py')]
                   run('python3','-m','ruff','check','--fix',*pyfiles,cwd=work)
