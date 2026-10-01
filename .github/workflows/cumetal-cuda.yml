@@ -419,6 +419,15 @@ jobs:
           assert all(math.isfinite(samples[name]) and samples[name] > 0.0 for name in expected), samples
           PY
 
+      # With CodSpeed disabled, its benchmark fixture invokes each workload once.
+      # Keep collection, fixture, and Python harness regressions gating as well.
+      - name: Validate CuMetal benchmark harness without profiling
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          GENERATIVEQC_CUMETAL_FP32_BENCH: ${{ github.workspace }}/build-cumetal-benchmark/generativeqc_cumetal_fp32_benchmark
+        run: env -u CODSPEED_ENV .venv/bin/python -m pytest benchmarks/test_cumetal_fp32_codspeed.py -q
+
       - name: Run CodSpeed FP32 CuMetal proxy suite
         id: codspeed
         continue-on-error: true
@@ -434,7 +443,7 @@ jobs:
       - name: Report CodSpeed telemetry failure
         if: steps.codspeed.outcome == 'failure'
         run: |
-          echo "::warning::CuMetal benchmark workloads passed their direct smoke gate, but CodSpeed telemetry failed. Treating profiler/upload infrastructure as non-gating."
+          echo "::warning::CuMetal workloads and the Python harness passed their unprofiled gates, but CodSpeed telemetry failed. Treating profiler/upload infrastructure as non-gating."
 
   upload-test-results:
     name: Upload CUDA test results
