@@ -256,25 +256,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void record_fock_precision_work(std::uint64_t mixed_coulomb_recurrences) {
     auto& work = output.precision_work;
     const bool mixed = pending_mixed_j;
-    const auto phase =
-        mixed ? scf::PrecisionWorkPhase::Scf
-              : (mixed_j_executed ? scf::PrecisionWorkPhase::Refinement
-                                  : scf::PrecisionWorkPhase::Scf);
+    const auto phase = mixed ? scf::PrecisionWorkPhase::Scf
+                             : (mixed_j_executed ? scf::PrecisionWorkPhase::Refinement
+                                                 : scf::PrecisionWorkPhase::Scf);
     work.events.push_back(
-        {mixed ? scf::PrecisionWorkEventKind::MixedFock
-               : scf::PrecisionWorkEventKind::StrictFock,
+        {mixed ? scf::PrecisionWorkEventKind::MixedFock : scf::PrecisionWorkEventKind::StrictFock,
          phase, static_cast<std::uint64_t>(work.events.size()), output.iterations, owner,
          solve_epoch, generation});
     if (!mixed || mixed_coulomb_recurrences == 0) return;
 
-    constexpr scf::PrecisionOperatorRecord signature{
-        scf::PrecisionOperatorKind::CoulombRecurrence,
-        scf::PrecisionDtype::Fp64,
-        scf::PrecisionDtype::Fp32,
-        scf::PrecisionDtype::Fp64,
-        scf::PrecisionDtype::Fp64,
-        scf::PrecisionArithmeticMode::Mixed,
-        0};
+    constexpr scf::PrecisionOperatorRecord signature{scf::PrecisionOperatorKind::CoulombRecurrence,
+                                                     scf::PrecisionDtype::Fp64,
+                                                     scf::PrecisionDtype::Fp32,
+                                                     scf::PrecisionDtype::Fp64,
+                                                     scf::PrecisionDtype::Fp64,
+                                                     scf::PrecisionArithmeticMode::Mixed,
+                                                     0};
     auto found = std::find_if(work.operators.begin(), work.operators.end(), [&](const auto& item) {
       return item.kind == signature.kind && item.storage == signature.storage &&
              item.compute == signature.compute && item.accumulation == signature.accumulation &&
@@ -286,8 +283,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       record.count = mixed_coulomb_recurrences;
       work.operators.push_back(record);
     } else {
-      if (mixed_coulomb_recurrences >
-          std::numeric_limits<std::uint64_t>::max() - found->count)
+      if (mixed_coulomb_recurrences > std::numeric_limits<std::uint64_t>::max() - found->count)
         throw std::overflow_error("CUDA KS mixed Coulomb recurrence census overflow");
       found->count += mixed_coulomb_recurrences;
     }

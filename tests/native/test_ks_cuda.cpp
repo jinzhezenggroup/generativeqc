@@ -1056,14 +1056,15 @@ void mixed_precision_work_census_case() {
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
   const auto result = plan.run(nullptr, false, false);
-  require(result.converged && !plan.failed(), "CUDA PBE AUTO precision-work solve did not converge");
-  require(result.precision.mixed_stage_fock_builds > 0 &&
-              result.precision.strict_stage_fock_builds > 0 &&
-              result.precision.mixed_stage_fock_builds +
-                      result.precision.strict_stage_fock_builds ==
-                  result.fock_builds &&
-              result.precision.strict_refinement_applied,
-          "CUDA PBE AUTO aggregate Fock accounting is incomplete");
+  require(result.converged && !plan.failed(),
+          "CUDA PBE AUTO precision-work solve did not converge");
+  require(
+      result.precision.mixed_stage_fock_builds > 0 &&
+          result.precision.strict_stage_fock_builds > 0 &&
+          result.precision.mixed_stage_fock_builds + result.precision.strict_stage_fock_builds ==
+              result.fock_builds &&
+          result.precision.strict_refinement_applied,
+      "CUDA PBE AUTO aggregate Fock accounting is incomplete");
 
   const auto& work = result.precision_work;
   require(!work.complete && !work.operator_inventory_complete &&
@@ -1073,8 +1074,8 @@ void mixed_precision_work_census_case() {
   bool strict_seen = false;
   for (std::size_t i = 0; i < work.events.size(); ++i) {
     const auto& event = work.events[i];
-    require(event.sequence == i && event.owner_id == work.owner_id &&
-                event.solve_epoch != 0 && event.state_generation != 0,
+    require(event.sequence == i && event.owner_id == work.owner_id && event.solve_epoch != 0 &&
+                event.state_generation != 0,
             "CUDA-KS precision event lost execution identity or ordering");
     if (event.kind == scf::PrecisionWorkEventKind::MixedFock) {
       require(!strict_seen && event.phase == scf::PrecisionWorkPhase::Scf,
@@ -1095,9 +1096,8 @@ void mixed_precision_work_census_case() {
           "CUDA-KS detailed Fock timeline disagrees with aggregate counters");
 
   const auto recurrence = std::find_if(
-      work.operators.begin(), work.operators.end(), [](const auto& item) {
-        return item.kind == scf::PrecisionOperatorKind::CoulombRecurrence;
-      });
+      work.operators.begin(), work.operators.end(),
+      [](const auto& item) { return item.kind == scf::PrecisionOperatorKind::CoulombRecurrence; });
   require(recurrence != work.operators.end() && recurrence->count > 0 &&
               recurrence->storage == scf::PrecisionDtype::Fp64 &&
               recurrence->compute == scf::PrecisionDtype::Fp32 &&
@@ -1109,11 +1109,11 @@ void mixed_precision_work_census_case() {
   dft::CudaKsFinalStateToken token;
   std::string detail;
   require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
-  require(work.owner_id == token.identity.model.owner &&
-              work.returned_solve_epoch == token.identity.determinant.solve_epoch &&
-              work.returned_state_generation ==
-                  token.identity.determinant.factor.density_generation,
-          "CUDA-KS precision work does not identify the returned final state");
+  require(
+      work.owner_id == token.identity.model.owner &&
+          work.returned_solve_epoch == token.identity.determinant.solve_epoch &&
+          work.returned_state_generation == token.identity.determinant.factor.density_generation,
+      "CUDA-KS precision work does not identify the returned final state");
 }
 
 /** Exercise the C validation layer, which can reject a request before the
