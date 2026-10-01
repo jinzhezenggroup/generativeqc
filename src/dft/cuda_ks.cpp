@@ -78,10 +78,9 @@ CudaKsPrecisionSchedule resolve_cuda_ks_precision_schedule(
     throw std::invalid_argument("CUDA KS nonlocal composition currently requires strict FP64");
   CudaKsPrecisionSchedule schedule;
   schedule.mixed_coulomb = true;
-  schedule.mixed_density_contraction =
-      is_semilocal_family(functional, SemilocalFamily::Lda) ||
-      is_semilocal_family(functional, SemilocalFamily::Pbe) ||
-      is_semilocal_family(functional, SemilocalFamily::R2scan);
+  schedule.mixed_density_contraction = is_semilocal_family(functional, SemilocalFamily::Lda) ||
+                                       is_semilocal_family(functional, SemilocalFamily::Pbe) ||
+                                       is_semilocal_family(functional, SemilocalFamily::R2scan);
   return schedule;
 }
 void check(cudaError_t status) {
@@ -321,10 +320,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void record_fock_precision_work(std::uint64_t mixed_coulomb_recurrences) {
     auto& work = output.precision_work;
     const bool mixed = pending_mixed_coulomb || pending_mixed_density;
-    const auto phase =
-        mixed ? scf::PrecisionWorkPhase::Scf
-              : (mixed_precision_executed ? scf::PrecisionWorkPhase::Refinement
-                                          : scf::PrecisionWorkPhase::Scf);
+    const auto phase = mixed ? scf::PrecisionWorkPhase::Scf
+                             : (mixed_precision_executed ? scf::PrecisionWorkPhase::Refinement
+                                                         : scf::PrecisionWorkPhase::Scf);
     work.events.push_back(
         {mixed ? scf::PrecisionWorkEventKind::MixedFock : scf::PrecisionWorkEventKind::StrictFock,
          phase, static_cast<std::uint64_t>(work.events.size()), output.iterations, owner,
@@ -1363,8 +1361,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
     movement.scalar_d2h_bytes +=
-        sizeof(physical) +
-        (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U);
+        sizeof(physical) + (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U);
     ++movement.synchronizations;
     ++movement.iteration_synchronizations;
     ++movement.iteration_chunks;
@@ -1471,10 +1468,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && final_corrections < kMaximumFinalCorrections;
     } else {
       output.converged = converged;
-      const bool refinement_budget =
-          strict_refinement && precision_schedule.any_mixed()
-              ? refinement_iterations < options.max_iterations
-              : output.iterations < options.max_iterations;
+      const bool refinement_budget = strict_refinement && precision_schedule.any_mixed()
+                                         ? refinement_iterations < options.max_iterations
+                                         : output.iterations < options.max_iterations;
       is_active = !output.converged && refinement_budget;
     }
     try {
