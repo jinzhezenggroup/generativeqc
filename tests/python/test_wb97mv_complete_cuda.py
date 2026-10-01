@@ -30,6 +30,32 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
     assert "execute_cuda_one_electron_gradient(" not in bridge
 
 
+def test_wb97mv_geometry_layout_admits_f_without_spdf_integral_schedule() -> None:
+    """Geometry-only composition must not require the generic SPD inventory."""
+    from types import SimpleNamespace
+
+    from generativeqc._stationary_cuda import _layout
+
+    packed = np.zeros(3 + 2 + 16, dtype=np.float64)
+    packed[3:5] = (1.0, 1.0)
+    ao = packed[5:].reshape(1, 16)[0]
+    ao[0:4] = (0, 0, 1, 1)
+    ao[4:7] = (3, 0, 0)
+    ao[7] = 1.0
+    basis = SimpleNamespace(
+        natom=1,
+        nprimitive=1,
+        packed=packed,
+        shells=(SimpleNamespace(angular_momentum=3),),
+    )
+
+    _, _, expansions, requests = _layout(basis, integral_derivatives=False)
+    assert expansions == ((("xxx", 1.0),),)
+    assert requests == (("nuclear", ()),)
+    with pytest.raises(NotImplementedError, match="s/p/d"):
+        _layout(basis)
+
+
 @pytest.mark.parametrize(
     "method,spin,atoms,basis",
     [
@@ -53,6 +79,16 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
                 ("H", (-0.15, -1.45, 1.12)),
             ],
             "def2-svp",
+        ),
+        (
+            "wb97m-v",
+            0,
+            [
+                ("O", (0.02, -0.03, 0.04)),
+                ("H", (0.1, 1.43, 1.1)),
+                ("H", (-0.15, -1.45, 1.12)),
+            ],
+            "def2-tzvp",
         ),
     ],
 )
