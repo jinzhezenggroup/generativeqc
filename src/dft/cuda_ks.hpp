@@ -68,9 +68,9 @@ struct CudaKsTransfers {
 std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
                                 bool exact_exchange = false, bool range_correction = false);
 
-/** Borrowed device density for a successful immutable final-state token.
- * The allocation remains owned by CudaKsPlan and is valid only while that
- * exact token remains current. No transfer or synchronization is performed. */
+/** Borrowed exact occupied factor and fitted projection for a successful
+ * restricted density-fitted hybrid final state. Both allocations stay owned by
+ * the KS/provider pair and are ordered by the returned stream. */
 struct CudaKsResidentFittedProjectionBinding {
   int device_id{-1};
   const double* occupied_coefficients{};
@@ -86,6 +86,9 @@ struct CudaKsResidentFittedProjectionBinding {
   }
 };
 
+/** Borrowed device density for a successful immutable final-state token.
+ * The allocation remains owned by CudaKsPlan and is valid only while that
+ * exact token remains current. No transfer or synchronization is performed. */
 struct CudaKsResidentDensityBinding {
   int device_id{-1};
   const double* alpha{};
