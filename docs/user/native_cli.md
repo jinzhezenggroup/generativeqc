@@ -44,8 +44,9 @@ Basis Set Exchange subset used by the Python frontend:
 ```
 
 The installed executable contains generated C++ constants and does not read
-`basis_pack.json` or start Python at runtime. This slice exposes discovery only;
-subsequent native CLI layers use the same generated table for shell expansion.
+`basis_pack.json` or start Python at runtime. Native shell expansion reuses
+that generated table. The upstream BSD-3-Clause license is installed under
+`share/generativeqc/licenses/` in the native prefix.
 
 ## Run GFN2-xTB from XYZ
 
@@ -86,7 +87,8 @@ generativeqc autotune --clear-profile
 ```
 
 `profile show` reports the resolved cache root and active profile index without
-probing a GPU. `profile clear` deactivates profiles while retaining immutable
+probing a GPU. Invalid indexes fail closed rather than emitting malformed JSON.
+On POSIX systems, `profile clear` deactivates profiles while retaining immutable
 bundle directories that may still be used by live processes. The cache root
 uses `GENERATIVEQC_PROFILE_CACHE` first, then `XDG_CACHE_HOME`, then
 `~/.cache/generativeqc/profiles`, matching the Python frontend contract.
