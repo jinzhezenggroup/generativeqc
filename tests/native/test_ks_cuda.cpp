@@ -26,6 +26,8 @@
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 
+extern "C" void ks_cuda_fail_next_runtime_for_test_v1();
+
 namespace {
 using namespace generativeqc;
 using scf::reference::Matrix;
@@ -1189,20 +1191,24 @@ void precision_work_census_case(bool restricted, int precision_mode) {
 
   if (restricted && mixed) {
     const auto previous_epoch = work.returned_solve_epoch;
-    auto invalid = result.density;
-    const auto matrix = basis.nao * basis.nao;
-    require(invalid.size() == matrix,
-            "RKS precision failure test did not export the converged density");
-    std::fill(invalid.begin(), invalid.end(), 0.0);
-    invalid.front() = -1.0;
-    invalid.back() = 2.0;
-    const auto failed = plan.run(&invalid, false, false);
-    require(plan.failed() && !failed.converged && !failed.precision_work.complete &&
+    ks_cuda_fail_next_runtime_for_test_v1();
+    bool injected_failure = false;
+    try {
+      (void)plan.run(nullptr, false, false);
+    } catch (const std::exception&) {
+      injected_failure = true;
+    }
+    require(injected_failure && plan.failed(),
+            "CUDA-KS one-shot runtime failure did not fail the new solve");
+    const auto failed = plan.result(false);
+    require(!failed.precision_work.complete &&
                 !failed.precision_work.operator_inventory_complete &&
                 failed.precision.operator_work_counters_valid == 0 &&
+                failed.precision.final_residual_audits == 0 &&
                 failed.precision_work.returned_solve_epoch == 0 &&
-                failed.precision_work.returned_state_generation == 0,
-            "failed CUDA-KS replay leaked complete precision evidence from the prior solve");
+                failed.precision_work.returned_state_generation == 0 &&
+                failed.precision_work.events.empty() && failed.precision_work.operators.empty(),
+            "failed CUDA-KS begin leaked precision evidence from the prior solve");
 
     const auto recovered = plan.run(nullptr, false, false);
     require(recovered.converged && !plan.failed() && recovered.precision_work.complete &&
