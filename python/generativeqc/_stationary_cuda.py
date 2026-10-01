@@ -2440,6 +2440,11 @@ def _complete_rks_cuda_gradient_diagnostic(
                     raise RuntimeError(
                         "prepared stationary integral source returned invalid output"
                     )
+        if use_fitted_integrals and native_integral_components is None:
+            raise NotImplementedError(
+                "density-fitted stationary derivative provider is unavailable; "
+                "Direct derivative fallback would change the Hamiltonian"
+            )
         native_complete_integrals = native_integral_components is not None
         resident_grid_density = None
         if native_complete_integrals:
