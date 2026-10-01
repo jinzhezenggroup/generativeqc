@@ -703,10 +703,10 @@ static void direct_jk_canonical_density(CudaDirectJkPlan* plan, bool unrestricte
   if (!plan->canonical_transform) return;
   const auto batch_size = plan->batch.batch_size;
   const auto source_dimension = plan->canonical_batch.nbf;
-  const auto rectangular =
-      direct_jk_product(plan->diagnostic.batch_size * spin_count, dimension * source_dimension);
-  const auto source_elements = direct_jk_product(plan->diagnostic.batch_size * spin_count,
-                                                 source_dimension * source_dimension);
+  const auto states = direct_jk_product(plan->diagnostic.batch_size, spin_count);
+  const auto rectangular = direct_jk_product(states, direct_jk_product(dimension, source_dimension));
+  const auto source_elements =
+      direct_jk_product(states, direct_jk_product(source_dimension, source_dimension));
   const auto blocks = [](std::size_t elements) {
     return dim3(
         static_cast<unsigned>((elements + kIndependentJkThreads - 1U) / kIndependentJkThreads));
@@ -739,8 +739,8 @@ static void direct_jk_canonical_output(CudaDirectJkPlan* plan, bool unrestricted
   const double* projected = source;
   if (plan->canonical_transform) {
     const auto rectangular =
-        direct_jk_product(plan->diagnostic.batch_size * spin_count,
-                          dimension * static_cast<std::size_t>(plan->canonical_batch.nbf));
+        direct_jk_product(direct_jk_product(plan->diagnostic.batch_size, spin_count),
+                          direct_jk_product(dimension, plan->canonical_batch.nbf));
     const auto blocks = [](std::size_t elements) {
       return dim3(
           static_cast<unsigned>((elements + kIndependentJkThreads - 1U) / kIndependentJkThreads));
