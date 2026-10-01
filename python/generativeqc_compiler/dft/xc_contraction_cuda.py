@@ -317,10 +317,11 @@ __global__ void tiled_density_product_fused_jets(
       __syncthreads();
     }
   }
-  if (mu < n && point < count)
+  if (mu < n && point < count) {
 #pragma unroll
     for (I jet = 0; jet < jets; ++jet)
       work[(spin*jets+jet)*panel+point*n+mu] = finite(value[jet], error, 1);
+  }
 }
 
 // One triangle is authoritative, including on diagonal and partial blocks.
