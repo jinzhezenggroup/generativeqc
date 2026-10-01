@@ -135,37 +135,18 @@ ParameterWeights parameter_vjp(const Problem& p, const SolverResult& cc, const L
   return out;
 }
 
-void add_projected_triples(ParameterWeights& target, const TriplesResponseResult& triples,
-                           std::size_t o, std::size_t v) {
+void add_triples_parameter_sources(ParameterWeights& target, const TriplesResponseResult& triples) {
   if (triples.fov.size() != target.fov.size() || triples.ovov.size() != target.ovov.size() ||
       triples.ovvv.size() != target.ovvv.size() || triples.ovoo.size() != target.ovoo.size())
     throw std::invalid_argument("RCCSD(T) direct triples parameter-source shape mismatch");
-  for (std::size_t index = 0; index < target.fov.size(); ++index)
-    target.fov[index] += triples.fov[index];
-  for (std::size_t i = 0; i < o; ++i)
-    for (std::size_t a = 0; a < v; ++a)
-      for (std::size_t j = 0; j < o; ++j)
-        for (std::size_t b = 0; b < v; ++b) {
-          const auto first = ((i * v + a) * o + j) * v + b;
-          const auto second = ((j * v + b) * o + i) * v + a;
-          target.ovov[first] += 0.5 * (triples.ovov[first] + triples.ovov[second]);
-        }
-  for (std::size_t i = 0; i < o; ++i)
-    for (std::size_t a = 0; a < v; ++a)
-      for (std::size_t b = 0; b < v; ++b)
-        for (std::size_t c = 0; c < v; ++c) {
-          const auto first = ((i * v + a) * v + b) * v + c;
-          const auto second = ((i * v + a) * v + c) * v + b;
-          target.ovvv[first] += 0.5 * (triples.ovvv[first] + triples.ovvv[second]);
-        }
-  for (std::size_t i = 0; i < o; ++i)
-    for (std::size_t a = 0; a < v; ++a)
-      for (std::size_t j = 0; j < o; ++j)
-        for (std::size_t k = 0; k < o; ++k) {
-          const auto first = ((i * v + a) * o + j) * o + k;
-          const auto second = ((i * v + a) * o + k) * o + j;
-          target.ovoo[first] += 0.5 * (triples.ovoo[first] + triples.ovoo[second]);
-        }
+  auto add = [](std::vector<double>& destination, const std::vector<double>& source) {
+    for (std::size_t index = 0; index < destination.size(); ++index)
+      destination[index] += source[index];
+  };
+  add(target.fov, triples.fov);
+  add(target.ovov, triples.ovov);
+  add(target.ovvv, triples.ovvv);
+  add(target.ovoo, triples.ovoo);
 }
 
 // A borrowed interaction source must describe the same nuclear Hamiltonian.
@@ -647,7 +628,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   if (cuda_derivative && !corrected.diagnostic.cuda_actions)
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
-  if (triples) add_projected_triples(parameters, *triples, o, v);
+  if (triples) add_triples_parameter_sources(parameters, *triples);
   auto raw = raw_hamiltonian(source, reference, max_bytes);
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;

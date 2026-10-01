@@ -57,4 +57,14 @@ struct CudaDirectJkPlan {
   ~CudaDirectJkPlan();
 };
 
+/** A derivative-capable provider owner may still use generated exchange for a
+ * zero-order value request. The owner's maximum derivative capability must not
+ * select the SCF value schedule.
+ */
+inline bool direct_jk_generated_exchange_value_available(const CudaDirectJkPlan& plan,
+                                                         const FockBuildSpec& spec) noexcept {
+  return plan.generated_exchange != nullptr && spec.derivative_order == 0 &&
+         spec.exchange.present && spec.exchange.op == FockOperator::FullRange;
+}
+
 }  // namespace generativeqc::scf

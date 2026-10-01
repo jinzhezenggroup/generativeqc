@@ -94,11 +94,18 @@ Vv10Integral integrate_vv10_rks(const AoBasis& basis, const MolecularGrid& grid,
 
   std::vector<double> rho(points), gradient(3 * points), vrho(points), vsigma(points);
   std::vector<double> ao;
+  bool weighted_potential_only = domain == Vv10DensityDomain::MolecularV1;
   const auto& xyz = grid.points();
   for (std::size_t begin = 0; begin < points; begin += tile_points) {
     const auto count = std::min(tile_points, points - begin);
     ao.resize(4 * count * n);
     basis.evaluate(xyz.data() + 3 * begin, count, 1, 0, n, ao.data(), ao.size());
+    // The pair runtime bounds its raw feature outputs below 1e120. Also
+    // bound this consumer's factors so zeroing an unused feature cannot hide
+    // overflow before multiplication by the zero quadrature weight.
+    if (weighted_potential_only)
+      weighted_potential_only =
+          std::all_of(ao.begin(), ao.end(), [](double value) { return std::abs(value) <= 1e40; });
     for (std::size_t p = 0; p < count; ++p) {
       const auto* phi = ao.data() + p * n;
       const auto* dx = ao.data() + (count + p) * n;
@@ -126,13 +133,18 @@ Vv10Integral integrate_vv10_rks(const AoBasis& basis, const MolecularGrid& grid,
         rho[p] = 1.0;
         gradient[3 * p] = gradient[3 * p + 1] = gradient[3 * p + 2] = 0.0;
       }
+      if (weighted_potential_only &&
+          (std::abs(gradient[3 * p]) > 1e40 || std::abs(gradient[3 * p + 1]) > 1e40 ||
+           std::abs(gradient[3 * p + 2]) > 1e40))
+        weighted_potential_only = false;
     }
   }
   const auto& effective_weights = screened_weights.empty() ? grid.weights() : screened_weights;
   double energy = 0.0;
   std::string detail;
-  const auto status = plan.execute(xyz, effective_weights, rho, gradient, energy, vrho, vsigma,
-                                   std::span<double>{}, std::span<double>{}, detail);
+  const auto status =
+      plan.execute(xyz, effective_weights, rho, gradient, energy, vrho, vsigma, std::span<double>{},
+                   std::span<double>{}, detail, weighted_potential_only);
   if (status != GENERATIVEQC_STATUS_SUCCESS)
     throw std::runtime_error(detail.empty() ? "VV10 pair execution failed" : detail);
 

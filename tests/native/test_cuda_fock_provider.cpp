@@ -699,6 +699,15 @@ void direct_providers(bool through_f_response) {
           raw, &destroy_cuda_direct_jk_plan);
       direct_eri_tile(plan.get(), 0, ints.eri, n);
       direct_eri_tile(plan.get(), 1, other.eri, n);
+      if (derivatives) {
+        auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
+        value_spec.derivative_order = 0;
+        require(direct_jk_generated_exchange_value_available(*plan, value_spec) == (angular <= 2),
+                "force-capable owner changed generated exchange value eligibility");
+        value_spec.derivative_order = 1;
+        require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
+                "derivative request incorrectly selected generated value exchange");
+      }
       // A value-only owner may use generated pure J; exact generic capacity
       // must still be a usable fallback. Both consume nonsymmetric densities
       // and independently formed full ERIs, including spherical d projection.

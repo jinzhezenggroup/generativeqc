@@ -1,6 +1,6 @@
 {
   "path": "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu",
-  "reason": "First-class bounded VV10/rVV10 CUDA primitive: maintained FP64 local-scale and ordered-pair scientific algebra with O(N) device workspace; it remains distinct from semilocal XC and retains an independent direct CPU/reference oracle.",
+  "reason": "First-class bounded VV10/rVV10 CUDA primitive: maintained FP64 local scales and ordered-pair scheduling with shared TensorIR-generated pair algebra with O(N) device workspace; it remains distinct from semilocal XC and retains an independent Python/reference oracle.",
   "regions": [
     {
       "start": "void enqueue_vv10_molecular_domain_cuda(",
