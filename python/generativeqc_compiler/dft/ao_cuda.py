@@ -285,6 +285,48 @@ __global__ void density_product(const double* density, const double* ao, I n, I 
   }
 }
 
+// Meta-GGA needs D*phi plus D*grad(phi)[xyz].  Fuse those four dot
+// products so one symmetric density-row load feeds every AO jet.  Each jet
+// retains the original nu-order reduction and the same mixed-precision
+// multiply/FP64-accumulate contract.
+template <bool Mixed>
+__global__ void density_product_fused_jets(const double* density, const double* ao, I n, I count,
+                                           I spins, double* work, int* error) {
+  constexpr I jets = 4;
+  const I panel = count * n;
+  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < spins * panel;
+       i += I(blockDim.x) * gridDim.x) {
+    const I spin = i / panel, point = i / n % count, mu = i % n;
+    const double* d = density + spin * n * n;
+    double value[jets]{};
+    for (I nu = 0; nu < n; ++nu) {
+      const I index = point * n + nu;
+      if constexpr (Mixed) {
+        const float left = __double2float_rn(d[mu * n + nu]);
+        const float right = __double2float_rn(d[nu * n + mu]);
+        const float symmetric =
+            __fadd_rn(__fmul_rn(0.5f, left), __fmul_rn(0.5f, right));
+#pragma unroll
+        for (I jet = 0; jet < jets; ++jet) {
+          const float orbital = __double2float_rn(ao[jet * panel + index]);
+          value[jet] =
+              __dadd_rn(value[jet], static_cast<double>(__fmul_rn(symmetric, orbital)));
+        }
+      } else {
+        const double symmetric =
+            0.5 * d[mu * n + nu] + 0.5 * d[nu * n + mu];
+#pragma unroll
+        for (I jet = 0; jet < jets; ++jet)
+          value[jet] += symmetric * ao[jet * panel + index];
+      }
+    }
+#pragma unroll
+    for (I jet = 0; jet < jets; ++jet)
+      work[(spin * jets + jet) * panel + point * n + mu] =
+          finite(value[jet], error, 1);
+  }
+}
+
 template<bool Cooperative>
 __global__ void density_features(const double* ao, const double* work, I n, I count, I spins,
                                  I ao_jets, I work_jets, I feature_terms, I functional,
