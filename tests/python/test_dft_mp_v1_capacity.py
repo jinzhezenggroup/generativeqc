@@ -1129,7 +1129,7 @@ def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
-    old = "for begin in range(0, len(grid.points), tile_points):"
+    old = "for begin in range(0, grid_points, tile_points):"
     assert source.count(old) == 1
     stationary_contract_tree(
         tmp_path,
