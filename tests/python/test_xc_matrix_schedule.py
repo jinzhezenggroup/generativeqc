@@ -75,10 +75,7 @@ def test_mgga_density_product_reuses_one_density_tile_across_four_jets() -> None
     assert "spins*work_jets), block" in source
     assert "density_product<false>" in source
     # Fused tiled launch owns one z-plane per spin rather than per spin/jet.
-    assert (
-        "(count+15)/16, spins);"
-        in source
-    )
+    assert "(count+15)/16, spins);" in source
 
 
 def test_tiled_potential_fuses_point_total_reduction() -> None:
