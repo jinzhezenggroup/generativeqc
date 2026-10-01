@@ -254,6 +254,56 @@ void direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
   output.verify(expected);
 }
 
+void prepared_interaction_source_device(const generativeqc::core::System& system,
+                                        const std::vector<double>& expected_eri) {
+  auto spec = make_hf_fock_spec(FockSpin::Restricted, FockApproximation::Exact);
+  spec.derivative_order = 0;
+  const auto strategy = resolve_fock_build(spec, FockBackend::Cuda, 0.0);
+  PreparedFockPlan prepared(system, nullptr, strategy, 0, 64U * 1024U * 1024U);
+  PreparedFockInteractionSourceView source(prepared);
+  const auto op = generativeqc::integrals::ElectronInteractionOperator::eri;
+  require(source.supports(op) && !source.supports_host_read(op) &&
+              source.supports_device_read(op, 0),
+          "prepared CUDA interaction source advertised the wrong ERI memory spaces");
+
+  const std::size_t n = source.nbf();
+  const std::array<std::size_t, 4> begin{0, 1, 0, 0};
+  const std::array<std::size_t, 4> count{2, 1, 2, 2};
+  constexpr std::size_t elements = 8;
+  std::vector<double> expected(elements);
+  for (std::size_t local = 0; local < elements; ++local) {
+    auto remainder = local;
+    std::array<std::size_t, 4> index{};
+    for (std::size_t reverse = 0; reverse < 4; ++reverse) {
+      const auto axis = 3 - reverse;
+      index[axis] = begin[axis] + remainder % count[axis];
+      remainder /= count[axis];
+    }
+    expected[local] =
+        expected_eri[((index[0] * n + index[1]) * n + index[2]) * n + index[3]];
+  }
+
+  DeviceMatrix output(std::vector<double>(elements, 123.0));
+  cudaStream_t stream{};
+  check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+  source.read_device(op, begin, count,
+                     {0, reinterpret_cast<void*>(stream), output.pointer, elements},
+                     elements);
+  check(cudaStreamSynchronize(stream));
+  check(cudaStreamDestroy(stream));
+  output.verify(expected);
+
+  std::array<double, 1> host_sentinel{123.0};
+  bool host_rejected = false;
+  try {
+    source.read(op, {0, 0, 0, 0}, {1, 1, 1, 1}, host_sentinel.data(), 1);
+  } catch (const std::invalid_argument&) {
+    host_rejected = true;
+  }
+  require(host_rejected && host_sentinel[0] == 123.0,
+          "prepared CUDA interaction source silently published a host ERI");
+}
+
 void direct_value_dispatch_selection() {
   const auto hybrid = direct_jk_value_dispatch(true, true, true, false);
   require(hybrid.generated_coulomb && !hybrid.generic_coulomb && hybrid.generic_exchange,
