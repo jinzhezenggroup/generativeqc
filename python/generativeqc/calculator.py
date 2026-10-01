@@ -593,11 +593,6 @@ class Calculator:
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
         if (
-            self._method in (_native.METHOD_R2SCAN_RKS, _native.METHOD_R2SCAN_UKS)
-            and self._precision_mode != _native.PRECISION_FP64
-        ):
-            raise NotImplementedError("r2SCAN currently requires strict FP64")
-        if (
             self._method == _native.METHOD_PBE_D4_RKS
             and self._precision_mode != _native.PRECISION_FP64
         ):
@@ -871,7 +866,6 @@ class Calculator:
         cuda_hybrid_force = (
             self._device_name == "cuda"
             and not basis_has_ecp
-            and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
             and self._ks_options.xc_schedule == "device_fused"
             and cuda_global_hybrid_force_eligible(self._ks_options.method_ir)
