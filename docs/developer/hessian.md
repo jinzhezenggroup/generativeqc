@@ -97,9 +97,11 @@ seven-source molecular HVP, shared multi-RHS CPKS and raw bounded full-Hessian
 assembly. The existing finite-difference, raw-symmetry and resource-admission
 tests continue to qualify this same scientific slice. Repository
 `tools.generativeqc_hessian.rks_directional` and `rks_molecular` are module
-aliases to those installed consumers. Public Calculator DFT Hessian/HVP
-capability remains off only because no public Hessian capability/resource
-contract has been promoted; wider method/backend support remains separate.
+aliases to those installed consumers. The same owner is now exposed through
+`Calculator.hessian_vector_product()` and `Calculator.hessian()` for CPU direct
+all-electron Cartesian strict-FP64 closed-shell LDA/PBE RKS. Public calls retain
+explicit integral/output budgets and report the executed public endpoint in
+result diagnostics. Wider method/backend support remains separate.
 
 ## Scope of this slice
 
@@ -109,12 +111,12 @@ CPU-only.
 
 Explicitly outside this slice, and left fail-closed rather than approximated:
 
-- **DFT public execution** (slice C) — the installed CPU direct Cartesian
-  LDA/PBE RKS HVP/full-Hessian consumer exists, but Calculator capability and
-  complete public resource publication remain separate promotion work;
-- **bounded full-Hessian execution** (slice B4) is installed but remains an
-  internal capability rather than a public Calculator endpoint; its raw matrix
-  is never post-hoc symmetrized;
+- **DFT public execution beyond the qualified slice** — the Calculator endpoint
+  is limited to CPU direct all-electron Cartesian strict-FP64 closed-shell
+  LDA/PBE RKS; its raw matrix is never post-hoc symmetrized;
+- **one global end-to-end Hessian memory cap** is not claimed: dense output and
+  generated integral work are explicitly bounded, while response/provider
+  contracts remain independently bounded and reported;
 - **DF, ECP, range-separated and meta-GGA Hessians** — each needs its own
   complete second-derivative/response chain and is *not* inherited from energy
   or first-force support;

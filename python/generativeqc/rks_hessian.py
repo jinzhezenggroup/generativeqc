@@ -3,9 +3,9 @@
 This is the first native LDA/PBE RKS composition of the MethodIR-derived
 StationaryHVPPlan, one real CPKS nuclear response, generated first/second
 integral providers, analytic Becke mixed response and native SCF-domain XC
-Hessian contractions. The installed endpoint remains an internal capability:
-direct all-electron Cartesian CPU RKS under explicit resource budgets, with no
-public Calculator Hessian capability inferred.
+Hessian contractions. The installed endpoint is also the scientific owner for
+the qualified public Calculator CPU direct all-electron Cartesian LDA/PBE RKS
+HVP/full-Hessian methods; wider method/backend support remains fail-closed.
 """
 
 from __future__ import annotations
@@ -318,6 +318,7 @@ def _rks_hvp_with_response(
     execution: str,
     integral_budget_bytes: int,
     plan_weight_workspace_bytes: int,
+    public_calculator_endpoint: bool = False,
 ) -> RKSHVPResult:
     """Assemble one complete HVP from an already solved directional response."""
     if not np.array_equal(directional.direction, vector):
@@ -431,6 +432,7 @@ def _rks_hvp_with_response(
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,
             "execution": execution,
+            "public_calculator_endpoint": public_calculator_endpoint,
         }
     )
     return RKSHVPResult(
@@ -451,6 +453,7 @@ def rks_hvp(
     cache: typing.Any = ".artifacts",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    _public_calculator_endpoint: bool = False,
 ) -> RKSHVPResult:
     """Apply the complete bounded direct LDA/PBE RKS molecular Hessian once."""
     if not isinstance(operator, NativeRKSResponse):
@@ -478,6 +481,7 @@ def rks_hvp(
         execution="bounded-cpu-native-rks-hvp-v2",
         integral_budget_bytes=integral_budget_bytes,
         plan_weight_workspace_bytes=plan_weight_workspace,
+        public_calculator_endpoint=_public_calculator_endpoint,
     )
 
 
@@ -489,6 +493,7 @@ def rks_hvp_many(
     strategy: str = "recycled",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    _public_calculator_endpoint: bool = False,
 ) -> RKSHVPBatchResult:
     """Apply complete RKS HVPs after one shared sequential/blocked/recycled solve."""
     if not isinstance(operator, NativeRKSResponse):
@@ -533,6 +538,7 @@ def rks_hvp_many(
             execution="bounded-cpu-native-rks-hvp-multi-rhs-v1",
             integral_budget_bytes=integral_budget_bytes,
             plan_weight_workspace_bytes=plan_weight_workspace,
+            public_calculator_endpoint=_public_calculator_endpoint,
         )
         for vector, response in zip(vectors, directional.responses, strict=True)
     )
@@ -565,6 +571,7 @@ def rks_hvp_many(
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,
             "execution": "bounded-cpu-native-rks-hvp-multi-rhs-v1",
+            "public_calculator_endpoint": _public_calculator_endpoint,
         }
     )
     return RKSHVPBatchResult(
@@ -587,6 +594,7 @@ def rks_hessian(
     output_budget_bytes: int = 64 << 20,
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    _public_calculator_endpoint: bool = False,
 ) -> RKSHessianResult:
     """Assemble the raw bounded semilocal RKS Hessian from block HVP columns.
 
@@ -636,6 +644,7 @@ def rks_hessian(
             strategy=strategy,
             integral_budget_bytes=integral_budget_bytes,
             solver_options=solver_options,
+            _public_calculator_endpoint=_public_calculator_endpoint,
         )
         matrix[:, begin:end] = result.values.reshape(end - begin, coordinates).T
         blocks.append(
@@ -680,7 +689,7 @@ def rks_hessian(
             "posthoc_symmetrization": False,
             "blocks": tuple(blocks),
             "seconds": time.perf_counter() - started,
-            "public_calculator_endpoint": False,
+            "public_calculator_endpoint": _public_calculator_endpoint,
             "complete_resource_bound": False,
         }
     )

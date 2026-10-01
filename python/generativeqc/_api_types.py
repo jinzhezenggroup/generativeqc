@@ -183,6 +183,7 @@ class MethodCapabilities:
     available: bool
     supports_batch: bool
     supported_properties: frozenset[str]
+    supported_second_order: frozenset[str] = field(default_factory=frozenset)
 
 
 __all__ = [
