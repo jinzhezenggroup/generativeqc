@@ -121,8 +121,8 @@ ordinary-stream provider. See the
 
 ## CUDA KS iteration residency
 
-Native CUDA LDA/PBE direct all-electron RKS has an explicitly selectable
-ordinary-stream device-control prototype. With \`GENERATIVEQC_CUDA_KS_CHUNK=2\`, an
+Native CUDA LDA/PBE and strict-FP64 direct PBE0 all-electron RKS have an
+explicitly selectable ordinary-stream device-control prototype. With \`GENERATIVEQC_CUDA_KS_CHUNK=2\`, an
 eligible owner can submit a bounded two-iteration chunk and synchronize once at
 the chunk boundary rather than unconditionally fencing after every iteration.
 Each completed physical iteration still writes one compact scalar diagnostic
@@ -147,10 +147,11 @@ physical final closure required by #586.
 The two-slot path is bound to the shared compiled-execution lifecycle also used
 by TensorIR graph replay. \`GENERATIVEQC_CUDA_KS_REPLAY=1\` (also \`on\`, \`true\` or
 \`small-native\`) additionally requests shared CUDA-Graph capture/replay for
-this qualification route. Replay is admitted only for LDA/PBE when the KS
+this qualification route. Replay is admitted only for pure LDA/PBE when the KS
 eigensolver is the capture-safe small-native implementation (currently at most
-16 AOs).
-Provider-backed ordinary \`Xsyevd\` remains outside capture, so larger systems
+16 AOs). PBE0 may use the bounded two-slot SolverRegion, but exact exchange
+remains outside CUDA-Graph capture until its provider is independently
+capture-qualified. Provider-backed ordinary \`Xsyevd\` remains outside capture, so larger systems
 continue through the ordinary two-slot path even when replay is requested.
 
 The KS transfer diagnostic reports region bindings, invalidations, successful
