@@ -938,8 +938,7 @@ XcIntegral integrate_pbe_rks(const AoBasis& basis, const MolecularGrid& grid,
 ExactIncrementalXcIntegral integrate_pbe_rks_incremental_exact(
     const AoBasis& basis, const MolecularGrid& grid, const std::vector<double>& anchor_density,
     const std::vector<double>& delta_density, std::size_t tile_points, double exchange_scale,
-    double correlation_scale, const RksGgaFeatureCache* anchor_features,
-    const RksAoCache* cache) {
+    double correlation_scale, const RksGgaFeatureCache* anchor_features, const RksAoCache* cache) {
   const std::size_t n = basis.nao;
   validate_density_matrix(basis, grid, anchor_density, tile_points);
   if (anchor_features) validate_rks_gga_feature_cache(basis, grid, *anchor_features);

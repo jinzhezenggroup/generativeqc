@@ -304,8 +304,8 @@ struct IncrementalPbeRksState {
       full = dft::integrate_pbe_rks_with_tail_scaled_cached(
           basis, grid, density, tile, {}, exchange_scale, correlation_scale, *ao_cache);
     } else {
-      full = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, density, tile, {},
-                                                     exchange_scale, correlation_scale);
+      full = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, density, tile, {}, exchange_scale,
+                                                     correlation_scale);
     }
     ++diagnostic.full_builds;
     diagnostic.periodic_rebuilds += periodic ? 1U : 0U;
@@ -322,8 +322,9 @@ struct IncrementalPbeRksState {
         throw std::overflow_error("incremental XC anchor generation exhausted");
       const IncrementalPbeRksAnchorIdentity replacement_identity{model,
                                                                  diagnostic.anchor_generation + 1};
-      const auto replacement_bytes = runtime::add_capacity(
-          runtime::vector_bytes(replacement_density), replacement_features.numeric_capacity_bytes());
+      const auto replacement_bytes =
+          runtime::add_capacity(runtime::vector_bytes(replacement_density),
+                                replacement_features.numeric_capacity_bytes());
       diagnostic.peak_replacement_overlap_bytes =
           std::max(diagnostic.peak_replacement_overlap_bytes,
                    runtime::add_capacity(old_anchor_bytes, replacement_bytes));

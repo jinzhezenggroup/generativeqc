@@ -184,13 +184,13 @@ void fixed_density() {
   const auto cached = dft::integrate_pbe_rks_incremental_exact(
       basis, grid, density, signed_delta, 7, 1.0, 1.0, &retained.features, &ao_cache);
   same_xc(cached.total, reference.total);
-  require(retained.features.points == grid.point_count() && retained.features.nao == basis.nao &&
-              retained.features.numeric_capacity_bytes() ==
-                  4 * grid.point_count() * sizeof(double) &&
-              std::abs(cached.anchor_energy - reference.anchor_energy) < 3e-11 &&
-              std::abs(cached.energy_difference - reference.energy_difference) < 3e-11 &&
-              cached.potential_difference.size() == reference.potential_difference.size(),
-          "retained incremental PBE feature cache shape or scalar parity failed");
+  require(
+      retained.features.points == grid.point_count() && retained.features.nao == basis.nao &&
+          retained.features.numeric_capacity_bytes() == 4 * grid.point_count() * sizeof(double) &&
+          std::abs(cached.anchor_energy - reference.anchor_energy) < 3e-11 &&
+          std::abs(cached.energy_difference - reference.energy_difference) < 3e-11 &&
+          cached.potential_difference.size() == reference.potential_difference.size(),
+      "retained incremental PBE feature cache shape or scalar parity failed");
   for (std::size_t i = 0; i < cached.potential_difference.size(); ++i)
     require(std::abs(cached.potential_difference[i] - reference.potential_difference[i]) < 3e-11,
             "retained incremental PBE feature cache changed the potential difference");
