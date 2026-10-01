@@ -187,3 +187,24 @@ def test_generated_low_order_force_roots_remain_in_use() -> None:
     order3 = (ROOT / "src/scf/cuda/direct_force_order3.cuh").read_text(encoding="utf-8")
     for name in ("ppps", "dsps", "dpss", "fsss"):
         assert f"generated_weighted_eri::{name}_force" in order3
+
+
+def test_retired_exact_force_scheduler_is_absent_from_scientific_overlay() -> None:
+    retirement, ownership = _inputs()
+    path = "src/scf/cuda/direct_bounded_exact_force.cu"
+    roles = {row["path"]: row["role"] for row in ownership["files"]}
+    assert roles[path] == "runtime"
+    assert all(path not in family["files"] for family in retirement["families"])
+    validate_retirement_ledger(ROOT, retirement, ownership)
+
+
+def test_native_radial_and_screening_composition_is_not_hidden() -> None:
+    _, ownership = _inputs()
+    roles = {row["path"]: row["role"] for row in ownership["files"]}
+    for path in (
+        "src/scf/cuda/direct_bounded_dddd.cu",
+        "src/xtb/native/src/backends/cuda/gfn2_geometry.cu",
+        "src/xtb/native/src/backends/cuda/gfn2_pairlist.cu",
+        "src/xtb/native/src/backends/cuda/gfn2_repulsion.cu",
+    ):
+        assert roles[path] == "scientific"

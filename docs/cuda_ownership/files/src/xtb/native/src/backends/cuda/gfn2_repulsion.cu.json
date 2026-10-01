@@ -1,7 +1,7 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_repulsion.cu",
-  "reason": "GFN2 repulsion runtime traversal, reduction, validation and error/publication ownership. Pair repulsion energy and coordinate derivative mathematics are compiler-generated TensorIR/AD consumers.",
+  "reason": "Repulsion-pair scalar energy and radial derivative mathematics is compiler-generated. Native execution still composes element-pair alpha/charge and light-pair policy and maps radial derivatives into Cartesian forces; keep these remaining scientific operations visible.",
   "regions": [],
-  "role": "runtime",
+  "role": "scientific",
   "subsystem": "gfn2"
 }
