@@ -4,10 +4,10 @@ index 951269c..c4b2999 100644
 +++ b/tests/python/test_df_shell_derivatives_cuda.py
 @@ -1,6 +1,7 @@
  """Execution and complete-force qualification of generated shell reuse."""
-
+ 
  import os
 +import re
-
+ 
  import numpy as np
  import pytest
 @@ -107,10 +108,12 @@ def test_shell_execution_and_return_to_generic(

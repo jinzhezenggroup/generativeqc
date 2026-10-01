@@ -5,7 +5,7 @@ index a88d991..b51c714 100644
 @@ -23,6 +23,46 @@ void require(bool ok, const char* message) {
  }
  void check(cudaError_t error) { require(error == cudaSuccess, cudaGetErrorString(error)); }
-
+ 
 +/** Prove the public expansion contract independently of generated indexing.
 + * Products of these one-to-one maps remain injective after a triangle/panel
 + * removes tuples. Spherical d/f deliberately demonstrate collisions and must
@@ -52,7 +52,7 @@ index a88d991..b51c714 100644
 @@ -104,7 +144,98 @@ struct Storage {
    }
  };
-
+ 
 -void exercise(bool spherical_o, bool spherical_x, bool many_signatures = false) {
 +using Signature = std::array<std::size_t, 6>;
 +// A/B/C scatter counts, shared/distinct physical-atom updates, local additions,
