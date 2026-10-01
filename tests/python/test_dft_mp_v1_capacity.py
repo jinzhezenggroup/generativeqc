@@ -313,7 +313,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "11cd95520b07a7a5e16df64ccea35b3a45035b528b8c69efca9a7e6e8750e052"
+            "89d3e7889d50a6a3ff1ca31c26ad2cc8e2f2dee72f4d66f3e9a717834fbfdb3c"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
