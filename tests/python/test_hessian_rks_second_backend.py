@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from generativeqc.rks_hessian_integrals import checked_second_hvp_options
 
 

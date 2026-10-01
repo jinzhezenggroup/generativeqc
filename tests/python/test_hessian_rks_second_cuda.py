@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
+from generativeqc.response_solver import GMRESOptions
 from generativeqc.rks_hessian import rks_hessian, rks_hvp
 from generativeqc.rks_response import NativeRKSResponse
-from generativeqc.response_solver import GMRESOptions
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.dft import NativeAO
