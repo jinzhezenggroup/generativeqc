@@ -15,6 +15,7 @@ from generativeqc_compiler.method.gfn2_electronic_contract import (
 )
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_PAIR_VERSION,
+    build_gfn2_population_update_program,
     build_gfn2_runtime_electronic_pair_primal,
     build_gfn2_runtime_electronic_pair_vjp,
     build_gfn2_runtime_overlap_vjp,
@@ -127,6 +128,9 @@ def cuda_header() -> str:
     )
     vjp = prepare_for_backend(build_gfn2_runtime_electronic_pair_vjp(), backend="cuda")
     overlap_vjp = prepare_for_backend(build_gfn2_runtime_overlap_vjp(), backend="cuda")
+    population = prepare_for_backend(
+        build_gfn2_population_update_program(), backend="cuda"
+    )
     primal_inputs = _primal_input_order()
     vjp_inputs = _vjp_input_order()
     vjp_outputs = _vjp_output_order()
@@ -163,6 +167,17 @@ def cuda_header() -> str:
             check_intermediates=False,
         ),
         "gfn2_electronic_overlap_vjp_tensor",
+    )
+    population_source = _device(
+        emit_scalar_cpp(
+            population,
+            function_name="gfn2_population_update_cuda_tensor",
+            input_order=("density", "integral", "accumulator"),
+            output_order=("updated",),
+            fused_accumulation=True,
+            ordered_native_sums=True,
+        ),
+        "gfn2_population_update_cuda_tensor",
     )
     primal_call = ", ".join([*map(_cpp_input, primal_inputs), "shift"])
     vjp_call = ", ".join([*map(_cpp_input, vjp_inputs), *map(_cpp_output, vjp_outputs)])
@@ -205,6 +220,7 @@ struct Gfn2ElectronicPairAdjoint {{
 {primal_source}
 {vjp_source}
 {overlap_source}
+{population_source}
 __device__ inline bool evaluate_gfn2_electronic_pair(
     const Gfn2ElectronicPairIntegrals& integrals,
     const Gfn2ElectronicPairPotentials& potentials,
