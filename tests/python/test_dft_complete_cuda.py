@@ -204,6 +204,17 @@ def test_complete_cuda_independent_analytic(
         )
         assert result.work["grid_density_source"] == "exact-final-scf-device-binding"
         assert result.work["grid_density_h2d_bytes"] == 0
+        assert result.work["grid_owner_source"] == "implicit-atom-major-index"
+        assert result.work["grid_owner_h2d_bytes"] == 0
+        assert result.work["grid_point_source"] == "exact-native-resident-grid"
+        assert result.work["grid_point_h2d_bytes"] == 0
+        assert result.work["grid_weight_source"] == "exact-native-resident-grid"
+        assert result.work["grid_weight_h2d_bytes"] == 0
+        assert (
+            result.work["grid_atomic_measure_source"]
+            == "exact-native-resident-grid"
+        )
+        assert result.work["grid_atomic_measure_h2d_bytes"] == 0
         assert result.work["xc_points"] == len(state.grid.points)
         assert (
             result.work["additional_device_peak_bound"]
