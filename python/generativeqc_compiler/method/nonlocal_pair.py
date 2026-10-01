@@ -57,8 +57,8 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline LocalScaleValues local_scales_cpu(
   const double sigma2 = sigma * sigma;
   const double omega2 = c * sigma2 / rho4 + four_pi_over_three * rho;
   LocalScaleValues out{};
-  out.omega = std::sqrt(omega2);
-  out.kappa = b * 1.5 * pi * std::pow(rho / (9.0 * pi), 1.0 / 6.0);
+  out.omega = ::sqrt(omega2);
+  out.kappa = b * 1.5 * pi * ::pow(rho / (9.0 * pi), 1.0 / 6.0);
   if constexpr (Features) {
     const double rho5 = rho4 * rho;
     out.domega_drho =
@@ -76,18 +76,18 @@ GENERATIVEQC_NONLOCAL_PAIR_HD inline LocalScaleValues local_scales_cuda(
   constexpr double four_pi_over_three = 4.0 * pi / 3.0;
   const double ratio = sigma / (rho * rho);
   LocalScaleValues out{};
-  out.omega = std::sqrt(c * ratio * ratio + four_pi_over_three * rho);
-  out.kappa = b * 1.5 * pi * std::pow(rho / (9.0 * pi), 1.0 / 6.0);
+  out.omega = ::sqrt(c * ratio * ratio + four_pi_over_three * rho);
+  out.kappa = b * 1.5 * pi * ::pow(rho / (9.0 * pi), 1.0 / 6.0);
   if constexpr (Features) {
     out.domega_drho =
-        (four_pi_over_three - 4.0 * c * sigma * sigma / std::pow(rho, 5.0)) /
+        (four_pi_over_three - 4.0 * c * sigma * sigma / ::pow(rho, 5.0)) /
         (2.0 * out.omega);
-    out.domega_dsigma = c * sigma / (out.omega * std::pow(rho, 4.0));
+    out.domega_dsigma = c * sigma / (out.omega * ::pow(rho, 4.0));
     out.dkappa_drho = out.kappa / (6.0 * rho);
   }
   if constexpr (Variant == Vv10Variant::rvv10) {
     out.omega /= out.kappa;
-    out.kappa *= std::sqrt(out.kappa);
+    out.kappa *= ::sqrt(out.kappa);
   }
   return out;
 }
