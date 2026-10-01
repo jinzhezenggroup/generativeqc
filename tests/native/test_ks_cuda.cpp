@@ -1055,12 +1055,11 @@ void precision_work_census_case(bool restricted, int precision_mode) {
   options.precision_mode = precision_mode;
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
-  const auto result = plan.run(nullptr, false, false);
   const bool mixed = precision_mode == GENERATIVEQC_PRECISION_AUTO;
+  const auto result = plan.run(nullptr, false, restricted && mixed);
   require(result.converged && !plan.failed(), "CUDA PBE precision-work solve did not converge");
   require(
-      result.precision.mixed_stage_fock_builds ==
-              (mixed ? result.precision.mixed_stage_fock_builds : 0) &&
+      (mixed || result.precision.mixed_stage_fock_builds == 0) &&
           result.precision.strict_stage_fock_builds > 0 &&
           result.precision.mixed_stage_fock_builds + result.precision.strict_stage_fock_builds ==
               result.fock_builds,
@@ -1187,6 +1186,31 @@ void precision_work_census_case(bool restricted, int precision_mode) {
           audit.owner_id == work.owner_id && audit.solve_epoch == work.returned_solve_epoch &&
           audit.state_generation == work.returned_state_generation,
       "CUDA-KS precision work/final audit does not identify the returned final state");
+
+  if (restricted && mixed) {
+    const auto previous_epoch = work.returned_solve_epoch;
+    auto invalid = result.density;
+    const auto matrix = basis.nao * basis.nao;
+    require(invalid.size() == matrix,
+            "RKS precision failure test did not export the converged density");
+    std::fill(invalid.begin(), invalid.end(), 0.0);
+    invalid.front() = -1.0;
+    invalid.back() = 2.0;
+    const auto failed = plan.run(&invalid, false, false);
+    require(plan.failed() && !failed.converged && !failed.precision_work.complete &&
+                !failed.precision_work.operator_inventory_complete &&
+                failed.precision.operator_work_counters_valid == 0 &&
+                failed.precision_work.returned_solve_epoch == 0 &&
+                failed.precision_work.returned_state_generation == 0,
+            "failed CUDA-KS replay leaked complete precision evidence from the prior solve");
+
+    const auto recovered = plan.run(nullptr, false, false);
+    require(recovered.converged && !plan.failed() && recovered.precision_work.complete &&
+                recovered.precision_work.operator_inventory_complete &&
+                recovered.precision.operator_work_counters_valid == 1 &&
+                recovered.precision_work.returned_solve_epoch != previous_epoch,
+            "CUDA-KS recovery did not publish fresh complete precision evidence");
+  }
 }
 
 /** Exercise the C validation layer, which can reject a request before the
