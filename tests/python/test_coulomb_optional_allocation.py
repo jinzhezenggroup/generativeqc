@@ -134,7 +134,7 @@ int main(int argc,char** argv) {
   injected_stage=std::atoi(argv[1]); injected_kind=std::atoi(argv[2]);
   bool propagated=false;
   try {
-    auto plan=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20);
+    auto plan=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false);
     if(injected_stage==0) assert(plan && live_allocations>0);
     else assert(!plan);
   } catch(const std::bad_alloc&) { return 2; }
@@ -145,7 +145,7 @@ int main(int argc,char** argv) {
   if(injected_stage>=4) assert(fences>0);
   // A rejected optional owner must not poison a fresh preparation.
   injected_stage=0;
-  auto recovered=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20);
+  auto recovered=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false);
   assert(recovered && live_allocations>0);
   recovered.reset(); assert(live_allocations==0);
 }
