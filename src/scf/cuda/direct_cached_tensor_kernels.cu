@@ -31,6 +31,28 @@ __global__ void build_eri_kernel(DeviceBatch batch, double* eri) {
   eri[element] = contracted_eri<double>(batch, system, i, j, k, l, -1);
 }
 
+__global__ void build_eri_tile_kernel(DeviceBatch batch, std::int32_t system,
+                                      std::size_t b0, std::size_t b1,
+                                      std::size_t b2, std::size_t b3,
+                                      std::size_t c0, std::size_t c1,
+                                      std::size_t c2, std::size_t c3,
+                                      std::size_t elements, double* eri) {
+  const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
+  for (std::size_t element =
+           static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+       element < elements; element += stride) {
+    std::size_t local = element;
+    const auto l = static_cast<std::int32_t>(b3 + local % c3);
+    local /= c3;
+    const auto k = static_cast<std::int32_t>(b2 + local % c2);
+    local /= c2;
+    const auto j = static_cast<std::int32_t>(b1 + local % c1);
+    local /= c1;
+    const auto i = static_cast<std::int32_t>(b0 + local);
+    eri[element] = contracted_eri<double>(batch, system, i, j, k, l, -1);
+  }
+}
+
 __global__ void build_fock_kernel(std::int32_t batch_size, std::int32_t nbf, const double* hcore,
                                   const double* eri, const double* density,
                                   const std::uint8_t* active, double* fock) {
@@ -94,6 +116,19 @@ __global__ void build_uhf_fock_kernel(std::int32_t batch_size, std::int32_t nbf,
 void launch_build_eri_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
                              DeviceBatch batch, double* eri) {
   build_eri_kernel<<<grid, block, shared_bytes, stream>>>(batch, eri);
+}
+
+void launch_build_eri_tile_kernel(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
+                                  const std::array<std::size_t, 4>& begin,
+                                  const std::array<std::size_t, 4>& count,
+                                  std::size_t elements, double* eri) {
+  if (!elements) return;
+  constexpr unsigned threads = 128;
+  const auto blocks = static_cast<unsigned>(
+      std::min<std::size_t>((elements + threads - 1) / threads, 65535));
+  build_eri_tile_kernel<<<blocks, threads, 0, stream>>>(
+      batch, system, begin[0], begin[1], begin[2], begin[3],
+      count[0], count[1], count[2], count[3], elements, eri);
 }
 
 void launch_build_fock_kernel(dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
