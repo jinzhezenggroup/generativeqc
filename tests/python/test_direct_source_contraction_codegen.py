@@ -26,7 +26,7 @@ def test_cartesian_source_contraction_accepts_runtime_radial_identity() -> None:
     source = emit_direct_source_contraction_header()
     assert "generativeqc::integrals::CoulombRange range" in source
     assert "double omega = 0.0" in source
-    assert "primitive_eri_cartesian<MaximumAngular>" in source
+    assert "primitive_eri_cartesian_shell_pairs<FirstShellAngular" in source
     assert "angular_fourth, range, omega" in source
     assert "range == generativeqc::integrals::CoulombRange::Full" in source
 
