@@ -148,7 +148,10 @@ different phases. A cold call is the first call of a new calculator in the
 measurement process; it is not a new process for each molecule.
 Calculator/result cleanup after all samples is timed separately, before the
 next case's constructor. Reports record this timing contract and reject a mix
-with older receipts that included preceding-calculator cleanup in construction.
+with older receipts that included preceding-calculator cleanup in construction
+or triggered lazy native-library loading during an untimed identity check.
+Loaded-library identity is verified after the timed first call, before accepting
+that sample, so both engines include any lazy load in their cold endpoint.
 Run CUDA measurements inside Slurm as described below; compare the resulting
 JSON files using `--reference`, `--candidate` and `--output`. Both reports must
 use the same geometries and settings, and every sample participates in the

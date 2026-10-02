@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-03
 
+First-process timing caveat: see the later
+[lazy-library-load correction](2026-10-03-xtb-cold-library-timing.md). The
+historical xTBloom first-process timings here omit an untimed native/provider
+load; warm/changed timings and scientific gates retain their scope.
+
 ## Problem
 
 After AES2 peer scheduling, small molecular cold calls still paid approximately

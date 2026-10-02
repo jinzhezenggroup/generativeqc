@@ -89,23 +89,35 @@ def test_comparison_rejects_mixed_cleanup_contracts() -> None:
 
 
 @pytest.mark.parametrize("engine", ("generativeqc", "xtbloom"))
+@pytest.mark.parametrize("wrong_library", (False, True))
 def test_measurement_separates_previous_calculator_cleanup(
-    engine: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    engine: str, wrong_library: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A deliberately expensive finalizer must not inflate the next constructor."""
+    """Charge lazy loading to the first call and isolate expensive finalizers."""
     import generativeqc
 
     library = tmp_path / "native.so"
     library.touch()
     destination = tmp_path / "measurement.json"
     elapsed = [0.0]
+    loaded = []
+
+    def load_library() -> SimpleNamespace:
+        if not loaded:
+            elapsed[0] += 200.0
+            loaded.append(True)
+        return SimpleNamespace(
+            _name=str(tmp_path / "wrong.so" if wrong_library else library)
+        )
 
     class Calculator:
         def __init__(self, *args: object, **kwargs: object) -> None:
             elapsed[0] += 1.0
-            self._library = SimpleNamespace(_name=str(library))
+            if engine == "generativeqc":
+                self._library = load_library()
 
         def singlepoint(self, *args: object, **kwargs: object) -> SimpleNamespace:
+            load_library()
             elapsed[0] += 2.0
             return SimpleNamespace(
                 converged=True,
@@ -131,7 +143,7 @@ def test_measurement_separates_previous_calculator_cleanup(
     monkeypatch.setitem(
         sys.modules,
         "xtbloom.library",
-        SimpleNamespace(load_library=lambda: SimpleNamespace(_name=str(library))),
+        SimpleNamespace(load_library=load_library),
     )
     monkeypatch.setattr(BENCHMARK.time, "perf_counter", lambda: elapsed[0])
     monkeypatch.setattr(BENCHMARK, "source_revision", lambda _: "fixture")
@@ -159,14 +171,23 @@ def test_measurement_separates_previous_calculator_cleanup(
             str(destination),
         ],
     )
+    if wrong_library:
+        with pytest.raises(RuntimeError, match="loaded .*wrong.so, expected"):
+            BENCHMARK.main()
+        assert not destination.exists()
+        return
     BENCHMARK.main()
     measured = json.loads(destination.read_text())
     assert measured["timing_contract"] == BENCHMARK.TIMING_CONTRACT
     assert len(measured["rows"]) == 2
-    for row in measured["rows"]:
-        assert row["construction_seconds"] == 1.0
+    for index, row in enumerate(measured["rows"]):
+        constructor = 201.0 if index == 0 and engine == "generativeqc" else 1.0
+        cold = 202.0 if index == 0 and engine == "xtbloom" else 2.0
+        assert row["construction_seconds"] == constructor
         assert row["cleanup_seconds"] == 100.0
-        assert [sample["seconds"] for sample in row["samples"]] == [2.0] * 3
+        assert [sample["seconds"] for sample in row["samples"]] == [cold, 2.0, 2.0]
+    first = measured["rows"][0]
+    assert first["construction_seconds"] + first["samples"][0]["seconds"] == 203.0
 
 
 @pytest.mark.parametrize("construction", [None, -0.1, float("nan"), float("inf")])
