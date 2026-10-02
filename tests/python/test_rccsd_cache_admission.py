@@ -43,8 +43,14 @@ struct PreparedFockPlan {
 }
 namespace posthf {
 std::size_t rhf_reference_capacity(const core::System&,int,bool) { return 80; }
+std::size_t checked_add(std::size_t a,std::size_t b) { return a+b; }
 }
-struct RccsdNativeState { bool cached; };
+struct Diagnostic { std::size_t numeric_capacity_bytes=80; };
+struct RccsdNativeState {
+  bool cached;
+  std::size_t external_reservation_bytes=0;
+  Diagnostic diagnostic{};
+};
 void validate_descriptor(const generativeqc_method_descriptor& d,const runtime::ExecutionContext&) {
   if (!d.valid) throw std::invalid_argument("invalid descriptor");
 }
@@ -55,7 +61,7 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::S
                                       Reference,int,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*) {
   ++executions;
-  return {p != nullptr};
+  return {p != nullptr,0,{80}};
 }
 """
 
@@ -72,17 +78,17 @@ int main(int argc,char** argv) {
   if (mode == 2) execution.cuda=true;
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
-                                        nullptr,nullptr);
+                                        nullptr,nullptr,0);
     if (mode < 2) return 2;
     const bool expect_cache = mode == 2 || mode >= 4;
     if (result.cached != expect_cache) return 3;
     if (allocations != (expect_cache ? 1 : 0) || executions != 1) return 4;
     if (expect_cache) {
       auto* first=cache.get();
-      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr);
+      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0);
       if (!result.cached || cache.get()!=first || allocations!=1 || executions!=2) return 5;
       descriptor.budget=79;
-      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr); return 6; }
+      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0); return 6; }
       catch (const MethodError&) {}
       if (cache.get()!=first || allocations!=1 || executions!=2) return 7;
     }
