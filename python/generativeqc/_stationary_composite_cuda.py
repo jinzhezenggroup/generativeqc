@@ -33,6 +33,9 @@ from generativeqc_compiler.integral.first_derivative_native import (
 from generativeqc_compiler.method.nonlocal_correlation import (
     NonlocalCorrelationPrimitive,
 )
+from generativeqc_compiler.method.stationary_composite_resources import (
+    plan_composite_stationary_cuda_resources,
+)
 from generativeqc_compiler.method.stationary_cuda import (
     compile_stationary_cuda,
     stationary_external_provider_sources,
@@ -48,9 +51,6 @@ from generativeqc_compiler.method.stationary_gradient import (
 )
 from generativeqc_compiler.method.stationary_prepared import (
     compile_stationary_prepared_plan,
-)
-from generativeqc_compiler.method.stationary_resources import (
-    plan_stationary_cuda_resources,
 )
 
 from . import _native
@@ -151,7 +151,7 @@ class PreparedCompositeStationaryCudaGradient:
         compiler: typing.Any,
         cache: Path,
         library: Path,
-        tile_points: int = 256,
+        tile_points: int | None = None,
         max_device_bytes: int = 1 << 30,
         max_host_bytes: int = 2 << 30,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
@@ -179,7 +179,7 @@ class PreparedCompositeStationaryCudaGradient:
         compiler: typing.Any,
         cache: Path,
         library: Path,
-        tile_points: int,
+        tile_points: int | None,
         max_device_bytes: int,
         max_host_bytes: int,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
@@ -235,14 +235,6 @@ class PreparedCompositeStationaryCudaGradient:
             for p in source.method_ir.primitives
             if isinstance(p, NonlocalCorrelationPrimitive)
         )
-        gp = plan_tiles(
-            basis,
-            backend="cuda",
-            order=2,
-            tile_points=tile_points,
-            active_ao_capacity=n,
-            budget_bytes=max_device_bytes,
-        )
         # Integral work belongs to the native source, never an AO^4 host loop.
         capacity = 1
         # The resident pair/seed arena scales with the complete grid, while the
@@ -250,7 +242,7 @@ class PreparedCompositeStationaryCudaGradient:
         # capacity, then admit all simultaneously live owners under both totals.
         # An explicit user cap still fails before any force allocation or JIT.
         nlc_budget = _ResidentNonlocalForceOwner.required_device_bytes(
-            source._library, npnt, tile_points
+            source._library, npnt, 256 if tile_points is None else tile_points
         )
         if (
             nlc_budget
@@ -259,49 +251,30 @@ class PreparedCompositeStationaryCudaGradient:
             raise ValueError(
                 "resident nonlocal force exceeds nonlocal_memory_budget_bytes"
             )
-        # The Direct derivative source is retained by the prepared SCF owner and
-        # is already charged to that owner's resource ledger. This allowance is
-        # only for force-time one-electron/transient native work; do not reserve
-        # a second Direct owner here. The matrix term also covers final-state
-        # revalidation/export on host.
-        native_budget = 256 * n * n + 1024 * (
-            na + n + basis.nprimitive + len(basis.shells)
-        )
-        source_bytes = plan_stationary_cuda_resources(
-            atoms=na,
-            aos=n,
-            primitives=basis.nprimitive,
-            points=tile_points,
-            tasks=capacity,
+        layout = plan_composite_stationary_cuda_resources(
+            basis,
+            grid_plan=lambda points: plan_tiles(
+                basis,
+                backend="cuda",
+                order=2,
+                tile_points=points,
+                active_ao_capacity=n,
+                budget_bytes=max_device_bytes,
+            ),
+            grid_points=npnt,
             spins=plan.spin_blocks,
-            sources=len(stationary_runtime_sources(plan)),
+            source_count=len(stationary_runtime_sources(plan)),
+            nonlocal_bytes=nlc_budget,
             target=compiler.target,
-            budget_bytes=(
-                max_device_bytes
-                - gp.peak_bytes
-                - 48 * tile_points
-                - nlc_budget
-                - native_budget
-            )
-            // 2,
-        ).allocation_bytes
-        device_bound = (
-            gp.peak_bytes
-            + 2 * source_bytes
-            + 48 * tile_points
-            + nlc_budget
-            + native_budget
+            max_device_bytes=max_device_bytes,
+            max_host_bytes=max_host_bytes,
+            tile_points=tile_points,
         )
-        host_bound = (
-            gp.host_bytes
-            + 8 * (64 * npnt + 8 * n * n + 128 * na)
-            + nlc_budget
-            + native_budget
-        )
-        if device_bound > max_device_bytes or host_bound > max_host_bytes:
-            raise ValueError(
-                "composite stationary stationary numeric capacity budget exceeded"
-            )
+        gp = layout.grid
+        tile_points = gp.tile_points
+        source_bytes = layout.sources.allocation_bytes
+        native_budget = layout.native_bytes
+        device_bound, host_bound = layout.device_bound, layout.host_bound
         cache = Path(cache)
         identity = (
             basis.identity,
@@ -342,6 +315,7 @@ class PreparedCompositeStationaryCudaGradient:
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
                         integral_derivatives=False,
+                        cooperative_becke=True,
                         # The batched nuclear call owns every unordered atom
                         # pair in one deterministic native page.
                         page_work_budget=max(1, na * (na - 1) // 2),
@@ -362,6 +336,7 @@ class PreparedCompositeStationaryCudaGradient:
                         source_bytes,
                         spin_blocks=plan.spin_blocks,
                         integral_derivatives=False,
+                        cooperative_becke=True,
                         page_work_budget=1,
                     )
                 )
@@ -490,6 +465,10 @@ class PreparedCompositeStationaryCudaGradient:
             "retained_grid_features": list(feature_plan.retained_features),
             "source_names": list(plan.source_names),
             "grid_points": npnt,
+            "grid_tile_points": tile_points,
+            "grid_tile_count": (npnt + tile_points - 1) // tile_points,
+            "geometry_planned_lanes": layout.sources.geometry_lanes,
+            "becke_planned_threads_per_point": layout.sources.becke_threads_per_point,
             "grid_density_source": "exact-final-scf-device-binding",
             "grid_density_h2d_bytes": 0,
             "final_reduction": "host-canonical-source-sum",
