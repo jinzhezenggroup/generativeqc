@@ -44,7 +44,7 @@ def pinned_reference() -> None:
     "options",
     ({"density_fitting": "cuda"}, {"host_unfused": True}),
 )
-def test_global_hybrid_force_does_not_inherit_unqualified_execution(
+def test_global_hybrid_force_preserves_execution_boundaries(
     options: dict,
 ) -> None:
     from generativeqc import Calculator, GridSpec, KsOptions
@@ -58,6 +58,19 @@ def test_global_hybrid_force_does_not_inherit_unqualified_execution(
         ks_options=KsOptions(grid=GridSpec(), xc_schedule=schedule),
         **options,
     )
+    if options.get("density_fitting"):
+        # The separately qualified DF response owner now supports FP64 forces;
+        # it must not inherit the direct owner's component-wise AUTO admission.
+        assert "forces" in calc.capabilities.supported_properties
+        with pytest.raises(NotImplementedError, match="requires precision='fp64'"):
+            Calculator(
+                method="pbe0-rks",
+                device="cuda",
+                precision="auto",
+                ks_options=KsOptions(grid=GridSpec(), xc_schedule=schedule),
+                **options,
+            )
+        return
     assert "forces" not in calc._capabilities.supported_properties
     with pytest.raises((ValueError, NotImplementedError)):
         calc.singlepoint(

@@ -821,14 +821,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // The bounded device-control prototype is qualified only for strict-FP64
     // direct all-electron RKS. AUTO must stay on the legacy host-controlled
     // path so its FP32 mixed-J stage and independent FP64 refinement cannot be
-    // bypassed by an opt-in two-iteration device chunk.
+    // bypassed by an opt-in two-iteration device chunk. In addition to the
+    // original pure LDA/PBE envelope, admit the audited direct PBE0 composition
+    // so exact K can remain inside the same bounded SolverRegion. Graph replay
+    // stays disabled for global hybrids until the exchange provider is
+    // independently capture-qualified.
+    const bool pure_semilocal_chunk = !has_exchange && options.semilocal_exchange_scale == 1.0 &&
+                                      options.semilocal_correlation_scale == 1.0;
+    const bool pbe0_chunk = has_exchange && is_semilocal_family(functional, SemilocalFamily::Pbe) &&
+                            options.semilocal_exchange_scale == 0.75 &&
+                            options.semilocal_correlation_scale == 1.0 &&
+                            exchange_coefficient == -0.125;
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-        !fitted_coulomb && !has_exchange && !has_range_correction && !nonlocal_correlation &&
+        !fitted_coulomb && !has_range_correction && !nonlocal_correlation &&
         !precision_schedule.any_mixed() && spins == 1 &&
         !is_semilocal_family(functional, SemilocalFamily::Wb97mv) &&
-        options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
-        provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
+        (pure_semilocal_chunk || pbe0_chunk) && provider.system().ecp_terms.empty() &&
+        configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
       const auto binding = device_chunk_binding();
       if (!device_chunk_region.matches(binding))
@@ -894,7 +904,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
   runtime::SolverRegionCudaBinding solver_region_binding() const {
     const bool replay_functional = is_semilocal_family(functional, SemilocalFamily::Lda) ||
                                    is_semilocal_family(functional, SemilocalFamily::Pbe);
-    const bool replay = configured_replay_enabled() && replay_functional &&
+    // CUDA-Graph replay remains limited to the semilocal body qualified by
+    // #1437. Global-hybrid chunks may use the shared bounded SolverRegion
+    // without capturing the exact-exchange provider.
+    const bool replay_semilocal_only =
+        !has_exchange && !has_range_correction && !nonlocal_correlation && !fitted_coulomb &&
+        !precision_schedule.any_mixed() && options.semilocal_exchange_scale == 1.0 &&
+        options.semilocal_correlation_scale == 1.0;
+    const bool replay = configured_replay_enabled() && replay_semilocal_only && replay_functional &&
                         n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     auto graph = device_chunk_binding();
     graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";

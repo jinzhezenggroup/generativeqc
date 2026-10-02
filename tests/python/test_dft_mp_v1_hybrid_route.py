@@ -39,7 +39,7 @@ def _nodes() -> tuple[str, dict[str, ast.Assign], ast.If]:
     )
     predicate_names = {
         "semilocal_force",
-        "cuda_df_semilocal_force",
+        "density_fitted_force",
         "cuda_hybrid_force",
     }
     assignments = {
@@ -71,6 +71,7 @@ def _promoted(
     renamed: bool = False,
     density_fitting: bool = False,
     include_semilocal: bool = False,
+    device: str = "cuda",
 ) -> bool:
     _, assignments, promotion = _nodes()
     options = SimpleNamespace(
@@ -91,7 +92,7 @@ def _promoted(
         else None
     )
     owner = SimpleNamespace(
-        _device_name="cuda",
+        _device_name=device,
         _precision_mode=precision,
         _ks_options=options,
         _capabilities=SimpleNamespace(family="density_functional"),
@@ -101,6 +102,7 @@ def _promoted(
         _basis="sto-3g",
         _method_name=method.lower(),
         _automatic_libxc_name=None,
+        _dispersion_method_ir=None,
     )
     scope = {
         "self": owner,
@@ -125,33 +127,37 @@ def _promoted(
         owner._ks_options = None
     elif blocked == "reference-xc":
         options.xc_schedule = "reference"
-    elif blocked == "density-fitting":
-        scope["density_fitting_mode"] = _native.DENSITY_FITTING_NONE + 1
     elif blocked == "wrong-family":
         owner._capabilities.family = "hartree_fock"
     elif blocked == "unregistered-method":
         owner._method = -1
     elif blocked == "automatic-libxc":
         owner._automatic_libxc_name = "unqualified"
-    elif blocked in ("exchange", "nonlocal", "post-scf"):
+    elif blocked == "unsupported-device":
+        owner._device_name = "unsupported"
+    elif blocked == "dispersion":
+        owner._dispersion_method_ir = object()
+    elif blocked in ("exchange", "nonlocal"):
         options.execution_plan = SimpleNamespace(
-            exchange=(object(),) if blocked == "exchange" else (),
+            exchange=(SimpleNamespace(operator="short-range"),)
+            if blocked == "exchange"
+            else (),
             nonlocal_correlation=object() if blocked == "nonlocal" else None,
-            post_scf=(object(),) if blocked == "post-scf" else (),
+            post_scf=(),
         )
     predicates = (
         [("semilocal_force", assignments["semilocal_force"].value)]
         if include_semilocal
         else []
     ) + [
-        ("cuda_df_semilocal_force", assignments["cuda_df_semilocal_force"].value),
+        ("density_fitted_force", assignments["density_fitted_force"].value),
         ("cuda_hybrid_force", assignments["cuda_hybrid_force"].value),
         ("promoted", promotion.test),
     ]
     for name, expression in predicates:
         scope[name] = eval(  # noqa: S307 - execute only the trusted repository predicate
             compile(ast.Expression(expression), "<Calculator force route>", "eval"),
-            {"__builtins__": {}},
+            {"__builtins__": {"all": all}},
             scope,
         )
     return scope["promoted"]
@@ -193,7 +199,6 @@ def test_auto_force_admission_uses_resolved_domain_under_renaming(
         "ecp",
         "missing-options",
         "reference-xc",
-        "density-fitting",
         "wrong-family",
         "unregistered-method",
     ),
@@ -231,22 +236,26 @@ def test_semilocal_force_precision_boundary_is_separate_from_hybrid_admission(
 @pytest.mark.parametrize("precision", (_native.PRECISION_FP64, _native.PRECISION_AUTO))
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
 @pytest.mark.parametrize("method", ("PBE0", "B3LYP", "M06-2X", "MN15", "WB97M-V"))
-def test_density_fitting_never_borrows_direct_hybrid_force_admission(
-    precision: int, spin: str, method: str
+@pytest.mark.parametrize("device", ("cpu", "cuda"))
+def test_density_fitted_force_uses_own_strict_precision_admission(
+    precision: int, spin: str, method: str, device: str
 ) -> None:
-    assert not _promoted(
+    # This executes capability admission only; the native final-state owner
+    # independently validates the particular fitted functional composition.
+    assert _promoted(
         precision=precision,
         spin=spin,
         method=method,
         density_fitting=True,
         include_semilocal=True,
-    )
+        device=device,
+    ) is (precision == _native.PRECISION_FP64 and method != "WB97M-V")
 
 
 @pytest.mark.parametrize(
     "blocked",
     (
-        "cpu",
+        "unsupported-device",
         "missing-options",
         "wrong-family",
         "unregistered-method",
@@ -254,10 +263,10 @@ def test_density_fitting_never_borrows_direct_hybrid_force_admission(
         "unqualified-ecp",
         "exchange",
         "nonlocal",
-        "post-scf",
+        "dispersion",
     ),
 )
-def test_df_semilocal_force_preserves_nonprecision_boundaries(blocked: str) -> None:
+def test_df_force_preserves_nonprecision_boundaries(blocked: str) -> None:
     assert not _promoted(
         precision=_native.PRECISION_FP64,
         method="PBE",

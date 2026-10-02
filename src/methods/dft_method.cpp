@@ -386,22 +386,25 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   const double pbe0_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.125 : -0.25;
   const double b3lyp_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.1 : -0.2;
   // AUTO is admitted per component by CudaKsPlan: Direct Coulomb J may use
-  // mixed arithmetic while exact exchange K remains strict FP64.
-  const bool cuda_direct_global_hybrid =
+  // mixed arithmetic while exact exchange K remains strict FP64. Density-fitted
+  // global hybrids retain their separate strict-FP64 admission.
+  const bool cuda_global_hybrid =
       backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
       !execution_plan.nonlocal_correlation &&
-      options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE && fock.exchange.present;
+      (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+       options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
+      fock.exchange.present;
   const bool cuda_pbe0 =
-      cuda_direct_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
+      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
       options.semilocal_exchange_scale == 0.75 && options.semilocal_correlation_scale == 1.0 &&
       fock.exchange.coefficient == pbe0_fock_coefficient;
   const bool cuda_b3lyp =
-      cuda_direct_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::B3lyp &&
+      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::B3lyp &&
       options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
       fock.exchange.coefficient == b3lyp_fock_coefficient;
   bool cuda_split_hybrid = false;
 #if GENERATIVEQC_HAS_CUDA
-  if (cuda_direct_global_hybrid && execution_plan.generated_split_hybrid &&
+  if (cuda_global_hybrid && execution_plan.generated_split_hybrid &&
       options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0) {
     const auto composition =
         dft::generated::split_hybrid_composition(xc_functional_code(execution_plan));
@@ -693,7 +696,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U,
-              ks_fitted_derivative_order(*options_.resolved_fock_build, backend)),
+              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ? 0U : 1U),
         basis_(system_),
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
@@ -950,12 +953,6 @@ class KsPreparedCalculation final : public PreparedCalculation {
   generativeqc_status read_derivative_state(const dft::CudaKsFinalStateToken& expected,
                                             KsDerivativeSnapshot& output, std::string& detail) {
     output = {};
-    if (options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE &&
-        ks_fitted_derivative_order(fock_.strategy(), backend_) == 0) {
-      detail =
-          "DFT density-fitted derivative snapshots require a qualified CUDA semilocal DF-J owner";
-      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
-    }
     dft::VerifiedKsFinalState state;
 #if GENERATIVEQC_HAS_CUDA
     const auto before = cuda_ ? cuda_->transfers() : dft::CudaKsTransfers{};
@@ -978,6 +975,118 @@ class KsPreparedCalculation final : public PreparedCalculation {
       output.export_synchronizations = after.synchronizations - before.synchronizations;
     }
 #endif
+    return GENERATIVEQC_STATUS_SUCCESS;
+  }
+
+  generativeqc_status density_fitted_integral_gradient(
+      const dft::CudaKsFinalStateToken& expected,
+      const std::vector<scf::reference::Matrix>& density,
+      const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+    output.clear();
+    work = {};
+    if (options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+        !system_.ecp_terms.empty() || execution_plan_.range_exchange ||
+        execution_plan_.nonlocal_correlation) {
+      detail = "density-fitted stationary derivatives require all-electron full-range KS";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    const auto& strategy = fock_.strategy();
+    const auto fitted_term = [](const scf::FockTermSpec& term) {
+      return !term.present || (term.approximation == scf::FockApproximation::DensityFitted &&
+                               term.op == scf::FockOperator::FullRange);
+    };
+    if (!fitted_term(strategy.spec.coulomb) || !fitted_term(strategy.spec.exchange)) {
+      detail = "density-fitted stationary derivative provider identity mismatch";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
+    dft::CudaKsFinalStateToken current;
+    auto status = final_state_token(current, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (current != expected) {
+      detail = "density-fitted stationary derivative token is stale";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    const auto spins = expected.identity.model.spins;
+    const auto& one = fock_.one_electron();
+    const auto matrix_elements = one.nbf * one.nbf;
+    const auto coordinates = 3 * system_.atoms.size();
+    if (spins < 1 || spins > 2 || density.size() != spins || weighted_density.size() != spins ||
+        one.ncoord != coordinates || one.hcore_derivative.size() != coordinates * matrix_elements ||
+        one.overlap_derivative.size() != coordinates * matrix_elements) {
+      detail = "density-fitted stationary D/W or one-electron derivative shape mismatch";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    for (unsigned spin = 0; spin < spins; ++spin)
+      if (density[spin].size() != matrix_elements ||
+          weighted_density[spin].size() != matrix_elements) {
+        detail = "density-fitted stationary D/W AO shape mismatch";
+        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+      }
+    // H'/Pulay/J'/K' vectors coexist with the four-source publication buffer.
+    // This allowance covers only compact publication, not DF-provider scratch.
+    if (!maximum_bytes || coordinates > maximum_bytes / (8U * sizeof(double))) {
+      detail = "density-fitted stationary derivative publication exceeds its budget";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    }
+
+    std::vector<double> hcore(coordinates), pulay(coordinates);
+    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+      const auto* dh = one.hcore_derivative.data() + coordinate * matrix_elements;
+      const auto* ds = one.overlap_derivative.data() + coordinate * matrix_elements;
+      for (unsigned spin = 0; spin < spins; ++spin)
+        for (std::size_t item = 0; item < matrix_elements; ++item) {
+          hcore[coordinate] += density[spin][item] * dh[item];
+          pulay[coordinate] -= weighted_density[spin][item] * ds[item];
+        }
+    }
+
+    const std::vector<double> empty;
+    scf::FockEnergyDerivativeComponents two;
+    try {
+      two = fock_.energy_derivative_components(density[0], spins == 2 ? density[1] : empty);
+    } catch (const std::bad_alloc&) {
+      detail = "density-fitted stationary response exceeded the prepared resource budget";
+      return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+    } catch (const std::invalid_argument& error) {
+      detail = error.what();
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    } catch (const std::exception& error) {
+      detail = error.what();
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    if (two.coulomb.size() != coordinates || two.exchange.size() != coordinates) {
+      detail = "density-fitted stationary J/K derivative source shape mismatch";
+      return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+    }
+    std::vector<double> candidate;
+    candidate.reserve(4 * coordinates);
+    std::size_t publication_remaining_bytes = maximum_bytes;
+    for (const auto* values : {&hcore, &pulay, &two.coulomb, &two.exchange, &candidate}) {
+      if (values->capacity() > publication_remaining_bytes / sizeof(double)) {
+        detail = "density-fitted stationary derivative publication exceeds its budget";
+        return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      }
+      publication_remaining_bytes -= values->capacity() * sizeof(double);
+    }
+    const auto publication_peak_bytes = maximum_bytes - publication_remaining_bytes;
+    candidate.insert(candidate.end(), hcore.begin(), hcore.end());
+    candidate.insert(candidate.end(), pulay.begin(), pulay.end());
+    candidate.insert(candidate.end(), two.coulomb.begin(), two.coulomb.end());
+    candidate.insert(candidate.end(), two.exchange.begin(), two.exchange.end());
+    if (!std::all_of(candidate.begin(), candidate.end(),
+                     [](double value) { return std::isfinite(value); })) {
+      detail = "density-fitted stationary derivative source is nonfinite";
+      return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+    }
+    // H'/S' were exported during provider preparation; their contractions here
+    // are host work and perform no force-time one-electron CUDA transfers.
+    // DF response has separate scratch/transfers which this compact publication
+    // bridge does not measure. Do not invent those counts from spin dimensions.
+    work[0] = fock_.diagnostic().device_bytes;
+    work[3] = publication_peak_bytes;
+    output = std::move(candidate);
+    detail.clear();
     return GENERATIVEQC_STATUS_SUCCESS;
   }
 
@@ -1785,6 +1894,19 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status density_fitted_integral_gradient(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected,
+      const std::vector<scf::reference::Matrix>& density,
+      const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+      std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->density_fitted_integral_gradient(
+          expected, density, weighted_density, output, maximum_bytes, work, detail);
+    output.clear();
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status cuda_full_range_integral_derivatives(
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::string& detail) {
@@ -1944,6 +2066,20 @@ generativeqc_status dft_cuda_integral_gradient(PreparedBatch& batch, std::size_t
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail);
   detail = "CUDA integral gradient requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_density_fitted_integral_gradient_cached(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    const std::vector<scf::reference::Matrix>& density,
+    const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks)
+    return ks->density_fitted_integral_gradient(index, expected, density, weighted_density, output,
+                                                maximum_bytes, work, detail);
+  output.clear();
+  detail = "density-fitted integral gradient requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
