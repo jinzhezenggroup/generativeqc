@@ -54,8 +54,32 @@ case has 9,834,496 values and 1,274,406 contractions.
 GPU qualification covers complete cold, twice-warm and changed-geometry
 CCSD(T) energy/force calls, physical RHF/UHF batch parity against independent
 CPU execution, spherical d/f inputs, allocation fallback/teardown, and complete
-force memcheck. Performance evidence must include both the reference phase
-and the full endpoint; the later MO source and response work remain substantial.
+force memcheck. The [reviewed evidence](../../../../benchmarks/results/cc-eri-orbits-20261003/summary.json)
+retains source/binary identities, every output and public CC work counter, and
+completed reference work. Relative to the resident-reference parent, complete
+28-AO energy cold/warm/changed time is 4.795/4.251/4.282 ->
+3.415/2.901/2.932 seconds on node1. Complete forces are
+18.659/17.917/17.887 -> 17.339/16.700/16.699 seconds. The corresponding
+56-AO energy times on node2 are 67.229/66.724/66.762 ->
+44.296/43.782/43.824 seconds. Warm means include two calls; cold and changed
+geometry have one call per variant. Allocations were separate on shared nodes,
+so these observed ratios are not interleaved confidence intervals.
+
+All public CC work counters, reference Fock counts and resident/peak byte counts
+are unchanged. Maximum candidate total-energy, triples and force errors across
+all calls are 5.2e-12 Eh, 1.6e-13 Eh and 6.7e-8 Eh/bohr, against gates of
+3e-9, 2e-9 and 1e-6 respectively. All 40 public CPU/CUDA tests and four
+RHF/UHF/spherical d/f GPU batch cases pass. The previously compiled native
+resource probe uses the unchanged internal ABI and passes against this binary,
+including exact-budget/failure fallback and zero live bytes after teardown.
+It and all four 14-AO force calls pass memcheck with zero errors. Six host
+generation/coverage tests pass. The publication accepts these numerical gates;
+it does not claim the formal statistical performance-promotion campaign.
+
+The later MO source and response work remain substantial. The 56-AO reference
+phase decreases from about 29.5 to 6.45 seconds while the full warm endpoint is
+still 43.78 seconds. Complete endpoint evidence, rather than the isolated
+contraction census, remains the basis for assessing this optimization.
 
 ## Rejected alternatives and revisit conditions
 
