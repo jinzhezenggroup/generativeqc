@@ -206,8 +206,8 @@ void print_usage(std::ostream& out) {
          "  generativeqc profile install|export|diagnose ...  # reserved; Python frontend owns it\n"
          "  generativeqc autotune ...    # tuning remains in the Python frontend\n\n"
          "Native run options:\n"
-         "  --method gfn2-xtb|rhf|uhf  Native method (default: gfn2-xtb)\n"
-         "  --basis NAME             Bundled Gaussian basis for RHF/UHF (default: sto-3g)\n"
+         "  --method NAME            gfn2-xtb, rhf/uhf, or a native manifest DFT method\n"
+         "  --basis NAME             Bundled Gaussian basis (default: sto-3g)\n"
          "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
          "  --density-fitting none|cpu|cuda|auto  HF Coulomb/exchange approximation (default: "
          "none)\n"
@@ -283,6 +283,11 @@ void print_methods(bool json) {
 
 bool is_gfn2(const RunOptions& options) { return options.method == GENERATIVEQC_METHOD_GFN2_XTB; }
 
+bool is_dft(const RunOptions& options) {
+  const auto* entry = generativeqc::methods::generated::find_method(options.method);
+  return entry != nullptr && entry->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL;
+}
+
 std::string_view representation_name(generativeqc_basis_representation representation) {
   return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
 }
@@ -350,8 +355,14 @@ RunOptions parse_run(int argc, char** argv) {
       } else if (selected == "uhf") {
         options.method_name = "uhf";
         options.method = GENERATIVEQC_METHOD_UHF;
+      } else if (const auto* entry = generativeqc::methods::generated::find_method(selected);
+                 entry != nullptr &&
+                 entry->family == GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) {
+        options.method_name = std::string(entry->name);
+        options.method = entry->method;
       } else {
-        throw UsageError("native run method must be gfn2-xtb, rhf, or uhf");
+        throw UsageError(
+            "native run method must be gfn2-xtb, rhf, uhf, or a listed native DFT method");
       }
     } else if (option == "--basis") {
       options.basis_name = lower(std::string(value()));
@@ -418,11 +429,14 @@ RunOptions parse_run(int argc, char** argv) {
   if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit ||
                            options.density_fitting_explicit || options.auxiliary_basis_explicit))
     throw UsageError(
-        "GFN2-xTB owns its intrinsic basis; Gaussian-basis and density-fitting flags apply to "
-        "RHF/UHF");
+        "GFN2-xTB owns its intrinsic basis; Gaussian-basis and density-fitting flags do not apply");
   if (options.auxiliary_basis_explicit &&
       options.density_fitting == GENERATIVEQC_DENSITY_FITTING_NONE)
     throw UsageError("--auxiliary-basis requires density fitting");
+  if (is_dft(options) && options.density_fitting != GENERATIVEQC_DENSITY_FITTING_NONE)
+    throw UsageError("native CLI DFT density fitting is not exposed by this command yet");
+  if (is_dft(options) && options.forces)
+    throw UsageError("native CLI DFT forces are not exposed by this command yet");
   return options;
 }
 
