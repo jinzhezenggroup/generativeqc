@@ -44,22 +44,51 @@ def test_mp2_advertises_batches_reuses_hf_warm_state_and_rejects_profiling() -> 
         calculator.prepare_batch(H2, warm_start=False, shell_class_profiling=True)
 
 
-def test_mp2_batch_checkpoint_restores_hf_warm_state(tmp_path: Path) -> None:
-    calculator = Calculator(method="mp2", device="cpu")
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+@pytest.mark.parametrize("forces", [False, True])
+def test_mp2_batch_checkpoint_restores_hf_warm_state(
+    tmp_path: Path, device: str, forces: bool
+) -> None:
+    if device == "cuda" and os.environ.get("GENERATIVEQC_MP2_CUDA_TEST") != "1":
+        pytest.skip("requires explicitly allocated CUDA device and native library")
+    properties = ("energy", "forces") if forces else ("energy",)
+    calculator = Calculator(method="mp2", device=device)
     checkpoint = tmp_path / "mp2-warm.vqcp"
 
     with calculator.prepare_batch(H2) as source:
-        baseline = source.execute(properties=("energy",), strict=True)
+        baseline = source.execute(properties=properties, strict=True)
+        snapshots = [_snapshot(source, index) for index in range(len(H2))]
+        for snapshot, atoms in zip(snapshots, H2, strict=True):
+            assert snapshot is not None
+            density, coordinates, energy = snapshot
+            # H2/STO-3G must export the complete seed on both backends, even
+            # when CUDA HF leaves its optional iterative density vector empty.
+            assert density.shape == (4,)
+            assert coordinates.shape == (6,)
+            assert np.isfinite(density).all() and np.isfinite(coordinates).all()
+            assert np.isfinite(energy)
+            np.testing.assert_array_equal(
+                coordinates, np.asarray([atom[1] for atom in atoms]).ravel()
+            )
         source.save_checkpoint(checkpoint)
 
     with calculator.prepare_batch(H2) as target:
         report = target.load_checkpoint(checkpoint)
         assert all(item["restored_fields"] == ["density"] for item in report["items"])
-        replay = target.execute(properties=("energy",), strict=True)
+        for index, snapshot in enumerate(snapshots):
+            _assert_snapshot_equal(_snapshot(target, index), snapshot)
+        replay = target.execute(properties=properties, strict=True)
 
     np.testing.assert_allclose(replay.energies, baseline.energies, atol=1.0e-10, rtol=0)
     assert all(item.warm_start_used for item in replay.items)
     assert all(not item.warm_start_fallback for item in replay.items)
+    for item, reference in zip(replay.items, baseline.items, strict=True):
+        assert item.executed_backend == (
+            "cuda" if device == "cuda" else "cpu_reference"
+        )
+        assert item.converged and item.iterations > 0
+        if forces:
+            np.testing.assert_allclose(item.forces, reference.forces, atol=2e-9, rtol=0)
 
 
 def test_mp2_batch_energy_force_replay_geometry_and_order_independence() -> None:

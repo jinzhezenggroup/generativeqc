@@ -81,6 +81,14 @@ replay, in addition to the unchanged moved-geometry energy/force and fallback
 gates. CPU fixed-capacity boundary tests remain distinct from CUDA's adaptive
 correlation/force arena capacity diagnostics.
 
+The export selection uses explicit branches. A conditional expression combining
+the const physical-reference density with the moved iterative density produces a
+const temporary and copies again on assignment. This defeats the iterative move
+and transiently adds an uncharged density allocation. A compiled host regression
+executes the production checkpoint block with the real result/reference types:
+reference-only export allocates exactly one density, while iterative export
+transfers its existing storage without any density allocation.
+
 Repeated prepared MP2 energy calls can reduce RHF startup work without changing MP2 equations or final reference gates. Full same-geometry reference reuse and correlated-method warm lifecycle remain follow-up work and require stronger versioned identity/provenance.
 
 ## Revisit when

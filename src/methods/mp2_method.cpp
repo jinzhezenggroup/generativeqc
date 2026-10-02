@@ -160,7 +160,12 @@ class Mp2Prepared final : public PreparedCalculation {
         // CUDA HF exports the validated density in its physical reference,
         // not the optional iterative result vector. Retain that existing host
         // export so replay has a complete seed without another device transfer.
-        state.density = hf.density.empty() ? hf.reference->density : std::move(hf.density);
+        // Keep the branches separate: a conditional with the const reference
+        // density would copy through a temporary even on the iterative path.
+        if (hf.density.empty())
+          state.density = hf.reference->density;
+        else
+          state.density = std::move(hf.density);
         state.coordinates.reserve(3 * system_.atoms.size());
         for (const auto& atom : system_.atoms)
           state.coordinates.insert(state.coordinates.end(), atom.position.begin(),
