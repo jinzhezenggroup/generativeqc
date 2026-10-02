@@ -26,6 +26,7 @@ from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
 NONLOCAL_PAIR_LOWERING_VERSION = "nonlocal-pair-ordered-native-fp64-v1"
+NONLOCAL_PAIR_RATIONAL_VERSION = "nonlocal-pair-vv10-bounded-energy-denominator-fp64-v1"
 PAIR_INPUT_ORDER = ("r2", "wi", "wj", "ki", "kj", "row_inverse_kappa")
 PAIR_OUTPUT_ORDER = ("phi", "dphi_domega", "dphi_dkappa", "dphi_dr2")
 
@@ -107,6 +108,7 @@ def build_nonlocal_pair_program(
     preconditioned: bool = False,
     features: bool = True,
     geometry: bool = True,
+    rational_derivatives: bool = False,
 ) -> Program:
     """Select live pair outputs without changing runtime admission semantics.
 
@@ -115,11 +117,21 @@ def build_nonlocal_pair_program(
     separately for feature outputs. CPU raw callers retain all legacy output
     roots for failure observation even when an output is not physically used.
     Only their existing bounded admission may omit the radial root.
+
+    Rational derivatives reuse the ordered VV10 energy denominator.
+    The generated caller admits a bounded positive domain and retains the
+    ordered closure elsewhere. Energy is unchanged; derivative roots deliberately
+    use a separately versioned FP64 operation order.
     """
     if variant not in (VV10, RVV10):
         raise UnsupportedNonlocalCorrelation(f"unsupported pair variant {variant!r}")
-    if any(type(flag) is not bool for flag in (preconditioned, features, geometry)):
+    if any(
+        type(flag) is not bool
+        for flag in (preconditioned, features, geometry, rational_derivatives)
+    ):
         raise TypeError("pair representation and output demands must be Boolean")
+    if rational_derivatives and not (variant == VV10 and features):
+        raise ValueError("rational derivatives require VV10 features")
     scalar = TensorSpec((), role="input", differentiable=True)
     r2, wi, wj, ki, kj, row_inverse = (
         input_tensor(name, scalar) for name in PAIR_INPUT_ORDER
@@ -168,25 +180,53 @@ def build_nonlocal_pair_program(
         negative_phi = multiply(minus_one, phi)
         outputs["phi"] = phi
         if features:
-            dphi_dgi = multiply(negative_phi, add(divide(one, gi), divide(one, gsum)))
+            if rational_derivatives:
+                # phi = -3/(2*D), so (2/3)*phi^2 = 3/(2*D^2).
+                # Reuse the ordered energy's denominator without another divide.
+                # The generated caller bounds all positive factors before this
+                # reassociation; the original closure owns extreme inputs.
+                denominator_partial = multiply(
+                    constant("2/3"), multiply(negative_phi, negative_phi)
+                )
+                dphi_dgi = multiply(multiply(denominator_partial, gj), add(gi, gsum))
+            else:
+                dphi_dgi = multiply(
+                    negative_phi, add(divide(one, gi), divide(one, gsum))
+                )
             outputs["dphi_domega"] = multiply(dphi_dgi, r2)
             outputs["dphi_dkappa"] = dphi_dgi
         if geometry:
-            logarithmic = add(
-                add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
-            )
-            outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
+            if rational_derivatives:
+                # Positive denominator factors avoid cancellation in each
+                # logarithmic partial. This shares dphi/dg_i with SCF features.
+                dphi_dgj = multiply(multiply(denominator_partial, gi), add(gj, gsum))
+                outputs["dphi_dr2"] = add(
+                    multiply(wi, dphi_dgi), multiply(wj, dphi_dgj)
+                )
+            else:
+                logarithmic = add(
+                    add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
+                )
+                outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
     return Program(
         outputs,
         provenance={
             "kind": "nonlocal-correlation-pair",
             "scientific_version": NONLOCAL_CORRELATION_VERSION,
-            "lowering_version": NONLOCAL_PAIR_LOWERING_VERSION,
+            "lowering_version": (
+                NONLOCAL_PAIR_RATIONAL_VERSION
+                if rational_derivatives
+                else NONLOCAL_PAIR_LOWERING_VERSION
+            ),
             "variant": variant,
             "representation": "preconditioned"
             if preconditioned and variant == RVV10
             else "raw",
-            "arithmetic": "ordered-native-fp64; caller-owned-failure-checks",
+            "arithmetic": (
+                "bounded-rational-derivatives-fp64; caller-owned-failure-checks"
+                if rational_derivatives
+                else "ordered-native-fp64; caller-owned-failure-checks"
+            ),
             "features": features,
             "geometry": geometry,
         },

@@ -89,3 +89,24 @@ verified ccache. The new native hash is
 `0b1d9a8511ebf177f49af94a3fbeaf2cd4359b4281b9f85c9cd874cfd5e43021`;
 independent molecular and default48 qualification is running as `full-lr3`. Coupled larger
 experiments include separate scalar changes and cannot isolate this proposal.
+
+## Standalone repaired-source completed endpoint qualification
+
+The exact `0b1d9a...` native/source `1d7fb4e0f` passes seven independent complete
+molecular/rebuild/stale-state tests (node1 job 5459, 199.08 s). That job completed
+default48: cold 1443.967429 s/21 iterations, priming 213.179017 s, three
+one-iteration warm samples 213.507344, 212.919550, 213.093309 s (median
+213.093309 s). GPU4PySCF warm is 172.248139 s. All five pairs pass, maximum
+energy 2.978595e-11 Eh and force 5.890293e-10 Eh/Bohr. This standalone source
+predates the geometry and VV10 denominator merges, and remains slower than the
+reference; the result must not be relabeled as the subsequent integrated source.
+
+Moved water-12/def2-TZVP on the 24x8x16 diagnostic grid passes all independent
+full CPU-oracle samples, including fixed-final-state force replay. Cold, priming,
+warm and moved are 166.944908 / 22.662385 / 23.144913 / 92.331291 s with
+22/1/1/11 iterations; maxima are 1.307399e-12 Eh and 8.964989e-10 Eh/Bohr.
+Raw receipts remain in `.artifacts/wb97m-full-lr-review/results/`.
+
+Master `0d9d763e3` is then integrated, adding the separately qualified geometry
+schedule and VV10 denominator changes. The fresh integrated binary and real-device
+qualification must be identified separately from the standalone results above.
