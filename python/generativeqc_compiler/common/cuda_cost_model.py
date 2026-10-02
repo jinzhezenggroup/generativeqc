@@ -23,11 +23,11 @@ def _optional_count(value: int | None, name: str, *, positive: bool = False) -> 
         raise ValueError(f"{name} must be a {qualifier} integer or None")
 
 
-def _minimize(value: float | int | None) -> tuple[bool, float]:
+def _minimize(value: float | None) -> tuple[bool, float]:
     return value is None, 0.0 if value is None else float(value)
 
 
-def _maximize(value: float | int | None) -> tuple[bool, float]:
+def _maximize(value: float | None) -> tuple[bool, float]:
     return value is None, 0.0 if value is None else -float(value)
 
 
@@ -143,9 +143,7 @@ def static_cuda_cost(
         if registers > target.maximum_registers_per_thread:
             limits["registers-per-thread"] = 0
         elif registers:
-            limits["registers"] = target.registers_per_sm // (
-                registers * block_threads
-            )
+            limits["registers"] = target.registers_per_sm // (registers * block_threads)
     else:
         diagnostics.append(
             "register pressure is unknown and omitted from the occupancy bound"
@@ -171,7 +169,9 @@ def static_cuda_cost(
         limits["caller-estimated-occupancy"] = max(0, estimated_resident)
 
     resident = max(0, min(limits.values()))
-    limiting = tuple(sorted(name for name, value in limits.items() if value == resident))
+    limiting = tuple(
+        sorted(name for name, value in limits.items() if value == resident)
+    )
     occupancy = min(
         1.0,
         resident * block_threads / target.maximum_threads_per_sm,
