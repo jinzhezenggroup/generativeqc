@@ -257,3 +257,16 @@ def test_native_provider_keeps_host_fallback_and_device_handoff() -> None:
     assert "posthf_cuda_batch_add_device_v1" in transform_header
     assert "raw_borrowed" in transform_cuda
     assert "if (p.raw_borrowed)" in transform_cuda
+
+
+def test_cc_force_hamiltonian_uses_prepared_cuda_source() -> None:
+    force = (ROOT / "src/cc/rccsdt_force.cpp").read_text()
+    rccsd = (ROOT / "src/methods/rccsd_method.cpp").read_text()
+    rccsdt = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
+
+    assert "raw_hamiltonian(source, reference, max_bytes, cuda_derivative" in force
+    assert "provider.get({all, all, all, all}, cuda, device_id)" in force
+    assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsd
+    assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsdt
+    assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsd
+    assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsdt
