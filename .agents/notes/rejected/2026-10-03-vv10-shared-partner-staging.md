@@ -1,6 +1,6 @@
 # Proposal: stage compacted VV10 partners for ordered row consumers
 
-Status: experimental; complete endpoint performance comparison pending
+Status: rejected; no measurable complete endpoint benefit
 Date: 2026-10-03
 
 Each ordered row reloads the same compacted partner's position, omega, kappa and
@@ -66,3 +66,23 @@ Compiled sm_120 resources for masked feature/geometry staging are 72/98 register
 occupy 6144 bytes; compiler-reported shared use, including overhead, is 7 KiB.
 The corresponding direct-load kernels use 64/88 registers and no shared storage.
 These are resource receipts, not endpoint performance evidence.
+
+## Completed comparison and decision
+
+Node1 job 5435 completed both variants sequentially on one scheduled RTX5090.
+At 24 atoms, def2-SVP, 589824 points (48 x 16 x 32), the direct-load
+one-denominator baseline has cold 325.618740 s and warm median 49.364240 s.
+Staging has cold 325.708247 s and warm median 49.391322 s; warm samples are
+49.419443, 49.350089 and 49.391322 s. Both use 18 cold and one warm SCF iteration.
+All five staged/reference pairs pass (max energy 2.752e-11 Eh, force
+4.159e-10 Eh/Bohr). There is no useful complete endpoint gain, despite safe
+barriers and fewer repeated source load instructions. PR #1738 is closed
+without merging this runtime default.
+
+The source, binary and tests remain archived so this experiment need not be
+repeated based only on upstream shared-memory use. The in-flight 48/96-atom
+combined runs include staging and the separate full/LR derivative change;
+they qualify that combination only and cannot overturn this controlled
+no-benefit comparison. Revisit staging only with isolated larger-system or
+new-architecture evidence. The tested FP64 unit-reciprocal algebra experiment
+is a separate policy and must pass its own complete endpoint gates.
