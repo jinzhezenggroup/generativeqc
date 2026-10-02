@@ -115,9 +115,12 @@ int main() {
                 spec.coulomb.present = want_j;
                 spec.exchange.present = want_k;
                 spec.exchange.op = radial;
+                spec.exchange.omega = radial == FockOperator::FullRange ? 0.0 : 0.37;
                 const bool expected =
-                    available && (value_capability || bounded_value_capability) && order == 0 &&
-                    want_k && radial == FockOperator::FullRange;
+                    available && order == 0 && want_k &&
+                    ((radial == FockOperator::FullRange &&
+                      (value_capability || bounded_value_capability)) ||
+                     (radial != FockOperator::FullRange && bounded_value_capability));
                 const bool selected = direct_jk_generated_exchange_value_available(plan, spec);
                 assert(selected == expected);
                 const auto route = direct_jk_value_dispatch(true, selected, want_j, want_k,
@@ -156,7 +159,7 @@ int main() {
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_through_f_full_range_values_precede_canonical_fallback() -> None:
+def test_through_f_shell_values_precede_canonical_fallback() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
     owner = _source("src/scf/cuda/direct_coulomb.cpp")
     assert "const bool bounded_through_f = through_f;" in direct
@@ -167,8 +170,9 @@ def test_through_f_full_range_values_precede_canonical_fallback() -> None:
     )
     assert "enqueue_generated_coulomb(*plan->generated_exchange" in direct
     assert "launch_bounded_shell_fock_source(" in owner
-    assert "p.force_cursor, true, false" in owner
+    assert "launch_bounded_shell_range_exchange_source(" in owner
     assert "p.force_cursor, false, true" in owner
+    assert "p.force_cursor, range," in owner
 
 
 def test_canonical_screening_fixture_does_not_disable_default_provider_gate() -> None:
