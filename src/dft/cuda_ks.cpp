@@ -840,8 +840,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool rsh_chunk =
         has_exchange && has_range_correction && range_correction.has_value() &&
         range_correction->backend == scf::FockBackend::Cuda &&
-        range_correction->spec.derivative_order == 0 &&
-        !range_correction->spec.coulomb.present && range_correction->spec.exchange.present &&
+        range_correction->spec.derivative_order == 0 && !range_correction->spec.coulomb.present &&
+        range_correction->spec.exchange.present &&
         range_correction->spec.exchange.approximation == scf::FockApproximation::Exact &&
         (range_correction->spec.exchange.op == scf::FockOperator::ShortRange ||
          range_correction->spec.exchange.op == scf::FockOperator::LongRange) &&
@@ -849,8 +849,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
         !fitted_coulomb && !nonlocal_correlation && !precision_schedule.any_mixed() && spins == 1 &&
-        (pure_semilocal_chunk || pbe0_chunk || rsh_chunk) &&
-        provider.system().ecp_terms.empty() &&
+        (pure_semilocal_chunk || pbe0_chunk || rsh_chunk) && provider.system().ecp_terms.empty() &&
         configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
       const auto binding = device_chunk_binding();

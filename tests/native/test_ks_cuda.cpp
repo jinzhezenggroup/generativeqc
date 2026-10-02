@@ -718,7 +718,6 @@ void compare_pbe0_chunk_history() {
           "could not restore CUDA PBE0 chunk qualification");
 }
 
-
 void compare_rsh_chunk_history() {
   const auto system = hydrogens(2U, true);
   const dft::AoBasis basis(system);
@@ -763,9 +762,9 @@ void compare_rsh_chunk_history() {
               chunked.second.iteration_chunks < chunked.second.iterations &&
               chunked.second.iteration_synchronizations < chunked.second.iterations,
           "CUDA RSH did not use the bounded SolverRegion");
-  require(chunked.second.execution_region_captures == 0 &&
-              chunked.second.execution_region_replays == 0,
-          "CUDA RSH unexpectedly entered unqualified graph replay");
+  require(
+      chunked.second.execution_region_captures == 0 && chunked.second.execution_region_replays == 0,
+      "CUDA RSH unexpectedly entered unqualified graph replay");
   require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
           "could not restore CUDA RSH chunk qualification");
 }
