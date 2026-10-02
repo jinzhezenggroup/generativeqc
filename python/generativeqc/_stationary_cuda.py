@@ -71,6 +71,11 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from generativeqc_compiler.method.stationary_resources import (
+    plan_stationary_cuda_resources,
+    stationary_cuda_allocation_bytes,
+    stationary_native_pair_reserve,
+)
 from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 from generativeqc_compiler.xc._generated_native_semilocal import (
@@ -541,7 +546,7 @@ class _CudaSources:
         self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
-            [ct.c_int] * 3 + [ct.c_size_t] * 8 + [ct.POINTER(ct.c_void_p), *tail]
+            [ct.c_int] * 3 + [ct.c_size_t] * 10 + [ct.POINTER(ct.c_void_p), *tail]
         )
         lib.stationary_topology.argtypes = [
             ct.c_void_p,
@@ -685,6 +690,19 @@ class _CudaSources:
         ]
         lib.stationary_destroy.argtypes = [ct.c_void_p]
         lib.stationary_destroy.restype = None
+        # This is the admitted upper bound. Native metrics report actual retained
+        # geometry bytes if a typed device-allocation failure selects the fallback.
+        self.resources = plan_stationary_cuda_resources(
+            atoms=basis.natom,
+            aos=basis.nao,
+            primitives=basis.nprimitive,
+            points=points,
+            tasks=records,
+            spins=spin_blocks,
+            sources=len(source_names),
+            target=compiler.target if target is None else target,
+            budget_bytes=budget,
+        )
         self._call(
             "stationary_create",
             device,
@@ -697,6 +715,8 @@ class _CudaSources:
             spin_blocks,
             page_work_budget,
             budget,
+            self.resources.geometry_lanes,
+            self.resources.geometry_threads,
             ct.byref(self.handle),
         )
         if profile_device:
@@ -1477,8 +1497,8 @@ class _CudaSources:
         return out
 
     def metrics(self) -> typing.Any:
-        values = (ct.c_uint64 * 14)()
-        if self.library.stationary_metrics(self.handle, values, 14):
+        values = (ct.c_uint64 * 21)()
+        if self.library.stationary_metrics(self.handle, values, 21):
             raise RuntimeError("stationary metrics unavailable")
         metrics = dict(
             zip(
@@ -1497,6 +1517,13 @@ class _CudaSources:
                     "d2h_calls",
                     "synchronizations",
                     "geometry_batches",
+                    "geometry_lane_capacity",
+                    "geometry_threads",
+                    "geometry_scratch_bytes",
+                    "geometry_peak_lanes",
+                    "center_geometry_bytes",
+                    "center_distance_evaluations",
+                    "center_geometry_preparations",
                 ),
                 values,
             )
@@ -1929,6 +1956,7 @@ class PreparedStationaryCudaExecution:
                     "integral_terms": integral_terms,
                     "primitive_page_work_budget": page_work_budget,
                     "grid_allocation_bytes": grid_plan.allocation_bytes,
+                    "geometry_resources": asdict(sources.resources),
                 },
                 "tensor_plans": tuple(
                     (name, tensor_plans[name].identity) for name in sorted(tensor_plans)
@@ -2007,6 +2035,8 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "synchronizations",
         "primitive_batches",
         "geometry_batches",
+        "center_distance_evaluations",
+        "center_geometry_preparations",
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]
@@ -2187,19 +2217,19 @@ def _complete_rks_cuda_gradient_diagnostic(
         active_ao_capacity=n,
         budget_bytes=max_device_bytes,
     )
-    source_bytes = (
-        8
-        * (
-            22 * primitive_tile
-            + 2 * basis.nprimitive
-            + 4 * n
-            + (579 + 3 * len(source_names)) * na
-            + 3 * tile_points
-            + 2 * plan.spin_blocks * n * n
-        )
-        + 256
+    # Admit the bounded fallback first. Optional lane expansion uses only the
+    # space left after every other retained force owner has been planned.
+    minimum_source_bytes = stationary_cuda_allocation_bytes(
+        atoms=na,
+        aos=n,
+        primitives=basis.nprimitive,
+        points=tile_points,
+        tasks=primitive_tile,
+        spins=plan.spin_blocks,
+        sources=len(source_names),
+        geometry_lanes=min(32, tile_points),
     )
-    available = max_device_bytes - grid_plan.peak_bytes - source_bytes
+    available = max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes
     if available <= 0:
         raise ValueError("stationary additional-device budget exceeded")
     tensor_plans = {}
@@ -2289,6 +2319,42 @@ def _complete_rks_cuda_gradient_diagnostic(
             raise ValueError("ECP additional-host byte budget exceeded")
         if ecp_workspace > max_device_bytes:
             raise ValueError("ECP additional-device budget exceeded")
+    # Lane expansion is optional: retain the old native provider allowance so
+    # a tighter geometry budget cannot disable or OOM an already-admitted
+    # prepared integral path. If the old remainder was itself too small, keep
+    # all of it and leave that existing provider decision unchanged. The fitted
+    # provider has a separate resource contract, so preserve its full allowance
+    # rather than borrowing the Direct provider's one-electron estimate.
+    native_geometry_reserve = (
+        max(0, available - sum(value.peak_bytes for value in tensor_plans.values()))
+        if not ecp and bool(getattr(state._source, "density_fitted", False))
+        else min(
+            max(
+                0, available - sum(value.peak_bytes for value in tensor_plans.values())
+            ),
+            stationary_native_pair_reserve(
+                atoms=na, aos=n, primitives=basis.nprimitive
+            ),
+        )
+        if not ecp
+        and callable(getattr(state._source, "cuda_integral_derivatives", None))
+        else 0
+    )
+    source_resources = plan_stationary_cuda_resources(
+        atoms=na,
+        aos=n,
+        primitives=basis.nprimitive,
+        points=tile_points,
+        tasks=primitive_tile,
+        spins=plan.spin_blocks,
+        sources=len(source_names),
+        target=target,
+        budget_bytes=max_device_bytes
+        - grid_plan.peak_bytes
+        - sum(value.peak_bytes for value in tensor_plans.values())
+        - native_geometry_reserve,
+    )
+    source_bytes = source_resources.allocation_bytes
     cache = Path(cache)
     spec = state._source.grid_spec
     if prepared is None:
@@ -2796,7 +2862,15 @@ def _complete_rks_cuda_gradient_diagnostic(
             work["bulk_pack_chunks"] = sources.bulk_pack_chunks
             work["bulk_packed_descriptors"] = sources.bulk_packed_descriptors
             work["scalar_packed_descriptors"] = sources.scalar_packed_descriptors
-        if work["owned_device_bytes"] != source_bytes:
+        # A typed cache-allocation failure may retain the exact direct arena.
+        # Keep admission/peak accounting conservative, but verify actual storage.
+        actual_center_bytes = work["center_geometry_bytes"]
+        planned_center_bytes = source_resources.center_geometry_bytes
+        if (
+            actual_center_bytes not in (0, planned_center_bytes)
+            or work["owned_device_bytes"]
+            != source_bytes - planned_center_bytes + actual_center_bytes
+        ):
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
     timeline.switch("publication_validation")

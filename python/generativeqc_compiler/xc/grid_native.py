@@ -72,12 +72,64 @@ GENERATIVEQC_GRID_HD std::array<double, 4> distance(const double* a, const doubl
   return result;
 }
 
-template <class Norm, class Ratio, class Log, class Pair>
-GENERATIVEQC_GRID_HD bool contract_point(const double* point, const double* centers, size_t na,
+// Exact triangular geometry storage. The ratio fields are emitted from the same
+// local AD graph, not a separately implemented force formula.
+struct CenterPair {
+  std::array<double, 4> distance;
+  std::array<double, 2> ratio;
+};
+static_assert(sizeof(CenterPair) == 6 * sizeof(double));
+GENERATIVEQC_GRID_HD inline size_t center_pair_index(size_t a, size_t b) {
+  return a * (a - 1) / 2 + b; // canonical a > b orientation
+}
+template <class Norm, class PrepareRatio>
+GENERATIVEQC_GRID_HD bool prepare_center_geometry(const double* centers, size_t na,
+                                                  double tolerance, CenterPair* pairs,
+                                                  Norm norm, PrepareRatio prepare_ratio) {
+  bool valid = true;
+  for (size_t a = 0; a < na; ++a) {
+    for (size_t k = 0; k < 3; ++k)
+      if (!std::isfinite(centers[3 * a + k])) return false;
+    for (size_t b = 0; b < a; ++b) {
+      const auto separation = distance(centers + 3 * a, centers + 3 * b, norm, valid);
+      if (!valid || separation[0] <= tolerance) return false;
+      if (pairs) pairs[center_pair_index(a, b)] = {separation, prepare_ratio(separation[0])};
+    }
+  }
+  return valid;
+}
+template <class Norm, class Ratio>
+struct DirectCenterGeometry {
+  const double* centers;
+  Norm norm;
+  Ratio ratio;
+  GENERATIVEQC_GRID_HD std::array<double, 4> separation(size_t a, size_t b, bool& valid) const {
+    return distance(centers + 3 * a, centers + 3 * b, norm, valid);
+  }
+  GENERATIVEQC_GRID_HD std::array<double, 3> coordinate(double difference, size_t, size_t,
+                                                      double separation) const {
+    return ratio(difference, separation);
+  }
+};
+template <class PreparedRatio>
+struct PreparedCenterGeometry {
+  const CenterPair* pairs;
+  PreparedRatio ratio;
+  GENERATIVEQC_GRID_HD std::array<double, 4> separation(size_t a, size_t b, bool&) const {
+    return pairs[center_pair_index(a, b)].distance;
+  }
+  GENERATIVEQC_GRID_HD std::array<double, 3> coordinate(double difference, size_t a, size_t b,
+                                                      double) const {
+    return ratio(difference, pairs[center_pair_index(a, b)].ratio.data());
+  }
+};
+
+template <class Norm, class Ratio, class Log, class Pair, class Geometry>
+GENERATIVEQC_GRID_HD bool contract_point_impl(const double* point, const double* centers, size_t na,
                                    size_t owner, double seed, double* gradient, double* logs,
                                    double* products, double* bar_product, double* bar_distance,
                                    size_t* zeros, std::array<double, 4>* distances, Norm norm,
-                                   Ratio ratio, Log logarithm, Pair pair) {
+                                   Ratio ratio, Log logarithm, Pair pair, Geometry geometry) {
   bool valid = true;
   for (size_t a = 0; a < na; ++a) distances[a] = distance(point, centers + 3 * a, norm, valid);
   if (!valid) return false;
@@ -86,7 +138,7 @@ GENERATIVEQC_GRID_HD bool contract_point(const double* point, const double* cent
   for (size_t a = 0; a < na; ++a) zeros[a] = 0;
   for (size_t a = 0; a < na; ++a) bar_distance[a] = 0;
   auto factor = [&](size_t a, size_t b, double separation) {
-    auto r = ratio(distances[a][0] - distances[b][0], separation);
+    auto r = geometry.coordinate(distances[a][0] - distances[b][0], a, b, separation);
     const bool clipped = portable_abs(r[0]) >= 1;
     auto f = pair(std::clamp(r[0], -1.0, 1.0));
     if (clipped || f[0] < 0 || f[0] > 1) f[1] = 0;
@@ -95,7 +147,7 @@ GENERATIVEQC_GRID_HD bool contract_point(const double* point, const double* cent
   };
   for (size_t a = 0; a < na; ++a)
     for (size_t b = 0; b < a; ++b) {
-      const double separation = distance(centers + 3 * a, centers + 3 * b, norm, valid)[0];
+      const double separation = geometry.separation(a, b, valid)[0];
       const auto f = factor(a, b, separation);
       for (size_t side = 0; side < 2; ++side) {
         const size_t atom = side ? b : a;
@@ -122,8 +174,8 @@ GENERATIVEQC_GRID_HD bool contract_point(const double* point, const double* cent
     bar_product[a] = seed * (objective[2] + (a == size_t(owner) ? objective[1] : 0));
   for (size_t a = 0; a < na; ++a)
     for (size_t b = 0; b < a; ++b) {
-      const auto separation = distance(centers + 3 * a, centers + 3 * b, norm, valid);
-      const auto r = ratio(distances[a][0] - distances[b][0], separation[0]);
+      const auto separation = geometry.separation(a, b, valid);
+      const auto r = geometry.coordinate(distances[a][0] - distances[b][0], a, b, separation[0]);
       const auto f = factor(a, b, separation[0]);
       // Saturated branches have exactly zero pullback. Skip before
       // exponentiation to avoid the undefined numerical form inf*0.
@@ -156,6 +208,31 @@ GENERATIVEQC_GRID_HD bool contract_point(const double* point, const double* cent
     }
   return valid;
 }
+// Keep the bounded direct route for owners without retained geometry capacity.
+template <class Norm, class Ratio, class Log, class Pair>
+GENERATIVEQC_GRID_HD bool contract_point(const double* point, const double* centers, size_t na,
+                                   size_t owner, double seed, double* gradient, double* logs,
+                                   double* products, double* bar_product, double* bar_distance,
+                                   size_t* zeros, std::array<double, 4>* distances, Norm norm,
+                                   Ratio ratio, Log logarithm, Pair pair) {
+  return contract_point_impl(point, centers, na, owner, seed, gradient, logs, products,
+                             bar_product, bar_distance, zeros, distances, norm, ratio,
+                             logarithm, pair, DirectCenterGeometry<Norm, Ratio>{centers, norm, ratio});
+}
+template <class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
+GENERATIVEQC_GRID_HD bool contract_point_prepared(const double* point, const double* centers, size_t na,
+                                   size_t owner, double seed, double* gradient, double* logs,
+                                   double* products, double* bar_product, double* bar_distance,
+                                   size_t* zeros, std::array<double, 4>* distances, Norm norm,
+                                   Ratio ratio, Log logarithm, Pair pair,
+                                   const CenterPair* pairs, PreparedRatio prepared_ratio) {
+  if (!pairs) return contract_point(point, centers, na, owner, seed, gradient, logs, products,
+                                   bar_product, bar_distance, zeros, distances, norm, ratio,
+                                   logarithm, pair);
+  return contract_point_impl(point, centers, na, owner, seed, gradient, logs, products,
+                             bar_product, bar_distance, zeros, distances, norm, ratio,
+                             logarithm, pair, PreparedCenterGeometry<PreparedRatio>{pairs, prepared_ratio});
+}
 }  // namespace generativeqc_grid_adjoint
 #undef GENERATIVEQC_GRID_HD
 """
@@ -166,12 +243,82 @@ def emit_grid_adjoint() -> str:
     return _GRID_ADJOINT_SOURCE
 
 
+def _emit_prepared_ratio(*, device: bool) -> str:
+    """Cut geometry-only nodes from the existing ratio AD graph, without rewriting it."""
+    program = grid_response_program("ratio")
+    graph, primal = program.graph, program.roots[0]
+    roots = (
+        primal,
+        *(graph.differentiate(primal, graph.variable(n)) for n in ("a", "b")),
+    )
+    order = tuple(graph.topological_order(roots))
+    dependent = {}
+    for identifier in order:
+        node = graph.nodes[identifier]
+        dependent[identifier] = (
+            node.operation == "variable"
+            and node.payload == "a"
+            or any(dependent[argument] for argument in node.arguments)
+        )
+    boundary = {
+        argument
+        for identifier in order
+        if dependent[identifier]
+        for argument in graph.nodes[identifier].arguments
+        if not dependent[argument]
+        and graph.nodes[argument].operation not in ("constant", "variable")
+    }
+    boundary.update(root.identifier for root in roots if not dependent[root.identifier])
+    # The retained ABI is reciprocal(R), -pow(R, -2), including the original
+    # operation order. Fail generation if the authoritative graph changes it.
+    retained = tuple(identifier for identifier in order if identifier in boundary)
+    if len(retained) != 2:
+        raise ValueError("unexpected geometry-only ratio graph boundary")
+    from generativeqc_compiler.integral.expr import Expr
+
+    expressions = tuple(Expr(graph, identifier) for identifier in retained)
+    prefix = "__device__" if device else "static"
+    prepare = ScalarCEmitter(graph, {"b": "b"})
+    prepare.emit(expressions)
+    consume = ScalarCEmitter(graph, {"a": "a", "b": "b"})
+    # Bind every invariant node, not just the cut, so emission cannot leave dead
+    # reciprocal/pow work in the pointwise body.
+    for identifier in order:
+        if not dependent[identifier]:
+            consume.names[identifier] = "unused_geometry_node"
+    for index, identifier in enumerate(retained):
+        consume.names[identifier] = f"geometry[{index}]"
+    consume.emit(roots)
+    if "unused_geometry_node" in "\n".join(consume.lines):
+        raise ValueError("incomplete geometry-only ratio graph boundary")
+    return (
+        "\n".join(
+            [
+                f"{prefix} std::array<double, 2> local_ratio_geometry(double b) {{",
+                *prepare.lines,
+                "return {"
+                + ", ".join(prepare.reference(root) for root in expressions)
+                + "};",
+                "}",
+                f"{prefix} std::array<double, 3> local_ratio_prepared(double a, const double* geometry) {{",
+                *consume.lines,
+                "return {"
+                + ", ".join(consume.reference(root) for root in roots)
+                + "};",
+                "}",
+            ]
+        )
+        + "\n"
+    )
+
+
 def emit_grid_partials(
     iterations: typing.Any = 3, *, device: typing.Any = False
 ) -> typing.Any:
     """Shared local AD construction for CPU and CUDA traversal owners."""
     lines = []
     identities = {}
+    lines.append(_emit_prepared_ratio(device=device))
     for kind, names in (
         ("norm", ("x", "y", "z")),
         ("ratio", ("a", "b")),
@@ -207,7 +354,7 @@ def emit_grid_contraction(iterations: typing.Any = 3) -> typing.Any:
     ]
     lines += [
         'extern "C" int grid_contract(const double* points, size_t np, const double* centers, size_t na, const int64_t* owners, const double* seeds, double* output, size_t no, size_t budget, size_t max_pairs, double tolerance) noexcept {',
-        "return generativeqc_grid_cpu::contract(points, np, centers, na, owners, seeds, output, no, budget, max_pairs, tolerance, local_norm, local_ratio, local_log, local_becke);",
+        "return generativeqc_grid_cpu::contract(points, np, centers, na, owners, seeds, output, no, budget, max_pairs, tolerance, local_norm, local_ratio, local_log, local_becke, local_ratio_geometry, local_ratio_prepared);",
         "}",
     ]
     return "\n".join(lines) + "\n"

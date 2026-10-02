@@ -32,7 +32,7 @@ class StationaryOwnerKernelTests(unittest.TestCase):
             return [" ".join(item.split()) for item in match.group(1).split(",")]
 
         self.assertEqual(arguments(prototype), arguments(definition))
-        self.assertEqual(len(arguments(definition)), 16)
+        self.assertEqual(len(arguments(definition)), 18)
 
     def test_emitted_explicit_and_implicit_owner_expression(self) -> None:
         compiler = shutil.which("c++")

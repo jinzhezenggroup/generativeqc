@@ -277,9 +277,9 @@ struct Owner {
   }
 };
 
-void run_diis(Owner& s, const SolverOptions& options,
+bool run_diis(Owner& s, const SolverOptions& options,
               const generated::DeviceIterationOutputs& trial) {
-  if (!options.diis_size) return;
+  if (!options.diis_size) return false;
   int count = static_cast<int>(s.history);
   if (count == static_cast<int>(options.diis_size)) {
     generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
@@ -304,8 +304,9 @@ void run_diis(Owner& s, const SolverOptions& options,
   if (count == 1) {
     s.check_generated_error();
     s.history = 1;
-    return;
+    return false;
   }
+  bool state_modified = false;
   bool generated_error_checked = false;
   int generated_error = 0;
   while (count > 1) {
@@ -351,6 +352,7 @@ void run_diis(Owner& s, const SolverOptions& options,
     if (host_status == 2) break;
     if (host_status == 0) {
       if (arithmetic) throw std::runtime_error("nonfinite RCCSD CUDA DIIS extrapolation");
+      state_modified = true;
       break;
     }
     generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
@@ -366,6 +368,7 @@ void run_diis(Owner& s, const SolverOptions& options,
   }
   s.history = static_cast<unsigned>(count);
   cuda_check(cudaGetLastError());
+  return state_modified;
 }
 
 }  // namespace
@@ -380,17 +383,25 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
   result.total_energy = std::numeric_limits<double>::quiet_NaN();
   double previous = std::numeric_limits<double>::quiet_NaN();
   bool use_last = false;
+  generated::DeviceIterationOutputs carried_output{};
+  bool has_carried_output = false;
   const auto started = std::chrono::steady_clock::now();
 
   for (unsigned iteration = 0; iteration <= options.max_iterations; ++iteration) {
     try {
       const auto iteration_started = std::chrono::steady_clock::now();
-      const auto output = generated::run_iteration_cuda(owner.state);
+      generated::DeviceIterationOutputs output{};
+      if (has_carried_output) {
+        output = carried_output;
+        has_carried_output = false;
+      } else {
+        output = generated::run_iteration_cuda(owner.state);
+        ++owner.diagnostic.iteration_graph_calls;
+      }
       const auto status = owner.read_status(output);
       owner.diagnostic.iteration_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
               .count();
-      ++owner.diagnostic.iteration_graph_calls;
       const double delta = std::isfinite(previous) ? std::abs(status[0] - previous)
                                                    : std::numeric_limits<double>::infinity();
       result.correlation_energy = status[0];
@@ -430,7 +441,11 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         const auto trial = generated::run_iteration_cuda(owner.state);
         cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
         ++owner.diagnostic.iteration_graph_calls;
-        run_diis(owner, options, trial);
+        const bool diis_modified_state = run_diis(owner, options, trial);
+        if (!diis_modified_state) {
+          carried_output = trial;
+          has_carried_output = true;
+        }
         // Every successful DIIS path, including the first history push, has
         // already drained this stream past both events. Do not add a timing
         // fence: the trial's completed device interval belongs to iteration,

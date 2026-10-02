@@ -12,11 +12,12 @@
 
 namespace generativeqc_stationary_cuda {
 using namespace generativeqc_tensor;
-constexpr size_t workers = 32, record_stride = 26, task_stride = 9;
+constexpr size_t record_stride = 26, task_stride = 9;
 struct Owner {
   Context context;
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
-      max_page_primitive_work{}, bytes{};
+      max_page_primitive_work{}, bytes{}, geometry_lanes{}, geometry_threads{},
+      geometry_peak_lanes{}, center_geometry_bytes{};
   bool failed = true, topology_ready = false;
   bool profile = false, geometry_pending = false;
   cudaStream_t geometry_stream{};
@@ -26,10 +27,12 @@ struct Owner {
   double geometry_h2d_ms{}, geometry_kernel_ms{}, geometry_reduction_ms{}, final_d2h_wall_ms{};
   double *primitive_table{}, *ao_norms{}, *task_charges{}, *task_values{}, *centers{}, *weights{},
       *raw{}, *partial{}, *scratch{}, *sources{}, *density{}, *weighted_density{};
+  generativeqc_grid_adjoint::CenterPair* center_pairs{};
   int64_t *ao_ranges{}, *tasks{}, *ao_atoms{}, *point_atoms{};
   uint64_t uploads{}, downloads{}, launches{}, primitive_count{}, point_count{}, pair_visits{},
       task_count{}, task_batches{};
   uint64_t h2d_calls{}, d2h_calls{}, synchronizations{}, geometry_batches{};
+  uint64_t center_distance_evaluations{}, center_geometry_preparations{};
   // Primitive metrics are cumulative across one reset/force execution. Admission
   // is page-local so arbitrarily many bounded pages may contribute to one force.
   void check_page_primitive_work(size_t work) const {
@@ -43,16 +46,20 @@ struct Owner {
   }
 };
 // Caps make all products below representable before any allocation or pointer
-// dereference. The fixed worker count bounds O(worker*natom) adjoint scratch.
-size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntask, size_t ns) {
+// dereference. Compiler-planned lanes bound O(lanes*natom) adjoint scratch.
+size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntask, size_t ns,
+                  size_t geometry_lanes, bool cache_center_geometry = false) {
   if (!na || na > 128 || !n || n > 1024 || !nprimitive || nprimitive > 16384 || !np || np > 4096 ||
-      !ntask || ntask > 4096 || (ns != 1 && ns != 2) || ns != stationary_spin_blocks)
+      !ntask || ntask > 4096 || (ns != 1 && ns != 2) || ns != stationary_spin_blocks ||
+      !geometry_lanes || geometry_lanes > np || geometry_lanes > stationary_geometry_max_lanes ||
+      18 * geometry_lanes * na * sizeof(double) > stationary_geometry_max_scratch_bytes)
     throw std::invalid_argument("stationary CUDA shape exceeds small-domain caps");
-  // Three center coordinates, two 32-worker nine-coordinate scratch panels,
+  // Three center coordinates, two planned nine-coordinate lane panels,
   // and one three-coordinate panel per compiler-owned gradient source.
-  return 8 * (2 * nprimitive + 4 * n + 22 * ntask + (579 + 3 * stationary_source_count) * na +
-              3 * np + 2 * ns * n * n) +
-         256;
+  return 8 * (2 * nprimitive + 4 * n + 22 * ntask +
+              (3 + 18 * geometry_lanes + 3 * stationary_source_count) * na + 3 * np +
+              2 * ns * n * n) +
+         (cache_center_geometry ? 48 * (na * (na - 1) / 2) : 0) + 256;
 }
 template <class F>
 int guarded(Owner* owner, char* error, size_t size, F f) noexcept {
@@ -126,33 +133,64 @@ __global__ void nuclear_kernel(unsigned kind, int64_t a, int64_t b, double za, d
                                const double* centers, size_t na, double* output, int* error);
 __global__ void nuclear_all_kernel(unsigned kind, const double* charges, const double* centers,
                                    size_t na, double* output, int* error);
-__global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error);
+__global__ void validate_centers(const double* centers, size_t na, double tolerance,
+                                 generativeqc_grid_adjoint::CenterPair* center_pairs, int* error);
 __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners, size_t owner_offset,
                                 size_t points_per_atom, const double* centers, size_t na,
                                 const double* weights, const double* raw, const double* external,
-                                size_t external_stride, size_t external_offset, double* partial,
-                                double* scratch, int* error);
-__global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error);
+                                size_t external_stride, size_t external_offset,
+                                size_t geometry_lanes, double* partial, double* scratch,
+                                const generativeqc_grid_adjoint::CenterPair* center_pairs,
+                                int* error);
+__global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
+                                double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
 }  // namespace generativeqc_stationary_cuda
 
 extern "C" {
 int stationary_create(int device, int major, int minor, size_t na, size_t n, size_t nprimitive,
                       size_t np, size_t ntask, size_t ns, size_t max_primitive_work, size_t budget,
-                      void** output, char* error, size_t size) {
+                      size_t geometry_lanes, size_t geometry_threads, void** output, char* error,
+                      size_t size) {
   using namespace generativeqc_stationary_cuda;
   if (output) *output = nullptr;
   return guarded(nullptr, error, size, [&] {
     if (!output || !max_primitive_work)
       throw std::invalid_argument("invalid stationary owner output/work budget");
-    const size_t bytes = allocation(na, n, nprimitive, np, ntask, ns);
+    size_t bytes = allocation(na, n, nprimitive, np, ntask, ns, geometry_lanes);
     if (bytes > budget) throw std::invalid_argument("stationary CUDA byte budget exceeded");
+    // Reuse spare capacity only; point concurrency remains compiler-planned.
+    const size_t pair_bytes = 48 * (na * (na - 1) / 2);
+    size_t center_bytes = pair_bytes <= budget - bytes ? pair_bytes : 0;
+    bytes += center_bytes;
     int device_count = 0;
     cuda_check(cudaGetDeviceCount(&device_count));
     if (device < 0 || device >= device_count)
       throw std::invalid_argument("invalid stationary CUDA device ordinal");
+    cudaDeviceProp property{};
+    cuda_check(cudaGetDeviceProperties(&property, device));
+    if (!geometry_threads || geometry_threads > stationary_geometry_max_threads ||
+        geometry_threads > geometry_lanes ||
+        geometry_threads > size_t(property.maxThreadsPerBlock) ||
+        geometry_threads > size_t(property.maxThreadsDim[0]) ||
+        (geometry_lanes + geometry_threads - 1) / geometry_threads >
+            size_t(property.maxGridSize[0]))
+      throw std::invalid_argument("invalid stationary geometry launch plan");
     auto p = std::make_unique<Owner>();
+    try {
+      p->context.prepare(device, major, minor, bytes, bytes - 256, 0, 0, 0, false);
+    } catch (const DeviceAllocationError&) {
+      if (!center_bytes) throw;
+      // Release every partially constructed CUDA resource before retrying the
+      // already-admitted direct arena once. Other device errors still fail.
+      p.reset();
+      (void)cudaGetLastError();
+      bytes -= center_bytes;
+      center_bytes = 0;
+      p = std::make_unique<Owner>();
+      p->context.prepare(device, major, minor, bytes, bytes - 256, 0, 0, 0, false);
+    }
     p->atoms = na;
     p->aos = n;
     p->primitives = nprimitive;
@@ -161,7 +199,9 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->spin_blocks = ns;
     p->max_page_primitive_work = max_primitive_work;
     p->bytes = bytes;
-    p->context.prepare(device, major, minor, bytes, bytes - 256, 0, 0, 0, false);
+    p->geometry_lanes = geometry_lanes;
+    p->geometry_threads = geometry_threads;
+    p->center_geometry_bytes = center_bytes;
     auto* next = reinterpret_cast<double*>(p->context.arena);
     auto take = [&](size_t count) {
       auto* ptr = next;
@@ -173,10 +213,13 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->task_charges = take(ntask);
     p->task_values = take(12 * ntask);
     p->centers = take(3 * na);
+    if (center_bytes)
+      p->center_pairs = reinterpret_cast<generativeqc_grid_adjoint::CenterPair*>(
+          take(center_bytes / sizeof(double)));
     p->weights = take(np);
     p->raw = take(np);
-    p->partial = take(workers * 9 * na);
-    p->scratch = take(workers * 9 * na);
+    p->partial = take(geometry_lanes * 9 * na);
+    p->scratch = take(geometry_lanes * 9 * na);
     p->sources = take(3 * stationary_source_count * na);
     p->ao_ranges = reinterpret_cast<int64_t*>(take(2 * n));
     p->tasks = reinterpret_cast<int64_t*>(take(task_stride * ntask));
@@ -258,6 +301,7 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     p->context.check_device();
     drain_geometry(*p);
     p->failed = false;
+    p->geometry_peak_lanes = 0;
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
@@ -266,10 +310,13 @@ int stationary_reset(void* pointer, const double* centers, const double* density
     upload(*p, p->density, density, p->spin_blocks * p->aos * p->aos, stream);
     upload(*p, p->weighted_density, weighted_density, p->spin_blocks * p->aos * p->aos, stream);
     profile_record(*p, p->stage1, stream);
-    validate_centers<<<1, 1, 0, stream>>>(p->centers, p->atoms, tolerance, p->context.error);
+    validate_centers<<<1, 1, 0, stream>>>(p->centers, p->atoms, tolerance, p->center_pairs,
+                                          p->context.error);
     profile_record(*p, p->stage2, stream);
     ++p->launches;
     p->pair_visits += p->atoms * (p->atoms - 1) / 2;
+    p->center_distance_evaluations += p->atoms * (p->atoms - 1) / 2;
+    if (p->center_pairs) ++p->center_geometry_preparations;
     finished(*p, stream);
     profile_elapsed(*p, p->setup_transfer_ms, p->stage0, p->stage1);
     profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
@@ -285,16 +332,20 @@ int stationary_geometry_reset(void* pointer, const double* centers, double toler
     p->context.check_device();
     drain_geometry(*p);
     p->failed = false;
+    p->geometry_peak_lanes = 0;
     auto stream = p->context.stream;
     profile_record(*p, p->stage0, stream);
     cuda_check(cudaMemsetAsync(p->context.error, 0, sizeof(int), stream));
     cuda_check(cudaMemsetAsync(p->sources, 0, 3 * stationary_source_count * p->atoms * 8, stream));
     upload(*p, p->centers, centers, 3 * p->atoms, stream);
     profile_record(*p, p->stage1, stream);
-    validate_centers<<<1, 1, 0, stream>>>(p->centers, p->atoms, tolerance, p->context.error);
+    validate_centers<<<1, 1, 0, stream>>>(p->centers, p->atoms, tolerance, p->center_pairs,
+                                          p->context.error);
     profile_record(*p, p->stage2, stream);
     ++p->launches;
     p->pair_visits += p->atoms * (p->atoms - 1) / 2;
+    p->center_distance_evaluations += p->atoms * (p->atoms - 1) / 2;
+    if (p->center_pairs) ++p->center_geometry_preparations;
     finished(*p, stream);
     profile_elapsed(*p, p->setup_transfer_ms, p->stage0, p->stage1);
     profile_elapsed(*p, p->setup_validation_ms, p->stage1, p->stage2);
@@ -405,6 +456,9 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
         !view->ao || !view->points)
       throw std::invalid_argument("invalid geometry task lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     drain_geometry(*p);
     auto stream = view->stream;
     // This optional bounded tile is accounted separately by the nonlocal
@@ -425,16 +479,21 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
       upload(*p, p->weights, weights, view->npoint, stream);
       upload(*p, p->raw, raw, view->npoint, stream);
       profile_record(*p, p->stage1, stream);
-      geometry_kernel<<<1, workers, 0, stream>>>(
-          *view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers, p->atoms, p->weights, p->raw,
-          seeds.get(), view->npoint, 0, p->partial, p->scratch, p->context.error);
+      geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                        stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers,
+                                  p->atoms, p->weights, p->raw, seeds.get(), view->npoint, 0,
+                                  geometry_lanes, p->partial, p->scratch, p->center_pairs,
+                                  p->context.error);
       profile_record(*p, p->stage2, stream);
       geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-          p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+          p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+          p->context.error);
       profile_record(*p, p->stage3, stream);
       p->launches += 2;
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+      if (!p->center_pairs)
+        p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
       finished(*p, stream);
       profile_elapsed(*p, p->geometry_h2d_ms, p->stage0, p->stage1);
@@ -470,6 +529,9 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
         view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident nonlocal geometry seed lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     drain_geometry(*p);
     auto stream = view->stream;
     // external_device is caller-owned device memory. The caller guarantees
@@ -481,17 +543,21 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
       upload(*p, p->weights, weights, view->npoint, stream);
       upload(*p, p->raw, raw, view->npoint, stream);
       profile_record(*p, p->stage1, stream);
-      geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0,
-                                                 p->centers, p->atoms, p->weights, p->raw,
-                                                 external_device, external_stride, external_offset,
-                                                 p->partial, p->scratch, p->context.error);
+      geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                        stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers,
+                                  p->atoms, p->weights, p->raw, external_device, external_stride,
+                                  external_offset, geometry_lanes, p->partial, p->scratch,
+                                  p->center_pairs, p->context.error);
       profile_record(*p, p->stage2, stream);
       geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-          p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+          p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+          p->context.error);
       profile_record(*p, p->stage3, stream);
       p->launches += 2;
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+      if (!p->center_pairs)
+        p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
       finished(*p, stream);
       profile_elapsed(*p, p->geometry_h2d_ms, p->stage0, p->stage1);
@@ -524,6 +590,9 @@ int stationary_geometry_external_device_enqueue(
         view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid deferred resident nonlocal geometry seed lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     auto stream = view->stream;
     if (p->geometry_pending && p->geometry_stream != stream)
       throw std::invalid_argument("stationary deferred geometry stream changed before drain");
@@ -536,16 +605,20 @@ int stationary_geometry_external_device_enqueue(
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0,
-                                               p->centers, p->atoms, p->weights, p->raw,
-                                               external_device, external_stride, external_offset,
-                                               p->partial, p->scratch, p->context.error);
+    geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                      stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers,
+                                p->atoms, p->weights, p->raw, external_device, external_stride,
+                                external_offset, geometry_lanes, p->partial, p->scratch,
+                                p->center_pairs, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    if (!p->center_pairs)
+      p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
 }
@@ -566,6 +639,9 @@ int stationary_geometry_external_device_molecular_enqueue(
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid implicit-owner nonlocal geometry lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     auto stream = view->stream;
     if (p->geometry_pending && p->geometry_stream != stream)
       throw std::invalid_argument("stationary deferred geometry stream changed before drain");
@@ -575,16 +651,20 @@ int stationary_geometry_external_device_molecular_enqueue(
     }
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        p->weights, p->raw, external_device, external_stride, external_offset, p->partial,
-        p->scratch, p->context.error);
+    geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                      stream>>>(*view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom,
+                                p->centers, p->atoms, p->weights, p->raw, external_device,
+                                external_stride, external_offset, geometry_lanes, p->partial,
+                                p->scratch, p->center_pairs, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    if (!p->center_pairs)
+      p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
 }
@@ -606,6 +686,9 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
         external_stride < external_offset || view->npoint > external_stride - external_offset)
       throw std::invalid_argument("invalid resident-weight nonlocal geometry lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     auto stream = view->stream;
     if (p->geometry_pending && p->geometry_stream != stream)
       throw std::invalid_argument("stationary deferred geometry stream changed before drain");
@@ -613,16 +696,20 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
       p->geometry_stream = stream;
       p->geometry_pending = true;
     }
-    geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        device_weights, device_raw, external_device, external_stride, external_offset, p->partial,
-        p->scratch, p->context.error);
+    geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                      stream>>>(*view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom,
+                                p->centers, p->atoms, device_weights, device_raw, external_device,
+                                external_stride, external_offset, geometry_lanes, p->partial,
+                                p->scratch, p->center_pairs, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    if (!p->center_pairs)
+      p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
 }
@@ -641,6 +728,9 @@ int stationary_geometry_molecular_resident_weights_enqueue(
         view->npoint > p->atoms * points_per_atom - owner_offset)
       throw std::invalid_argument("invalid resident-weight geometry task lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     auto stream = view->stream;
     if (p->geometry_pending && p->geometry_stream != stream)
       throw std::invalid_argument("stationary deferred geometry stream changed before drain");
@@ -648,15 +738,20 @@ int stationary_geometry_molecular_resident_weights_enqueue(
       p->geometry_stream = stream;
       p->geometry_pending = true;
     }
-    geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        device_weights, device_raw, nullptr, 0, 0, p->partial, p->scratch, p->context.error);
+    geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                      stream>>>(*view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom,
+                                p->centers, p->atoms, device_weights, device_raw, nullptr, 0, 0,
+                                geometry_lanes, p->partial, p->scratch, p->center_pairs,
+                                p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    if (!p->center_pairs)
+      p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
 }
@@ -676,6 +771,9 @@ int stationary_geometry_molecular_enqueue(void* pointer,
         view->npoint > p->atoms * points_per_atom - owner_offset)
       throw std::invalid_argument("invalid implicit-owner geometry task lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     auto stream = view->stream;
     if (p->geometry_pending && p->geometry_stream != stream)
       throw std::invalid_argument("stationary deferred geometry stream changed before drain");
@@ -685,15 +783,20 @@ int stationary_geometry_molecular_enqueue(void* pointer,
     }
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(
-        *view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom, p->centers, p->atoms,
-        p->weights, p->raw, nullptr, 0, 0, p->partial, p->scratch, p->context.error);
+    geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                      stream>>>(*view, work, p->ao_atoms, nullptr, owner_offset, points_per_atom,
+                                p->centers, p->atoms, p->weights, p->raw, nullptr, 0, 0,
+                                geometry_lanes, p->partial, p->scratch, p->center_pairs,
+                                p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    if (!p->center_pairs)
+      p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
 }
@@ -709,6 +812,9 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
         !view->ao || !view->points)
       throw std::invalid_argument("invalid deferred geometry task lease");
     check(*p);
+    if (!view->npoint) return;
+    const size_t geometry_lanes = std::min(p->geometry_lanes, view->npoint);
+    p->geometry_peak_lanes = std::max(p->geometry_peak_lanes, geometry_lanes);
     auto stream = view->stream;
     if (p->geometry_pending && p->geometry_stream != stream)
       throw std::invalid_argument("stationary deferred geometry stream changed before drain");
@@ -722,15 +828,19 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
     upload(*p, p->point_atoms, owners, view->npoint, stream);
     upload(*p, p->weights, weights, view->npoint, stream);
     upload(*p, p->raw, raw, view->npoint, stream);
-    geometry_kernel<<<1, workers, 0, stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0,
-                                               p->centers, p->atoms, p->weights, p->raw, nullptr, 0,
-                                               0, p->partial, p->scratch, p->context.error);
+    geometry_kernel<<<blocks(geometry_lanes, p->geometry_threads), p->geometry_threads, 0,
+                      stream>>>(*view, work, p->ao_atoms, p->point_atoms, 0, 0, p->centers,
+                                p->atoms, p->weights, p->raw, nullptr, 0, 0, geometry_lanes,
+                                p->partial, p->scratch, p->center_pairs, p->context.error);
     geometry_reduce<<<blocks(9 * p->atoms, 64), 64, 0, stream>>>(
-        p->partial, p->atoms, p->sources + 3 * stationary_xc_source * p->atoms, p->context.error);
+        p->partial, p->atoms, geometry_lanes, p->sources + 3 * stationary_xc_source * p->atoms,
+        p->context.error);
     cuda_check(cudaGetLastError());
     p->launches += 2;
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+    if (!p->center_pairs)
+      p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
   });
 }
@@ -850,7 +960,7 @@ int stationary_profile_metrics(void* pointer, double* output, size_t count) {
 }
 int stationary_metrics(void* pointer, uint64_t* output, size_t count) {
   auto* p = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
-  if (!p || !output || count != 14) return 1;
+  if (!p || !output || count != 21) return 1;
   const uint64_t values[]{p->bytes,
                           p->uploads,
                           p->downloads,
@@ -864,8 +974,15 @@ int stationary_metrics(void* pointer, uint64_t* output, size_t count) {
                           p->h2d_calls,
                           p->d2h_calls,
                           p->synchronizations,
-                          p->geometry_batches};
-  std::copy(values, values + 14, output);
+                          p->geometry_batches,
+                          p->geometry_lanes,
+                          p->geometry_threads,
+                          18 * p->geometry_lanes * p->atoms * sizeof(double),
+                          p->geometry_peak_lanes,
+                          p->center_geometry_bytes,
+                          p->center_distance_evaluations,
+                          p->center_geometry_preparations};
+  std::copy(values, values + 21, output);
   return 0;
 }
 void stationary_destroy(void* pointer) {

@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 
@@ -21,10 +22,9 @@ struct GeneratedCoulombPlan {
   cudaStream_t stream{};
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
-  std::uint64_t class_mask{};
-  /** True only when every present shell class has a production value J/K
-   * consumer. Force-only owners may retain the same topology through f while
-   * value execution stays on the canonical/generic provider. */
+  std::uint64_t class_mask{}, value_class_mask{};
+  /** True only when generated/native streaming value consumers cover every
+   * present shell class without the bounded higher-l fallback. */
   bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};
@@ -43,7 +43,7 @@ struct GeneratedCoulombPlan {
  */
 std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool allow_force_only_shell_classes = false);
+    std::size_t budget, bool allow_bounded_shell_fallback = false);
 
 /** Enqueue raw J from total spin density. Inputs and result use public AO order.
  * The same stream owns every transform, scatter and projection; no host copies.
@@ -52,10 +52,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* 
                                       const double* beta, double* coulomb);
 
 /** Optional raw-K owner layered on the generated-J geometry/topology owner.
- * Value-only direct CUDA plans prefer this owner when the supported shell
- * classes and optional device budget admit it. Density screening uses the same
- * shell-pair reductions as Direct HF. Value K remains full-range; the optional
- * stationary-force lease may reuse this topology for explicit SR/LR operators.
+ * Direct CUDA plans prefer complete generated/native value coverage when the
+ * optional device budget admits it. Bounded through-f values require an
+ * explicit qualification opt-in on CudaDirectJkPlan. Density screening uses
+ * the same shell-pair reductions as Direct HF. The bounded lease supports
+ * strict-FP64 SR/LR value K; generated streaming classes remain full-range.
  */
 struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
@@ -67,30 +68,36 @@ struct GeneratedExchangePlan {
   double *system_density_bounds{}, *system_pair_density_bounds{};
   std::uint32_t* heads{};
   GeneratedShellPairStream* topology{};
-  // Optional stationary-force lease. These buffers reuse the same immutable
-  // Cartesian topology and current density bounds as generated full-range K.
-  bool force_capability{};
+  // Optional bounded Direct-HF lease. Value fallback and stationary forces
+  // share immutable shell topology, screening metadata and one cursor.
+  bool force_capability{}, bounded_value_capability{};
   const std::uint32_t* bounded_pair_order{};
+  std::uint32_t* bounded_value_overflow{};
   double *shell_pair_block_bounds{}, *force{};
   unsigned long long* force_cursor{};
   ~GeneratedExchangePlan();
 };
 
 /** Prepare the generated J+full-range-K owner within one explicit budget.
- * A derivative-capable caller may retain force topology for shell classes that
- * do not have a production value consumer; value_capability then remains false.
- * Insufficient optional capacity still returns null.
- */
+ * Through-f callers may retain HF's bounded shell fallback for value and force
+ * classes not owned by generated/native streaming consumers. */
 std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool force_capability = false, bool allow_force_only_shell_classes = false);
+    std::size_t budget, bool force_capability = false, bool allow_bounded_shell_fallback = false);
+
+/** Enqueue a complete raw J through generated/native classes plus the bounded
+ * higher-l shell fallback owned by the exchange plan. */
+cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& plan, bool unrestricted,
+                                      const double* alpha, const double* beta, double* coulomb);
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
  */
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestricted,
                                        const double* alpha, const double* beta,
-                                       double* alpha_exchange, double* beta_exchange);
+                                       double* alpha_exchange, double* beta_exchange,
+                                       DirectCoulombRange range = DirectCoulombRange::Full,
+                                       double omega = 0.0);
 
 /** Execute separate full-range J' and K' fixed-density energy derivatives
  * through the retained shell topology. Output is source-major [J,K], each

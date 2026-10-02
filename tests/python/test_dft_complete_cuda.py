@@ -215,6 +215,14 @@ def test_complete_cuda_independent_analytic(
         assert result.work["grid_atomic_measure_source"] == "exact-native-resident-grid"
         assert result.work["grid_atomic_measure_h2d_bytes"] == 0
         assert result.work["xc_points"] == len(state.grid.points)
+        assert result.work["geometry_lane_capacity"] > 32
+        assert (
+            result.work["geometry_peak_lanes"] == result.work["geometry_lane_capacity"]
+        )
+        assert (
+            result.work["geometry_scratch_bytes"]
+            == 144 * basis.natom * result.work["geometry_lane_capacity"]
+        )
         assert (
             result.work["additional_device_peak_bound"]
             <= result.work["additional_device_budget"]
@@ -294,6 +302,14 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         np.testing.assert_allclose(result.gradient, reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
         assert result.work["xc_points"] == len(state.grid.points)
+        assert result.work["geometry_lane_capacity"] > 32
+        assert (
+            result.work["geometry_peak_lanes"] == result.work["geometry_lane_capacity"]
+        )
+        assert (
+            result.work["geometry_scratch_bytes"]
+            == 144 * basis.natom * result.work["geometry_lane_capacity"]
+        )
         assert result.work["tensor_executions"] == 0
         assert (
             result.work["stationary_final_reduction"]
@@ -391,6 +407,14 @@ def test_complete_cuda_r2scan_independent_analytic(
         np.testing.assert_allclose(result.gradient, reference, atol=2e-6, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-9, rtol=0)
         assert result.work["xc_points"] == len(state.grid.points)
+        assert result.work["geometry_lane_capacity"] > 32
+        assert (
+            result.work["geometry_peak_lanes"] == result.work["geometry_lane_capacity"]
+        )
+        assert (
+            result.work["geometry_scratch_bytes"]
+            == 144 * basis.natom * result.work["geometry_lane_capacity"]
+        )
         assert result.execution.startswith("cuda-seven-source/")
 
 
@@ -557,7 +581,7 @@ def test_cuda_source_failure_zero_tail_and_recovery(compiler: typing.Any) -> Non
         )
         with pytest.raises(ValueError, match="hash mismatch"):
             _CudaSources(basis, corrupt, compiler, 0, 5, 7, 1 << 20)
-        with pytest.raises(RuntimeError, match="budget"):
+        with pytest.raises(ValueError, match="budget"):
             _CudaSources(basis, artifact, compiler, 0, 5, 7, 1)
         with pytest.raises(RuntimeError):
             _CudaSources(basis, artifact, compiler, 1, 5, 7, 1 << 20)
@@ -1024,3 +1048,186 @@ def test_cuda_ks_resource_plan_accounts_for_public_force_staging() -> None:
     }
     assert "serialized generated KS force device staging cap" in names
     assert "serialized generated KS force host staging cap" in names
+
+
+@pytest.mark.parametrize(
+    "method,functional", [("LDA_XC_PW", 0), ("PBE", 1), ("R2SCAN", 2), ("PBE0", 1)]
+)
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_cuda_geometry_lane_budget_tail_and_changed_geometry_replay(
+    compiler: typing.Any, method: str, functional: int, spin: str, tmp_path: Path
+) -> None:
+    """Compare actual multi-block point work with the bounded 32-lane fallback.
+
+    This is a schedule equivalence gate. The complete endpoint tests above retain
+    independent analytic/finite-difference force oracles and unchanged tolerances.
+    """
+    from contextlib import ExitStack
+
+    from generativeqc._stationary_cuda import _CudaSources
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft.cuda import CudaGrid
+    from generativeqc_compiler.dft.cuda import compile_cuda as compile_grid
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_cuda import (
+        compile_stationary_cuda,
+        stationary_runtime_sources,
+    )
+    from generativeqc_compiler.method.stationary_gradient import (
+        SCF_POINT_MODEL,
+        StationaryGradientPlan,
+        StationaryMeanField,
+    )
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_cuda_allocation_bytes,
+    )
+
+    atoms = [("H", (0.13, -0.17, -0.71)), ("H", (-0.09, 0.11, 0.79))]
+    changed = [("H", (0.15, -0.15, -0.73)), ("H", (-0.08, 0.09, 0.82))]
+    plan = StationaryGradientPlan(
+        resolve_method(method, spin=spin), StationaryMeanField(SCF_POINT_MODEL)
+    )
+    # Geometry must never invoke the integral derivative provider in this gate.
+    primitive = """#include <cuda_runtime.h>
+__device__ bool first_derivative(unsigned, const double*, const double*, double*) { return false; }
+"""
+    artifact = compile_stationary_cuda(
+        primitive,
+        functional=functional,
+        plan=plan,
+        iterations=3,
+        compiler=compiler,
+        cache=tmp_path,
+    )
+    point_capacity = 2083
+    rng = np.random.default_rng(1479)
+    relative_points = rng.normal(size=(point_capacity, 3)) * 0.4
+    owners = np.arange(point_capacity, dtype=np.int64) % 2
+    weights = np.full(point_capacity, 0.013)
+    raw = np.full(point_capacity, 0.019)
+    with ExitStack() as stack:
+        basis = stack.enter_context(NativeAO(atoms))
+        moved_basis = stack.enter_context(NativeAO(changed))
+        density = np.repeat(
+            np.eye(basis.nao)[None, :, :] * 0.2, plan.spin_blocks, axis=0
+        )
+        # Sources borrow this stream; destroy them before their grid owner.
+        grid = stack.enter_context(
+            CudaGrid(
+                basis,
+                compile_grid(compiler, tmp_path),
+                order=2,
+                tile_points=point_capacity,
+                active_ao_capacity=basis.nao,
+                ingredients=("rho", "gradient", "tau"),
+            )
+        )
+        sources = []
+        for lanes, cached in (
+            (32, False),
+            (32, True),
+            (256, False),
+            (256, True),
+            (2048, False),
+            (2048, True),
+        ):
+            budget = stationary_cuda_allocation_bytes(
+                atoms=basis.natom,
+                aos=basis.nao,
+                primitives=basis.nprimitive,
+                points=point_capacity,
+                tasks=1,
+                spins=plan.spin_blocks,
+                sources=len(stationary_runtime_sources(plan)),
+                geometry_lanes=lanes,
+                cache_center_geometry=cached,
+            )
+            owner = stack.enter_context(
+                _CudaSources(
+                    basis,
+                    artifact,
+                    compiler,
+                    0,
+                    point_capacity,
+                    1,
+                    budget,
+                    spin_blocks=plan.spin_blocks,
+                    source_names=stationary_runtime_sources(plan),
+                )
+            )
+            assert owner.metrics()["geometry_lane_capacity"] == lanes
+            assert owner.metrics()["owned_device_bytes"] == budget
+            assert owner.metrics()["center_geometry_bytes"] == (48 if cached else 0)
+            with pytest.raises((ValueError, RuntimeError)):
+                owner.reset_geometry(-1.0)
+            sources.append(owner)
+        previous = None
+        for repeat, current_basis in enumerate(
+            (basis, basis, moved_basis, moved_basis, basis, moved_basis, basis)
+        ):
+            centers = np.ascontiguousarray(current_basis.packed[:6].reshape(2, 3))
+            grid._rebind_centers(centers)
+            grid.set_density(density[0] if plan.spin_blocks == 1 else density)
+            points = np.ascontiguousarray(relative_points + centers[owners])
+            results = []
+            for owner in sources:
+                owner.rebind_geometry(current_basis)
+                metrics_before = owner.metrics()
+                if repeat % 2:
+                    owner.reset_geometry(1e-12)
+                else:
+                    owner.reset(1e-12, density, np.zeros_like(density))
+                # Reuse the full panels for an irregular large tile, a 6-point
+                # tail, and an empty tile; stale high lanes must not be reduced.
+                for begin, end in (
+                    (0, 2077),
+                    (2077, point_capacity),
+                    (point_capacity, point_capacity),
+                ):
+                    with grid.feature_task(
+                        points[begin:end],
+                        np.arange(basis.nao),
+                        ("rho",)
+                        if functional == 0
+                        else ("rho", "gradient")
+                        if functional == 1
+                        else ("rho", "gradient", "tau"),
+                    ) as task:
+                        owner.geometry(
+                            task,
+                            owners[begin:end],
+                            weights[begin:end],
+                            raw[begin:end],
+                            functional=functional,
+                        )
+                result = owner.finish()
+                metrics_after = owner.metrics()
+                cached = metrics_after["center_geometry_bytes"] != 0
+                assert metrics_after["center_distance_evaluations"] - metrics_before[
+                    "center_distance_evaluations"
+                ] == (1 if cached else 1 + 2 * point_capacity)
+                assert metrics_after["center_geometry_preparations"] - metrics_before[
+                    "center_geometry_preparations"
+                ] == int(cached)
+                # Preparation is device-only and adds no center table upload.
+                expected_upload = 3 * basis.natom * 8 + 3 * point_capacity * 8
+                if not repeat % 2:
+                    expected_upload += 2 * density.nbytes
+                assert (
+                    metrics_after["h2d_bytes"] - metrics_before["h2d_bytes"]
+                    == expected_upload
+                )
+                results.append(
+                    np.stack(
+                        [result[name] for name in ("xc_ao", "xc_grid", "xc_weight")]
+                    )
+                )
+                assert (
+                    owner.metrics()["geometry_peak_lanes"]
+                    == owner.resources.geometry_lanes
+                )
+            for result in results[1:]:
+                np.testing.assert_allclose(result, results[0], atol=2e-10, rtol=2e-12)
+            if previous is not None and previous[0] == current_basis.identity:
+                np.testing.assert_array_equal(results[0], previous[1])
+            previous = current_basis.identity, results[0]
