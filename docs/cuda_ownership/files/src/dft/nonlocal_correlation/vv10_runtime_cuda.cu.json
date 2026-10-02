@@ -6,7 +6,7 @@
       "start": "using PairKernelValues = generated::PairValues;",
       "stop": "unsigned launch_blocks(",
       "role": "runtime",
-      "reason": "Dispatch into compiler-owned ordered or bounded VV10 scalar closures; no handwritten pair mathematics. The bounded closure preserves energy/feature roots and retains the ordered closure outside its admitted radial domain."
+      "reason": "Dispatch into compiler-owned ordered or bounded VV10 scalar closures; no handwritten pair mathematics. The rational closure preserves the energy root, explicitly qualifies derivative rounding, and retains the ordered closure outside its admitted domain."
     },
     {
       "start": "void enqueue_vv10_molecular_domain_cuda(",
