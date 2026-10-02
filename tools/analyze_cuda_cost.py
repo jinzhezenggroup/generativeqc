@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Report GPU-free CUDA cost evidence from static facts or PTXAS diagnostics."""
 
 from __future__ import annotations
