@@ -142,6 +142,18 @@ smaller than the isolated radial speedup because Hermite recurrence and force
 work remain. Do not compare these matched values with a different allocation's
 composed times as a controlled speedup.
 
+The subsequent node1 Slurm 5354 allocation compares merged Hermite master and
+the composed radial candidate on the same RTX 5090 (visibility 0). At twelve
+atoms / def2-TZVP / grid 24 x 8 x 16, cold changes 230.972 -> 167.062 s,
+three-repeat warm median 28.459 -> 23.475 s (1.212x), and changed geometry
+125.523 -> 93.109 s. Both candidates take 22 cold, one warm, and 11 moved SCF
+iterations. All nine samples per source pass the independent CPU oracle,
+maximum force error below 9.09e-10 Eh/Bohr and energy error below 6.60e-12 Eh.
+This isolates the radial change on top of #1711; it remains a diagnostic-grid
+endpoint and is not evidence of large-system GPU4PySCF superiority. Raw records
+and the all-sample check are retained in `n1-matched-composed/` and
+`matched-composed12-check.json` below the artifact directory.
+
 The complete 24-atom, 48 x 16 x 32 grid cases are still running. Raw scientific
 records, input scripts, binary hashes and phase journals are retained locally in
 `.artifacts/lr-moments/` and on the explicitly authorized Slurm nodes under
