@@ -23,10 +23,12 @@ SUPPORTED = frozenset({"energy", "forces"})
 @pytest.fixture(params=("singlepoint", "batch"))
 def selector(request: pytest.FixtureRequest) -> typing.Any:
     batched = request.param == "batch"
+    # The public singlepoint wrapper serializes context ownership; property
+    # selection lives in the common execution method it calls.
     filename, owner, method = (
         ("batch.py", "PreparedBatch", "execute")
         if batched
-        else ("calculator.py", "Calculator", "singlepoint")
+        else ("calculator.py", "Calculator", "_singlepoint")
     )
     tree = ast.parse(
         (ROOT / "python/generativeqc" / filename).read_text(encoding="utf-8")
