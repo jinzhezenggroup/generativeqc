@@ -155,7 +155,7 @@ struct PreparedCosxFockPlan::Impl {
     validate_density(strategy, n, density, beta);
     const auto coordinates = 3 * orbital.atoms.size();
     scf::FockEnergyDerivativeComponents result{std::vector<double>(coordinates),
-                                                std::vector<double>(coordinates)};
+                                               std::vector<double>(coordinates)};
     if (strategy.spec.coulomb.present) {
       result.coulomb = coulomb->energy_derivative(density, beta);
       if (result.coulomb.size() != coordinates)
