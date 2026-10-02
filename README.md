@@ -197,7 +197,7 @@ print(first.energies)
 
 <!-- DFT benchmark rows are temporarily withheld from the rendered README.
 Restore these rows to the table above only after approval to publish the results.
-| PBE0 / def2-SVP | <a href="benchmarks/results/pbe0-def2-svp-20261003/pbe0.svg"><img src="benchmarks/results/pbe0-def2-svp-20261003/pbe0.svg" width="900" alt="GenerativeQC versus GPU4PySCF: complete warm PBE0 energy-plus-analytic-force latency at all six sizes"></a> |
+| PBE0 / def2-SVP | <a href="benchmarks/results/pbe0-grid-reuse-20261003/pbe0.svg"><img src="benchmarks/results/pbe0-grid-reuse-20261003/pbe0.svg" width="900" alt="GenerativeQC versus GPU4PySCF: complete warm PBE0 energy-plus-analytic-force latency at all six sizes"></a> |
 | ωB97M-V / def2-TZVPD (OMol25) | <a href="benchmarks/results/omol25-wb97mv-20261001/default-hf-cartesian/omol25.svg"><img src="benchmarks/results/omol25-wb97mv-20261001/default-hf-cartesian/omol25.svg" width="900" alt="GenerativeQC versus GPU4PySCF: automatic Cartesian-source OMol25 functional and basis, complete warm energy-plus-analytic-force latency; incomplete points explicitly marked"></a> |
 -->
 
@@ -210,7 +210,7 @@ five fixed engine-local warm replays, and independent energy/force gates at
 both original and changed geometries. Both engines use the same moving
 quadrature; timings include analytic grid response and host-returned forces,
 not energy-only SCF. Native uses the default direct FP64 path.
-[PBE0 protocol and results](benchmarks/results/pbe0-def2-svp-20261003/README.md).
+[PBE0 protocol and results](benchmarks/results/pbe0-grid-reuse-20261003/README.md).
 
 OMol25-level DFT uses the same water clusters and five-repeat energy + force
 protocol, with full spherical def2-TZVPD, a common moving grid and matched VV10

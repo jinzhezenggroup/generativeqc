@@ -1,5 +1,9 @@
 # PBE0/def2-SVP: complete strict energy and force endpoints
 
+This historical convergence-repair baseline is retained unchanged. The newer
+[grid-reuse campaign](../pbe0-grid-reuse-20261003/README.md) measures the subsequent
+performance changes against freshly measured independent references.
+
 ![All-five warm medians and ranges](pbe0.svg)
 
 All six sizes now complete cold, changed-geometry and ten warm endpoints,
@@ -154,7 +158,8 @@ match the recorded commit.
   under memcheck with zero errors. These cover explicitly rounded nonbinary
   products, unequal spins, full/range cancellation, null exchange pointers,
   failure bits and nonfinite rejection. The production kernel is unchanged.
-- `water<atoms>.json` retains every scalar observation, gates, source hashes,
+- `water<atoms>.json` (losslessly gzipped as `water96.json.gz` for 96 atoms)
+  retains every scalar observation, gates, source hashes,
   work/resources and both independent force oracles. Corresponding raw
   `*-{native,reference}.json.gz` files retain **all** forces; decompressed hashes
   must match `raw_sha256`. Controls and the two failed 96-atom attempts stay

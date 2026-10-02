@@ -140,6 +140,49 @@ def test_retained_pbe0_larger_failures_are_not_timings(atoms: int) -> None:
         assert "medians" not in entry
 
 
+@pytest.mark.parametrize("atoms", (3, 6, 12, 24, 48, 96))
+def test_grid_reuse_campaign_rechecks_every_endpoint(
+    atoms: int, tmp_path: Path
+) -> None:
+    """Rebuild each retained point from exact raw bytes, not summary gate flags."""
+    directory = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/pbe0-grid-reuse-20261003"
+    )
+    provenance = json.loads((directory / "provenance.json").read_text())
+    summaries = json.loads(
+        gzip.decompress((directory / "summary.json.gz").read_bytes())
+    )
+    summary = next(point for point in summaries if point["atoms"] == atoms)
+    restored = tmp_path / str(atoms)
+    restored.mkdir()
+    for engine, entry in summary["engines"].items():
+        name = f"water{atoms}-{engine}.json.gz"
+        raw = gzip.decompress((directory / name).read_bytes())
+        identity = provenance["raw_files"][name]
+        assert hashlib.sha256(raw).hexdigest() == identity["raw_sha256"]
+        assert len(raw) == identity["raw_bytes"]
+        (restored / f"{engine}.json").write_bytes(raw)
+        (restored / f"{engine}.outcome").write_text(json.dumps(entry["outcome"]))
+    checked = collect(tmp_path, atoms, schema=SCHEMA)
+    assert checked["protocol"] == summary["protocol"]
+    for engine, entry in checked["engines"].items():
+        assert entry["status"] == "measured"
+        assert len(entry["records"]) == 12
+        assert entry["medians"] == summary["engines"][engine]["medians"]
+        assert entry["raw_sha256"] == summary["engines"][engine]["raw_sha256"]
+    native = checked["engines"]["native"]
+    assert (
+        native["native_build"]["library_sha256"] == provenance["native_library_sha256"]
+    )
+    for record in native["records"]:
+        assert record["converged"] and record["gate"]
+        if record["phase"] in ("warm", "moved-warm"):
+            assert record["iterations"] == 1
+            assert record["warm_start_used"]
+            assert not record["warm_start_fallback"]
+
+
 def test_pbe0_plot_has_its_own_method_label(tmp_path: Path) -> None:
     """Rendering alone needs matplotlib; timeout/evidence validation always runs."""
     pytest.importorskip("matplotlib")

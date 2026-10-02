@@ -129,6 +129,62 @@ __global__ void feature_kernel(const double* ao, const double* work, I npoint, I
   }
 }
 
+// One full warp owns a point, including point and AO tails. Only lane zero
+// publishes; sigma uses the two completely reduced spin gradients. The
+// bilinears stay in the shared feature policy, while AO summation is a tree.
+__global__ void cooperative_feature_kernel(const double* ao, const double* work,
+                                           I npoint, I nao, double* output,
+                                           int* error, unsigned mask) {
+  const I lane = threadIdx.x % 32;
+  const I stride = npoint * nao;
+  for (I point = (I(blockIdx.x) * blockDim.x + threadIdx.x) / 32; point < npoint;
+       point += I(blockDim.x) * gridDim.x / 32) {
+    double gradients[2][3]{};
+    for (int spin = 0; spin < 2; ++spin) {
+      const double* spin_work = work + 4 * spin * stride;
+      double accum[5]{};
+      for (I ao_index = lane; ao_index < nao; ao_index += 32) {
+        const I index = point * nao + ao_index;
+        double derivative[3]{}, panel[4]{};
+        if (mask & 7) panel[0] = spin_work[index];
+        if (mask & 8)
+          for (int axis = 1; axis < 4; ++axis)
+            panel[axis] = spin_work[axis * stride + index];
+        if (mask & 14)
+          for (int axis = 0; axis < 3; ++axis)
+            derivative[axis] = ao[(axis + 1) * stride + index];
+        generativeqc_grid_policy::add_features(ao[index], derivative, panel, accum, mask);
+      }
+      for (int feature = 0; feature < 5; ++feature) {
+        for (int offset = 16; offset > 0; offset >>= 1)
+          accum[feature] += __shfl_down_sync(0xffffffffu, accum[feature], offset);
+        if (lane == 0)
+          output[(5 * spin + feature) * npoint + point] = finite(accum[feature], error, 1);
+      }
+      for (int axis = 0; axis < 3; ++axis) gradients[spin][axis] = accum[axis + 1];
+    }
+    if (lane == 0 && (mask & 4)) {
+      double sigma[3];
+      generativeqc_grid_policy::sigma(gradients, sigma);
+      for (int component = 0; component < 3; ++component)
+        output[(10 + component) * npoint + point] = finite(sigma[component], error, 1);
+    }
+  }
+}
+
+// Match the native SCF density-feature schedule without allocating scratch.
+// Keep the ordered scalar path for small active spaces and empty maps.
+inline void scheduled_grid_features(cudaStream_t stream, const double* ao,
+    const double* work, I npoint, I nao, double* output, int* error, unsigned mask) {
+  if (nao >= 32) {
+    cooperative_feature_kernel<<<blocks(npoint * 32, 128), 128, 0, stream>>>(
+        ao, work, npoint, nao, output, error, mask);
+  } else {
+    feature_kernel<<<blocks(npoint, 128), 128, 0, stream>>>(
+        ao, work, npoint, nao, output, error, mask);
+  }
+}
+
 // Reduce one occupied tile on the owner's stream. Partial sums remain per
 // spin/point; sigma is formed only after ALL occupied tiles in BOTH spins.
 __global__ void orbital_feature_kernel(const double* psi, I npoint, I width, int spin,
