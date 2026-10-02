@@ -131,7 +131,7 @@ __global__ void scatter_active_partners_ordered_kernel(std::size_t npoint,
   active_indices[block_offsets[blockIdx.x] + rank] = static_cast<std::uint64_t>(j);
 }
 
-template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
+template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows, bool StagePartners>
 __global__ void pair_kernel_ordered(
     std::size_t row_offset, std::size_t row_count, double coefficient, const double* points,
     const double* density, const double* omega, const double* kappa, const double* domega_drho,
@@ -140,23 +140,28 @@ __global__ void pair_kernel_ordered(
     double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
     double* weight_derivative, int* failed) {
   const auto lane = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (lane >= row_count) return;
+  const bool valid_row = lane < row_count;
+  if constexpr (!StagePartners) {
+    if (!valid_row) return;
+  }
   const auto i = row_offset + lane;
-
-  const double xi = points[3 * i];
-  const double yi = points[3 * i + 1];
-  const double zi = points[3 * i + 2];
-  const double wi = omega[i];
-  const double ki = kappa[i];
-  const double rhoi = density[i];
-  const double weighted_i = weighted_density[i];
-  const double domega_rhoi = Features ? domega_drho[i] : 0.0;
-  const double domega_sigmai = Features ? domega_dsigma[i] : 0.0;
-  const double dkappa_rhoi = Features ? dkappa_drho[i] : 0.0;
+  // A padded or screened row still loads partners and joins every barrier in
+  // the staged schedule. It never reads its absent row or performs pair work.
+  const double xi = valid_row ? points[3 * i] : 0.0;
+  const double yi = valid_row ? points[3 * i + 1] : 0.0;
+  const double zi = valid_row ? points[3 * i + 2] : 0.0;
+  const double wi = valid_row ? omega[i] : 0.0;
+  const double ki = valid_row ? kappa[i] : 1.0;
+  const double rhoi = valid_row ? density[i] : 1.0;
+  const double weighted_i = valid_row ? weighted_density[i] : 0.0;
+  const double domega_rhoi = Features && valid_row ? domega_drho[i] : 0.0;
+  const double domega_sigmai = Features && valid_row ? domega_dsigma[i] : 0.0;
+  const double dkappa_rhoi = Features && valid_row ? dkappa_drho[i] : 0.0;
+  bool active_row = valid_row;
   if constexpr (MaskZeroRows) {
     // Only negative zero denotes a density-screened row. Finite negative
     // quadrature weights and active positive-zero rows retain their derivatives.
-    if (weighted_i == 0.0 && signbit(weighted_i)) {
+    if (valid_row && weighted_i == 0.0 && signbit(weighted_i)) {
       energy_terms[i] = 0.0;
       if constexpr (Features) {
         vrho[i] = 0.0;
@@ -168,8 +173,14 @@ __global__ void pair_kernel_ordered(
         point_derivative[3 * i + 2] = 0.0;
         weight_derivative[i] = 0.0;
       }
-      return;
+      active_row = false;
+      if constexpr (!StagePartners) return;
     }
+  }
+  if constexpr (StagePartners) {
+    // The decision is uniform: an entirely screened block can omit every
+    // partner load without stranding a live row at a later block barrier.
+    if (!__syncthreads_or(active_row)) return;
   }
   double row_inverse_kappa = 0.0;
   if constexpr (Variant == Vv10Variant::rvv10 && Features)
@@ -180,29 +191,59 @@ __global__ void pair_kernel_ordered(
   double sum_sigma = 0.0;
   double coordinate_sum[3]{0.0, 0.0, 0.0};
   const auto nactive = *active_count;
-  for (std::uint64_t slot = 0; slot < nactive; ++slot) {
-    const auto j = static_cast<std::size_t>(active_indices[slot]);
-    const double factor = weighted_density[j];
-    const double dx = points[3 * j] - xi;
-    const double dy = points[3 * j + 1] - yi;
-    const double dz = points[3 * j + 2] - zi;
-    const double r2 = dx * dx + dy * dy + dz * dz;
-    const auto pair = pair_kernel_values<Variant, Features, Geometry>(r2, wi, omega[j], ki,
-                                                                      kappa[j], row_inverse_kappa);
-    sum_phi += factor * pair.phi;
-    if constexpr (Features) {
-      const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
-      const double dphi_dsigma = pair.dphi_domega * domega_sigmai;
-      sum_rho += factor * dphi_drho;
-      sum_sigma += factor * dphi_dsigma;
+  // Stage one ascending compacted-partner tile for all 128 row lanes. The
+  // six FP64 fields cost a fixed 6 KiB of on-chip storage, no resident arena.
+  // Every row still adds every partner in the original order; there is no
+  // parallel pair reduction or new scientific screening.
+  constexpr unsigned partner_tile = StagePartners ? 128U : 1U;
+  __shared__ double partners[StagePartners ? 6U : 1U][partner_tile];
+  for (std::uint64_t first = 0; first < nactive; first += partner_tile) {
+    const auto remaining = nactive - first;
+    const unsigned count =
+        remaining < partner_tile ? static_cast<unsigned>(remaining) : partner_tile;
+    if constexpr (StagePartners) {
+      if (threadIdx.x < count) {
+        const auto j = static_cast<std::size_t>(active_indices[first + threadIdx.x]);
+        partners[0][threadIdx.x] = points[3 * j];
+        partners[1][threadIdx.x] = points[3 * j + 1];
+        partners[2][threadIdx.x] = points[3 * j + 2];
+        partners[3][threadIdx.x] = omega[j];
+        partners[4][threadIdx.x] = kappa[j];
+        partners[5][threadIdx.x] = weighted_density[j];
+      }
+      __syncthreads();
     }
-    if constexpr (Geometry) {
-      const double radial = -2.0 * factor * pair.dphi_dr2;
-      coordinate_sum[0] += radial * dx;
-      coordinate_sum[1] += radial * dy;
-      coordinate_sum[2] += radial * dz;
+    if (active_row) {
+      for (unsigned slot = 0; slot < count; ++slot) {
+        std::size_t j = 0;
+        if constexpr (!StagePartners) j = static_cast<std::size_t>(active_indices[first + slot]);
+        const double factor = StagePartners ? partners[5][slot] : weighted_density[j];
+        const double dx = (StagePartners ? partners[0][slot] : points[3 * j]) - xi;
+        const double dy = (StagePartners ? partners[1][slot] : points[3 * j + 1]) - yi;
+        const double dz = (StagePartners ? partners[2][slot] : points[3 * j + 2]) - zi;
+        const double wj = StagePartners ? partners[3][slot] : omega[j];
+        const double kj = StagePartners ? partners[4][slot] : kappa[j];
+        const double r2 = dx * dx + dy * dy + dz * dz;
+        const auto pair =
+            pair_kernel_values<Variant, Features, Geometry>(r2, wi, wj, ki, kj, row_inverse_kappa);
+        sum_phi += factor * pair.phi;
+        if constexpr (Features) {
+          const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
+          const double dphi_dsigma = pair.dphi_domega * domega_sigmai;
+          sum_rho += factor * dphi_drho;
+          sum_sigma += factor * dphi_dsigma;
+        }
+        if constexpr (Geometry) {
+          const double radial = -2.0 * factor * pair.dphi_dr2;
+          coordinate_sum[0] += radial * dx;
+          coordinate_sum[1] += radial * dy;
+          coordinate_sum[2] += radial * dz;
+        }
+      }
     }
+    if constexpr (StagePartners) __syncthreads();
   }
+  if (!active_row) return;
 
   energy_terms[i] = coefficient * weighted_i * (beta + 0.5 * sum_phi);
   bool nonfinite = !isfinite(energy_terms[i]);
@@ -223,7 +264,8 @@ __global__ void pair_kernel_ordered(
   if (nonfinite) atomicExch(failed, 1);
 }
 
-template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
+template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows,
+          bool StagePartners = false>
 void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stream,
                            double coefficient, const double* points, const double* density,
                            const double* omega, const double* kappa, const double* domega_drho,
@@ -238,10 +280,11 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
   for (std::size_t first = 0; first < layout.point_count; first += max_rows_per_launch) {
     const auto count = std::min(max_rows_per_launch, layout.point_count - first);
     const auto blocks = launch_blocks(count, threads);
-    pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows><<<blocks, threads, 0, stream>>>(
-        first, count, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
-        dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed);
+    pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows, StagePartners>
+        <<<blocks, threads, 0, stream>>>(first, count, coefficient, points, density, omega, kappa,
+                                         domega_drho, domega_dsigma, dkappa_drho, weighted_density,
+                                         active_indices, active_count, beta, energy_terms, vrho,
+                                         vsigma, point_derivative, weight_derivative, failed);
     runtime::cuda_resource_check(cudaGetLastError());
   }
 }
@@ -254,6 +297,23 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
                       const std::uint64_t* active_indices, const std::uint64_t* active_count,
                       double beta, double* energy_terms, double* vrho, double* vsigma,
                       double* point_derivative, double* weight_derivative, int* failed) {
+  // Keep the direct-load schedule for short grids and other variants. The
+  // staged VV10 feature schedule needs only the fixed 128-thread launch shape.
+  if constexpr (Variant == Vv10Variant::vv10 && Features) {
+    if (layout.point_count >= 128) {
+      if (layout.mask_zero_weight_rows)
+        launch_pair_rows_impl<Variant, Features, Geometry, true, true>(
+            layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
+            dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
+            vsigma, point_derivative, weight_derivative, failed);
+      else
+        launch_pair_rows_impl<Variant, Features, Geometry, false, true>(
+            layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
+            dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
+            vsigma, point_derivative, weight_derivative, failed);
+      return;
+    }
+  }
   if (layout.mask_zero_weight_rows)
     launch_pair_rows_impl<Variant, Features, Geometry, true>(
         layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,

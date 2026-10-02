@@ -9,6 +9,12 @@
       "reason": "Dispatch into compiler-owned ordered or bounded VV10 scalar closures; no handwritten pair mathematics. The rational closure preserves the energy root, explicitly qualifies derivative rounding, and retains the ordered closure outside its admitted domain."
     },
     {
+      "start": "bool StagePartners = false>",
+      "stop": "constexpr unsigned kOrderedEnergyLoadThreads",
+      "role": "runtime",
+      "reason": "Bounded row launch splitting and selection of direct or fixed 6 KiB partner-staged schedules; pair formulas and ordered row composition are owned separately."
+    },
+    {
       "start": "void enqueue_vv10_molecular_domain_cuda(",
       "stop": null,
       "role": "runtime",

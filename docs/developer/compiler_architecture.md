@@ -69,6 +69,15 @@ values in [2^-32, 2^32], the rational closure is admitted. Other values execute 
 original ordered closure and retain its exceptional behavior. CPU and rVV10
 closures remain separate. WB97M-V uses VV10.
 
+The CUDA traversal stages six partner fields in a fixed 128-partner, 6 KiB
+shared-memory tile for VV10 feature demands on grids with at least 128 points.
+Each row consumes the stable compacted partner sequence in its original order;
+only partner loads are shared, without a parallel reduction or new screen.
+Screened and padded row lanes participate in every tile barrier, while a
+collectively inactive block returns before loading partners. Short grids and
+other variant/output demands retain the direct-load schedule. The tile changes
+on-chip storage only and adds no resident or host workspace allocation.
+
 The CPU raw rVV10 and CUDA preconditioned rVV10 representations remain explicit
 lowering choices. They retain their established ordered FP64 arithmetic rather
 than exchanging raw and preconditioned parameters silently. The shared scalar
