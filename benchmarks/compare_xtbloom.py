@@ -19,6 +19,11 @@ from statistics import median
 
 import numpy as np
 
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -131,7 +136,7 @@ def main() -> None:
     parser.add_argument("--waters", type=int, nargs="*", default=[8, 32])
     parser.add_argument("--case", action="append")
     parser.add_argument("--repeat", type=int, default=5)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if args.reference or args.candidate:
         if not (args.reference and args.candidate) or args.engine:
