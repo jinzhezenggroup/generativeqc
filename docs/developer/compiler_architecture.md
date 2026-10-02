@@ -109,7 +109,12 @@ metrics and preparation synchronization are owned by `common`. Static
 device topology such as SM count is unknown until a runtime probe enriches the
 target. Generic scheduling APIs require an explicit target or architecture
 instead of silently selecting `sm_120`. Measured production and local profiles
-may still record device topology as qualification provenance. The rationale is
+may still record device topology as qualification provenance. Native context
+and tuning probes share `runtime/cuda_device_facts`: each call reads current
+device resource attributes. NVIDIA/Linux may use metadata functions from the
+already loaded driver for the name and memory size; missing interfaces and
+other providers retain the complete property-query fallback. Device ordinals
+and resource facts are never cached across owners. The rationale is
 retained in
 `.agents/notes/implemented/compatibility/2026-09-20-explicit-cuda-target-topology.md`.
 

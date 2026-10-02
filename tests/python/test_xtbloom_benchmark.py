@@ -25,6 +25,7 @@ def report() -> dict:
             {
                 "case": "h2",
                 "geometry_sha256": "geometry",
+                "construction_seconds": 0.25,
                 "samples": [
                     {
                         "mode": mode,
@@ -52,6 +53,36 @@ def test_inaccurate_repeat_cannot_hide_behind_iteration_mismatch() -> None:
     assert not any(row["accuracy_passed"] for row in rows)
     assert not rows[1]["iterations_match"]
     assert rows[1]["speedup"] == 2.0
+
+
+def test_cold_total_cannot_hide_costly_constructor() -> None:
+    reference = report()
+    candidate = copy.deepcopy(reference)
+    candidate["rows"][0]["construction_seconds"] = 2.0
+    candidate["rows"][0]["samples"][0]["seconds"] = 0.5
+    rows = {
+        row["mode"]: row
+        for row in BENCHMARK.compare_reports(reference, candidate)["rows"]
+    }
+    assert rows["cold"]["speedup"] == 2.0
+    assert rows["cold_total"]["speedup"] == 0.5
+    assert rows["warm"]["speedup"] == 1.0
+    assert rows["changed"]["speedup"] == 1.0
+    assert all(
+        row["accuracy_passed"] and row["iterations_match"] for row in rows.values()
+    )
+
+
+@pytest.mark.parametrize("construction", [None, -0.1, float("nan"), float("inf")])
+def test_missing_or_invalid_setup_cost_fails_closed(construction: float | None) -> None:
+    reference = report()
+    candidate = copy.deepcopy(reference)
+    if construction is None:
+        del candidate["rows"][0]["construction_seconds"]
+    else:
+        candidate["rows"][0]["construction_seconds"] = construction
+    with pytest.raises(ValueError, match="construction timing"):
+        BENCHMARK.compare_reports(reference, candidate)
 
 
 @pytest.mark.parametrize("field", ("energy", "forces"))
