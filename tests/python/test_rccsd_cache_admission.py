@@ -23,6 +23,7 @@ struct ExecutionContext {
   bool cuda=false;
   int backend() const { return cuda ? 3 : GENERATIVEQC_BACKEND_CPU_REFERENCE; }
   bool cuda_requested() const { return cuda; }
+  int device_id() const { return 0; }
 };
 }
 struct generativeqc_method_descriptor { std::size_t budget=100; bool valid=true; };
@@ -32,11 +33,11 @@ struct MethodError : std::runtime_error {
 struct Reference { int diis_history=8; double screening_tolerance=0; };
 namespace scf {
 enum class FockSpin { Restricted };
-enum class FockBackend { Cpu };
+enum class FockBackend { Cpu, Cuda };
 int make_hf_fock_spec(FockSpin) { return 0; }
 int resolve_fock_build(int,FockBackend,double) { return 0; }
 struct PreparedFockPlan {
-  PreparedFockPlan(const core::System&,std::nullptr_t,int) { ++allocations; }
+  PreparedFockPlan(const core::System&,std::nullptr_t,int,int=-1) { ++allocations; }
 };
 }
 namespace posthf {
@@ -70,9 +71,10 @@ int main(int argc,char** argv) {
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache);
     if (mode < 2) return 2;
-    if (result.cached != (mode >= 4)) return 3;
-    if (allocations != (mode >= 4 ? 1 : 0) || executions != 1) return 4;
-    if (mode >= 4) {
+    const bool expect_cache = mode == 2 || mode >= 4;
+    if (result.cached != expect_cache) return 3;
+    if (allocations != (expect_cache ? 1 : 0) || executions != 1) return 4;
+    if (expect_cache) {
       auto* first=cache.get();
       result=run_rccsd_native_state(execution,system,descriptor,&cache);
       if (!result.cached || cache.get()!=first || allocations!=1 || executions!=2) return 5;
