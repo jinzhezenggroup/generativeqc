@@ -336,19 +336,40 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
                                         const scf::ScfOptions& reference_options,
                                         const cc::SolverOptions& solver_options,
                                         std::size_t reference_capacity,
-                                        scf::PreparedFockPlan* prepared_exact) {
+                                        scf::PreparedFockPlan* prepared_exact,
+                                        const std::vector<double>* initial_density,
+                                        bool* warm_start_fallback) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
+    if (warm_start_fallback) *warm_start_fallback = false;
     const auto reference_started = std::chrono::steady_clock::now();
+    const auto run_reference = [&](const std::vector<double>* seed) {
+      if (prepared_exact) {
+        auto prepared_options = reference_options;
+        prepared_options.resolved_fock_build = prepared_exact->strategy();
+        return scf::run_prepared_fock_strategy(*prepared_exact, prepared_options, seed);
+      }
+      return cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed)
+                  : scf::run_rhf(system, reference_options, seed);
+    };
     scf::ScfResult hf;
-    if (prepared_exact) {
-      auto prepared_options = reference_options;
-      prepared_options.resolved_fock_build = prepared_exact->strategy();
-      hf = scf::run_prepared_fock_strategy(*prepared_exact, prepared_options);
+    if (initial_density) {
+      bool retried_cold = false;
+      try {
+        hf = run_reference(initial_density);
+      } catch (...) {
+        retried_cold = true;
+        if (warm_start_fallback) *warm_start_fallback = true;
+        hf = run_reference(nullptr);
+      }
+      if (!retried_cold && (!hf.converged || !hf.reference)) {
+        hf = {};
+        if (warm_start_fallback) *warm_start_fallback = true;
+        hf = run_reference(nullptr);
+      }
     } else {
-      hf = cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id())
-                : scf::run_rhf(system, reference_options);
+      hf = run_reference(nullptr);
     }
     const double reference_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - reference_started).count();
@@ -361,6 +382,9 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
     state.reference = reference;
+    state.reference_energy_change = hf.energy_change;
+    state.reference_density_rms = hf.density_rms;
+    state.reference_iterations = static_cast<int>(hf.iterations);
     const auto o = reference->nocc;
     state.eps_o.assign(reference->orbital_energies.begin(),
                        reference->orbital_energies.begin() + static_cast<std::ptrdiff_t>(o));
@@ -534,7 +558,7 @@ class RccsdPrepared final : public PreparedCalculation {
           system_, nullptr, strategy, execution_.cuda_requested() ? execution_.device_id() : -1);
     }
     auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
-                                        reference_capacity_, cpu_exact_plan_.get());
+                                        reference_capacity_, cpu_exact_plan_.get(), nullptr, nullptr);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -740,7 +764,8 @@ class RccsdPreparedBatch final : public PreparedBatch {
 RccsdNativeState run_rccsd_native_state(
     runtime::ExecutionContext& execution, const core::System& system,
     const generativeqc_method_descriptor& descriptor,
-    std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache) {
+    std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache,
+    const std::vector<double>* initial_density, bool* warm_start_fallback) {
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
   auto solver_options = cc_options(descriptor, budget);
@@ -764,7 +789,7 @@ RccsdNativeState run_rccsd_native_state(
     prepared_exact = prepared_exact_cache->get();
   }
   return execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
-                                prepared_exact);
+                                prepared_exact, initial_density, warm_start_fallback);
 }
 
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System& system,
