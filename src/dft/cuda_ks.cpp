@@ -826,7 +826,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // so exact K can remain inside the same bounded SolverRegion. Graph replay
     // stays disabled for global hybrids until the exchange provider is
     // independently capture-qualified.
-    const bool pure_semilocal_chunk = !has_exchange && options.semilocal_exchange_scale == 1.0 &&
+    const bool pure_semilocal_chunk = !has_exchange && !has_range_correction &&
+                                      options.semilocal_exchange_scale == 1.0 &&
                                       options.semilocal_correlation_scale == 1.0;
     const bool pbe0_chunk = has_exchange && !has_range_correction &&
                             is_semilocal_family(functional, SemilocalFamily::Pbe) &&
