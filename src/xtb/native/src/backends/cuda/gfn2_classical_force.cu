@@ -620,10 +620,14 @@ __global__ void repulsion_gradient_kernel(Gfn2ClassicalForceDevicePlan plan,
         atomicExch(&valid, 0);
         continue;
       }
-      const double gradient_scale = pair.distance_derivative / distance;
-      bool finite_pair = isfinite(gradient_scale);
-      const double gradient[3] = {
-          gradient_scale * dx, gradient_scale * dy, gradient_scale * dz};
+      double gradient[3]{};
+      if (!generativeqc::xtb::generated::project_gfn2_pair_radial_adjoint(
+              pair.distance_derivative, 1.0, 1.0 / distance, dx, dy, dz,
+              gradient[0], gradient[1], gradient[2])) {
+        atomicExch(&valid, 0);
+        continue;
+      }
+      bool finite_pair = true;
       for (int axis = 0; axis < 3; ++axis) {
         finite_pair =
             add_finite_atomic(workspace.gradient_scratch + upper_coordinate + axis,

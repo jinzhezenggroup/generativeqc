@@ -189,6 +189,109 @@ def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     assert "bounded_value_capability" not in schedule
 
 
+def test_rsh_value_join_reuses_one_shell_density_preparation() -> None:
+    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    begin = owner.index("cudaError_t enqueue_generated_rsh_values(")
+    end = owner.index("\n}\n\n}  // namespace generativeqc::scf::cuda_execution", begin)
+    body = owner[begin:end]
+    assert body.count("prepare_generated_exchange_density(") == 1
+    assert "enqueue_generated_coulomb_prepared(" in body
+    assert body.count("enqueue_generated_exchange_prepared(") == 2
+
+    facade = _source("src/scf/cuda_fock_execution.cpp")
+    assert "enqueue_cuda_direct_rsh_values_device(" in facade
+
+    ks = _source("src/dft/cuda_ks.cpp")
+    assert ks.count("enqueue_prepared_cuda_rsh_values(") == 2
+    assert "jk_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED" in ks
+    assert "has_range_correction && !fused_rsh_values" in ks
+
+
+def test_rsh_value_join_preserves_value_policy_and_buffer_contract(
+    tmp_path: Path,
+) -> None:
+    """Compile production span checks and cover every fused writable buffer."""
+    direct = _source("src/scf/cuda/direct_jk.cpp")
+    begin = direct.index("generativeqc_status enqueue_cuda_direct_rsh_values_device(")
+    body = direct[begin : direct.index("\n}\n", begin)]
+    assert "!direct_jk_bounded_value_enabled(*plan)" in body
+    assert body.index("GENERATIVEQC_STATUS_NOT_IMPLEMENTED") < body.index(
+        "return direct_jk_guard("
+    )
+    assert "correction = direct_jk_strategy(" in body
+    check_start = body.index("const auto bytes = direct_jk_product(")
+    check_end = body.index("direct_jk_check(cudaMemsetAsync(primary_error")
+    checks = body[check_start:check_end]
+    assert "for (unsigned i = 0; i < 5; ++i)" in checks
+    assert "const double* inputs[]{density, beta};" in checks
+    assert (
+        "direct_jk_require_disjoint(primary_error, sizeof(int), range_error" in checks
+    )
+    for status in ("primary_error", "range_error"):
+        assert f"direct_jk_require_disjoint(input, bytes, {status}" in checks
+        assert f"direct_jk_require_disjoint(outputs[i], bytes, {status}" in checks
+
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a C++ compiler")
+    start = direct.index("void direct_jk_require_disjoint(")
+    helper = direct[start : direct.index("\n}", start) + 2]
+    harness = (
+        r"""
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+void direct_jk_require(bool condition, const char* message) {
+  if (!condition) throw std::invalid_argument(message);
+}
+"""
+        + helper
+        + r"""
+int main() {
+  const auto p = [](std::uintptr_t x) { return reinterpret_cast<const void*>(x); };
+  direct_jk_require_disjoint(p(128), 64, p(192), 64);
+  direct_jk_require_disjoint(p(192), 64, p(128), 64);
+  direct_jk_require_disjoint(nullptr, 64, p(128), 64);
+  const auto rejected = [&](std::uintptr_t a, std::size_t na,
+                            std::uintptr_t b, std::size_t nb) {
+    try { direct_jk_require_disjoint(p(a), na, p(b), nb); }
+    catch (const std::invalid_argument&) { return true; }
+    return false;
+  };
+  assert(rejected(128, 64, 128, 64));
+  assert(rejected(128, 64, 160, 64));
+  assert(rejected(160, 64, 128, 64));
+  assert(rejected(128, 64, 144, sizeof(int)));
+  assert(rejected(144, sizeof(int), 128, 64));
+  assert(rejected(std::numeric_limits<std::uintptr_t>::max() - 7, 8, 128, 64));
+  assert(rejected(128, 64, std::numeric_limits<std::uintptr_t>::max() - 7, 8));
+}
+"""
+    )
+    source = tmp_path / "rsh_writable_spans.cpp"
+    executable = tmp_path / "rsh_writable_spans"
+    source.write_text(harness)
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
+
+
 def test_canonical_screening_fixture_preserves_default_and_opt_in_coverage() -> None:
     """Keep the screened oracle distinct while testing both retained value routes."""
     source = _source("tests/native/test_cuda_fock_provider.cpp")

@@ -71,7 +71,9 @@ def _demangle(
 def run(args: argparse.Namespace) -> dict:
     generated_dir = args.generated_dir.resolve()
     generated_dir.mkdir(parents=True, exist_ok=True)
-    source, grid_identity, _ = emit_grid_source(native_ks=True)
+    source, grid_identity, _ = emit_grid_source(
+        native_ks=True, ao_radial_reuse=args.ao_radial_reuse
+    )
     cmake_source = (
         args.cmake_source.resolve()
         if args.cmake_source is not None
@@ -121,6 +123,7 @@ def run(args: argparse.Namespace) -> dict:
         tile_points=args.tile_points,
         nao=args.nao,
         spins=args.spins,
+        ao_radial_reuse=args.ao_radial_reuse,
     )
     evidence = native_grid_xc_compiled_region_evidence(
         resources,
@@ -163,6 +166,11 @@ def main() -> None:
     parser.add_argument("--nao", type=int, default=96)
     parser.add_argument("--spins", type=int, choices=(1, 2), default=2)
     parser.add_argument("--compile-timeout", type=float, default=300.0)
+    parser.add_argument(
+        "--ao-radial-reuse",
+        action="store_true",
+        help="opt in to unqualified compiler-owned 4/10-jet AO radial reuse",
+    )
     args = parser.parse_args()
     run(args)
 

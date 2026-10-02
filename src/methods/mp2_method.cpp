@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "api/handles.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
@@ -71,17 +72,8 @@ class Mp2Prepared final : public PreparedCalculation {
       // The prior last-good seed must survive failure, and a candidate seed
       // stays live until the complete endpoint succeeds. Charge both numeric
       // payloads to every phase; warm-disabled execution retains its old budget.
-      const auto warm_bytes = [](std::size_t density, std::size_t coordinates) {
-        return posthf::checked_mul(sizeof(double), posthf::checked_add(density, coordinates));
-      };
-      const auto n = molecule::ao_count(system_);
-      auto warm_capacity = initial_state ? warm_bytes(initial_state->density.size(),
-                                                      initial_state->coordinates.size())
-                                         : 0;
-      if (retained_warm_state)
-        warm_capacity = posthf::checked_add(
-            warm_capacity,
-            warm_bytes(posthf::checked_mul(n, n), posthf::checked_mul(3, system_.atoms.size())));
+      const auto warm_capacity =
+          warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
       if (warm_capacity >= budget_ || reference_capacity_ > budget_ - warm_capacity)
         throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                           "MP2 warm state and reference exceed numeric memory budget");
@@ -156,25 +148,17 @@ class Mp2Prepared final : public PreparedCalculation {
                           "HF did not converge; no MP2 energy evaluated");
 
       if (retained_warm_state) {
-        scf::HfWarmState state;
-        // CUDA HF exports the validated density in its physical reference,
-        // not the optional iterative result vector. Retain that existing host
-        // export so replay has a complete seed without another device transfer.
-        // Keep the branches separate: a conditional with the const reference
-        // density would copy through a temporary even on the iterative path.
+        // Preserve #1701: CUDA exports its immutable reference density, while
+        // the iterative CPU vector transfers its existing allocation. A ternary
+        // with the const reference would introduce an extra temporary/copy.
         if (hf.density.empty())
-          state.density = hf.reference->density;
+          *retained_warm_state =
+              warm_reference::capture(system_, hf.reference->density, hf.energy, hf.energy_change,
+                                      hf.density_rms, static_cast<int>(hf.iterations));
         else
-          state.density = std::move(hf.density);
-        state.coordinates.reserve(3 * system_.atoms.size());
-        for (const auto& atom : system_.atoms)
-          state.coordinates.insert(state.coordinates.end(), atom.position.begin(),
-                                   atom.position.end());
-        state.energy = hf.energy;
-        state.energy_change = hf.energy_change;
-        state.density_rms = hf.density_rms;
-        state.iterations = static_cast<int>(hf.iterations);
-        *retained_warm_state = std::move(state);
+          *retained_warm_state =
+              warm_reference::capture(system_, std::move(hf.density), hf.energy, hf.energy_change,
+                                      hf.density_rms, static_cast<int>(hf.iterations));
       }
       const auto& ref = *hf.reference;
       // Release the iterative density. The exact CPU prepared owner remains
@@ -304,25 +288,6 @@ class Mp2Prepared final : public PreparedCalculation {
   mutable std::mutex mutex_;
 };
 
-bool valid_positions(const std::vector<double>& coordinates, const core::System& system) {
-  return coordinates.size() == 3 * system.atoms.size() &&
-         std::all_of(coordinates.begin(), coordinates.end(),
-                     [](double value) { return std::isfinite(value); });
-}
-
-std::vector<double> positions(const core::System& system) {
-  std::vector<double> result;
-  result.reserve(3 * system.atoms.size());
-  for (const auto& atom : system.atoms)
-    result.insert(result.end(), atom.position.begin(), atom.position.end());
-  return result;
-}
-
-void set_positions(core::System& system, const std::vector<double>& coordinates) {
-  for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
-    std::copy_n(coordinates.begin() + 3 * atom, 3, system.atoms[atom].position.begin());
-}
-
 generativeqc_status item_exception_status() {
   try {
     throw;
@@ -356,7 +321,7 @@ class Mp2PreparedBatch final : public PreparedBatch {
     owner_coordinates_.reserve(systems_.size());
     for (const auto& system : systems_) {
       owners_.push_back(prepare_mp2_calculation(capabilities_, *context_, system, descriptor_));
-      owner_coordinates_.push_back(positions(system));
+      owner_coordinates_.push_back(warm_reference::coordinates(system));
     }
   }
 
@@ -379,12 +344,12 @@ class Mp2PreparedBatch final : public PreparedBatch {
       result.calculation.executed_backend = context_->requested_backend;
       try {
         auto target = systems_[index];
-        auto target_coordinates = positions(target);
+        auto target_coordinates = warm_reference::coordinates(target);
         if (!coordinates.empty() && coordinates[index]) {
-          if (!valid_positions(*coordinates[index], target))
+          if (!warm_reference::valid_coordinates(*coordinates[index], target))
             throw std::invalid_argument("invalid MP2 batch item coordinates");
           target_coordinates = *coordinates[index];
-          set_positions(target, target_coordinates);
+          warm_reference::set_coordinates(target, target_coordinates);
         }
         if (target_coordinates != owner_coordinates_[index]) {
           auto candidate = prepare_mp2_calculation(capabilities_, *context_, target, descriptor_);
@@ -425,7 +390,7 @@ class Mp2PreparedBatch final : public PreparedBatch {
     const auto n = molecule::ao_count(systems_.at(index));
     if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n / sizeof(double))
       throw std::invalid_argument("MP2 warm density dimensions overflow");
-    return n * n;
+    return posthf::checked_mul(n, n);
   }
 
   [[nodiscard]] const std::optional<scf::HfWarmState>& warm_state(
@@ -437,19 +402,9 @@ class Mp2PreparedBatch final : public PreparedBatch {
     if (!warm_starts_enabled_ || states.size() != size())
       throw std::invalid_argument("checkpoint restore requires a matching warm-enabled MP2 batch");
 
-    for (std::size_t index = 0; index < size(); ++index) {
-      if (!states[index]) continue;
-      const auto& state = *states[index];
-      if (state.density.size() != warm_density_size(index) ||
-          !valid_positions(state.coordinates, systems_[index]) || state.iterations < 0 ||
-          !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||
-          !std::isfinite(state.density_rms) || state.density_rms < 0)
-        throw std::invalid_argument("invalid MP2 checkpoint state dimensions or diagnostics");
-
-      auto source = systems_[index];
-      set_positions(source, state.coordinates);
-      scf::validate_hf_warm_density(source, GENERATIVEQC_METHOD_RHF, state.density);
-    }
+    for (std::size_t index = 0; index < size(); ++index)
+      if (states[index])
+        warm_reference::validate_checkpoint(systems_[index], *states[index], "MP2");
 
     for (std::size_t index = 0; index < size(); ++index)
       if (states[index]) warm_states_[index].swap(states[index]);

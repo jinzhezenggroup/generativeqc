@@ -280,10 +280,14 @@ generativeqc_xtb_status_t add_coordination_gradient_cpu(const CoordinationPlan& 
           return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
         }
         const double weight = dE_dcn[first_index] + dE_dcn[second_index];
-        const double scale = weight * pair.distance_derivative / distance;
-        const double gx = scale * dx;
-        const double gy = scale * dy;
-        const double gz = scale * dz;
+        double gx = 0.0;
+        double gy = 0.0;
+        double gz = 0.0;
+        if (!generativeqc::xtb::generated::project_gfn2_pair_radial_adjoint(
+                pair.distance_derivative, weight, 1.0 / distance, dx, dy, dz, gx, gy, gz)) {
+          error = "compiler-generated GFN2 coordination Cartesian projection failed";
+          return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
+        }
 
         gradients[first_index * 3] += gx;
         gradients[first_index * 3 + 1] += gy;

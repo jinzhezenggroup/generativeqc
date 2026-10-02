@@ -147,6 +147,24 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
         raise RuntimeError("trace failed")
 
     monkeypatch.setattr(matrix, "_scf_trace_profile", fail_trace)
+    monkeypatch.setattr(
+        matrix,
+        "_fixed_density_scf_profile",
+        lambda *_args, **_kwargs: {
+            "status": "measured",
+            "measurement_boundary": "fixed_density_scf_components",
+            "fixed_density": True,
+            "scf_replayed": False,
+            "expected_components": ["scf_fock_j", "semilocal_ao_grid_xc"],
+            "profile": {
+                "profiled_ms": {
+                    "scf_fock_j": 1.5,
+                    "semilocal_ao_grid_xc": 2.5,
+                },
+                "missing_expected_components": [],
+            },
+        },
+    )
     result = matrix.benchmark_case(
         method="pbe-rks",
         system="water-3",
@@ -167,7 +185,8 @@ def test_late_changed_geometry_failure_preserves_successful_samples(
     assert result["scf_profile"]["measurement_boundary"] == "full_scf_replay"
     assert result["scf_profile"]["fixed_density"] is False
     assert result["scf_profile"]["reason"] == "trace failed"
-    assert result["fixed_density_scf_profile"]["status"] == "unavailable"
+    assert result["fixed_density_scf_profile"]["status"] == "measured"
+    assert result["fixed_density_scf_profile"]["scf_replayed"] is False
     assert result["changed_geometry"]["status"] == "failed"
     assert result["changed_geometry"]["error"] == "changed replay failed"
     assert calls[:4] == [

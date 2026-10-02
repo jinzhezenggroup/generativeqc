@@ -5,6 +5,7 @@ owns allocation/launches. This schedule changes floating-point grouping, never
 pointwise AO/Becke mathematics or the set of grid points visited.
 """
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
@@ -12,11 +13,110 @@ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 GEOMETRY_MAX_LANES = 2048
 GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
 GEOMETRY_THREADS = 32
-BECKE_COOPERATIVE_MAX_ATOMS = 32
+BECKE_COOPERATIVE_MAX_ATOMS = 128
+BECKE_RETAINED_MAX_ATOMS = 32
+BECKE_PAIR_TILE_ROWS = 4
 BECKE_COOPERATIVE_THREADS = 32
 BECKE_PAIR_STATE_BYTES = 64
 BECKE_COOPERATIVE_CONTROL_BYTES = 16
+STATIONARY_MAX_ATOMS = 128
+STATIONARY_MAX_AOS = 1024
+STATIONARY_MAX_PRIMITIVES = 16384
 _SIZE_MAX = (1 << 64) - 1
+
+
+@dataclass(frozen=True, slots=True)
+class StationaryCudaGridWork:
+    """Finite grid work with bounded asynchronous submission windows.
+
+    The whole-grid limits are optional diagnostic time/work guards. The
+    per-window limits remain mandatory, including for public complete forces.
+    No grid points, equations, or scientific accuracy settings are changed.
+    """
+
+    grid_points: int
+    tile_points: int
+    tile_count: int
+    chunk_points: int
+    chunk_count: int
+    grid_pair_visits: int
+    chunk_pair_visits: int
+
+    def chunks(self) -> Iterator[tuple[int, int]]:
+        """Yield half-open windows without materializing a full point/task list."""
+        for begin in range(0, self.grid_points, self.chunk_points):
+            yield begin, min(begin + self.chunk_points, self.grid_points)
+
+
+def plan_stationary_cuda_grid_work(
+    *,
+    atoms: int,
+    grid_points: int,
+    tile_points: int,
+    max_grid_points: int | None = 1_000_000,
+    max_grid_pair_visits: int | None = 100_000_000,
+    max_pending_tiles: int = 64,
+    max_pending_pair_visits: int = 100_000_000,
+) -> StationaryCudaGridWork:
+    """Plan complete work and bounded error fences before compilation/allocation."""
+    for name, value, cap in (
+        ("atoms", atoms, STATIONARY_MAX_ATOMS),
+        ("grid_points", grid_points, 1 << 40),
+        ("tile_points", tile_points, 4096),
+        ("max_pending_tiles", max_pending_tiles, 4096),
+        ("max_pending_pair_visits", max_pending_pair_visits, 1 << 40),
+    ):
+        if type(value) is not int or not 1 <= value <= cap:
+            raise ValueError(f"stationary CUDA {name} exceeds resource caps")
+    for name, value in (
+        ("max_grid_points", max_grid_points),
+        ("max_grid_pair_visits", max_grid_pair_visits),
+    ):
+        if value is not None and (type(value) is not int or not 1 <= value <= 1 << 40):
+            raise ValueError(f"{name} must be None or an integer in [1,{1 << 40}]")
+    pairs = atoms * (atoms - 1) // 2
+    visits = (1 + 2 * grid_points) * pairs
+    if visits > _SIZE_MAX:
+        raise ValueError("stationary grid work exceeds uint64 metric range")
+    if max_grid_points is not None and grid_points > max_grid_points:
+        raise ValueError("grid point work budget exceeded")
+    if max_grid_pair_visits is not None and visits > max_grid_pair_visits:
+        raise ValueError("grid work budget exceeded")
+    tile_visits = 2 * min(grid_points, tile_points) * pairs
+    if tile_visits > max_pending_pair_visits:
+        raise ValueError("stationary grid tile exceeds pending pair-visit budget")
+    pending = min(
+        max_pending_tiles,
+        max_pending_pair_visits // tile_visits if tile_visits else max_pending_tiles,
+    )
+    chunk_points = min(grid_points, pending * tile_points)
+    return StationaryCudaGridWork(
+        grid_points,
+        tile_points,
+        (grid_points + tile_points - 1) // tile_points,
+        chunk_points,
+        (grid_points + chunk_points - 1) // chunk_points,
+        visits,
+        2 * chunk_points * pairs,
+    )
+
+
+def stationary_cuda_requires_native_integrals(
+    *, atoms: int, aos: int, primitives: int
+) -> bool:
+    """Enlarged domains must use the shared prepared HF/DFT derivative owner.
+
+    The old AO-descriptor diagnostic fallback remains a small-domain route;
+    bounded storage alone is no justification for silently executing AO^4 work.
+    """
+    for name, value, cap in (
+        ("atoms", atoms, STATIONARY_MAX_ATOMS),
+        ("aos", aos, STATIONARY_MAX_AOS),
+        ("primitives", primitives, STATIONARY_MAX_PRIMITIVES),
+    ):
+        if type(value) is not int or not 1 <= value <= cap:
+            raise ValueError(f"stationary CUDA {name} exceeds resource caps")
+    return atoms > 32 or aos > 128 or primitives > 4096
 
 
 def stationary_cuda_allocation_bytes(
@@ -33,9 +133,9 @@ def stationary_cuda_allocation_bytes(
 ) -> int:
     """Exact arena bytes, including both lane panels and the error reserve."""
     for name, value, cap in (
-        ("atoms", atoms, 128),
-        ("aos", aos, 1024),
-        ("primitives", primitives, 16384),
+        ("atoms", atoms, STATIONARY_MAX_ATOMS),
+        ("aos", aos, STATIONARY_MAX_AOS),
+        ("primitives", primitives, STATIONARY_MAX_PRIMITIVES),
         ("points", points, 4096),
         ("tasks", tasks, 4096),
         ("spins", spins, 2),
@@ -131,8 +231,14 @@ def plan_stationary_cuda_resources(
     if center_bytes > budget_bytes - allocation:
         center_bytes = 0
     becke_threads, shared_bytes = 1, 0
-    required_shared = BECKE_COOPERATIVE_CONTROL_BYTES + BECKE_PAIR_STATE_BYTES * (
+    retained_rows = min(BECKE_PAIR_TILE_ROWS, atoms - 1)
+    state_count = (
         atoms * (atoms - 1) // 2
+        if atoms <= BECKE_RETAINED_MAX_ATOMS
+        else retained_rows * (2 * atoms - retained_rows - 1) // 2
+    )
+    required_shared = (
+        BECKE_COOPERATIVE_CONTROL_BYTES + BECKE_PAIR_STATE_BYTES * state_count
     )
     if (
         cooperative_becke
@@ -164,9 +270,9 @@ def stationary_native_pair_reserve(*, atoms: int, aos: int, primitives: int) -> 
     parity is independently host-compiled in the resource tests.
     """
     for name, value, cap in (
-        ("atoms", atoms, 128),
-        ("aos", aos, 1024),
-        ("primitives", primitives, 16384),
+        ("atoms", atoms, STATIONARY_MAX_ATOMS),
+        ("aos", aos, STATIONARY_MAX_AOS),
+        ("primitives", primitives, STATIONARY_MAX_PRIMITIVES),
     ):
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"stationary CUDA {name} exceeds resource caps")

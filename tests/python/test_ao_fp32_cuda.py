@@ -1,4 +1,4 @@
-"""Allocated FP32 AO jets against retained independent libcint fixtures.
+"""Allocated FP64/FP32 AO jets against retained independent libcint fixtures.
 
 This qualifies the generated arithmetic through third derivatives, including
 diffuse/tight and Cartesian/spherical f shells. It does not admit mixed-precision
@@ -36,25 +36,29 @@ def fp32_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     directory = tmp_path_factory.mktemp("ao-fp32-cuda")
     policy = emit_grid_policy()
     end = policy.index(";", policy.index("__constant__ int derivatives")) + 1
-    kernels = emit_grid_scientific_kernels()
+    kernels = emit_grid_scientific_kernels(ao_radial_reuse=True)
     begin = kernels.index("__global__ void ao_kernel(")
     end_kernels = kernels.index("__global__ void feature_kernel(")
     source = directory / "probe.cu"
     source.write_text(
         "#include <cuda_runtime.h>\n#include <cmath>\n#include <cstddef>\n"
         "using I = std::size_t;\n"
+        "unsigned blocks(I n, unsigned threads) { return (n + threads - 1) / threads; }\n"
         "__device__ double finite(double x, int* error, int) {\n"
         "  if (!isfinite(x)) atomicExch(error, 1); return x;\n}\n"
         + policy[:end]
         + "\n}\nusing namespace generativeqc_grid_policy;\n"
         + kernels[begin:end_kernels]
+        + kernels[
+            kernels.index("void scheduled_ao(") : kernels.rindex("}  // namespace")
+        ]
         + r"""
 extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
                         size_t nprimitive, size_t nao, const double* points,
-                        size_t npoint, double* out) {
+                        size_t npoint, size_t jets, int fp32, double* out) {
   double *b=nullptr, *p=nullptr, *o=nullptr;
   int *error=nullptr, result=0;
-  const size_t count=20*npoint*nao;
+  const size_t count=jets*npoint*nao;
   const auto release = [&] {
     cudaFree(b); cudaFree(p); cudaFree(o); cudaFree(error);
   };
@@ -66,8 +70,8 @@ extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
   CHECK(cudaMemcpy(b,basis,nbasis*sizeof(double),cudaMemcpyHostToDevice));
   CHECK(cudaMemcpy(p,points,3*npoint*sizeof(double),cudaMemcpyHostToDevice));
   CHECK(cudaMemset(error,0,sizeof(int)));
-  // A nondivisible launch also covers the emitted grid-stride tail.
-  ao_kernel_fp32<<<7, 128>>>(b,natom,nprimitive,nao,p,npoint,20,o,error,nullptr);
+  // Exercise the production compiler-owned specialization/fallback dispatch.
+  scheduled_ao(nullptr,b,natom,nprimitive,nao,p,npoint,jets,o,error,nullptr,fp32);
   CHECK(cudaGetLastError());
   CHECK(cudaMemcpy(out,o,count*sizeof(double),cudaMemcpyDeviceToHost));
   CHECK(cudaMemcpy(&result,error,sizeof(int),cudaMemcpyDeviceToHost));
@@ -100,6 +104,8 @@ extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
         *([ct.c_size_t] * 4),
         pointer,
         ct.c_size_t,
+        ct.c_size_t,
+        ct.c_int,
         pointer,
     ]
     probe.evaluate.restype = ct.c_int
@@ -107,12 +113,14 @@ extern "C" int evaluate(const double* basis, size_t nbasis, size_t natom,
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_fp32_ao_jets_against_independent_reference(
-    fp32_probe: ct.CDLL, name: str
+@pytest.mark.parametrize("jets", [1, 4, 10, 20])
+@pytest.mark.parametrize("fp32", [False, True])
+def test_ao_jets_against_independent_reference(
+    fp32_probe: ct.CDLL, name: str, jets: int, fp32: bool
 ) -> None:
     meta, arrays = load_fixture(name)
     points = np.ascontiguousarray(arrays["points"])
-    expected = arrays["ao_jets"]
+    expected = arrays["ao_jets"][:jets]
     actual = np.empty_like(expected)
     pointer = ct.POINTER(ct.c_double)
     with NativeAO(**basis_arguments(meta)) as basis:
@@ -124,6 +132,8 @@ def test_fp32_ao_jets_against_independent_reference(
             basis.nao,
             points.ctypes.data_as(pointer),
             len(points),
+            jets,
+            int(fp32),
             actual.ctypes.data_as(pointer),
         )
     assert status == 0
@@ -133,4 +143,4 @@ def test_fp32_ao_jets_against_independent_reference(
     # do not let large third derivatives hide errors in values or first jets.
     scale = np.maximum(np.max(np.abs(expected), axis=(1, 2)), 1e-30)
     error = np.max(np.abs(actual - expected), axis=(1, 2)) / scale
-    assert np.max(error) <= 5e-6, (name, error)
+    assert np.max(error) <= (5e-6 if fp32 else 2e-12), (name, jets, error)

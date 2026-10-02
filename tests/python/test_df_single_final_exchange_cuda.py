@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from benchmarks._retained_basis import load_retained_basis
+
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
     reason="requires an explicitly Slurm-allocated GPU",
@@ -75,8 +77,10 @@ def test_single_final_k_and_response_replay(
     record = (
         auxiliary
         if auxiliary == "def2-svp"
-        else Path(__file__).resolve().parents[2]
-        / "benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json"
+        else load_retained_basis(
+            Path(__file__).resolve().parents[2]
+            / "benchmarks/results/issue206-practical-auxiliary/identity/cc-pvdz-jkfit.json"
+        )
     )
     calc = Calculator(
         device="cuda",

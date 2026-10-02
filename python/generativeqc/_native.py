@@ -274,6 +274,39 @@ class KsOptionsDescriptor(ctypes.Structure):
     ]
 
 
+class InitialGuessOptionsDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("kind", ctypes.c_int32),
+        ("max_iterations", ctypes.c_uint32),
+        ("diis_history", ctypes.c_uint32),
+        ("energy_tolerance", ctypes.c_double),
+        ("density_tolerance", ctypes.c_double),
+        ("maximum_numeric_bytes", ctypes.c_uint64),
+        ("radial_points", ctypes.c_uint32),
+        ("angular_polar", ctypes.c_uint32),
+        ("angular_azimuth", ctypes.c_uint32),
+    ]
+
+
+class InitialGuessDiagnosticDescriptor(ctypes.Structure):
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("requested_kind", ctypes.c_uint32),
+        ("outcome", ctypes.c_uint32),
+        ("preliminary_iterations", ctypes.c_uint32),
+        ("preliminary_fock_builds", ctypes.c_uint64),
+        ("target_attempts", ctypes.c_uint32),
+        ("discarded_target_iterations", ctypes.c_uint32),
+        ("discarded_target_fock_builds", ctypes.c_uint64),
+        ("preparation_numeric_capacity", ctypes.c_uint64),
+        ("preparation_seconds", ctypes.c_double),
+        ("work_counters_complete", ctypes.c_uint32),
+    ]
+
+
 class MethodDescriptor(ctypes.Structure):
     _fields_ = [
         ("struct_size", ctypes.c_uint32),
@@ -300,6 +333,7 @@ class MethodDescriptor(ctypes.Structure):
         ("ccsd_damping", ctypes.c_double),
         ("ccsd_level_shift", ctypes.c_double),
         ("ccsd_frozen_core", ctypes.c_uint32),
+        ("initial_guess", ctypes.POINTER(InitialGuessOptionsDescriptor)),
     ]
 
 

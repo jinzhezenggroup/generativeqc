@@ -10,7 +10,7 @@ from generativeqc import Calculator
 from generativeqc.profiles import probe_device
 
 from benchmarks._cases import benchmark_cases
-from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis
+from benchmarks._retained_basis import load_retained_comparison_basis
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
@@ -53,10 +53,10 @@ def test_automatic_derivative_route_cold_warm_and_moved(
             Path(__file__).resolve().parents[2]
             / "benchmarks/results/issue206-practical-auxiliary/identity"
         )
-        orbital, cpu_orbital = load_comparison_basis(
+        orbital, cpu_orbital = load_retained_comparison_basis(
             identity / "cc-pvdz.json", case, role="orbital", compute_forces=True
         )
-        auxiliary, cpu_auxiliary = load_comparison_basis(
+        auxiliary, cpu_auxiliary = load_retained_comparison_basis(
             identity / "cc-pvdz-jkfit.json", case, role="auxiliary", compute_forces=True
         )
     for name in (

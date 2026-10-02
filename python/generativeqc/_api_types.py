@@ -167,6 +167,7 @@ class Result:
     ks_diagnostic: KsDiagnostic | None = None
     ks_transport_diagnostic: KsTransportDiagnostic | None = None
     dispersion: object | None = None
+    initial_guess: dict | None = None
 
 
 @dataclass(frozen=True)

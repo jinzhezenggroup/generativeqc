@@ -16,6 +16,7 @@ Use this guide to install GenerativeQC and run calculations. If the terminology 
 - [Portable checkpoints](checkpoint.md)
 - [Cross-basis initialization](basis_projection.md)
 - [Progressive HF](progressive_hf.md)
+- [Preliminary SCF initial guesses](initial_guesses.md)
 - [KS options](ks_options.md)
 - [Automatic Libxc semilocal functionals](libxc.md)
 - [Density-fitted DFT](dft_density_fitting.md)
@@ -47,6 +48,7 @@ batched_hf
 checkpoint
 basis_projection
 progressive_hf
+initial_guesses
 ks_options
 libxc
 dft_density_fitting

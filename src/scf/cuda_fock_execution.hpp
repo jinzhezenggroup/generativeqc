@@ -164,6 +164,16 @@ generativeqc_status enqueue_prepared_cuda_fock(const PreparedFockPlan& plan, con
                                                bool mixed_coulomb, std::string& detail,
                                                std::uint64_t* mixed_coulomb_work_count = nullptr);
 
+/** Enqueue the prepared primary full-range J/K plus one compatible exact
+ * SR/LR exchange correction through a single Direct density-preparation pass.
+ * Unsupported domains return NOT_IMPLEMENTED so consumers can retain the
+ * ordinary two-call composition. */
+generativeqc_status enqueue_prepared_cuda_rsh_values(
+    const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
+    const double* beta, std::size_t matrix_elements, double* coulomb, double* full_alpha_exchange,
+    double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
+    int* primary_error, int* range_error, std::string& detail);
+
 /** Enqueue a separately resolved long-range exact-exchange correction through
  * the same resident direct-J/K source as the primary prepared owner. The
  * correction must preserve spin and screening identity and contain no Coulomb

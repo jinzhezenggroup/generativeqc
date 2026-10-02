@@ -20,6 +20,7 @@
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "methods/correlated_cuda_source.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
@@ -40,25 +41,6 @@ std::vector<std::size_t> range(std::size_t begin, std::size_t end) {
   std::vector<std::size_t> result(end - begin);
   std::iota(result.begin(), result.end(), begin);
   return result;
-}
-
-std::vector<double> positions(const core::System& system) {
-  std::vector<double> result;
-  result.reserve(3 * system.atoms.size());
-  for (const auto& atom : system.atoms)
-    result.insert(result.end(), atom.position.begin(), atom.position.end());
-  return result;
-}
-
-bool valid_positions(const std::vector<double>& coordinates, const core::System& system) {
-  return coordinates.size() == 3 * system.atoms.size() &&
-         std::all_of(coordinates.begin(), coordinates.end(),
-                     [](double value) { return std::isfinite(value); });
-}
-
-void set_positions(core::System& system, const std::vector<double>& coordinates) {
-  for (std::size_t atom = 0; atom < system.atoms.size(); ++atom)
-    std::copy_n(coordinates.begin() + 3 * atom, 3, system.atoms[atom].position.begin());
 }
 
 generativeqc_status item_exception_status() {
@@ -340,16 +322,16 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
   return p;
 }
 
-RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
-                                        const core::System& system,
-                                        const scf::ScfOptions& reference_options,
-                                        const cc::SolverOptions& solver_options,
-                                        std::size_t reference_capacity,
-                                        scf::PreparedFockPlan* prepared_exact,
-                                        std::unique_ptr<scf::PreparedFockPlan>* cuda_source_cache) {
+RccsdNativeState execute_rccsd_prepared(
+    runtime::ExecutionContext& execution, const core::System& system,
+    const scf::ScfOptions& reference_options, const cc::SolverOptions& solver_options,
+    std::size_t reference_capacity, scf::PreparedFockPlan* prepared_exact,
+    const std::vector<double>* initial_density, bool* warm_start_fallback,
+    std::unique_ptr<scf::PreparedFockPlan>* cuda_source_cache) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
+    if (warm_start_fallback) *warm_start_fallback = false;
     // A previous correlation source must not coexist with the next native
     // CUDA RHF arena. CPU keeps its qualified shared reference/source owner.
     if (cuda) {
@@ -357,14 +339,32 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
       prepared_exact = nullptr;
     }
     const auto reference_started = std::chrono::steady_clock::now();
+    const auto run_reference = [&](const std::vector<double>* seed) {
+      if (prepared_exact) {
+        auto prepared_options = reference_options;
+        prepared_options.resolved_fock_build = prepared_exact->strategy();
+        return scf::run_prepared_fock_strategy(*prepared_exact, prepared_options, seed);
+      }
+      return cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed)
+                  : scf::run_rhf(system, reference_options, seed);
+    };
     scf::ScfResult hf;
-    if (prepared_exact) {
-      auto prepared_options = reference_options;
-      prepared_options.resolved_fock_build = prepared_exact->strategy();
-      hf = scf::run_prepared_fock_strategy(*prepared_exact, prepared_options);
+    if (initial_density) {
+      bool retried_cold = false;
+      try {
+        hf = run_reference(initial_density);
+      } catch (...) {
+        retried_cold = true;
+        if (warm_start_fallback) *warm_start_fallback = true;
+        hf = run_reference(nullptr);
+      }
+      if (!retried_cold && (!hf.converged || !hf.reference)) {
+        hf = {};
+        if (warm_start_fallback) *warm_start_fallback = true;
+        hf = run_reference(nullptr);
+      }
     } else {
-      hf = cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id())
-                : scf::run_rhf(system, reference_options);
+      hf = run_reference(nullptr);
     }
     const double reference_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - reference_started).count();
@@ -411,6 +411,9 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
     state.reference = reference;
+    state.reference_energy_change = hf.energy_change;
+    state.reference_density_rms = hf.density_rms;
+    state.reference_iterations = static_cast<int>(hf.iterations);
     const auto o = reference->nocc;
     state.eps_o.assign(reference->orbital_energies.begin(),
                        reference->orbital_energies.begin() + static_cast<std::ptrdiff_t>(o));
@@ -600,29 +603,62 @@ class RccsdPrepared final : public PreparedCalculation {
   }
 
   Result execute(bool compute_forces) override {
+    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
+  }
+
+  Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
+                                     bool* warm_start_fallback,
+                                     std::optional<scf::HfWarmState>* retained_warm_state) {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     last_performance_.reset();
     if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
+
+    const auto warm_capacity =
+        warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
+    if (warm_capacity >= solver_options_.max_bytes ||
+        reference_capacity_ > solver_options_.max_bytes - warm_capacity)
+      throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                        "RCCSD warm state and reference exceed numeric memory budget");
+    auto reference_options = reference_options_;
+    auto solver_options = solver_options_;
+    reference_options.reference_memory_budget_bytes -= warm_capacity;
+    solver_options.max_bytes -= warm_capacity;
+
     if (!execution_.cuda_requested() && !cpu_exact_plan_) {
       const auto backend =
           execution_.cuda_requested() ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
       const auto strategy =
           scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted), backend,
-                                  reference_options_.screening_tolerance);
+                                  reference_options.screening_tolerance);
       cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(
           system_, nullptr, strategy, execution_.cuda_requested() ? execution_.device_id() : -1);
     }
-    auto state =
-        execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
-                               reference_capacity_, cpu_exact_plan_.get(), &cpu_exact_plan_);
+    auto state = execute_rccsd_prepared(execution_, system_, reference_options, solver_options,
+                                        reference_capacity_, cpu_exact_plan_.get(),
+                                        initial_state ? &initial_state->density : nullptr,
+                                        warm_start_fallback, &cpu_exact_plan_);
+    state.external_reservation_bytes = warm_capacity;
+    state.diagnostic.numeric_capacity_bytes =
+        posthf::checked_add(state.diagnostic.numeric_capacity_bytes, warm_capacity);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
       throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE, state.solved.reason);
-    if (!state.solved.converged() || !compute_forces) return state.result;
+
+    const auto retain_reference = [&] {
+      if (retained_warm_state && state.reference)
+        *retained_warm_state =
+            warm_reference::capture(system_, *state.reference, state.reference_energy_change,
+                                    state.reference_density_rms, state.reference_iterations);
+    };
+
+    if (!state.solved.converged() || !compute_forces) {
+      if (state.solved.converged()) retain_reference();
+      return state.result;
+    }
     if (!state.reference)
       throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                         "RCCSD force owner lost the converged RHF reference");
@@ -676,19 +712,21 @@ class RccsdPrepared final : public PreparedCalculation {
         force.orbital_response.measured_workspace_peak_bytes;
     diagnostic.response_workspace_allocation_count =
         force.orbital_response.workspace_allocation_count;
+    const auto force_capacity =
+        posthf::checked_add(force.numeric_capacity_bytes, state.external_reservation_bytes);
     diagnostic.planned_endpoint_peak_bytes =
-        std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force.numeric_capacity_bytes);
+        std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force_capacity);
     diagnostic.force_provenance_flags = execution_.cuda_requested() ? 0xf : 0x7;
     diagnostic.numeric_capacity_bytes =
-        std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force.numeric_capacity_bytes);
-    execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Host,
-                                    force.numeric_capacity_bytes);
+        std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force_capacity);
+    execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Host, force_capacity);
     execution_.observe_workspace_peak(runtime::ExecutionMemorySpace::Host,
                                       force.orbital_response.workspace_bytes);
     std::copy_n(force.response_operator_hash.c_str(),
                 std::min<std::size_t>(64, force.response_operator_hash.size()),
                 diagnostic.response_operator_hash);
     last_ = diagnostic;
+    retain_reference();
     return state.result;
   }
 
@@ -709,11 +747,13 @@ class RccsdPreparedBatch final : public PreparedBatch {
  public:
   RccsdPreparedBatch(Capabilities capabilities, core::ContextState& context,
                      std::vector<core::System> systems,
-                     const generativeqc_method_descriptor& descriptor)
+                     const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
       : capabilities_(capabilities),
         execution_(context),
         context_(&context),
-        systems_(std::move(systems)) {
+        systems_(std::move(systems)),
+        warm_starts_enabled_(warm_starts_enabled),
+        warm_states_(systems_.size()) {
     descriptor_ = descriptor;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.ks_options = nullptr;
@@ -721,7 +761,7 @@ class RccsdPreparedBatch final : public PreparedBatch {
     owner_coordinates_.reserve(systems_.size());
     for (const auto& system : systems_) {
       owners_.push_back(prepare_rccsd_calculation(capabilities_, *context_, system, descriptor_));
-      owner_coordinates_.push_back(positions(system));
+      owner_coordinates_.push_back(warm_reference::coordinates(system));
     }
   }
 
@@ -742,19 +782,28 @@ class RccsdPreparedBatch final : public PreparedBatch {
       result.calculation.executed_backend = execution_.backend();
       try {
         auto target = systems_[index];
-        auto target_coordinates = positions(target);
+        auto target_coordinates = warm_reference::coordinates(target);
         if (!coordinates.empty() && coordinates[index]) {
-          if (!valid_positions(*coordinates[index], target))
+          if (!warm_reference::valid_coordinates(*coordinates[index], target))
             throw std::invalid_argument("invalid RCCSD batch item coordinates");
           target_coordinates = *coordinates[index];
-          set_positions(target, target_coordinates);
+          warm_reference::set_coordinates(target, target_coordinates);
         }
         if (target_coordinates != owner_coordinates_[index]) {
           auto candidate = prepare_rccsd_calculation(capabilities_, *context_, target, descriptor_);
           owners_[index] = std::move(candidate);
           owner_coordinates_[index] = std::move(target_coordinates);
         }
-        result.calculation = owners_[index]->execute(compute_forces);
+        const bool has_warm_state = warm_starts_enabled_ && warm_states_[index].has_value();
+        result.warm_start_used = has_warm_state;
+        bool warm_start_fallback = false;
+        std::optional<scf::HfWarmState> next_warm_state;
+        auto& owner = static_cast<RccsdPrepared&>(*owners_[index]);
+        result.calculation = owner.execute_with_reference_seed(
+            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr, &warm_start_fallback,
+            warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
+        result.warm_start_fallback = warm_start_fallback;
+        if (next_warm_state) warm_states_[index].swap(next_warm_state);
         result.status = result.calculation.convergence.converged
                             ? GENERATIVEQC_STATUS_SUCCESS
                             : GENERATIVEQC_STATUS_NOT_CONVERGED;
@@ -778,14 +827,27 @@ class RccsdPreparedBatch final : public PreparedBatch {
     return owners_[index]->cc_performance_diagnostic();
   }
 
-  void clear_warm_starts() override {}
-  std::size_t warm_density_size(std::size_t) const override { return 0; }
-  const std::optional<scf::HfWarmState>& warm_state(std::size_t) const override {
-    static const std::optional<scf::HfWarmState> empty;
-    return empty;
+  void clear_warm_starts() override {
+    for (auto& state : warm_states_) state.reset();
   }
-  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>>) override {}
-  void set_warm_start_updates(bool) override {}
+  std::size_t warm_density_size(std::size_t index) const override {
+    const auto n = molecule::ao_count(systems_.at(index));
+    return posthf::checked_mul(n, n);
+  }
+  const std::optional<scf::HfWarmState>& warm_state(std::size_t index) const override {
+    return warm_states_.at(index);
+  }
+  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
+    if (!warm_starts_enabled_ || states.size() != size())
+      throw std::invalid_argument(
+          "checkpoint restore requires a matching warm-enabled RCCSD batch");
+    for (std::size_t index = 0; index < size(); ++index)
+      if (states[index])
+        warm_reference::validate_checkpoint(systems_[index], *states[index], "RCCSD");
+    for (std::size_t index = 0; index < size(); ++index)
+      if (states[index]) warm_states_[index].swap(states[index]);
+  }
+  void set_warm_start_updates(bool enabled) override { warm_start_updates_enabled_ = enabled; }
   runtime::ExecutionResourceSnapshot execution_resources(
       std::size_t index) const noexcept override {
     if (index >= owners_.size() || !owners_[index]) return {};
@@ -812,6 +874,9 @@ class RccsdPreparedBatch final : public PreparedBatch {
   runtime::ExecutionContext execution_;
   core::ContextState* context_{};
   std::vector<core::System> systems_;
+  bool warm_starts_enabled_{};
+  bool warm_start_updates_enabled_{true};
+  std::vector<std::optional<scf::HfWarmState>> warm_states_;
   generativeqc_method_descriptor descriptor_{};
   std::vector<std::unique_ptr<PreparedCalculation>> owners_;
   std::vector<std::vector<double>> owner_coordinates_;
@@ -822,14 +887,20 @@ class RccsdPreparedBatch final : public PreparedBatch {
 RccsdNativeState run_rccsd_native_state(
     runtime::ExecutionContext& execution, const core::System& system,
     const generativeqc_method_descriptor& descriptor,
-    std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache) {
+    std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache,
+    const std::vector<double>* initial_density, bool* warm_start_fallback,
+    std::size_t external_reservation_bytes) {
   validate_descriptor(descriptor, execution);
   const auto budget = correlation_budget(descriptor);
-  auto solver_options = cc_options(descriptor, budget);
-  auto reference = reference_options(descriptor, budget);
+  if (external_reservation_bytes >= budget)
+    throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                      "RCCSD warm state exhausts correlation memory budget");
+  const auto phase_budget = budget - external_reservation_bytes;
+  auto solver_options = cc_options(descriptor, phase_budget);
+  auto reference = reference_options(descriptor, phase_budget);
   const auto reference_capacity = posthf::rhf_reference_capacity(
       system, reference.diis_history, execution.backend() == GENERATIVEQC_BACKEND_CPU_REFERENCE);
-  if (reference_capacity > budget)
+  if (reference_capacity > phase_budget)
     throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                       "RCCSD bounded RHF reference exceeds correlation memory budget");
   scf::PreparedFockPlan* prepared_exact = nullptr;
@@ -845,8 +916,13 @@ RccsdNativeState run_rccsd_native_state(
     }
     prepared_exact = prepared_exact_cache->get();
   }
-  return execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
-                                prepared_exact, prepared_exact_cache);
+  auto state = execute_rccsd_prepared(execution, system, reference, solver_options,
+                                      reference_capacity, prepared_exact, initial_density,
+                                      warm_start_fallback, prepared_exact_cache);
+  state.external_reservation_bytes = external_reservation_bytes;
+  state.diagnostic.numeric_capacity_bytes =
+      posthf::checked_add(state.diagnostic.numeric_capacity_bytes, external_reservation_bytes);
+  return state;
 }
 
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System& system,
@@ -914,8 +990,8 @@ std::unique_ptr<PreparedBatch> prepare_rccsd_batch(const Capabilities& capabilit
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "RCCSD prepared batch requires one homogeneous (nocc,nvir) shape; split ragged groups");
   }
-  return std::make_unique<RccsdPreparedBatch>(capabilities, context, std::move(systems),
-                                              descriptor);
+  return std::make_unique<RccsdPreparedBatch>(capabilities, context, std::move(systems), descriptor,
+                                              (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0);
 }
 
 }  // namespace generativeqc::methods::detail

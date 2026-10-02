@@ -28,6 +28,7 @@ def checkpoint_export(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include "core/types.hpp"
 #include "scf/types.hpp"
 #include "scf/warm_state.hpp"
+#include "methods/correlated_warm_reference.hpp"
 
 // Count the four-double H2 density allocations only while publishing the seed.
 // The six-double coordinate allocation is deliberately a different size.
@@ -42,6 +43,7 @@ void operator delete(void* p) noexcept { std::free(p); }
 void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 
 using namespace generativeqc;
+namespace warm_reference = generativeqc::methods::warm_reference;
 scf::HfWarmState capture(scf::ScfResult& hf, const core::System& system_) {
   scf::HfWarmState output;
   auto* retained_warm_state = &output;

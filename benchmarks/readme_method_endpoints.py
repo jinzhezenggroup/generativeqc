@@ -25,6 +25,7 @@ from generativeqc_compiler.dft.grid import MolecularGrid
 
 from benchmarks._endpoint_progress import EndpointProgress, save_record
 from benchmarks._gpu4pyscf_grid import preserve_reference_grid_order
+from benchmarks._retained_basis import load_retained_comparison_basis
 from benchmarks._support import (
     cuda_accelerator_metadata,
     environment_metadata,
@@ -36,7 +37,6 @@ from benchmarks.compare_gpu4pyscf_batch import (
     accuracy_gate_summary,
     fixed_warm_start_policy,
     interleaved_engine_order,
-    load_comparison_basis,
     native_build_metadata,
     pair_repeat_accuracy,
 )
@@ -157,7 +157,7 @@ def run_dft(args: argparse.Namespace, record: dict) -> None:
     engine.xc = {"pbe": "PBE", "pbe0": "PBE0", "r2scan": "R2SCAN"}[args.method]
     native_aux = None
     if args.mode == "df":
-        native_aux, reference_aux = load_comparison_basis(
+        native_aux, reference_aux = load_retained_comparison_basis(
             AUXILIARY, case, role="auxiliary", compute_forces=False
         )
         engine = engine.density_fit(auxbasis=reference_aux)

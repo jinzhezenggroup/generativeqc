@@ -15,6 +15,7 @@ PREFIX = r"""
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 int allocations=0, executions=0;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2;
 namespace core { struct System {}; }
@@ -42,8 +43,14 @@ struct PreparedFockPlan {
 }
 namespace posthf {
 std::size_t rhf_reference_capacity(const core::System&,int,bool) { return 80; }
+std::size_t checked_add(std::size_t a,std::size_t b) { return a+b; }
 }
-struct RccsdNativeState { bool cached; };
+struct Diagnostic { std::size_t numeric_capacity_bytes=80; };
+struct RccsdNativeState {
+  bool cached;
+  std::size_t external_reservation_bytes=0;
+  Diagnostic diagnostic{};
+};
 void validate_descriptor(const generativeqc_method_descriptor& d,const runtime::ExecutionContext&) {
   if (!d.valid) throw std::invalid_argument("invalid descriptor");
 }
@@ -52,9 +59,10 @@ int cc_options(const generativeqc_method_descriptor&,std::size_t) { return 0; }
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,int,std::size_t,scf::PreparedFockPlan* p,
+                                      const std::vector<double>*, bool*,
                                       std::unique_ptr<scf::PreparedFockPlan>*) {
   ++executions;
-  return {p != nullptr};
+  return {p != nullptr,0,{80}};
 }
 """
 
@@ -70,7 +78,8 @@ int main(int argc,char** argv) {
   if (mode == 1) descriptor.valid=false;
   if (mode == 2) execution.cuda=true;
   try {
-    auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache);
+    auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
+                                        nullptr,nullptr,0);
     if (mode < 2) return 2;
     // CUDA source preparation belongs after native RHF, inside execution.
     const bool expect_cache = mode >= 4;
@@ -78,10 +87,10 @@ int main(int argc,char** argv) {
     if (allocations != (expect_cache ? 1 : 0) || executions != 1) return 4;
     if (expect_cache) {
       auto* first=cache.get();
-      result=run_rccsd_native_state(execution,system,descriptor,&cache);
+      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0);
       if (!result.cached || cache.get()!=first || allocations!=1 || executions!=2) return 5;
       descriptor.budget=79;
-      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache); return 6; }
+      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0); return 6; }
       catch (const MethodError&) {}
       if (cache.get()!=first || allocations!=1 || executions!=2) return 7;
     }
@@ -121,7 +130,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         assert result.returncode == 0, (mode, result.returncode, result.stderr)
     consumer = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
     assert (
-        "run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_)"
+        "run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,"
         in consumer
     )
     assert "make_unique<scf::PreparedFockPlan>" not in consumer

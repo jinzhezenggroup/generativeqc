@@ -391,6 +391,122 @@ GENERATIVEQC_GRID_HD bool contract_point_cooperative(
       products, bar_product, bar_distance, zeros, distances, states, team, norm, ratio,
       logarithm, pair, DirectCenterGeometry<Norm, Ratio>{centers, norm, ratio});
 }
+
+// Large domains stream a bounded strip of triangular rows through one block.
+// Each atom owns its log/gradient entries and gathers only incident strip edges,
+// in its original triangular order. Normalization separates two complete pair
+// passes; rematerialization keeps storage O(rows*natom), not O(natom^2).
+// Team::all publishes votes collectively and completes every participant's read
+// before a later vote can overwrite the same shared flag.
+template <class Team, class Norm, class Ratio, class Log, class Pair, class Geometry>
+GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative_impl(
+    const double* point, const double* centers, size_t na, size_t owner, double seed,
+    double* gradient, double* logs, double* products, double* bar_product,
+    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
+    PointPair* states, size_t rows, Team team, Norm norm, Ratio ratio, Log logarithm,
+    Pair pair, Geometry geometry) {
+  if (!rows) return false;
+  bool point_valid = true;
+  for (size_t atom = team.rank(); atom < na; atom += team.size()) {
+    bool valid = true;
+    distances[atom] = distance(point, centers + 3 * atom, norm, valid);
+    point_valid = point_valid && valid;
+    logs[atom] = 0;
+    zeros[atom] = 0;
+    bar_distance[atom] = 0;
+  }
+  if (!team.all(point_valid)) return false;
+  if (na == 1) { team.sync(); return true; }
+  double maximum = 0;
+  for (size_t pass = 0; pass < 2; ++pass) {
+    for (size_t begin = 1; begin < na; begin += rows) {
+      const size_t end = std::min(na, begin + rows);
+      const size_t offset = center_pair_index(begin, 0);
+      const size_t count = center_pair_index(end, 0) - offset;
+      bool tile_valid = true;
+      for (size_t index = team.rank(); index < count; index += team.size()) {
+        size_t a = begin;
+        while (center_pair_index(a + 1, 0) <= offset + index) ++a;
+        const size_t b = offset + index - center_pair_index(a, 0);
+        bool valid = true;
+        const auto separation = geometry.separation(a, b, valid);
+        auto state = pass == 0
+            ? point_pair(distances[a][0] - distances[b][0], a, b, separation[0],
+                         geometry, logarithm, pair)
+            : point_pair<false>(distances[a][0] - distances[b][0], a, b, separation[0],
+                                geometry, logarithm, pair);
+        tile_valid = tile_valid && valid && std::isfinite(state.factor[0]);
+        if (pass == 1) {
+          std::array<double, 4> pullback{};
+          if (state.factor[1] != 0) {
+            const double bar_mu = pair_adjoint<false>(state, a, b, logs, products,
+                bar_product, zeros, maximum, logarithm);
+            pullback[0] = bar_mu * state.ratio[0];
+            for (size_t k = 0; k < 3; ++k)
+              pullback[k + 1] = bar_mu * state.ratio[1] * separation[k + 1];
+          }
+          state.ratio = {pullback[0], pullback[1]};
+          state.factor = {pullback[2], pullback[3]};
+        }
+        states[index] = state;
+      }
+      // The team vote publishes the strip and makes failures collective without
+      // every participant rescanning all pair states.
+      if (!team.all(tile_valid)) return false;
+      for (size_t atom = team.rank(); atom < na; atom += team.size()) {
+        // Lower neighbors exist only in atom's own row; upper neighbors exist
+        // only in the strip's later rows. Every edge is read twice in total.
+        const size_t lower = atom >= begin && atom < end ? atom : 0;
+        const size_t upper_begin = std::max(atom + 1, begin);
+        const size_t upper = end > upper_begin ? end - upper_begin : 0;
+        for (size_t incident = 0; incident < lower + upper; ++incident) {
+          const bool side = incident >= lower;
+          const size_t a = side ? upper_begin + incident - lower : atom;
+          const size_t b = side ? atom : incident;
+          const auto& state = states[center_pair_index(a, b) - offset];
+          if (pass == 0) {
+            const double v = side ? 1 - state.factor[0] : state.factor[0];
+            if (v > 0) logs[atom] += state.logarithm[side][0];
+            else ++zeros[atom];
+          } else {
+            const double sign = side ? -1 : 1;
+            bar_distance[atom] += sign * state.ratio[0];
+            gradient[3 * atom] += sign * state.ratio[1];
+            gradient[3 * atom + 1] += sign * state.factor[0];
+            gradient[3 * atom + 2] += sign * state.factor[1];
+          }
+        }
+      }
+      team.sync();  // all incident-edge consumers finish before strip reuse
+    }
+    if (pass == 0) {
+      maximum = maximum_log_product(na, logs, zeros);
+      if (!std::isfinite(maximum)) return false;
+      if (team.rank() == 0)
+        normalized_product_adjoint(na, owner, seed, logs, products, bar_product, zeros,
+                                   maximum, ratio);
+      team.sync();
+    }
+  }
+  if (team.rank() == 0) point_motion_adjoint(na, owner, bar_distance, distances, gradient);
+  team.sync();
+  return true;
+}
+template <class Team, class Norm, class Ratio, class Log, class Pair, class PreparedRatio>
+GENERATIVEQC_GRID_HD bool contract_point_tiled_cooperative(
+    const double* point, const double* centers, size_t na, size_t owner, double seed,
+    double* gradient, double* logs, double* products, double* bar_product,
+    double* bar_distance, size_t* zeros, std::array<double, 4>* distances,
+    PointPair* states, size_t rows, Team team, Norm norm, Ratio ratio, Log logarithm, Pair pair,
+    const CenterPair* pairs, PreparedRatio prepared_ratio) {
+  if (pairs)
+    return contract_point_tiled_cooperative_impl(point, centers, na, owner, seed, gradient,
+        logs, products, bar_product, bar_distance, zeros, distances, states, rows, team,
+        norm, ratio, logarithm, pair, PreparedCenterGeometry<PreparedRatio>{pairs, prepared_ratio});
+  return contract_point_tiled_cooperative_impl(point, centers, na, owner, seed, gradient,
+      logs, products, bar_product, bar_distance, zeros, distances, states, rows, team,
+      norm, ratio, logarithm, pair, DirectCenterGeometry<Norm, Ratio>{centers, norm, ratio});
+}
 }  // namespace generativeqc_grid_adjoint
 #undef GENERATIVEQC_GRID_HD
 """

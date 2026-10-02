@@ -119,10 +119,14 @@ __global__ void gfn2_repulsion_kernel(Gfn2RepulsionDeviceBatch batch, double* en
       local_energy += pair.energy;
 
       if (forces != nullptr) {
-        const double force_scale = -pair.distance_derivative / distance;
-        const double fx = force_scale * dx;
-        const double fy = force_scale * dy;
-        const double fz = force_scale * dz;
+        double fx = 0.0;
+        double fy = 0.0;
+        double fz = 0.0;
+        if (!generativeqc::xtb::generated::project_gfn2_pair_radial_adjoint(
+                pair.distance_derivative, -1.0, 1.0 / distance, dx, dy, dz, fx, fy, fz)) {
+          record_error(device_error, Gfn2RepulsionDeviceError::kNonfinitePairArithmetic);
+          continue;
+        }
         first_fx += fx;
         first_fy += fy;
         first_fz += fz;

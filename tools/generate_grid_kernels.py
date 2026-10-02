@@ -24,9 +24,15 @@ def main() -> None:
         default=16,
         help="compiler-owned CUDA XC matrix tile; production default is 16",
     )
+    parser.add_argument(
+        "--ao-radial-reuse",
+        action="store_true",
+        help="opt in to unqualified compiler-owned 4/10-jet AO radial reuse",
+    )
     args = parser.parse_args()
     source, _, _ = emit_grid_source(
         native_ks=True,
+        ao_radial_reuse=args.ao_radial_reuse,
         xc_matrix_schedule=XcMatrixSchedule(args.xc_matrix_tile),
     )
     write_if_changed(args.output, source)

@@ -1,0 +1,150 @@
+{
+  "build_source_revision": "6bf930be60b688fe5917d8fb03464cb44c37be58",
+  "build_source_tree": "5783753bfad4cbef30d318df1e14a22bef8b8a43",
+  "checkpoint_boundary": "HF/MP2-only Python checkpoint model cannot label PBE0; existing read-only native DFT warm-state buffer export is used instead",
+  "device": {
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "affinity_isolated": false,
+    "kind": "cpu",
+    "models": [
+      "INTEL(R) XEON(R) PLATINUM 8573C"
+    ],
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41"
+  },
+  "endpoint_boundary": "Input argument materialization + Calculator constructor + prepare_batch + execute(returned diagnostics); library loading in constructor included. API imports, final-state export, close and process launch excluded and recorded separately. Fresh warm-enabled batch retains final density but has no imported/reused initial density and executes exactly once.",
+  "fixture_sha256": "710414e4170c16000f2a55b9bcb284cf0db1933926d9d1fcd2b10915283c2183",
+  "harness_sha256": "ed2541effe234bab14282f105fa648e2eb633c82f8ec25b3a7e563c1f5dc071d",
+  "library_path": "/workspace/scratch/1b7630fc9eb4/gqc-preliminary-initial-guess/build/cpu-review/libgenerativeqc.so",
+  "library_sha256": "82856b490be279ecde772d2feb6684953271246abac94c5f3748fe945f922c24",
+  "library_unchanged": true,
+  "original_provenance_sha256": "588eaee0517e1136b884fd5982eec3b4b60734282636ff5daf0ec8d102fb11b9",
+  "original_records_bytes": 663166,
+  "original_records_sha256": "bdec123c459dec761d8da40dfb905dbf2e8335110da5380ef4aed5f70d15f7c9",
+  "production_sources_match_build": true,
+  "reproduction_source_mapping": "Local measured/build revisions retain their historical meaning. They need not be public Git objects: reproduce.py accepts an explicit verified build revision or current HEAD only if the complete production-source aggregate hash matches the measured implementation.",
+  "runtime_environment": {
+    "GENERATIVEQC_LIBRARY": "/workspace/scratch/1b7630fc9eb4/gqc-preliminary-initial-guess/build/cpu-review/libgenerativeqc.so",
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1"
+  },
+  "schedule": [
+    [
+      0,
+      "water-631g",
+      "direct"
+    ],
+    [
+      0,
+      "water-631g",
+      "hf"
+    ],
+    [
+      0,
+      "water-631g",
+      "lda"
+    ],
+    [
+      0,
+      "water-tetramer-631g",
+      "direct"
+    ],
+    [
+      0,
+      "water-tetramer-631g",
+      "hf"
+    ],
+    [
+      0,
+      "water-tetramer-631g",
+      "lda"
+    ],
+    [
+      1,
+      "water-tetramer-631g",
+      "hf"
+    ],
+    [
+      1,
+      "water-tetramer-631g",
+      "lda"
+    ],
+    [
+      1,
+      "water-tetramer-631g",
+      "direct"
+    ],
+    [
+      1,
+      "water-631g",
+      "hf"
+    ],
+    [
+      1,
+      "water-631g",
+      "lda"
+    ],
+    [
+      1,
+      "water-631g",
+      "direct"
+    ],
+    [
+      2,
+      "water-631g",
+      "lda"
+    ],
+    [
+      2,
+      "water-631g",
+      "direct"
+    ],
+    [
+      2,
+      "water-631g",
+      "hf"
+    ],
+    [
+      2,
+      "water-tetramer-631g",
+      "lda"
+    ],
+    [
+      2,
+      "water-tetramer-631g",
+      "direct"
+    ],
+    [
+      2,
+      "water-tetramer-631g",
+      "hf"
+    ]
+  ],
+  "scope": "18-endpoint actual-API campaign",
+  "smoke_scope": "Separate smoke-hf run excluded from all campaign samples and statistics",
+  "source": {
+    "dirty": false,
+    "revision": "154e3207d08207b950a93db7e4064a95098270fa",
+    "source_file_count": 1261,
+    "source_hash": "50fa5bd80f608a9f02c54a1463bf841d8dfb5beb101bce787b4dbb976e96fc89",
+    "source_hash_definition": "SHA256 of canonical JSON path-to-file-SHA256 map for tracked/existing and untracked production files under src/include/python/cmake and CMakeLists.txt; sorted keys and compact separators",
+    "source_inventory_omission": "Full path/hash map omitted because exact clean Git revisions and aggregate map hash suffice for reconstruction; original provenance file hash retained below",
+    "tree": "2a2b0789c2b0d3e6d520097ca7061cb9b0568352",
+    "untracked_source_files": []
+  },
+  "source_mapping_scope": "Measured checkout may differ in tests/notes from the build source; src/include/python/cmake/CMakeLists.txt equality verified before run",
+  "source_unchanged": true,
+  "status": "completed",
+  "time_utc": "2026-10-02T05:53:26Z"
+}

@@ -18,6 +18,7 @@
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/compiled_execution_region.hpp"
+#include "runtime/cuda_resources.cuh"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/solver_region_cuda.cuh"
@@ -27,6 +28,7 @@
 #include "scf/cuda/scf_density_kernels.hpp"
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
+#include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_fock_execution.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
@@ -874,9 +876,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (range_correction->spec.exchange.op == scf::FockOperator::ShortRange ||
          range_correction->spec.exchange.op == scf::FockOperator::LongRange) &&
         range_correction->spec.exchange.omega > 0.0;
+    const bool resident_nonlocal_chunk =
+        rsh_chunk && device_nonlocal && nonlocal_correlation != nullptr;
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-        !fitted_coulomb && !nonlocal_correlation && !precision_schedule.any_mixed() && spins == 1 &&
+        !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
+        !precision_schedule.any_mixed() && spins == 1 &&
         (pure_semilocal_chunk || pbe0_chunk || rsh_chunk) && provider.system().ecp_terms.empty() &&
         configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
@@ -977,15 +982,47 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void enqueue_one(unsigned slot) {
     if (slot >= kCudaKsChunkCapacity) throw std::logic_error("CUDA KS chunk slot overflow");
     std::string detail;
-    check(scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange, nullptr,
-                                          jk_error, false, detail),
-          detail);
-    if (has_range_correction)
-      check(scf::enqueue_prepared_cuda_exchange_correction(provider, *range_correction, density,
-                                                           nullptr, matrix, range_exchange, nullptr,
-                                                           range_jk_error, detail),
+    if (has_range_correction) {
+      auto status = scf::enqueue_prepared_cuda_rsh_values(
+          provider, *range_correction, density, nullptr, matrix, j, exchange, nullptr,
+          range_exchange, nullptr, jk_error, range_jk_error, detail);
+      if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        status = scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
+                                                 nullptr, jk_error, false, detail);
+        if (status == GENERATIVEQC_STATUS_SUCCESS)
+          status = scf::enqueue_prepared_cuda_exchange_correction(
+              provider, *range_correction, density, nullptr, matrix, range_exchange, nullptr,
+              range_jk_error, detail);
+      }
+      check(status, detail);
+    } else {
+      check(scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
+                                            nullptr, jk_error, false, detail),
             detail);
-    const auto potential = xc->enqueue_replay_body(density, elements);
+    }
+    CudaXcView potential;
+    if (!device_nonlocal) {
+      potential = xc->enqueue_replay_body(density, elements);
+    } else {
+      potential = xc->enqueue_replay_density_features(density, elements, nonlocal_raw_density,
+                                                      nonlocal_raw_gradient);
+      const auto quadrature = xc->grid_view();
+      run_resident_nonlocal_cuda([&] {
+        nlc::enqueue_vv10_molecular_domain_cuda(
+            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
+            nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
+            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
+      });
+      run_resident_nonlocal_cuda([&] {
+        nlc::enqueue_vv10_cuda_device(
+            nonlocal_layout, nonlocal_correlation->parameters(), device, stream, quadrature.points,
+            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+            nonlocal_workspace, nonlocal_layout.workspace_bytes, nonlocal_workspace, nonlocal_vrho,
+            nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error);
+      });
+      xc->enqueue_replay_nonlocal_potential(nonlocal_effective_weights, nonlocal_effective_gradient,
+                                            nonlocal_vrho, nonlocal_vsigma, nonlocal_workspace);
+    }
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
                                   enabled, fock);
@@ -1300,20 +1337,32 @@ struct CudaKsPlan::Impl : KsStateStorage {
           fitted_exchange && occupied_fitted_factor_ready && occupied_fock_binding;
       pending_fitted_occupied = use_occupied_fitted;
       pending_fitted_projection_scratch_generation = 0;
-      generativeqc_status jk_status;
-      if (use_occupied_fitted) {
-        const scf::PreparedCudaOccupiedFockInput occupied{
-            tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
-            spins == 2 ? occupations[1] : 0};
-        jk_status = scf::enqueue_prepared_cuda_occupied_fock(
-            provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
-            exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, detail);
-      } else {
-        jk_status = scf::enqueue_prepared_cuda_fock(
-            provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
-            has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error,
-            pending_mixed_coulomb, detail,
-            pending_mixed_coulomb ? mixed_coulomb_work_counter() : nullptr);
+      generativeqc_status jk_status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      bool fused_rsh_values = false;
+      if (has_range_correction && !pending_mixed_coulomb && !use_occupied_fitted) {
+        jk_status = scf::enqueue_prepared_cuda_rsh_values(
+            provider, *range_correction, density, spins == 2 ? density + matrix : nullptr, matrix,
+            j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr, range_exchange,
+            spins == 2 ? range_exchange + matrix : nullptr, jk_error, range_jk_error, detail);
+        fused_rsh_values = jk_status == GENERATIVEQC_STATUS_SUCCESS;
+        if (!fused_rsh_values && jk_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+          check(jk_status, detail);
+      }
+      if (!fused_rsh_values) {
+        if (use_occupied_fitted) {
+          const scf::PreparedCudaOccupiedFockInput occupied{
+              tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
+              spins == 2 ? occupations[1] : 0};
+          jk_status = scf::enqueue_prepared_cuda_occupied_fock(
+              provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
+              exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, detail);
+        } else {
+          jk_status = scf::enqueue_prepared_cuda_fock(
+              provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
+              has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error,
+              pending_mixed_coulomb, detail,
+              pending_mixed_coulomb ? mixed_coulomb_work_counter() : nullptr);
+        }
       }
       check(jk_status, detail);
       if (use_occupied_fitted) {
@@ -1330,7 +1379,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         else
           ++movement.fitted_dense_exchange_builds;
       }
-      if (has_range_correction)
+      if (has_range_correction && !fused_rsh_values)
         check(scf::enqueue_prepared_cuda_exchange_correction(
                   provider, *range_correction, density, spins == 2 ? density + matrix : nullptr,
                   matrix, range_exchange, spins == 2 ? range_exchange + matrix : nullptr,
@@ -1992,10 +2041,17 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
       detail = "CUDA KS final state has no device-resident nonlocal features";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
-    // Device-resident nonlocal composition is deliberately excluded from the
-    // speculative chunk/replay route. The raw full-grid features are therefore
-    // the last ordinary stage_xc() generation iff they are the final state.
-    if (impl_->device_chunk_mode || impl_->generation != impl_->final_generation)
+    // The resident nonlocal replay body overwrites raw full-grid features in
+    // stream order. A terminal iteration does not copy its proposal back into
+    // density, so at most one already-submitted second body sees the unchanged
+    // final density. Its feature overwrite is therefore still the final-state
+    // lease even though logical generation publication includes that bounded
+    // speculative body. Graph replay remains disabled for nonlocal composition.
+    const bool exact_generation = impl_->generation == impl_->final_generation;
+    const bool bounded_terminal_overwrite =
+        impl_->device_chunk_mode && impl_->generation > impl_->final_generation &&
+        impl_->generation - impl_->final_generation < kCudaKsChunkCapacity;
+    if (!exact_generation && !bounded_terminal_overwrite)
       throw std::logic_error("CUDA KS resident nonlocal features are not the final generation");
     if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient || !impl_->xc_layout.npoint)
       throw std::logic_error("CUDA KS resident nonlocal feature storage is unavailable");
@@ -2016,6 +2072,140 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
+generativeqc_status CudaKsPlan::profile_fixed_density_components(
+    const CudaKsFinalStateToken& expected, CudaKsFixedDensityProfile& profile,
+    std::string& detail) {
+  profile = {};
+  detail.clear();
+  bool submitted = false, complete = false;
+  const auto revoke_failed_profile = [&]() noexcept {
+    if (!submitted || complete) return;
+    // The diagnostic borrows the published owner's mutable J/K/XC buffers.
+    // A partial replay cannot retain a lease on those buffers. Drain before
+    // revoking all final-state views; the last-good warm seed stays separate.
+    (void)cudaSetDevice(impl_->device);
+    (void)cudaStreamSynchronize(impl_->stream);
+    invalidate_final_state();
+    profile = {};
+  };
+  runtime::ResourceScopeExit failed_profile(revoke_failed_profile);
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument(
+          "CUDA KS fixed-density profile token has stale owner, epoch, generation or model");
+    impl_->current_device();
+    cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
+    check(cudaStreamIsCapturing(impl_->stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::invalid_argument("CUDA KS fixed-density profile requires an ordinary stream");
+
+    runtime::OwnedCudaEvent begin(impl_->device), end(impl_->device);
+    const auto timed = [&](auto&& submit) {
+      begin.record(impl_->stream);
+      submitted = true;
+      submit();
+      end.record(impl_->stream);
+      end.synchronize();
+      return static_cast<double>(end.elapsed_since(begin));
+    };
+    const auto read_error = [&](const int* source, const char* name) {
+      int value = 0;
+      check(cudaMemcpy(&value, source, sizeof(value), cudaMemcpyDeviceToHost));
+      if (value) throw std::runtime_error(std::string(name) + " reported a numerical failure");
+    };
+
+    const auto& strategy = impl_->provider.strategy();
+    const auto* beta = impl_->spins == 2 ? impl_->density + impl_->matrix : nullptr;
+    auto profile_primary = [&](bool want_j, bool want_k, unsigned slot) {
+      auto spec = strategy.spec;
+      spec.coulomb.present = want_j && strategy.spec.coulomb.present;
+      spec.exchange.present = want_k && strategy.spec.exchange.present;
+      if (!spec.coulomb.present && !spec.exchange.present) return;
+
+      if (auto* direct = impl_->provider.cuda_direct_source()) {
+        profile.milliseconds[slot] = timed([&] {
+          check(scf::enqueue_cuda_direct_jk_device(
+                    direct, spec, impl_->density, beta, impl_->matrix,
+                    spec.coulomb.present ? impl_->j : nullptr,
+                    spec.exchange.present ? impl_->exchange : nullptr,
+                    spec.exchange.present && impl_->spins == 2 ? impl_->exchange + impl_->matrix
+                                                               : nullptr,
+                    impl_->jk_error, detail),
+                detail);
+        });
+        read_error(impl_->jk_error, want_j ? "fixed-density J" : "fixed-density K");
+      } else if (auto* fitted = impl_->provider.cuda_fitted_source()) {
+        const scf::JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
+        profile.milliseconds[slot] = timed([&] {
+          const auto status =
+              impl_->spins == 2
+                  ? scf::execute_cuda_density_fitting_uhf_jk_device(
+                        fitted, impl_->density, beta, spec.coulomb.present ? impl_->j : nullptr,
+                        spec.exchange.present ? impl_->exchange : nullptr,
+                        spec.exchange.present ? impl_->exchange + impl_->matrix : nullptr, detail,
+                        terms, scf::FockMatrixLayout::RowMajor)
+                  : scf::execute_cuda_density_fitting_rhf_jk_device(
+                        fitted, impl_->density, spec.coulomb.present ? impl_->j : nullptr,
+                        spec.exchange.present ? impl_->exchange : nullptr, detail, terms,
+                        scf::FockMatrixLayout::RowMajor);
+          check(status, detail);
+        });
+      } else {
+        throw std::runtime_error("CUDA KS fixed-density profile lost its prepared Fock provider");
+      }
+      profile.present_mask |= (1U << slot);
+    };
+
+    profile_primary(true, false, 0);
+    profile_primary(false, true, 1);
+
+    if (impl_->has_range_correction) {
+      profile.milliseconds[2] = timed([&] {
+        check(scf::enqueue_prepared_cuda_exchange_correction(
+                  impl_->provider, *impl_->range_correction, impl_->density, beta, impl_->matrix,
+                  impl_->range_exchange,
+                  impl_->spins == 2 ? impl_->range_exchange + impl_->matrix : nullptr,
+                  impl_->range_jk_error, detail),
+              detail);
+      });
+      read_error(impl_->range_jk_error, "fixed-density range K");
+      profile.present_mask |= (1U << 2);
+    }
+
+    // A semilocal replay against the same D is state-equivalent for ordinary
+    // device-fused KS. Nonlocal composition has already added VV10 to the XC
+    // buffers, so a semilocal-only replay would corrupt that final view; leave
+    // its XC component explicitly unavailable instead.
+    if (impl_->xc && !impl_->nonlocal_correlation) {
+      CudaXcView view;
+      profile.milliseconds[3] = timed([&] {
+        view = impl_->xc->enqueue_replay_body(impl_->density, impl_->elements,
+                                              CudaXcDensityPrecision::Fp64);
+      });
+      read_error(view.error, "fixed-density XC");
+      profile.present_mask |= (1U << 3);
+    }
+
+    if (impl_->token() != current)
+      throw std::invalid_argument("CUDA KS final-state eligibility changed during profiling");
+    complete = true;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::bad_alloc&) {
+    detail = "CUDA KS fixed-density component profile exceeded its resource budget";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const generativeqc::Error& error) {
+    detail = error.what();
+    return error.status();
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    if (detail.empty()) detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+
 generativeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& expected,
                                                  bool compute_weighted_density,
                                                  VerifiedKsFinalState& state, std::string& detail) {
