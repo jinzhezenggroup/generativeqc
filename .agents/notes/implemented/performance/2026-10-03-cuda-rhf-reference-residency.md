@@ -38,23 +38,41 @@ route does not mean zero integral work; that route recomputes during Fock builds
 
 ## Evidence
 
-Initial complete endpoints pass the exact-basis PySCF 2.14.0 gates and all 40
-public CCSD/CCSD(T) CPU/CUDA tests on node1. The 28-AO energy endpoint takes
-4.77 seconds cold, 4.24 seconds warm and 4.26 seconds after changing geometry;
-28-AO forces take 18.50/17.89/17.90 seconds. Node2 completes all four 56-AO
-energy calls in 67.28/66.79/66.80/66.84 seconds. These preliminary measurements
-use a source-identical numerical candidate before adding the diagnostic journal
-and extracting the admission predicate; final-binary evidence is retained with
-qualification before promoting this PR.
+The [retained final-binary evidence](../../../../benchmarks/results/cc-rhf-resident-20261003/summary.json)
+contains every cold, twice-warm and changed-geometry endpoint, immutable
+source/binary identities, Slurm provenance, work observations and independent
+exact-basis PySCF 2.14.0 gates. Warm 28-AO energy decreases from 13.61 to 4.25
+seconds (3.20x), and warm 28-AO forces from 27.19 to 17.92 seconds (1.52x) on
+node1. Cold/changed 28-AO energy decreases from 61.54/55.46 to 4.79/4.28 seconds;
+force endpoints decrease from 75.06/68.95 to 18.66/17.89 seconds. On node2,
+56-AO cold/warm/changed energy decreases from 812.58/173.93/902.89 to
+67.23/66.72/66.76 seconds; the warm improvement is 2.61x. Nodes were shared and
+the pairs used separate allocations; there are two warm samples per variant.
 
-The native resource probe compares physical energies, density, Fock matrices
-and orbital energies against an independent CPU RHF solve. It executes the
-exact selected and fallback budgets, rejects minimum-minus-one, and injects
-optional device allocation pressure through the real numeric ledger instead
-of exhausting a shared GPU. The initial 7-AO probe observes 19,208 resident
-bytes, an exact 8,435,684-byte fallback peak, one optional rejection and zero
-live ledger bytes after release. Host tests cover overflow, the 256 MiB ceiling,
-force exclusion, higher angular momentum and exact admission boundaries.
+Public CC work counts are unchanged. Each 28-AO reference emits 614,656 ERI
+values into a 4,917,248-byte cache; each 56-AO reference emits 9,834,496 values
+into 78,675,968 bytes. Warm calls reuse those values for four/three physical
+Fock builds, respectively. The complete reference peaks are 215,319,548 and
+291,941,964 bytes, including mandatory provider/workspace allowances. The
+baseline RHF Fock counts were not instrumented; the candidate's completed
+journal is not a retrospective baseline measurement.
+
+All 40 public CPU/CUDA tests pass. Two remote pytest compiler wrappers skip
+because node1 lacks ccache; the identical native probes were compiled locally
+with ccache and run in Slurm job 5404 for Cartesian and spherical inputs. They
+compare physical energies, density, Fock matrices and orbital energies against
+independent CPU RHF, execute the exact optional-cache boundary and one byte
+below it, execute the exact minimum fallback budget, reject minimum-minus-one,
+and inject optional device allocation pressure through the real numeric ledger.
+Both observe 19,208 resident bytes, an exact 8,435,684-byte fallback peak, one
+optional rejection and zero live ledger bytes after release. Changed geometry
+and higher-angular fallback also pass. The native resource probe and all four
+14-AO complete force calls pass memcheck with zero errors. Host tests cover
+overflow, the storage ceiling, force exclusion and angular/admission boundaries.
+
+Maximum retained total-energy, triples and force errors are 5.4e-12 Eh,
+1.6e-13 Eh and 6.7e-8 Eh/bohr. Memcheck timings are retained but excluded from
+speed comparisons. No reference-oracle work enters production execution.
 
 ## Rejected alternatives and revisit conditions
 
