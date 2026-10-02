@@ -127,6 +127,7 @@ def test_stationary_cuda_component_nuclear_task_encodes_binding() -> None:
 
     calls = []
     owner = object.__new__(_CudaSources)
+    owner.integral_derivatives = True
     owner.used = 0
     owner.component_mode = True
     owner.kinds = {("nuclear", ()): 7}
@@ -144,6 +145,25 @@ def test_stationary_cuda_component_nuclear_task_encodes_binding() -> None:
     assert len(calls) == 1
     assert calls[0][0] == "stationary_nuclear"
     assert calls[0][2:] == (expected, 0, 1, 1.0, 2.0)
+
+
+@pytest.mark.parametrize(
+    ("method", "indices"),
+    (
+        ("integral", (0, 1)),
+        ("integral_page", ((0, 1),)),
+        ("integral_page", ()),
+    ),
+)
+def test_stationary_cuda_geometry_only_rejects_integral_tasks(
+    method: str, indices: tuple[int, ...] | tuple[tuple[int, ...], ...]
+) -> None:
+    from generativeqc._stationary_cuda import _CudaSources
+
+    owner = object.__new__(_CudaSources)
+    owner.integral_derivatives = False
+    with pytest.raises(NotImplementedError, match="geometry-only.*integral tasks"):
+        getattr(owner, method)(0, "overlap", indices)
 
 
 def test_stationary_cuda_derivative_shards_are_bounded_and_uniquely_named() -> None:

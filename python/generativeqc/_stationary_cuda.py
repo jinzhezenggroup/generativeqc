@@ -2445,15 +2445,29 @@ def _complete_rks_cuda_gradient_diagnostic(
                 source_before, grid_before = sources.metrics(), ao.metrics()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
+        fitted_integral_provider = getattr(
+            state._source, "density_fitted_integral_derivatives", None
+        )
+        direct_integral_provider = getattr(
+            state._source, "cuda_integral_derivatives", None
+        )
         use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
-        integral_provider = getattr(state._source, "cuda_integral_derivatives", None)
+        integral_provider = (
+            fitted_integral_provider
+            if use_fitted_integrals
+            else direct_integral_provider
+        )
         native_integral_budget = max_device_bytes - peak
         if not ecp and native_integral_budget > 0 and callable(integral_provider):
             with timeline.phase("prepared_stationary_integral_derivatives"):
-                native_integral = integral_provider(
-                    na,
-                    native_integral_budget,
-                    range_exchange=False,
+                native_integral = (
+                    integral_provider(na, native_integral_budget)
+                    if use_fitted_integrals
+                    else integral_provider(
+                        na,
+                        native_integral_budget,
+                        range_exchange=False,
+                    )
                 )
             if native_integral is not None:
                 native_integral_components, native_integral_resources = native_integral
@@ -2885,6 +2899,16 @@ def _complete_rks_cuda_gradient_diagnostic(
         grid_artifact_kind=grid_artifact.metadata.get("artifact_kind", "runtime-jit"),
         artifacts=artifacts_record,
     )
+    if use_fitted_integrals:
+        work["density_fitted_response_resources_included"] = False
+        work["native_integral_resource_scope"] = (
+            "compact-publication-and-host-one-electron-only"
+        )
+        work["additional_device_peak_bound_scope"] = (
+            "stationary-consumer-only; excludes DF-provider response scratch"
+        )
+        work["transfer_work"]["density_fitted_response_included"] = False
+        work["host_scope"] += "; retained H'/S' source contraction"
     timeline_record = timeline.finish()
     work.update(
         endpoint_seconds=timeline_record["endpoint_seconds"],

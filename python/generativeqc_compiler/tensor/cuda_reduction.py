@@ -19,11 +19,20 @@ REDUCTION_PROVIDERS: tuple[ReductionProvider, ...] = ("generated", "cub")
 
 
 def reduction_extent(node: typing.Any) -> int:
-    """Return the flattened reduction domain for one TensorIR reduce node."""
+    """Return the flattened reduction domain for a reduction-like TensorIR node."""
 
-    if node.op != "reduce":
-        raise ValueError("reduction extent requires a TensorIR reduce node")
-    return prod(node.inputs[0].spec.shape[axis] for axis in node.attrs["axes"])
+    if node.op == "reduce":
+        return prod(node.inputs[0].spec.shape[axis] for axis in node.attrs["axes"])
+    if node.op == "einsum":
+        domains: dict[str, int] = {}
+        for child, labels in zip(node.inputs, node.attrs["labels"], strict=True):
+            domains.update(zip(labels, child.spec.shape, strict=True))
+        return prod(
+            extent
+            for label, extent in domains.items()
+            if label not in node.attrs["output"]
+        )
+    raise ValueError("reduction extent requires a TensorIR reduce or einsum node")
 
 
 def cooperative_reduction_provider(
@@ -32,10 +41,16 @@ def cooperative_reduction_provider(
     """Return the active cooperative provider, or None for ordinary lowering."""
 
     step = plan.steps[index]
+    reduction_like = step.node.op == "reduce" or (
+        plan.schedule.streamed_gemm_reduction
+        and step.node.op == "einsum"
+        and step.gemm == "none"
+        and any(plan.steps[child].virtual for child in step.inputs)
+    )
     if (
         not plan.schedule.stream_reductions
         or step.virtual
-        or step.node.op != "reduce"
+        or not reduction_like
         or plan.target.warp_size != 32
         or reduction_extent(step.node) < plan.target.warp_size
     ):

@@ -22,6 +22,10 @@ struct GeneratedCoulombPlan {
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
   std::uint64_t class_mask{};
+  /** True only when every present shell class has a production value J/K
+   * consumer. Force-only owners may retain the same topology through f while
+   * value execution stays on the canonical/generic provider. */
+  bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};
   double *density{}, *coulomb{}, *temporary{}, *total_density{}, *zero{}, *schwarz{},
@@ -37,11 +41,9 @@ struct GeneratedCoulombPlan {
 /** Unsupported angular classes or insufficient optional capacity return null.
  * CUDA execution failures propagate; only allocation failure selects fallback.
  */
-std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch& host,
-                                                                DeviceBatch borrowed,
-                                                                cudaStream_t stream, int device,
-                                                                double screening,
-                                                                std::size_t budget);
+std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
+    const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
+    std::size_t budget, bool allow_force_only_shell_classes = false);
 
 /** Enqueue raw J from total spin density. Inputs and result use public AO order.
  * The same stream owns every transform, scatter and projection; no host copies.
@@ -75,11 +77,13 @@ struct GeneratedExchangePlan {
 };
 
 /** Prepare the generated J+full-range-K owner within one explicit budget.
- * Unsupported classes or insufficient optional capacity return null.
+ * A derivative-capable caller may retain force topology for shell classes that
+ * do not have a production value consumer; value_capability then remains false.
+ * Insufficient optional capacity still returns null.
  */
 std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool force_capability = false);
+    std::size_t budget, bool force_capability = false, bool allow_force_only_shell_classes = false);
 
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
@@ -97,7 +101,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
- * shell owner and one public-to-Cartesian density transform. */
+ * shell owner, one public-to-Cartesian density transform and one bounded shell
+ * traversal. */
 cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& plan, bool unrestricted,
                                                      const double* alpha, const double* beta,
                                                      double coulomb_coefficient,
