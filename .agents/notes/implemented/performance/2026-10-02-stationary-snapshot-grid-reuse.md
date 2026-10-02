@@ -1,6 +1,6 @@
 # Decision: bounded exact-content reuse of stationary snapshot grids
 
-Status: implemented; complete large-device qualification in progress
+Status: implemented; complete large-device qualification passed 2026-10-03
 Date: 2026-10-02
 
 ## Problem
@@ -56,6 +56,12 @@ Local profiles and exact-source diagnostic journals are under
 `.artifacts/pbe0-large-20261002/`. Baseline native library bytes are retained
 separately from Python changes so cached-grid measurements do not imply that an
 unrebuilt library contains newer native source edits.
+
+All six default PBE0 sizes subsequently pass all 12 endpoints per size. The
+combined cache/source/scheduling candidate improves same-host warm medians by
+1.53/1.69/1.83/2.36 times at 3/12/24/48 atoms. The report retains controls,
+all repeats and byte-bound source/binary provenance; these are not isolated
+cache-only speedups. See the [final campaign](../../../../benchmarks/results/pbe0-def2-svp-20261003/README.md).
 
 ## Revisit when
 

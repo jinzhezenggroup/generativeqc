@@ -1,6 +1,6 @@
-# Qualification: automatic cooperative Becke scheduling on sm_120
+# Decision: automatic cooperative Becke scheduling on sm_120
 
-Status: candidate implemented; complete endpoint qualification pending
+Status: implemented; complete endpoint qualification passed 2026-10-03
 Date: 2026-10-02
 
 The existing cooperative kernels remain scientifically unchanged. Device tests
@@ -26,7 +26,15 @@ the tests: its loaded kernel module is 580.173.02 while system libcuda is
 580.178.04. These environment failures are not device qualification. n1 runs
 the independent derivative, cooperative geometry and Compute Sanitizer gates.
 
-Before moving this note to implemented, require clean memcheck, initcheck and
-synccheck plus all cold, moved and ten warm endpoints at each README size.
-Preserve timing comparisons on one host and actual source/binary identities;
-partial diagnostics and cross-host comparisons are not default-speedup claims.
+The promotion gates passed: 96/128-atom geometry probes have clean memcheck,
+initcheck and synccheck; all six PBE0 sizes complete cold, moved and ten warm
+endpoints against independent force oracles. The 96-atom protocol additionally
+requires the separately documented compensated energy-trace repair; earlier
+timeouts remain failures, not warm timing points. The final 48-atom median is
+24.926 s versus the same-host pre-change control's 58.764 s. This measures the
+combined cache/source/schedule changes, not isolated cooperative kernel speed.
+
+Exact source/binary identities, all repeats and controls are retained in the
+[final report](../../../../benchmarks/results/pbe0-def2-svp-20261003/README.md).
+The 12–96-atom endpoints remain slower than GPU4PySCF; qualification is not a
+claim of parity or unmeasured architecture coverage.

@@ -1,6 +1,6 @@
 # Decision: share full-range J/K derivative source work
 
-Status: implemented; device numerical and endpoint qualification in progress
+Status: implemented; device numerical and endpoint qualification passed 2026-10-03
 Date: 2026-10-02
 
 ## Problem
@@ -63,3 +63,11 @@ PBE0 energy/force endpoints must pass before this branch is qualified to merge.
 Exact raw profiles, baseline library hash, compiler-cache statistics and build
 logs are local under `.artifacts/pbe0-large-20261002/`. GPU work is scheduler
 owned on the `main` partition; no device visibility overrides are permitted.
+
+The six independent RKS/UKS, Cartesian/spherical and zero-exchange source tests
+pass on the GPU and under memcheck with zero errors. The final default PBE0
+campaign passes all 72 native energy/force endpoints through 96 atoms; six
+public hybrid analytic/reconverged finite-difference cases also pass. The
+[retained report](../../../../benchmarks/results/pbe0-def2-svp-20261003/README.md)
+separates source-audited traversal reductions from coarser exported work
+counters and retains original failure attempts rather than excluding them.
