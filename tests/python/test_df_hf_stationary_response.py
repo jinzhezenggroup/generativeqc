@@ -168,9 +168,7 @@ def test_rooted_final_projection_recovers_fitted_rhf_potential(
         fitted = 0.5 * (fitted + fitted.transpose(0, 2, 1))
     metric_rotation = np.linalg.qr(rng.normal(size=(a, a)))[0]
     metric_eigenvalues = np.geomspace(0.7, 3.1, a)
-    inverse_root = (
-        metric_rotation / np.sqrt(metric_eigenvalues)
-    ) @ metric_rotation.T
+    inverse_root = (metric_rotation / np.sqrt(metric_eigenvalues)) @ metric_rotation.T
     density = density_scale * density_coefficients @ density_coefficients.T
     direct_charge = np.einsum("mn,qmn->q", density, fitted)
     direct_potential = inverse_root @ direct_charge
