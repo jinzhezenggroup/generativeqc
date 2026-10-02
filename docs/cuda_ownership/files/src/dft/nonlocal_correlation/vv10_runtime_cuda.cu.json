@@ -3,6 +3,12 @@
   "reason": "Bounded VV10/rVV10 CUDA primitive with compiler-owned local-scale and pair scalar mathematics. Native CUDA retains ordered-pair traversal, active-partner compaction, row chain composition/reduction, device workspace, validation and failure publication; the remaining row composition is tracked as maintained scientific execution until separately generated.",
   "regions": [
     {
+      "start": "using PairKernelValues = generated::PairValues;",
+      "stop": "unsigned launch_blocks(",
+      "role": "runtime",
+      "reason": "Dispatch into compiler-owned ordered or bounded VV10 scalar closures; no handwritten pair mathematics. The bounded closure preserves energy/feature roots and retains the ordered closure outside its admitted radial domain."
+    },
+    {
       "start": "void enqueue_vv10_molecular_domain_cuda(",
       "stop": null,
       "role": "runtime",

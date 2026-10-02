@@ -59,7 +59,12 @@ the separately qualified CPU/CUDA FP64 local-scale operation orders. Requested
 output roots determine the generated arithmetic; their explicit dependency-first
 emission schedule keeps the energy producer ahead of derivative consumers.
 Runtime policy determines which roots must remain observable for numerical-failure
-compatibility.
+compatibility. CUDA VV10 with both feature and geometry outputs selects a separate
+bounded radial closure that reuses feature reciprocals. Energy and feature roots
+keep their ordered operations. For nonnegative squared distance at most 2^32 and
+positive omega/kappa values in [2^-32, 2^32], the closure reduces six FP64 divisions
+to four; other values execute the original ordered closure, preserving exceptional
+behavior. rVV10 and feature-only SCF closures remain separate. WB97M-V uses VV10.
 
 The CPU raw rVV10 and CUDA preconditioned rVV10 representations remain explicit
 lowering choices. They retain their established ordered FP64 arithmetic rather
