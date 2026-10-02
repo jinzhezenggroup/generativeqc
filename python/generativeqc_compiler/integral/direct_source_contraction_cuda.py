@@ -184,7 +184,11 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
   // routines for Schwarz diagonals as well: the generic source evaluator keeps
   // a much larger recurrence frame alive and can exceed CUDA's per-thread local
   // stack on p/s and d/s quartets even though the order-two result is tiny.
-  if constexpr (ShellClass == 2 || ShellClass == 3 || ShellClass == 6) {
+  // The closed-form vector has value-only double components. Derivative
+  // scalars must retain the seeded recurrence instead of losing their jets
+  // through a value-to-dual cast, including the full-range RSH force term.
+  if constexpr ((ShellClass == 2 || ShellClass == 3 || ShellClass == 6) &&
+                (std::is_arithmetic_v<Scalar> || std::is_same_v<Scalar, MixedPrecisionFloat>)) {
     if (range == generativeqc::integrals::CoulombRange::Full) {
       const unsigned first_count = (static_cast<unsigned>(FirstShellAngular) + 1U) *
                                    (static_cast<unsigned>(FirstShellAngular) + 2U) / 2U;

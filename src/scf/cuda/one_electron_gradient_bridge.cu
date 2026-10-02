@@ -428,13 +428,16 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   auto* exchange = source->generated_exchange.get();
-  if (!exchange || !exchange->force_capability || !exchange->shared || !exchange->force) {
+  const bool generated_owner =
+      exchange && exchange->force_capability && exchange->shared && exchange->force;
+  const auto view =
+      cuda_execution::one_electron_view(generated_owner ? exchange->shared->batch : source->batch);
+  auto* output = generated_owner ? exchange->force : source->derivative;
+  if (!output) {
     detail = "prepared Direct owner has no retained shell-force scratch";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
-  auto& shared = *exchange->shared;
-  const auto view = cuda_execution::one_electron_view(shared.batch);
-  if (shared.stream != source->stream || view.batch_size != 1 ||
+  if ((generated_owner && exchange->shared->stream != source->stream) || view.batch_size != 1 ||
       static_cast<std::size_t>(view.nbf) != n || view.shell_pair_count == 0 || !view.atom_offsets ||
       !view.atomic_numbers || !view.positions || !view.shell_atoms || !view.shell_ao_offsets ||
       !view.shell_primitive_offsets || !view.shell_pair_first || !view.shell_pair_second ||
@@ -470,7 +473,6 @@ generativeqc_status execute_prepared_cuda_stationary_one_electron_pair(
     OneElectronWeightView pulay_weights{resident_weighted_density, nullptr, nullptr};
     pulay_weights.overlap_scale = -1.0;
     constexpr unsigned schedule = 1;
-    auto* output = exchange->force;
     const auto output_bytes = 3 * atoms * sizeof(double);
 
     check(cudaMemsetAsync(output, 0, output_bytes, source->stream));
