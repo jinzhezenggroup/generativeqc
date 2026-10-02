@@ -296,8 +296,12 @@ def test_production_ao_launches_use_one_compiler_schedule() -> None:
 
 def test_emitted_ao_cuda_compiles_with_specialized_resources(tmp_path: Path) -> None:
     """Optional compile-only check; never initializes a CUDA device."""
+    import json
     import os
+    from dataclasses import asdict
+    from hashlib import sha256
 
+    from generativeqc_compiler.common.compiler_process import run_compiler
     from generativeqc_compiler.common.cuda_resources import parse_resources
 
     compiler = os.environ.get("GENERATIVEQC_NVCC") or shutil.which("nvcc")
@@ -316,28 +320,43 @@ def test_emitted_ao_cuda_compiles_with_specialized_resources(tmp_path: Path) -> 
         + kernels
         + schedule
     )
-    run = subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O3",
-            "--fmad=false",
-            "-Xptxas=-v",
-            "-arch=" + os.environ.get("GENERATIVEQC_GRID_CUDA_ARCH", "sm_80"),
-            "-c",
-            str(source),
-            "-o",
-            str(output),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
+    architecture = os.environ.get("GENERATIVEQC_GRID_CUDA_ARCH", "sm_80")
+    command = [
+        compiler,
+        "-std=c++17",
+        "-O3",
+        "--fmad=false",
+        "-Xptxas=-v",
+        "-arch=" + architecture,
+        "-c",
+        str(source),
+        "-o",
+        str(output),
+    ]
+    run = run_compiler(command, 180, label="CUDA AO radial")
     (tmp_path / "ptxas.txt").write_text(run.stdout + run.stderr)
+    rows = parse_resources(run.stderr)
+    # Retain actual PTXAS observations even when compilation/resource admission
+    # fails. CI uploads this directory on success and failure, including source.
+    (tmp_path / "resources.json").write_text(
+        json.dumps(
+            {
+                "schema": "generativeqc.cuda-ao-radial-resources.v1",
+                "architecture": architecture,
+                "source_sha256": sha256(source.read_bytes()).hexdigest(),
+                "command": command,
+                "returncode": run.returncode,
+                "timed_out": run.timed_out,
+                "compile_seconds": run.duration_seconds,
+                "object_bytes": output.stat().st_size if output.exists() else None,
+                "resources": [asdict(row) for row in rows],
+            },
+            indent=2,
+        )
+        + "\n"
+    )
     assert run.returncode == 0, run.stdout + run.stderr
     assert output.stat().st_size > 0
-    rows = parse_resources(run.stderr)
     # Match the length-encoded exact names in Itanium CUDA symbols. Checking
     # broad ao_kernel prefixes could accept an inactive specialization instead.
     for name in (
@@ -431,3 +450,120 @@ def test_resource_tool_rejects_mismatched_selector_before_compiling(
                 ao_radial_reuse=not emitted_reuse,
             )
         )
+
+
+def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
+    import textwrap
+
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    cuda = workflow.split("\n  cuda-compile:\n", 1)[1].split("\n  python:\n", 1)[0]
+    marker = "      - name: Compile opted-in AO radial kernels with release resources\n"
+    step = cuda.split(marker, 1)[1].split("      - name: ", 1)[0]
+    assert "python3-pytest" in cuda
+    assert "if:" not in step and "continue-on-error:" not in step
+    assert 'test -x "$CUDACXX"' in step
+    assert 'exec ccache "$CUDACXX" "$@"' in step
+    assert "GENERATIVEQC_GRID_CUDA_ARCH: sm_120" in step
+    assert 'CUDA_VISIBLE_DEVICES: ""' in step
+    assert (
+        "test_cuda_ao_radial_reuse.py::test_emitted_ao_cuda_compiles_with_specialized_resources"
+        in step
+    )
+    assert "--basetemp build/ao-radial-compile" in step
+    assert cuda.index(marker) < cuda.index(
+        "      - name: Save CUDA ccache immediately after build"
+    )
+    artifact = cuda.split("      - name: Preserve generated XC resource reports\n", 1)[
+        1
+    ].split("      - name: ", 1)[0]
+    assert "if: always()" in artifact
+    assert "build/ao-radial-compile" in artifact
+    assert "build/native-xc-resource" in artifact
+    script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+    subprocess.run(["bash", "-n"], input=script, text=True, check=True, timeout=10)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [
+        None,
+        "ao_radial_kernel_4",
+        "ao_radial_kernel_10",
+        "ao_radial_kernel_4_fp32",
+        "ao_radial_kernel_10_fp32",
+    ],
+)
+def test_compile_gate_requires_exact_radial_resource_rows_and_retains_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, missing: str | None
+) -> None:
+    """Synthetic compiler diagnostics validate the gate, not CUDA resources."""
+    import json
+
+    from generativeqc_compiler.common import compiler_process
+
+    names = [
+        "ao_kernel",
+        "ao_kernel_fp32",
+        "ao_radial_kernel_4",
+        "ao_radial_kernel_10",
+        "ao_radial_kernel_4_fp32",
+        "ao_radial_kernel_10_fp32",
+    ]
+    if missing is not None:
+        names[names.index(missing)] = missing + "0"  # Inactive near-match.
+    diagnostics = "".join(
+        f"ptxas info : Function properties for _Z{len(name)}{name}PKd\n"
+        "  0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads\n"
+        "ptxas info : Used 32 registers, 0 bytes lmem\n"
+        for name in names
+    )
+
+    def fake_compile(
+        command: list[str], timeout: float, *, label: str
+    ) -> compiler_process.CompileResult:
+        assert "-c" in command and "--fmad=false" in command and "-Xptxas=-v" in command
+        Path(command[-1]).write_bytes(b"synthetic object")
+        return compiler_process.CompileResult(0, False, 0.25, "", diagnostics)
+
+    monkeypatch.setenv("GENERATIVEQC_NVCC", "/synthetic/nvcc")
+    monkeypatch.setattr(compiler_process, "run_compiler", fake_compile)
+    if missing is None:
+        test_emitted_ao_cuda_compiles_with_specialized_resources(tmp_path)
+    else:
+        with pytest.raises(AssertionError):
+            test_emitted_ao_cuda_compiles_with_specialized_resources(tmp_path)
+    assert (tmp_path / "ptxas.txt").read_text() == diagnostics
+    report = json.loads((tmp_path / "resources.json").read_text())
+    assert len(report["resources"]) == 6
+    assert report["returncode"] == 0 and not report["timed_out"]
+    assert {
+        "registers",
+        "stack_bytes",
+        "spill_store_bytes",
+        "spill_load_bytes",
+        "local_bytes",
+    } <= report["resources"][0].keys()
+
+
+@pytest.mark.parametrize("timed_out", [False, True])
+def test_compile_gate_retains_failed_compiler_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, timed_out: bool
+) -> None:
+    import json
+
+    from generativeqc_compiler.common import compiler_process
+
+    monkeypatch.setenv("GENERATIVEQC_NVCC", "/synthetic/nvcc")
+    monkeypatch.setattr(
+        compiler_process,
+        "run_compiler",
+        lambda *args, **kwargs: compiler_process.CompileResult(
+            124 if timed_out else 1, timed_out, 0.5, "", "synthetic compilation failure"
+        ),
+    )
+    with pytest.raises(AssertionError, match="synthetic compilation failure"):
+        test_emitted_ao_cuda_compiles_with_specialized_resources(tmp_path)
+    assert (tmp_path / "ptxas.txt").read_text() == "synthetic compilation failure"
+    report = json.loads((tmp_path / "resources.json").read_text())
+    assert report["timed_out"] == timed_out
+    assert report["object_bytes"] is None
