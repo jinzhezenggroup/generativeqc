@@ -71,17 +71,18 @@ int main(int argc,char** argv) {
   if (mode == 1) descriptor.valid=false;
   if (mode == 2) execution.cuda=true;
   try {
-    auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache);
+    auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
+                                        nullptr,nullptr);
     if (mode < 2) return 2;
     const bool expect_cache = mode == 2 || mode >= 4;
     if (result.cached != expect_cache) return 3;
     if (allocations != (expect_cache ? 1 : 0) || executions != 1) return 4;
     if (expect_cache) {
       auto* first=cache.get();
-      result=run_rccsd_native_state(execution,system,descriptor,&cache);
+      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr);
       if (!result.cached || cache.get()!=first || allocations!=1 || executions!=2) return 5;
       descriptor.budget=79;
-      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache); return 6; }
+      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr); return 6; }
       catch (const MethodError&) {}
       if (cache.get()!=first || allocations!=1 || executions!=2) return 7;
     }
@@ -121,7 +122,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         assert result.returncode == 0, (mode, result.returncode, result.stderr)
     consumer = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
     assert (
-        "run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_)"
+        "run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,"
         in consumer
     )
     assert "make_unique<scf::PreparedFockPlan>" not in consumer
