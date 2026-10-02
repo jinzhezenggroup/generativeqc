@@ -96,6 +96,8 @@ __global__ void ao_kernel_fp32(const double* basis, I natom, I nprimitive, I nao
   }
 }
 
+@AO_RADIAL_KERNELS@
+
 __global__ void feature_kernel(const double* ao, const double* work, I npoint, I nao,
                                double* output, int* error, unsigned mask) {
   for (I point = I(blockIdx.x) * blockDim.x + threadIdx.x; point < npoint;
@@ -241,6 +243,7 @@ __global__ void xc_local_potential_kernel(bool pbe, bool restricted, const doubl
     potential[index] = finite(value, error, 3);
   }
 }
+@AO_SCHEDULE@
 }  // namespace
 """
 
@@ -737,9 +740,120 @@ def emit_native_xc_contraction_kernels(
     ) + emit_native_xc_matrix_schedule(matrix_schedule)
 
 
-def emit_grid_scientific_kernels() -> str:
-    """Emit AO/feature traversal and local XC contractions for the grid runtime."""
-    return _GRID_SCIENTIFIC_KERNELS
+def _emit_ao_radial_kernels() -> str:
+    """Emit fixed 4/10-jet producers without runtime-indexed accumulators.
+
+    Each output retains the scalar kernel's primitive/Cartesian-term sum and
+    multiplication order. Only the jet-independent radial factor is shared.
+    Axis DAGs remain noinline; 1/20 jets retain the bounded scalar fallback.
+    """
+    kernels = []
+    for scalar in ("double", "float"):
+        narrow = (
+            (lambda value: value)
+            if scalar == "double"
+            else (lambda value: f"static_cast<float>({value})")
+        )
+        suffix = "" if scalar == "double" else "_fp32"
+        zero = "0.0" if scalar == "double" else "0.0f"
+        for jets in (4, 10):
+            lines = [
+                f"__global__ void ao_radial_kernel_{jets}{suffix}(",
+                "    const double* basis, I natom, I nprimitive, I nao, const double* points,",
+                "    I npoint, double* output, int* error, const size_t* ao_ids) {",
+                "  const double* primitives = basis + 3 * natom;",
+                "  const double* records = primitives + 2 * nprimitive;",
+                "  const I stride = npoint * nao;",
+                "  for (I index = I(blockIdx.x) * blockDim.x + threadIdx.x; index < stride;",
+                "       index += I(blockDim.x) * gridDim.x) {",
+                "    const I ao = index % nao, point = index / nao;",
+                "    const double* record = records + 16 * (ao_ids ? ao_ids[ao] : ao);",
+                "    const I atom = static_cast<I>(record[0]);",
+                "    // Subtract in FP64 before narrowing local coordinates, including FP32.",
+            ]
+            for axis, offset in zip("xyz", range(3), strict=True):
+                delta = f"points[3 * point + {offset}] - basis[3 * atom + {offset}]"
+                lines.append(f"    const {scalar} {axis} = {narrow(delta)};")
+            lines.extend(
+                (
+                    f"    const {scalar} r2 = x * x + y * y + z * z;",
+                    "    const I first = static_cast<I>(record[1]), end = first + static_cast<I>(record[2]);",
+                    *(f"    {scalar} value{jet} = {zero};" for jet in range(jets)),
+                    "    for (I p = first; p < end; ++p) {",
+                    f"      const {scalar} alpha = {narrow('primitives[2 * p]')};",
+                    f"      const {scalar} radial = {narrow('primitives[2 * p + 1]')} * exp(-alpha * r2);",
+                    f"      if (radial == {zero}) continue;",
+                    "      for (int term = 0; term < static_cast<int>(record[3]); ++term) {",
+                )
+            )
+            for jet, derivative in enumerate(jet_indices(2)[:jets]):
+                lines.append(
+                    f"        value{jet} += radial * {narrow('record[7 + 4 * term]')} *"
+                )
+                for axis, offset, order in zip(
+                    "xyz", range(4, 7), derivative, strict=True
+                ):
+                    ending = ";" if axis == "z" else " *"
+                    lines.append(
+                        f"            axis_jet(static_cast<int>(record[{offset} + 4 * term]), {order}, alpha, {axis}){ending}"
+                    )
+            lines.extend(("      }", "    }"))
+            for jet in range(jets):
+                value = (
+                    f"value{jet}"
+                    if scalar == "double"
+                    else f"static_cast<double>(value{jet})"
+                )
+                lines.append(
+                    f"    output[{jet} * stride + index] = finite({value}, error, 0);"
+                )
+            lines.extend(("  }", "}", ""))
+            kernels.append("\n".join(lines))
+    return "\n".join(kernels)
+
+
+def _emit_ao_schedule(*, ao_radial_reuse: bool) -> str:
+    lines = [
+        "// Compiler-owned radial-reuse schedule; runtime owns buffers and stream.",
+        "void scheduled_ao(cudaStream_t stream, const double* basis, I natom, I nprimitive,",
+        "                  I nao, const double* points, I npoint, I jets, double* output,",
+        "                  int* error, const size_t* ao_ids, bool fp32 = false) {",
+        "  if (!npoint || !nao || !jets) return;",
+    ]
+    for jets in (4, 10) if ao_radial_reuse else ():
+        lines.append(f"  if (jets == {jets}) {{")
+        for fp32 in (True, False):
+            lines.append("    if (fp32)" if fp32 else "    else")
+            suffix = "_fp32" if fp32 else ""
+            lines.extend(
+                (
+                    f"      ao_radial_kernel_{jets}{suffix}<<<blocks(npoint * nao, 128), 128, 0, stream>>>(",
+                    "          basis, natom, nprimitive, nao, points, npoint, output, error, ao_ids);",
+                )
+            )
+        lines.extend(("    return;", "  }"))
+    lines.extend(
+        (
+            "  // Keep the one-jet path and order-three/other supported fallback bounded.",
+            "  if (fp32)",
+            "    ao_kernel_fp32<<<blocks(jets * npoint * nao, 128), 128, 0, stream>>>(",
+            "        basis, natom, nprimitive, nao, points, npoint, jets, output, error, ao_ids);",
+            "  else",
+            "    ao_kernel<<<blocks(jets * npoint * nao, 128), 128, 0, stream>>>(",
+            "        basis, natom, nprimitive, nao, points, npoint, jets, output, error, ao_ids);",
+            "}",
+        )
+    )
+    return "\n".join(lines)
+
+
+def emit_grid_scientific_kernels(*, ao_radial_reuse: bool = False) -> str:
+    """Emit AO/feature kernels; radial reuse requires explicit qualification opt-in."""
+    if type(ao_radial_reuse) is not bool:
+        raise TypeError("AO radial-reuse selector must be boolean")
+    return _GRID_SCIENTIFIC_KERNELS.replace(
+        "@AO_RADIAL_KERNELS@", _emit_ao_radial_kernels() if ao_radial_reuse else ""
+    ).replace("@AO_SCHEDULE@", _emit_ao_schedule(ao_radial_reuse=ao_radial_reuse))
 
 
 def axis_expression(power: typing.Any, derivative: typing.Any) -> typing.Any:
@@ -813,20 +927,26 @@ def emit_grid_policy() -> typing.Any:
 def emit_grid_source(
     *,
     native_ks: typing.Any = False,
+    ao_radial_reuse: bool = False,
     xc_matrix_schedule: XcMatrixSchedule = DEFAULT_XC_MATRIX_SCHEDULE,
 ) -> typing.Any:
     """Compose one AO policy with the grid runtime and optional resident KS glue.
 
     The native library additionally instantiates its borrowed-buffer XC kernels.
     JIT grid owners retain their own ABI and arena without that native extension.
-    The selected matrix schedule is embedded in generated source identity.
+    The selected matrix and AO schedules are embedded in generated source identity.
+    AO radial reuse is an internal opt-in until device/endpoint qualification.
     """
     if not isinstance(xc_matrix_schedule, XcMatrixSchedule):
         raise TypeError("grid source emission requires XcMatrixSchedule")
     if not native_ks and xc_matrix_schedule != DEFAULT_XC_MATRIX_SCHEDULE:
         raise ValueError("non-default XC matrix schedules require native KS emission")
     policy = emit_grid_policy()
-    source = policy + emit_grid_scientific_kernels() + '#include "cuda_grid.cu"\n'
+    source = (
+        policy
+        + emit_grid_scientific_kernels(ao_radial_reuse=ao_radial_reuse)
+        + '#include "cuda_grid.cu"\n'
+    )
     if native_ks:
         source += emit_native_xc_contraction_kernels(xc_matrix_schedule)
         source += '#include "cuda_xc_kernels.cuh"\n'

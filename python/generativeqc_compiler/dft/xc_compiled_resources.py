@@ -34,12 +34,15 @@ class GridXcCompiledResourceShape:
     tile_points: int
     nao: int
     spins: int
+    ao_radial_reuse: bool = False
 
     def __post_init__(self) -> None:
         for name in ("npoint", "tile_points", "nao", "spins"):
             value = getattr(self, name)
             if type(value) is not int or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
+        if type(self.ao_radial_reuse) is not bool:
+            raise TypeError("AO radial-reuse selector must be boolean")
         if self.spins not in (1, 2):
             raise ValueError("grid/XC compiled resource spin count must be one or two")
 
@@ -173,8 +176,15 @@ def _active_scopes(
     )
     ao_kernel = _matching(
         resources,
+        # Native LDA requests one jet; native PBE requests four. Never let an
+        # inactive scalar, force/order-two, or FP32 variant hide missing evidence.
         lambda name: (
-            name.startswith("ao_kernel") and not name.startswith("ao_kernel_fp32")
+            name
+            == (
+                "ao_radial_kernel_4"
+                if shape.ao_radial_reuse and feature_terms == 4
+                else "ao_kernel"
+            )
         ),
         "strict-FP64 AO kernel",
     )

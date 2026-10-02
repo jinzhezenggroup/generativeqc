@@ -78,7 +78,7 @@ struct GridPlan {
   const double* current_points{};
   std::size_t ao_ids[2]{};
 };
-void ao_kernel(const double*, std::size_t, std::size_t, std::size_t, const double* points,
+void scheduled_ao(int, const double*, std::size_t, std::size_t, std::size_t, const double* points,
                std::size_t,std::size_t,double*,int* error,const std::size_t*) {
   observed_points = points;
   if (fault == 1) *error = 7;

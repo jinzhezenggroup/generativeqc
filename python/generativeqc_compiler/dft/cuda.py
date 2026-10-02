@@ -159,9 +159,11 @@ class DeviceGridTask:
         return immutable(integrals), potential
 
 
-def compile_cuda(compiler: typing.Any, cache: typing.Any) -> typing.Any:
+def compile_cuda(
+    compiler: typing.Any, cache: typing.Any, *, ao_radial_reuse: bool = False
+) -> typing.Any:
     """Compile the device runtime without running a GPU or importing PySCF."""
-    source, identity, headers = emit_grid_source()
+    source, identity, headers = emit_grid_source(ao_radial_reuse=ao_radial_reuse)
     folder = Path(cache).resolve() / "source" / identity
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "grid.cu"
