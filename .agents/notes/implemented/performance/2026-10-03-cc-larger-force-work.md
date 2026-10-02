@@ -111,6 +111,18 @@ was `degenerate RCCSD(T) canonical occupied/virtual subspace`; the batch wrapper
 only reported numerical failure. Keep the 1e-10 same-space gap gate and the public
 28-AO boundary until degenerate-subspace response is independently qualified.
 
+The [follow-up diagnostic](../../../../benchmarks/results/cc-large-force-20261003/degenerate-frontier.json)
+uses the faster reference owner from #1728 but preserves the numerical gate.
+Independent exact-basis PySCF RHF and native response find the same 14 occupied
+or virtual degenerate pairs, with gaps around 1e-13 to 1e-15 Eh. Native null-space
+stationarity is at most 7.42e-13, yet dividing it by these gaps would create a
+spurious Fock cotangent up to 190.94. Pairwise diagonal denominator cotangents
+agree within 2.6e-16, but this does not establish the full block adjoint or make
+zeroing off-diagonal response a generally valid fix. A future extension needs
+a gauge-invariant triples-denominator response, with independent gradient and
+orbital-rotation checks. Do not weaken the gate or perturb away this fixture's
+symmetry merely to declare larger force support.
+
 Increasing a memory limit without changing source/derivative traversal does not
 reduce repeated work. Applying a constant factor of eight is incorrect when
 shells repeat. Symmetrizing only two MO indices is insufficient for arbitrary
