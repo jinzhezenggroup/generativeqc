@@ -15,6 +15,7 @@ PREFIX = r"""
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 int allocations=0, executions=0;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2;
 namespace core { struct System {}; }
@@ -51,7 +52,8 @@ std::size_t correlation_budget(const generativeqc_method_descriptor& d) { return
 int cc_options(const generativeqc_method_descriptor&,std::size_t) { return 0; }
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
-                                      Reference,int,std::size_t,scf::PreparedFockPlan* p) {
+                                      Reference,int,std::size_t,scf::PreparedFockPlan* p,
+                                      const std::vector<double>*, bool*) {
   ++executions;
   return {p != nullptr};
 }
