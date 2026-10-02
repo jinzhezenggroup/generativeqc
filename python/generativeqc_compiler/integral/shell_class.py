@@ -90,6 +90,16 @@ class ShellClassComponentKernel:
     # boundary for backends that reuse geometry across a shell quartet.  This
     # adds no second geometry algebra and leaves value/derivative roots intact.
     geometry_roots: tuple[tuple[str, Expr], ...] = ()
+    # Existing component Coulomb nodes, exported before any backend factoring.
+    coulomb_roots: tuple[tuple[tuple[int, int, int], Expr], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class CoulombDerivativeAlgebra:
+    """Graded, backend-neutral Cartesian roots of the existing Coulomb DAG."""
+
+    graph: Graph
+    roots: tuple[tuple[tuple[int, int, int], Expr], ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,7 +387,7 @@ def _coulomb_derivative(
     difference: Mapping[str, Expr],
     boys: Sequence[Expr],
 ) -> Expr:
-    """Build one exact Cartesian Coulomb derivative through total order six."""
+    """Build one exact Cartesian Coulomb derivative from its requested orders."""
 
     total_order = sum(derivative_orders)
     negative_two_rho = -2.0 * rho
@@ -409,6 +419,29 @@ def _coulomb_derivative(
     return graph.sum(terms)
 
 
+def build_coulomb_derivative_algebra(maximum_order: int) -> CoulombDerivativeAlgebra:
+    """Build a shared graded prefix without introducing another recurrence.
+
+    Every total-degree prefix is complete under simultaneous axis permutations.
+    The consumer's IntegralIR determines the maximum degree it may request.
+    """
+
+    # Reuse the Cartesian inventory's integer/nonnegative validation.
+    cartesian_components(maximum_order)
+    graph = Graph()
+    rho = graph.variable("rho")
+    difference = {axis: graph.variable(f"difference_{axis}") for axis in AXES}
+    boys = tuple(graph.variable(f"boys_{order}") for order in range(maximum_order + 1))
+    roots: list[tuple[tuple[int, int, int], Expr]] = []
+    for degree in range(maximum_order + 1):
+        for component in cartesian_components(degree):
+            orders = (component.count("x"), component.count("y"), component.count("z"))
+            roots.append(
+                (orders, _coulomb_derivative(graph, orders, rho, difference, boys))
+            )
+    return CoulombDerivativeAlgebra(graph, tuple(roots))
+
+
 def _validated_dppp_components(
     d_component: str, p_components: Sequence[str]
 ) -> tuple[str, str, str]:
@@ -428,6 +461,8 @@ def _shell_component_value(
     rho: Expr,
     difference: Mapping[str, Expr],
     boys: Sequence[Expr],
+    *,
+    coulomb_roots: dict[tuple[int, int, int], Expr] | None = None,
 ) -> Expr:
     """Build exact pair/Coulomb algebra for any four-center component."""
 
@@ -460,6 +495,8 @@ def _shell_component_value(
             terms.append(
                 sign * first_coefficient * second_coefficient * coulomb(orders)
             )
+    if coulomb_roots is not None:
+        coulomb_roots.update(coulomb_cache)
     return graph.sum(terms)
 
 
@@ -676,6 +713,7 @@ def build_shell_class_component_kernel(
     }
     inverse_two_p = 0.5 / p
     inverse_two_q = 0.5 / q
+    coulomb_roots: dict[tuple[int, int, int], Expr] = {}
     primitive_value = _shell_component_value(
         graph,
         normalized,
@@ -685,6 +723,7 @@ def build_shell_class_component_kernel(
         rho,
         difference,
         boys,
+        coulomb_roots=coulomb_roots,
     )
     pair_decay = graph.exponential(
         -mu * _squared_distance(graph, coordinates, "first", "second")
@@ -751,6 +790,7 @@ def build_shell_class_component_kernel(
             ("boys_argument", boys_argument),
             ("prefactor", prefactor),
         ),
+        coulomb_roots=tuple(sorted(coulomb_roots.items())),
     )
 
 

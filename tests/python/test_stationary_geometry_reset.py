@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import ctypes as ct
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -126,6 +128,144 @@ def test_geometry_reset_ffi_keeps_pointer_and_tolerance_types() -> None:
         ct.c_char_p,
         ct.c_size_t,
     ]
+
+
+@pytest.mark.parametrize("integral_derivatives", [False, True])
+def test_geometry_only_owner_does_not_encode_cartesian_derivative_kinds(
+    integral_derivatives: bool,
+) -> None:
+    """Nuclear-only binaries dispatch plain kinds even when the AO basis has f."""
+    from generativeqc._stationary_cuda import _component_mode
+
+    init = next(
+        node for node in _owner().body if getattr(node, "name", None) == "__init__"
+    )
+    binding = next(
+        node
+        for node in ast.walk(init)
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and ast.unparse(node.targets[0]) == "self.component_mode"
+    )
+    owner = SimpleNamespace(expansions=((("xxx", 1.0),),))
+    namespace = {
+        "self": owner,
+        "integral_derivatives": integral_derivatives,
+        "_component_mode": _component_mode,
+    }
+    module = ast.Module(body=[binding], type_ignores=[])
+    exec(compile(module, "<actual component mode>", "exec"), namespace)  # noqa: S102
+    assert owner.component_mode is integral_derivatives
+
+
+@pytest.mark.parametrize("component", ["xx", "xxx"])
+def test_geometry_only_nuclear_dispatch_matches_actual_primitive(
+    component: str, tmp_path: Path
+) -> None:
+    """Host-execute the emitted nuclear dispatcher with the real owner's kind."""
+    from generativeqc._stationary_cuda import _component_mode
+    from generativeqc_compiler.integral.first_derivative_native import (
+        emit_first_derivative_cuda,
+    )
+    from generativeqc_compiler.integral.first_derivative_schedule import (
+        derivative_binding,
+    )
+    from generativeqc_compiler.method.stationary_cuda import (
+        encode_stationary_derivative_kind,
+    )
+
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a C++ compiler")
+    init = next(
+        node for node in _owner().body if getattr(node, "name", None) == "__init__"
+    )
+    binding = next(
+        node
+        for node in ast.walk(init)
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and ast.unparse(node.targets[0]) == "self.component_mode"
+    )
+    nuclear = next(
+        node for node in _owner().body if getattr(node, "name", None) == "nuclear"
+    )
+    calls = []
+    owner = SimpleNamespace(
+        expansions=(((component, 1.0),),),
+        kinds={("nuclear", ()): 0},
+        handle=object(),
+        flush=lambda: None,
+        _call=lambda *args: calls.append(args),
+    )
+    namespace = {
+        "self": owner,
+        "integral_derivatives": False,
+        "_component_mode": _component_mode,
+        "typing": SimpleNamespace(Any=object),
+        "encode_stationary_derivative_kind": encode_stationary_derivative_kind,
+        "derivative_binding": derivative_binding,
+    }
+    exec(  # noqa: S102
+        compile(
+            ast.Module(body=[binding, nuclear], type_ignores=[]),
+            "<actual nuclear>",
+            "exec",
+        ),
+        namespace,
+    )
+    namespace["nuclear"](owner, 0, 1, [8.0, 1.0])
+    assert len(calls) == 1 and calls[0][0] == "stationary_nuclear"
+    kind = calls[0][2]
+    # This composite compiles only the plain nuclear primitive for every AO basis.
+    composite = (ROOT / "python/generativeqc/_stationary_composite_cuda.py").read_text()
+    calls_ast = [
+        node
+        for node in ast.walk(ast.parse(composite))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_CudaSources"
+    ]
+    assert len(calls_ast) == 2
+    for call in calls_ast:
+        assert any(
+            k.arg == "integral_derivatives"
+            and isinstance(k.value, ast.Constant)
+            and k.value.value is False
+            for k in call.keywords
+        )
+    (tmp_path / "cuda_runtime.h").write_text("#include <cmath>\n")
+    source = tmp_path / "nuclear_dispatch.cpp"
+    source.write_text(
+        "#define __device__\n#define __noinline__\n#include <cassert>\n"
+        + emit_first_derivative_cuda((("nuclear", ()),))
+        + f"""
+int main() {{
+  double e[] = {{8., 1.}}, c[] = {{0., 0., 0., 0., 0., 2.}}, out[12]{{}};
+  assert(first_derivative({kind}U, e, c, out));
+  assert(std::abs(out[2] - 2.) < 1e-12 && std::abs(out[5] + 2.) < 1e-12);
+}}
+"""
+    )
+    executable = tmp_path / "nuclear_dispatch"
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-I",
+            str(tmp_path),
+            "-I",
+            str(ROOT / "src"),
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
 
 
 def _body(source: str, name: str) -> str:

@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include "runtime/resource_usage.hpp"
+
 namespace generativeqc::dft {
 namespace {
 
@@ -194,6 +196,15 @@ const scf::ResolvedFockBuild& PreparedCosxFockPlan::strategy() const noexcept {
 const core::System& PreparedCosxFockPlan::system() const noexcept { return impl_->orbital; }
 const integrals::IntegralData& PreparedCosxFockPlan::one_electron() const noexcept {
   return impl_->coulomb->one_electron();
+}
+bool PreparedCosxFockPlan::matches_system(const core::System& system) const noexcept {
+  return impl_->coulomb->matches_system(system);
+}
+std::size_t PreparedCosxFockPlan::cpu_observation_capacity() const noexcept {
+  return runtime::add_capacity(
+      impl_->coulomb->cpu_observation_capacity(),
+      runtime::vector_capacities(impl_->cosx_grid.points(), impl_->cosx_grid.weights(),
+                                 impl_->cosx_grid.owners()));
 }
 const MolecularGrid& PreparedCosxFockPlan::grid() const noexcept { return impl_->cosx_grid; }
 const CosxFockPreparationDiagnostic& PreparedCosxFockPlan::diagnostic() const noexcept {

@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
+#include <array>
 #include <cstddef>
 #include <vector>
 
@@ -54,6 +55,33 @@ struct CudaDirectJkPlan {
   CudaDirectJkDiagnostic diagnostic{};
   std::unique_ptr<cuda_execution::GeneratedCoulombPlan> generated_coulomb;
   std::unique_ptr<cuda_execution::GeneratedExchangePlan> generated_exchange;
+  /** Automatic symmetry-canonical source for through-f plans. Angular buckets
+   * keep each kernel's recurrence order fixed, including f-shell quartets.
+   * All storage is charged to the existing optional provider budget. */
+  const std::int32_t* canonical_pairs{};
+  /** Cartesian consumers borrow HF's normalized source/projection ABI. Public
+   * matrix dimensions remain in batch/diagnostic; source strides live here. */
+  cuda_execution::DeviceBatch canonical_batch{};
+  bool canonical_cartesian{};
+  double* canonical_bounds{};
+  const double* canonical_transform{};
+  /** Shell-local transform support; null keeps the shared HF dense projection. */
+  const std::int32_t* canonical_projection_spans{};
+  std::uint8_t* canonical_active{};
+  double *canonical_public_density{}, *canonical_public_output{}, *canonical_projection{},
+      *canonical_zero{};
+  std::vector<std::array<std::size_t, 8>> canonical_pair_offsets;
+  /** Geometry-bound descending Schwarz order and inclusive ket-row spans.
+   * Optional O(NAO^2) metadata removes rejected quartets before traversal.
+   * If its charged workspace does not fit, the dense canonical source remains. */
+  const std::int32_t* canonical_pair_order{};
+  const std::uint64_t* canonical_row_prefix{};
+  /** Derivative-capable canonical plans may retain shell AO offsets/pairs in
+   * batch so HF's one-electron kernel can borrow metadata and derivative scratch. */
+  double *canonical_density{}, *canonical_coulomb{}, *canonical_exchange{};
+  /** Borrowed test/profiler census: candidate quartets and radial evaluations.
+   * Null in production. The observer owns storage and stream-ordered lifetime. */
+  std::uint64_t* canonical_work_count{};
   ~CudaDirectJkPlan();
 };
 
@@ -63,7 +91,8 @@ struct CudaDirectJkPlan {
  */
 inline bool direct_jk_generated_exchange_value_available(const CudaDirectJkPlan& plan,
                                                          const FockBuildSpec& spec) noexcept {
-  return plan.generated_exchange != nullptr && spec.derivative_order == 0 &&
+  return plan.generated_exchange != nullptr && plan.generated_exchange->shared != nullptr &&
+         plan.generated_exchange->shared->value_capability && spec.derivative_order == 0 &&
          spec.exchange.present && spec.exchange.op == FockOperator::FullRange;
 }
 

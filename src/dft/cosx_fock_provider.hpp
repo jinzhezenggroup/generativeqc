@@ -38,6 +38,10 @@ class PreparedCosxFockPlan {
   const scf::ResolvedFockBuild& strategy() const noexcept;
   const core::System& system() const noexcept;
   const integrals::IntegralData& one_electron() const noexcept;
+  /** Exact orbital-system identity used by shared host-controlled KS consumers. */
+  bool matches_system(const core::System& system) const noexcept;
+  /** Host numerical buffers retained by the Coulomb owner and dedicated COSX grid. */
+  std::size_t cpu_observation_capacity() const noexcept;
   const MolecularGrid& grid() const noexcept;
   const CosxFockPreparationDiagnostic& diagnostic() const noexcept;
 

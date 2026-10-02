@@ -1,40 +1,47 @@
-# Methods and long-term scope
+# Methods and capability discovery
 
-GenerativeQC's long-term mission is to cover **all quantum-chemistry methods** in one
-accelerator-native system. Public method discovery is rendered at Sphinx build
-time in the [public method catalog](../public_methods.md). The catalog combines
+GenerativeQC exposes public method selectors through several coordinated sources:
 stable native ABI registrations, compiler-discovered DFT selectors, public
-composite selectors, and the automatic Libxc semilocal MethodIR inventory.
+composite methods, and automatically imported Libxc semilocal MethodIR entries.
 
-Stable native ABI IDs, providers, declared properties, batch capability, and
-compatibility aliases remain owned by `manifests/public_methods.json`. DFT
-scientific identity remains compiler-owned: representation never bypasses
-backend, basis, grid, spin, derivative, or production-domain admission gates.
+Use the runtime discovery command for the current public selector set:
 
-## Current method status
+```bash
+python -m generativeqc methods
+python -m generativeqc methods --json
+```
 
-Run the Python frontend (`python -m generativeqc methods`) for the current public
-discovery set, and use the generated
-[public method catalog](../public_methods.md) for the documentation view across
-native, compiler-discovered, composite, and automatic Libxc entry paths.
+The documentation view is generated from the same sources in the
+[public method catalog](../public_methods.md). Do not treat a handwritten list in
+another page as a support matrix.
 
-A discovered or listed method is not a blanket claim that every backend, basis,
-grid, spin state, or requested property is qualified. The method contract and
-execution-time admission checks remain authoritative for those combinations.
-Compiler representation alone is likewise not a public execution guarantee:
-unsupported lowerers fail closed. A Python-free native SDK install has a
-separate `generativeqc methods` command that intentionally reports the C/C++ ABI/provider
-registry only; it does not import the compiler catalog. Planned families and
-development directions are listed in the
-[implementation roadmap](../maintainer/roadmap.md), which does not promise
-release dates or a fixed implementation order.
+## How to interpret a listed method
 
-## CPU semilocal RKS Hessian and HVP
+A listed selector means that GenerativeQC can identify that public method. It does
+**not** mean that every backend, basis, spin state, precision, density-fitting
+mode, ECP, grid, batch shape, or requested property is qualified.
 
-The Python `Calculator` exposes analytic Cartesian second-order derivatives for
-the qualified **CPU direct all-electron strict-FP64 closed-shell LDA/PBE RKS**
-domain. This capability is separate from `singlepoint(properties=...)` and is
-reported by `calculator.capabilities.supported_second_order`.
+After those execution choices are fixed, `Calculator.capabilities` is the
+authoritative public view for that calculation context. Prepared batches expose
+the corresponding contextual capability record. Unsupported combinations fail
+closed rather than silently changing the requested method, backend, or property.
+Per-system geometry, electron-count, convergence, and resource checks still apply
+during preparation and execution.
+
+For the ownership of each capability source and why GenerativeQC does not maintain
+a second handwritten CPU/GPU matrix, see
+[Capability sources and interpretation](../reference/capabilities.md).
+
+A Python-free native SDK install has a separate `generativeqc methods` command.
+It reports the stable C/C++ ABI/provider registry and intentionally does not
+import the Python compiler catalog.
+
+## Second-order derivatives
+
+The Python `Calculator` exposes analytic Cartesian Hessian-vector products and
+full Hessians only when the selected execution context advertises second-order
+support. For example, the qualified CPU direct all-electron strict-FP64
+closed-shell LDA/PBE RKS domain can be queried and used as follows:
 
 ```python
 from generativeqc import Calculator, GridSpec, KsOptions
@@ -48,120 +55,73 @@ calc = Calculator(
     ks_options=KsOptions(grid=GridSpec()),
 )
 
-hvp = calc.hessian_vector_product(
-    atoms,
-    [[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]],
-    integral_budget_bytes=64 << 20,
-)
-hessian = calc.hessian(
-    atoms,
-    integral_budget_bytes=64 << 20,
-    output_budget_bytes=64 << 20,
-)
-print(hvp.value, hessian.matrix)
+if calc.capabilities.supported_second_order:
+    hvp = calc.hessian_vector_product(
+        atoms,
+        [[0.0, 0.0, -1.0], [0.0, 0.0, 1.0]],
+        integral_budget_bytes=64 << 20,
+    )
+    hessian = calc.hessian(
+        atoms,
+        integral_budget_bytes=64 << 20,
+        output_budget_bytes=64 << 20,
+    )
 ```
 
-The full Hessian is the **raw** analytic matrix; GenerativeQC does not hide
-missing terms by post-hoc symmetrization. `output_budget_bytes` covers the dense
-matrix plus immutable publication, while `integral_budget_bytes` bounds generated
-second-order integral work. Response/provider memory remains under its own
-reported bounds rather than being relabeled as one global peak-memory guarantee.
+The full Hessian is the raw analytic matrix. Unsupported second-order domains
+remain fail-closed; callers should use the contextual capability record rather
+than infer support from the method name alone. Implementation and response
+details belong in the [Hessian developer documentation](../developer/hessian.md).
 
-CUDA, density fitting, ECP, real-spherical AOs, UKS, meta-GGA/r2SCAN,
-hybrid/range-separated and VV10 Hessians remain fail-closed.
+## DFT forces
 
-## CUDA global-hybrid forces
-
-The Python `Calculator` exposes analytic forces for admitted all-electron
-global-hybrid RKS/UKS compositions with direct J/K, an explicit `GridSpec`, and
-device-fused XC. SCF may use strict FP64 or qualified component-wise `precision="auto"`;
-AUTO can lower Direct Coulomb J and separately qualified density contractions, while
-exact K and the published force's final-state audit remain FP64. Public AUTO forces
-are currently limited to the qualified PBE0/B3LYP-style global-hybrid routes;
-generated split hybrids retain strict-FP64 force admission. Force eligibility
-follows the actual MethodIR primitives;
-the SCF owner still validates the semilocal composition. Request forces through
-the ordinary single-point or prepared-batch interface:
+Analytic DFT forces are requested through the ordinary property interface when
+the selected method/backend context advertises force support:
 
 ```python
 from generativeqc import Calculator, GridSpec, KsOptions
 
 calc = Calculator(
-    method="b3lyp-rks", device="cuda", precision="fp64", basis="sto-3g",
+    method="b3lyp-rks",
+    device="cuda",
+    precision="fp64",
+    basis="sto-3g",
     ks_options=KsOptions(
         grid=GridSpec(radial_points=32, angular_polar=10, angular_azimuth=20),
         xc_schedule="device_fused",
     ),
 )
 result = calc.singlepoint(
-    [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))], properties=("energy", "forces")
+    [("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))],
+    properties=("energy", "forces"),
 )
 ```
 
-The first call compiles a method-specific CUDA wrapper and requires a
-discoverable NVCC toolkit (`CUDACXX` or `CUDA_PATH` can select it). Later calls
-reuse the compiler cache. There is no CPU scientific fallback. Density-fitted,
-range-separated, nonlocal and ECP hybrid forces remain outside this contract.
-Generated split hybrids additionally require strict FP64 for forces; component
-AUTO is admitted only on the PBE0/B3LYP-style routes described above.
-See the [execution and resource limits](../developer/stationary_cuda_diagnostic.md)
-and [independent force acceptance gate](../maintainer/hybrid_cuda_acceptance.md#public-global-hybrid-force-gate).
+Admitted direct CUDA KS paths can use component-wise `precision="auto"`:
+qualified Direct Coulomb J and density contractions may use reduced compute
+precision while exact K and final-state audits remain FP64. For global-hybrid
+forces, AUTO admission is limited to PBE0/B3LYP-style routes; generated split
+hybrids retain strict FP64. See the
+[CUDA hybrid acceptance contract](../maintainer/hybrid_cuda_acceptance.md).
 
-## Direct CUDA HF force state
+Generated CUDA consumers may require a discoverable CUDA toolkit during first
+use and may reuse compiler artifacts on later calls. Exact backend, basis,
+precision, exchange, nonlocal-correlation, ECP, and resource admission remains
+context-specific. See [KS options](ks_options.md), the method-specific user
+guides, and `Calculator.capabilities` instead of copying those gates here.
 
-Direct RHF/UHF force solves require the maximum physical AO commutator
-`|F P S - S P F|` to meet `min(1e-8, density_tolerance)` in addition to the
-energy and density-update criteria. The maximum includes both UHF spins;
-nonfinite residuals cannot pass. Additional SCF updates remain within the
-requested iteration limit and appear in the public iteration count.
-An item's mixed-precision coarse stage keeps its previous stop; the exact FP64
-refinement and exact-precision neighbors apply the physical force criterion.
+## HF force convergence
 
-Finalization projects the final physical-Fock orbitals to a determinant,
-rebuilds its physical Fock, and rechecks that determinant's commutator before
-publishing forces. Energy, forces and the returned warm state share this P/F(P).
-The Pulay weight is `P F(P) P / 2` for RHF and `P_sigma F_sigma P_sigma` for
-UHF. A failed final residual returns nonconvergence. Energy-only and detached
-physical-reference execution retain their existing finalization contracts.
+Direct CUDA HF force publication applies an additional physical commutator check
+and final physical-state validation beyond the ordinary density/energy stopping
+criteria. This can add finalization work while preserving the requested
+iteration limit and fail-closed convergence behavior. The implementation
+semantics, Pulay construction, work counters, and diagnostic ownership are
+documented in [Direct CUDA HF force finalization](../developer/hf_force_finalization.md).
 
-This force finalization adds one density projection, one physical Fock build,
-four matrix products for residual validation and two for the Pulay weight.
-Existing device scratch holds the products; a four-byte work counter is copied
-at the existing completion fence. `GENERATIVEQC_DF_PROGRESS_TRACE` records final
-updates, physical Fock builds, residual checks and rejections separately from
-iterative SCF updates. Complete endpoint costs include all this work. The
-[decision record](../../.agents/notes/proposed/2026-09-17-consistent-direct-pulay-weight.md)
-retains the independent diagnosis and qualification boundaries.
+## Planned work is not current support
 
-## Acceptance standard
-
-A method becomes supported only when all of the following are true:
-
-1. Its public behavior and mathematical conventions are documented.
-2. Energies and relevant derivatives agree with an independent implementation
-   over representative systems and basis sets.
-3. CPU/GPU execution boundaries and unsupported cases fail explicitly; there
-   is no silent fallback to an unvalidated path.
-4. Reproducible benchmark artifacts support any performance claim.
-5. Batched execution preserves per-system ordering, diagnostics, and failure
-   isolation where the method permits batching.
-
-## Expansion strategy
-
-GenerativeQC expands method coverage behind the same registry-driven prepared
-calculation interface. New public capabilities should reuse the existing basis,
-integral, SCF, batching, resource-planning, and diagnostic contracts rather than
-introducing method-specific API branches.
-
-Near-term development focuses on completing scientific and backend coverage of
-the method families already present in the registry: broader DFT execution and
-analytic derivatives, density-fitted derivatives, correlated-method
-qualification and derivatives, and wider basis/ECP/backend coverage. Compiler
-and runtime work should remove duplicated handwritten execution paths while
-preserving explicit numerical ownership and fail-closed unsupported cases.
-
-A capability is promoted only after the [acceptance standard](#acceptance-standard)
-is satisfied. Implementation details belong in the
-[Developer Guide](../developer/index.md), performance qualification in the
-[Maintainer Guide](../maintainer/index.md), and durable historical rationale in
-`.agents/notes/`.
+The [implementation roadmap](../maintainer/roadmap.md) describes development
+directions only. A roadmap entry, compiler representation, generated kernel, or
+low-level capability record is not a public execution promise until the
+execution-context capability gate admits it.

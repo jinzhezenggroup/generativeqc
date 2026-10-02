@@ -1,0 +1,90 @@
+{
+  "baseline": {
+    "commit": "f678b01fff0a7025aa292d3713476402266c2e0f",
+    "tree": "c8f41b1c4d88ecd0b683d701641d63d93194a264",
+    "source_root": "/workspace/scratch/1b7630fc9eb4/generativeqc-dev/repo",
+    "library_path": "/workspace/scratch/1b7630fc9eb4/generativeqc-dev/repo/build/cpu-dev/libgenerativeqc.so",
+    "library_bytes": 300055792,
+    "library_sha256": "ce0a04bd7858512c6090b834da21fe4853864e0f81dae7f5a019f21b9dce8c76",
+    "source_inventory_sha256": "8681cab84dc712d57c9a0aa3874b3ede5755e38d701866d7f382ce53556e3d7b",
+    "git_status": "",
+    "tracked_diff": "",
+    "generated_header_sha256": "c0c708ec58bdf31cd42310f2a5a62a33383c59f5493ac56da1650a02766e9dda",
+    "generated_header_bytes": 2745678,
+    "native_text_bytes": 18843047
+  },
+  "candidate": {
+    "commit": "a7afa3864f12a747b1851a25f97db5500c58c36c",
+    "tree": "17b2951c0a7269c4534a56bb8180d9edaac36baa",
+    "source_root": "/workspace/scratch/1b7630fc9eb4/generativeqc-dev/coulomb-reuse",
+    "library_path": "/workspace/scratch/1b7630fc9eb4/generativeqc-dev/coulomb-reuse/build/cpu-dev/libgenerativeqc.so",
+    "library_bytes": 313900928,
+    "library_sha256": "546dc0f03e2360fa35414c7c1499a20b1fad227171c3f6b3baf2030ed0063a86",
+    "source_inventory_sha256": "b037d9cc8d496957b9724aacd174ace4f98af52e06c00077e51eeeb1efc55177",
+    "git_status": "",
+    "tracked_diff": "",
+    "generated_header_sha256": "a08f3b9c37e2ee89e526a043c02d73888798100a8d16e210e6aa06d83e0187e0",
+    "generated_header_bytes": 4842970,
+    "native_text_bytes": 19317369,
+    "published_equivalent_commit": "dc95a3c742e8ee61b8eebc462867cf9e75e4a247",
+    "published_equivalent_url": "https://github.com/jinzhezenggroup/generativeqc/commit/dc95a3c742e8ee61b8eebc462867cf9e75e4a247",
+    "publication_equivalence": "All four changed blobs and full tree checked identical; commit transport metadata only. Evidence additions do not change native source inventory."
+  },
+  "build": {
+    "compiler": "GCC 14.2.0",
+    "cmake_build_type": "RelWithDebInfo",
+    "cxx_flags": "-O2 -g -DNDEBUG",
+    "cuda": false,
+    "thread_environment": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "PYTHONHASHSEED": "0"
+    },
+    "build_observation_limit": "Whole builds; baseline/candidate qualification concurrency differed, so not a causal compile-time or peak-memory comparison.",
+    "baseline": {
+      "returncode": 0,
+      "wall_seconds": 491.09482738199586,
+      "maximum_child_rss_kib": 3771236
+    },
+    "candidate": {
+      "returncode": 0,
+      "wall_seconds": 518.7330132819989,
+      "maximum_child_rss_kib": 4460064
+    }
+  },
+  "reused_protocol_inputs_sha256": {
+    "benchmark.py": "91211fa69c5e7ede5a0f5e2c9a0849cd7a80251553712af172708f8925698ff3",
+    "run.py": "cabe7fddf62dfbd198e34d22f182f96874af04575775adc1290b816234175b7d",
+    "cases.json": "44e5cfd759a0a9da50840e8ef8fb89dfea7489a1c69f25b1a1a4b6ed51ff1f86"
+  },
+  "measured_runner_sha256": "af7b9bad8c9c58c484fa48a31c3977fbc481f8af3527cffd05fabfe79c070cd8",
+  "host": {
+    "utc": "2026-10-01T20:04:43.706650+00:00",
+    "node": "3bcf35e99b7f",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+    "executable": "/workspace/scratch/1b7630fc9eb4/generativeqc-dev/venv/bin/python",
+    "cpu_model": "INTEL(R) XEON(R) PLATINUM 8573C",
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "load_average": [
+      0.29541015625,
+      0.994140625,
+      1.62353515625
+    ],
+    "boot_id": "caf433ed-037a-4c9c-9355-6c8171562482",
+    "cpu_max": null
+  },
+  "measurement_end_utc": "2026-10-01T20:09:37.521516+00:00"
+}
