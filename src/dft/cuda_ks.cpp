@@ -1981,7 +1981,7 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
 
       if (auto* direct = impl_->provider.cuda_direct_source()) {
         profile.milliseconds[slot] = timed([&] {
-          check(execute_cuda_direct_jk_device(
+          check(scf::execute_cuda_direct_jk_device(
                     direct, spec, impl_->density, beta, impl_->matrix,
                     spec.coulomb.present ? impl_->j : nullptr,
                     spec.exchange.present ? impl_->exchange : nullptr,
