@@ -135,6 +135,67 @@ void direct_device_failures(CudaDirectJkPlan* plan, const std::vector<double>& a
   }
 }
 
+void direct_rsh_device(CudaDirectJkPlan* plan, FockBuildSpec correction,
+                       const std::vector<double>& a, const std::vector<double>& b,
+                       const std::vector<double>& expected_j,
+                       const std::vector<double>& expected_full_a,
+                       const std::vector<double>& expected_full_b,
+                       const std::vector<double>& expected_range_a,
+                       const std::vector<double>& expected_range_b) {
+  const bool unrestricted = correction.spin == FockSpin::Unrestricted;
+  auto primary = make_hf_fock_spec(correction.spin);
+  primary.derivative_order = correction.derivative_order = 0;
+  correction.coulomb.present = false;
+  const std::vector<double> sentinel(a.size(), 123.0);
+  DeviceMatrix da(a), db(b), j(sentinel), full_a(sentinel), full_b(sentinel), range_a(sentinel),
+      range_b(sentinel), primary_error({123.0}), range_error({123.0});
+  std::string detail;
+  const auto enqueue = [&](double* full_output, double* range_output, int* range_failure) {
+    return enqueue_cuda_direct_rsh_values_device(
+        plan, primary, correction, da.pointer, unrestricted ? db.pointer : nullptr, a.size(),
+        j.pointer, full_output, unrestricted ? full_b.pointer : nullptr, range_output,
+        unrestricted ? range_b.pointer : nullptr, reinterpret_cast<int*>(primary_error.pointer),
+        range_failure, detail);
+  };
+  auto* range_failure = reinterpret_cast<int*>(range_error.pointer);
+  if (!plan->bounded_value_opt_in) {
+    require(enqueue(full_a.pointer, range_a.pointer, range_failure) ==
+                GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+            "fused RSH bypassed the default bounded-value policy");
+    for (const auto* output : {&j, &full_a, &full_b, &range_a, &range_b}) output->verify(sentinel);
+    primary_error.verify({123.0});
+    range_error.verify({123.0});
+  } else {
+    require(enqueue(full_a.pointer, full_a.pointer, range_failure) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "fused RSH accepted overlapping full/range exchange outputs");
+    require(
+        enqueue(da.pointer, range_a.pointer, range_failure) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "fused RSH accepted overlapping density/output buffers");
+    require(
+        enqueue(full_a.pointer, range_a.pointer, reinterpret_cast<int*>(primary_error.pointer)) ==
+            GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "fused RSH accepted overlapping numerical status buffers");
+    require(enqueue(full_a.pointer, range_a.pointer, reinterpret_cast<int*>(range_a.pointer)) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "fused RSH accepted overlapping output/status buffers");
+    require(enqueue(full_a.pointer, range_a.pointer, range_failure) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    check(cudaStreamSynchronize(cuda_direct_jk_stream(plan)));
+    int first = -1, second = -1;
+    check(cudaMemcpy(&first, primary_error.pointer, sizeof(first), cudaMemcpyDeviceToHost));
+    check(cudaMemcpy(&second, range_error.pointer, sizeof(second), cudaMemcpyDeviceToHost));
+    require(first == 0 && second == 0, "fused RSH failed numerical validation");
+    j.verify(expected_j);
+    full_a.verify(expected_full_a);
+    full_b.verify(unrestricted ? expected_full_b : sentinel);
+    range_a.verify(expected_range_a);
+    range_b.verify(unrestricted ? expected_range_b : sentinel);
+  }
+  da.verify(a);
+  db.verify(b);
+}
+
 void mixed_coulomb_work_census(bool through_f = false) {
   generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
@@ -607,6 +668,29 @@ void canonical_value_provider() {
                   require(work[0] == (canonical_route ? quartets : 0U) &&
                               work[1] == radial_passes * quartets,
                           "default/opt-in value selection disagrees with executed canonical work");
+                }
+                if (want_j && want_k && op != FockOperator::FullRange) {
+                  std::vector<double> expected_full_alpha, expected_full_beta;
+                  for (std::size_t item = 0; item < 2U; ++item) {
+                    const std::vector<double> item_alpha(alpha.begin() + item * matrix,
+                                                         alpha.begin() + (item + 1U) * matrix);
+                    const auto full_alpha =
+                        reference_exchange_from_eri(full_eri[item], dimension, item_alpha);
+                    expected_full_alpha.insert(expected_full_alpha.end(), full_alpha.begin(),
+                                               full_alpha.end());
+                    if (spin == FockSpin::Unrestricted) {
+                      const std::vector<double> item_beta(beta.begin() + item * matrix,
+                                                          beta.begin() + (item + 1U) * matrix);
+                      const auto full_beta =
+                          reference_exchange_from_eri(full_eri[item], dimension, item_beta);
+                      expected_full_beta.insert(expected_full_beta.end(), full_beta.begin(),
+                                                full_beta.end());
+                    }
+                  }
+                  direct_rsh_device(plan.get(), spec, alpha,
+                                    spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
+                                    expected_j, expected_full_alpha, expected_full_beta,
+                                    expected_alpha, expected_beta);
                 }
                 if (want_k && plan->canonical_transform) {
                   const auto* spans = plan->canonical_projection_spans;

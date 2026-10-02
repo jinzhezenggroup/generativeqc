@@ -46,9 +46,10 @@ retained capability metadata.
   `direct_jk_bounded_value_enabled()` gate before opting into bounded range values.
   Its native CPU-ERI comparison retains both default and opt-in SR/LR routes,
   with canonical candidate/radial counts appropriate to each selection.
-- Stacked PR #1695's fused RSH value facade must use the same gate, returning its
+- Stacked PR #1695's fused RSH value facade uses the same gate, returning its
   existing `NOT_IMPLEMENTED` fallback when disabled, so a direct join cannot
-  bypass production value policy. That join is outside this repair.
+  bypass production value policy. Its writable buffers also retain the ordinary
+  Direct J/K disjointness contract before any device mutation.
 
 ## Evidence
 
