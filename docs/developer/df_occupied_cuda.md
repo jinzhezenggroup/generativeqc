@@ -450,7 +450,9 @@ occupied pairs, with diagonals first, and applies the second metric root to
 that smaller extent. The Coulomb potential still reads the diagonal trace.
 Two lower-triangle SYRK products form the metric adjoint: diagonal occupied
 pairs have weight one and off-diagonal pairs weight two. Their `beta=1`
-updates preserve the existing Coulomb contribution before mirroring.
+updates preserve the existing Coulomb contribution before mirroring. Providers
+without SYRK keep two full GEMM products over those same weighted pairs, with
+full-product FLOPs reported; NVIDIA execution retains the two SYRK calls.
 
 Only singleton RHF with its exact final-state lease, retained full-rank metric
 root and packed physical source can take this route. Dense/nonsymmetric

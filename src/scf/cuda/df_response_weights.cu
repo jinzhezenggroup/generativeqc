@@ -1050,12 +1050,14 @@ static cudaError_t contract_occupied_response(
       const double alpha = metric.full_rank ? coefficient : -coefficient;
       const auto* metric_factors = metric.full_rank ? transformed_projected + retained : projected;
       if (symmetric_occupied_pairs) {
+        bool triangular_metric = true;
         checked(generated::df_occupied_symmetric_metric_gram(blas, ai, ri, alpha, metric_factors,
-                                                             bar_inverse));
+                                                             bar_inverse, &triangular_metric));
         cuda_df::launch_mirror_exchange_triangle(blocks(aa), threads, stream, a, bar_inverse);
         runtime::cuda_trace::trace_counter("response_occupied_metric_products", r > 1 ? 2 : 1);
-        runtime::cuda_trace::trace_counter("response_occupied_metric_flops",
-                                           a * (a + 1) * (r * (r + 1) / 2));
+        runtime::cuda_trace::trace_counter(
+            "response_occupied_metric_flops",
+            (triangular_metric ? a * (a + 1) : 2 * aa) * (r * (r + 1) / 2));
       } else {
         checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ai, rri, &alpha, metric_factors,
                             rri, metric_factors, rri, &one, bar_inverse, ai));

@@ -1,0 +1,123 @@
+diff --git a/python/generativeqc_compiler/method/df_occupied_response_cuda.py b/python/generativeqc_compiler/method/df_occupied_response_cuda.py
+index 12c29cafa..5b9d92936 100644
+--- a/python/generativeqc_compiler/method/df_occupied_response_cuda.py
++++ b/python/generativeqc_compiler/method/df_occupied_response_cuda.py
+@@ -130,20 +130,35 @@ inline std::size_t df_occupied_symmetric_pair(
+  */
+ inline cublasStatus_t df_occupied_symmetric_metric_gram(
+     cublasHandle_t blas, int auxiliary, int rank, double coefficient,
+-    const double* factors, double* metric) {
++    const double* factors, double* metric, bool* triangular = nullptr) {
+   if (auxiliary <= 0 || rank <= 0 || !factors || !metric || factors == metric)
+     return CUBLAS_STATUS_INVALID_VALUE;
+   const auto pairs = static_cast<long long>(rank) * (rank + 1LL) / 2;
+   if (pairs > std::numeric_limits<int>::max()) return CUBLAS_STATUS_INVALID_VALUE;
+   const auto stride = static_cast<int>(pairs);
+   const double one = 1, twice = 2 * coefficient;
+-  auto status = cublasDsyrk(blas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
+-                           auxiliary, rank, &coefficient, factors, stride,
+-                           &one, metric, auxiliary);
++  // Match the occupied-K provider contract: a provider without SYRK may
++  // update both triangles with GEMM. The caller consumes/mirrors the lower
++  // triangle and records the actual full-product work in that case.
++  const auto product = [&](auto handle, int count, const double* scale,
++                           const double* input) {
++    if constexpr (requires {
++        cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, auxiliary,
++                    count, scale, input, stride, &one, metric, auxiliary);
++    }) {
++      if (triangular) *triangular = true;
++      return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, auxiliary,
++                         count, scale, input, stride, &one, metric, auxiliary);
++    } else {
++      if (triangular) *triangular = false;
++      return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, auxiliary, auxiliary,
++                         count, scale, input, stride, input, stride, &one,
++                         metric, auxiliary);
++    }
++  };
++  auto status = product(blas, rank, &coefficient, factors);
+   if (status != CUBLAS_STATUS_SUCCESS || stride == rank) return status;
+-  return cublasDsyrk(blas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
+-                      auxiliary, stride - rank, &twice, factors + rank, stride,
+-                      &one, metric, auxiliary);
++  return product(blas, stride - rank, &twice, factors + rank);
+ }
+ 
+ inline cublasStatus_t df_occupied_from_metric_eigenbasis(
+diff --git a/src/scf/cuda/df_response_weights.cu b/src/scf/cuda/df_response_weights.cu
+index 0b8f5b75e..09401fd4d 100644
+--- a/src/scf/cuda/df_response_weights.cu
++++ b/src/scf/cuda/df_response_weights.cu
+@@ -1050,12 +1050,14 @@ static cudaError_t contract_occupied_response(
+       const double alpha = metric.full_rank ? coefficient : -coefficient;
+       const auto* metric_factors = metric.full_rank ? transformed_projected + retained : projected;
+       if (symmetric_occupied_pairs) {
++        bool triangular_metric = true;
+         checked(generated::df_occupied_symmetric_metric_gram(blas, ai, ri, alpha, metric_factors,
+-                                                             bar_inverse));
++                                                             bar_inverse, &triangular_metric));
+         cuda_df::launch_mirror_exchange_triangle(blocks(aa), threads, stream, a, bar_inverse);
+         runtime::cuda_trace::trace_counter("response_occupied_metric_products", r > 1 ? 2 : 1);
+-        runtime::cuda_trace::trace_counter("response_occupied_metric_flops",
+-                                           a * (a + 1) * (r * (r + 1) / 2));
++        runtime::cuda_trace::trace_counter(
++            "response_occupied_metric_flops",
++            (triangular_metric ? a * (a + 1) : 2 * aa) * (r * (r + 1) / 2));
+       } else {
+         checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ai, rri, &alpha, metric_factors,
+                             rri, metric_factors, rri, &one, bar_inverse, ai));
+diff --git a/tests/python/test_df_occupied_projection_lowering.py b/tests/python/test_df_occupied_projection_lowering.py
+index 4982f5dc3..00ecafe9a 100644
+--- a/tests/python/test_df_occupied_projection_lowering.py
++++ b/tests/python/test_df_occupied_projection_lowering.py
+@@ -132,8 +132,10 @@ extern "C" int symmetric_gram(int a,int r,double scale,const double* u,double* o
+ """
+ 
+ 
+-@pytest.fixture(scope="session")
+-def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
++@pytest.fixture(scope="session", params=[True, False], ids=["syrk", "gemm-provider"])
++def native(
++    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
++) -> ct.CDLL:
+     compiler = shutil.which("c++")
+     if compiler is None:
+         pytest.skip("requires a host C++ compiler")
+@@ -144,9 +146,14 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+     module = importlib.util.module_from_spec(spec)
+     spec.loader.exec_module(module)
+     folder = tmp_path_factory.mktemp("df-projection-host")
+-    (folder / "cublas_v2.h").write_text(HEADER)
++    has_syrk = request.param
++    header = HEADER if has_syrk else HEADER.replace("cublasDsyrk", "unavailableDsyrk")
++    standin = (
++        STANDIN if has_syrk else STANDIN.replace("cublasDsyrk", "unavailableDsyrk")
++    )
++    (folder / "cublas_v2.h").write_text(header)
+     code = (
+-        STANDIN
++        standin
+         + "\nnamespace generativeqc::scf::generated {\n"
+         + module.emit_occupied_response_helpers()
+         + "\n}\n"
+@@ -171,6 +178,7 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+         check=True,
+     )
+     lib = ct.CDLL(str(output))
++    lib.has_syrk = has_syrk
+     ptr = ct.POINTER(ct.c_double)
+     lib.project.argtypes = [ct.c_int] * 5 + [ptr] * 4 + [ct.c_int]
+     lib.project.restype = ct.c_int
+@@ -575,7 +583,10 @@ def test_symmetric_metric_gram_matches_full_occupied_contraction(
+     np.testing.assert_allclose(
+         np.tril(actual), np.tril(expected), atol=4e-13, rtol=4e-13
+     )
+-    np.testing.assert_array_equal(np.triu(actual, 1), np.triu(initial, 1))
++    if native.has_syrk:
++        np.testing.assert_array_equal(np.triu(actual, 1), np.triu(initial, 1))
++    else:
++        np.testing.assert_allclose(actual, expected, atol=4e-13, rtol=4e-13)
+     assert native.call_count() == (1 if r == 1 else 2)
+ 
+ 

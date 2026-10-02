@@ -86,8 +86,16 @@ The n5 combined candidate before source formatting has SHA-256
 its exact dirty source is retained in [combined-preformat.patch](combined-preformat.patch).
 [source.patch](source.patch) reconstructs the measured final implementation
 on the baseline above. [response-only.patch](response-only.patch) reconstructs
-the earlier response-only arm. Neither patch is required to run the current
-checkout. Raw traces, logs, binaries and exploratory products remain in ignored
+the earlier response-only arm. The integration recheck uses master `06459d469`;
+[integration.json](integration.json) retains another complete 96-atom DF run
+from clean commit `b317e0b7f`, with all gates passing. Subsequent master
+`db44f7939` changes only CC arena reuse and has no HF DF overlap. The final [provider compatibility patch](provider-compatibility.patch)
+keeps full GEMM available for BLAS interfaces without SYRK; the timed NVIDIA
+operation sequence is unchanged. The final compatibility build passes 274 host
+tests with both BLAS interfaces and 34 molecular GPU tests; its library hash
+and test receipts are retained in [validation.json](validation.json). These reconstruction patches are not needed
+to run the current checkout. Raw traces, logs, binaries and exploratory
+products remain in ignored
 `.artifacts/hf-df-96/` directories.
 
 ## Reproduce

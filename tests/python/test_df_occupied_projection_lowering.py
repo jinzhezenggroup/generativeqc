@@ -132,8 +132,10 @@ extern "C" int symmetric_gram(int a,int r,double scale,const double* u,double* o
 """
 
 
-@pytest.fixture(scope="session")
-def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
+@pytest.fixture(scope="session", params=[True, False], ids=["syrk", "gemm-provider"])
+def native(
+    tmp_path_factory: pytest.TempPathFactory, request: pytest.FixtureRequest
+) -> ct.CDLL:
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
@@ -144,9 +146,14 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     folder = tmp_path_factory.mktemp("df-projection-host")
-    (folder / "cublas_v2.h").write_text(HEADER)
+    has_syrk = request.param
+    header = HEADER if has_syrk else HEADER.replace("cublasDsyrk", "unavailableDsyrk")
+    standin = (
+        STANDIN if has_syrk else STANDIN.replace("cublasDsyrk", "unavailableDsyrk")
+    )
+    (folder / "cublas_v2.h").write_text(header)
     code = (
-        STANDIN
+        standin
         + "\nnamespace generativeqc::scf::generated {\n"
         + module.emit_occupied_response_helpers()
         + "\n}\n"
@@ -171,6 +178,7 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         check=True,
     )
     lib = ct.CDLL(str(output))
+    lib.has_syrk = has_syrk
     ptr = ct.POINTER(ct.c_double)
     lib.project.argtypes = [ct.c_int] * 5 + [ptr] * 4 + [ct.c_int]
     lib.project.restype = ct.c_int
@@ -575,7 +583,10 @@ def test_symmetric_metric_gram_matches_full_occupied_contraction(
     np.testing.assert_allclose(
         np.tril(actual), np.tril(expected), atol=4e-13, rtol=4e-13
     )
-    np.testing.assert_array_equal(np.triu(actual, 1), np.triu(initial, 1))
+    if native.has_syrk:
+        np.testing.assert_array_equal(np.triu(actual, 1), np.triu(initial, 1))
+    else:
+        np.testing.assert_allclose(actual, expected, atol=4e-13, rtol=4e-13)
     assert native.call_count() == (1 if r == 1 else 2)
 
 

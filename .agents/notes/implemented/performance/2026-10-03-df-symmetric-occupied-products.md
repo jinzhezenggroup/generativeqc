@@ -39,8 +39,10 @@ scientific acceptance rule is introduced.
 - The first `r` compact entries are diagonals. Averaging off-diagonal entries
   removes only FP64 reduction-order asymmetry of physical `C^T B C`.
 - Dense/nonsymmetric, spectral, rank-truncated, unqualified final-state and UHF
-  response paths keep their established algebra. Discarded metric directions
-  are never reconstructed from whitened factors.
+  response paths keep their established algebra. Providers without SYRK use
+  checked full GEMM products for the weighted metric Gram, with actual FLOPs
+  reported. Discarded metric directions are never reconstructed from whitened
+  factors.
 - Gram admission requires `n >= 384`, `a*r >= 32768`, integer-safe dimensions
   and `ceil(a*r/32768)*n*n` doubles in the existing intermediate. All other
   shapes/layouts retain SYRK/GEMM. Native runtime failure is not a fallback.

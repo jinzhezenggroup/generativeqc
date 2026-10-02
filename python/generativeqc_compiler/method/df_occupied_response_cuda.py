@@ -130,20 +130,35 @@ inline std::size_t df_occupied_symmetric_pair(
  */
 inline cublasStatus_t df_occupied_symmetric_metric_gram(
     cublasHandle_t blas, int auxiliary, int rank, double coefficient,
-    const double* factors, double* metric) {
+    const double* factors, double* metric, bool* triangular = nullptr) {
   if (auxiliary <= 0 || rank <= 0 || !factors || !metric || factors == metric)
     return CUBLAS_STATUS_INVALID_VALUE;
   const auto pairs = static_cast<long long>(rank) * (rank + 1LL) / 2;
   if (pairs > std::numeric_limits<int>::max()) return CUBLAS_STATUS_INVALID_VALUE;
   const auto stride = static_cast<int>(pairs);
   const double one = 1, twice = 2 * coefficient;
-  auto status = cublasDsyrk(blas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
-                           auxiliary, rank, &coefficient, factors, stride,
-                           &one, metric, auxiliary);
+  // Match the occupied-K provider contract: a provider without SYRK may
+  // update both triangles with GEMM. The caller consumes/mirrors the lower
+  // triangle and records the actual full-product work in that case.
+  const auto product = [&](auto handle, int count, const double* scale,
+                           const double* input) {
+    if constexpr (requires {
+        cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, auxiliary,
+                    count, scale, input, stride, &one, metric, auxiliary);
+    }) {
+      if (triangular) *triangular = true;
+      return cublasDsyrk(handle, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T, auxiliary,
+                         count, scale, input, stride, &one, metric, auxiliary);
+    } else {
+      if (triangular) *triangular = false;
+      return cublasDgemm(handle, CUBLAS_OP_T, CUBLAS_OP_N, auxiliary, auxiliary,
+                         count, scale, input, stride, input, stride, &one,
+                         metric, auxiliary);
+    }
+  };
+  auto status = product(blas, rank, &coefficient, factors);
   if (status != CUBLAS_STATUS_SUCCESS || stride == rank) return status;
-  return cublasDsyrk(blas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
-                      auxiliary, stride - rank, &twice, factors + rank, stride,
-                      &one, metric, auxiliary);
+  return product(blas, stride - rank, &twice, factors + rank);
 }
 
 inline cublasStatus_t df_occupied_from_metric_eigenbasis(
