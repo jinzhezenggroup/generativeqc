@@ -28,6 +28,7 @@
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 #include "scf/cuda_fock_execution.hpp"
+#include "scf/cuda_direct_jk_device.hpp"
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/reference/mean_field.hpp"
@@ -1940,6 +1941,126 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
     return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
   }
 }
+generativeqc_status CudaKsPlan::profile_fixed_density_components(
+    const CudaKsFinalStateToken& expected, CudaKsFixedDensityProfile& profile,
+    std::string& detail) {
+  profile = {};
+  detail.clear();
+  try {
+    const auto current = impl_->token();
+    if (expected.version != 1 || expected != current)
+      throw std::invalid_argument(
+          "CUDA KS fixed-density profile token has stale owner, epoch, generation or model");
+    impl_->current_device();
+    cudaStreamCaptureStatus capture = cudaStreamCaptureStatusNone;
+    check(cudaStreamIsCapturing(impl_->stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::invalid_argument("CUDA KS fixed-density profile requires an ordinary stream");
+
+    runtime::OwnedCudaEvent begin(impl_->device), end(impl_->device);
+    const auto timed = [&](auto&& submit) {
+      begin.record(impl_->stream);
+      submit();
+      end.record(impl_->stream);
+      end.synchronize();
+      return static_cast<double>(end.elapsed_since(begin));
+    };
+    const auto read_error = [&](const int* source, const char* name) {
+      int value = 0;
+      check(cudaMemcpy(&value, source, sizeof(value), cudaMemcpyDeviceToHost));
+      if (value) throw std::runtime_error(std::string(name) + " reported a numerical failure");
+    };
+
+    const auto& strategy = impl_->provider.strategy();
+    const auto* beta = impl_->spins == 2 ? impl_->density + impl_->matrix : nullptr;
+    auto profile_primary = [&](bool want_j, bool want_k, unsigned slot) {
+      auto spec = strategy.spec;
+      spec.coulomb.present = want_j && strategy.spec.coulomb.present;
+      spec.exchange.present = want_k && strategy.spec.exchange.present;
+      if (!spec.coulomb.present && !spec.exchange.present) return;
+
+      if (auto* direct = impl_->provider.cuda_direct_source()) {
+        profile.milliseconds[slot] = timed([&] {
+          check(execute_cuda_direct_jk_device(
+                    direct, spec, impl_->density, beta, impl_->matrix,
+                    spec.coulomb.present ? impl_->j : nullptr,
+                    spec.exchange.present ? impl_->exchange : nullptr,
+                    spec.exchange.present && impl_->spins == 2 ? impl_->exchange + impl_->matrix
+                                                               : nullptr,
+                    impl_->jk_error, detail),
+                detail);
+        });
+        read_error(impl_->jk_error, want_j ? "fixed-density J" : "fixed-density K");
+      } else if (auto* fitted = impl_->provider.cuda_fitted_source()) {
+        const scf::JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
+        profile.milliseconds[slot] = timed([&] {
+          const auto status =
+              impl_->spins == 2
+                  ? scf::execute_cuda_density_fitting_uhf_jk_device(
+                        fitted, impl_->density, beta, spec.coulomb.present ? impl_->j : nullptr,
+                        spec.exchange.present ? impl_->exchange : nullptr,
+                        spec.exchange.present ? impl_->exchange + impl_->matrix : nullptr, detail,
+                        terms, scf::FockMatrixLayout::RowMajor)
+                  : scf::execute_cuda_density_fitting_rhf_jk_device(
+                        fitted, impl_->density, spec.coulomb.present ? impl_->j : nullptr,
+                        spec.exchange.present ? impl_->exchange : nullptr, detail, terms,
+                        scf::FockMatrixLayout::RowMajor);
+          check(status, detail);
+        });
+      } else {
+        throw std::runtime_error("CUDA KS fixed-density profile lost its prepared Fock provider");
+      }
+      profile.present_mask |= (1U << slot);
+    };
+
+    profile_primary(true, false, 0);
+    profile_primary(false, true, 1);
+
+    if (impl_->has_range_correction) {
+      profile.milliseconds[2] = timed([&] {
+        check(scf::enqueue_prepared_cuda_exchange_correction(
+                  impl_->provider, *impl_->range_correction, impl_->density, beta, impl_->matrix,
+                  impl_->range_exchange,
+                  impl_->spins == 2 ? impl_->range_exchange + impl_->matrix : nullptr,
+                  impl_->range_jk_error, detail),
+              detail);
+      });
+      read_error(impl_->range_jk_error, "fixed-density range K");
+      profile.present_mask |= (1U << 2);
+    }
+
+    // A semilocal replay against the same D is state-equivalent for ordinary
+    // device-fused KS. Nonlocal composition has already added VV10 to the XC
+    // buffers, so a semilocal-only replay would corrupt that final view; leave
+    // its XC component explicitly unavailable instead.
+    if (impl_->xc && !impl_->nonlocal_correlation) {
+      CudaXcView view;
+      profile.milliseconds[3] = timed([&] {
+        view = impl_->xc->enqueue_replay_body(impl_->density, impl_->elements,
+                                              CudaXcDensityPrecision::Fp64);
+      });
+      read_error(view.error, "fixed-density XC");
+      profile.present_mask |= (1U << 3);
+    }
+
+    if (impl_->token() != current)
+      throw std::invalid_argument("CUDA KS final-state eligibility changed during profiling");
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (const std::bad_alloc&) {
+    detail = "CUDA KS fixed-density component profile exceeded its resource budget";
+    return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+  } catch (const generativeqc::Error& error) {
+    detail = error.what();
+    return error.status();
+  } catch (const std::invalid_argument& error) {
+    detail = error.what();
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  } catch (const std::exception& error) {
+    if (detail.empty()) detail = error.what();
+    return GENERATIVEQC_STATUS_NUMERICAL_FAILURE;
+  }
+}
+
 generativeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& expected,
                                                  bool compute_weighted_density,
                                                  VerifiedKsFinalState& state, std::string& detail) {
