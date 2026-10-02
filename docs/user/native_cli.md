@@ -68,11 +68,64 @@ Energies are Hartree and forces are Hartree/Bohr. Add `--json` for
 machine-readable output. Native CUDA SDK builds may select `--backend cuda`;
 unsupported build/device combinations fail closed.
 
-The native `run` command currently accepts `gfn2-xtb` (and its `gfn2`
-alias). Gaussian-basis HF/DFT calculations already have native C/C++ execution
-APIs, but the CLI still needs a native named-basis/data resolver before those
-methods can accept user-friendly XYZ input without Python.
+## Run RHF/UHF with bundled Gaussian bases
 
+The native CLI can also expand the generated bundled basis catalog directly
+into the public C/C++ system descriptor:
+
+```bash
+/opt/generativeqc/bin/generativeqc run molecule.xyz \
+  --method rhf \
+  --basis def2-svp \
+  --representation spherical \
+  --backend cpu \
+  --forces
+```
+
+`rhf` and `uhf` use the same exact bundled decimal basis records as the
+Python frontend. The currently bundled names are reported by
+`generativeqc basis list`. GFN2-xTB continues to own its intrinsic basis, so
+passing `--basis` or `--representation` with GFN2 is rejected instead of
+being silently ignored.
+
+## Select HF density fitting
+
+RHF/UHF can select the same native density-fitting modes exposed by the public
+method descriptor:
+
+```bash
+generativeqc run molecule.xyz \
+  --method rhf \
+  --basis sto-3g \
+  --density-fitting cpu \
+  --auxiliary-basis def2-svp
+```
+
+`--density-fitting` accepts `none`, `cpu`, `cuda`, or `auto`. When no
+auxiliary basis is named, the native method contract reuses the orbital system
+as the auxiliary basis. An explicit `--auxiliary-basis` is expanded from the
+same generated bundled catalog and must accompany an enabled density-fitting
+mode. This CLI layer does not change the existing metric threshold or planner
+policy.
+
+## Run native DFT energies
+
+Native DFT methods already present in the generated method manifest can use the
+same bundled Gaussian-basis resolver:
+
+```bash
+generativeqc run molecule.xyz \
+  --method pbe-rks \
+  --basis def2-svp \
+  --representation spherical \
+  --backend cpu
+```
+
+The selector is resolved from the native method manifest rather than a second
+CLI-specific DFT list. This slice exposes the manifest DFT energy endpoint with
+conventional Coulomb only. DFT density fitting and DFT forces remain
+fail-closed at argument validation and require separate qualification before
+the CLI exposes them.
 
 ## Manage local profile activation
 

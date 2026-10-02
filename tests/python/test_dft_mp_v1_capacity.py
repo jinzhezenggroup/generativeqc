@@ -66,6 +66,7 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
         (
             "src/dft/stationary_gradient_cuda.cuh",
             "python/generativeqc/_ks_snapshot.py",
+            "python/generativeqc_compiler/method/stationary_resources.py",
         ),
     )
     target = tmp_path / "python/generativeqc/_stationary_cuda.py"
@@ -173,16 +174,16 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
         ),
         "global_hybrid_force_predicate_sha256": (
-            "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
+            "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
         ),
         "force_capability_promotion_sha256": (
-            "aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e"
+            "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
         ),
         "cuda_force_method_sha256": (
             "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
         ),
         "prepared_aot_selection_sha256": (
-            "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
+            "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
         ),
     }
 
@@ -273,11 +274,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
+        "geometry_resources_sha256": "de8487535c96e9dc73ab21f9e95dd86a5ac281751e4a814ecf49cf237da09c3b",
         "public_wrapper_sha256": (
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "34bc6b3c49fdb6661587b46f5aa374e911a2c921b5a6940661f5464347d64cf9"
+            "78e657ba5eb865ead768d7d18575977508bdd34ede9f2fc7a51aae3f09baa652"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -313,19 +315,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "89d3e7889d50a6a3ff1ca31c26ad2cc8e2f2dee72f4d66f3e9a717834fbfdb3c"
+            "2b7ff05ad84060c657b76576ef2afc3adf206262313ae681ae66db2ba021319a"
         ),
         "native_owner_sha256": (
-            "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
+            "5f2e8924e1d97f1668edefc95caec70b96223244afadfc2aac97ad254d601b82"
         ),
         "native_allocation_sha256": (
-            "e680ab29f69ce35c9758e4f3ebd916e889d3f553dc9816dd07e9b7b740624544"
+            "47b73fb800b28abeea23bdef2feab6c18b3c9747508b02522e322f758d5fe878"
         ),
         "native_create_sha256": (
-            "0690d2e8ed965c27150051eb1f4957e26038a8c2e1307de13db8458df032fa7b"
+            "52e4b914ac2baa804db89f85f331f05835bdb4786e981777a6ea4303743d058a"
         ),
         "native_reset_sha256": (
-            "78b78cdf74f26e51d470452b94b872750a88770001ec51a8293f4f1685e4ba9f"
+            "fa3f0b989c571b4abd7d983fc0a6f3eafce3059a889b53c97bdd06bd416509fa"
         ),
         "native_tasks_sha256": (
             "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -334,16 +336,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "b2356eca0b5eafd0e3c67f59d334a769e38df765fc730a4c839757204d0a455b"
+            "efc8f4643fdd271782ad62ecc29d387f279347bae98fb78fc3bb78146743ef80"
         ),
         "native_geometry_enqueue_sha256": (
-            "f555f778eaf4af1e8fac5e75e7f26d1d40827a43ee12f8c5a71ffe179a6a1891"
+            "4770b1100e26c8e79012054f25dedfe5857635342fff64ef1fe61eb97a047d8d"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_metrics_sha256": (
-            "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
+            "680742eea07b5e65ee26b1e45820f865c26b06d35921eb85caa19cd8d59a3ed3"
         ),
         "native_finish_span_sha256": (
             "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
@@ -370,10 +372,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
         "init_sha256": (
-            "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
+            "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
         "decode_sha256": (
-            "c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6"
+            "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
         ),
     }
     assert result["admission_limits"]["grid_plan_definition"] == (
@@ -382,16 +384,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "budget_bytes=max_device_bytes)"
     )
     assert result["admission_limits"]["source_bytes_definition"].startswith(
-        "8 * (22 * primitive_tile"
+        "plan_stationary_cuda_resources(atoms=na"
     )
     assert result["admission_limits"]["host_bound_definition"].startswith(
         "grid_plan.host_bytes + 8 * (34 * primitive_tile"
     )
     assert result["admission_limits"]["available_device_bytes_definition"] == (
-        "max_device_bytes - grid_plan.peak_bytes - source_bytes"
+        "max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes"
     )
     assert result["admission_limits"]["additional_device_admission"] == (
-        "additional_device_peak_bound < additional_device_budget"
+        "minimum_additional_device_bytes < additional_device_budget and additional_device_peak_bound <= additional_device_budget"
     )
     assert result["admission_limits"]["gate_order"] == [
         "small_domain_atom_ao_cap",
@@ -511,7 +513,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
     assert result["stationary_aot_source_package"] == {
         "cmake_contract_sha256": (
-            "7d95518ef56532d978c5015ee116b356f63a0599f45ca50e8e1ab452efc9574d"
+            "2ddd2b7a77c992bc9812914e1a31b8dbbc1a332d4fab8b3ec92c239ff6ff2228"
         ),
         "profiles": [
             "lda_rks",
@@ -582,7 +584,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         row for row in rows if row["id"] == "pbe/rks/water32/fp64_energy_forces"
     )
     assert water32["resource_requirements"]["additional_device_peak_bound"] == (
-        353_705_216
+        356_801_792
     )
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
         192_187_488
@@ -603,8 +605,10 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     )
 
 
+@pytest.mark.parametrize("boundary", ["minimum", "expanded"])
 def test_each_row_uses_its_own_method_memory_admission(
     monkeypatch: pytest.MonkeyPatch,
+    boundary: str,
 ) -> None:
     original = qualify_capacity._method_resources
 
@@ -627,11 +631,25 @@ def test_each_row_uses_its_own_method_memory_admission(
         )
         memory = dict(memory)
         if functional == qualify_capacity.SEMILOCAL_FUNCTIONALS["pbe"]:
-            memory["additional_device_peak_bound"] = limits["additional_device_bytes"]
+            if boundary == "minimum":
+                memory["minimum_additional_device_bytes"] = limits[
+                    "additional_device_bytes"
+                ]
+            else:
+                memory["additional_device_peak_bound"] = (
+                    limits["additional_device_bytes"] + 1
+                )
         return memory, plan
 
     monkeypatch.setattr(qualify_capacity, "_method_resources", method_resources)
-    rows = {row["id"]: row for row in report()["rows"]}
+    result = report()
+    assert (
+        next(case for case in result["cases"] if case["id"] == "water")["admission"][
+            "outcome"
+        ]
+        == "blocked"
+    )
+    rows = {row["id"]: row for row in result["rows"]}
 
     assert rows["lda/rks/water/fp64_energy_forces"]["admission"]["outcome"] == (
         "passes_static_stationary_caps"
@@ -1129,13 +1147,13 @@ def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
-    old = "for begin in range(0, len(grid.points), tile_points):"
+    old = "for begin in range(0, grid_points, tile_points):"
     assert source.count(old) == 1
     stationary_contract_tree(
         tmp_path,
         source.replace(
             old,
-            "for begin in range(0, len(grid.points), 2 * tile_points):",
+            "for begin in range(0, grid_points, 2 * tile_points):",
             1,
         ),
     )
@@ -1222,10 +1240,12 @@ def test_memory_bounds_fail_closed_when_native_allocation_moves(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "(579 + 3 * stationary_source_count) * na"
+    old = "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na"
     assert old in native
     target.write_text(
-        native.replace(old, "(580 + 3 * stationary_source_count) * na", 1),
+        native.replace(
+            old, "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na", 1
+        ),
         encoding="utf-8",
     )
 
@@ -1270,11 +1290,13 @@ def test_memory_bounds_fail_closed_when_production_definition_moves(
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
-    old = "22 * primitive_tile"
+    old = "tasks=primitive_tile,"
     assert old in source
-    stationary_contract_tree(tmp_path, source.replace(old, "23 * primitive_tile", 1))
+    stationary_contract_tree(
+        tmp_path, source.replace(old, "tasks=primitive_tile + 1,", 1)
+    )
 
-    with pytest.raises(RuntimeError, match="source-bytes definition"):
+    with pytest.raises(RuntimeError, match="minimum-source-bytes definition"):
         qualify_capacity._source_limits(tmp_path)
 
 
@@ -1961,7 +1983,10 @@ def test_unreadable_optional_aot_artifact_is_reported_not_raised(
     }
 
 
-def test_device_budget_requires_a_positive_remainder() -> None:
+@pytest.mark.parametrize("minimum,blocked", [(512, True), (511, False)])
+def test_device_budget_requires_a_positive_minimum_remainder(
+    minimum: int, blocked: bool
+) -> None:
     limits = {
         "small_domain": {"atom_count": 32, "ao_count": 128},
         "basis_primitive_count": 4096,
@@ -1986,12 +2011,15 @@ def test_device_budget_requires_a_positive_remainder() -> None:
         },
         {
             "additional_device_peak_bound": 512,
+            "minimum_additional_device_bytes": minimum,
             "additional_host_numeric_bound": 1,
         },
         limits,
     )
 
-    assert [item["gate"] for item in failures] == ["additional_device_budget"]
+    assert [item["gate"] for item in failures] == (
+        ["additional_device_budget"] if blocked else []
+    )
 
 
 def test_primitive_descriptor_budget_is_page_local_and_ordered_after_host() -> None:
@@ -2058,3 +2086,17 @@ def test_logical_primitive_metric_retains_uint64_range_gate() -> None:
     )
 
     assert [item["gate"] for item in failures] == ["primitive_logical_metric_range"]
+
+
+def test_geometry_resource_budget_changes_fail_closed(tmp_path: Path) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    path = tmp_path / "python/generativeqc_compiler/method/stationary_resources.py"
+    path.write_text(
+        path.read_text().replace(
+            "GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20",
+            "GEOMETRY_MAX_SCRATCH_BYTES = 16 << 20",
+        )
+    )
+    with pytest.raises(RuntimeError, match="geometry-resource contract changed"):
+        qualify_capacity._source_limits(tmp_path)

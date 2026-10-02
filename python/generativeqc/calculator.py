@@ -593,11 +593,6 @@ class Calculator:
         except KeyError as error:
             raise ValueError("precision must be 'fp64' or 'auto'") from error
         if (
-            self._method in (_native.METHOD_R2SCAN_RKS, _native.METHOD_R2SCAN_UKS)
-            and self._precision_mode != _native.PRECISION_FP64
-        ):
-            raise NotImplementedError("r2SCAN currently requires strict FP64")
-        if (
             self._method == _native.METHOD_PBE_D4_RKS
             and self._precision_mode != _native.PRECISION_FP64
         ):
@@ -866,17 +861,8 @@ class Calculator:
                 or (self._device_name == "cpu" and qualified_basis(self._basis))
             )
         )
-        cuda_df_semilocal_force = (
-            self._device_name == "cuda"
-            and density_fitting_mode != _native.DENSITY_FITTING_NONE
-            and self._precision_mode == _native.PRECISION_FP64
-            and semilocal_force
-            and self._ks_options is not None
-            and not self._ks_options.execution_plan.exchange
-            and self._ks_options.execution_plan.nonlocal_correlation is None
-            and not self._ks_options.execution_plan.post_scf
-        )
         from .ks import (
+            SPLIT_HYBRID_SCF_DOMAIN,
             cuda_global_hybrid_force_eligible,
             cuda_wb97mv_force_basis_eligible,
         )
@@ -884,10 +870,13 @@ class Calculator:
         cuda_hybrid_force = (
             self._device_name == "cuda"
             and not basis_has_ecp
-            and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
             and self._ks_options.xc_schedule == "device_fused"
             and cuda_global_hybrid_force_eligible(self._ks_options.method_ir)
+            and (
+                self._precision_mode == _native.PRECISION_FP64
+                or self._ks_options.scf_domain != SPLIT_HYBRID_SCF_DOMAIN
+            )
         )
         cuda_wb97mv_force = (
             self._device_name == "cuda"
@@ -896,6 +885,20 @@ class Calculator:
             and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
             and cuda_wb97mv_force_basis_eligible(self._basis)
+        )
+        density_fitted_force = (
+            density_fitting_mode != _native.DENSITY_FITTING_NONE
+            and self._precision_mode == _native.PRECISION_FP64
+            and not basis_has_ecp
+            and self._automatic_libxc_name is None
+            and self._dispersion_method_ir is None
+            and self._ks_options is not None
+            and self._ks_options.execution_plan.nonlocal_correlation is None
+            and all(
+                term.operator == "full-range"
+                for term in self._ks_options.execution_plan.exchange
+            )
+            and (self._device_name == "cpu" or self._device_name == "cuda")
         )
         if (
             self._capabilities.family == "density_functional"
@@ -909,7 +912,7 @@ class Calculator:
                         or cuda_wb97mv_force
                     )
                 )
-                or cuda_df_semilocal_force
+                or density_fitted_force
             )
             and not (
                 self._device_name == "cuda"
@@ -985,9 +988,9 @@ class Calculator:
                     "DFT automatic precision currently requires CUDA"
                 )
             if density_fitting_mode != _native.DENSITY_FITTING_NONE:
-                # DF changes the Hamiltonian. Keep its backend explicit; only the
-                # structurally qualified CUDA semilocal DF-J force owner above is
-                # advertised, never the conventional Direct derivative contract.
+                # DF changes the Hamiltonian. Keep its backend explicit; the
+                # stationary force consumer is admitted only through the
+                # token-bound auxiliary/metric-response provider above.
                 if self._precision_mode != _native.PRECISION_FP64:
                     raise NotImplementedError(
                         "DFT density fitting requires precision='fp64'"

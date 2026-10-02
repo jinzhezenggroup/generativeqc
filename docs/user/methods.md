@@ -97,6 +97,13 @@ result = calc.singlepoint(
 )
 ```
 
+Admitted direct CUDA KS paths can use component-wise `precision="auto"`:
+qualified Direct Coulomb J and density contractions may use reduced compute
+precision while exact K and final-state audits remain FP64. For global-hybrid
+forces, AUTO admission is limited to PBE0/B3LYP-style routes; generated split
+hybrids retain strict FP64. See the
+[CUDA hybrid acceptance contract](../maintainer/hybrid_cuda_acceptance.md).
+
 Generated CUDA consumers may require a discoverable CUDA toolkit during first
 use and may reuse compiler artifacts on later calls. Exact backend, basis,
 precision, exchange, nonlocal-correlation, ECP, and resource admission remains

@@ -644,9 +644,9 @@ generativeqc_status create_cuda_direct_jk_plan(
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
       info.schedule = plan->generated_exchange->shared->value_capability
                           ? "generated-shell-coulomb+exchange/generic-jk-fallback"
-                          : (plan->generated_exchange->bounded_value_capability
+                          : (direct_jk_bounded_value_enabled(*plan)
                                  ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
-                                 : "force-only-shell-derivative/generic-jk-fallback");
+                                 : "retained-shell-owner/generic-jk-fallback");
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +

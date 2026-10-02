@@ -1,5 +1,9 @@
 # Decision: select the canonical source for its discrete screening oracle
 
+The later [through-f value policy decision](../performance/2026-10-02-through-f-value-policy.md)
+supersedes this note's bounded-default assumption after matched endpoint timing.
+The original oracle and unchanged numerical thresholds below are preserved.
+
 Status: implemented
 Date: 2026-10-01
 

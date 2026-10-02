@@ -52,11 +52,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* 
                                       const double* beta, double* coulomb);
 
 /** Optional raw-K owner layered on the generated-J geometry/topology owner.
- * Value-only direct CUDA plans prefer this owner when the supported shell
- * classes and optional device budget admit it. Density screening uses the same
- * shell-pair reductions as Direct HF. Through-f plans may also reuse the
- * bounded shell lease for strict-FP64 SR/LR value K; generated streaming
- * classes remain full-range only.
+ * Direct CUDA plans prefer complete generated/native value coverage when the
+ * optional device budget admits it. Bounded through-f values require an
+ * explicit qualification opt-in on CudaDirectJkPlan. Density screening uses
+ * the same shell-pair reductions as Direct HF. The bounded lease supports
+ * strict-FP64 SR/LR value K; generated streaming classes remain full-range.
  */
 struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
