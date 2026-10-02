@@ -1,6 +1,6 @@
 # Proposal: admit composite grid concurrency under the whole force budget
 
-Status: proposed; independent device tests pass, endpoint comparison in progress
+Status: proposed; independent and full24 endpoint gates pass, larger qualification pending
 Date: 2026-10-03
 
 ## Problem
@@ -51,7 +51,31 @@ Both candidate and baseline use the same native library SHA256
 `f1253b0aa722ff119f6dc99ff61731f0da1ac473e38f53a8ef2233beb24a9c47`.
 Metadata-only full-grid admission selects 1024 points for 24/48 atoms and 128
 points for 96 atoms under the unchanged totals. This is capacity evidence only.
-The paired full24 cold/warm comparator is node1 job 5392; its result is pending.
+Node1 job 5392 completes a same-GPU full24 baseline/candidate comparison:
+
+| Complete SCF + force | capacity baseline | geometry candidate |
+| --- | ---: | ---: |
+| Cold seconds | 357.740 | 348.861 |
+| Three-repeat warm median seconds | 65.498 | 57.015 |
+| Cold / warm SCF iterations | 19 / 1 | 19 / 1 |
+
+The 1.149x warm improvement preserves equal SCF iteration counts. The candidate's
+paired GPU4PySCF endpoint is 123.538 s cold / 27.759 s warm; native is still
+slower. All five candidate/reference pairs pass, with maximum energy error
+3.377e-11 Eh and force error 2.981e-10 Eh/Bohr. The baseline's corresponding
+maxima are 3.241e-11 and 2.981e-10. AO tile submissions fall from 2304 to 576;
+the two geometry accumulators consume 4608 versus 1152 tiles. Complete-grid
+AO visits (589824) and geometry visits (1179648) are unchanged. Actual nonlocal
+active-pair and screened integral traversal counts are not exported; do not
+substitute the 347892350976 dense-pair capacity for a measured work count.
+
+Node1 job 5400 passes the geometry-rebuild, failed-neighbor isolation and stale
+snapshot test. The water12/def2-TZVP diagnostic grid24x8x16 cold/warm/moved
+endpoints are 166.226/22.818/91.397 seconds with 22/1/11 SCF iterations. Every
+sample, including fixed-final-state force, passes the independent CPU PySCF/
+Libcint reference: maximum energy error 6.20e-12 Eh and force error 9.09e-10
+Eh/Bohr. This is a separate device run, so differences from earlier small-grid
+runs are not a controlled speedup claim.
 Every independent sample must pass 1e-8 Eh and 1e-7 Eh/Bohr gates.
 Candidate source, patch, logs and results are retained under ignored
 `.artifacts/wb97m-geometry/` and the authorized remote task directory.
