@@ -28,8 +28,7 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* fock,
     const std::uint64_t* generated_fock_shell_class_mask, std::size_t active_subtile,
     unsigned ao_quartet_lane, bool coulomb_only = false, bool exchange_only = false,
-    generativeqc::integrals::CoulombRange range =
-        generativeqc::integrals::CoulombRange::Full,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
     double omega = 0.0) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
   constexpr std::size_t subtiles_per_tile = detail::direct_quartet_subtiles_per_tile(AngularOrder);

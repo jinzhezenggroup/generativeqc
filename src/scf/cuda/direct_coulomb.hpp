@@ -93,10 +93,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& plan, bool unrestri
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
  */
-cudaError_t enqueue_generated_exchange(
-    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
-    double* alpha_exchange, double* beta_exchange,
-    DirectCoulombRange range = DirectCoulombRange::Full, double omega = 0.0);
+cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestricted,
+                                       const double* alpha, const double* beta,
+                                       double* alpha_exchange, double* beta_exchange,
+                                       DirectCoulombRange range = DirectCoulombRange::Full,
+                                       double omega = 0.0);
 
 /** Execute separate full-range J' and K' fixed-density energy derivatives
  * through the retained shell topology. Output is source-major [J,K], each

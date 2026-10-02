@@ -460,9 +460,10 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
 
 }  // namespace
 
-cudaError_t enqueue_generated_exchange(
-    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double* alpha_exchange, double* beta_exchange, DirectCoulombRange range, double omega) {
+cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
+                                       const double* alpha, const double* beta,
+                                       double* alpha_exchange, double* beta_exchange,
+                                       DirectCoulombRange range, double omega) {
   const bool full_range = range == DirectCoulombRange::Full;
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
       (!full_range && !p.bounded_value_capability))
@@ -490,9 +491,8 @@ cudaError_t enqueue_generated_exchange(
   if (error != cudaSuccess) return error;
 
   if (full_range) {
-    error =
-        cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
-                        shared.stream);
+    error = cudaMemsetAsync(
+        p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t), shared.stream);
     if (error != cudaSuccess) return error;
 
     std::size_t count = 0;
@@ -523,8 +523,8 @@ cudaError_t enqueue_generated_exchange(
           unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, shared.value_class_mask,
-          p.bounded_value_overflow, shared.schwarz, p.direct_spin, shared.active,
-          p.direct_exchange, p.force_cursor, false, true);
+          p.bounded_value_overflow, shared.schwarz, p.direct_spin, shared.active, p.direct_exchange,
+          p.force_cursor, false, true);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
     }
@@ -532,11 +532,10 @@ cudaError_t enqueue_generated_exchange(
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
     launch_bounded_shell_range_exchange_source(
-        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
-        shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
-        p.shell_pair_block_bounds, p.system_density_bounds, p.bounded_value_overflow,
-        shared.schwarz, p.direct_spin, shared.active, p.direct_exchange, p.force_cursor, range,
-        omega);
+        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+        p.system_density_bounds, p.bounded_value_overflow, shared.schwarz, p.direct_spin,
+        shared.active, p.direct_exchange, p.force_cursor, range, omega);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
   }

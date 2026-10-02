@@ -26,8 +26,7 @@ __device__ inline __noinline__ void contract_bounded_direct_fock_subtile(
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* fock, std::size_t subtile,
     unsigned lane, bool coulomb_only = false, bool exchange_only = false,
-    generativeqc::integrals::CoulombRange range =
-        generativeqc::integrals::CoulombRange::Full,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
     double omega = 0.0) {
 #define GENERATIVEQC_BOUNDED_FOCK_CASE(order)                                                 \
   case order:                                                                                 \
