@@ -1202,10 +1202,12 @@ void canonical_work_census() {
         int numerical_error{};
         check(cudaMemcpy(&numerical_error, error.pointer, sizeof(int), cudaMemcpyDeviceToHost));
         require(numerical_error == 0, "census source produced nonfinite values");
-        const bool bounded_route = bounded_opt_in && operation == FockOperator::FullRange;
+        // This fixture admits both full and positive-omega range value sources
+        // to the bounded provider. Neither opt-in route visits canonical AOs.
+        const bool bounded_route = bounded_opt_in;
         if (bounded_route) {
           require(work[0] == 0U && work[1] == 0U,
-                  "full-range through-f value unexpectedly entered the canonical AO source");
+                  "bounded through-f value unexpectedly entered the canonical AO source");
         } else {
           require(work[0] == quartets && work[1] == quartets,
                   "canonical values repeated or omitted a candidate/radial evaluation");
