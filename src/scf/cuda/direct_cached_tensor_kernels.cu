@@ -8,6 +8,7 @@
 #include <type_traits>
 
 #include "generated_direct_contraction.cuh"
+#include "generated_direct_eri_materialization.cuh"
 #include "scf/cuda/direct_cached_tensor_kernels.hpp"
 #include "scf/cuda/eri_tensor_index.cuh"
 #include "scf/cuda/matrix_index.cuh"
@@ -16,19 +17,8 @@
 namespace generativeqc::scf::cuda_execution {
 
 __global__ void build_eri_kernel(DeviceBatch batch, double* eri) {
-  const std::size_t n = static_cast<std::size_t>(batch.nbf);
-  const std::size_t eri_size = n * n * n * n;
   const std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-  if (element >= static_cast<std::size_t>(batch.batch_size) * eri_size) return;
-  const std::int32_t system = static_cast<std::int32_t>(element / eri_size);
-  std::size_t local = element % eri_size;
-  const std::int32_t l = static_cast<std::int32_t>(local % n);
-  local /= n;
-  const std::int32_t k = static_cast<std::int32_t>(local % n);
-  local /= n;
-  const std::int32_t j = static_cast<std::int32_t>(local % n);
-  const std::int32_t i = static_cast<std::int32_t>(local / n);
-  eri[element] = contracted_eri<double>(batch, system, i, j, k, l, -1);
+  materialize_eri_orbit(batch, element, eri);
 }
 
 __global__ void build_fock_kernel(std::int32_t batch_size, std::int32_t nbf, const double* hcore,

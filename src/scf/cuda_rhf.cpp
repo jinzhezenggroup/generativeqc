@@ -3883,6 +3883,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       runtime::df_progress::Scope::number("resident_eri_bytes", resources.reference_eri_bytes_);
       runtime::df_progress::Scope::number("resident_eri_values_built",
                                           persistent_eri && geometry_changed ? eri_elements : 0);
+      // Exact AO-orbit census, independently checked with a counting
+      // contractor. Dense output still has n^4 values; contractions are folded.
+      runtime::df_progress::Scope::number(
+          "resident_eri_contractions",
+          persistent_eri && geometry_changed ? pair_count * (pair_count + 1) / 2 : 0);
       runtime::df_progress::Scope::number("reference_peak_bytes", resources.reference_peak_bytes_);
     }
     return outputs;
