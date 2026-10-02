@@ -185,7 +185,7 @@ struct RawHamiltonian {
 
 RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& source,
                                const hf::PhysicalReference& ref, std::size_t max_bytes, bool cuda,
-                               int device_id) {
+                               int device_id, std::size_t provider_budget) {
   const auto n = ref.nbf;
   if (source.nbf() != n || !source.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("RCCSD(T) raw Hamiltonian source/reference mismatch");
@@ -203,7 +203,7 @@ RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& sourc
     tensor::cpu_congruence('T', n, ref.coefficients.data(), ref.hcore.data(), out.h.data(),
                            workspace.data());
   }
-  posthf::NativeBlockProvider provider(source, ref, max_bytes, 2);
+  posthf::NativeBlockProvider provider(source, ref, provider_budget, 2);
   const auto all = range(n);
   out.g = provider.get({all, all, all, all}, cuda, device_id);
   if (out.g.size() != n4) throw std::runtime_error("RCCSD(T) full MO ERI shape mismatch");
@@ -393,7 +393,8 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                                     const hf::PhysicalReference& reference,
                                                     const Problem& p, const SolverResult& cc,
                                                     std::size_t max_bytes, bool include_triples,
-                                                    std::size_t source_bytes) {
+                                                    std::size_t source_bytes,
+                                                    bool cuda_transform = false) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
   if (!o || !v || n > 12 || reference.nbf != n || reference.nocc != o ||
       molecule::ao_count(system) != n || !max_bytes)
@@ -467,10 +468,16 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   // The source is borrowed and already charged in retained_input_bytes.
   // Ask the generated provider plan only for its additional staging/output buffers.
   const auto provider =
-      posthf::numeric_block_plan(n, 0, 0, {n, n, n, n}, {tile, tile, tile, tile}, false);
+      posthf::numeric_block_plan(n, 0, 0, {n, n, n, n}, {tile, tile, tile, tile}, cuda_transform);
+  // The nested provider owns only this phase's buffers. Add its borrowed
+  // reference/source for its local admission without charging them twice in
+  // the complete endpoint peak below.
+  plan.raw_provider_budget_bytes = sum({provider.host_bytes, provider.device_bytes,
+                                        bytes(checked_add(checked_mul(5, n2), n)), source_bytes});
   const auto rank2_transform_phase = sum({before_raw, bytes(checked_mul(2, n2))});
-  const auto provider_phase = sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes,
-                                   checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+  const auto provider_phase =
+      sum({before_raw, bytes(checked_mul(3, n2)), provider.host_bytes, provider.device_bytes,
+           checked_mul(checked_mul(13, n), sizeof(std::size_t))});
   plan.raw_phase_bytes = std::max(rank2_transform_phase, provider_phase);
   const auto raw_retained = bytes(sum({n4, checked_mul(3, n2)}));
   const auto small_response_retained = bytes(sum({checked_mul(4, n2), ov}));
@@ -581,10 +588,13 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   const auto o = problem.nocc, v = problem.nvir, n = reference.nbf;
   if (reference.orbital_energies.size() != n || !finite(reference.orbital_energies))
     throw std::invalid_argument("RCCSD(T) force requires finite canonical orbital energies");
-  const auto resources =
-      include_triples
-          ? plan_rccsdt_force_cpu(system, source, reference, problem, cc_result, max_bytes)
-          : plan_rccsd_force_cpu(system, source, reference, problem, cc_result, max_bytes);
+  if (source.nbf() != reference.nbf ||
+      !source.supports(integrals::ElectronInteractionOperator::eri) ||
+      !force_source_matches_system(system, source.orbital()))
+    throw std::invalid_argument("RCCSD(T) force interaction source/reference mismatch");
+  const auto resources = plan_relaxed_rccsd_force_cpu(
+      system, reference, problem, cc_result, max_bytes, include_triples,
+      source.retained_numeric_bytes(), cuda_derivative);
 
   std::optional<TriplesResponseResult> triples;
   if (include_triples) {
@@ -631,7 +641,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 
   if (triples) add_triples_parameter_sources(parameters, *triples);
   auto raw = raw_hamiltonian(source, reference, max_bytes, cuda_derivative,
-                             cuda_derivative ? device_id : 0);
+                             cuda_derivative ? device_id : 0, resources.raw_provider_budget_bytes);
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
   if (cuda_derivative)

@@ -25,6 +25,11 @@ from generativeqc_compiler.common.native_runtime import (
 from generativeqc_compiler.common.paths import asset_path, source_hashes
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.common.source_cache import cache_source
+from generativeqc_compiler.method.stationary_resources import (
+    GEOMETRY_MAX_LANES,
+    GEOMETRY_MAX_SCRATCH_BYTES,
+    GEOMETRY_THREADS,
+)
 from generativeqc_compiler.tensor.cuda_inline import (
     InlineCudaOutput,
     exact_cuda_literal,
@@ -94,6 +99,9 @@ def _runtime_layout_cuda(plan: StationaryGradientPlan) -> str:
         (
             "namespace generativeqc_stationary_cuda {",
             f"constexpr unsigned stationary_source_count = {len(sources)};",
+            f"constexpr size_t stationary_geometry_max_lanes = {GEOMETRY_MAX_LANES};",
+            f"constexpr size_t stationary_geometry_max_scratch_bytes = {GEOMETRY_MAX_SCRATCH_BYTES};",
+            f"constexpr size_t stationary_geometry_max_threads = {GEOMETRY_THREADS};",
             f"constexpr unsigned stationary_nuclear_source = {sources.index('nuclear')};",
             f"constexpr unsigned stationary_xc_source = {sources.index('xc_ao')};",
             "__host__ __device__ inline bool stationary_integral_source(int64_t source) {",
@@ -385,8 +393,9 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external,
                                 size_t external_stride, size_t external_offset,
-                                double* partial, double* scratch, int* error) {
-  const size_t lane = threadIdx.x;
+                                size_t geometry_lanes, double* partial, double* scratch, int* error) {
+  const size_t lane = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (lane >= geometry_lanes) return;
   // Same-stream consumers may receive a resident grid tile before a host
   // error publication gate. Propagate the producer's sticky device status into
   // the stationary owner before reading AO/features so one later drain can
@@ -401,7 +410,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
   double* ws = scratch + lane * 9 * na;
   auto* distances = reinterpret_cast<std::array<double, 4>*>(ws + 5 * na);
   auto* zeros = reinterpret_cast<size_t*>(ws + 4 * na);
-  for (size_t p = lane; p < np; p += workers) {
+  for (size_t p = lane; p < np; p += geometry_lanes) {
     const int64_t owner =
         owners ? owners[p]
                : (points_per_atom ? int64_t((owner_offset + p) / points_per_atom) : int64_t{-1});
@@ -492,12 +501,12 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
   }
   for (size_t k = 0; k < 9 * na; ++k) finite(grad[k], error, 0);
 }
-__global__ void geometry_reduce(const double* partial, size_t na, double* output, int* error) {
+__global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes, double* output, int* error) {
   if (*error) return;
   const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i >= 9 * na) return;
   double sum = 0;
-  for (size_t lane = 0; lane < workers; ++lane) sum += partial[lane * 9 * na + i];
+  for (size_t lane = 0; lane < geometry_lanes; ++lane) sum += partial[lane * 9 * na + i];
   output[i] = finite(output[i] + sum, error, 0);
 }
 
@@ -878,6 +887,9 @@ def _stationary_aot_contract_identity(
             ),
             **component,
             "method_module": file_hash(Path(__file__)),
+            "resource_module": file_hash(
+                Path(__file__).with_name("stationary_resources.py")
+            ),
             "compiler_sources": source_hashes(
                 "common", "integral", "xc", "dft", assets=STATIONARY_AOT_ASSETS
             ),

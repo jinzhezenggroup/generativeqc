@@ -39,7 +39,7 @@ GeneratedCoulombPlan::~GeneratedCoulombPlan() {
 
 std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool allow_force_only_shell_classes) try {
+    std::size_t budget, bool allow_bounded_shell_fallback) try {
   cudaDeviceProp properties{};
   check(cudaGetDeviceProperties(&properties, device));
   generated::select_profile_for_device(device, properties.major, properties.minor);
@@ -49,8 +49,9 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   const auto generated_mask =
       generated::enabled_fock_shell_class_mask() & kGeneratedStreamingFockShellClassMask;
   const auto value_mask = generated_mask | kNativeStreamingFockShellClassMask;
-  const bool value_capability = (present & ~value_mask) == 0;
-  if (!value_capability && !allow_force_only_shell_classes) return {};
+  const auto value_class_mask = present & value_mask;
+  const bool value_capability = value_class_mask == present;
+  if (!value_capability && !allow_bounded_shell_fallback) return {};
   std::vector<std::uint32_t> order, offsets;
   if (!make_bounded_stream_shell_pair_order(host, order, offsets)) return {};
   const std::size_t batch = borrowed.batch_size;
@@ -124,6 +125,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   plan->stream = stream;
   plan->screening = screening;
   plan->class_mask = present;
+  plan->value_class_mask = value_class_mask;
   plan->value_capability = value_capability;
   // Reuse the target-legal HF worker and recurrence-stack policy; a prepared
   // KS owner must not rely on an earlier HF call having raised the CUDA limit.
@@ -255,11 +257,12 @@ GeneratedExchangePlan::~GeneratedExchangePlan() {
 
 std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool force_capability, bool allow_force_only_shell_classes) try {
-  if (allow_force_only_shell_classes && !force_capability) return {};
+    std::size_t budget, bool force_capability, bool allow_bounded_shell_fallback) try {
   auto shared = prepare_generated_coulomb(host, borrowed, stream, device, screening, budget,
-                                          allow_force_only_shell_classes);
+                                          allow_bounded_shell_fallback);
   if (!shared) return {};
+  const bool bounded_value_capability = allow_bounded_shell_fallback && !shared->value_capability;
+  const bool bounded_resources = force_capability || bounded_value_capability;
 
   const std::size_t batch = static_cast<std::size_t>(borrowed.batch_size);
   const auto matrix = product(product(batch, host.nbf), host.nbf);
@@ -270,7 +273,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   constexpr std::size_t quartet_classes = detail::kDirectQuartetShellClassCount;
   const auto atoms = host.atomic_numbers.size();
   const auto pair_blocks = static_cast<std::size_t>(host.system_shell_pair_block_offsets.back());
-  if (force_capability && pair_blocks > std::numeric_limits<unsigned>::max()) return {};
+  if (bounded_resources && pair_blocks > std::numeric_limits<unsigned>::max()) return {};
 
   std::size_t additional = 0;
   const auto charge = [&](std::size_t count, std::size_t width) {
@@ -287,14 +290,15 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   charge(product(batch, pair_classes), sizeof(double));
   charge(quartet_classes, sizeof(std::uint32_t));
   charge(1, sizeof(GeneratedShellPairStream));
-  if (force_capability) {
+  if (bounded_resources) {
     charge(pairs, sizeof(std::uint32_t));
     charge(pair_blocks, sizeof(double));
-    charge(product(atoms, 9), sizeof(double));
     charge(1, sizeof(unsigned long long));
     charge(host.system_shell_pair_block_offsets.size(), sizeof(std::int64_t));
     charge(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t));
   }
+  if (force_capability) charge(product(atoms, 9), sizeof(double));
+  if (bounded_value_capability) charge(quartet_classes, sizeof(std::uint32_t));
   if (shared->device_bytes > budget || additional > budget - shared->device_bytes) return {};
 
   // The owner drains H2D on failed preparation before this staging is freed.
@@ -302,6 +306,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   auto plan = std::make_unique<GeneratedExchangePlan>();
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
+  plan->bounded_value_capability = bounded_value_capability;
   plan->device_bytes = plan->shared->device_bytes;
   auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
     void* pointer{};
@@ -331,13 +336,12 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   plan->system_density_bounds = doubles(batch);
   plan->system_pair_density_bounds = doubles(product(batch, pair_classes));
   plan->heads = static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
-  if (force_capability) {
+  if (bounded_resources) {
     bounded_pair_order.resize(pairs);
     std::iota(bounded_pair_order.begin(), bounded_pair_order.end(), 0U);
     plan->bounded_pair_order = static_cast<const std::uint32_t*>(
         allocate(pairs, sizeof(std::uint32_t), bounded_pair_order.data()));
     plan->shell_pair_block_bounds = doubles(pair_blocks);
-    plan->force = doubles(product(atoms, 9));
     plan->force_cursor = static_cast<unsigned long long*>(allocate(1, sizeof(unsigned long long)));
     plan->shared->batch.total_shell_pair_blocks = host.system_shell_pair_block_offsets.back();
     plan->shared->batch.total_shell_pair_block_quartets =
@@ -348,6 +352,13 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     plan->shared->batch.system_shell_pair_block_quartet_offsets = static_cast<const std::int64_t*>(
         allocate(host.system_shell_pair_block_quartet_offsets.size(), sizeof(std::int64_t),
                  host.system_shell_pair_block_quartet_offsets.data()));
+  }
+  if (force_capability) plan->force = doubles(product(atoms, 9));
+  if (bounded_value_capability) {
+    plan->bounded_value_overflow =
+        static_cast<std::uint32_t*>(allocate(quartet_classes, sizeof(std::uint32_t)));
+    check(cudaMemsetAsync(plan->bounded_value_overflow, 0, quartet_classes * sizeof(std::uint32_t),
+                          stream));
   }
 
   const auto& b = plan->shared->batch;
@@ -374,7 +385,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
       plan->shared->active,
       detail::GeneratedFockConsumer::Exchange};
   plan->topology = static_cast<GeneratedShellPairStream*>(allocate(1, sizeof(topology), &topology));
-  if (force_capability) {
+  if (bounded_resources) {
     launch_reduce_bounded_shell_pair_block_bounds_kernel(
         static_cast<unsigned>(pair_blocks), 128U, 128U * sizeof(double), stream, b,
         plan->bounded_pair_order, plan->shared->shell_bounds, plan->shell_pair_block_bounds);
@@ -452,7 +463,8 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange) {
-  if (p.shared == nullptr || !p.shared->value_capability) return cudaErrorNotSupported;
+  if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability))
+    return cudaErrorNotSupported;
   if (alpha_exchange == nullptr ||
       (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr))
     return cudaErrorInvalidValue;
@@ -495,6 +507,17 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
         unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
         shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
         shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr, nullptr);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+  }
+  if (p.bounded_value_capability) {
+    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+    if (error != cudaSuccess) return error;
+    launch_bounded_shell_fock_source(
+        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+        p.system_density_bounds, shared.value_class_mask, p.bounded_value_overflow, shared.schwarz,
+        p.direct_spin, shared.active, p.direct_exchange, p.force_cursor, false, true);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
   }
@@ -636,9 +659,10 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
   return cudaSuccess;
 }
 
-cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
-                                      const double* beta, double* coulomb) {
-  if (!p.value_capability) return cudaErrorNotSupported;
+namespace {
+
+cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
+                                             const double* beta) {
   const auto b = p.batch;
   const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
   const auto cartesian = std::size_t(b.batch_size) * b.direct_nbf * b.direct_nbf;
@@ -648,9 +672,6 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* den
                                             p.total_density);
     density = p.total_density;
   }
-  // J depends only on the symmetric density, so the public row-major input
-  // may be viewed transposed by the column-major transform. The antisymmetric
-  // component cancels exactly under ERI pair symmetry, including UHF sums.
   launch_transform_density_to_direct_right_kernel(blocks(rectangle), 128, 0, p.stream, b.batch_size,
                                                   1, b.nbf, b.direct_nbf, b.ao_to_direct_transform,
                                                   density, p.active, p.temporary);
@@ -662,14 +683,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* den
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           p.stream);
   if (error != cudaSuccess) return error;
-  // Keep the geometry-only Schwarz contract of the public provider. The
-  // Coulomb consumer disables HF's extra density-dependent screening gates.
-  // The Coulomb consumer disables HF's extra density-dependent screening gates.
   std::size_t count = 0;
   const auto* kernels = generated::selected_fock_shell_kernels(count);
   for (std::size_t i = 0; i < count; ++i) {
     const auto cls = kernels[i].shell_class;
-    if (!(p.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
+    if (!(p.value_class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
       continue;
     error = generated::launch_shell_class_streaming_fock(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
@@ -677,12 +695,20 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* den
         p.schwarz, p.density, p.coulomb, p.heads + cls, nullptr, nullptr);
     if (error != cudaSuccess) return error;
   }
-  if (p.class_mask & kNativeStreamingFockShellClassMask) {
+  if (p.value_class_mask & kNativeStreamingFockShellClassMask) {
     launch_bounded_direct_dddd_streaming_kernel(
         false, DirectScreeningPurpose::Fock, false, p.worker_blocks, 32, 0, p.stream, b, p.topology,
         p.screening, p.schwarz, p.density, p.active, p.coulomb, p.heads + kDdddShellClass, nullptr,
         nullptr);
   }
+  return cudaGetLastError();
+}
+
+cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb) {
+  if (coulomb == nullptr) return cudaErrorInvalidValue;
+  const auto b = p.batch;
+  const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
+  const auto rectangle = std::size_t(b.batch_size) * b.nbf * b.direct_nbf;
   launch_transform_direct_fock_left_kernel(blocks(rectangle), 128, 0, p.stream, b.batch_size, 1,
                                            b.nbf, b.direct_nbf, b.ao_to_direct_transform, p.coulomb,
                                            p.active, p.temporary);
@@ -691,4 +717,38 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* den
                                             p.temporary, p.zero, p.active, coulomb);
   return cudaGetLastError();
 }
+
+}  // namespace
+
+cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
+                                      const double* beta, double* coulomb) {
+  if (!p.value_capability) return cudaErrorNotSupported;
+  auto error = enqueue_generated_coulomb_direct(p, density, beta);
+  return error == cudaSuccess ? project_generated_coulomb(p, coulomb) : error;
+}
+
+cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricted,
+                                      const double* alpha, const double* beta, double* coulomb) {
+  if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability))
+    return cudaErrorNotSupported;
+  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
+  if (error != cudaSuccess) return error;
+  auto& shared = *p.shared;
+  error = enqueue_generated_coulomb_direct(shared, alpha, beta);
+  if (error != cudaSuccess) return error;
+  if (p.bounded_value_capability) {
+    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+    if (error != cudaSuccess) return error;
+    launch_bounded_shell_fock_source(
+        false, shared.worker_blocks, shared.stream, shared.batch, shared.screening,
+        shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+        p.shell_pair_block_bounds, p.system_density_bounds, shared.value_class_mask,
+        p.bounded_value_overflow, shared.schwarz, shared.density, shared.active, shared.coulomb,
+        p.force_cursor, true, false);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+  }
+  return project_generated_coulomb(shared, coulomb);
+}
+
 }  // namespace generativeqc::scf::cuda_execution
