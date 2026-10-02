@@ -209,6 +209,7 @@ def test_public_native_rccsdt_homogeneous_batch_repeats_and_moves_geometry() -> 
     with calc.prepare_batch([atoms, moved]) as prepared:
         first = prepared.execute(strict=True)
         assert all(item.converged for item in first.items)
+        assert all(not item.warm_start_used for item in first.items)
         assert first.items[0].energy == pytest.approx(
             reference["total_energy"] + triples, abs=3e-9
         )
@@ -219,13 +220,48 @@ def test_public_native_rccsdt_homogeneous_batch_repeats_and_moves_geometry() -> 
         )
         forced = prepared.execute(properties=("energy", "forces"), strict=True)
         assert all(item.forces is not None for item in forced.items)
+        assert all(item.warm_start_used and not item.warm_start_fallback for item in forced.items)
         repeated = prepared.execute(strict=True)
+        assert all(item.warm_start_used and not item.warm_start_fallback for item in repeated.items)
         np.testing.assert_allclose(
             [item.energy for item in repeated.items],
             [item.energy for item in first.items],
             atol=2e-10,
             rtol=0,
         )
+        prepared.clear_warm_starts()
+        cleared = prepared.execute(strict=True)
+        assert all(not item.warm_start_used for item in cleared.items)
+        np.testing.assert_allclose(
+            [item.energy for item in cleared.items],
+            [item.energy for item in first.items],
+            atol=2e-10,
+            rtol=0,
+        )
+
+
+def test_public_native_rccsdt_checkpoint_restores_hf_warm_state(tmp_path: Path) -> None:
+    atoms, _, _ = _reference_case("h2")
+    moved = [(z, [xyz[0], xyz[1], xyz[2] + 0.02]) for z, xyz in atoms]
+    calc = _calculator()
+    checkpoint = tmp_path / "rccsdt-warm.vqcp"
+
+    with calc.prepare_batch([atoms, moved]) as source:
+        baseline = source.execute(strict=True)
+        source.save_checkpoint(checkpoint)
+
+    with calc.prepare_batch([atoms, moved]) as target:
+        report = target.load_checkpoint(checkpoint)
+        assert all(item["restored_fields"] == ["density"] for item in report["items"])
+        replay = target.execute(strict=True)
+
+    np.testing.assert_allclose(
+        [item.energy for item in replay.items],
+        [item.energy for item in baseline.items],
+        atol=2e-10,
+        rtol=0,
+    )
+    assert all(item.warm_start_used and not item.warm_start_fallback for item in replay.items)
 
 
 def test_public_native_rccsdt_cuda_batch_rebuild_and_failure_isolation(
