@@ -7,6 +7,7 @@ from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
+import pytest
 from generativeqc_compiler.method import DensityFittingRHFResponsePlan
 from generativeqc_compiler.method.df_hf_response_contract import CONTRACT_IDENTITY
 from generativeqc_compiler.method.df_hf_response_cuda import (
