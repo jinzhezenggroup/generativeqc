@@ -175,6 +175,18 @@ analytic-force domain. The
 [independent schedule decision](../../.agents/notes/implemented/performance/2026-10-02-cc-independent-reassociation.md)
 records numerical and complete-endpoint qualification.
 
+The conventional CCSD MO provider considers source tiles across the complete
+public AO basis. Cross-shell tiles use the same ordered AO-source and cyclic
+FP64 transform contracts; generated checked resource plans charge their larger
+source/stage buffers and all retained output batches. The planner selects among
+admitted tiles by complete source-read count, preserving smaller-tile and
+multiple-batch fallbacks under tighter budgets. Other MO consumers retain their
+existing shell-bounded default until their own admission is updated. A reported
+roomy endpoint peak is therefore the capacity of the selected schedule, not a
+minimum feasible budget: a smaller budget can succeed by doing more source work.
+See the [MO source tile decision](../../.agents/notes/implemented/performance/2026-10-03-cc-molecular-source-tiles.md)
+for the schedule and numerical qualification.
+
 Prepared RCCSD batches intentionally admit one homogeneous `(nocc,nvir)` shape.
 Each input owns an independent prepared calculation, amplitudes, DIIS and status;
 an invalid or failed item cannot corrupt its neighbours. Changed geometry is

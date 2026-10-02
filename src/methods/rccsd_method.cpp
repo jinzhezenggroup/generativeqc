@@ -255,14 +255,16 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
   };
 
   posthf::NativeBlockProvider widest_provider(source, ref, options.max_bytes,
-                                              std::numeric_limits<unsigned>::max());
+                                              std::numeric_limits<unsigned>::max(),
+                                              posthf::AOTileDomain::Basis);
   const auto maximum_axis_tile = widest_provider.tile_shape()[0];
   std::vector<posthf::generated::SourceTileCandidate> tile_candidates;
   tile_candidates.reserve(maximum_axis_tile);
   for (std::size_t axis_tile = 1; axis_tile <= maximum_axis_tile; ++axis_tile) {
     try {
       posthf::NativeBlockProvider candidate(source, ref, options.max_bytes,
-                                            static_cast<unsigned>(axis_tile));
+                                            static_cast<unsigned>(axis_tile),
+                                            posthf::AOTileDomain::Basis);
       const auto candidate_reuse = schedule_for(candidate);
       tile_candidates.push_back(
           {candidate.tile_shape()[0], candidate_reuse.batches.size(), candidate_reuse.peak_bytes});
@@ -274,7 +276,8 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
     throw std::length_error("RCCSD MO provider exceeds numeric memory budget");
   const auto source_tile_plan = posthf::generated::select_source_tile(n, tile_candidates);
   posthf::NativeBlockProvider provider(source, ref, options.max_bytes,
-                                       static_cast<unsigned>(source_tile_plan.axis_tile));
+                                       static_cast<unsigned>(source_tile_plan.axis_tile),
+                                       posthf::AOTileDomain::Basis);
   const auto reuse = schedule_for(provider);
 
   std::size_t retained = 0;

@@ -383,6 +383,73 @@ void conventional_energy_batch_fallback_matches() {
   require(rejected, "one-byte-below the minimum source-tile budget was accepted");
 }
 
+void provider_cross_shell_tiles() {
+  // A five-AO s/p basis distinguishes shell width (3) from the molecular AO
+  // domain (5), and tile width 4 exercises a tail crossing shell boundaries.
+  auto system = h2();
+  system.shells.push_back({0, 1, {{0.7, 1.0}}});
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "cross-shell provider fixture normalization");
+  generativeqc::posthf::RawSource source(system);
+  generativeqc::hf::PhysicalReference ref;
+  const auto n = source.nbf();
+  ref.nbf = n;
+  ref.nocc = 2;
+  ref.coefficients.resize(n * n);
+  for (std::size_t i = 0; i < n * n; ++i)
+    ref.coefficients[i] = std::sin(static_cast<double>(i + 1)) / 3.0;
+  const generativeqc::posthf::MOSlots slots{{{0, 2}, {4, 1, 3}, {2, 0}, {3, 1}}};
+  const std::array<std::size_t, 4> shape{2, 3, 2, 2};
+  std::vector<double> ao(n * n * n * n), expected(24);
+  source.read(generativeqc::integrals::ElectronInteractionOperator::eri, {0, 0, 0, 0}, {n, n, n, n},
+              ao.data(), ao.size());
+  // Independent full-coordinate contraction, without cyclic staged GEMMs.
+  for (std::size_t a = 0; a < shape[0]; ++a)
+    for (std::size_t b = 0; b < shape[1]; ++b)
+      for (std::size_t c = 0; c < shape[2]; ++c)
+        for (std::size_t d = 0; d < shape[3]; ++d)
+          for (std::size_t i = 0; i < n; ++i)
+            for (std::size_t j = 0; j < n; ++j)
+              for (std::size_t k = 0; k < n; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                  expected[((a * shape[1] + b) * shape[2] + c) * shape[3] + d] +=
+                      ao[((i * n + j) * n + k) * n + l] * ref.coefficients[i * n + slots[0][a]] *
+                      ref.coefficients[j * n + slots[1][b]] *
+                      ref.coefficients[k * n + slots[2][c]] * ref.coefficients[l * n + slots[3][d]];
+  using generativeqc::posthf::AOTileDomain;
+  using generativeqc::posthf::NativeBlockProvider;
+  NativeBlockProvider legacy(source, ref, 256ULL << 20, 5);
+  require(legacy.tile_shape()[0] == 3, "existing shell-bounded admission changed");
+  for (unsigned tile : {1, 2, 3, 4, 5}) {
+    NativeBlockProvider provider(source, ref, 256ULL << 20, tile, AOTileDomain::Basis);
+    require(provider.tile_shape()[0] == tile, "molecular tile was clipped to a shell");
+    const auto admitted = provider.batch_bytes(shape, 1);
+    NativeBlockProvider exact(source, ref, admitted, tile, AOTileDomain::Basis);
+    generativeqc::posthf::ProviderWork work{};
+    const auto values = exact.get(slots, false, 0, nullptr, &work);
+    for (std::size_t i = 0; i < expected.size(); ++i)
+      require(std::abs(values[i] - expected[i]) < 1e-11,
+              "cross-shell transform differs from independent dense contraction");
+    const auto axis_reads = (n + tile - 1) / tile;
+    require(work.source_scans == 1 &&
+                work.source_reads == axis_reads * axis_reads * axis_reads * axis_reads &&
+                work.source_values == ao.size(),
+            "cross-shell transform source census disagrees with its tile domain");
+    bool rejected = false;
+    generativeqc::posthf::ProviderWork rejected_work{};
+    try {
+      NativeBlockProvider short_plan(source, ref, admitted - 1, tile, AOTileDomain::Basis);
+      (void)short_plan.get(slots, false, 0, nullptr, &rejected_work);
+    } catch (const std::length_error&) {
+      rejected = true;
+    }
+    require(rejected && rejected_work.source_reads == 0,
+            "short cross-shell budget performed numerical source work");
+  }
+}
+
 void conventional_energy_reuses_ao_scans() {
   const auto system = h2();
   generativeqc::scf::ScfOptions options;
@@ -597,6 +664,7 @@ int main() {
   try {
     generated_equations();
     provider_and_reference();
+    provider_cross_shell_tiles();
     conventional_energy_reuses_ao_scans();
     conventional_energy_batch_fallback_matches();
     shell_local_weighted_eri_derivative();
