@@ -48,7 +48,8 @@ def test_generated_response_arena_with_default_compiler_depth(
     source.write_text(
         '#include "generated.hpp"\n'
         "int main(){using namespace generativeqc::cc::generated;\n"
-        f"if(lambda_transpose_arena_elements(2,3)!={expected})return 1;\n"
+        # Dead tensors now share storage; the old sum is a strict upper bound.
+        f"if(!lambda_transpose_arena_elements(2,3)||lambda_transpose_arena_elements(2,3)>={expected})return 1;\n"
         "try{(void)lambda_transpose_arena_elements(std::numeric_limits<std::size_t>::max(),1);return 2;}"
         "catch(const std::length_error&){}return 0;}\n"
     )
