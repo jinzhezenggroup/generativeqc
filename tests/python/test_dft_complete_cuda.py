@@ -185,7 +185,9 @@ def test_complete_cuda_independent_analytic(
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-10, rtol=0)
         assert result.work["launches"] > 0
         assert result.work["tensor_executions"] == 0
-        assert result.work["full_range_derivative_route"] == "prepared-direct-shell"
+        assert (
+            result.work["full_range_derivative_route"] == "prepared-native-stationary"
+        )
         assert result.work["full_range_ao_task_domain_elided"] is True
         assert all(
             item["source"] not in ("coulomb", "exact_exchange")
