@@ -658,7 +658,47 @@ static cudaError_t contract_occupied_response(
     inverse_kernel<<<blocks(aa), threads, 0, stream>>>(a, metric.inverse_square_root, inverse);
   auto error = cudaMemsetAsync(bar_inverse, 0, aa * sizeof(double), stream);
   if (error != cudaSuccess) return error;
-  if (fitted_occupied || buffers.read_occupied_panels) {
+  if (reuse_final_fitted_projection) {
+    // The final-K lease already contains B*C for the exact canonical RHF
+    // determinant. Finish S_P=C^T B_P C once, root it as U=X*S, and derive
+    // X(D:B)_P=w*tr(U_P). The same U remains live for exchange response. This
+    // removes the fitted-B charge traversal and its separate charge-root work.
+    const auto& factor = buffers.occupied_factors[0];
+    const auto r = factor.rank, rr = r * r;
+    runtime::cuda_trace::TraceRegion reuse("final_fitted_projection_potential_reuse", stream);
+    checked(generated::df_occupied_finish_projection(blas, ni, static_cast<int>(r), ai,
+                                                     factor.coefficients, final_fitted_projection,
+                                                     transformed_projected));
+    gather_final_fitted_projection<<<blocks(a * rr), threads, 0, stream>>>(
+        a, r, transformed_projected, projected);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    checked(generated::df_occupied_apply_metric_root(blas, ai, static_cast<int>(rr),
+                                                     metric.inverse_square_root, projected,
+                                                     transformed_projected));
+    generated::df_rhf_potential_from_rooted_projection<<<blocks(a), threads, 0, stream>>>(
+        a, r, factor.density_scale, transformed_projected, potentials);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    runtime::cuda_trace::trace_counter("response_final_fitted_projection_reused", 1);
+    runtime::cuda_trace::trace_counter("response_final_fitted_projection_bytes",
+                                       n * a * r * sizeof(double));
+    runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 1);
+    runtime::cuda_trace::trace_counter("response_occupied_projection_products", a);
+    runtime::cuda_trace::trace_counter("response_occupied_projection_flops", 2 * a * n * rr);
+    runtime::cuda_trace::trace_counter("response_final_fitted_potential_reused", 1);
+    runtime::cuda_trace::trace_counter("response_final_fitted_potential_trace_elements", a * r);
+    runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
+    runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
+    runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms_avoided", 2);
+    runtime::cuda_trace::trace_counter("response_occupied_charge_scale_elements_avoided", a);
+    runtime::cuda_trace::trace_counter("response_retained_fitted_charge_source_elements_avoided",
+                                       fitted_occupied->pair_count * a);
+    runtime::cuda_trace::trace_counter("response_retained_fitted_charge_unpack_elements_avoided",
+                                       a * matrix);
+    runtime::cuda_trace::trace_counter("response_retained_fitted_occupied_bytes",
+                                       fitted_occupied->pair_count * a * sizeof(double));
+  } else if (fitted_occupied || buffers.read_occupied_panels) {
     // All raw/temporary matrices borrow the exchange interval before it is
     // used by the small metric transform. S[aux,occ,occ] lives in the disjoint
     // staging interval; subsequent spin factors cannot overwrite earlier ones.
@@ -768,23 +808,25 @@ static cudaError_t contract_occupied_response(
                           &one, raw, mi, densities, mi, &zero, charges, ai));
     }
     if (metric.full_rank) {
-      // Preserve weak metric directions until after applying the charge
-      // projection. Forming X X^T first also destabilizes occupied response.
-      const auto ti = static_cast<int>(terms.size());
-      checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors, ai,
-                          charges, ai, &zero, potentials, ai));
-      if (fitted_occupied)
-        cuda_df::launch_scale_metric_projection(stream, a, terms.size(), metric.eigenvalues, true,
-                                                potentials);
-      else
-        divide_charge_eigenvalues<<<blocks(a * terms.size()), threads, 0, stream>>>(
-            a, terms.size(), metric.eigenvalues, potentials);
-      error = cudaGetLastError();
-      if (error != cudaSuccess) return error;
-      checked(cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors, ai,
-                          potentials, ai, &zero, charges, ai));
-      std::swap(charges, potentials);
-      runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms", 2);
+      if (!reuse_final_fitted_projection) {
+        // Preserve weak metric directions until after applying the charge
+        // projection. Forming X X^T first also destabilizes occupied response.
+        const auto ti = static_cast<int>(terms.size());
+        checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors,
+                            ai, charges, ai, &zero, potentials, ai));
+        if (fitted_occupied)
+          cuda_df::launch_scale_metric_projection(stream, a, terms.size(), metric.eigenvalues, true,
+                                                  potentials);
+        else
+          divide_charge_eigenvalues<<<blocks(a * terms.size()), threads, 0, stream>>>(
+              a, terms.size(), metric.eigenvalues, potentials);
+        error = cudaGetLastError();
+        if (error != cudaSuccess) return error;
+        checked(cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors,
+                            ai, potentials, ai, &zero, charges, ai));
+        std::swap(charges, potentials);
+        runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms", 2);
+      }
     } else {
       potential_kernel<<<blocks(terms.size() * a), threads, 0, stream>>>(a, terms.size(), inverse,
                                                                          charges, potentials);
@@ -807,18 +849,9 @@ static cudaError_t contract_occupied_response(
       runtime::cuda_trace::TraceRegion products("exchange_response_occupied_products", stream);
       if (reuse_final_fitted_projection) {
         if (t != 0) return cudaErrorInvalidValue;
-        checked(generated::df_occupied_finish_projection(
-            blas, ni, ri, ai, factor.coefficients, final_fitted_projection, transformed_projected));
-        gather_final_fitted_projection<<<blocks(a * rr), threads, 0, stream>>>(
-            a, r, transformed_projected, projected);
-        error = cudaGetLastError();
-        if (error != cudaSuccess) return error;
-        runtime::cuda_trace::trace_counter("response_final_fitted_projection_reused", 1);
-        runtime::cuda_trace::trace_counter("response_final_fitted_projection_bytes",
-                                           n * a * r * sizeof(double));
-        runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 1);
-        runtime::cuda_trace::trace_counter("response_occupied_projection_products", a);
-        runtime::cuda_trace::trace_counter("response_occupied_projection_flops", 2 * a * n * rr);
+        // U=X*S was formed once above so its diagonal could supply the
+        // physical Coulomb potential. Keep that same rooted projection for
+        // exchange metric/pseudo-density work; do not touch retained B again.
       } else if (read_values) {
         // Keep the existing eigenfactor inverse ordering. Its input and output
         // alternate between these disjoint intervals; previous spin factors
@@ -920,10 +953,15 @@ static cudaError_t contract_occupied_response(
       if (metric.full_rank) {
         auto* fitted = transformed_projected + retained;
         if (retained_root) {
-          checked(generated::df_occupied_apply_metric_root(
-              blas, ai, rri, metric.inverse_square_root, projected, fitted));
-          runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
-          runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
+          if (reuse_final_fitted_projection) {
+            // U=X*S was formed before the Coulomb trace and remains in this
+            // exact destination for the exchange metric/pseudo-density work.
+          } else {
+            checked(generated::df_occupied_apply_metric_root(
+                blas, ai, rri, metric.inverse_square_root, projected, fitted));
+            runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
+            runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
+          }
         } else if (fitted_occupied) {
           checked(generated::df_occupied_to_metric_eigenbasis(blas, ai, rri, metric.eigenvectors,
                                                               projected, fitted));

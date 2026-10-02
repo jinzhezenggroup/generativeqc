@@ -144,12 +144,14 @@ def calculator(method: str, policy: InitialGuessSpec | None = None) -> Calculato
         device="cpu",
         initial_guess=policy,
         ks_options=KsOptions(grid=GridSpec(16, 8, 16))
-        if method == "pbe0-rks"
+        if method.endswith("-rks")
         else None,
     )
 
 
-@pytest.mark.parametrize("method", ["rhf", "pbe0-rks"])
+@pytest.mark.parametrize(
+    "method", ["rhf", "pbe-rks", "pbe0-rks", "r2scan-rks", "b3lyp-rks"]
+)
 @pytest.mark.parametrize("kind", ["hf", "lda"])
 def test_complete_native_energy_and_fallbacks(
     native: None, method: str, kind: str

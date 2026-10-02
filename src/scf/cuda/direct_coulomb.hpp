@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 
@@ -54,8 +55,8 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* 
  * Direct CUDA plans prefer complete generated/native value coverage when the
  * optional device budget admits it. Bounded through-f values require an
  * explicit qualification opt-in on CudaDirectJkPlan. Density screening uses
- * the same shell-pair reductions as Direct HF. Value K remains full-range; the optional
- * stationary-force lease may reuse this topology for explicit SR/LR operators.
+ * the same shell-pair reductions as Direct HF. The bounded lease supports
+ * strict-FP64 SR/LR value K; generated streaming classes remain full-range.
  */
 struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
@@ -94,7 +95,9 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& plan, bool unrestri
  */
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestricted,
                                        const double* alpha, const double* beta,
-                                       double* alpha_exchange, double* beta_exchange);
+                                       double* alpha_exchange, double* beta_exchange,
+                                       DirectCoulombRange range = DirectCoulombRange::Full,
+                                       double omega = 0.0);
 
 /** Execute separate full-range J' and K' fixed-density energy derivatives
  * through the retained shell topology. Output is source-major [J,K], each

@@ -42,11 +42,13 @@ retained capability metadata.
   honestly; zero canonical work does not mean zero total bounded-shell work.
 - Derivative, mixed-J, range and constrained-memory fallback semantics remain
   separate from full-range value selection.
-- Stacked PR #1688's SR/LR predicate must also use
-  `direct_jk_bounded_value_enabled()` before opting into bounded range values.
+- Stacked PR #1688's SR/LR predicate uses the same
+  `direct_jk_bounded_value_enabled()` gate before opting into bounded range values.
+  Its native CPU-ERI comparison retains both default and opt-in SR/LR routes,
+  with canonical candidate/radial counts appropriate to each selection.
 - Stacked PR #1695's fused RSH value facade must use the same gate, returning its
   existing `NOT_IMPLEMENTED` fallback when disabled, so a direct join cannot
-  bypass production value policy. Those branches are outside this repair.
+  bypass production value policy. That join is outside this repair.
 
 ## Evidence
 

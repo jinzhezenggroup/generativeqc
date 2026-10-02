@@ -1,6 +1,6 @@
 # Decision: explicit bounded preliminary SCF before the immutable target
 
-Status: implemented, pending native/CI qualification before publication
+Status: implemented; CPU native and host qualification passed, CI pending
 Date: 2026-10-02
 
 ## Problem
@@ -32,8 +32,9 @@ functional's display name.
 Warm-state storage, checkpoint identity, update/freeze and last-good publication
 are unchanged. In the active opt-in mode, a failed warm attempt goes directly to
 core, cannot reactivate preliminary SCF, and cannot retry an allocation error or
-start a third target attempt. Default/no-policy retry behavior is unchanged. In particular, this policy does not implement the shared
-MP2/RCCSD/RCCSD(T) warm-reference lifecycle already published in #1696 and being repaired separately.
+start a third target attempt. Default/no-policy retry behavior is unchanged. In particular, this policy does
+not implement the shared MP2/RCCSD/RCCSD(T) warm-reference lifecycle already
+published in #1696 and being repaired separately.
 
 The native cap covers additional numeric payloads before allocation. The public
 resource planner composes the existing full target/preparation host inventories
@@ -79,9 +80,12 @@ These are energy-only CPU exploratory measurements, not a production-default,
 large-organic, open-shell, ECP, transition-metal or GPU qualification. Preparation
 uses a separate integral owner; integral sharing between stages was not tested.
 The independent water/PBE0 same-grid PySCF spot check differed by 1.71e-13 Eh.
-New feature-native endpoint, failure and warm-priority tests must pass on the
-new library before publication. The production feature remains disabled by
-default regardless of these prototype observations.
+The actual feature library passed seven selected native suites, including the
+new provider/failure/warm-priority contracts, and all new Python API/controller
+cases. The energy/fallback matrix includes RHF, PBE, PBE0, r2SCAN and B3LYP
+targets with both HF and LDA preparation. An independent reviewer also ran
+67 existing default-path CPU regressions with zero skips. The production
+feature remains disabled by default regardless of these observations.
 
 ## Consequences and revisit conditions
 
@@ -112,3 +116,24 @@ iterations. Its 3.8782 s preparation did not beat the single-HF route's
 solution, with maximum energy/density deltas below 2.1e-12/7.2e-10.
 The four-repeat small-water comparison also showed no added target-iteration
 benefit. The chain remains experimental and is not added to the API.
+
+## Actual public-API qualification
+
+The separately retained `benchmarks/results/preliminary-scf-api/` campaign runs
+18 new `Calculator` endpoints in three balanced fresh-process repeats. On the
+12-atom/52-AO tetramer, constructor + preparation + execution medians were
+43.6234 s direct, 30.6409 s with HF, and 31.4944 s with coarse LDA. All target
+states matched within 2.05e-12 Eh and 7.13e-10 maximum AO-density difference.
+The complete child-process medians were 44.1790, 31.1020 and 31.9693 s.
+The process RSS high-water medians rose from 327,704 KiB to 388,016 KiB;
+that includes imports and state export, not just the preliminary owner.
+Small-water HF improved the endpoint median but lost on whole-process median.
+These costs and negative observations remain part of the evidence; three
+repeats and native paired checks do not satisfy the default-promotion gate.
+
+After merging frozen master `ac6080759`, the incremental CPU build changed
+only build-identity compilation (plus regenerated DF contract metadata) and
+relinked the library. Seven native suites, 62 new-API Python cases and 67
+existing default-path regressions passed again. The performance source/binary
+identities remain pinned to the earlier measured campaign; these integration
+checks are not relabeled as a new timing campaign.

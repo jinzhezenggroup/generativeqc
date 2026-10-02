@@ -601,16 +601,14 @@ void canonical_value_provider() {
                   const auto pairs = source_dimension * (source_dimension + 1U) / 2U;
                   const auto quartets = diagnostic.batch_size * pairs * (pairs + 1U) / 2U;
                   const bool canonical_range_exchange = want_k && op != FockOperator::FullRange;
-                  const bool canonical_route =
-                      (want_j || want_k) && (!bounded_opt_in || canonical_range_exchange);
+                  const bool canonical_route = (want_j || want_k) && !bounded_opt_in;
                   const auto radial_passes =
                       canonical_route ? (canonical_range_exchange && want_j ? 2U : 1U) : 0U;
                   require(work[0] == (canonical_route ? quartets : 0U) &&
                               work[1] == radial_passes * quartets,
                           "default/opt-in value selection disagrees with executed canonical work");
                 }
-                if (want_j && want_k && op == FockOperator::FullRange &&
-                    plan->canonical_transform) {
+                if (want_k && plan->canonical_transform) {
                   const auto* spans = plan->canonical_projection_spans;
                   require(spans, "shell-local projection inventory was not retained");
                   const bool bounded = plan->bounded_value_opt_in;

@@ -1,0 +1,280 @@
+{
+  "basis_name": "6-31G (exact earlier PySCF-derived Cartesian primitive coefficients, explicit Shell input)",
+  "basis_per_element": {
+    "1": [
+      {
+        "angular_momentum": 0,
+        "primitives": [
+          [
+            18.731137,
+            0.0334946
+          ],
+          [
+            2.8253937,
+            0.23472695
+          ],
+          [
+            0.6401217,
+            0.81375733
+          ]
+        ]
+      },
+      {
+        "angular_momentum": 0,
+        "primitives": [
+          [
+            0.1612778,
+            1.0
+          ]
+        ]
+      }
+    ],
+    "8": [
+      {
+        "angular_momentum": 0,
+        "primitives": [
+          [
+            5484.6717,
+            0.0018311
+          ],
+          [
+            825.23495,
+            0.0139501
+          ],
+          [
+            188.04696,
+            0.0684451
+          ],
+          [
+            52.9645,
+            0.2327143
+          ],
+          [
+            16.89757,
+            0.470193
+          ],
+          [
+            5.7996353,
+            0.3585209
+          ]
+        ]
+      },
+      {
+        "angular_momentum": 0,
+        "primitives": [
+          [
+            15.539616,
+            -0.1107775
+          ],
+          [
+            3.5999336,
+            -0.1480263
+          ],
+          [
+            1.0137618,
+            1.130767
+          ]
+        ]
+      },
+      {
+        "angular_momentum": 0,
+        "primitives": [
+          [
+            0.2700058,
+            1.0
+          ]
+        ]
+      },
+      {
+        "angular_momentum": 1,
+        "primitives": [
+          [
+            15.539616,
+            0.0708743
+          ],
+          [
+            3.5999336,
+            0.3397528
+          ],
+          [
+            1.0137618,
+            0.7271586
+          ]
+        ]
+      },
+      {
+        "angular_momentum": 1,
+        "primitives": [
+          [
+            0.2700058,
+            1.0
+          ]
+        ]
+      }
+    ]
+  },
+  "cases": {
+    "water-631g": {
+      "atoms": [
+        [
+          8,
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            -1.43233673,
+            1.10715266
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            1.43233673,
+            1.10715266
+          ]
+        ]
+      ],
+      "charge": 0,
+      "expected_grid_points": 20736,
+      "expected_nao": 13,
+      "expected_primitive_count": 22,
+      "expected_shell_count": 9,
+      "multiplicity": 1
+    },
+    "water-tetramer-631g": {
+      "atoms": [
+        [
+          8,
+          [
+            0.0,
+            0.0,
+            0.0
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            -1.43233673,
+            1.10715266
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            1.43233673,
+            1.10715266
+          ]
+        ],
+        [
+          8,
+          [
+            0.0,
+            0.0,
+            5.5
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            -1.43233673,
+            6.60715266
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            1.43233673,
+            6.60715266
+          ]
+        ],
+        [
+          8,
+          [
+            0.0,
+            0.0,
+            11.0
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            -1.43233673,
+            12.10715266
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            1.43233673,
+            12.10715266
+          ]
+        ],
+        [
+          8,
+          [
+            0.0,
+            0.0,
+            16.5
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            -1.43233673,
+            17.60715266
+          ]
+        ],
+        [
+          1,
+          [
+            0.0,
+            1.43233673,
+            17.60715266
+          ]
+        ]
+      ],
+      "charge": 0,
+      "expected_grid_points": 82944,
+      "expected_nao": 52,
+      "expected_primitive_count": 88,
+      "expected_shell_count": 36,
+      "multiplicity": 1
+    }
+  },
+  "preliminary_scope": "InitialGuessSpec(kind) defaults: max_iterations=32, DIIS=8, energy/density=1e-6/1e-4, maximum_numeric_bytes=256MiB; LDA grid8x6x12. This differs from the prototype preparation maximum150 and is deliberately the new API default.",
+  "source_basis_sha256": "7fd17e1e1825a45023ef037db7597567320f8be649b7f1fc6e255597eb3ae571",
+  "source_geometry_cpp_sha256": "ffbe166a87d4acaee359a60a6adcd5d5b7c62fb405d1e0ed05c631edc9ee49eb",
+  "source_scope": "Exact inputs from frozen prototype only; all execution uses the new Calculator API",
+  "target": {
+    "basis_representation": "cartesian",
+    "density_fitting": "none",
+    "density_tolerance": 1e-08,
+    "device": "cpu",
+    "diis_history": 8,
+    "energy_tolerance": 1e-10,
+    "grid": [
+      24,
+      12,
+      24
+    ],
+    "max_iterations": 150,
+    "method": "pbe0-rks",
+    "precision": "fp64",
+    "screening_tolerance": 1e-12
+  },
+  "units": "Bohr"
+}
