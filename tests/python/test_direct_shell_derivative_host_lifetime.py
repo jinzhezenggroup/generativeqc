@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.integral.lowering.fock_accumulation import (
+    emit_direct_force_density_coefficient,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,10 +39,25 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         bodies.append(_extract_function(source, symbol))
     body = "\n".join(bodies)
     folder = tmp_path_factory.mktemp("direct-shell-host-lifetime")
+    (folder / "cuda_runtime.h").write_text(
+        "#pragma once\n#define __device__\n#define __forceinline__ inline\n"
+    )
     cpp, binary = folder / "probe.cpp", folder / "probe"
-    cpp.write_text(PREFIX + body + SUFFIX)
+    prefix = PREFIX.replace(
+        "// PRODUCTION_DENSITY_COEFFICIENT", emit_direct_force_density_coefficient()
+    )
+    cpp.write_text(prefix + body + SUFFIX)
     result = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(cpp), "-o", str(binary)],
+        [
+            compiler,
+            "-std=c++20",
+            "-O0",
+            "-I" + str(folder),
+            "-I" + str(ROOT / "src"),
+            str(cpp),
+            "-o",
+            str(binary),
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -54,7 +72,12 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ("route", "failed_step"),
     [
         (route, step)
-        for route, count in (("full_range", 8), ("rsh", 8), ("rsh_split", 14))
+        for route, count in (
+            ("full_range", 8),
+            ("rsh", 8),
+            ("rsh_split", 14),
+            ("rsh_zero", 8),
+        )
         for step in range(count)
     ],
 )
@@ -63,6 +86,44 @@ def test_pending_downloads_outlive_early_returns_and_exceptions(
 ) -> None:
     result = subprocess.run(
         [str(host_lifetime_probe), str(failed_step), str(int(throw_error)), route],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "coulomb,short,long,density_fixture",
+    [
+        (1.0, 0.0, 0.0, False),
+        (0.0, 0.0, 0.0, False),
+        (1.0, 0.0, 0.0, True),
+        (0.0, 0.0, 0.0, True),
+        (1.0, -0.1, 0.0, False),
+        (1.0, 0.0, -0.5, False),
+    ],
+)
+def test_split_rsh_preserves_disabled_sources(
+    host_lifetime_probe: Path,
+    coulomb: float,
+    short: float,
+    long: float,
+    density_fixture: bool,
+) -> None:
+    """Compile real weights for opposing finite UKS spins; no ERI is evaluated."""
+    result = subprocess.run(
+        [
+            str(host_lifetime_probe),
+            "0",
+            "0",
+            "rsh_split",
+            str(coulomb),
+            str(short),
+            str(long),
+            str(int(density_fixture)),
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -93,6 +154,8 @@ PREFIX = r"""
 #include <utility>
 #include <tuple>
 #include <vector>
+#include "scf/cuda/direct_eri_symmetry.cuh"
+#include "scf/cuda/matrix_index.cuh"
 using cudaError_t = int;
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaMemcpyDeviceToHost=2;
@@ -100,6 +163,7 @@ int step=0, fail_step=0, syncs=0; bool throw_error=false;
 unsigned source_count=2, submitted_copies=0;
 bool tracking=false, pending=false, freed_pending=false;
 void* watched[32]{}; unsigned watched_count=0; bool split=false;
+bool density_fixture=false; unsigned range_calls=0;
 void* operator new(std::size_t n) {
   void* p=std::malloc(n);
   if(!p) throw std::bad_alloc();
@@ -159,7 +223,9 @@ struct GeneratedExchangePlan {
   double *shell_pair_density_bounds=nullptr, *system_density_bounds=nullptr;
   double* direct_spin=nullptr;
 };
-int prepare_generated_exchange_density(GeneratedExchangePlan&,bool,const double*,const double*) {
+// PRODUCTION_DENSITY_COEFFICIENT
+int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const double* alpha,const double*) {
+  if(density_fixture) plan.direct_spin=const_cast<double*>(alpha);
   return operation();
 }
 // Independent labelled source values expose both coefficient and force-sign
@@ -167,15 +233,23 @@ int prepare_generated_exchange_density(GeneratedExchangePlan&,bool,const double*
 template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... args) {
   const auto values=std::make_tuple(args...);
   auto* force=std::get<14>(values);
+  const auto* density=std::get<12>(values);
+  const double j=density_fixture ? direct_force_density_coefficient_scaled<true>(
+      2,0,0,density,1,1,0,0,std::get<16>(values),0.0) : std::get<16>(values);
+  const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
+      2,0,0,density,1,1,0,0,0.0,std::get<17>(values)) : std::get<17>(values);
   for(unsigned i=0;i<3;++i) {
-    force[i]=-std::get<16>(values)*(1+i);
-    force[3+i]=-std::get<17>(values)*(10+i);
+    force[i]=-j*(1+i);
+    force[3+i]=-k*(10+i);
   }
 }
 template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
+  ++range_calls;
   const auto values=std::make_tuple(args...);
   auto* force=std::get<14>(values);
-  for(unsigned i=0;i<3;++i) force[i]=-std::get<18>(values)*(20+i);
+  const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
+      2,0,0,std::get<12>(values),1,1,0,0,0.0,std::get<18>(values)) : std::get<18>(values);
+  for(unsigned i=0;i<3;++i) force[i]=-k*(20+i);
 }
 template<class... Args> void launch_bounded_shell_rsh_derivatives(Args&&... args) {
   const auto values=std::make_tuple(args...);
@@ -193,21 +267,35 @@ SUFFIX = r"""
 int main(int argc,char** argv) {
   fail_step=argc>1 ? std::atoi(argv[1]) : 0;
   throw_error=argc>2 && std::atoi(argv[2]);
-  split=argc>3 && std::strcmp(argv[3],"rsh_split")==0;
+  const bool zero_exchange=argc>3 && std::strcmp(argv[3],"rsh_zero")==0;
+  split=zero_exchange || (argc>3 && std::strcmp(argv[3],"rsh_split")==0);
   source_count=(argc>3 && std::strcmp(argv[3],"full_range")!=0) ? 3U : 2U;
+  const double cj=argc>4 ? std::strtod(argv[4],nullptr) : 1.0;
+  const double cs=argc>5 ? std::strtod(argv[5],nullptr) : (zero_exchange ? 0.0 : -0.1);
+  const double cl=argc>6 ? std::strtod(argv[6],nullptr) : (zero_exchange ? 0.0 : -0.5);
+  density_fixture=argc>7 && std::atoi(argv[7]);
+  const bool want_range=split && (cs!=0.0 || cl!=0.0);
+  const int expected_syncs=want_range ? 2 : 1;
   using namespace generativeqc::scf::cuda_execution;
   Shared shared;
   std::uint32_t pair=0,head=0; unsigned long long cursor=0;
   double force[9]{}, bound=1, density=1;
+  // The total density is small; the unused same-spin exchange squares overflow.
+  double spin_density[]{1.0,1e200,1e200,1.0,1.0,-1e200,-1e200,1.0};
+  if(density_fixture && (direct_force_density_coefficient_scaled<true>(
+      2,0,0,spin_density,1,1,0,0,1.0,0.0)!=4.0 ||
+      std::isfinite(direct_force_density_coefficient_scaled<true>(
+          2,0,0,spin_density,1,1,0,0,0.0,1.0)))) return 9;
   GeneratedExchangePlan plan{&shared,true,&pair,&bound,force,&cursor,&head};
   std::vector<double> output{99.0};
   const auto execute = [&]() {
-    submitted_copies=0;
+    submitted_copies=0; range_calls=0;
     return source_count==2
         ? execute_generated_full_range_energy_derivatives(
             plan,false,&density,nullptr,1.0,-0.5,output)
         : execute_generated_rsh_energy_derivatives(
-            plan,false,&density,nullptr,1.0,-0.1,-0.5,split ? 0.3 : 0.4,output);
+            plan,density_fixture,density_fixture ? spin_density : &density,
+            density_fixture ? spin_density+4 : nullptr,cj,cs,cl,split ? 0.3 : 0.4,output);
   };
   tracking=true;
   int status=0; bool threw=false;
@@ -222,17 +310,21 @@ int main(int argc,char** argv) {
   } else {
     if(threw || status || output.size()!=3*source_count) return 6;
     for(unsigned i=0;i<3;++i) {
-      if(std::abs(output[i]-(1+i))>1e-12 ||
-         std::abs(output[3+i]-(source_count==2 ? -0.5*(10+i) : 1.0))>1e-12 ||
-         (source_count==3 && std::abs(output[6+i]+0.5*(20+i))>1e-12)) {
+      if(!std::isfinite(output[i]) || !std::isfinite(output[3+i]) ||
+         std::abs(output[i]-cj*(density_fixture ? 4 : 1)*(1+i))>1e-12 ||
+         std::abs(output[3+i]-(source_count==2 ? -0.5*(10+i) : -10.0*cs))>1e-12 ||
+         (source_count==3 && (!std::isfinite(output[6+i]) ||
+          std::abs(output[6+i]-cl*(20+i))>1e-12))) {
         std::cerr<<"published derivative source/sign/coefficient changed";return 6;
       }
     }
-    if(syncs!=(split ? 2 : 1)) {std::cerr<<"extra success-path synchronization";return 7;}
+    if(range_calls!=(want_range ? 1U : 0U)) {std::cerr<<"unused LR worker executed";return 10;}
+    if(syncs!=expected_syncs) {std::cerr<<"extra success-path synchronization";return 7;}
   }
   // Reuse the same retained owner after the failed call.
   step=0;fail_step=0;syncs=0;throw_error=false;
-  if(execute()!=cudaSuccess || pending || syncs!=(split ? 2 : 1)) {
+  if(execute()!=cudaSuccess || pending || syncs!=expected_syncs ||
+     range_calls!=(want_range ? 1U : 0U)) {
     std::cerr<<"owner did not recover";return 8;
   }
 }

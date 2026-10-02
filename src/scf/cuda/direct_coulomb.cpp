@@ -676,6 +676,13 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
     auto& shared = *p.shared;
     const auto b = shared.batch;
     const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
+    if (short_exchange_coefficient == 0.0 && long_exchange_coefficient == 0.0) {
+      // Disabled exchange must not form potentially overflowing spin products.
+      // The full helper already drained its download and supplied a zero K row.
+      full.resize(3U * coordinates, 0.0);
+      derivatives = std::move(full);
+      return cudaSuccess;
+    }
     std::vector<double> long_force(coordinates);
     struct HostResultDrain {
       cudaStream_t stream;
