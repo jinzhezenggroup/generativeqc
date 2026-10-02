@@ -60,9 +60,13 @@ Homogeneous prepared MP2 batches support conventional energy and force
 requests. Each item owns its reference, response, provider, diagnostics, and
 candidate outputs; immutable method options alone are shared. A failed item
 sets only its per-item status and does not overwrite its output storage or
-poison successful neighbours or a later replay. MP2 batches explicitly reject
-warm-start and HF profiling flags, all RI batch requests, invalid coordinates,
-and unknown flags.
+poison successful neighbours or a later replay. Warm-enabled batches retain the
+last successful HF density and its source geometry. It seeds a new strict RHF
+solve, including after geometry changes; it does not skip reference validation.
+A failed/nonconverged seeded solve retries cold. Clear, freeze, and checkpoint
+restore use the generic batch controls, and a new seed replaces the old one only
+after the complete MP2 endpoint succeeds. MP2 batches explicitly reject HF
+profiling flags, all RI batch requests, invalid coordinates, and unknown flags.
 
 ## Fixed mathematical contract
 
@@ -203,7 +207,14 @@ TensorIR.
 `correlation_memory_budget_bytes` is an internal method numeric-capacity budget
 composing sequential reference and correlation phases (zero means 256 MiB).
 It is not a new global #203 planner, nor a process-RSS or free-VRAM guarantee.
-The largest phase capacity is returned. Persistent reference/source buffers,
+The largest phase capacity is returned. For each warm-enabled batch item, both
+the last-good density/source coordinates and any candidate replacement remain
+charged throughout reference, correlation, and force execution. Their payload is
+subtracted before phase admission and added to capacity diagnostics. Freezing
+updates needs only the old seed; clearing seeds removes that reservation.
+Insufficient headroom fails without replacing the last-good seed. These are
+per-item bounds, not an aggregate batch-residency budget.
+Persistent reference/source buffers,
 coefficient panels, two transform stages, detached/reordered MO feeds, tensor
 arena, validation arithmetic, scalar outputs, library workspaces and retained
 provider allowances are charged. Existing CG10 Python and native block plans

@@ -146,9 +146,16 @@ def _validate_controls(controls: typing.Any) -> None:
     )
     for name in ("max_iterations", "diis_history"):
         _integer(controls[name], name, 2**31 - 1)
+    # Zero screening is the exact unscreened contract (required by MP2),
+    # while convergence tolerances must remain strictly positive.
     for name in ("energy_tolerance", "density_tolerance", "screening_tolerance"):
         value = controls[name]
-        if type(value) not in (float, int) or not math.isfinite(value) or value <= 0:
+        if (
+            type(value) not in (float, int)
+            or not math.isfinite(value)
+            or value < 0
+            or (value == 0 and name != "screening_tolerance")
+        ):
             raise CheckpointError(f"invalid source {name}")
     if controls["target_accuracy"] is not None:
         TargetAccuracy.from_dict(controls["target_accuracy"])
