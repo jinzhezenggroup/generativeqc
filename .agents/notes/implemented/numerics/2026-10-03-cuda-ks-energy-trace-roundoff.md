@@ -62,5 +62,12 @@ is retained as a known baseline failure, not silently fixed or counted as
 passed. The corrected library also passes 19 snapshot/native, 14 independent
 cooperative-force and six hybrid analytic/finite-difference cases.
 
+Review follow-up adds eight independent nonbinary-product/null-exchange cases
+and seven failure-bit/nonfinite cases. Together with the six original GPU
+cases and six host cases, all 27 pass memcheck in Slurm job 5380 with zero
+errors. NumPy explicitly rounds each FP64 multiplication before an independent
+`math.fsum` oracle; unequal spins and near-canceling full/range terms exercise
+NVCC's contraction behavior. No production change or gate relaxation is needed.
+
 See the [complete report](../../../../benchmarks/results/pbe0-def2-svp-20261003/README.md)
 for raw all-repeat force evidence, failed attempts and separate binary hashes.

@@ -150,6 +150,10 @@ match the recorded commit.
   rather than the retained first-warm energy baseline. It is not counted as
   passed. Unchanged large-geometry kernels pass 96/128-atom memcheck, initcheck
   and synccheck on the separately recorded integration build.
+- Review follow-up in Slurm job 5380 passes six host and 21 NVCC trace probes
+  under memcheck with zero errors. These cover explicitly rounded nonbinary
+  products, unequal spins, full/range cancellation, null exchange pointers,
+  failure bits and nonfinite rejection. The production kernel is unchanged.
 - `water<atoms>.json` retains every scalar observation, gates, source hashes,
   work/resources and both independent force oracles. Corresponding raw
   `*-{native,reference}.json.gz` files retain **all** forces; decompressed hashes
