@@ -124,13 +124,12 @@ inline cublasStatus_t df_rhf_charge_contract(
  */
 static __global__ void df_rhf_charge_from_final_projection(
     std::size_t auxiliary, std::size_t rank, double density_scale,
-    const double* projected, double* charges) {{
+    const double* pair_major, double* charges) {{
   const auto q = std::size_t{{blockIdx.x}} * blockDim.x + threadIdx.x;
   if (q >= auxiliary) return;
-  const auto rr = rank * rank;
   double value = 0.0;
   for (std::size_t i = 0; i < rank; ++i)
-    value += projected[q * rr + i * (rank + 1)];
+    value += pair_major[i * (rank + 1) * auxiliary + q];
   charges[q] = density_scale * value;
 }}
 
