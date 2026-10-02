@@ -252,7 +252,7 @@ def test_cooperative_resource_plan_is_opt_in_and_keeps_point_lanes() -> None:
     assert cooperative.becke_shared_bytes == 16 + 66 * 64
     assert cooperative.geometry_lanes == generic.geometry_lanes
     assert cooperative.allocation_bytes == generic.allocation_bytes
-    for atoms in (1, 33, 128):
+    for atoms in (1,):
         plan = plan_stationary_cuda_resources(
             **{**shape, "atoms": atoms},
             target=target,
@@ -260,6 +260,28 @@ def test_cooperative_resource_plan_is_opt_in_and_keeps_point_lanes() -> None:
             cooperative_becke=True,
         )
         assert plan.becke_threads_per_point == 1 and plan.becke_shared_bytes == 0
+    for atoms in (33, 96, 128):
+        common = dict(shape, atoms=atoms)
+        generic = plan_stationary_cuda_resources(
+            **common, target=target, budget_bytes=1 << 30
+        )
+        plan = plan_stationary_cuda_resources(
+            **common, target=target, budget_bytes=1 << 30, cooperative_becke=True
+        )
+        assert plan.becke_threads_per_point == 32
+        assert plan.becke_shared_bytes == 16 + 64 * (4 * (2 * atoms - 5) // 2)
+        assert plan.becke_shared_bytes <= 32 << 10
+        assert plan.geometry_lanes == generic.geometry_lanes
+        assert plan.allocation_bytes == generic.allocation_bytes
+        for field in ("shared_memory_per_block", "tuning_maximum_shared_bytes"):
+            rejected = plan_stationary_cuda_resources(
+                **common,
+                target=replace(target, **{field: plan.becke_shared_bytes - 1}),
+                budget_bytes=1 << 30,
+                cooperative_becke=True,
+            )
+            assert rejected.becke_threads_per_point == 1
+            assert rejected.becke_shared_bytes == 0
     for limited in (
         replace(target, shared_memory_per_block=1024),
         replace(target, tuning_maximum_shared_bytes=1024),
@@ -343,12 +365,14 @@ def test_native_cooperative_configuration_validates_actual_device_caps(
     source.write_text(
         r"""
 #include <cstddef>
+#include <algorithm>
 #include <stdexcept>
 #include <cstring>
 using std::size_t;
 namespace generativeqc_grid_adjoint { struct PointPair { double v[8]; }; }
 namespace generativeqc_stationary_cuda {
-constexpr size_t stationary_becke_control_bytes=16, stationary_becke_max_atoms=32,
+constexpr size_t stationary_becke_control_bytes=16, stationary_becke_max_atoms=128,
+                 stationary_becke_retained_max_atoms=32, stationary_becke_pair_tile_rows=4,
                  stationary_becke_threads=32;
 struct Context { int device=0; void check_device() {} };
 struct Owner {
@@ -395,6 +419,16 @@ int main() {
   if(!stationary_configure_becke(&p,32,required-1,error,256)) return 8;
   p.atoms=33;
   if(!stationary_configure_becke(&p,32,required,error,256)) return 9;
+  for(size_t atoms:{size_t(33),size_t(96),size_t(128)}) {
+    p.atoms=atoms;
+    const size_t tiled=16+64*(4*(2*atoms-5)/2);
+    actual.sharedMemPerBlock=tiled;
+    if(stationary_configure_becke(&p,32,tiled,error,256) || p.becke_threads_per_point!=32 ||
+       p.becke_shared_bytes!=tiled) return 13;
+    actual.sharedMemPerBlock=tiled-1;
+    if(stationary_configure_becke(&p,32,tiled,error,256) || p.becke_threads_per_point!=1 ||
+       p.becke_shared_bytes) return 14;
+  }
   p.atoms=1;
   if(!stationary_configure_becke(&p,32,required,error,256)) return 10;
   p.atoms=12; p.topology_ready=true;

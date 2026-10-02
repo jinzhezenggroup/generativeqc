@@ -29,6 +29,8 @@ from generativeqc_compiler.method.stationary_resources import (
     BECKE_COOPERATIVE_CONTROL_BYTES,
     BECKE_COOPERATIVE_MAX_ATOMS,
     BECKE_COOPERATIVE_THREADS,
+    BECKE_PAIR_TILE_ROWS,
+    BECKE_RETAINED_MAX_ATOMS,
     GEOMETRY_MAX_LANES,
     GEOMETRY_MAX_SCRATCH_BYTES,
     GEOMETRY_THREADS,
@@ -103,6 +105,8 @@ def _runtime_layout_cuda(plan: StationaryGradientPlan) -> str:
             "namespace generativeqc_stationary_cuda {",
             f"constexpr unsigned stationary_source_count = {len(sources)};",
             f"constexpr size_t stationary_becke_max_atoms = {BECKE_COOPERATIVE_MAX_ATOMS};",
+            f"constexpr size_t stationary_becke_retained_max_atoms = {BECKE_RETAINED_MAX_ATOMS};",
+            f"constexpr size_t stationary_becke_pair_tile_rows = {BECKE_PAIR_TILE_ROWS};",
             f"constexpr size_t stationary_becke_threads = {BECKE_COOPERATIVE_THREADS};",
             f"constexpr size_t stationary_becke_control_bytes = {BECKE_COOPERATIVE_CONTROL_BYTES};",
             f"constexpr size_t stationary_geometry_max_lanes = {GEOMETRY_MAX_LANES};",
@@ -472,12 +476,21 @@ __device__ bool geometry_point_ao(generativeqc::dft::GridTaskView view, const do
 struct GeometryBlockControl {
   double seed;
   int valid;
+  int collective_valid;
 };
 static_assert(sizeof(GeometryBlockControl) == 16);
 struct GeometryBlockTeam {
+  int* valid = nullptr;
   __device__ size_t rank() const { return threadIdx.x; }
   __device__ size_t size() const { return blockDim.x; }
   __device__ void sync() const { __syncthreads(); }
+  __device__ bool all(bool value) const {
+    if (!value) atomicExch(valid, 0);
+    sync();
+    const bool result = *valid != 0;
+    sync();  // all readers finish before a later vote can clear the shared flag
+    return result;
+  }
 };
 __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
@@ -507,6 +520,7 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
     const int64_t owner = owners ? owners[p]
         : (points_per_atom ? int64_t((owner_offset + p) / points_per_atom) : int64_t{-1});
     if (threadIdx.x == 0) {
+      control.collective_valid = 1;
       control.valid = owner >= 0 && owner < int64_t(na) && isfinite(weights[p]) && isfinite(raw[p]);
       if (control.valid)
         control.valid = geometry_point_ao(view, work, ao_atoms, p, owner, na, weights, raw, external,
@@ -517,10 +531,17 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       if (threadIdx.x == 0) atomicExch(error, 1);
       return;
     }
-    if (!generativeqc_grid_adjoint::contract_point_cooperative(
+    const bool valid = na <= stationary_becke_retained_max_atoms
+        ? generativeqc_grid_adjoint::contract_point_cooperative(
             view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
             ws + 2 * na, ws + 3 * na, zeros, distances, states, GeometryBlockTeam{},
-            local_norm, local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)) {
+            local_norm, local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)
+        : generativeqc_grid_adjoint::contract_point_tiled_cooperative(
+            view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
+            ws + 2 * na, ws + 3 * na, zeros, distances, states, stationary_becke_pair_tile_rows,
+            GeometryBlockTeam{&control.collective_valid}, local_norm, local_ratio, local_log, local_becke,
+            center_pairs, local_ratio_prepared);
+    if (!valid) {
       if (threadIdx.x == 0) atomicExch(error, 1);
       return;
     }

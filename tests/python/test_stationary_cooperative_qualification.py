@@ -46,7 +46,9 @@ def test_full_force_fixture_selects_opt_in_and_preserves_matrix_choices(
     monkeypatch.setattr(Owner, "metrics", lambda _self: {"becke_threads_per_point": 1})
     with pytest.raises(AssertionError, match="generic device fallback"):
         Owner(12)
-    Owner(33)  # The bounded atom-count fallback is intentional.
+    with pytest.raises(AssertionError, match="generic device fallback"):
+        Owner(33)
+    Owner(1)  # The single-atom generic schedule is intentional.
 
 
 def test_qualification_runner_passes_explicit_cooperative_selection(

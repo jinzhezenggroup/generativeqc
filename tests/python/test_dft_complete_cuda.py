@@ -37,7 +37,7 @@ def cooperative_becke_qualification(monkeypatch: pytest.MonkeyPatch) -> None:
     def initialize(self: typing.Any, *args: typing.Any, **kwargs: typing.Any) -> None:
         requested = kwargs.setdefault("cooperative_becke", True)
         original(self, *args, **kwargs)
-        if requested and 1 < self.natom <= 32:
+        if requested and 1 < self.natom <= 128:
             assert self.metrics()["becke_threads_per_point"] == 32, (
                 "cooperative qualification selected the generic device fallback"
             )
@@ -1135,7 +1135,7 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         compiler=compiler,
         cache=tmp_path,
     )
-    point_capacity = 2083
+    point_capacity = 67 if atom_count > 33 else 2083
     rng = np.random.default_rng(1479)
     relative_points = rng.normal(size=(point_capacity, 3)) * 0.4
     owners = np.arange(point_capacity, dtype=np.int64) % atom_count
@@ -1160,10 +1160,12 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         )
         sources = []
         lane_bytes = 144 * basis.natom
-        maximum_lanes = min(2048, (8 << 20) // lane_bytes)
+        maximum_lanes = min(point_capacity, 2048, (8 << 20) // lane_bytes)
         for lanes, cached, cooperative in (
             (lanes, cached, cooperative)
-            for lanes in (32, 256, maximum_lanes)
+            for lanes in (
+                (1, 17, maximum_lanes) if atom_count > 33 else (32, 256, maximum_lanes)
+            )
             for cached in (False, True)
             for cooperative in (False, True)
         ):
@@ -1205,18 +1207,23 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 + retained_centers
             )
             assert owner.metrics()["center_geometry_bytes"] == retained_centers
-            selected = cooperative and atom_count <= 32
+            selected = cooperative and atom_count <= 128
             assert owner.metrics()["becke_threads_per_point"] == (32 if selected else 1)
             assert owner.metrics()["becke_shared_bytes"] == (
-                16 + 64 * pairs if selected else 0
+                16 + 64 * (pairs if atom_count <= 32 else 4 * (2 * atom_count - 5) // 2)
+                if selected
+                else 0
             )
             with pytest.raises((ValueError, RuntimeError)):
                 owner.reset_geometry(-1.0)
             sources.append(owner)
         previous = None
-        for repeat, current_basis in enumerate(
-            (basis, basis, moved_basis, moved_basis, basis, moved_basis, basis)
-        ):
+        replays = (
+            (basis, basis, moved_basis, basis)
+            if atom_count > 33
+            else (basis, basis, moved_basis, moved_basis, basis, moved_basis, basis)
+        )
+        for repeat, current_basis in enumerate(replays):
             centers = np.ascontiguousarray(
                 current_basis.packed[: 3 * atom_count].reshape(atom_count, 3)
             )
@@ -1234,8 +1241,8 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 # Reuse the full panels for an irregular large tile, a 6-point
                 # tail, and an empty tile; stale high lanes must not be reduced.
                 for begin, end in (
-                    (0, 2077),
-                    (2077, point_capacity),
+                    (0, point_capacity - 6),
+                    (point_capacity - 6, point_capacity),
                     (point_capacity, point_capacity),
                 ):
                     with grid.feature_task(
@@ -1266,7 +1273,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 selected = metrics_after["becke_threads_per_point"] > 1
                 assert metrics_after["becke_pair_state_evaluations"] - metrics_before[
                     "becke_pair_state_evaluations"
-                ] == pairs * point_capacity * (1 if selected else 2)
+                ] == pairs * point_capacity * (
+                    1 if selected and atom_count <= 32 else 2
+                )
                 # Preparation is device-only and adds no center table upload.
                 expected_upload = 3 * basis.natom * 8 + 3 * point_capacity * 8
                 if not repeat % 2:
@@ -1280,12 +1289,21 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                         [result[name] for name in ("xc_ao", "xc_grid", "xc_weight")]
                     )
                 )
-                assert (
-                    owner.metrics()["geometry_peak_lanes"]
-                    == owner.resources.geometry_lanes
+                assert owner.metrics()["geometry_peak_lanes"] == min(
+                    owner.resources.geometry_lanes, point_capacity - 6
                 )
             for result in results[1:]:
                 np.testing.assert_allclose(result, results[0], atol=2e-10, rtol=2e-12)
             if previous is not None and previous[0] == current_basis.identity:
                 np.testing.assert_array_equal(results[0], previous[1])
             previous = current_basis.identity, results[0]
+
+
+@pytest.mark.parametrize("atom_count", [96, 128])
+def test_cuda_large_tiled_becke_bounded_geometry_probe(
+    compiler: typing.Any, atom_count: int, tmp_path: Path
+) -> None:
+    """67 points qualify the large schedule without launching a full benchmark."""
+    test_cuda_geometry_lane_budget_tail_and_changed_geometry_replay(
+        compiler, "PBE0", 1, "unpolarized", atom_count, tmp_path
+    )

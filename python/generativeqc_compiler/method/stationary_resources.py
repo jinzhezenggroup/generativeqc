@@ -13,7 +13,9 @@ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 GEOMETRY_MAX_LANES = 2048
 GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
 GEOMETRY_THREADS = 32
-BECKE_COOPERATIVE_MAX_ATOMS = 32
+BECKE_COOPERATIVE_MAX_ATOMS = 128
+BECKE_RETAINED_MAX_ATOMS = 32
+BECKE_PAIR_TILE_ROWS = 4
 BECKE_COOPERATIVE_THREADS = 32
 BECKE_PAIR_STATE_BYTES = 64
 BECKE_COOPERATIVE_CONTROL_BYTES = 16
@@ -229,8 +231,14 @@ def plan_stationary_cuda_resources(
     if center_bytes > budget_bytes - allocation:
         center_bytes = 0
     becke_threads, shared_bytes = 1, 0
-    required_shared = BECKE_COOPERATIVE_CONTROL_BYTES + BECKE_PAIR_STATE_BYTES * (
+    retained_rows = min(BECKE_PAIR_TILE_ROWS, atoms - 1)
+    state_count = (
         atoms * (atoms - 1) // 2
+        if atoms <= BECKE_RETAINED_MAX_ATOMS
+        else retained_rows * (2 * atoms - retained_rows - 1) // 2
+    )
+    required_shared = (
+        BECKE_COOPERATIVE_CONTROL_BYTES + BECKE_PAIR_STATE_BYTES * state_count
     )
     if (
         cooperative_becke

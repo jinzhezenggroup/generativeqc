@@ -272,9 +272,12 @@ int stationary_configure_becke(void* pointer, size_t threads, size_t shared_byte
       p->becke_shared_bytes = 0;
       return;
     }
+    const size_t rows = std::min(stationary_becke_pair_tile_rows, p->atoms - 1);
+    const size_t state_count = p->atoms <= stationary_becke_retained_max_atoms
+                                   ? p->atoms * (p->atoms - 1) / 2
+                                   : rows * (2 * p->atoms - rows - 1) / 2;
     const size_t required =
-        stationary_becke_control_bytes +
-        sizeof(generativeqc_grid_adjoint::PointPair) * (p->atoms * (p->atoms - 1) / 2);
+        stationary_becke_control_bytes + sizeof(generativeqc_grid_adjoint::PointPair) * state_count;
     if (p->atoms < 2 || p->atoms > stationary_becke_max_atoms ||
         threads != stationary_becke_threads || shared_bytes != required)
       throw std::invalid_argument("invalid cooperative Becke resource plan");
@@ -554,7 +557,9 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
       p->becke_pair_state_evaluations +=
-          view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+          view->npoint * p->atoms * (p->atoms - 1) /
+          (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2
+                                                                                             : 1);
       if (!p->center_pairs)
         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
@@ -619,7 +624,9 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
       p->becke_pair_state_evaluations +=
-          view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+          view->npoint * p->atoms * (p->atoms - 1) /
+          (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2
+                                                                                             : 1);
       if (!p->center_pairs)
         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
@@ -680,7 +687,8 @@ int stationary_geometry_external_device_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) /
+        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -727,7 +735,8 @@ int stationary_geometry_external_device_molecular_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) /
+        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -773,7 +782,8 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) /
+        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -815,7 +825,8 @@ int stationary_geometry_molecular_resident_weights_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) /
+        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -860,7 +871,8 @@ int stationary_geometry_molecular_enqueue(void* pointer,
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) /
+        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -905,7 +917,8 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) / (p->becke_threads_per_point > 1 ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) /
+        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;

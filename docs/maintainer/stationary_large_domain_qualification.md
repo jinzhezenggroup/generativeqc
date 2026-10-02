@@ -26,8 +26,12 @@ every method, basis, or molecule inside them.
   final-state identity checks, equations and precision are unchanged. Tail tiles
   visit every point once. The native measured point and pair-visit totals must
   equal the admitted totals before publication.
-- Cooperative Becke remains opt-in within its separately qualified 2–32-atom
-  envelope. Larger systems retain the generic lane-based path.
+- Cooperative Becke remains opt-in. The retained full-pair schedule covers 2–32
+  atoms; a four-row tiled schedule covers 33–128 atoms without quadratic shared
+  storage. The tiled schedule charges 23,952 bytes per block at 96 atoms and
+  32,144 at 128, including control state. Actual-device resource rejection keeps
+  the admitted generic path. The production default is unchanged, and the new
+  tiled schedule remains pending real-GPU correctness and performance qualification.
 
 For `P` points and `A` atoms the complete native pair-visit census is
 `(1 + 2*P) * A*(A-1)/2`. Bounded submission does not reduce this total work.
@@ -67,6 +71,23 @@ packaged AOT, whereas global hybrids select the runtime-compiler path. Neither a
 package declaration nor static admission qualifies its executable. Historical v1
 reports, frozen inputs and receipts remain unchanged; do not reinterpret their
 older admission fields as v2 results.
+
+## Targeted large Becke schedule probes
+
+The opt-in `test_cuda_large_tiled_becke_bounded_geometry_probe` test in
+`tests/python/test_dft_complete_cuda.py` uses 67 fixed-density PBE0 geometry points
+at 96 and 128 atoms. It compares generic and tiled cooperative execution with
+cached/direct center geometry, tight/full point capacity, irregular tails,
+repeated and changed geometry. The tests require the existing allocated-device
+fixture, explicit CUDA test gate and matching compiler/library setup; they do
+not submit a job or run the complete benchmark ladder.
+
+Tiled execution retains two full pair-state evaluations per unordered pair per
+point. Only the retained 2–32-atom schedule cuts these evaluations to one. Neither
+schedule changes the logical pair-visit census, grid, precision or acceptance
+tolerances. Run Compute Sanitizer memcheck/initcheck/synccheck on the targeted
+probes before treating the new schedule as device-qualified. Host-thread checks,
+resource admission and source work counts alone do not establish GPU speedup.
 
 ## Frozen PBE0 acceptance ladder
 

@@ -15,8 +15,10 @@ from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_pa
 from test_stationary_geometry_kernel_host import PREFIX
 
 
+@pytest.mark.parametrize("atoms", [12, 33, 96, 128])
 def test_emitted_cooperative_kernel_routes_tails_and_sticky_failure(
     tmp_path: Path,
+    atoms: int,
 ) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
@@ -56,10 +58,12 @@ double* geometry_pair_storage;
         prefix
         + emit_grid_adjoint()
         + emit_grid_partials(3)
+        + "constexpr size_t stationary_becke_retained_max_atoms=32, stationary_becke_pair_tile_rows=4;\n"
         + kernels
         + r"""
 int main() {
-  constexpr size_t na=12,n=2,np=17,pairs=na*(na-1)/2;
+  constexpr size_t na=ATOMS,n=2,np=(na>32?5:17),pairs=na*(na-1)/2;
+  constexpr size_t state_count=na<=32?pairs:4*(2*na-5)/2;
   double centers[3*na];
   for(size_t a=0;a<na;++a) {
     centers[3*a]=0.7*a; centers[3*a+1]=0.4*std::sin(a); centers[3*a+2]=0.3*std::cos(a);
@@ -69,16 +73,16 @@ int main() {
                                                          local_norm,local_ratio_geometry)) return 1;
   const int64_t ao_atoms[n]{0,na-1};
   for(bool cached:{false,true}) for(bool implicit:{false,true}) for(bool external:{false,true})
-  for(size_t capacity:{size_t(1),size_t(7),size_t(17)}) for(size_t points:{size_t(0),size_t(1),np}) {
+  for(size_t capacity:{size_t(1),size_t(7)}) for(size_t points:{size_t(0),size_t(1),np}) {
     const size_t lanes=std::min(capacity,points);
     std::vector<double> partial(capacity*9*na+2,987654),scratch(capacity*9*na+2,987654);
-    std::vector<double> storage(8*pairs+2,987654);
+    std::vector<double> storage(8*state_count+2,987654);
     geometry_pair_storage=storage.data()+1;
     std::vector<double> xyz(3*points),features(10*points,1),ao(10*points*n,0.5),work(8*points*n,0.75);
     std::vector<double> weights(points,0.3),raw(points,0.2),seeds(6*(np+7),0.15);
     std::vector<int64_t> owners(points);
     for(size_t p=0;p<points;++p) {
-      owners[p]=implicit?(p+4)/3:(7*p)%na;
+      owners[p]=implicit?(p+4)/3:(p+1==points?na-1:(7*p)%na);
       xyz[3*p]=0.1+0.3*p; xyz[3*p+1]=0.7; xyz[3*p+2]=-0.8;
     }
     const auto* center_pairs=cached?geometry.data():nullptr;
@@ -139,7 +143,7 @@ int main() {
   }
   return 0;
 }
-"""
+""".replace("ATOMS", str(atoms))
     )
     binary = tmp_path / "kernel"
     process = subprocess.run(
@@ -163,3 +167,99 @@ int main() {
         [str(binary)], capture_output=True, text=True, timeout=60, check=False
     )
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+
+
+def test_emitted_team_vote_completes_reads_before_the_next_failure(
+    tmp_path: Path,
+) -> None:
+    """A slow reader of a successful vote must not see the next vote's failure."""
+    from test_stationary_task_work_budget import _block
+
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("C++ compiler unavailable")
+    team = _block(_STATIONARY_SCIENTIFIC_KERNELS, "struct GeometryBlockTeam {") + ";\n"
+    source = tmp_path / "vote.cpp"
+    source.write_text(
+        r"""
+#include <atomic>
+#include <barrier>
+#include <chrono>
+#include <thread>
+#include <vector>
+#include <cstddef>
+#define __device__
+struct Dimension { size_t x{}; };
+thread_local Dimension threadIdx;
+Dimension blockDim{2};
+thread_local std::barrier<>* active_barrier;
+thread_local size_t barrier_count=0;
+void delayed_barrier() {
+  active_barrier->arrive_and_wait();
+  if (barrier_count++ == 0 && threadIdx.x==1)
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+}
+#define __syncthreads() delayed_barrier()
+int atomicExch(int* pointer,int value) { return std::atomic_ref(*pointer).exchange(value); }
+"""
+        + team
+        + emit_grid_adjoint()
+        + emit_grid_partials(3)
+        + r"""
+int main() {
+  using namespace generativeqc_grid_adjoint;
+  constexpr size_t na=33;
+  double point[3]{0.4,0.7,0.9},centers[3*na]{};
+  centers[3]=1e-310;
+  for(size_t atom=2;atom<na;++atom) centers[3*atom]=0.7*atom;
+  std::vector<CenterPair> pairs(na*(na-1)/2);
+  // Zero tolerance legally admits distinct finite centers whose inverse
+  // separation overflows. The first pair state fails after a successful vote.
+  if(!prepare_center_geometry(centers,na,0,pairs.data(),local_norm,local_ratio_geometry)) return 1;
+  for(size_t participants:{size_t(2),size_t(32)}) for(bool cached:{false,true}) {
+    blockDim.x=participants;
+    std::vector<double> gradient(3*na),logs(na),products(na),bar_product(na),bar_distance(na);
+    std::vector<size_t> zeros(na);
+    std::vector<std::array<double,4>> distances(na);
+    std::vector<PointPair> states(4*(2*na-5)/2);
+    int vote=1;
+    std::atomic<size_t> rejected{0};
+    std::barrier barrier(static_cast<std::ptrdiff_t>(participants));
+    std::vector<std::thread> workers;
+    for(size_t rank=0;rank<participants;++rank) workers.emplace_back([&,rank] {
+      threadIdx.x=rank; active_barrier=&barrier;
+      const bool result=contract_point_tiled_cooperative(point,centers,na,0,0.3,gradient.data(),
+          logs.data(),products.data(),bar_product.data(),bar_distance.data(),zeros.data(),
+          distances.data(),states.data(),4,GeometryBlockTeam{&vote},local_norm,local_ratio,
+          local_log,local_becke,cached?pairs.data():nullptr,local_ratio_prepared);
+      if(!result) ++rejected;
+    });
+    for(auto& worker:workers) worker.join();
+    if(rejected!=participants) return 2;
+  }
+  return 0;
+}
+"""
+    )
+    binary = tmp_path / "vote"
+    compiled = subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-pthread",
+            "-O2",
+            "-ffp-contract=off",
+            str(source),
+            "-o",
+            str(binary),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    result = subprocess.run(
+        [str(binary)], capture_output=True, text=True, timeout=5, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
