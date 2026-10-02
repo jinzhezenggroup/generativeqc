@@ -1,6 +1,6 @@
 {
   "adaptations": {
-    "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 energy/potential/coordinate and CN reverse response; preserve runtime validation, topology, and publication ownership.",
+    "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 science and bounded atom/peer schedules; validate once, retain ordered component sums and fused small-system fallback, and suppress failed-system publication.",
     "src/backends/cuda/gfn2_es3.cu": "Consume compiler-generated TensorIR/AD ES3 energy/potential and finite-range recovery; preserve runtime validation, topology, and publication ownership.",
     "src/backends/cuda/gfn2_geometry.cu": "Consume compiler-generated TensorIR/AD coordination pair science; retain CUDA geometry/topology ownership.",
     "src/backends/cuda/gfn2_hamiltonian.cu": "Consume compiler-generated fixed-state TensorIR S/D/Q pair Hamiltonian for both spin layouts. Consume compiler-owned bounded matrix tiling while preserving scalar order, ragged/spin ownership and per-system atomic publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile.",
@@ -93,7 +93,7 @@
     "src/backends/cuda/gfn2_aes2.cu": {
       "adapted": true,
       "upstream_sha256": "86ebfe4e4c846f2f2358e75eaa521b98ff2627e0ff1d659ddb4a64be9eb801de",
-      "vendored_sha256": "10192647b0262b9cf245575880d93e1a54ea7b8041030958d3de8bf5e8862434"
+      "vendored_sha256": "64c67896bb7f11364752b515c0b73284e439927f7019db5414e6da9565642e90"
     },
     "src/backends/cuda/gfn2_aes2.cuh": {
       "adapted": true,

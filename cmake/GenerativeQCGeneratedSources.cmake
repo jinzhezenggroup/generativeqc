@@ -316,6 +316,7 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_GFN2_AES2_CPU_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_aes2.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_aes2_schedule.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ad_program.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
     ARGS --cpu-output "${GENERATIVEQC_GFN2_AES2_CPU_HEADER}"
