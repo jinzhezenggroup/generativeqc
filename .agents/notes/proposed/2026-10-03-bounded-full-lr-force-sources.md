@@ -1,6 +1,6 @@
 # Proposal: specialized full-range and LR stationary source traversals
 
-Status: experimental; larger and same-allocation comparison pending
+Status: experimental; larger and latest native qualification pending
 Date: 2026-10-03
 
 The bounded fused RSH derivative traversal evaluates three radial source kinds.
@@ -62,3 +62,30 @@ A fused generated full/SR/LR shell consumer or another omega specialization has
 complete endpoint evidence that beats this decomposition. Preserve all three
 source meanings and independent strict energy/force gates when changing the
 operator representation or screening policy.
+
+## Controlled two-traversal comparison
+
+Node1 Slurm job 5449 ran baseline `capacity2` followed by `full-lr2` on the same
+scheduled RTX5090 with eight CPUs. Both used the full24 settings above and three
+warm repeats. Baseline/candidate cold is 331.171878 / 330.307535 s, both 18 SCF
+iterations. Warm median is 57.326409 / 54.321158 s (1.0553x), with one iteration
+per sample. Candidate samples span 54.196943--54.730460 s; its GPU4PySCF median
+is 27.380643 s. This improves our endpoint but does not beat the reference.
+
+All five pairs pass for each variant. Candidate maximum energy error is
+2.728485e-11 Eh and force error 4.160557e-10 Eh/Bohr; baseline maxima are
+2.819434e-11 Eh and 4.163496e-10 Eh/Bohr. The final force-component records show
+integral derivatives 18.012149 -> 14.975477 s and grid/pair drain
+23.138527 -> 23.136647 s, consistent with the intended source change.
+The compared native binaries include #1716 but predate #1732; the candidate
+hash is the `03c2...` hash above. Full JSONs remain under the ignored evidence
+folder; this evidence is not silently relabelled as a later build.
+
+After #1725 merged, the branch was rebased onto master `9a5871dca`. A concurrent
+review fix was preserved: when both exchange coefficients are zero, the full
+helper's J row is published with zero exchange rows without evaluating LR or
+forming potentially overflowing spin products. The updated implementation has 97 passing host tests and was rebuilt with
+verified ccache. The new native hash is
+`0b1d9a8511ebf177f49af94a3fbeaf2cd4359b4281b9f85c9cd874cfd5e43021`;
+independent molecular and default48 qualification is running as `full-lr3`. Coupled larger
+experiments include separate scalar changes and cannot isolate this proposal.
