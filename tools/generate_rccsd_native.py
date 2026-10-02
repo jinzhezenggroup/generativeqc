@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 import typing
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -240,10 +242,71 @@ def _scaled_bilinear_cpp() -> str:
 }"""
 
 
-def _cpu_node(node: typing.Any, number: int, names: dict[int, str]) -> list[str]:
+@dataclass(frozen=True)
+class ArenaPlan:
+    """Shape-symbolic storage shared by admission and CPU/CUDA emission.
+
+    Slots are reused only after their last reader and only for an identical
+    product of runtime extents. This is valid for every o/v/q, including equal
+    concrete extents; no representative-shape size comparison is involved.
+    Program outputs remain live through return because callers borrow pointers.
+    """
+
+    slots: tuple[tuple[str, ...], ...]
+    node_slots: dict[int, int]
+
+    @property
+    def sizes(self) -> tuple[str, ...]:
+        return tuple(
+            "checked_product({" + ",".join(shape) + "})" if shape else "1"
+            for shape in self.slots
+        )
+
+
+def _arena_plan(program: Program) -> ArenaPlan:
+    """Color last-use intervals without aliasing a node with its own inputs.
+
+    All emitted operations write their entire output. Reusing a dead slot needs
+    no clearing or extra arithmetic. CUDA launches use one ordered stream, so
+    the same intervals apply to queued kernels and captured graph replays.
+    """
+    nodes = tuple(program.live_nodes)
+    numbers = {id(node): number for number, node in enumerate(nodes)}
+    last_use = list(range(len(nodes)))
+    for number, node in enumerate(nodes):
+        for source in node.inputs:
+            last_use[numbers[id(source)]] = number
+    for node in program.outputs.values():
+        last_use[numbers[id(node)]] = len(nodes)
+
+    releases: dict[int, list[int]] = defaultdict(list)
+    available: dict[tuple[str, ...], list[int]] = defaultdict(list)
+    slots: list[tuple[str, ...]] = []
+    node_slots = {}
+    for number, node in enumerate(nodes):
+        for slot in releases[number]:
+            available[slots[slot]].append(slot)
+        if node.op == "input":
+            continue
+        if node.spec.dtype != "float64":
+            raise ValueError("native RCCSD arena requires FP64 intermediates")
+        shape = tuple(sorted(_dim(index) for index in node.spec.indices))
+        if available[shape]:
+            slot = available[shape].pop()
+        else:
+            slot = len(slots)
+            slots.append(shape)
+        node_slots[number] = slot
+        releases[last_use[number] + 1].append(slot)
+    return ArenaPlan(tuple(slots), node_slots)
+
+
+def _cpu_node(
+    node: typing.Any, number: int, names: dict[int, str], *, storage: str
+) -> list[str]:
     out = names[number]
     size = _size(node.spec)
-    lines = [f"  double* {out}=allocate({size});"]
+    lines = [f"  double* {out}={storage};"]
     if node.op == "add":
         terms = []
         for source, coefficient in zip(node.inputs, node.attrs["coefficients"]):
@@ -530,6 +593,7 @@ def _cpu_function(
     batch_dim: bool = False,
 ) -> str:
     names = _prepare_program(program)
+    arena_plan = _arena_plan(program)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     dimensions = "std::size_t o,std::size_t v"
     if batch_dim:
@@ -543,6 +607,10 @@ def _cpu_function(
         '    if(next>arena_elements) throw std::length_error("RCCSD generated CPU arena is too small");',
         "    double* result=arena+cursor; cursor=next; return result;",
         "  };",
+        *[
+            f"  double* slot{slot}=allocate({size});"
+            for slot, size in enumerate(arena_plan.sizes)
+        ],
     ]
     for number, node in enumerate(program.live_nodes):
         if node.op == "input":
@@ -553,7 +621,9 @@ def _cpu_function(
             ctype = "std::int64_t" if node.spec.dtype == "int64" else "double"
             lines.append(f"  const {ctype}* {names[number]}={access};")
         else:
-            lines += _cpu_node(node, number, names)
+            lines += _cpu_node(
+                node, number, names, storage=f"slot{arena_plan.node_slots[number]}"
+            )
     outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
     if output_type == "IterationOutputs":
         returned = [
@@ -608,8 +678,7 @@ def _cpu_function(
 
 
 def _required_function(program: Program, name: str, *, batch_dim: bool = False) -> str:
-    _prepare_program(program)
-    pieces = [_size(node.spec) for node in program.live_nodes if node.op != "input"]
+    pieces = _arena_plan(program).sizes
     # Emit sequential checked additions rather than an expression whose parser
     # nesting grows with the AD graph. Clang's default bracket limit is finite.
     body = "std::size_t required=0;"
@@ -1111,6 +1180,7 @@ def _cuda_program(
     input_overrides: dict[str, str] | None = None,
 ) -> str:
     names = _prepare_program(program)
+    arena_plan = _arena_plan(program)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     kernels = []
     for number, node in enumerate(program.live_nodes):
@@ -1137,6 +1207,10 @@ def _cuda_program(
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
         "  std::size_t cursor=0;",
         "  auto allocate=[&](std::size_t count)->double*{double* p=arena+cursor;cursor=checked_add(cursor,count);return p;};",
+        *[
+            f"  double* slot{slot}=allocate({size});"
+            for slot, size in enumerate(arena_plan.sizes)
+        ],
         "  generativeqc_tensor::cuda_check(cudaMemsetAsync(s.error,0,sizeof(int),s.stream));",
     ]
     for number, node in enumerate(program.live_nodes):
@@ -1149,7 +1223,7 @@ def _cuda_program(
             )
             lines.append(f"  const double* {names[number]}={access};")
             continue
-        lines.append(f"  double* {names[number]}=allocate({_size(node.spec)});")
+        lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         sources = [names[x._emit_index] for x in node.inputs]
         count = _size(node.spec)
         launch_args = ",".join([*sources, names[number], "s.o", "s.v", "s.error"])
