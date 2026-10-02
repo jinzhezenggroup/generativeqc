@@ -11,7 +11,7 @@ import pytest
 from generativeqc import Calculator
 
 from benchmarks._cases import benchmark_cases
-from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis
+from benchmarks._retained_basis import load_retained_comparison_basis
 from benchmarks.df_component_ledger import read_trace
 
 pytestmark = pytest.mark.skipif(
@@ -84,10 +84,10 @@ def test_qualified_lowering_without_ao_shape_admission(
             Path(__file__).resolve().parents[2]
             / "benchmarks/results/issue206-practical-auxiliary/identity"
         )
-        orbital, cpu_orbital = load_comparison_basis(
+        orbital, cpu_orbital = load_retained_comparison_basis(
             identity / "cc-pvdz.json", case, role="orbital", compute_forces=True
         )
-        auxiliary, cpu_auxiliary = load_comparison_basis(
+        auxiliary, cpu_auxiliary = load_retained_comparison_basis(
             identity / "cc-pvdz-jkfit.json",
             case,
             role="auxiliary",

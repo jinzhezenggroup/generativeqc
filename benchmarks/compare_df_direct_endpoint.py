@@ -26,12 +26,12 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from benchmarks._cases import benchmark_cases
+from benchmarks._retained_basis import load_retained_comparison_basis
 from benchmarks._retention import raw_output_path
 from benchmarks.compare_gpu4pyscf_batch import (
     GpuCycleTracker,
     _configure_reference_scf,
     gpu_convergence_payload,
-    load_comparison_basis,
     native_build_metadata,
     require_tuned_native_build,
     scaled_geometries,
@@ -162,7 +162,7 @@ def main() -> None:
         if args.nested_water
         else benchmark_cases()[case_name]
     )
-    native_aux, reference_aux = load_comparison_basis(
+    native_aux, reference_aux = load_retained_comparison_basis(
         AUXILIARY, case, role="auxiliary", compute_forces=True
     )
     original = scaled_geometries(case.atoms, 1)[0]

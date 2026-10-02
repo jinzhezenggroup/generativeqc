@@ -10,10 +10,8 @@ import pytest
 from generativeqc import Calculator, _native
 
 from benchmarks._cases import benchmark_cases
-from benchmarks.compare_gpu4pyscf_batch import (
-    load_comparison_basis,
-    native_build_metadata,
-)
+from benchmarks._retained_basis import load_retained_comparison_basis
+from benchmarks.compare_gpu4pyscf_batch import native_build_metadata
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1",
@@ -28,10 +26,10 @@ def _practical_model(case_name: typing.Any) -> typing.Any:
         Path(__file__).resolve().parents[2]
         / "benchmarks/results/issue206-practical-auxiliary/identity"
     )
-    orbital, cpu_orbital = load_comparison_basis(
+    orbital, cpu_orbital = load_retained_comparison_basis(
         identity / "cc-pvdz.json", case, role="orbital", compute_forces=True
     )
-    auxiliary, cpu_auxiliary = load_comparison_basis(
+    auxiliary, cpu_auxiliary = load_retained_comparison_basis(
         identity / "cc-pvdz-jkfit.json", case, role="auxiliary", compute_forces=True
     )
     return case, orbital, auxiliary, cpu_orbital, cpu_auxiliary
