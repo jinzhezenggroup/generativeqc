@@ -170,6 +170,21 @@ def test_final_projection_trace_recovers_fitted_rhf_charge(
     np.testing.assert_allclose(reused, direct, atol=3e-13, rtol=3e-13)
 
 
+def test_final_projection_charge_reuse_avoids_retained_fitted_charge_pass() -> None:
+    """The qualified reuse branch must not unpack B or rerun an AO-density dot."""
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "src/scf/cuda/df_response_weights.cu").read_text()
+    start = source.index("if (reuse_final_fitted_projection) {")
+    stop = source.index("} else if (fitted_occupied || buffers.read_occupied_panels)", start)
+    reuse = source[start:stop]
+    assert "df_occupied_finish_projection" in reuse
+    assert "df_rhf_charge_from_final_projection" in reuse
+    assert "response_final_fitted_charge_reused" in reuse
+    assert "launch_unpack_df_values" not in reuse
+    assert "df_rhf_charge_contract" not in reuse
+    assert source.count("generated::df_occupied_finish_projection(") == 1
+
+
 def test_metric_custom_rule_is_explicit_fixed_rank_pseudoinverse() -> None:
     owner = DensityFittingRHFResponsePlan(2, 3)
     rule = owner.metric_rule(0.1)
