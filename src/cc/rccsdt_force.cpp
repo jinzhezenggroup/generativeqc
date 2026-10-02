@@ -184,7 +184,8 @@ struct RawHamiltonian {
 };
 
 RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& source,
-                               const hf::PhysicalReference& ref, std::size_t max_bytes) {
+                               const hf::PhysicalReference& ref, std::size_t max_bytes, bool cuda,
+                               int device_id) {
   const auto n = ref.nbf;
   if (source.nbf() != n || !source.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("RCCSD(T) raw Hamiltonian source/reference mismatch");
@@ -204,7 +205,7 @@ RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& sourc
   }
   posthf::NativeBlockProvider provider(source, ref, max_bytes, 2);
   const auto all = range(n);
-  out.g = provider.get({all, all, all, all}, false, 0);
+  out.g = provider.get({all, all, all, all}, cuda, device_id);
   if (out.g.size() != n4) throw std::runtime_error("RCCSD(T) full MO ERI shape mismatch");
   out.density.assign(n2, 0.0);
   for (std::size_t i = 0; i < ref.nocc; ++i) out.density[i * n + i] = 2.0;
@@ -629,7 +630,8 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
   if (triples) add_triples_parameter_sources(parameters, *triples);
-  auto raw = raw_hamiltonian(source, reference, max_bytes);
+  auto raw =
+      raw_hamiltonian(source, reference, max_bytes, cuda_derivative, cuda_derivative ? device_id : 0);
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
   if (cuda_derivative)
