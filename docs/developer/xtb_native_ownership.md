@@ -16,7 +16,8 @@ bounded fallback remain part of CUDA execution.
 ## Scientific ownership
 
 The compiler emits the following production mathematics. Backend owners retain
-ragged storage traversal, validation, scheduling, accumulation and publication.
+ragged storage traversal, validation, accumulation and publication, and launch
+the compiler-selected schedules where available.
 
 | Science | Compiler owner | Production consumers |
 | --- | --- | --- |
@@ -46,6 +47,18 @@ up to 36 outputs. Native contraction order, screening and spherical transforms
 remain unchanged. CUDA keeps one Cartesian pair per lane and hoists only DAG
 nodes common to every component alternative before the component switch.
 Both routes retain FP64 arithmetic and the checked primitive entry points.
+
+CUDA electronic Hamiltonian assembly and density contraction use the policy in
+`method/gfn2_electronic_schedule.py`: 256 threads per block and up to 128 tiles
+per system. Host-visible mean matrix size selects the tile count; each system
+strides over its actual device extent. Small matrices retain one tile. This
+requires no additional storage or device-to-host metadata transfer, including
+for imbalanced ragged batches. One triangular pair owns both matrix
+directions, preserving scalar arithmetic and spin packing. Density contraction
+retains the full orbital sum in each lane; orbital and trace reduction orders
+and finite-range checks are unchanged. Native validation
+and whole-system publication remain separate launches; an error in any tile
+suppresses the entire system's output.
 
 `benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
 matched fresh-SCC settings. It records cold, repeated and changed-geometry

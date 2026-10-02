@@ -3,7 +3,7 @@
     "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 energy/potential/coordinate and CN reverse response; preserve runtime validation, topology, and publication ownership.",
     "src/backends/cuda/gfn2_es3.cu": "Consume compiler-generated TensorIR/AD ES3 energy/potential and finite-range recovery; preserve runtime validation, topology, and publication ownership.",
     "src/backends/cuda/gfn2_geometry.cu": "Consume compiler-generated TensorIR/AD coordination pair science; retain CUDA geometry/topology ownership.",
-    "src/backends/cuda/gfn2_hamiltonian.cu": "Consume compiler-generated fixed-state TensorIR S/D/Q pair Hamiltonian for both spin layouts.",
+    "src/backends/cuda/gfn2_hamiltonian.cu": "Consume compiler-generated fixed-state TensorIR S/D/Q pair Hamiltonian for both spin layouts. Consume compiler-owned bounded matrix tiling while preserving scalar order, ragged/spin ownership and per-system atomic publication.",
     "src/backends/cuda/gfn2_hamiltonian_force.cu": "Consume the matching compiler-generated S/D/Q reverse-mode pair adjoints, including spin overlap.",
     "src/backends/cuda/gfn2_pairlist.cu": "Backport xTBloom #487: pass pair-list CUDA kernel descriptors by value so device code never dereferences launcher-stack host references. Consume the same compiler-generated TensorIR/AD coordination pair helper as dense geometry, preserving bitwise CN admission and canonical neighbor accumulation.",
     "src/backends/cuda/gfn2_preprocessing.cu": "Backport xTBloom #487: pass committed pair-list CUDA kernel descriptors by value for GPUs without pageable host-memory access.",
@@ -17,7 +17,8 @@
     "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy.",
     "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership.",
     "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
-    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership."
+    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership.",
+    "src/backends/cuda/gfn2_density.cu": "Consume compiler-owned bounded matrix tiling; preserve complete ordered orbital sums, finite-range checks, trace reductions, ragged spin packing and atomic per-system publication."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -121,7 +122,7 @@
     "src/backends/cuda/gfn2_density.cu": {
       "adapted": true,
       "upstream_sha256": "22e2f182a418ddf43834578605ba913c9e9e043f491e0f95f2f7ec6f16735a34",
-      "vendored_sha256": "89588e47750add95e713a82843a7bb038945cfb2cef7a959f37aab28ac0ddd4b"
+      "vendored_sha256": "cf68d87ed672e927422914178523958f542baa7140a7c35fa8519031708fed52"
     },
     "src/backends/cuda/gfn2_density.cuh": {
       "adapted": true,
@@ -241,7 +242,7 @@
     "src/backends/cuda/gfn2_hamiltonian.cu": {
       "adapted": true,
       "upstream_sha256": "3c3be624100613cef64a01b2d3bc78756f59f0847e832472678b9018bc11729b",
-      "vendored_sha256": "a310fe87dc7e72fadd6098e0689d471464c76512d141b605331d2d08f42850c5"
+      "vendored_sha256": "8fe6cc5d0d98895cf3ac8aebed7e21ea13cf874c06f41ff8e3171cf9d174a32b"
     },
     "src/backends/cuda/gfn2_hamiltonian.cuh": {
       "adapted": true,
