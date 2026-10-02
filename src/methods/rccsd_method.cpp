@@ -331,14 +331,11 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
   return p;
 }
 
-RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
-                                        const core::System& system,
-                                        const scf::ScfOptions& reference_options,
-                                        const cc::SolverOptions& solver_options,
-                                        std::size_t reference_capacity,
-                                        scf::PreparedFockPlan* prepared_exact,
-                                        const std::vector<double>* initial_density,
-                                        bool* warm_start_fallback) {
+RccsdNativeState execute_rccsd_prepared(
+    runtime::ExecutionContext& execution, const core::System& system,
+    const scf::ScfOptions& reference_options, const cc::SolverOptions& solver_options,
+    std::size_t reference_capacity, scf::PreparedFockPlan* prepared_exact,
+    const std::vector<double>* initial_density, bool* warm_start_fallback) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
@@ -557,8 +554,9 @@ class RccsdPrepared final : public PreparedCalculation {
       cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(
           system_, nullptr, strategy, execution_.cuda_requested() ? execution_.device_id() : -1);
     }
-    auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
-                                        reference_capacity_, cpu_exact_plan_.get(), nullptr, nullptr);
+    auto state =
+        execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
+                               reference_capacity_, cpu_exact_plan_.get(), nullptr, nullptr);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)

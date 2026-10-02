@@ -220,9 +220,15 @@ def test_public_native_rccsdt_homogeneous_batch_repeats_and_moves_geometry() -> 
         )
         forced = prepared.execute(properties=("energy", "forces"), strict=True)
         assert all(item.forces is not None for item in forced.items)
-        assert all(item.warm_start_used and not item.warm_start_fallback for item in forced.items)
+        assert all(
+            item.warm_start_used and not item.warm_start_fallback
+            for item in forced.items
+        )
         repeated = prepared.execute(strict=True)
-        assert all(item.warm_start_used and not item.warm_start_fallback for item in repeated.items)
+        assert all(
+            item.warm_start_used and not item.warm_start_fallback
+            for item in repeated.items
+        )
         np.testing.assert_allclose(
             [item.energy for item in repeated.items],
             [item.energy for item in first.items],
@@ -261,7 +267,9 @@ def test_public_native_rccsdt_checkpoint_restores_hf_warm_state(tmp_path: Path) 
         atol=2e-10,
         rtol=0,
     )
-    assert all(item.warm_start_used and not item.warm_start_fallback for item in replay.items)
+    assert all(
+        item.warm_start_used and not item.warm_start_fallback for item in replay.items
+    )
 
 
 def test_public_native_rccsdt_cuda_batch_rebuild_and_failure_isolation(

@@ -123,10 +123,9 @@ class RccsdtPrepared final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD(T) forces are qualified only through 12 AOs");
 
-    auto state =
-        run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,
-                               initial_state ? &initial_state->density : nullptr,
-                               warm_start_fallback);
+    auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,
+                                        initial_state ? &initial_state->density : nullptr,
+                                        warm_start_fallback);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -369,8 +368,7 @@ class RccsdtPreparedBatch final : public PreparedBatch {
         std::optional<scf::HfWarmState> next_warm_state;
         auto& owner = static_cast<RccsdtPrepared&>(*owners_[index]);
         result.calculation = owner.execute_with_reference_seed(
-            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr,
-            &warm_start_fallback,
+            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr, &warm_start_fallback,
             warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
         result.warm_start_fallback = warm_start_fallback;
         if (next_warm_state) warm_states_[index].swap(next_warm_state);
@@ -420,8 +418,7 @@ class RccsdtPreparedBatch final : public PreparedBatch {
           !valid_positions(state.coordinates, systems_[index]) || state.iterations < 0 ||
           !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||
           !std::isfinite(state.density_rms) || state.density_rms < 0)
-        throw std::invalid_argument(
-            "invalid RCCSD(T) checkpoint state dimensions or diagnostics");
+        throw std::invalid_argument("invalid RCCSD(T) checkpoint state dimensions or diagnostics");
       auto source = systems_[index];
       set_positions(source, state.coordinates);
       scf::validate_hf_warm_density(source, GENERATIVEQC_METHOD_RHF, state.density);
@@ -509,8 +506,8 @@ std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(
                         "RCCSD(T) prepared batch requires one homogeneous (nocc,nvir) shape; split "
                         "ragged groups");
   }
-  return std::make_unique<RccsdtPreparedBatch>(
-      capabilities, context, std::move(systems), descriptor, warm_starts_enabled);
+  return std::make_unique<RccsdtPreparedBatch>(capabilities, context, std::move(systems),
+                                               descriptor, warm_starts_enabled);
 }
 
 }  // namespace generativeqc::methods::detail
