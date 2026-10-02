@@ -755,13 +755,13 @@ void compare_rsh_chunk_history() {
     const bool energy_change_equal =
         (std::isinf(left.energy_change) && std::isinf(right.energy_change)) ||
         std::abs(left.energy_change - right.energy_change) < 1e-13;
-    require(left.iteration == right.iteration && energy_change_equal &&
-                std::abs(left.components.total() - right.components.total()) < 1e-13 &&
-                std::abs(left.components.exact_exchange - right.components.exact_exchange) <
-                    1e-13 &&
-                std::abs(left.density_change - right.density_change) < 1e-13 &&
-                std::abs(left.physical_residual - right.physical_residual) < 1e-13,
-            "bounded CUDA RSH SolverRegion changed physical iteration history");
+    require(
+        left.iteration == right.iteration && energy_change_equal &&
+            std::abs(left.components.total() - right.components.total()) < 1e-13 &&
+            std::abs(left.components.exact_exchange - right.components.exact_exchange) < 1e-13 &&
+            std::abs(left.density_change - right.density_change) < 1e-13 &&
+            std::abs(left.physical_residual - right.physical_residual) < 1e-13,
+        "bounded CUDA RSH SolverRegion changed physical iteration history");
   }
   require(chunked.second.execution_region_bindings >= 1 &&
               chunked.second.iteration_chunks < chunked.second.iterations &&
