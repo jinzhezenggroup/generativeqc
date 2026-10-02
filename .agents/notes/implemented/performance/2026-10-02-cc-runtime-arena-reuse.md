@@ -57,6 +57,24 @@ to 8,961,320 bytes because the final derivative stage remains dominant. Cold,
 warm and changed-geometry times were approximately 2.5-3.0 s for both schedules;
 no complete-endpoint speedup is established by that result.
 
+The [retained CPU summary](../../../../benchmarks/results/ccsdt-arena-20261002/cpu-summary.json)
+binds binary hashes, exact basis/geometry/settings, complete endpoint timings,
+per-phase work counts and all-repeat oracle errors. It covers 7-AO forces and
+14/28-AO energies, each cold, twice warm and at changed geometry. Baseline and
+candidate energies/forces are bitwise equal; semantic work counts match.
+Maximum errors against PySCF 2.14.0 are 8.7e-13 Eh for energy, 1.5e-14 Eh for
+(T), and 1.3e-8 Eh/bohr for force. Match the packaged STO-3G coefficients in the
+oracle, and supply explicitly corrected `ccsd_t_lambda` amplitudes to its
+gradient; PySCF's default named basis and uncorrected Lambda are different inputs.
+
+The 28-AO baseline warm endpoint takes about 40 s: independent expanded replay
+alone takes 28.4 s, compared with 4.73 s for 47 iteration graphs, 6.47 s for MO
+preparation and 0.25 s for (T). Arena reuse leaves that work unchanged. A separate
+compiler census identifies degree-eight work in the deliberately unreassociated
+expanded replay, versus degree six under existing contraction reassociation.
+Any follow-up must preserve independent expanded equations and oracle gates;
+removing replay or relaxing convergence is not an acceptable optimization.
+
 `test_rccsd_arena_liveness.py` checks every native production graph's intervals,
 output lifetimes, symbolic-shape admission and CPU/CUDA plan agreement. Existing
 compiled Lambda, Hamiltonian and runtime triples-response tests compare executed
