@@ -44,6 +44,21 @@ def test_native_source_contraction_owner_is_retired() -> None:
         assert "direct_native_source_contraction.cuh" not in source
 
 
+def test_order_two_value_shortcut_preserves_derivative_seeds() -> None:
+    """The value-only vector must not zero the full-range Dual3 force jet."""
+    source = emit_direct_source_contraction_header()
+    assert "std::is_arithmetic_v<Scalar>" in source
+    shortcut = source.index("if constexpr ((ShellClass == 2")
+    assert source.index("std::is_arithmetic_v<Scalar>", shortcut) < source.index(
+        "Order2IntegralVector integral", shortcut
+    )
+    fallback = source.index(
+        "return contracted_eri_cartesian_source_shell_class<FirstShellAngular",
+        shortcut,
+    )
+    assert "derivative_coordinate, range, omega" in source[fallback:]
+
+
 def test_source_contraction_generation_is_registered() -> None:
     generated = (ROOT / "cmake/GenerativeQCGeneratedSources.cmake").read_text(
         encoding="utf-8"
