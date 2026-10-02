@@ -203,15 +203,15 @@ class RccsdtPrepared final : public PreparedCalculation {
         // Reuse the same prepared exact interaction owner for the force Hamiltonian.
         // CUDA sources publish raw ERI tiles directly into the existing bounded MO transform.
         std::unique_ptr<posthf::RawSource> force_raw_source;
-            std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
-            const integrals::ElectronInteractionSource* force_source = nullptr;
-            if (cpu_exact_plan_) {
-              force_prepared_source.emplace(*cpu_exact_plan_);
-              force_source = &*force_prepared_source;
-            } else {
-              force_raw_source = std::make_unique<posthf::RawSource>(system_);
-              force_source = force_raw_source.get();
-            }
+        std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
+        const integrals::ElectronInteractionSource* force_source = nullptr;
+        if (cpu_exact_plan_) {
+          force_prepared_source.emplace(*cpu_exact_plan_);
+          force_source = &*force_prepared_source;
+        } else {
+          force_raw_source = std::make_unique<posthf::RawSource>(system_);
+          force_source = force_raw_source.get();
+        }
 
         constexpr std::size_t kCudaDerivativeStageBudget = 64ULL << 20;
         auto force =
