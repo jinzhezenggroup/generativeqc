@@ -987,6 +987,85 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
   });
 }
 
+generativeqc_status enqueue_cuda_direct_rsh_values_device(
+    CudaDirectJkPlan* plan, FockBuildSpec primary, FockBuildSpec correction,
+    const double* density, const double* beta, std::size_t elements, double* coulomb,
+    double* full_alpha_exchange, double* full_beta_exchange, double* range_alpha_exchange,
+    double* range_beta_exchange, int* primary_error, int* range_error, std::string& detail) {
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan != nullptr && plan->generated_exchange != nullptr &&
+                          plan->generated_exchange->bounded_value_capability,
+                      "prepared Direct owner has no bounded range-value lease");
+    primary = direct_jk_strategy(plan, primary, 0, plan->diagnostic.batch_size);
+    const bool unrestricted = primary.spin == FockSpin::Unrestricted;
+    direct_jk_require(
+        primary.derivative_order == 0 && primary.coulomb.present &&
+            primary.coulomb.approximation == FockApproximation::Exact &&
+            primary.coulomb.op == FockOperator::FullRange && primary.exchange.present &&
+            primary.exchange.approximation == FockApproximation::Exact &&
+            primary.exchange.op == FockOperator::FullRange && correction.derivative_order == 0 &&
+            correction.spin == primary.spin && !correction.coulomb.present &&
+            correction.exchange.present &&
+            correction.exchange.approximation == FockApproximation::Exact &&
+            (correction.exchange.op == FockOperator::ShortRange ||
+             correction.exchange.op == FockOperator::LongRange) &&
+            std::isfinite(correction.exchange.omega) && correction.exchange.omega > 0.0,
+        "resident fused RSH value request has incompatible scientific identity");
+    direct_jk_require(
+        elements == plan->matrix_elements && density != nullptr && coulomb != nullptr &&
+            full_alpha_exchange != nullptr && range_alpha_exchange != nullptr &&
+            primary_error != nullptr && range_error != nullptr &&
+            (unrestricted ? beta != nullptr && full_beta_exchange != nullptr &&
+                                range_beta_exchange != nullptr
+                          : beta == nullptr && full_beta_exchange == nullptr &&
+                                range_beta_exchange == nullptr),
+        "resident fused RSH value buffers or dimensions are invalid");
+
+    int current = -1;
+    direct_jk_check(cudaGetDevice(&current));
+    direct_jk_require(current == plan->device_id, "resident fused RSH current device mismatch");
+    const auto device_pointer = [&](const void* value) {
+      cudaPointerAttributes attributes{};
+      direct_jk_check(cudaPointerGetAttributes(&attributes, value));
+      direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
+                        "resident fused RSH requires current-device buffers");
+    };
+    for (const auto* value : {density, beta, coulomb, full_alpha_exchange, full_beta_exchange,
+                              range_alpha_exchange, range_beta_exchange})
+      if (value) device_pointer(value);
+    device_pointer(primary_error);
+    device_pointer(range_error);
+
+    direct_jk_check(cudaMemsetAsync(primary_error, 0, sizeof(int), plan->stream));
+    direct_jk_check(cudaMemsetAsync(range_error, 0, sizeof(int), plan->stream));
+    if (plan->canonical_work_count)
+      direct_jk_check(
+          cudaMemsetAsync(plan->canonical_work_count, 0, 2U * sizeof(std::uint64_t), plan->stream));
+    launch_independent_jk_finite_kernel(plan->stream, density, elements, primary_error);
+    direct_jk_check(cudaGetLastError());
+    if (beta) {
+      launch_independent_jk_finite_kernel(plan->stream, beta, elements, primary_error);
+      direct_jk_check(cudaGetLastError());
+    }
+
+    direct_jk_check(enqueue_generated_rsh_values(
+        *plan->generated_exchange, unrestricted, density, beta, coulomb, full_alpha_exchange,
+        full_beta_exchange, range_alpha_exchange, range_beta_exchange,
+        direct_exchange_range(correction.exchange), correction.exchange.omega));
+
+    for (const auto* output : {coulomb, full_alpha_exchange, full_beta_exchange})
+      if (output) {
+        launch_independent_jk_finite_kernel(plan->stream, output, elements, primary_error);
+        direct_jk_check(cudaGetLastError());
+      }
+    for (const auto* output : {range_alpha_exchange, range_beta_exchange})
+      if (output) {
+        launch_independent_jk_finite_kernel(plan->stream, output, elements, range_error);
+        direct_jk_check(cudaGetLastError());
+      }
+  });
+}
+
 generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBuildSpec spec,
                                                   const double* density, const double* beta,
                                                   std::size_t elements, double* coulomb,
