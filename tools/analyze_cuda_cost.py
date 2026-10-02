@@ -4,16 +4,50 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
 from generativeqc_compiler.common.cuda_cost_model import static_cuda_cost
 from generativeqc_compiler.common.cuda_resources import (
+    KernelResources,
     compiled_gpu_profitability,
     parse_resources,
 )
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+
+
+def _ptxas_resources(
+    diagnostics: str, architecture: str
+) -> tuple[tuple[KernelResources, ...], bool]:
+    """Reject incomplete rows and contradictory retained-log provenance."""
+
+    resources = parse_resources(diagnostics)
+    declared = re.findall(r"Function properties for (\S+)", diagnostics)
+    if not resources:
+        raise ValueError("CUDA cost analysis requires PTXAS resource rows")
+    if sorted(row.function for row in resources) != sorted(declared):
+        raise ValueError("PTXAS log contains incomplete or unsupported resource rows")
+
+    entries = re.findall(
+        r"Compiling entry function '([^']+)' for '([^']+)'", diagnostics
+    )
+    entry_counts = Counter(function for function, _ in entries)
+    resource_counts = Counter(row.function for row in resources)
+    if entry_counts - resource_counts:
+        raise ValueError("PTXAS log contains incomplete or unsupported resource rows")
+    architectures = {entry_architecture for _, entry_architecture in entries}
+    if architectures - {architecture}:
+        raise ValueError(
+            f"PTXAS architecture declarations {sorted(architectures)} "
+            f"do not match requested target {architecture}"
+        )
+    # Headerless resource snippets remain useful, but cannot certify which
+    # architecture produced them. Every reported function must be accounted for.
+    architecture_verified = bool(entries) and entry_counts == resource_counts
+    return resources, architecture_verified
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -56,8 +90,16 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = _parser().parse_args()
     target = cuda_target_info(args.arch)
+    ptxas_evidence = None
     if args.ptxas is not None:
-        resources = parse_resources(args.ptxas.read_text(encoding="utf-8"))
+        resources, architecture_verified = _ptxas_resources(
+            args.ptxas.read_text(encoding="utf-8"), target.architecture
+        )
+        ptxas_evidence = {
+            "architecture": target.architecture if architecture_verified else None,
+            "architecture_verified": architecture_verified,
+            "functions": [row.function for row in resources],
+        }
         profitability = compiled_gpu_profitability(
             resources,
             target,
@@ -87,7 +129,19 @@ def main() -> None:
         grid_blocks=args.grid_blocks,
         sm_count=args.sm_count,
     )
+    if ptxas_evidence is not None and not ptxas_evidence["architecture_verified"]:
+        report = replace(
+            report,
+            diagnostics=(
+                *report.diagnostics,
+                (
+                    "PTXAS architecture is unverified for one or more resource rows; "
+                    "the requested target is a caller assumption"
+                ),
+            ),
+        )
     payload = report.to_payload()
+    payload["ptxas_evidence"] = ptxas_evidence
     payload["screening_priority"] = report.screening_priority(0)
     payload["profitability"] = profitability.to_payload()
     print(json.dumps(payload, indent=2, sort_keys=True))

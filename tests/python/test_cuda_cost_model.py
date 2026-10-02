@@ -46,6 +46,7 @@ def test_grid_underfill_is_visible_without_a_gpu_probe() -> None:
     assert cost.resident_blocks_per_sm_upper_bound == 8
     assert cost.occupancy_upper_bound == pytest.approx(2.0 / 3.0)
     assert cost.grid_saturation_upper_bound == pytest.approx(40 / (8 * 170))
+    assert cost.device_occupancy_upper_bound == pytest.approx(40 * 128 / (170 * 1536))
     assert "grid exposes fewer blocks than one resident wave" in cost.diagnostics
 
 
@@ -63,6 +64,7 @@ def test_unknown_sm_count_stays_unknown_instead_of_inventing_device_topology() -
     assert cost.evidence_stage == "static"
     assert cost.sm_count is None
     assert cost.grid_saturation_upper_bound is None
+    assert cost.device_occupancy_upper_bound is None
     assert "grid saturation unavailable without a device SM count" in cost.diagnostics
     assert (
         "resource occupancy uses static estimates; PTXAS evidence is unavailable"
@@ -90,6 +92,67 @@ def test_screening_priority_penalizes_underfill_before_equal_static_work() -> No
     )
 
     assert saturated.screening_priority(1) < underfilled.screening_priority(0)
+
+
+@pytest.mark.parametrize("grid_blocks", [1, 40, 1360, 10000])
+def test_resource_pressure_cannot_improve_equal_work_priority(grid_blocks: int) -> None:
+    costs = [
+        static_cuda_cost(
+            GpuProfitability(
+                compiled_registers_per_thread=registers,
+                shared_bytes=0,
+                spill_store_bytes=0,
+                spill_load_bytes=0,
+                semantic_traffic_bytes=4096,
+                arithmetic_operation_count=2048,
+            ),
+            cuda_target_info("sm_120"),
+            128,
+            grid_blocks=grid_blocks,
+            sm_count=170,
+        )
+        for registers in (32, 64, 128, 255)
+    ]
+
+    assert sorted(costs, key=lambda cost: cost.screening_priority(0)) == costs
+    if grid_blocks <= 40:
+        assert len({cost.device_occupancy_upper_bound for cost in costs}) == 1
+
+
+@pytest.mark.parametrize(
+    "resources",
+    [
+        {"compiled_registers_per_thread": 256, "shared_bytes": 0},
+        {"compiled_registers_per_thread": 32, "shared_bytes": 1 << 20},
+    ],
+)
+def test_impossible_launch_cannot_outrank_viable_launch_with_spills(
+    resources: dict[str, int],
+) -> None:
+    target = cuda_target_info("sm_120")
+    impossible = static_cuda_cost(
+        GpuProfitability(**resources, spill_store_bytes=0, spill_load_bytes=0),
+        target,
+        128,
+        grid_blocks=40,
+        sm_count=170,
+    )
+    viable = static_cuda_cost(
+        GpuProfitability(
+            compiled_registers_per_thread=32,
+            shared_bytes=0,
+            spill_store_bytes=1,
+            spill_load_bytes=1,
+        ),
+        target,
+        128,
+        grid_blocks=40,
+        sm_count=170,
+    )
+
+    assert impossible.resident_blocks_per_sm_upper_bound == 0
+    assert impossible.device_occupancy_upper_bound == 0
+    assert viable.screening_priority(1) < impossible.screening_priority(0)
 
 
 def test_payload_states_that_screening_is_not_a_timing_prediction() -> None:

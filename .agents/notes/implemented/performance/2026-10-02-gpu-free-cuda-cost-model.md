@@ -30,8 +30,21 @@ The report:
   known; and
 - exposes a deterministic shortlist key rather than a predicted duration.
 
+The shortlist uses the whole-device occupancy bound, combining resident capacity
+and available grid blocks. Raw wave saturation stays a diagnostic: ranking that
+fraction directly would reward higher register pressure for shrinking its
+denominator, even when the same grid supplies exactly the same active threads.
+Known resource combinations that cannot admit one resident block sort after
+viable candidates, before spill and occupancy preferences are considered.
+
 `tools/analyze_cuda_cost.py` makes the same model usable from retained PTXAS logs
 or pre-compilation estimates without initializing CUDA.
+
+The CLI rejects incomplete declared resource rows and explicit architecture
+contradictions, including mixed-architecture logs. Headerless resource snippets
+remain usable with the requested target disclosed as a caller assumption, not
+verified compiler provenance. Missing rows cannot silently disappear from the
+resource maximum.
 
 ## Rejected alternatives
 

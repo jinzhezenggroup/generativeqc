@@ -37,8 +37,9 @@ class StaticCudaCost:
 
     ``occupancy_upper_bound`` is theoretical occupancy from the known resource
     constraints.  Unknown constraints are omitted, so the value is deliberately
-    optimistic. ``grid_saturation_upper_bound`` additionally accounts for global
-    launch parallelism when both grid size and SM count are known.
+    optimistic. ``grid_saturation_upper_bound`` reports the fraction of one
+    resident wave supplied by the grid. ``device_occupancy_upper_bound`` combines
+    that fraction with per-SM occupancy when grid size and SM count are known.
     """
 
     architecture: str
@@ -52,6 +53,7 @@ class StaticCudaCost:
     grid_blocks: int | None
     sm_count: int | None
     grid_saturation_upper_bound: float | None
+    device_occupancy_upper_bound: float | None
     semantic_traffic_bytes: int | None
     arithmetic_operation_count: int | None
     arithmetic_intensity_ops_per_byte: float | None
@@ -69,8 +71,9 @@ class StaticCudaCost:
 
         _optional_count(generation_index, "generation_index")
         return (
+            self.resident_blocks_per_sm_upper_bound == 0,
             _minimize(self.spill_bytes),
-            _maximize(self.grid_saturation_upper_bound),
+            _maximize(self.device_occupancy_upper_bound),
             _maximize(self.occupancy_upper_bound),
             _minimize(self.semantic_traffic_bytes),
             _minimize(self.registers_per_thread),
@@ -169,6 +172,8 @@ def static_cuda_cost(
         limits["caller-estimated-occupancy"] = max(0, estimated_resident)
 
     resident = max(0, min(limits.values()))
+    if resident == 0:
+        diagnostics.append("known resource limits admit no resident block")
     limiting = tuple(
         sorted(name for name, value in limits.items() if value == resident)
     )
@@ -179,14 +184,23 @@ def static_cuda_cost(
 
     effective_sm_count = target.sm_count if sm_count is None else sm_count
     saturation = None
+    device_occupancy = None
     if grid_blocks is not None:
         if effective_sm_count is None:
             diagnostics.append("grid saturation unavailable without a device SM count")
         elif resident == 0:
             saturation = 0.0
+            device_occupancy = 0.0
         else:
             one_wave = resident * effective_sm_count
             saturation = min(1.0, grid_blocks / one_wave)
+            # Use integer work/capacity directly: reducing residency must not
+            # improve priority merely by shrinking the wave's denominator.
+            device_occupancy = (
+                min(grid_blocks, one_wave)
+                * block_threads
+                / (effective_sm_count * target.maximum_threads_per_sm)
+            )
             if grid_blocks < one_wave:
                 diagnostics.append("grid exposes fewer blocks than one resident wave")
 
@@ -221,6 +235,7 @@ def static_cuda_cost(
         grid_blocks=grid_blocks,
         sm_count=effective_sm_count,
         grid_saturation_upper_bound=saturation,
+        device_occupancy_upper_bound=device_occupancy,
         semantic_traffic_bytes=traffic,
         arithmetic_operation_count=operations,
         arithmetic_intensity_ops_per_byte=intensity,
