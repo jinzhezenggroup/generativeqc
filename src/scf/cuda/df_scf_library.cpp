@@ -56,21 +56,29 @@ generativeqc_status recover_scf_capture(cudaStream_t stream, cudaError_t capture
   return GENERATIVEQC_STATUS_SUCCESS;
 }
 
+generativeqc_status scf_gemm_strided(CudaDensityFittingJkPlan& plan, bool transpose_left,
+                                     std::size_t batch_size, std::size_t nbf, const double* left,
+                                     std::size_t left_stride, const double* right,
+                                     std::size_t right_stride, double* output,
+                                     std::size_t output_stride, double alpha, double beta,
+                                     const char* failure_context, std::string& detail) {
+  const cublasStatus_t status = cublasDgemmStridedBatched(
+      plan.blas, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(nbf),
+      static_cast<int>(nbf), static_cast<int>(nbf), &alpha, left, static_cast<int>(nbf),
+      static_cast<long long>(left_stride), right, static_cast<int>(nbf),
+      static_cast<long long>(right_stride), &beta, output, static_cast<int>(nbf),
+      static_cast<long long>(output_stride), static_cast<int>(batch_size));
+  return status == CUBLAS_STATUS_SUCCESS ? GENERATIVEQC_STATUS_SUCCESS
+                                         : blas_failure(status, failure_context, detail);
+}
+
 generativeqc_status scf_gemm(CudaDensityFittingJkPlan& plan, bool transpose_left,
                              std::size_t batch_size, std::size_t nbf, const double* left,
                              const double* right, double* output, std::string& detail) {
-  const double one = 1.0;
-  const double zero = 0.0;
   const std::size_t matrix_elements = nbf * nbf;
-  const cublasStatus_t status = cublasDgemmStridedBatched(
-      plan.blas, transpose_left ? CUBLAS_OP_T : CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(nbf),
-      static_cast<int>(nbf), static_cast<int>(nbf), &one, left, static_cast<int>(nbf),
-      static_cast<long long>(matrix_elements), right, static_cast<int>(nbf),
-      static_cast<long long>(matrix_elements), &zero, output, static_cast<int>(nbf),
-      static_cast<long long>(matrix_elements), static_cast<int>(batch_size));
-  return status == CUBLAS_STATUS_SUCCESS
-             ? GENERATIVEQC_STATUS_SUCCESS
-             : blas_failure(status, "CUDA DF device matrix product", detail);
+  return scf_gemm_strided(plan, transpose_left, batch_size, nbf, left, matrix_elements, right,
+                          matrix_elements, output, matrix_elements, 1.0, 0.0,
+                          "CUDA DF device matrix product", detail);
 }
 
 generativeqc_status setup_device_solver(CudaDensityFittingJkPlan& plan, std::size_t nbf,

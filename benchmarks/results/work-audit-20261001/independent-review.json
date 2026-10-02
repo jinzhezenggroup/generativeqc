@@ -1,0 +1,14 @@
+{
+  "status": "accepted-for-documented-advisory-subset",
+  "date": "2026-10-01",
+  "focused_tests_passed": 135,
+  "known_native_negative_cases_rechecked": 19,
+  "checks": [
+    "same-line callee sites remain distinct",
+    "Python induction rebinding rejected",
+    "Python line-motion fingerprints stable",
+    "scalar loop-invariance inference withheld",
+    "runtime and endpoint savings not claimed"
+  ],
+  "files_edited_by_reviewer": false
+}

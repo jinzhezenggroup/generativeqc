@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import typing
+from contextlib import contextmanager
 from dataclasses import asdict
 from statistics import median
 from time import perf_counter
@@ -26,8 +27,40 @@ except ModuleNotFoundError:
 from benchmarks.dft_force_components import normalize_force_work
 
 
+@contextmanager
+def reference_vv10_domain(
+    density_threshold: float,
+) -> typing.Iterator[dict[str, float]]:
+    """Scope a shared VV10 active density domain to an isolated reference call.
+
+    GPU4PySCF copies its SCF threshold into the gradient module at import time;
+    both constants must change together. This configures screening only, never
+    substitutes a kernel or an oracle. Restore defaults even on failed SCF.
+    Concurrent reference engines with different policies need separate processes.
+    """
+    if not np.isfinite(density_threshold) or density_threshold <= 0:
+        raise ValueError("VV10 density threshold must be finite and positive")
+    from gpu4pyscf.dft import numint
+    from gpu4pyscf.grad import rks
+
+    owners = (numint, rks)
+    previous = [owner.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD for owner in owners]
+    try:
+        for owner in owners:
+            owner.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD = density_threshold
+        yield {"scf": density_threshold, "forces": density_threshold}
+    finally:
+        for owner, threshold in zip(owners, previous, strict=True):
+            owner.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD = threshold
+
+
 def reference_engine(
-    atoms: typing.Any, basis: str, spec: typing.Any, *, spin: int = 0
+    atoms: typing.Any,
+    basis: typing.Any,
+    spec: typing.Any,
+    *,
+    spin: int = 0,
+    xc: str = "WB97M_V",
 ) -> typing.Any:
     """Build an independent GPU4PySCF engine on the same moving quadrature.
 
@@ -43,7 +76,7 @@ def reference_engine(
         raise ValueError("GPU4PySCF comparator requires three Becke iterations")
     mol = gto.M(atom=atoms, unit="Bohr", basis=basis, spin=spin, cart=False, verbose=0)
     engine = (uks.UKS if spin else rks.RKS)(mol)
-    engine.xc = "WB97M_V"
+    engine.xc = xc
     # Reconstruct the stated quadrature independently from its public spec.
     x, wx = np.polynomial.legendre.leggauss(spec.radial_points)
     t, wt = (x + 1) / 2, wx / 2

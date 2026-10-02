@@ -134,7 +134,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
     )
     assert result["basis"]["stationary_layout_contract_sha256"] == (
-        "b3ed8c694bc83fcdc4933b82d8d38e9017b4d79acd459f9f0779b9007e701879"
+        "fa8c4ff2a644fd45ab4eb828a995c4e42c49c80adbe712b32d50f90b3d98fb74"
     )
     assert result["basis"]["native_spherical_ao_count_contract_sha256"] == (
         "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
@@ -277,7 +277,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "818f33f7e6a241a29b4a1c2a1f1d5cd3287b2e27b21937733537e82d4c7526e1"
+            "34bc6b3c49fdb6661587b46f5aa374e911a2c921b5a6940661f5464347d64cf9"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -313,7 +313,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "11cd95520b07a7a5e16df64ccea35b3a45035b528b8c69efca9a7e6e8750e052"
+            "89d3e7889d50a6a3ff1ca31c26ad2cc8e2f2dee72f4d66f3e9a717834fbfdb3c"
         ),
         "native_owner_sha256": (
             "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"

@@ -27,4 +27,17 @@ Related implementation: PR #1651's existing geometry-only nuclear-kind repair.
 This restores that contract on the independently restacked PR #1637 without
 resurrecting the retired WB97M-V-specific owner.
 
+## Subsequent master integration, 2026-10-02
+
+The frozen `422b7a9f` NVIDIA receipt remains a failed complete f-shell
+qualification; neither its transfer assertion nor independent energy failures
+are retroactively passing. PR #1651 subsequently landed the newer, independently
+qualified through-f implementation as master `3bac8add`.
+
+The integration preserves every production, documentation and device-acceptance
+file from that pinned master unchanged. The remaining #1637 delta is this
+rationale and extra host regressions for geometry-only integral-task rejection.
+No numerical implementation or scientific tolerance is introduced by that
+remainder, and no new-head NVIDIA execution is claimed.
+
 Agent: dot

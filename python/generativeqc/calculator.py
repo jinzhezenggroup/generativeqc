@@ -876,7 +876,10 @@ class Calculator:
             and self._ks_options.execution_plan.nonlocal_correlation is None
             and not self._ks_options.execution_plan.post_scf
         )
-        from .ks import cuda_global_hybrid_force_eligible
+        from .ks import (
+            cuda_global_hybrid_force_eligible,
+            cuda_wb97mv_force_basis_eligible,
+        )
 
         cuda_hybrid_force = (
             self._device_name == "cuda"
@@ -892,15 +895,7 @@ class Calculator:
             and not basis_has_ecp
             and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
-            and (
-                self._basis in ("sto-3g", "def2-svp", "def2-tzvp")
-                if isinstance(self._basis, str)
-                else all(
-                    shell.angular_momentum <= 3
-                    for element in self._basis.elements
-                    for shell in element.shells
-                )
-            )
+            and cuda_wb97mv_force_basis_eligible(self._basis)
         )
         if (
             self._capabilities.family == "density_functional"

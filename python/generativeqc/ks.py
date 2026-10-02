@@ -415,6 +415,22 @@ def _split_hybrid_record(method_ir: typing.Any) -> typing.Any:
     return None
 
 
+def cuda_wb97mv_force_basis_eligible(basis: typing.Any) -> bool:
+    """Match the complete WB97M-V CUDA geometry owner's through-f basis domain.
+
+    Its integral derivatives come from the native stationary owner, not the
+    generic SPD descriptor inventory. Precision, ECP, DF and shape/resource
+    restrictions remain with the calculator and prepared force owner.
+    """
+    if isinstance(basis, str):
+        return basis in ("sto-3g", "def2-svp", "def2-tzvp")
+    return all(
+        shell.angular_momentum <= 3
+        for element in basis.elements
+        for shell in element.shells
+    )
+
+
 def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
     """Check derivative source coverage for an already admitted CUDA KS graph.
 

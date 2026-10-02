@@ -134,13 +134,14 @@ split compilation, and SDK details.
 
 Stable native ABI IDs, providers and compatibility selectors are generated from
 `manifests/public_methods.json`; see the
-[native ABI registry](docs/public_methods.md). DFT scientific names and
+[public method catalog](docs/public_methods.md). DFT scientific names and
 compositions are discovered from the compiler MethodIR catalog, including
 generated metadata from the pinned Libxc sources. `Calculator(method=...)`
 accepts qualified `<method>-rks` / `<method>-uks` selectors without requiring
 one ABI-manifest row per functional.
 
-Run the Python frontend (`python -m generativeqc methods`) for the current MethodIR-aware\ndiscovery set. MethodIR representation is
+Run the Python frontend (`python -m generativeqc methods`) for the current MethodIR-aware
+public discovery set. MethodIR representation is
 not by itself an execution promise: missing primitive lowerers, unsupported
 backends/models, or method-specific requirements such as an explicit hybrid
 grid fail closed. The Python API also accepts the composite selectors
@@ -194,8 +195,35 @@ print(first.energies)
 | --- | --- |
 | HF (direct / DF) | <a href="benchmarks/results/df-one-step-warm-20260926/hf.svg"><img src="benchmarks/results/df-one-step-warm-20260926/hf.svg" width="900" alt="GenerativeQC versus GPU4PySCF: direct and DF RHF energy-plus-force latency"></a> |
 
+<!-- DFT benchmark rows are temporarily withheld from the rendered README.
+Restore these rows to the table above only after approval to publish the results.
+| PBE0 / def2-SVP | <a href="benchmarks/results/pbe0-def2-svp-20261001/pbe0.svg"><img src="benchmarks/results/pbe0-def2-svp-20261001/pbe0.svg" width="900" alt="GenerativeQC versus GPU4PySCF: complete warm PBE0 energy-plus-analytic-force latency, with incomplete points explicitly marked"></a> |
+| ωB97M-V / def2-TZVPD (OMol25) | <a href="benchmarks/results/omol25-wb97mv-20261001/default-hf-cartesian/omol25.svg"><img src="benchmarks/results/omol25-wb97mv-20261001/default-hf-cartesian/omol25.svg" width="900" alt="GenerativeQC versus GPU4PySCF: automatic Cartesian-source OMol25 functional and basis, complete warm energy-plus-analytic-force latency; incomplete points explicitly marked"></a> |
+-->
+
 RTX 5090, spherical def2-SVP: complete warm RHF energy + forces, five repeats.
 [Protocol and results](benchmarks/results/df-one-step-warm-20260926/README.md).
+
+<!-- DFT benchmark discussion is temporarily withheld with the rows above.
+PBE0 uses the same 3–96-atom water clusters, full spherical def2-SVP,
+five fixed engine-local warm replays, and independent energy/force gates at
+both original and changed geometries. Both engines use the same moving
+quadrature; timings include analytic grid response and host-returned forces,
+not energy-only SCF. Native uses the default direct FP64 path.
+[PBE0 protocol and results](benchmarks/results/pbe0-def2-svp-20261001/README.md).
+
+OMol25-level DFT uses the same water clusters and five-repeat energy + force
+protocol, with full spherical def2-TZVPD, a common moving grid and matched VV10
+density masks. PR #1637's through-f composition is supplemented by public
+capability and nuclear-dispatch fixes. Through-f execution now automatically
+selects screened symmetry-canonical Cartesian-source J/K with HF projections
+under the existing budget. The qualified 3-atom warm endpoint is 6.301 s versus
+GPU4PySCF's 16.425 s; the incomplete 6-atom native run is not plotted as a timing.
+Historical opt-in measurements retain their original build identities.
+This is not an OMol25 dataset/ORCA
+throughput measurement. Incomplete points are not timings.
+[DFT protocol and results](benchmarks/results/omol25-wb97mv-20261001/README.md).
+-->
 
 ## Documentation
 

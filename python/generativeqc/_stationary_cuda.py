@@ -414,8 +414,8 @@ def _layout(basis: typing.Any, *, integral_derivatives: bool = True) -> typing.A
     """Read normalized public-AO records without evaluating integrals.
 
     Generic stationary integral descriptors remain qualified through d shells.
-    Geometry-only consumers may reuse the packed AO topology through f without
-    constructing the combinatorial SPDF derivative inventory.
+    Geometry-only consumers can reuse the same packed AO topology through f
+    without constructing the combinatorial Cartesian derivative inventory.
     """
     if type(integral_derivatives) is not bool:
         raise TypeError("integral_derivatives must be boolean")
@@ -458,7 +458,12 @@ def _layout(basis: typing.Any, *, integral_derivatives: bool = True) -> typing.A
 
 
 class _CudaSources:
-    """Serialized finite owner; bounded AO tasks expand primitives only on CUDA."""
+    """Serialized finite owner; bounded AO tasks expand primitives only on CUDA.
+
+    Geometry-only owners use plain nuclear dispatch kinds, independently of
+    their AO angular momentum. Encoded Cartesian bindings belong exclusively
+    to the sharded integral-derivative dispatcher.
+    """
 
     def __init__(
         self,
@@ -508,10 +513,8 @@ class _CudaSources:
             basis.packed[: 3 * basis.natom].reshape(-1, 3)
         )
         self.ao_atoms = np.ascontiguousarray(_native_ao_atoms(basis), dtype=np.int64)
-        self.primitives, self.aos, expansions, requests = (
-            _layout(basis)
-            if integral_derivatives
-            else _layout(basis, integral_derivatives=False)
+        self.primitives, self.aos, expansions, requests = _layout(
+            basis, integral_derivatives=integral_derivatives
         )
         self.expansions = tuple(expansions)
         self.component_mode = integral_derivatives and _component_mode(self.expansions)
@@ -2442,6 +2445,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 source_before, grid_before = sources.metrics(), ao.metrics()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
+        use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
         integral_provider = getattr(state._source, "cuda_integral_derivatives", None)
         native_integral_budget = max_device_bytes - peak
         if not ecp and native_integral_budget > 0 and callable(integral_provider):
@@ -2461,6 +2465,11 @@ def _complete_rks_cuda_gradient_diagnostic(
                     raise RuntimeError(
                         "prepared stationary integral source returned invalid output"
                     )
+        if use_fitted_integrals and native_integral_components is None:
+            raise NotImplementedError(
+                "density-fitted stationary derivative provider is unavailable; "
+                "Direct derivative fallback would change the Hamiltonian"
+            )
         native_complete_integrals = native_integral_components is not None
         resident_grid_density = None
         if native_complete_integrals:

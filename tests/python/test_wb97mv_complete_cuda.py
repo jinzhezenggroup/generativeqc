@@ -7,7 +7,9 @@ VV10 are all included in both engines; no component-only success promotes API.
 
 import os
 import typing
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -31,9 +33,7 @@ def test_native_wb97mv_pairs_stationary_one_electron_sources() -> None:
 
 
 def test_wb97mv_geometry_layout_admits_f_without_spdf_integral_schedule() -> None:
-    """Geometry-only composition must not require the generic SPD inventory."""
-    from types import SimpleNamespace
-
+    """WB97M-V geometry composition must not require the generic SPD inventory."""
     from generativeqc._stationary_cuda import _layout
 
     packed = np.zeros(3 + 2 + 16, dtype=np.float64)
@@ -54,6 +54,105 @@ def test_wb97mv_geometry_layout_admits_f_without_spdf_integral_schedule() -> Non
     assert requests == (("nuclear", ()),)
     with pytest.raises(NotImplementedError, match="s/p/d"):
         _layout(basis)
+
+
+@pytest.mark.parametrize(
+    "basis,expected",
+    [("sto-3g", True), ("def2-svp", True), ("def2-tzvp", True), ("def2-tzvpd", False)],
+)
+def test_wb97mv_cuda_named_force_basis_domain(basis: str, expected: bool) -> None:
+    """A non-bundled diffuse name must still require an explicit local snapshot."""
+    from generativeqc.ks import cuda_wb97mv_force_basis_eligible
+
+    assert cuda_wb97mv_force_basis_eligible(basis) is expected
+
+
+def test_wb97mv_cuda_local_force_basis_admits_f_but_not_g() -> None:
+    """Geometry-only f admission must not expand the generic GPU angular domain."""
+    from generativeqc import load_basis
+    from generativeqc.ks import cuda_wb97mv_force_basis_eligible
+
+    basis = load_basis(
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json"
+    )
+    assert cuda_wb97mv_force_basis_eligible(basis)
+    higher = replace(
+        basis,
+        elements=tuple(
+            replace(
+                element,
+                shells=(
+                    *element.shells,
+                    replace(element.shells[-1], angular_momentum=4),
+                ),
+            )
+            if element.atomic_number == 8
+            else element
+            for element in basis.elements
+        ),
+    )
+    assert not cuda_wb97mv_force_basis_eligible(higher)
+
+
+def test_cuda_geometry_only_f_nuclear_pair(tmp_path: Path) -> None:
+    """Qualify nuclear dispatch independently of costly SCF and grid composition."""
+    if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_WB97MV_CUDA=1 inside Slurm")
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    from generativeqc._stationary_cuda import _CudaSources
+    from generativeqc.profiles import find_nvcc
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.integral.first_derivative_native import (
+        emit_first_derivative_cuda,
+    )
+    from generativeqc_compiler.method import resolve_method
+    from generativeqc_compiler.method.stationary_cuda import compile_stationary_cuda
+    from generativeqc_compiler.method.stationary_gradient import (
+        StationaryGradientPlan,
+        StationaryMeanField,
+    )
+
+    nvcc = find_nvcc()
+    assert nvcc is not None, "set CUDACXX or CUDA_PATH for generated force kernels"
+    compiler = CudaCompilerAdapter(Path(nvcc), cuda_target_info("sm_120"))
+    plan = StationaryGradientPlan(
+        resolve_method("WB97M-V"),
+        StationaryMeanField("libxc-7.0/work-mgga-v1/smooth-lr-a1.35-order16"),
+    )
+    artifact = compile_stationary_cuda(
+        emit_first_derivative_cuda((("nuclear", ()),)),
+        functional=4,
+        plan=plan,
+        iterations=3,
+        compiler=compiler,
+        cache=tmp_path,
+    )
+    atoms = [("O", (0.02, -0.03, 0.04)), ("H", (0.1, 1.43, 1.1))]
+    with (
+        NativeAO(
+            atoms, "def2-tzvp", representation="spherical", multiplicity=2
+        ) as basis,
+        _CudaSources(
+            basis,
+            artifact,
+            compiler,
+            0,
+            1,
+            1,
+            16 << 20,
+            integral_derivatives=False,
+        ) as sources,
+    ):
+        assert not sources.component_mode
+        sources.reset_geometry(1e-12)
+        sources.nuclear_all(np.array([8.0, 1.0]))
+        actual = sources.finish()["nuclear"]
+    separation = np.asarray(atoms[0][1]) - atoms[1][1]
+    first = -8.0 * separation / np.linalg.norm(separation) ** 3
+    np.testing.assert_allclose(actual, [first, -first], atol=1e-12, rtol=0)
 
 
 @pytest.mark.parametrize(
@@ -90,23 +189,60 @@ def test_wb97mv_geometry_layout_admits_f_without_spdf_integral_schedule() -> Non
             ],
             "def2-tzvp",
         ),
+        (
+            "wb97m-v",
+            0,
+            [
+                ("O", (0.02, -0.03, 0.04)),
+                ("H", (0.1, 1.43, 1.1)),
+                ("H", (-0.15, -1.45, 1.12)),
+            ],
+            "local-def2-tzvpd",
+        ),
+        pytest.param(
+            "wb97m-v-uks",
+            1,
+            [
+                ("N", (0.02, -0.03, 0.04)),
+                ("H", (0.1, 1.51, 1.12)),
+                ("H", (-0.15, -1.55, 1.13)),
+            ],
+            "def2-tzvp",
+            id="wb97m-v-uks-nh2-def2-tzvp",
+        ),
     ],
 )
 def test_complete_cuda_force_matches_independent_engine(
     method: str, spin: int, atoms: typing.Any, basis: str
 ) -> None:
+    """Reconverge every displaced energy, reusing only native engine-local seeds."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
         pytest.skip("set GENERATIVEQC_TEST_WB97MV_CUDA=1 inside Slurm")
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     import cupy as cp
     from generativeqc import Calculator, GridSpec, KsOptions
 
-    from benchmarks.readme_wb97mv import reference_engine, reference_sample
+    from benchmarks.readme_wb97mv import (
+        reference_engine,
+        reference_sample,
+        reference_vv10_domain,
+    )
 
+    native_basis = reference_basis = basis
+    if basis == "local-def2-tzvpd":
+        from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis
+
+        native_basis, reference_basis = load_comparison_basis(
+            Path(__file__).resolve().parents[2]
+            / "benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json",
+            SimpleNamespace(atoms=atoms, basis_representation="spherical"),
+            role="orbital",
+            compute_forces=True,
+        )
     grid = GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
     calc = Calculator(
         method=method,
-        basis=basis,
+        basis=native_basis,
         basis_representation="spherical",
         device="cuda",
         ks_options=KsOptions(grid=grid),
@@ -154,36 +290,41 @@ def test_complete_cuda_force_matches_independent_engine(
         assert native["final_state_export_reads"] == 0
         assert native["final_state_export_synchronizations"] == 0
         assert native["one_electron_h2d_bytes"] == 0
+        assert (
+            native["one_electron_host_peak_bytes"]
+            <= work["additional_host_numeric_bound"]
+        )
         energy_only = batch.execute(strict=True, properties=("energy",)).items[0]
         assert cold.executed_backend == warm.executed_backend == "cuda"
         assert energy_only.forces is None
         np.testing.assert_allclose(warm.forces, cold.forces, atol=2e-8, rtol=0)
         assert abs(energy_only.energy - cold.energy) < 1e-9
-    oracle = reference_sample(reference_engine(atoms, basis, grid, spin=spin), cp)
-    assert abs(cold.energy - oracle["energies_hartree"][0]) < 1e-8
-    np.testing.assert_allclose(
-        cold.forces, oracle["forces_hartree_per_bohr"][0], atol=1e-7, rtol=1e-7
-    )
-    np.testing.assert_allclose(cold.forces.sum(axis=0), 0, atol=2e-8, rtol=0)
-    direction = np.random.default_rng(13421389).normal(size=(len(atoms), 3))
-    direction -= direction.mean(axis=0)
-    direction /= np.linalg.norm(direction)
-    analytic = -np.vdot(cold.forces, direction)
-    errors = []
-    for step in (1e-3, 3e-4, 1e-4):
-        energies = []
-        for sign in (-1, 1):
-            displaced = [
-                (symbol, np.asarray(xyz) + sign * step * d)
-                for (symbol, xyz), d in zip(atoms, direction, strict=True)
-            ]
-            result = calc.singlepoint(
-                displaced, multiplicity=spin + 1, properties=("energy",)
+        with reference_vv10_domain(1e-8):
+            oracle = reference_sample(
+                reference_engine(atoms, reference_basis, grid, spin=spin), cp
             )
-            assert result.converged
-            energies.append(result.energy)
-        errors.append(abs((energies[1] - energies[0]) / (2 * step) - analytic))
-    assert errors[0] < 1e-5 and max(errors[1:]) < 2e-6, errors
+        assert abs(cold.energy - oracle["energies_hartree"][0]) < 1e-8
+        np.testing.assert_allclose(
+            cold.forces, oracle["forces_hartree_per_bohr"][0], atol=1e-7, rtol=0
+        )
+        np.testing.assert_allclose(cold.forces.sum(axis=0), 0, atol=2e-8, rtol=0)
+        direction = np.random.default_rng(13421389).normal(size=(len(atoms), 3))
+        direction -= direction.mean(axis=0)
+        direction /= np.linalg.norm(direction)
+        analytic = -np.vdot(cold.forces, direction)
+        coordinates = np.asarray([xyz for _, xyz in atoms])
+        errors = []
+        for step in (1e-3, 3e-4, 1e-4):
+            energies = []
+            for sign in (-1, 1):
+                displaced = coordinates + sign * step * direction
+                result = batch.execute(
+                    [displaced], strict=True, properties=("energy",)
+                ).items[0]
+                assert result.converged
+                energies.append(result.energy)
+            errors.append(abs((energies[1] - energies[0]) / (2 * step) - analytic))
+        assert errors[0] < 1e-5 and max(errors[1:]) < 2e-6, errors
 
 
 def test_cuda_force_rebuild_failure_isolation_and_stale_snapshot() -> None:
