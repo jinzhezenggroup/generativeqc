@@ -60,11 +60,9 @@ inline cublasStatus_t df_occupied_project_panel(
 
 /** Finish the exact fitted occupied projection from the final-K linear
  * factor U[mu,j,Q]=sum_nu B[Q,mu,nu] C[nu,j]. The packed K kernel stores Q
- * fastest, so one GEMM contracts C over mu into [i,j,Q] order. Consumers may
- * either gather that result into [Q,i,j] or keep the Q-fast pair-major view and
- * absorb the transpose into a following contraction. Treating U as Q-major
- * GEMM batches directly reads unrelated occupied/auxiliary elements once rank
- * or auxiliary exceeds one.
+ * fastest, so one GEMM contracts C over mu into [i,j,Q] order. The caller
+ * gathers that result into [Q,i,j]; treating U as Q-major GEMM batches reads
+ * unrelated occupied/auxiliary elements once rank or auxiliary exceeds one.
  */
 inline cublasStatus_t df_occupied_finish_projection(
     cublasHandle_t blas, int n, int rank, int auxiliary,
@@ -106,24 +104,6 @@ inline cublasStatus_t df_occupied_apply_metric_root(
   return cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N,
                      rank_squared, auxiliary, auxiliary, &one,
                      projected, rank_squared, inverse_root, auxiliary,
-                     &zero, fitted, rank_squared);
-}
-
-/** Apply the same second metric root directly to the final-K pair-major
- * projection. pair_major is the column-major [auxiliary, occ*occ] view with
- * Q fastest. Transposing that view in GEMM yields the ordinary
- * [occ*occ, auxiliary] response layout without a separate gather.
- */
-inline cublasStatus_t df_occupied_apply_metric_root_pair_major(
-    cublasHandle_t blas, int auxiliary, int rank_squared,
-    const double* inverse_root, const double* pair_major, double* fitted) {
-  if (auxiliary <= 0 || rank_squared <= 0 || !inverse_root || !pair_major ||
-      !fitted || pair_major == fitted)
-    return CUBLAS_STATUS_INVALID_VALUE;
-  const double one = 1, zero = 0;
-  return cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N,
-                     rank_squared, auxiliary, auxiliary, &one,
-                     pair_major, auxiliary, inverse_root, auxiliary,
                      &zero, fitted, rank_squared);
 }
 
