@@ -630,8 +630,8 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
   if (triples) add_triples_parameter_sources(parameters, *triples);
-  auto raw =
-      raw_hamiltonian(source, reference, max_bytes, cuda_derivative, cuda_derivative ? device_id : 0);
+  auto raw = raw_hamiltonian(source, reference, max_bytes, cuda_derivative,
+                             cuda_derivative ? device_id : 0);
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
   if (cuda_derivative)
