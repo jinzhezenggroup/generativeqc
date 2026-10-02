@@ -175,7 +175,9 @@ def test_final_projection_charge_reuse_avoids_retained_fitted_charge_pass() -> N
     root = Path(__file__).resolve().parents[2]
     source = (root / "src/scf/cuda/df_response_weights.cu").read_text()
     start = source.index("if (reuse_final_fitted_projection) {")
-    stop = source.index("} else if (fitted_occupied || buffers.read_occupied_panels)", start)
+    stop = source.index(
+        "} else if (fitted_occupied || buffers.read_occupied_panels)", start
+    )
     reuse = source[start:stop]
     assert "df_occupied_finish_projection" in reuse
     assert "df_rhf_charge_from_final_projection" in reuse

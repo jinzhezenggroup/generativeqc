@@ -666,9 +666,9 @@ static cudaError_t contract_occupied_response(
     const auto& factor = buffers.occupied_factors[0];
     const auto r = factor.rank, rr = r * r;
     runtime::cuda_trace::TraceRegion reuse("final_fitted_projection_charge_reuse", stream);
-    checked(generated::df_occupied_finish_projection(
-        blas, ni, static_cast<int>(r), ai, factor.coefficients, final_fitted_projection,
-        transformed_projected));
+    checked(generated::df_occupied_finish_projection(blas, ni, static_cast<int>(r), ai,
+                                                     factor.coefficients, final_fitted_projection,
+                                                     transformed_projected));
     gather_final_fitted_projection<<<blocks(a * rr), threads, 0, stream>>>(
         a, r, transformed_projected, projected);
     error = cudaGetLastError();
