@@ -39,6 +39,15 @@ def source_revision(directory: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def geometry_sha256(symbols: list[str], positions: list[list[float]]) -> str:
+    """Bind a measurement to the atom identities and coordinates it consumes."""
+    return hashlib.sha256(
+        json.dumps(
+            {"symbols": symbols, "positions": positions}, sort_keys=True
+        ).encode()
+    ).hexdigest()
+
+
 def compare_reports(reference: dict, candidate: dict) -> dict:
     """Gate every sample before summarizing any complete endpoint speedup."""
     if not reference["rows"] or not candidate["rows"]:
@@ -59,6 +68,14 @@ def compare_reports(reference: dict, candidate: dict) -> dict:
         for left, right in zip(expected["samples"], actual["samples"], strict=True):
             if (left["mode"], left["repeat"]) != (right["mode"], right["repeat"]):
                 raise ValueError("sample inventories differ")
+            left_geometry = left.get("geometry_sha256")
+            right_geometry = right.get("geometry_sha256")
+            if not left_geometry or not right_geometry:
+                raise ValueError(
+                    "sample geometry identities are missing; remeasure inputs"
+                )
+            if left_geometry != right_geometry:
+                raise ValueError("sample input geometries differ")
             energy_error = abs(left["energy"] - right["energy"])
             left_forces, right_forces = (
                 np.asarray(left["forces"]),
@@ -231,12 +248,7 @@ def main() -> None:
             "case": case["name"],
             "atoms": len(case["symbols"]),
             "construction_seconds": construction_seconds,
-            "geometry_sha256": hashlib.sha256(
-                json.dumps(
-                    {"symbols": case["symbols"], "positions": case["positions"]},
-                    sort_keys=True,
-                ).encode()
-            ).hexdigest(),
+            "geometry_sha256": geometry_sha256(case["symbols"], case["positions"]),
             "samples": [],
         }
         for mode, count in (
@@ -248,6 +260,7 @@ def main() -> None:
                 positions = base_positions + (
                     0.001 * (repeat + 1) * direction if mode == "changed" else 0
                 )
+                sample_geometry = geometry_sha256(case["symbols"], positions.tolist())
                 start = time.perf_counter()
                 if args.engine == "generativeqc":
                     result = calc.singlepoint(
@@ -266,6 +279,7 @@ def main() -> None:
                     {
                         "mode": mode,
                         "repeat": repeat,
+                        "geometry_sha256": sample_geometry,
                         "seconds": seconds,
                         "iterations": iterations,
                         "energy": float(result.energy),

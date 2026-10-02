@@ -29,6 +29,9 @@ def report() -> dict:
                     {
                         "mode": mode,
                         "repeat": 0,
+                        "geometry_sha256": BENCHMARK.geometry_sha256(
+                            ["H", "H"], [[0.0, 0.0, 0.0], [0.0, 0.0, 1.4]]
+                        ),
                         "iterations": 7,
                         "seconds": 1.0,
                         "energy": -1.0,
@@ -78,4 +81,34 @@ def test_comparison_rejects_incomparable_work(change: str) -> None:
     else:
         candidate["rows"][0]["samples"].pop()
     with pytest.raises(ValueError):
+        BENCHMARK.compare_reports(reference, candidate)
+
+
+@pytest.mark.parametrize("mode", ("cold", "warm", "changed"))
+@pytest.mark.parametrize("change", ("symbols", "positions"))
+def test_comparison_rejects_different_sample_geometry(mode: str, change: str) -> None:
+    """Equal starting geometry and numerical outputs cannot hide changed inputs."""
+    reference = report()
+    candidate = copy.deepcopy(reference)
+    symbols = ["H", "H"]
+    positions = [[0.0, 0.0, 0.0], [0.0, 0.0, 1.4]]
+    if change == "symbols":
+        symbols[1] = "He"
+    else:
+        positions[1][2] += 0.001
+    sample = next(s for s in candidate["rows"][0]["samples"] if s["mode"] == mode)
+    sample["geometry_sha256"] = BENCHMARK.geometry_sha256(symbols, positions)
+    with pytest.raises(ValueError, match="sample input geometries differ"):
+        BENCHMARK.compare_reports(reference, candidate)
+
+
+@pytest.mark.parametrize("side", ("reference", "candidate", "both"))
+def test_comparison_rejects_missing_sample_geometry(side: str) -> None:
+    """Legacy receipts cannot establish which changed coordinates were measured."""
+    reference = report()
+    candidate = copy.deepcopy(reference)
+    for name, measured in (("reference", reference), ("candidate", candidate)):
+        if side in (name, "both"):
+            del measured["rows"][0]["samples"][2]["geometry_sha256"]
+    with pytest.raises(ValueError, match="sample geometry identities are missing"):
         BENCHMARK.compare_reports(reference, candidate)
