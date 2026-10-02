@@ -917,14 +917,24 @@ struct CudaKsPlan::Impl : KsStateStorage {
   void enqueue_one(unsigned slot) {
     if (slot >= kCudaKsChunkCapacity) throw std::logic_error("CUDA KS chunk slot overflow");
     std::string detail;
-    check(scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange, nullptr,
-                                          jk_error, false, detail),
-          detail);
-    if (has_range_correction)
-      check(scf::enqueue_prepared_cuda_exchange_correction(provider, *range_correction, density,
-                                                           nullptr, matrix, range_exchange, nullptr,
-                                                           range_jk_error, detail),
+    if (has_range_correction) {
+      auto status = scf::enqueue_prepared_cuda_rsh_values(
+          provider, *range_correction, density, nullptr, matrix, j, exchange, nullptr,
+          range_exchange, nullptr, jk_error, range_jk_error, detail);
+      if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED) {
+        status = scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
+                                                 nullptr, jk_error, false, detail);
+        if (status == GENERATIVEQC_STATUS_SUCCESS)
+          status = scf::enqueue_prepared_cuda_exchange_correction(
+              provider, *range_correction, density, nullptr, matrix, range_exchange, nullptr,
+              range_jk_error, detail);
+      }
+      check(status, detail);
+    } else {
+      check(scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
+                                            nullptr, jk_error, false, detail),
             detail);
+    }
     const auto potential = xc->enqueue_replay_body(density, elements);
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
@@ -1230,19 +1240,29 @@ struct CudaKsPlan::Impl : KsStateStorage {
       // borrow it on the next iteration without a host round trip.
       const bool use_occupied_fitted =
           fitted_exchange && occupied_fitted_factor_ready && occupied_fock_binding;
-      generativeqc_status jk_status;
-      if (use_occupied_fitted) {
-        const scf::PreparedCudaOccupiedFockInput occupied{
-            tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
-            spins == 2 ? occupations[1] : 0};
-        jk_status = scf::enqueue_prepared_cuda_occupied_fock(
-            provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
-            exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, detail);
-      } else {
-        jk_status = scf::enqueue_prepared_cuda_fock(
-            provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
-            has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
-            detail, pending_mixed_j ? mixed_coulomb_work_counter() : nullptr);
+      generativeqc_status jk_status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+      bool fused_rsh_values = false;
+      if (has_range_correction && !pending_mixed_j && !use_occupied_fitted) {
+        jk_status = scf::enqueue_prepared_cuda_rsh_values(
+            provider, *range_correction, density, spins == 2 ? density + matrix : nullptr, matrix,
+            j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr, range_exchange,
+            spins == 2 ? range_exchange + matrix : nullptr, jk_error, range_jk_error, detail);
+        fused_rsh_values = jk_status == GENERATIVEQC_STATUS_SUCCESS;
+      }
+      if (!fused_rsh_values) {
+        if (use_occupied_fitted) {
+          const scf::PreparedCudaOccupiedFockInput occupied{
+              tmp1, spins == 2 ? tmp1 + matrix : nullptr, occupations[0],
+              spins == 2 ? occupations[1] : 0};
+          jk_status = scf::enqueue_prepared_cuda_occupied_fock(
+              provider, density, spins == 2 ? density + matrix : nullptr, matrix, occupied, j,
+              exchange, spins == 2 ? exchange + matrix : nullptr, jk_error, detail);
+        } else {
+          jk_status = scf::enqueue_prepared_cuda_fock(
+              provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
+              has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
+              detail, pending_mixed_j ? mixed_coulomb_work_counter() : nullptr);
+        }
       }
       check(jk_status, detail);
       if (fitted_exchange) {
@@ -1251,7 +1271,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         else
           ++movement.fitted_dense_exchange_builds;
       }
-      if (has_range_correction)
+      if (has_range_correction && !fused_rsh_values)
         check(scf::enqueue_prepared_cuda_exchange_correction(
                   provider, *range_correction, density, spins == 2 ? density + matrix : nullptr,
                   matrix, range_exchange, spins == 2 ? range_exchange + matrix : nullptr,
