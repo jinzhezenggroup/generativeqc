@@ -148,36 +148,51 @@ struct PreparedCosxFockPlan::Impl {
     return result;
   }
 
-  std::vector<double> energy_derivative(const std::vector<double>& density,
-                                        const std::vector<double>& beta) {
+  scf::FockEnergyDerivativeComponents energy_derivative_components(
+      const std::vector<double>& density, const std::vector<double>& beta) {
     require(strategy.spec.derivative_order == 1, "COSX Fock derivatives were not requested");
     const auto n = coulomb->one_electron().nbf;
     validate_density(strategy, n, density, beta);
-    std::vector<double> result(3 * orbital.atoms.size(), 0.0);
+    const auto coordinates = 3 * orbital.atoms.size();
+    scf::FockEnergyDerivativeComponents result{std::vector<double>(coordinates),
+                                                std::vector<double>(coordinates)};
     if (strategy.spec.coulomb.present) {
-      result = coulomb->energy_derivative(density, beta);
-      if (result.size() != 3 * orbital.atoms.size())
+      result.coulomb = coulomb->energy_derivative(density, beta);
+      if (result.coulomb.size() != coordinates)
         throw std::runtime_error(
             "prepared Coulomb derivative returned an invalid coordinate count");
     }
 
     const double standard_exchange = strategy.spec.spin == scf::FockSpin::Restricted ? -0.5 : -1.0;
     const double exchange_scale = strategy.spec.exchange.coefficient / standard_exchange;
-    if (strategy.spec.spin == scf::FockSpin::Restricted) {
-      const auto response = cuda_cosx_molecular_energy_derivative(
-          cosx_grid, density, CosxDensityConvention::rhf_spin_summed, diagnostic.tile_points,
-          device_id);
-      for (std::size_t coordinate = 0; coordinate < result.size(); ++coordinate)
-        result[coordinate] += exchange_scale * response[coordinate];
-    } else {
-      const auto alpha = cuda_cosx_molecular_energy_derivative(cosx_grid, density,
-                                                               CosxDensityConvention::spin_resolved,
-                                                               diagnostic.tile_points, device_id);
-      const auto beta_response = cuda_cosx_molecular_energy_derivative(
-          cosx_grid, beta, CosxDensityConvention::spin_resolved, diagnostic.tile_points, device_id);
-      for (std::size_t coordinate = 0; coordinate < result.size(); ++coordinate)
-        result[coordinate] += exchange_scale * (alpha[coordinate] + beta_response[coordinate]);
+    if (strategy.spec.exchange.present) {
+      if (strategy.spec.spin == scf::FockSpin::Restricted) {
+        const auto response = cuda_cosx_molecular_energy_derivative(
+            cosx_grid, density, CosxDensityConvention::rhf_spin_summed, diagnostic.tile_points,
+            device_id);
+        for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate)
+          result.exchange[coordinate] = exchange_scale * response[coordinate];
+      } else {
+        const auto alpha = cuda_cosx_molecular_energy_derivative(
+            cosx_grid, density, CosxDensityConvention::spin_resolved, diagnostic.tile_points,
+            device_id);
+        const auto beta_response = cuda_cosx_molecular_energy_derivative(
+            cosx_grid, beta, CosxDensityConvention::spin_resolved, diagnostic.tile_points,
+            device_id);
+        for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate)
+          result.exchange[coordinate] =
+              exchange_scale * (alpha[coordinate] + beta_response[coordinate]);
+      }
     }
+    return result;
+  }
+
+  std::vector<double> energy_derivative(const std::vector<double>& density,
+                                        const std::vector<double>& beta) {
+    auto components = energy_derivative_components(density, beta);
+    std::vector<double> result = std::move(components.coulomb);
+    for (std::size_t coordinate = 0; coordinate < result.size(); ++coordinate)
+      result[coordinate] += components.exchange[coordinate];
     return result;
   }
 };
@@ -213,6 +228,10 @@ const CosxFockPreparationDiagnostic& PreparedCosxFockPlan::diagnostic() const no
 scf::DirectJkMatrices PreparedCosxFockPlan::build(const std::vector<double>& density,
                                                   const std::vector<double>& beta) {
   return impl_->build(density, beta);
+}
+scf::FockEnergyDerivativeComponents PreparedCosxFockPlan::energy_derivative_components(
+    const std::vector<double>& density, const std::vector<double>& beta) {
+  return impl_->energy_derivative_components(density, beta);
 }
 std::vector<double> PreparedCosxFockPlan::energy_derivative(const std::vector<double>& density,
                                                             const std::vector<double>& beta) {
