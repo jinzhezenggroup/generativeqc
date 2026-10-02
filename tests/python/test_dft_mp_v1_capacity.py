@@ -177,7 +177,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
         ),
         "force_capability_promotion_sha256": (
-            "aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e"
+            "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
         ),
         "cuda_force_method_sha256": (
             "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
@@ -315,7 +315,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "b3918673701fb03bea3b4961c29c4c2ca0367f6b436462fa4b54f099af6df813"
+            "4bebd920f244477c5b4b62b9cdef0837ef8b621db6b79dcf75a3d7850dcc738f"
         ),
         "native_owner_sha256": (
             "5f2e8924e1d97f1668edefc95caec70b96223244afadfc2aac97ad254d601b82"
@@ -372,10 +372,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
         "init_sha256": (
-            "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
+            "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
         "decode_sha256": (
-            "c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6"
+            "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
         ),
     }
     assert result["admission_limits"]["grid_plan_definition"] == (
