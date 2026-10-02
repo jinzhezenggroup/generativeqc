@@ -111,3 +111,20 @@ cold/warm/changed-geometry endpoints and semantic counters before promotion.
   fixed-worker resource contract and is not changed by this stationary-owner PR
 
 References: #1479; related resident-grid transport work #1659
+
+## Integration addendum: 2026-10-02
+
+The landed DF provider (#1654) selects its fitted derivative publication through
+a separate method and explicitly excludes DF response scratch from its reported
+resource scope. Optional geometry expansion therefore retains the fitted
+provider's entire previously admitted remainder. Reusing the Direct one-electron
+estimate, or checking only whether the Direct method exists, would otherwise
+shrink a different provider's allowance and could turn an admitted fitted force
+into an allocation failure. Fitted execution keeps the bounded 32-lane schedule
+until it exposes a resource contract that admits additional geometry scratch.
+Executed-source budget tests cover fitted-only and combined-provider owners.
+
+The maintainer subsequently permitted merging changes whose only gap is missing
+acceptance evidence. NVIDIA execution remains unrun locally; this supersedes the
+earlier Draft-only requirement without changing numerical gates or claiming a
+device result.

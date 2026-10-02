@@ -1,4 +1,4 @@
-# Density-fitted DFT interface
+# Density-fitted DFT energy and force interface
 
 `Calculator(method="pbe-rks", device="cuda", density_fitting="auto",
 auxiliary_basis="def2-svp")` selects the shared native DF Coulomb provider for
@@ -7,11 +7,14 @@ KS calculations. `auto` follows the calculation backend; explicit
 uses the orbital basis as the auxiliary basis, as in the existing HF interface;
 choose an appropriate fitting basis for scientific production calculations.
 
-CPU supports the existing local/semilocal RKS/UKS methods and full-range global
-hybrids (DF-JK) for energy. CUDA supports strict-FP64 LDA, PBE and r2SCAN
-RKS/UKS with DF-J for energy and analytic forces. CUDA DF hybrids,
-range-separated/nonlocal DF compositions, ECP DF and automatic mixed precision
-remain rejected for public forces. This interface does not change the selected functional or grid.
+CPU and CUDA support local/semilocal RKS/UKS density-fitted energies and
+analytic forces. Full-range global hybrids use matching DF-JK on both backends;
+the CUDA path reuses the prepared fitted J/K provider and its occupied-RI-K
+trajectory optimization. Analytic forces differentiate the same auxiliary
+basis and Coulomb metric used by the energy, including auxiliary-center and
+metric response. Range-separated/nonlocal DF compositions, ECP DF and
+automatic mixed precision remain rejected. This interface does not change the
+selected functional or grid.
 
 ```python
 from generativeqc import Calculator
@@ -37,26 +40,26 @@ Prepared CUDA batches expose the provider's metric diagnostics. Whole-KS
 `estimate_resources`/resource-plan admission is rejected for DF until its
 combined inventory is qualified; conventional inventories must not describe DF.
 
-CUDA semilocal DF forces reuse the prepared DF provider's first-derivative
-contract: orbital three-center response, auxiliary-center response and the DF
-metric response are evaluated under the same auxiliary basis, rank threshold,
-geometry and provider identity as the converged KS state. The stationary force
-consumer receives that result as its Coulomb derivative source; the semilocal
-exchange slot remains exactly zero. No Direct AO-quartet derivative is relabeled
-as a DF result.
+Qualified force calculations use token-checked derivative snapshots and the
+prepared DF response provider. The CPU diagnostic requires `execution="native"`
+for a fitted state; the Direct-only reference derivative path is rejected rather
+than differentiating a different Hamiltonian.
 
-The force-capable CUDA owner reserves bounded DF response capacity at
-preparation so an energy replay can later request forces without changing the
-prepared scientific model. Whole-KS `estimate_resources` remains unsupported
-for DF until the combined inventory is qualified. CPU DF forces, CUDA DF hybrid
-forces, RSH/nonlocal DF forces and ECP DF forces remain fail-closed.
+This bridge contracts retained host H'/S' derivatives for the one-electron and
+Pulay sources on both backends. The CUDA DF J/K response remains in the existing
+CUDA provider and can upload density terms and other response buffers. It is
+not a zero-upload resident whole-force path. Its resource metadata covers the
+compact source publication and the host one-electron contraction only;
+`density_fitted_response_resources_included=0` explicitly excludes unmeasured
+DF-provider scratch and transfers. These partial diagnostics cannot establish a
+whole-force memory or transport bound. Full DF resource-plan admission remains
+unqualified.
 
 `tests/python/test_dft_df_public.py` compares independently converged PySCF
-energies with copied orbital/auxiliary primitives and identical quadrature. The
-CUDA force gate additionally uses PySCF density-fitted analytic gradients with
-moving-grid response, so auxiliary/metric response is checked independently of
-the native stationary implementation. GPU acceptance requires
-`GENERATIVEQC_DFT_CUDA_TEST=1` and a scheduler-allocated CUDA device.
+energies and analytic gradients with copied orbital/auxiliary primitives and
+identical moving quadrature (absolute energy gate `1e-8 Eh`, force gate
+`3e-7 Eh/bohr`, physical residual below `1e-9`). GPU acceptance
+requires `GENERATIVEQC_DFT_CUDA_TEST=1` and a scheduler-allocated CUDA device.
 
 See the [ownership note](../../.agents/notes/implemented/architecture/2026-09-22-public-df-ks-provider.md)
 for the retained boundaries.

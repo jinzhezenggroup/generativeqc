@@ -21,10 +21,16 @@ def test_full_force_fixture_selects_opt_in_and_preserves_matrix_choices(
     observed = []
 
     class Owner:
-        def __init__(self, atoms: int, *, cooperative_becke: bool = False) -> None:
+        def __init__(
+            self,
+            atoms: int,
+            *,
+            integral_derivatives: bool = True,
+            cooperative_becke: bool = False,
+        ) -> None:
             self.natom = atoms
             self.selected = cooperative_becke
-            observed.append(cooperative_becke)
+            observed.append((integral_derivatives, cooperative_becke))
 
         def metrics(self) -> dict[str, int]:
             return {"becke_threads_per_point": 32 if self.selected else 1}
@@ -35,7 +41,8 @@ def test_full_force_fixture_selects_opt_in_and_preserves_matrix_choices(
     Owner(12)
     Owner(12, cooperative_becke=False)
     Owner(33)
-    assert observed == [True, False, True]
+    Owner(12, integral_derivatives=False)
+    assert observed == [(True, True), (True, False), (True, True), (False, True)]
     monkeypatch.setattr(Owner, "metrics", lambda _self: {"becke_threads_per_point": 1})
     with pytest.raises(AssertionError, match="generic device fallback"):
         Owner(12)
@@ -81,3 +88,15 @@ def test_qualification_runner_passes_explicit_cooperative_selection(
     )
     with pytest.raises(SystemExit):
         runner.main()
+
+
+def test_owner_options_keep_integral_and_cooperative_scopes_distinct() -> None:
+    import inspect
+
+    from generativeqc._stationary_cuda import _CudaSources
+
+    parameters = inspect.signature(_CudaSources).parameters
+    assert parameters["integral_derivatives"].default is True
+    assert parameters["cooperative_becke"].default is False
+    names = tuple(parameters)
+    assert names.index("integral_derivatives") < names.index("cooperative_becke")

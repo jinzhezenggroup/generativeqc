@@ -26,6 +26,9 @@ resource_planning
 cpu_autotuning
 f_shell_validation
 ccsdt_cpu_bundle_qualification
+dft_mp_v1_contract
+hybrid_cuda_acceptance
+source_work_audit
 roadmap
 generated-files
 ```

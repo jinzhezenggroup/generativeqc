@@ -1,8 +1,11 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -15,6 +18,13 @@
 #include <utility>
 #include <vector>
 
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#endif
+
+#include "cli/native_basis.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "methods/generated_method_manifest.hpp"
 
@@ -34,11 +44,16 @@ class UsageError : public std::runtime_error {
 struct RunOptions {
   std::string input;
   std::string method_name{"gfn2-xtb"};
+  generativeqc_method method{GENERATIVEQC_METHOD_GFN2_XTB};
+  std::string basis_name{"sto-3g"};
+  generativeqc_basis_representation representation{GENERATIVEQC_BASIS_CARTESIAN};
   generativeqc_backend backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   int device_id{0};
   int charge{0};
   std::uint32_t multiplicity{1};
   bool input_angstrom{true};
+  bool basis_explicit{false};
+  bool representation_explicit{false};
   bool forces{false};
   bool json{false};
 };
@@ -74,7 +89,8 @@ int atomic_number(std::string token) {
   if (!token.empty() && std::all_of(token.begin(), token.end(),
                                     [](unsigned char c) { return std::isdigit(c) != 0; })) {
     const int value = parse_int(token, "atomic number");
-    if (value < 1 || value > 86) throw UsageError("GFN2-xTB supports atomic numbers 1 through 86");
+    if (value < 1 || value > 86)
+      throw UsageError("native XYZ parsing supports atomic numbers 1 through 86");
     return value;
   }
 
@@ -91,7 +107,7 @@ int atomic_number(std::string token) {
       "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn"};
   const auto found = std::find(symbols.begin(), symbols.end(), token);
   if (found == symbols.end())
-    throw UsageError("unknown or unsupported GFN2-xTB element symbol: " + token);
+    throw UsageError("unknown or unsupported native XYZ element symbol: " + token);
   return static_cast<int>(std::distance(symbols.begin(), found)) + 1;
 }
 
@@ -177,12 +193,17 @@ void print_usage(std::ostream& out) {
   out << "Usage:\n"
          "  generativeqc --version\n"
          "  generativeqc methods [--json]\n"
+         "  generativeqc basis list [--json]\n"
          "  generativeqc run INPUT.xyz [options]\n"
+         "  generativeqc profile show|clear\n"
+         "  generativeqc autotune --show-profile|--clear-profile\n"
          "  generativeqc resources ...   # reserved; Python frontend currently owns it\n"
-         "  generativeqc profile ...     # reserved; Python frontend currently owns it\n"
-         "  generativeqc autotune ...    # reserved; Python frontend currently owns it\n\n"
+         "  generativeqc profile install|export|diagnose ...  # reserved; Python frontend owns it\n"
+         "  generativeqc autotune ...    # tuning remains in the Python frontend\n\n"
          "Native run options:\n"
-         "  --method gfn2-xtb|gfn2   Native CLI execution method (default: gfn2-xtb)\n"
+         "  --method gfn2-xtb|rhf|uhf  Native method (default: gfn2-xtb)\n"
+         "  --basis NAME             Bundled Gaussian basis for RHF/UHF (default: sto-3g)\n"
+         "  --representation cartesian|spherical  Gaussian AO representation (default: cartesian)\n"
          "  --backend cpu|cuda       Execution backend (default: cpu)\n"
          "  --device-id N            CUDA device index (default: 0)\n"
          "  --charge N               Molecular charge (default: 0)\n"
@@ -190,6 +211,32 @@ void print_usage(std::ostream& out) {
          "  --units angstrom|bohr    XYZ coordinate units (default: angstrom)\n"
          "  --forces                 Request analytic forces\n"
          "  --json                   Emit machine-readable output\n";
+}
+
+int basis_command(int argc, char** argv) {
+  if (argc < 3) throw UsageError("basis requires an operation");
+  const std::string_view operation = argv[2];
+  if (operation == "--help" || operation == "-h" || operation == "help") {
+    print_usage(std::cout);
+    return 0;
+  }
+  if (operation != "list") throw UsageError("unknown basis operation: " + std::string(operation));
+  if (argc > 4 || (argc == 4 && std::string_view(argv[3]) != "--json"))
+    throw UsageError("basis list accepts only the optional --json flag");
+
+  const bool json = argc == 4;
+  const auto names = generativeqc::cli::bundled_basis_names();
+  if (json) {
+    std::cout << "[";
+    for (std::size_t index = 0; index < names.size(); ++index) {
+      if (index) std::cout << ",";
+      std::cout << "\"" << names[index] << "\"";
+    }
+    std::cout << "]\n";
+  } else {
+    for (const auto name : names) std::cout << name << '\n';
+  }
+  return 0;
 }
 
 void print_methods(bool json) {
@@ -226,16 +273,22 @@ void print_methods(bool json) {
   if (json) std::cout << "\n]\n";
 }
 
-generativeqc_method_descriptor gfn2_method() {
+bool is_gfn2(const RunOptions& options) { return options.method == GENERATIVEQC_METHOD_GFN2_XTB; }
+
+std::string_view representation_name(generativeqc_basis_representation representation) {
+  return representation == GENERATIVEQC_BASIS_SPHERICAL ? "spherical" : "cartesian";
+}
+
+generativeqc_method_descriptor method_descriptor(const RunOptions& options) {
   generativeqc_method_descriptor descriptor{};
   descriptor.struct_size = sizeof(descriptor);
   descriptor.abi_version = GENERATIVEQC_ABI_VERSION;
-  descriptor.method = GENERATIVEQC_METHOD_GFN2_XTB;
+  descriptor.method = options.method;
   descriptor.max_iterations = 100;
   descriptor.diis_history = 8;
-  descriptor.energy_tolerance = 1.0e-10;
-  descriptor.density_tolerance = 1.0e-8;
-  descriptor.screening_tolerance = 0.0;
+  descriptor.energy_tolerance = is_gfn2(options) ? 1.0e-10 : 1.0e-12;
+  descriptor.density_tolerance = is_gfn2(options) ? 1.0e-8 : 1.0e-10;
+  descriptor.screening_tolerance = is_gfn2(options) ? 0.0 : 1.0e-14;
   descriptor.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE;
   descriptor.density_fitting_relative_threshold = 1.0e-10;
   descriptor.precision_mode = GENERATIVEQC_PRECISION_FP64;
@@ -262,11 +315,31 @@ RunOptions parse_run(int argc, char** argv) {
 
     if (option == "--method") {
       const std::string selected = lower(std::string(value()));
-      if (selected != "gfn2-xtb" && selected != "gfn2")
-        throw UsageError(
-            "native run currently supports gfn2-xtb; Gaussian-basis CLI "
-            "resolution is not yet exposed");
-      options.method_name = "gfn2-xtb";
+      if (selected == "gfn2-xtb" || selected == "gfn2") {
+        options.method_name = "gfn2-xtb";
+        options.method = GENERATIVEQC_METHOD_GFN2_XTB;
+      } else if (selected == "rhf") {
+        options.method_name = "rhf";
+        options.method = GENERATIVEQC_METHOD_RHF;
+      } else if (selected == "uhf") {
+        options.method_name = "uhf";
+        options.method = GENERATIVEQC_METHOD_UHF;
+      } else {
+        throw UsageError("native run method must be gfn2-xtb, rhf, or uhf");
+      }
+    } else if (option == "--basis") {
+      options.basis_name = lower(std::string(value()));
+      std::replace(options.basis_name.begin(), options.basis_name.end(), '_', '-');
+      options.basis_explicit = true;
+    } else if (option == "--representation") {
+      const std::string selected = lower(std::string(value()));
+      if (selected == "cartesian")
+        options.representation = GENERATIVEQC_BASIS_CARTESIAN;
+      else if (selected == "spherical")
+        options.representation = GENERATIVEQC_BASIS_SPHERICAL;
+      else
+        throw UsageError("--representation must be cartesian or spherical");
+      options.representation_explicit = true;
     } else if (option == "--backend") {
       const std::string selected = lower(std::string(value()));
       if (selected == "cpu")
@@ -298,6 +371,9 @@ RunOptions parse_run(int argc, char** argv) {
       throw UsageError("unknown run option: " + std::string(option));
     }
   }
+  if (is_gfn2(options) && (options.basis_explicit || options.representation_explicit))
+    throw UsageError(
+        "GFN2-xTB owns its intrinsic basis; --basis/--representation apply to RHF/UHF");
   return options;
 }
 
@@ -309,20 +385,36 @@ int run(const RunOptions& options) {
                                                            options.device_id, options.backend};
   generativeqc::Context context(context_descriptor);
 
-  const generativeqc_system_descriptor system_descriptor{sizeof(generativeqc_system_descriptor),
-                                                         GENERATIVEQC_ABI_VERSION,
-                                                         atoms.data(),
-                                                         static_cast<std::uint32_t>(atoms.size()),
-                                                         nullptr,
-                                                         0,
-                                                         nullptr,
-                                                         0,
-                                                         options.charge,
-                                                         options.multiplicity,
-                                                         GENERATIVEQC_BASIS_CARTESIAN};
+  generativeqc::cli::NativeBasisData basis;
+  if (!is_gfn2(options)) {
+    try {
+      basis = generativeqc::cli::expand_bundled_basis(options.basis_name, atoms,
+                                                      options.representation);
+    } catch (const std::invalid_argument& error) {
+      throw UsageError(error.what());
+    }
+  }
+  const auto* shells = is_gfn2(options) ? nullptr : basis.shells.data();
+  const auto* primitives = is_gfn2(options) ? nullptr : basis.primitives.data();
+  const std::uint32_t shell_count =
+      is_gfn2(options) ? 0u : static_cast<std::uint32_t>(basis.shells.size());
+  const std::uint32_t primitive_count =
+      is_gfn2(options) ? 0u : static_cast<std::uint32_t>(basis.primitives.size());
+  const generativeqc_system_descriptor system_descriptor{
+      sizeof(generativeqc_system_descriptor),
+      GENERATIVEQC_ABI_VERSION,
+      atoms.data(),
+      static_cast<std::uint32_t>(atoms.size()),
+      shells,
+      shell_count,
+      primitives,
+      primitive_count,
+      options.charge,
+      options.multiplicity,
+      is_gfn2(options) ? GENERATIVEQC_BASIS_CARTESIAN : options.representation};
   generativeqc::System system(context, system_descriptor);
 
-  const generativeqc_method_descriptor method = gfn2_method();
+  const generativeqc_method_descriptor method = method_descriptor(options);
   generativeqc::Calculation calculation(context, system, method);
   const generativeqc_property_flags requested =
       GENERATIVEQC_PROPERTY_ENERGY | (options.forces ? GENERATIVEQC_PROPERTY_FORCES : 0u);
@@ -331,8 +423,12 @@ int run(const RunOptions& options) {
   std::cout << std::setprecision(17);
   if (options.json) {
     std::cout << "{\"method\":\"" << options.method_name << "\","
-              << "\"backend\":\"" << backend_name(result.executed_backend) << "\","
-              << "\"energy_hartree\":" << result.energy << ","
+              << "\"backend\":\"" << backend_name(result.executed_backend) << "\"";
+    if (!is_gfn2(options)) {
+      std::cout << ",\"basis\":\"" << options.basis_name << "\","
+                << "\"representation\":\"" << representation_name(options.representation) << "\"";
+    }
+    std::cout << ",\"energy_hartree\":" << result.energy << ","
               << "\"iterations\":" << result.iterations;
     if (result.forces) {
       std::cout << ",\"forces_hartree_per_bohr\":[";
@@ -347,8 +443,12 @@ int run(const RunOptions& options) {
     std::cout << "}\n";
   } else {
     std::cout << "method: " << options.method_name << '\n'
-              << "backend: " << backend_name(result.executed_backend) << '\n'
-              << "energy_hartree: " << result.energy << '\n'
+              << "backend: " << backend_name(result.executed_backend) << '\n';
+    if (!is_gfn2(options)) {
+      std::cout << "basis: " << options.basis_name << '\n'
+                << "representation: " << representation_name(options.representation) << '\n';
+    }
+    std::cout << "energy_hartree: " << result.energy << '\n'
               << "iterations: " << result.iterations << '\n';
     if (result.forces) {
       std::cout << "forces_hartree_per_bohr:\n";
@@ -360,6 +460,264 @@ int run(const RunOptions& options) {
     }
   }
   return 0;
+}
+
+std::filesystem::path expand_profile_cache_override(std::string value) {
+  if (value == "~") {
+    const char* home = std::getenv("HOME");
+    if (home == nullptr || *home == '\0')
+      throw UsageError("cannot expand GENERATIVEQC_PROFILE_CACHE without HOME");
+    return std::filesystem::path(home);
+  }
+  if (value.rfind("~/", 0) == 0) {
+    const char* home = std::getenv("HOME");
+    if (home == nullptr || *home == '\0')
+      throw UsageError("cannot expand GENERATIVEQC_PROFILE_CACHE without HOME");
+    return std::filesystem::path(home) / value.substr(2);
+  }
+  return std::filesystem::path(std::move(value));
+}
+
+std::filesystem::path profile_cache_root() {
+  if (const char* configured = std::getenv("GENERATIVEQC_PROFILE_CACHE");
+      configured != nullptr && *configured != '\0')
+    return expand_profile_cache_override(configured);
+
+  if (const char* xdg = std::getenv("XDG_CACHE_HOME"); xdg != nullptr && *xdg != '\0')
+    return std::filesystem::path(xdg) / "generativeqc" / "profiles";
+
+  const char* home = std::getenv("HOME");
+  if (home == nullptr || *home == '\0')
+    throw UsageError("cannot resolve profile cache without HOME or XDG_CACHE_HOME");
+  return std::filesystem::path(home) / ".cache" / "generativeqc" / "profiles";
+}
+
+std::string json_escape(std::string_view value) {
+  std::string escaped;
+  escaped.reserve(value.size() + 8);
+  constexpr char hex[] = "0123456789abcdef";
+  for (const unsigned char c : value) {
+    switch (c) {
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '\b':
+        escaped += "\\b";
+        break;
+      case '\f':
+        escaped += "\\f";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        if (c < 0x20) {
+          escaped += "\\u00";
+          escaped += hex[(c >> 4) & 0x0f];
+          escaped += hex[c & 0x0f];
+        } else {
+          escaped.push_back(static_cast<char>(c));
+        }
+    }
+  }
+  return escaped;
+}
+
+// The profile index schema is a JSON object mapping compatibility hashes to
+// bundle IDs. Validate the whole document before embedding it in show output.
+bool valid_profile_index(std::string_view text) {
+  std::size_t position = 0;
+  const auto whitespace = [&]() {
+    while (position < text.size() && (text[position] == ' ' || text[position] == '\t' ||
+                                      text[position] == '\r' || text[position] == '\n'))
+      ++position;
+  };
+  const auto take = [&](char expected) {
+    whitespace();
+    if (position == text.size() || text[position] != expected) return false;
+    ++position;
+    return true;
+  };
+  const auto string = [&]() {
+    if (!take('"')) return false;
+    while (position < text.size()) {
+      const unsigned char character = text[position++];
+      if (character == '"') return true;
+      if (character < 0x20) return false;
+      if (character >= 0x80) {
+        const unsigned continuation = character >= 0xf0 ? 3 : character >= 0xe0 ? 2 : 1;
+        if (character < 0xc2 || character > 0xf4) return false;
+        std::uint32_t codepoint = character & (0x7fu >> (continuation + 1));
+        for (unsigned index = 0; index < continuation; ++index) {
+          if (position == text.size()) return false;
+          const unsigned char next = text[position++];
+          if ((next & 0xc0u) != 0x80u) return false;
+          codepoint = (codepoint << 6) | (next & 0x3fu);
+        }
+        const std::uint32_t minimum = continuation == 1   ? 0x80
+                                      : continuation == 2 ? 0x800
+                                                          : 0x10000;
+        if (codepoint < minimum || codepoint > 0x10ffff ||
+            (codepoint >= 0xd800 && codepoint <= 0xdfff))
+          return false;
+        continue;
+      }
+      if (character != '\\') continue;
+      if (position == text.size()) return false;
+      const char escape = text[position++];
+      if (escape == 'u') {
+        for (int digit = 0; digit < 4; ++digit) {
+          if (position == text.size() ||
+              std::isxdigit(static_cast<unsigned char>(text[position++])) == 0)
+            return false;
+        }
+      } else if (std::string_view("\"\\/bfnrt").find(escape) == std::string_view::npos) {
+        return false;
+      }
+    }
+    return false;
+  };
+  if (!take('{')) return false;
+  if (!take('}')) {
+    do {
+      if (!string() || !take(':') || !string()) return false;
+    } while (take(','));
+    if (!take('}')) return false;
+  }
+  whitespace();
+  return position == text.size();
+}
+
+std::string read_profile_index(const std::filesystem::path& path) {
+  std::error_code error;
+  if (!std::filesystem::exists(path, error)) {
+    if (error) throw std::runtime_error("cannot inspect profile index: " + error.message());
+    return "{}";
+  }
+
+  std::ifstream stream(path);
+  if (!stream) throw std::runtime_error("cannot open profile index: " + path.string());
+  std::string content((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+  if (stream.bad()) throw std::runtime_error("cannot read profile index: " + path.string());
+  if (!valid_profile_index(content))
+    throw std::runtime_error("profile index must be a JSON object mapping strings to strings: " +
+                             path.string());
+  return content;
+}
+
+int profile_show() {
+  const auto root = profile_cache_root();
+  const auto active = read_profile_index(root / "active.json");
+  std::cout << "{\n  \"cache\": \"" << json_escape(root.string()) << "\",\n  \"active\": " << active
+            << "\n}\n";
+  return 0;
+}
+
+class ProfileCacheLock {
+ public:
+  explicit ProfileCacheLock(const std::filesystem::path& path) {
+#if defined(__unix__) || defined(__APPLE__)
+    descriptor_ = ::open(path.c_str(), O_CREAT | O_RDWR, 0666);
+    if (descriptor_ < 0)
+      throw std::runtime_error("cannot open profile cache lock: " + path.string());
+    if (::flock(descriptor_, LOCK_EX) != 0) {
+      ::close(descriptor_);
+      descriptor_ = -1;
+      throw std::runtime_error("cannot acquire profile cache lock: " + path.string());
+    }
+#else
+    (void)path;
+#endif
+  }
+
+  ~ProfileCacheLock() {
+#if defined(__unix__) || defined(__APPLE__)
+    if (descriptor_ >= 0) {
+      (void)::flock(descriptor_, LOCK_UN);
+      (void)::close(descriptor_);
+    }
+#endif
+  }
+
+  ProfileCacheLock(const ProfileCacheLock&) = delete;
+  ProfileCacheLock& operator=(const ProfileCacheLock&) = delete;
+
+ private:
+#if defined(__unix__) || defined(__APPLE__)
+  int descriptor_{-1};
+#endif
+};
+
+int profile_clear() {
+  const auto root = profile_cache_root();
+  std::error_code error;
+  std::filesystem::create_directories(root, error);
+  if (error) throw std::runtime_error("cannot create profile cache: " + error.message());
+
+  ProfileCacheLock lock(root / ".lock");
+  const auto active = root / "active.json";
+#if defined(__unix__) || defined(__APPLE__)
+  // Never follow a predictable temporary-path symlink or truncate a stale file.
+  std::string pattern = (root / "active.json.tmp.XXXXXX").string();
+  std::vector<char> name(pattern.begin(), pattern.end());
+  name.push_back('\0');
+  const int descriptor = ::mkstemp(name.data());
+  if (descriptor < 0) throw std::runtime_error("cannot create temporary profile index");
+  const std::filesystem::path pending(name.data());
+  constexpr std::string_view content = "{}\n";
+  std::size_t written = 0;
+  while (written < content.size()) {
+    const auto count = ::write(descriptor, content.data() + written, content.size() - written);
+    if (count < 0 && errno == EINTR) continue;
+    if (count <= 0) {
+      (void)::close(descriptor);
+      std::filesystem::remove(pending, error);
+      throw std::runtime_error("cannot write temporary profile index");
+    }
+    written += static_cast<std::size_t>(count);
+  }
+  if (::close(descriptor) != 0) {
+    std::filesystem::remove(pending, error);
+    throw std::runtime_error("cannot close temporary profile index");
+  }
+#else
+  throw std::runtime_error("profile clear requires POSIX locking and atomic replacement");
+  const auto pending = active;
+#endif
+  std::filesystem::rename(pending, active, error);
+  if (error) {
+    std::error_code ignored;
+    std::filesystem::remove(pending, ignored);
+    throw std::runtime_error("cannot activate cleared profile index: " + error.message());
+  }
+  std::cout << "Local profiles deactivated.\n";
+  return 0;
+}
+
+int profile_command(int argc, char** argv) {
+  if (argc != 3) throw UsageError("profile requires exactly one operation: show or clear");
+  const std::string_view operation = argv[2];
+  if (operation == "--help" || operation == "-h" || operation == "help") {
+    print_usage(std::cout);
+    return 0;
+  }
+  if (operation == "show") return profile_show();
+  if (operation == "clear") return profile_clear();
+  if (operation == "install" || operation == "export" || operation == "diagnose") {
+    std::cerr << "generativeqc: native profile operation '" << operation
+              << "' is reserved but not migrated yet; the Python frontend currently provides it\n";
+    return 2;
+  }
+  throw UsageError("unknown profile operation: " + std::string(operation));
 }
 
 int reserved_python_subcommand(std::string_view command) {
@@ -393,6 +751,7 @@ int main(int argc, char** argv) {
       print_methods(argc == 3);
       return 0;
     }
+    if (command == "basis") return basis_command(argc, argv);
     if (command == "run") {
       if (argc == 3 &&
           (std::string_view(argv[2]) == "--help" || std::string_view(argv[2]) == "-h")) {
@@ -401,8 +760,13 @@ int main(int argc, char** argv) {
       }
       return run(parse_run(argc, argv));
     }
-    if (command == "resources" || command == "profile" || command == "autotune")
+    if (command == "profile") return profile_command(argc, argv);
+    if (command == "autotune") {
+      if (argc == 3 && std::string_view(argv[2]) == "--show-profile") return profile_show();
+      if (argc == 3 && std::string_view(argv[2]) == "--clear-profile") return profile_clear();
       return reserved_python_subcommand(command);
+    }
+    if (command == "resources") return reserved_python_subcommand(command);
 
     throw UsageError("unknown command: " + std::string(command));
   } catch (const UsageError& error) {

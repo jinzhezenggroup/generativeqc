@@ -86,36 +86,41 @@ def _select(source: object, *, budget: int = 32, ecp: bool = False) -> object:
     "failure", ["missing", "not-callable", "unavailable", "no-budget", "ecp"]
 )
 def test_fitted_derivative_failure_never_selects_exact_fallback(failure: str) -> None:
-    source = SimpleNamespace(density_fitted=True)
+    exact = Mock(
+        side_effect=AssertionError("Direct must not execute for a fitted state")
+    )
+    source = SimpleNamespace(density_fitted=True, cuda_integral_derivatives=exact)
     if failure != "missing":
-        source.cuda_integral_derivatives = (
+        source.density_fitted_integral_derivatives = (
             None if failure == "not-callable" else Mock(return_value=None)
         )
     with pytest.raises(NotImplementedError, match="change the Hamiltonian"):
         _select(
             source, budget=0 if failure == "no-budget" else 32, ecp=failure == "ecp"
         )
+    exact.assert_not_called()
     if failure in ("no-budget", "ecp"):
-        source.cuda_integral_derivatives.assert_not_called()
+        source.density_fitted_integral_derivatives.assert_not_called()
 
 
 def test_fitted_provider_errors_propagate_without_exact_retry() -> None:
     source = SimpleNamespace(
         density_fitted=True,
-        cuda_integral_derivatives=Mock(side_effect=RuntimeError("stale DF response")),
+        density_fitted_integral_derivatives=Mock(
+            side_effect=RuntimeError("stale DF response")
+        ),
+        cuda_integral_derivatives=Mock(),
     )
     with pytest.raises(RuntimeError, match="stale DF response"):
         _select(source)
-    source.cuda_integral_derivatives.assert_called_once_with(
-        2, 32, range_exchange=False
-    )
+    source.cuda_integral_derivatives.assert_not_called()
 
 
 @pytest.mark.parametrize("invalid", [np.zeros((2, 2, 3)), np.full((4, 2, 3), np.nan)])
 def test_fitted_provider_rejects_invalid_publication(invalid: np.ndarray) -> None:
     source = SimpleNamespace(
         density_fitted=True,
-        cuda_integral_derivatives=Mock(return_value=(invalid, {})),
+        density_fitted_integral_derivatives=Mock(return_value=(invalid, {})),
     )
     with pytest.raises(RuntimeError, match="invalid output"):
         _select(source)
@@ -125,12 +130,63 @@ def test_complete_fitted_response_and_explicit_exact_fallback_remain_distinct() 
     output = np.zeros((4, 2, 3))
     source = SimpleNamespace(
         density_fitted=True,
-        cuda_integral_derivatives=Mock(return_value=(output, {})),
+        density_fitted_integral_derivatives=Mock(return_value=(output, {})),
+        cuda_integral_derivatives=Mock(return_value=None),
     )
     np.testing.assert_array_equal(_select(source), output)
+    source.density_fitted_integral_derivatives.assert_called_once_with(2, 32)
+    source.density_fitted = False
+    assert _select(source) is None
     source.cuda_integral_derivatives.assert_called_once_with(
         2, 32, range_exchange=False
     )
-    source.density_fitted = False
-    source.cuda_integral_derivatives = Mock(return_value=None)
-    assert _select(source) is None
+
+
+def _cpu_selection(source: object, execution: str) -> bool:
+    path = ROOT / "python/generativeqc/_stationary_cpu.py"
+    module = ast.parse(path.read_text())
+    owner = next(
+        n
+        for n in module.body
+        if isinstance(n, ast.FunctionDef)
+        and n.name == "complete_rks_gradient_diagnostic"
+    )
+
+    def assigned(statement: ast.stmt, name: str) -> bool:
+        return isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in statement.targets
+        )
+
+    start = next(
+        i for i, n in enumerate(owner.body) if assigned(n, "native_fitted_integrals")
+    )
+    stop = next(i for i, n in enumerate(owner.body) if assigned(n, "work"))
+    function = ast.parse("def select():\n    pass").body[0]
+    function.body = (
+        owner.body[start:stop] + ast.parse("return native_fitted_integrals").body
+    )
+    code = compile(
+        ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+        str(path),
+        "exec",
+    )
+    compiled = next(
+        c for c in code.co_consts if isinstance(c, CodeType) and c.co_name == "select"
+    )
+    return FunctionType(
+        compiled,
+        {
+            "__builtins__": builtins.__dict__,
+            "state": SimpleNamespace(_source=source),
+            "execution": execution,
+        },
+    )()
+
+
+def test_cpu_reference_derivatives_reject_a_fitted_hamiltonian() -> None:
+    with pytest.raises(NotImplementedError, match="change the Hamiltonian"):
+        _cpu_selection(SimpleNamespace(density_fitted=True), "reference")
+    assert _cpu_selection(SimpleNamespace(density_fitted=True), "native")
+    assert not _cpu_selection(SimpleNamespace(density_fitted=False), "reference")
+    assert not _cpu_selection(SimpleNamespace(), "native")

@@ -277,7 +277,10 @@ jobs:
 
       - name: Install Python test dependencies
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        run: uv pip install --python .venv/bin/python --editable '.[test]'
+        # The CuMetal lane already built the native library above. Installing the
+        # project itself would start a second ordinary macOS wheel build, whose
+        # scoped GFN2 wheel provider is intentionally Linux-only.
+        run: uv pip install --python .venv/bin/python 'pytest>=8'
 
       - name: Run full CUDA suite on the Apple GPU
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -286,6 +289,7 @@ jobs:
           CUMETAL_ROOT: /tmp/cumetal-install
           DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-cumetal/libgenerativeqc.dylib
+          PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: full
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "300"
@@ -381,7 +385,52 @@ jobs:
             -I"$CUMETAL_PREFIX/include" \
             -o "$GENERATIVEQC_BENCH_BUILD/generativeqc_cumetal_fp32_benchmark"
 
+      - name: Smoke CuMetal FP32 proxy workloads
+        shell: bash
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          GENERATIVEQC_CUMETAL_FP32_BENCH: ${{ github.workspace }}/build-cumetal-benchmark/generativeqc_cumetal_fp32_benchmark
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/cumetal-fp32-smoke.log"
+          {
+            printf 'run compute\n'
+            printf 'run memory\n'
+            printf 'run gather\n'
+            printf 'run mixed\n'
+            printf 'quit\n'
+          } | "${GENERATIVEQC_CUMETAL_FP32_BENCH}" | tee "${log}"
+
+          .venv/bin/python - "${log}" <<'PY'
+          import math
+          import pathlib
+          import sys
+
+          lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
+          assert any(line.startswith("READY device=") for line in lines), lines
+          samples = {}
+          for line in lines:
+              fields = line.split()
+              if len(fields) == 3 and fields[0] == "OK":
+                  samples[fields[1]] = float(fields[2])
+          expected = {"compute", "memory", "gather", "mixed"}
+          assert samples.keys() >= expected, samples
+          assert all(math.isfinite(samples[name]) and samples[name] > 0.0 for name in expected), samples
+          PY
+
+      # With CodSpeed disabled, its benchmark fixture invokes each workload once.
+      # Keep collection, fixture, and Python harness regressions gating as well.
+      - name: Validate CuMetal benchmark harness without profiling
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          GENERATIVEQC_CUMETAL_FP32_BENCH: ${{ github.workspace }}/build-cumetal-benchmark/generativeqc_cumetal_fp32_benchmark
+        run: env -u CODSPEED_ENV .venv/bin/python -m pytest benchmarks/test_cumetal_fp32_codspeed.py -q
+
       - name: Run CodSpeed FP32 CuMetal proxy suite
+        id: codspeed
+        continue-on-error: true
         uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
@@ -390,6 +439,11 @@ jobs:
         with:
           mode: walltime
           run: .venv/bin/python -m pytest benchmarks/test_cumetal_fp32_codspeed.py --codspeed -q
+
+      - name: Report CodSpeed telemetry failure
+        if: steps.codspeed.outcome == 'failure'
+        run: |
+          echo "::warning::CuMetal workloads and the Python harness passed their unprofiled gates, but CodSpeed telemetry failed. Treating profiler/upload infrastructure as non-gating."
 
   upload-test-results:
     name: Upload CUDA test results

@@ -1,10 +1,12 @@
 """Compiler geometry planning agrees with native allocation without a GPU."""
 
+import ast
 import re
 import shutil
 import subprocess
 from dataclasses import replace
 from pathlib import Path
+from types import CodeType, FunctionType, SimpleNamespace
 
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -287,6 +289,74 @@ def test_optional_lanes_preserve_existing_native_admission_budget() -> None:
             assert budget - plan.allocation_bytes == available
         else:
             assert plan.geometry_lanes > 32
+
+
+@pytest.mark.parametrize("cooperative", [False, True])
+@pytest.mark.parametrize("direct_available", [False, True])
+@pytest.mark.parametrize("allowance", [432, 433, 1 << 20])
+def test_fitted_provider_retains_its_full_admitted_allowance(
+    direct_available: bool, allowance: int, cooperative: bool
+) -> None:
+    from generativeqc_compiler.method.stationary_resources import (
+        stationary_native_pair_reserve,
+    )
+
+    path = ROOT / "python/generativeqc/_stationary_cuda.py"
+    owner = next(
+        node
+        for node in ast.parse(path.read_text()).body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_complete_rks_cuda_gradient_diagnostic"
+    )
+    reservation = next(
+        node
+        for node in owner.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "native_geometry_reserve"
+            for target in node.targets
+        )
+    )
+    source = SimpleNamespace(
+        density_fitted=True, density_fitted_integral_derivatives=lambda *_: None
+    )
+    if direct_available:
+        source.cuda_integral_derivatives = lambda *_: None
+    scope = {
+        "state": SimpleNamespace(_source=source),
+        "available": allowance + 1024,
+        "tensor_plans": {"other": SimpleNamespace(peak_bytes=1024)},
+        "ecp": False,
+        "na": SHAPE["atoms"],
+        "n": SHAPE["aos"],
+        "basis": SimpleNamespace(nprimitive=SHAPE["primitives"]),
+        "stationary_native_pair_reserve": stationary_native_pair_reserve,
+    }
+    function = ast.parse("def reserve():\n    pass").body[0]
+    function.body = [ast.Return(value=reservation.value)]
+    code = compile(
+        ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+        str(path),
+        "exec",
+    )
+    compiled = next(
+        item
+        for item in code.co_consts
+        if isinstance(item, CodeType) and item.co_name == "reserve"
+    )
+    reserve = FunctionType(compiled, scope)()
+    assert reserve == allowance
+    minimum = stationary_cuda_allocation_bytes(**SHAPE, geometry_lanes=32)
+    plan = plan_stationary_cuda_resources(
+        **SHAPE,
+        target=TARGET,
+        budget_bytes=minimum + allowance - reserve,
+        cooperative_becke=cooperative,
+    )
+    assert plan.geometry_lanes == 32
+    assert plan.becke_threads_per_point == (32 if cooperative else 1)
+    assert plan.becke_shared_bytes == (4240 if cooperative else 0)
+    assert minimum + allowance - plan.allocation_bytes == allowance
 
 
 def test_native_pair_reserve_matches_actual_native_admission(tmp_path: Path) -> None:

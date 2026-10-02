@@ -135,7 +135,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         "snapshot_basis('def2-svp', 'spherical').shells_for(atoms)"
     )
     assert result["basis"]["stationary_layout_contract_sha256"] == (
-        "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
+        "fa8c4ff2a644fd45ab4eb828a995c4e42c49c80adbe712b32d50f90b3d98fb74"
     )
     assert result["basis"]["native_spherical_ao_count_contract_sha256"] == (
         "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
@@ -177,7 +177,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
         ),
         "force_capability_promotion_sha256": (
-            "aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e"
+            "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
         ),
         "cuda_force_method_sha256": (
             "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
@@ -279,19 +279,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "54a8611076e5b546842632852e75b95dc75f058bb4bb07ef30411cadb3e9333c"
+            "c29ed5e27de74d03e92e035fdba81f745e1f4f608fa6b175cdf9ca315402a5b5"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
         ),
         "bulk_sha256": (
-            "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
+            "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
         ),
         "scalar_sha256": (
             "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
         ),
         "component_integral_sha256": (
-            "c0eb9658bb707083073c9ea57b5021825691c35c0cc2ff6e2afa326c09159dc3"
+            "d3f61e820c8bcf0df4bf4fce639f342936b79aceb956cb6e9f43caa3d13cdaa3"
         ),
         "nuclear_sha256": (
             "1e86737d8732ef8637378ab925f829dfe229bcf049219c2705a0a4fbf7afdb85"
@@ -315,7 +315,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "b3918673701fb03bea3b4961c29c4c2ca0367f6b436462fa4b54f099af6df813"
+            "b600f2ccb9e5887e89174715139b4777ee850539317e71863031fc174a7a69eb"
         ),
         "native_owner_sha256": (
             "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -378,10 +378,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["snapshot_functional_contract_sha256"] == {
         "init_sha256": (
-            "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
+            "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
         "decode_sha256": (
-            "c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6"
+            "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
         ),
     }
     assert result["admission_limits"]["grid_plan_definition"] == (
@@ -389,8 +389,11 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "tile_points=tile_points, active_ao_capacity=n, "
         "budget_bytes=max_device_bytes)"
     )
-    assert result["admission_limits"]["source_bytes_definition"].startswith(
+    assert result["admission_limits"]["source_resources_definition"].startswith(
         "plan_stationary_cuda_resources(atoms=na"
+    )
+    assert result["admission_limits"]["source_bytes_definition"] == (
+        "source_resources.allocation_bytes"
     )
     assert result["admission_limits"]["host_bound_definition"].startswith(
         "grid_plan.host_bytes + 8 * (34 * primitive_tile"

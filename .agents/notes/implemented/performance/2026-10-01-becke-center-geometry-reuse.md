@@ -93,3 +93,22 @@ speedup is established by host execution.
 References: #1479, #1672; `test_becke_center_geometry.py`,
 `test_grid_native.py`, `test_stationary_geometry_resources.py`,
 `test_stationary_geometry_kernel_host.py`, `test_dft_complete_cuda.py`
+
+## Integration update, 2026-10-02
+
+The integration with #1654 preserves the fitted provider's full pre-existing
+integral allowance before optional lane expansion or center-cache admission.
+Fitted owners therefore retain the original 32-lane schedule and direct center
+geometry when that reservation exhausts spare owner capacity. The Direct provider
+continues using its existing conservative paired one-electron reserve. Source
+identity checks were recomputed from the integrated initializer, not copied from
+either branch. Missing NVIDIA evidence is retained as a qualification limitation;
+merge approval may proceed under the current review/CI policy, while actual
+NVIDIA correctness and endpoint performance claims still require device evidence.
+
+Integration review also exposed an endpoint accounting mismatch: native typed-OOM
+fallback retained the smaller direct arena, but publication still required the
+larger cached upper bound. Publication now accepts only the exact non-cache base
+plus either zero or the admitted cache bytes. JIT/AOT orchestration regressions
+cover both retained-cache outcomes and reject partial cache or mismatched totals;
+peak admission remains the conservative planned bound.

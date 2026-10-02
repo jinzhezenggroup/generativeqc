@@ -1,0 +1,31 @@
+{
+  "source_revision": "6795097b003a30f9f5e9ab8c34e0705dddbf2427",
+  "slurm_job_id": "11926",
+  "requested_properties": [
+    "energy",
+    "forces"
+  ],
+  "cases": [
+    {
+      "basis": "bundled def2-SVP control",
+      "supported_properties": [
+        "energy",
+        "forces"
+      ]
+    },
+    {
+      "basis": "bundled def2-TZVP PR test",
+      "supported_properties": [
+        "energy"
+      ],
+      "explicit_force_request_error": "ValueError: method 'wb97m-v' does not support properties: forces"
+    },
+    {
+      "basis": "local def2-TZVPD OMol25",
+      "supported_properties": [
+        "energy"
+      ],
+      "explicit_force_request_error": "ValueError: method 'wb97m-v' does not support properties: forces"
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "schema": "generativeqc.cpu-eri-coulomb-publication.v1",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 17325,
+      "sha256": "e14e660d221a2e2bbe9ceaedf2d77ee1c0ce9c95712ecfafc808c2bae6b37cf3"
+    },
+    {
+      "path": "auxiliary-validation.json.gz",
+      "bytes": 311664,
+      "sha256": "4c26a144db43d8c483b13faa4717f77cd6dca3f63ef5c94020e4d28c04d6417e"
+    },
+    {
+      "path": "check_hf_pbe_pbe0.py",
+      "bytes": 11118,
+      "sha256": "529e292232fa57ddee5267b1b98384501d4f802b0c287cbc7e6e4da01b2c1962"
+    },
+    {
+      "path": "confidence.py",
+      "bytes": 2563,
+      "sha256": "5775fc4512f9deb2555e34ee7b0950980c52b895aa64a8bfc41bd5eac912e6ee"
+    },
+    {
+      "path": "dependencies.json",
+      "bytes": 1733,
+      "sha256": "ede6f719277d4ce5e971f949762b305a16d8d160274e7b894a2a4d458f5da67c"
+    },
+    {
+      "path": "identity.json",
+      "bytes": 3764,
+      "sha256": "f099eee162a107f049faadf2c22953593cade2f93d1be1a4f92a5f794a11e412"
+    },
+    {
+      "path": "matched_cpu_evidence.py",
+      "bytes": 28976,
+      "sha256": "9c830aa01507573d2488c3eccb7fba431453af772ff91c4612caf6e9fa17be1e"
+    },
+    {
+      "path": "measured-inputs.json.gz",
+      "bytes": 21945,
+      "sha256": "6c2ccc98c9d239fad31a6cf252bd85d055b56673880f48648a6e9b0ab4965ded"
+    },
+    {
+      "path": "normalized-campaign.json.gz",
+      "bytes": 597414,
+      "sha256": "871bf7a8f09c92fb08ab413e7048445c92c2f9ff9fbf676a74c7de4b079cbc16"
+    },
+    {
+      "path": "paired-process-confidence.json",
+      "bytes": 10858,
+      "sha256": "7740865630b4a7d9bac7620d4dd86a6ededd4f102ed74b68cec350e290808427"
+    },
+    {
+      "path": "pilot-campaign.json.gz",
+      "bytes": 343092,
+      "sha256": "75854daee5495f7346cc4c8f2c110ea3ea6145caf2d73435cc371fe23f8f636c"
+    },
+    {
+      "path": "retention-review.json",
+      "bytes": 3040,
+      "sha256": "deef3fba588420658155bca7ad7235e63bcd8fa0ea70cf31368b9f8399c0dd7e"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 94243,
+      "sha256": "89c2d476804dac6c9c8141bab4af7aa43ef4e09f7d9093c2db92a2b587b9d847"
+    },
+    {
+      "path": "supporting-evidence.json.gz",
+      "bytes": 425678,
+      "sha256": "9b51375c88ba0bac93e87d198fc258d190073927c68a8b3d39e99cccde016009"
+    },
+    {
+      "path": "verification.json",
+      "bytes": 946,
+      "sha256": "4372295ecbcd63b7750202d32ec5a3345307046af46882580b509649c271b9c4"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 3371,
+      "sha256": "e0a6177396ab12261d13006ed863e78cce8150d957c16110885407a509a6c75f"
+    },
+    {
+      "path": "work-counts.json",
+      "bytes": 1623,
+      "sha256": "10dcd99aaab4ee536e5771180832c319bd9136289c2ddc0ed9212dd92617d3e7"
+    }
+  ]
+}
