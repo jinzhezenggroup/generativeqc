@@ -718,6 +718,58 @@ void compare_pbe0_chunk_history() {
           "could not restore CUDA PBE0 chunk qualification");
 }
 
+
+void compare_rsh_chunk_history() {
+  const auto system = hydrogens(2U, true);
+  const dft::AoBasis basis(system);
+  const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
+  const dft::MolecularGrid grid(system, grid_spec);
+  const auto model = rsh_strategies(true, scf::FockBackend::Cuda);
+
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-12;
+  options.density_tolerance = 1e-10;
+  options.max_iterations = 200;
+
+  const auto solve = [&](const char* width) {
+    require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", width, 1) == 0,
+            "could not select CUDA RSH history route");
+    const scf::PreparedFockPlan gpu(system, nullptr, model.primary, 0);
+    dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257,
+                         &model.correction);
+    auto result = plan.run(nullptr, false, false);
+    return std::pair{std::move(result), plan.transfers()};
+  };
+
+  const auto ordinary = solve("1");
+  const auto chunked = solve("2");
+  require(ordinary.first.converged && chunked.first.converged &&
+              ordinary.first.iterations == chunked.first.iterations &&
+              ordinary.first.dft_diagnostic.history.size() ==
+                  chunked.first.dft_diagnostic.history.size() &&
+              std::abs(ordinary.first.energy - chunked.first.energy) < 1e-13,
+          "bounded CUDA RSH SolverRegion changed the converged trajectory");
+  for (std::size_t i = 0; i < ordinary.first.dft_diagnostic.history.size(); ++i) {
+    const auto& left = ordinary.first.dft_diagnostic.history[i];
+    const auto& right = chunked.first.dft_diagnostic.history[i];
+    require(std::abs(left.energy - right.energy) < 1e-13 &&
+                std::abs(left.energy_change - right.energy_change) < 1e-13 &&
+                std::abs(left.density_change - right.density_change) < 1e-13 &&
+                std::abs(left.physical_residual - right.physical_residual) < 1e-13,
+            "bounded CUDA RSH SolverRegion changed physical iteration history");
+  }
+  require(chunked.second.execution_region_bindings >= 1 &&
+              chunked.second.iteration_chunks < chunked.second.iterations &&
+              chunked.second.iteration_synchronizations < chunked.second.iterations,
+          "CUDA RSH did not use the bounded SolverRegion");
+  require(chunked.second.execution_region_captures == 0 &&
+              chunked.second.execution_region_replays == 0,
+          "CUDA RSH unexpectedly entered unqualified graph replay");
+  require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
+          "could not restore CUDA RSH chunk qualification");
+}
+
 /** OH exercises the stationary integer-occupation cycle from #305 on CUDA.
  * Rebuild every returned physical quantity with the unshifted CPU operator. */
 void run_hydroxyl(bool pbe) {
@@ -1645,6 +1697,7 @@ int main() {
         run_case(2, true, pbe);
       }
       compare_pbe0_chunk_history();
+      compare_rsh_chunk_history();
       require(::unsetenv("GENERATIVEQC_CUDA_KS_REPLAY") == 0,
               "could not restore CUDA KS replay baseline");
       require(::unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
