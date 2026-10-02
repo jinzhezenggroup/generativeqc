@@ -27,7 +27,9 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* fock,
     const std::uint64_t* generated_fock_shell_class_mask, std::size_t active_subtile,
-    unsigned ao_quartet_lane, bool coulomb_only = false, bool exchange_only = false) {
+    unsigned ao_quartet_lane, bool coulomb_only = false, bool exchange_only = false,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
   constexpr std::size_t subtiles_per_tile = detail::direct_quartet_subtiles_per_tile(AngularOrder);
   const std::size_t active_tile = active_subtile / subtiles_per_tile;
@@ -85,10 +87,26 @@ __device__ __forceinline__ void contract_fock_direct_quartet_subtile(
                                             screening_tolerance)) {
       return;
     }
-    const EvalScalar evaluated_integral =
-        dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, EvalScalar>(
-            shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
-            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), -1);
+    EvalScalar evaluated_integral{};
+    if (range == generativeqc::integrals::CoulombRange::Full) {
+      evaluated_integral =
+          dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, EvalScalar>(
+              shell_class, batch, system, static_cast<std::int32_t>(i),
+              static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
+              static_cast<std::int32_t>(l), -1);
+    } else {
+      // Mixed-J has no qualified range arithmetic. Range exchange stays strict
+      // FP64 and reuses the compiler-owned Cartesian source recurrence.
+      if constexpr (std::is_same_v<EvalScalar, MixedPrecisionFloat>) {
+        return;
+      } else {
+        evaluated_integral =
+            dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, EvalScalar>(
+                shell_class, batch, system, static_cast<std::int32_t>(i),
+                static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
+                static_cast<std::int32_t>(l), -1, range, omega);
+      }
+    }
     if constexpr (std::is_same_v<EvalScalar, MixedPrecisionFloat>) {
       const float integral = evaluated_integral.value;
       if (integral == 0.0F) return;

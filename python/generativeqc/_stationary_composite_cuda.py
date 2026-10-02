@@ -36,6 +36,7 @@ from generativeqc_compiler.method.nonlocal_correlation import (
 from generativeqc_compiler.method.stationary_cuda import (
     compile_stationary_cuda,
     stationary_external_provider_sources,
+    stationary_runtime_sources,
 )
 from generativeqc_compiler.method.stationary_feature_lease import (
     plan_stationary_feature_leases,
@@ -47,6 +48,9 @@ from generativeqc_compiler.method.stationary_gradient import (
 )
 from generativeqc_compiler.method.stationary_prepared import (
     compile_stationary_prepared_plan,
+)
+from generativeqc_compiler.method.stationary_resources import (
+    plan_stationary_cuda_resources,
 )
 
 from . import _native
@@ -241,18 +245,6 @@ class PreparedCompositeStationaryCudaGradient:
         )
         # Integral work belongs to the native source, never an AO^4 host loop.
         capacity = 1
-        source_bytes = (
-            8
-            * (
-                22 * capacity
-                + 2 * basis.nprimitive
-                + 4 * n
-                + 600 * na
-                + 3 * tile_points
-                + 2 * plan.spin_blocks * n * n
-            )
-            + 256
-        )
         nlc_budget = min(
             source._batch._calculator.ks_options.nonlocal_memory_budget_bytes,
             max_host_bytes // 4,
@@ -266,6 +258,24 @@ class PreparedCompositeStationaryCudaGradient:
         native_budget = 256 * n * n + 1024 * (
             na + n + basis.nprimitive + len(basis.shells)
         )
+        source_bytes = plan_stationary_cuda_resources(
+            atoms=na,
+            aos=n,
+            primitives=basis.nprimitive,
+            points=tile_points,
+            tasks=capacity,
+            spins=plan.spin_blocks,
+            sources=len(stationary_runtime_sources(plan)),
+            target=compiler.target,
+            budget_bytes=(
+                max_device_bytes
+                - gp.peak_bytes
+                - 48 * tile_points
+                - nlc_budget
+                - native_budget
+            )
+            // 2,
+        ).allocation_bytes
         device_bound = (
             gp.peak_bytes
             + 2 * source_bytes

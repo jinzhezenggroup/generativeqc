@@ -45,7 +45,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, DirectRangeOperator radial_operator,
-    double omega, double secondary_exchange_coefficient) {
+    double omega, double secondary_exchange_coefficient, bool coulomb_only, bool exchange_only) {
   __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
   __shared__ std::uint32_t queue_count;
   __shared__ unsigned long long block_quartet;
@@ -113,7 +113,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
         const std::size_t second_pair = shell_pair_order[second_ordered_begin + second_local];
         if (direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
                 batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
-                shell_pair_density_bounds)) {
+                shell_pair_density_bounds, nullptr, exchange_only, coulomb_only)) {
           const std::int32_t first_shell = batch.shell_pair_first[first_pair];
           const std::int32_t second_shell = batch.shell_pair_second[first_pair];
           const std::int32_t third_shell = batch.shell_pair_first[second_pair];
@@ -178,13 +178,17 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                 coulomb_coefficient, exchange_coefficient);
           }
         } else {
-          if (angular_order == 0U) {
+          // The scalar low-order Fock shortcuts are full-range identities.
+          // SR/LR exchange falls through to the compiler-owned Cartesian
+          // range recurrence in the warp contraction below.
+          if (radial_operator == DirectRangeOperator::Full && angular_order == 0U) {
             contract_fock_direct_quartet_subtile<Unrestricted, 0U>(
                 batch, &queue_count, queue + slot, screening_tolerance, schwarz_bounds, density,
-                active, output, nullptr, 0U, 0U);
-          } else if (angular_order == 2U) {
-            contract_fock_direct_order2_task<Unrestricted>(
-                batch, task, screening_tolerance, schwarz_bounds, density, active, output, nullptr);
+                active, output, nullptr, 0U, 0U, coulomb_only, exchange_only);
+          } else if (radial_operator == DirectRangeOperator::Full && angular_order == 2U) {
+            contract_fock_direct_order2_task<Unrestricted>(batch, task, screening_tolerance,
+                                                           schwarz_bounds, density, active, output,
+                                                           nullptr, coulomb_only, exchange_only);
           }
         }
       }
@@ -210,9 +214,12 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
           if (radial_operator == DirectRangeOperator::Full && angular_order <= 3U) continue;
         } else {
           // Fock order one has no psss-specific handwritten fallback anymore.
-          // When generated psss is unavailable, evaluate it through the shared
-          // generic order-one contraction below.
-          if (angular_order == 0U || angular_order == 2U) continue;
+          // Full-range order zero/two were consumed above. Range exchange must
+          // traverse every angular class because full-range value kernels
+          // cannot substitute SR/LR mathematics.
+          if (radial_operator == DirectRangeOperator::Full &&
+              (angular_order == 0U || angular_order == 2U))
+            continue;
         }
         const std::size_t first_ao_count = shell_ao_pair_count(batch, base.first_pair);
         const std::size_t second_ao_count = shell_ao_pair_count(batch, base.second_pair);
@@ -261,10 +268,19 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                     schwarz_bounds, density, active, output, exchange_coefficient, range, omega,
                     subtile, lane);
               }
-            } else {
+            } else if (radial_operator == DirectRangeOperator::Full) {
               contract_bounded_direct_fock_subtile<Unrestricted>(
                   batch, angular_order, &queue_count, queue + slot, screening_tolerance,
-                  schwarz_bounds, density, active, output, subtile, lane);
+                  schwarz_bounds, density, active, output, subtile, lane, coulomb_only,
+                  exchange_only);
+            } else {
+              const auto range = radial_operator == DirectRangeOperator::Long
+                                     ? generativeqc::integrals::CoulombRange::Long
+                                     : generativeqc::integrals::CoulombRange::Short;
+              contract_bounded_direct_fock_subtile<Unrestricted>(
+                  batch, angular_order, &queue_count, queue + slot, screening_tolerance,
+                  schwarz_bounds, density, active, output, subtile, lane, false, true, range,
+                  omega);
             }
           }
           __syncwarp();
@@ -293,7 +309,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0, false, false);
     } else {
       bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
@@ -301,7 +317,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0, false, false);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -311,7 +327,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0, false, false);
     } else {
       bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
@@ -319,7 +335,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0);
+              exchange_coefficient, DirectRangeOperator::Full, 0.0, 0.0, false, false);
     }
   }
 }
@@ -340,14 +356,40 @@ void launch_bounded_direct_range_exchange_force_kernel(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0);
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, false);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
         <<<grid, block, shared_bytes, stream>>>(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0);
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, false);
+  }
+}
+
+void launch_bounded_direct_range_exchange_fock_kernel(
+    bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+    DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* bounded_generated_overflow, const double* schwarz_bounds,
+    const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega) {
+  if (radial_operator == DirectRangeOperator::Full) return;
+  if (unrestricted) {
+    bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, false>
+        <<<grid, block, shared_bytes, stream>>>(
+            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
+            bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+            nullptr, 0.0, -1.0, radial_operator, omega, 0.0, false, true);
+  } else {
+    bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>
+        <<<grid, block, shared_bytes, stream>>>(
+            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
+            bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
+            nullptr, 0.0, -0.5, radial_operator, omega, 0.0, false, true);
   }
 }
 
@@ -367,7 +409,7 @@ void launch_bounded_direct_rsh_force_kernel(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, source_forces,
             global_cursor, nullptr, coulomb_coefficient, short_exchange_coefficient,
-            DirectRangeOperator::RshSources, omega, long_exchange_coefficient);
+            DirectRangeOperator::RshSources, omega, long_exchange_coefficient, false, false);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
         <<<grid, block, shared_bytes, stream>>>(
@@ -375,7 +417,7 @@ void launch_bounded_direct_rsh_force_kernel(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, source_forces,
             global_cursor, nullptr, coulomb_coefficient, short_exchange_coefficient,
-            DirectRangeOperator::RshSources, omega, long_exchange_coefficient);
+            DirectRangeOperator::RshSources, omega, long_exchange_coefficient, false, false);
   }
 }
 
@@ -412,7 +454,7 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
             global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5, DirectRangeOperator::Full, 0.0,
-            0.0);
+            0.0, false, false);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>
         <<<grid, block, shared_bytes, stream>>>(
@@ -420,7 +462,34 @@ void launch_bounded_direct_fock_shell_quartet_kernel(
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, enabled_mask_pointer,
             enabled_mask, bounded_generated_overflow, schwarz_bounds, density, active, fock,
             global_cursor, nullptr, 1.0, unrestricted ? -1.0 : -0.5, DirectRangeOperator::Full, 0.0,
-            0.0);
+            0.0, false, false);
+  }
+}
+
+void launch_bounded_direct_fock_source_shell_quartet_kernel(
+    bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+    DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    std::uint64_t covered_shell_class_mask, const std::uint32_t* bounded_generated_overflow,
+    const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* global_cursor, bool coulomb_only, bool exchange_only) {
+  if (unrestricted) {
+    bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, false>
+        <<<grid, block, shared_bytes, stream>>>(
+            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr,
+            covered_shell_class_mask, bounded_generated_overflow, schwarz_bounds, density, active,
+            output, global_cursor, nullptr, 1.0, -1.0, DirectRangeOperator::Full, 0.0, 0.0,
+            coulomb_only, exchange_only);
+  } else {
+    bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>
+        <<<grid, block, shared_bytes, stream>>>(
+            batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
+            shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr,
+            covered_shell_class_mask, bounded_generated_overflow, schwarz_bounds, density, active,
+            output, global_cursor, nullptr, 1.0, -0.5, DirectRangeOperator::Full, 0.0, 0.0,
+            coulomb_only, exchange_only);
   }
 }
 

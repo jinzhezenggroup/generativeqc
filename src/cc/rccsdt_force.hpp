@@ -30,6 +30,7 @@ struct RccsdtForcePlan {
   std::size_t retained_input_bytes{};
   std::size_t triples_phase_bytes{}, lambda_phase_bytes{}, parameter_phase_bytes{};
   std::size_t raw_phase_bytes{}, response_phase_bytes{}, derivative_phase_bytes{};
+  std::size_t raw_provider_budget_bytes{};
   std::size_t peak_bytes{};
 };
 

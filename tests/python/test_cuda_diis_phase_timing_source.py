@@ -24,10 +24,10 @@ def test_trial_events_are_resolved_after_the_existing_diis_drain() -> None:
 
 
 def test_first_history_push_uses_the_same_outer_timer() -> None:
-    diis = SOURCE.split("void run_diis(", 1)[1].split("}  // namespace", 1)[0]
+    diis = SOURCE.split("bool run_diis(", 1)[1].split("}  // namespace", 1)[0]
     first_history = diis.split("if (count == 1) {", 1)[1].split("}", 1)[0]
     checked = first_history.index("s.check_generated_error()")
-    assert checked < first_history.index("return;")
+    assert checked < first_history.index("return false;")
     assert "diis_seconds" not in diis
     assert "diis_started" not in diis
     assert (
