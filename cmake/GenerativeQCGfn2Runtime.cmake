@@ -111,7 +111,8 @@ function(generativeqc_add_gfn2_runtime target)
     add_dependencies(generativeqc_gfn2_cuda
       generativeqc_gfn2_pair_cpu_codegen
       generativeqc_gfn2_sdq_cuda_codegen
-      generativeqc_gfn2_es2_native_codegen)
+      generativeqc_gfn2_es2_native_codegen
+      generativeqc_gfn2_external_point_charge_force_native_codegen)
     set(_gfn2_aes2_cuda_header
         "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_aes2_native.cuh")
     generativeqc_register_generated_sources(

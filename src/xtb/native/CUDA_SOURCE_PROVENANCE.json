@@ -16,7 +16,8 @@
     "src/backends/cuda/gfn2_spin.cu": "Consume shared compiler TensorIR FMA potential/energy updates and symmetric-energy AD identity; retain ragged admission, restricted zero branch and scratch publication.",
     "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy.",
     "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership.",
-    "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership."
+    "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
+    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -195,7 +196,7 @@
     "src/backends/cuda/gfn2_external_point_charges.cu": {
       "adapted": true,
       "upstream_sha256": "c281a16ebbf89d9591b63a521a691b35b13872677617599309d015440e9c9790",
-      "vendored_sha256": "2c8eaab6093de44367553a287ca2630dc247475cdc0f24cccee808602480dc15"
+      "vendored_sha256": "3ec0d71a492d82e97fad6b19f1bb3c8067955e0db1b0a92af3099b9d2befa374"
     },
     "src/backends/cuda/gfn2_external_point_charges.cuh": {
       "adapted": true,

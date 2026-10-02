@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "data/parameters/gfn2.hpp"
+#include "generated_gfn2_external_point_charge_force.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
 namespace {
@@ -438,15 +439,15 @@ generativeqc_xtb_status_t add_external_point_charge_forces_cpu(
         const double softened_distance =
             std::hypot(std::hypot(dx, dy), std::hypot(dz, inverse_average_hardness));
         const double inverse_distance = 1.0 / softened_distance;
-        const double force_scale = shell_charges[shell_index] * point_charges[point_index] *
-                                   inverse_distance * inverse_distance * inverse_distance;
-        const double fx = force_scale * dx;
-        const double fy = force_scale * dy;
-        const double fz = force_scale * dz;
+        double fx = 0.0;
+        double fy = 0.0;
+        double fz = 0.0;
         if (!(softened_distance > 0.0) || !std::isfinite(softened_distance) ||
-            !std::isfinite(inverse_distance) || !std::isfinite(force_scale) || !std::isfinite(fx) ||
-            !std::isfinite(fy) || !std::isfinite(fz)) {
-          error = "external point-charge force arithmetic exceeded floating-point range";
+            !std::isfinite(inverse_distance) ||
+            !generativeqc::xtb::generated::evaluate_gfn2_external_point_charge_force(
+                inverse_distance, shell_charges[shell_index], point_charges[point_index],
+                dx, dy, dz, fx, fy, fz)) {
+          error = "compiler-generated external point-charge force arithmetic failed";
           return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
         }
         if (qm_forces != nullptr) {
