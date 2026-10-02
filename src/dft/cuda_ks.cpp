@@ -1248,6 +1248,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             j, exchange, has_exchange && spins == 2 ? exchange + matrix : nullptr, range_exchange,
             spins == 2 ? range_exchange + matrix : nullptr, jk_error, range_jk_error, detail);
         fused_rsh_values = jk_status == GENERATIVEQC_STATUS_SUCCESS;
+        if (!fused_rsh_values && jk_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+          check(jk_status, detail);
       }
       if (!fused_rsh_values) {
         if (use_occupied_fitted) {
