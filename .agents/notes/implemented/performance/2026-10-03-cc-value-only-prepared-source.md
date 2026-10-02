@@ -61,6 +61,14 @@ to 13.61 seconds. Cold/changed GPU times decrease from 110.57/104.71 to
 and GPU comparisons used separate Slurm allocations. Source timing alone
 measures CUDA submission, so use complete provider/endpoint time to assess work.
 
+The [56-AO energy qualification](../../../../benchmarks/results/cc-value-source-20261003/large-energy.json)
+retains all four calls from node2 Slurm job 2058 (45-minute limit). Cold, two
+warm and changed-geometry endpoints take 812.58, 173.83, 174.02 and 902.89 seconds;
+RHF alone takes 775.08, 136.42, 136.58 and 865.50 seconds. All energies and triples
+pass the same independent oracle gates. No matched complete baseline exists, so
+this is candidate qualification without a 56-AO speedup claim. The earlier node1
+job timed out during changed geometry and is excluded from the complete record.
+
 ## Revisit when
 
 Revisit the explicit value-only request only if a new consumer actually borrows

@@ -482,11 +482,15 @@
       ]
     ]
   },
+  "large_energy_evidence": {
+    "path": "large-energy.json",
+    "sha256": "ead831bcc212d821ffca4d8a974cd2dc3db8222e25a6e4e8dcc913aca15f193f"
+  },
   "limitations": [
     "Shared nodes; CPU pinned to one core. GPU baseline/candidate were separate Slurm allocations on node1.",
     "GPU force endpoint timings are under memcheck; do not interpret them as normal execution performance.",
-    "Only 7-AO forces and 14/28-AO energy endpoints are qualified here; public force domain remains <=12 AOs.",
-    "Baseline 56-AO CUDA run hit its 30-minute limit before completing cold execution. Candidate job 5358 remains separate and is excluded until complete.",
+    "This comparison covers 7-AO forces and 14/28-AO energy; separate 56-AO candidate-only energy qualification is linked below. Public force domain remains <=12 AOs.",
+    "Baseline 56-AO CUDA execution did not complete cold execution within 30 minutes. Candidate node1 job 5358 timed out during changed geometry. The complete node2 job 2058 is retained separately without a speedup claim.",
     "CUDA source_seconds measures submission; provider_seconds and total endpoint seconds include consumed source work.",
     "The measured candidate source patch preceded clang-format-only changes in 9636f32dd. Source archive, patch and binary hashes are recorded in environment provenance."
   ],
