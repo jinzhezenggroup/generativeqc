@@ -1,6 +1,6 @@
 # Proposal: prevalidate molecular VV10 pair and row bounds in linear work
 
-Status: experimental; complete endpoint comparison pending
+Status: qualified standalone candidate; integration proceeds through the normal PR queue
 Date: 2026-10-03
 
 ## Decision and bounds
@@ -134,3 +134,43 @@ grid visits and SCF iteration counts are unchanged; only the linear admission
 scan and rejected empty launch are added. Compacted molecular pair counts remain
 unavailable, and dense-grid capacity is not relabeled executed work. The larger
 standalone default48 run remains pending on node5 job 1393.
+
+## Exploratory default48: accuracy passes, iteration-dependent timing
+
+Node2 job 2125 completed the exploratory `33211...` bundle on RTX PRO 6000.
+Cold is 1071.647251 s/21 native iterations versus 480.794651 s/18 reference
+cycles (19 J/K builds). Native priming is 144.482698 s/one iteration; three warm
+samples are 144.795027, 145.516947, 144.112300 s, all one iteration.
+Every one of five pairs passes, maximum energy 3.069545e-11 Eh and force
+5.885159e-10 Eh/Bohr.
+
+The reference warm samples are 94.805497 / 161.406050 / 161.640234 s with
+1/4/4 SCF cycles and 2/5/5 J/K builds. The native/reference medians are therefore
+144.795027 / 161.406050 s, but the apparent 1.1147x median advantage depends on
+extra reference iterations. The equal one-iteration reference sample is faster.
+Do not present this as a stable equal-work speed advantage or as qualification
+of the final review dispatch. Both engines used their own fixed first-converged
+cold density for every warm repeat; no oracle density entered the native solve.
+
+## Final standalone default48 qualification
+
+Node5 job 1393 completed exact `834344...` after six independent molecular tests
+(227.08 s). Full48 is 48 atoms/16 waters, 384 spherical def2-SVP AOs, grid
+48x16x32, strict FP64, complete SCF energy plus analytic forces. Native cold
+is 1173.851398 s/21 iterations versus 538.315381 s/18 reference cycles (19
+J/K builds). Native priming is 168.392871 s/one iteration.
+
+Native warm samples are 167.633316 / 168.273702 / 167.834175 s, all one
+iteration. Reference samples are 176.577404 / 176.529763 / 176.529931 s, all
+four cycles/five J/K builds. Medians 167.834175 / 176.529931 s give a 1.0518x
+advantage for this complete fixed-cold-density warm-start endpoint. This is
+not equal-iteration evidence: cold remains slower, and the separate node2
+experiment above observed a faster one-cycle reference branch. Do not
+extrapolate this measured endpoint to universal or cold-start superiority.
+
+Every one of five pairs passes, maximum energy 3.001333e-11 Eh and force
+5.881562e-10 Eh/Bohr. No sample is removed for differing iteration branches.
+Production sources remain identical after restacking onto master `0d9d763e3`;
+the concurrent wrapper-fixture correction is preserved (10 host tests pass).
+Source/binary/ccache, Slurm and complete raw JSON receipts are retained under
+`.artifacts/wb97m-admission-review/`.
