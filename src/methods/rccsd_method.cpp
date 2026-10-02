@@ -19,12 +19,12 @@
 #include "cc/rccsdt_force.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "posthf/source_reuse_schedule_generated.hpp"
-#include "methods/correlated_warm_reference.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
@@ -534,8 +534,8 @@ class RccsdPrepared final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
 
-    const auto warm_capacity = warm_reference::reservation_bytes(
-        system_, initial_state, retained_warm_state != nullptr);
+    const auto warm_capacity =
+        warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
     if (warm_capacity >= solver_options_.max_bytes ||
         reference_capacity_ > solver_options_.max_bytes - warm_capacity)
       throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
@@ -568,9 +568,9 @@ class RccsdPrepared final : public PreparedCalculation {
 
     const auto retain_reference = [&] {
       if (retained_warm_state && state.reference)
-        *retained_warm_state = warm_reference::capture(
-            system_, *state.reference, state.reference_energy_change, state.reference_density_rms,
-            state.reference_iterations);
+        *retained_warm_state =
+            warm_reference::capture(system_, *state.reference, state.reference_energy_change,
+                                    state.reference_density_rms, state.reference_iterations);
     };
 
     if (!state.solved.converged() || !compute_forces) {

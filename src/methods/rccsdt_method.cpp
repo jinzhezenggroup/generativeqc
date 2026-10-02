@@ -17,10 +17,10 @@
 #include "cc/rccsdt_force.hpp"
 #include "cc/triples_cuda.hpp"
 #include "generated_rccsdt_cpu.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/raw_source.hpp"
-#include "methods/correlated_warm_reference.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
@@ -105,8 +105,8 @@ class RccsdtPrepared final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD(T) forces are qualified only through 12 AOs");
 
-    const auto warm_capacity = warm_reference::reservation_bytes(
-        system_, initial_state, retained_warm_state != nullptr);
+    const auto warm_capacity =
+        warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
     auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,
                                         initial_state ? &initial_state->density : nullptr,
                                         warm_start_fallback, warm_capacity);
@@ -264,9 +264,9 @@ class RccsdtPrepared final : public PreparedCalculation {
                     diagnostic.response_operator_hash);
       }
       if (retained_warm_state && state.reference)
-        *retained_warm_state = warm_reference::capture(
-            system_, *state.reference, state.reference_energy_change, state.reference_density_rms,
-            state.reference_iterations);
+        *retained_warm_state =
+            warm_reference::capture(system_, *state.reference, state.reference_energy_change,
+                                    state.reference_density_rms, state.reference_iterations);
       last_ = diagnostic;
       last_performance_ = performance;
       return state.result;
