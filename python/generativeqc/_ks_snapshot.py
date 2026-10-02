@@ -470,6 +470,61 @@ class NativeKsSnapshot:
             int(source_stream.value),
         )
 
+    def cuda_fixed_density_profile(self) -> dict[str, typing.Any] | None:
+        """Replay native J/K/XC device components at this exact final density."""
+        if self.backend != "cuda":
+            return None
+        self.check_current()
+        binding = getattr(
+            self._library,
+            "generativeqc_ks_snapshot_cuda_fixed_density_profile_v1",
+            None,
+        )
+        if binding is None:
+            return None
+        binding.argtypes = [
+            ct.c_void_p,
+            ct.c_void_p,
+            ct.POINTER(ct.c_double),
+            ct.c_size_t,
+            ct.POINTER(ct.c_uint32),
+        ]
+        binding.restype = ct.c_int
+        values = (ct.c_double * 4)()
+        mask = ct.c_uint32()
+        status = binding(
+            self._batch._batch,
+            self._handle,
+            values,
+            4,
+            ct.byref(mask),
+        )
+        if status == _native.STATUS_NOT_IMPLEMENTED:
+            return None
+        _native.check(self._library, status, context=self._batch._context)
+        self.check_current()
+        names = (
+            "scf_fock_j",
+            "scf_full_range_k",
+            "scf_long_range_k",
+            "semilocal_ao_grid_xc",
+        )
+        profiled = {
+            name: (float(values[index]) if mask.value & (1 << index) else None)
+            for index, name in enumerate(names)
+        }
+        if any(value is not None and (not np.isfinite(value) or value < 0) for value in profiled.values()):
+            raise RuntimeError("native fixed-density component profile is nonfinite or negative")
+        return {
+            "status": "measured",
+            "measurement_boundary": "fixed_density_scf_components",
+            "fixed_density": True,
+            "scf_replayed": False,
+            "unit": "cuda_event_ms",
+            "profiled_ms": profiled,
+            "present_mask": int(mask.value),
+        }
+
     def cuda_full_range_derivatives(self, atom_count: int) -> typing.Any:
         """Execute prepared Direct shell J'/K' or return None when unavailable."""
         if self.backend != "cuda":

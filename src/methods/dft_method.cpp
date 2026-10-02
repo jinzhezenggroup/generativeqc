@@ -881,6 +881,17 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #endif
   }
 
+  generativeqc_status fixed_density_profile(
+      const dft::CudaKsFinalStateToken& expected, dft::CudaKsFixedDensityProfile& profile,
+      std::string& detail) {
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) return cuda_->profile_fixed_density_components(expected, profile, detail);
+#endif
+    profile = {};
+    detail = "fixed-density CUDA component profiling requires a CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+
   generativeqc_status resident_grid(const dft::CudaKsFinalStateToken& expected, int& device,
                                     const double*& points, const double*& weights,
                                     const double*& atomic_weights, std::size_t& point_count,
@@ -1856,6 +1867,16 @@ class KsPreparedBatch final : public PreparedBatch {
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
 
+  generativeqc_status fixed_density_profile(
+      std::size_t index, const dft::CudaKsFinalStateToken& expected,
+      dft::CudaKsFixedDensityProfile& profile, std::string& detail) {
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->fixed_density_profile(expected, profile, detail);
+    profile = {};
+    detail = "KS batch item has no prepared fixed-density profile owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
   generativeqc_status resident_grid(std::size_t index, const dft::CudaKsFinalStateToken& expected,
                                     int& device, const double*& points, const double*& weights,
                                     const double*& atomic_weights, std::size_t& point_count,
@@ -2118,6 +2139,16 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
   spins = 0;
   source_stream = nullptr;
   detail = "resident final density requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_fixed_density_profile(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    dft::CudaKsFixedDensityProfile& profile, std::string& detail) {
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->fixed_density_profile(index, expected, profile, detail);
+  profile = {};
+  detail = "fixed-density CUDA component profiling requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 

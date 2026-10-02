@@ -76,6 +76,13 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
  * stream that owns the final feature generation so a downstream D2D handoff can
  * establish a device-side dependency before source reuse. This helper performs
  * no transfer or synchronization. */
+/** Replay method-neutral J/K/XC device components against the exact live
+ * final density. This diagnostic boundary does not re-enter SCF or publish a
+ * new determinant generation. */
+generativeqc_status dft_cuda_fixed_density_profile(
+    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
+    dft::CudaKsFixedDensityProfile& profile, std::string& detail);
+
 generativeqc_status dft_cuda_resident_grid(PreparedBatch& batch, std::size_t index,
                                            const dft::CudaKsFinalStateToken& expected, int& device,
                                            const double*& points, const double*& weights,

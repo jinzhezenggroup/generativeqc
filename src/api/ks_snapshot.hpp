@@ -36,6 +36,11 @@ generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
 generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+/** Four CUDA-event milliseconds [J, full-range K, range K, semilocal XC].
+ * present_mask bit i declares whether values[i] was actually executed. */
+generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count, std::uint32_t* present_mask);
 generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,

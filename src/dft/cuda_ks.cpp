@@ -20,6 +20,7 @@
 #include "runtime/compiled_execution_region.hpp"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
+#include "runtime/cuda_resources.cuh"
 #include "runtime/solver_region_cuda.cuh"
 #include "scf/cuda/eigensolver.hpp"
 #include "scf/cuda/mean_field_setup.hpp"
@@ -1979,6 +1980,7 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
       spec.exchange.present = want_k && strategy.spec.exchange.present;
       if (!spec.coulomb.present && !spec.exchange.present) return;
 
+      const bool direct_provider = impl_->provider.cuda_direct_source() != nullptr;
       if (auto* direct = impl_->provider.cuda_direct_source()) {
         profile.milliseconds[slot] = timed([&] {
           check(execute_cuda_direct_jk_device(
@@ -1990,7 +1992,6 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
                     impl_->jk_error, detail),
                 detail);
         });
-        read_error(impl_->jk_error, want_j ? "fixed-density J" : "fixed-density K");
       } else if (auto* fitted = impl_->provider.cuda_fitted_source()) {
         const scf::JkTermSelection terms{spec.coulomb.present, spec.exchange.present};
         profile.milliseconds[slot] = timed([&] {
@@ -2010,6 +2011,8 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
       } else {
         throw std::runtime_error("CUDA KS fixed-density profile lost its prepared Fock provider");
       }
+      if (direct_provider)
+        read_error(impl_->jk_error, want_j ? "fixed-density J" : "fixed-density K");
       profile.present_mask |= (1U << slot);
     };
 

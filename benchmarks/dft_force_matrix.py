@@ -253,6 +253,26 @@ def _fixed_final_state_force_sample(
     }
 
 
+def _fixed_density_scf_component_profile(batch: typing.Any) -> dict[str, typing.Any]:
+    """Profile J/K/XC at the exact current D without SCF re-entry."""
+
+    from generativeqc._ks_snapshot import NativeKsSnapshot
+
+    snapshot = NativeKsSnapshot(batch, 0)
+    try:
+        result = snapshot.cuda_fixed_density_profile()
+        if result is None:
+            return {
+                "status": "unavailable",
+                "measurement_boundary": "fixed_density_scf_components",
+                "fixed_density": True,
+                "reason": "selected native KS owner has no fixed-density CUDA component profiler",
+            }
+        return result
+    finally:
+        snapshot.close()
+
+
 def _scf_trace_profile(
     batch: typing.Any,
     cupy_module: typing.Any,
@@ -449,21 +469,32 @@ def benchmark_case(
                     )
                     break
             if trace_directory is not None:
-                fixed_density_scf_profile = {
-                    "status": "unavailable",
-                    "measurement_boundary": "fixed_density_scf_components",
-                    "expected_components": list(
+                try:
+                    fixed_density_scf_profile = _fixed_density_scf_component_profile(batch)
+                    fixed_density_scf_profile["expected_components"] = list(
                         expected_scf_components(
                             exchange_operators,
                             nonlocal_correlation=nonlocal_correlation,
                         )
-                    ),
-                    "reason": (
-                        "no method-neutral fixed-density SCF J/K/XC replay boundary "
-                        "is exposed; the full-SCF trace remains separate diagnostic "
-                        "evidence rather than being relabeled"
-                    ),
-                }
+                    )
+                except (
+                    NotImplementedError,
+                    ValueError,
+                    RuntimeError,
+                    MemoryError,
+                    OSError,
+                ) as error:
+                    fixed_density_scf_profile = {
+                        "status": (
+                            "unsupported"
+                            if isinstance(error, NotImplementedError)
+                            else "failed"
+                        ),
+                        "measurement_boundary": "fixed_density_scf_components",
+                        "fixed_density": True,
+                        "error_type": type(error).__name__,
+                        "reason": str(error),
+                    }
                 try:
                     scf_profile = _scf_trace_profile(
                         batch,
@@ -673,8 +704,8 @@ def main() -> None:
                 "force component timing"
             ),
             "fixed_density_scf": (
-                "reported unavailable until a method-neutral fixed-density J/K/XC "
-                "component replay boundary exists; full-SCF tracing is not relabeled"
+                "native CUDA-event J/K/range-K/semilocal-XC replay at the exact resident "
+                "final density; no batch.execute/SCF re-entry and no setup time included"
             ),
             "unsupported": (
                 "unsupported functional/provider combinations are retained as records"
