@@ -663,6 +663,66 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
       !std::isfinite(coulomb_coefficient) || !std::isfinite(short_exchange_coefficient) ||
       !std::isfinite(long_exchange_coefficient) || !std::isfinite(omega) || omega <= 0.0)
     return cudaErrorInvalidValue;
+  // Bounded decomposition: the fused full-range J/K shell workers plus the
+  // packaged omega=0.3 LR workers use two traversals of specialized sources.
+  // Keep the three stationary source meanings: SR = Full - LR, with each
+  // exchange source carrying its own functional coefficient. Other omegas
+  // retain the fused source traversal below.
+  if (omega == 0.3) {
+    std::vector<double> full;
+    auto error = execute_generated_full_range_energy_derivatives(
+        p, unrestricted, alpha, beta, coulomb_coefficient, short_exchange_coefficient, full);
+    if (error != cudaSuccess) return error;
+    auto& shared = *p.shared;
+    const auto b = shared.batch;
+    const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
+    if (short_exchange_coefficient == 0.0 && long_exchange_coefficient == 0.0) {
+      // Disabled exchange must not form potentially overflowing spin products.
+      // The full helper already drained its download and supplied a zero K row.
+      full.resize(3U * coordinates, 0.0);
+      derivatives = std::move(full);
+      return cudaSuccess;
+    }
+    std::vector<double> long_force(coordinates);
+    struct HostResultDrain {
+      cudaStream_t stream;
+      bool active{true};
+      ~HostResultDrain() {
+        if (active) (void)cudaStreamSynchronize(stream);
+      }
+    } drain{shared.stream};
+    error = cudaMemsetAsync(
+        p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t), shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+    if (error != cudaSuccess) return error;
+    launch_bounded_shell_range_exchange_derivative(
+        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
+        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
+        p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
+        p.force_cursor, DirectCoulombRange::Long, omega, 1.0);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    error = cudaMemcpyAsync(long_force.data(), p.force, coordinates * sizeof(double),
+                            cudaMemcpyDeviceToHost, shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaStreamSynchronize(shared.stream);
+    if (error != cudaSuccess) return error;
+    drain.active = false;
+    std::vector<double> result(3U * coordinates);
+    for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+      // The full helper publishes derivatives; the shell worker returns force.
+      const double long_derivative = -long_force[coordinate];
+      result[coordinate] = full[coordinate];
+      result[coordinates + coordinate] =
+          full[coordinates + coordinate] - short_exchange_coefficient * long_derivative;
+      result[2U * coordinates + coordinate] = long_exchange_coefficient * long_derivative;
+    }
+    derivatives = std::move(result);
+    return cudaSuccess;
+  }
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   if (error != cudaSuccess) return error;
 
