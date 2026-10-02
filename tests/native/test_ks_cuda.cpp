@@ -774,6 +774,81 @@ void compare_rsh_chunk_history() {
           "could not restore CUDA RSH chunk qualification");
 }
 
+void compare_wb97mv_nonlocal_chunk_history() {
+  const auto system = hydrogens(2U, true);
+  const dft::AoBasis basis(system);
+  const dft::GridSpec grid_spec{1, 12, 4, 8, 3, 1e-12};
+  const dft::MolecularGrid grid(system, grid_spec);
+  constexpr std::size_t tile_points = 64;
+  const auto model = wb97mv_rsh_strategies(true, scf::FockBackend::Cuda);
+
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-10;
+  options.density_tolerance = 1e-8;
+  options.max_iterations = 250;
+  options.xc_tile_points = tile_points;
+  options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+
+  const auto solve = [&](const char* width) {
+    require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", width, 1) == 0,
+            "could not select CUDA WB97M-V nonlocal history route");
+    const scf::PreparedFockPlan gpu(system, nullptr, model.primary, 0);
+    auto nonlocal =
+        prepare_wb97mv_nonlocal(GENERATIVEQC_BACKEND_CUDA, 0, grid.point_count(), tile_points);
+    dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Wb97mv, tile_points,
+                         &model.correction, nonlocal.get(),
+                         dft::nlc::Vv10DensityDomain::MolecularV1);
+    auto result = plan.run(nullptr, false, false);
+    require(result.converged && !plan.failed(),
+            "CUDA WB97M-V nonlocal chunk qualification did not converge");
+
+    dft::CudaKsFinalStateToken token;
+    std::string detail;
+    require(plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    dft::CudaKsResidentNonlocalFeaturesBinding features;
+    require(plan.resident_final_nonlocal_features(token, features, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS &&
+                features && features.generation == token.identity.determinant.factor.density_generation &&
+                features.point_count == grid.point_count(),
+            "CUDA WB97M-V nonlocal chunk lost the final resident feature lease");
+    return std::pair{std::move(result), plan.transfers()};
+  };
+
+  const auto ordinary = solve("1");
+  const auto chunked = solve("2");
+  const auto& left = ordinary.first.dft_diagnostic.history;
+  const auto& right = chunked.first.dft_diagnostic.history;
+  require(ordinary.first.iterations == chunked.first.iterations && left.size() == right.size() &&
+              std::abs(ordinary.first.energy - chunked.first.energy) < 2e-11,
+          "bounded WB97M-V nonlocal SolverRegion changed the converged trajectory");
+  for (std::size_t i = 0; i < left.size(); ++i) {
+    const bool energy_change_equal =
+        (std::isinf(left[i].energy_change) && std::isinf(right[i].energy_change)) ||
+        std::abs(left[i].energy_change - right[i].energy_change) < 2e-11;
+    require(left[i].iteration == right[i].iteration && energy_change_equal &&
+                std::abs(left[i].components.total() - right[i].components.total()) < 2e-11 &&
+                std::abs(left[i].components.xc - right[i].components.xc) < 2e-11 &&
+                std::abs(left[i].components.exact_exchange - right[i].components.exact_exchange) <
+                    1e-12 &&
+                std::abs(left[i].density_change - right[i].density_change) < 2e-11 &&
+                std::abs(left[i].physical_residual - right[i].physical_residual) < 2e-11,
+            "bounded WB97M-V nonlocal SolverRegion changed physical iteration history");
+  }
+  require(ordinary.second.iteration_synchronizations == ordinary.second.iterations &&
+              chunked.second.iteration_synchronizations < chunked.second.iterations &&
+              chunked.second.execution_region_bindings >= 1 &&
+              chunked.second.execution_region_failures == 0,
+          "WB97M-V nonlocal SolverRegion did not reduce the host-fence cadence");
+  require(chunked.second.execution_region_captures == 0 &&
+              chunked.second.execution_region_replays == 0 &&
+              chunked.second.xc_host_d2h_bytes == 0 && chunked.second.xc_host_h2d_bytes == 0 &&
+              chunked.second.xc_host_synchronizations == 0,
+          "WB97M-V nonlocal chunk entered graph replay or host XC staging");
+  require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
+          "could not restore CUDA WB97M-V nonlocal chunk qualification");
+}
+
 /** OH exercises the stationary integer-occupation cycle from #305 on CUDA.
  * Rebuild every returned physical quantity with the unshifted CPU operator. */
 void run_hydroxyl(bool pbe) {
@@ -1702,6 +1777,7 @@ int main() {
       }
       compare_pbe0_chunk_history();
       compare_rsh_chunk_history();
+      compare_wb97mv_nonlocal_chunk_history();
       require(::unsetenv("GENERATIVEQC_CUDA_KS_REPLAY") == 0,
               "could not restore CUDA KS replay baseline");
       require(::unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
