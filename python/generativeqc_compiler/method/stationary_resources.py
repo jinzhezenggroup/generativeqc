@@ -25,6 +25,7 @@ def stationary_cuda_allocation_bytes(
     spins: int,
     sources: int,
     geometry_lanes: int,
+    cache_center_geometry: bool = False,
 ) -> int:
     """Exact arena bytes, including both lane panels and the error reserve."""
     for name, value, cap in (
@@ -39,6 +40,8 @@ def stationary_cuda_allocation_bytes(
     ):
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"stationary CUDA {name} exceeds resource caps")
+    if type(cache_center_geometry) is not bool:
+        raise ValueError("stationary center geometry cache flag must be boolean")
     scratch = 18 * geometry_lanes * atoms * 8
     if scratch > GEOMETRY_MAX_SCRATCH_BYTES:
         raise ValueError("stationary geometry scratch budget exceeded")
@@ -53,6 +56,7 @@ def stationary_cuda_allocation_bytes(
             + 2 * spins * aos * aos
         )
         + scratch
+        + (48 * (atoms * (atoms - 1) // 2) if cache_center_geometry else 0)
         + 256
     )
     if result > _SIZE_MAX:
@@ -66,6 +70,7 @@ class StationaryCudaResources:
     geometry_threads: int
     geometry_scratch_bytes: int
     allocation_bytes: int
+    center_geometry_bytes: int
 
 
 def plan_stationary_cuda_resources(
@@ -110,8 +115,14 @@ def plan_stationary_cuda_resources(
     threads = min(GEOMETRY_THREADS, target.maximum_threads_per_block, lanes)
     if threads < 1:
         raise ValueError("stationary CUDA target has no geometry threads")
+    allocation = fixed + per_lane * lanes
+    # Retain geometry only from spare budget after choosing point concurrency.
+    # A tight budget must not lose lanes or revoke the bounded direct route.
+    center_bytes = 48 * (atoms * (atoms - 1) // 2)
+    if center_bytes > budget_bytes - allocation:
+        center_bytes = 0
     return StationaryCudaResources(
-        lanes, threads, per_lane * lanes, fixed + per_lane * lanes
+        lanes, threads, per_lane * lanes, allocation + center_bytes, center_bytes
     )
 
 

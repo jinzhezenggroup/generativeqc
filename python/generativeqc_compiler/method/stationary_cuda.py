@@ -375,17 +375,11 @@ __global__ void nuclear_all_kernel(unsigned kind, const double* charges, const d
                         error))
         return;
 }
-__global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error) {
-  bool valid = true;
-  for (size_t a = 0; a < na; ++a) {
-    for (size_t k = 0; k < 3; ++k)
-      if (!isfinite(centers[3 * a + k])) valid = false;
-    for (size_t b = 0; b < a; ++b)
-      if (generativeqc_grid_adjoint::distance(centers + 3 * a, centers + 3 * b, local_norm, valid)[0] <=
-          tolerance)
-        valid = false;
-  }
-  if (!valid) atomicExch(error, 1);
+__global__ void validate_centers(const double* centers, size_t na, double tolerance,
+                                generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
+  if (!generativeqc_grid_adjoint::prepare_center_geometry(
+          centers, na, tolerance, center_pairs, local_norm, local_ratio_geometry))
+    atomicExch(error, 1);
 }
 __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
@@ -393,7 +387,8 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external,
                                 size_t external_stride, size_t external_offset,
-                                size_t geometry_lanes, double* partial, double* scratch, int* error) {
+                                size_t geometry_lanes, double* partial, double* scratch,
+                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
   const size_t lane = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= geometry_lanes) return;
   // Same-stream consumers may receive a resident grid tile before a host
@@ -491,10 +486,10 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
         grad[3 * na + 3 * owner + k] += value;
       }
     }
-    if (!generativeqc_grid_adjoint::contract_point(view.points + 3 * p, centers, na, owner,
+    if (!generativeqc_grid_adjoint::contract_point_prepared(view.points + 3 * p, centers, na, owner,
                                              xc.energy * raw[p], grad + 6 * na, ws, ws + na,
                                              ws + 2 * na, ws + 3 * na, zeros, distances, local_norm,
-                                             local_ratio, local_log, local_becke)) {
+                                             local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)) {
       atomicExch(error, 1);
       return;
     }
