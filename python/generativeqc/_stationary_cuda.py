@@ -2445,6 +2445,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 source_before, grid_before = sources.metrics(), ao.metrics()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
+        use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
         integral_provider = getattr(state._source, "cuda_integral_derivatives", None)
         native_integral_budget = max_device_bytes - peak
         if not ecp and native_integral_budget > 0 and callable(integral_provider):
@@ -2464,6 +2465,11 @@ def _complete_rks_cuda_gradient_diagnostic(
                     raise RuntimeError(
                         "prepared stationary integral source returned invalid output"
                     )
+        if use_fitted_integrals and native_integral_components is None:
+            raise NotImplementedError(
+                "density-fitted stationary derivative provider is unavailable; "
+                "Direct derivative fallback would change the Hamiltonian"
+            )
         native_complete_integrals = native_integral_components is not None
         resident_grid_density = None
         if native_complete_integrals:

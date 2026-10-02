@@ -7,6 +7,9 @@
 #include <tuple>
 
 #include "dft/ao_grid.hpp"
+#if GENERATIVEQC_HAS_CUDA
+#include "dft/cosx_scf.hpp"
+#endif
 #include "dft/grid.hpp"
 #include "dft/nonlocal_correlation/vv10_integration.hpp"
 #include "dft/nonlocal_correlation/vv10_runtime.hpp"
@@ -105,7 +108,8 @@ dft::SpinXcIntegral evaluate_cam_b3lyp_xc_uks(const dft::AoBasis& basis,
 /** The physical operator is independent of extrapolation and occupations.
  * The common Fock plans own J/K dispatch; RSH adds a structurally separate
  * long-range exchange correction without changing proposal semantics. */
-SpinEvaluation evaluate(const PreparedFockPlan& plan, const PreparedFockPlan* long_range_correction,
+template <class PrimaryPlan>
+SpinEvaluation evaluate(PrimaryPlan& plan, const PreparedFockPlan* long_range_correction,
                         const dft::AoBasis& basis, const dft::MolecularGrid& grid,
                         const Matrix& alpha, const Matrix& beta, SpinXcEvaluator evaluate_xc,
                         const ScfOptions& options, dft::nlc::Vv10Plan* nonlocal_correlation,
@@ -175,25 +179,33 @@ EigenResult stabilized_uks_orbitals(Matrix fock, const Matrix& density, const Ma
 
 }  // namespace
 
+template <class PrimaryPlan>
 ScfResult run_uks_impl(
-    const PreparedFockPlan& plan, const PreparedFockPlan* long_range_correction,
-    const dft::AoBasis& basis, const dft::MolecularGrid& grid, const ScfOptions& options,
-    SpinXcEvaluator evaluate_xc, const char* method_name,
-    const std::vector<double>* initial_density, dft::nlc::Vv10Plan* nonlocal_correlation,
+    PrimaryPlan& plan, const PreparedFockPlan* long_range_correction, const dft::AoBasis& basis,
+    const dft::MolecularGrid& grid, const ScfOptions& options, SpinXcEvaluator evaluate_xc,
+    const char* method_name, const std::vector<double>* initial_density,
+    dft::nlc::Vv10Plan* nonlocal_correlation,
     dft::nlc::Vv10DensityDomain nonlocal_domain = dft::nlc::Vv10DensityDomain::StrictPositive) {
   using namespace reference;
   const auto& strategy = plan.strategy();
   validate_resolved_fock_build(strategy);
   if (options.compute_forces)
     throw std::invalid_argument(std::string(method_name) + " UKS forces are not implemented");
-  if (strategy.backend != FockBackend::Cpu || strategy.spec.spin != FockSpin::Unrestricted ||
-      strategy.spec.derivative_order != 0 || !strategy.spec.coulomb.present ||
-      strategy.spec.coulomb.coefficient != 1.0 ||
-      (strategy.spec.exchange.present &&
-       (strategy.spec.exchange.op != FockOperator::FullRange ||
-        (strategy.spec.exchange.approximation != FockApproximation::Exact &&
-         strategy.spec.exchange.approximation != FockApproximation::DensityFitted))))
-    throw std::invalid_argument("UKS requires a CPU full-range exact or fitted J/K Fock strategy");
+  const bool ordinary_primary =
+      strategy.backend == FockBackend::Cpu &&
+      (!strategy.spec.exchange.present ||
+       (strategy.spec.exchange.op == FockOperator::FullRange &&
+        (strategy.spec.exchange.approximation == FockApproximation::Exact ||
+         strategy.spec.exchange.approximation == FockApproximation::DensityFitted)));
+  const bool cosx_primary =
+      strategy.backend == FockBackend::Cuda && strategy.spec.exchange.present &&
+      strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx;
+  if (strategy.spec.spin != FockSpin::Unrestricted || strategy.spec.derivative_order != 0 ||
+      !strategy.spec.coulomb.present || strategy.spec.coulomb.coefficient != 1.0 ||
+      (!ordinary_primary && !cosx_primary))
+    throw std::invalid_argument(
+        "UKS requires a CPU exact/DF or explicit CUDA COSX full-range J/K Fock strategy");
   if (long_range_correction) {
     const auto& correction = long_range_correction->strategy();
     validate_resolved_fock_build(correction);
@@ -460,6 +472,29 @@ ScfResult run_pbe_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
   return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_pbe_xc_uks, "PBE",
                       initial_density, nullptr);
 }
+
+#if GENERATIVEQC_HAS_CUDA
+ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis& basis,
+                            const dft::MolecularGrid& grid, const ScfOptions& options,
+                            const std::vector<double>* initial_density) {
+  const auto& strategy = plan.strategy();
+  const bool pbe0_exchange =
+      strategy.backend == FockBackend::Cuda && strategy.spec.spin == FockSpin::Unrestricted &&
+      strategy.spec.derivative_order == 0 && strategy.spec.coulomb.present &&
+      strategy.spec.coulomb.coefficient == 1.0 && strategy.spec.exchange.present &&
+      strategy.spec.exchange.op == FockOperator::FullRange && strategy.spec.exchange.omega == 0.0 &&
+      strategy.spec.exchange.approximation == FockApproximation::SeminumericalCosx &&
+      strategy.spec.exchange.coefficient == -0.25;
+  if (!pbe0_exchange || options.semilocal_exchange_scale != 0.75 ||
+      options.semilocal_correlation_scale != 1.0)
+    throw std::invalid_argument(
+        "PBE0 COSX UKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
+  return run_uks_impl(plan, nullptr, basis, grid, options, evaluate_pbe_xc_uks, "PBE0-COSX",
+                      initial_density, nullptr);
+}
+
+#endif
+
 ScfResult run_pbe_uks_nonlocal(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                                const dft::MolecularGrid& grid, const ScfOptions& options,
                                const std::vector<double>* initial_density,
