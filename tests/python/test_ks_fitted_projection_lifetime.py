@@ -132,12 +132,27 @@ struct CudaKsPlan {
     )
     unit += r"""
 int main(int argc, char** argv) {
-  assert(argc == 2);
+  assert(argc == 3);
   const std::string mode=argv[1];
   Owner owner;
   auto& source=owner.provider.source;
+  source.value_storage.pairs=std::string(argv[2]) == "packed-single" ? 1 : 0;
   source.revoke_projection_leases();
   source.completed_occupied_projection_rank=1;
+  if (mode == "no-capacity" || mode == "streamed" || mode == "truncated" ||
+      mode == "unexecuted") {
+    if (mode == "no-capacity") {
+      source.value_storage.rank_capacity=0;
+      source.auxiliary_tile=1;
+    }
+    if (mode == "streamed") source.streamed=true;
+    if (mode == "truncated") source.metric_full_rank[0]=false;
+    if (mode == "unexecuted") source.completed_occupied_projection_rank=0;
+    owner.capture_submission(true);
+    owner.retain_final_fitted_projection();
+    assert(!owner.final_fitted_projection_ready && launches == 0);
+    return 0;
+  }
   owner.capture_submission(true);
   if (mode == "interleaved") {
     source.revoke_projection_leases();
@@ -154,6 +169,7 @@ int main(int argc, char** argv) {
   std::string detail;
   assert(plan.resident_final_fitted_projection(token,binding,detail) == GENERATIVEQC_STATUS_SUCCESS);
   assert(binding && launches == 1);
+  assert(binding.occupied_coefficients == owner.proposal && binding.generation == token.generation);
   if (mode == "unchanged") return 0;
   if (mode == "new-state") {
     ++owner.final_generation;
@@ -212,13 +228,18 @@ int main(int argc, char** argv) {
         "new-state",
         "overflow",
         "interleaved",
+        "no-capacity",
+        "streamed",
+        "truncated",
+        "unexecuted",
     ],
 )
+@pytest.mark.parametrize("storage", ["dense", "packed-single"])
 def test_final_projection_rejects_replaced_scratch(
-    projection_probe: Path, mode: str
+    projection_probe: Path, mode: str, storage: str
 ) -> None:
     result = subprocess.run(
-        [str(projection_probe), mode],
+        [str(projection_probe), mode, storage],
         capture_output=True,
         text=True,
         timeout=10,

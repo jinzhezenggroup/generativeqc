@@ -36,6 +36,16 @@ struct FockPreparationDiagnostic {
   std::vector<CudaDensityFittingMetricDiagnostic> fitted;
 };
 
+/** Optional capacity requested by a method with integral restricted occupations.
+ * This reserves single-B packed U scratch, not a density/factor identity or
+ * permission to borrow a completed projection. Generic callers leave it empty;
+ * execution must still establish exact Cocc/D and owner/generation provenance.
+ */
+struct FockOccupiedProjectionReservation {
+  std::size_t restricted_rank{};
+  bool operator==(const FockOccupiedProjectionReservation&) const = default;
+};
+
 /** Immutable geometry/semantic owner for the common Fock provider views.
  * CPU numerical sources use the existing reference integrals; CUDA uses
  * the existing direct evaluator and source-backed DF tile generator. The
@@ -54,7 +64,8 @@ class PreparedFockPlan {
                    ResolvedFockBuild strategy, int device_id = -1,
                    std::size_t device_budget_bytes = 0,
                    unsigned retained_direct_derivative_order = 0,
-                   unsigned retained_fitted_derivative_order = 0);
+                   unsigned retained_fitted_derivative_order = 0,
+                   FockOccupiedProjectionReservation projection_reservation = {});
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
@@ -116,7 +127,8 @@ class PreparedFockPlan {
   bool matches(const core::System& orbital, const core::System* auxiliary,
                const ResolvedFockBuild& strategy, int device_id, std::size_t device_budget_bytes,
                unsigned minimum_direct_derivative_order = 0,
-               unsigned minimum_fitted_derivative_order = 0) const noexcept;
+               unsigned minimum_fitted_derivative_order = 0,
+               FockOccupiedProjectionReservation projection_reservation = {}) const noexcept;
 
  private:
   struct Impl;

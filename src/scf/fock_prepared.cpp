@@ -120,6 +120,7 @@ struct PreparedFockPlan::Impl {
   std::optional<CudaFockPlanView> cuda_view;
   initial_guess::OverlapOrthogonalizer overlap_cache;
   unsigned retained_fitted_derivative_order{};
+  FockOccupiedProjectionReservation projection_reservation;
 
   const integrals::IntegralData& one_electron() const {
     return fitted ? fitted->one_electron : exact;
@@ -127,12 +128,25 @@ struct PreparedFockPlan::Impl {
 
   Impl(const core::System& system, const core::System* aux, ResolvedFockBuild strategy, int device,
        std::size_t budget, unsigned retained_direct_derivative_order,
-       unsigned retained_fitted_derivative_order_input)
+       unsigned retained_fitted_derivative_order_input,
+       FockOccupiedProjectionReservation projection_reservation_input)
       : orbital(system),
         device_id(strategy.backend == FockBackend::Cuda ? device : -1),
         requested_budget(strategy.backend == FockBackend::Cuda ? budget : 0),
-        retained_fitted_derivative_order(retained_fitted_derivative_order_input) {
+        retained_fitted_derivative_order(retained_fitted_derivative_order_input),
+        projection_reservation(projection_reservation_input) {
     validate_resolved_fock_build(strategy);
+    const auto reserved_rank = projection_reservation.restricted_rank;
+    if (reserved_rank &&
+        (strategy.backend != FockBackend::Cuda || strategy.spec.spin != FockSpin::Restricted ||
+         strategy.spec.derivative_order != 0 || !strategy.spec.exchange.present ||
+         strategy.spec.exchange.approximation != FockApproximation::DensityFitted ||
+         strategy.spec.exchange.op != FockOperator::FullRange || system.electron_count <= 0 ||
+         system.electron_count % 2 || system.multiplicity != 1 ||
+         reserved_rank != static_cast<std::size_t>(system.electron_count / 2) ||
+         reserved_rank > molecule::ao_count(system)))
+      throw std::invalid_argument(
+          "occupied projection reservation requires a valid restricted CUDA DF occupation");
     for (const auto* term : {&strategy.spec.coulomb, &strategy.spec.exchange}) {
       if (!term->present) continue;
       if (term->approximation == FockApproximation::SeminumericalCosx)
@@ -274,11 +288,17 @@ struct PreparedFockPlan::Impl {
         data.df_gradient_budget = resolved.response_bytes;
       }
       data.value_storage = diagnostic.variant.df_pair_storage;
-      // Fixed-density/composed Fock APIs have no occupied-rank promise. An
-      // explicit packed owner reserves bounded panels and accepts arbitrary D.
+      // Only an explicit method reservation may add complete single-B U capacity.
+      // This is separate from RHF-owned SCF factors: KS owns its own Cocc. Empty
+      // reservations keep arbitrary-density callers on bounded panels. The
+      // packed planner may drop optional U under automatic budget pressure.
       const auto plan_values = [&](std::size_t n, std::size_t a, std::size_t fixed) {
+        // Packed-raw is not an admitted borrowed-response consumer and does
+        // not have the same optional-U budget fallback. Keep its old capacity.
+        const auto packed_rank =
+            data.value_storage == DfPairStorage::SymmetricLowerSingle ? reserved_rank : 0;
         return df_packed_pairs(data.value_storage)
-                   ? plan_packed_density_fitting_tiles(1, n, a, 0, plan_budget, fixed, 0,
+                   ? plan_packed_density_fitting_tiles(1, n, a, packed_rank, plan_budget, fixed, 0,
                                                        df_retains_packed_raw(data.value_storage))
                    : plan_density_fitting_tiles(1, n, a, n, plan_budget, fixed, true);
       };
@@ -333,10 +353,11 @@ struct PreparedFockPlan::Impl {
 PreparedFockPlan::PreparedFockPlan(const core::System& system, const core::System* auxiliary,
                                    ResolvedFockBuild strategy, int device, std::size_t budget,
                                    unsigned retained_direct_derivative_order,
-                                   unsigned retained_fitted_derivative_order)
+                                   unsigned retained_fitted_derivative_order,
+                                   FockOccupiedProjectionReservation projection_reservation)
     : impl_(std::make_unique<Impl>(system, auxiliary, strategy, device, budget,
                                    retained_direct_derivative_order,
-                                   retained_fitted_derivative_order)) {}
+                                   retained_fitted_derivative_order, projection_reservation)) {}
 PreparedFockPlan::~PreparedFockPlan() = default;
 const ResolvedFockBuild& PreparedFockPlan::strategy() const noexcept {
   return impl_->diagnostic.strategy;
@@ -460,11 +481,13 @@ std::vector<double> PreparedFockPlan::retained_energy_derivative(
   return impl_->cpu_view ? impl_->cpu_view->retained_energy_derivative(density, beta)
                          : impl_->cuda_view->retained_energy_derivative(density, beta);
 }
-bool PreparedFockPlan::matches(const core::System& orbital, const core::System* auxiliary,
-                               const ResolvedFockBuild& strategy, int device, std::size_t budget,
-                               unsigned minimum_direct_derivative_order,
-                               unsigned minimum_fitted_derivative_order) const noexcept {
-  if (minimum_direct_derivative_order > 1 || minimum_fitted_derivative_order > 1 ||
+bool PreparedFockPlan::matches(
+    const core::System& orbital, const core::System* auxiliary, const ResolvedFockBuild& strategy,
+    int device, std::size_t budget, unsigned minimum_direct_derivative_order,
+    unsigned minimum_fitted_derivative_order,
+    FockOccupiedProjectionReservation projection_reservation) const noexcept {
+  if (projection_reservation != impl_->projection_reservation ||
+      minimum_direct_derivative_order > 1 || minimum_fitted_derivative_order > 1 ||
       (minimum_direct_derivative_order &&
        (!impl_->cuda_exact ||
         impl_->diagnostic.direct.derivative_order < minimum_direct_derivative_order)) ||

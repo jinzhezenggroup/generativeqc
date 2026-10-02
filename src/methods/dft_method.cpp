@@ -676,6 +676,26 @@ dft::MolecularGrid ks_molecular_grid(const core::System& system, dft::GridSpec s
   return dft::MolecularGrid(system, spec);
 }
 
+scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
+    const core::System& system, const NativeKsExecutionPlan& execution_plan,
+    const scf::ResolvedFockBuild& strategy) {
+  // This method owns an integer restricted determinant. Fixed-density Fock
+  // callers do not acquire this promise from the same dimensions or system.
+  const auto& spec = strategy.spec;
+  if (execution_plan.spin_channels != 1 || execution_plan.range_exchange ||
+      strategy.backend != scf::FockBackend::Cuda || spec.spin != scf::FockSpin::Restricted ||
+      spec.derivative_order != 0 || !spec.coulomb.present || !spec.exchange.present ||
+      spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
+      spec.exchange.approximation != scf::FockApproximation::DensityFitted ||
+      spec.exchange.op != scf::FockOperator::FullRange)
+    return {};
+  const auto [alpha, beta] = scf::initial_guess::spin_occupations(system);
+  if (system.electron_count <= 0 || !alpha || alpha != beta || system.multiplicity != 1 ||
+      alpha > molecule::ao_count(system))
+    throw std::invalid_argument("KS projection reservation requires valid restricted occupations");
+  return {alpha};
+}
+
 class KsPreparedCalculation final : public PreparedCalculation {
  public:
   KsPreparedCalculation(Capabilities capabilities, core::System system,
@@ -696,7 +716,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U,
-              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ? 0U : 1U),
+              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ? 0U : 1U,
+              ks_fitted_projection_reservation(system_, execution_plan_,
+                                               *options_.resolved_fock_build)),
         basis_(system_),
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
