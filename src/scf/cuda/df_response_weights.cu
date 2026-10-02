@@ -665,7 +665,7 @@ static cudaError_t contract_occupied_response(
     // removes the fitted-B charge traversal and its separate charge-root work.
     const auto& factor = buffers.occupied_factors[0];
     const auto r = factor.rank, rr = r * r;
-    runtime::cuda_trace::TraceRegion reuse("final_fitted_projection_charge_reuse", stream);
+    runtime::cuda_trace::TraceRegion reuse("final_fitted_projection_potential_reuse", stream);
     checked(generated::df_occupied_finish_projection(blas, ni, static_cast<int>(r), ai,
                                                      factor.coefficients, final_fitted_projection,
                                                      transformed_projected));
