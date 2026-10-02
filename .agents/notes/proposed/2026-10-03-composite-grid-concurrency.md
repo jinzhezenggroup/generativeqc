@@ -1,6 +1,6 @@
 # Proposal: admit composite grid concurrency under the whole force budget
 
-Status: proposed; independent and full24 endpoint gates pass, larger qualification pending
+Status: proposed; independent, moved-geometry and default48 endpoint gates pass
 Date: 2026-10-03
 
 ## Problem
@@ -79,6 +79,22 @@ runs are not a controlled speedup claim.
 Every independent sample must pass 1e-8 Eh and 1e-7 Eh/Bohr gates.
 Candidate source, patch, logs and results are retained under ignored
 `.artifacts/wb97m-geometry/` and the authorized remote task directory.
+
+
+## Larger default-capacity endpoint
+
+Node1 job 5405 completes water48 (384 spherical def2-SVP AOs, 1179648 points)
+under the unchanged public force totals. Native cold/warm are 1656.685/219.692
+seconds (24/1 SCF iterations); paired GPU4PySCF are 520.387/175.263 seconds
+(18/4 iterations). All three pairs pass, maximum energy error 4.161e-11 Eh and
+force error 1.643e-10 Eh/Bohr. This one-repeat run establishes completion and
+accuracy at the larger shape. It is separate from the earlier capacity-only
+run and is not a controlled speedup estimate. Native remains slower.
+
+These receipts use the library hash recorded above. After rebasing, master also
+contains #1716's compensated KS energy traces and fused full-range J/K derivative
+source. Their source/binary identities differ from the measured historical stack;
+new stack qualification must identify the rebuilt native library explicitly.
 
 ## Rejected alternatives and limits
 
