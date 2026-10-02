@@ -62,6 +62,25 @@ Review repair by Agent: dot
 
 ## Consequences
 
+### CUDA density-export repair (2026-10-02)
+
+The real NVIDIA warm-replay gate exposed an adapter mismatch: CUDA RHF exports
+its validated AO density in `ScfResult.reference->density`, while its optional
+`ScfResult.density` vector is empty. Moving only the latter into the MP2 checkpoint
+published coordinates without a density. Every CUDA warm attempt then fell back
+to a cold solve, checkpoint import rejected the incomplete state, and prior-seed
+byte accounting reflected only the coordinate payload.
+
+MP2 now retains the existing physical-reference density when the iterative
+result vector is absent. This copies an already exported, validated host matrix;
+it adds no device download and does not reconstruct or approximate the density.
+The existing candidate/prior-seed budget charge still covers the complete matrix
+and coordinates, and publication remains conditional on complete MP2 success.
+The opt-in CUDA regression explicitly checks all four H2 density entries before
+replay, in addition to the unchanged moved-geometry energy/force and fallback
+gates. CPU fixed-capacity boundary tests remain distinct from CUDA's adaptive
+correlation/force arena capacity diagnostics.
+
 Repeated prepared MP2 energy calls can reduce RHF startup work without changing MP2 equations or final reference gates. Full same-geometry reference reuse and correlated-method warm lifecycle remain follow-up work and require stronger versioned identity/provenance.
 
 ## Revisit when

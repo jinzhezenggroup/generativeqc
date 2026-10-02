@@ -134,6 +134,13 @@ def test_mp2_cuda_batch_matches_cpu_and_isolates_failed_items(warm_start: bool) 
     calculator = Calculator(method="mp2", device="cuda")
     with calculator.prepare_batch(H2, warm_start=warm_start) as batch:
         cuda = batch.execute(strict=True)
+        if warm_start:
+            # CUDA HF retains D in its physical reference, not ScfResult.density.
+            # The MP2 checkpoint must still own all four AO density entries.
+            density, coordinates, _ = _snapshot(batch, 0)
+            assert density.shape == (4,)
+            assert coordinates.shape == (6,)
+            assert np.isfinite(density).all()
         replay = batch.execute(strict=True)
         assert all(item.warm_start_used == warm_start for item in replay.items)
         assert all(not item.warm_start_fallback for item in replay.items)
