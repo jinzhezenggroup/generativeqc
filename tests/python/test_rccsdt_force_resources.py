@@ -78,8 +78,11 @@ def test_native_force_exact_cap_and_nested_live_allocations(
     record = json.loads(result.stdout)
     assert record["nested_peak"] + record["retained"] <= record["planned_peak"]
     assert record["source_reads"] > 0
-    # Ensure allocator interposition actually observed generated response work.
-    assert record["largest_allocation"] > 500_000
+    # Tie observation to the current generated response arena, whose size may
+    # shrink when dead intermediates share storage. An arbitrary historical
+    # byte floor incorrectly rejects a successful memory optimization.
+    assert record["triples_arena_bytes"] > 0
+    assert record["largest_allocation"] >= record["triples_arena_bytes"]
 
 
 CPP = r"""
@@ -92,6 +95,7 @@ CPP = r"""
 #include <new>
 #include <stdexcept>
 #include "cc/rccsdt_force.hpp"
+#include "cc/triples_response.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/raw_source.hpp"
@@ -183,6 +187,16 @@ int main(int argc,char** argv) {
     } catch(const std::length_error&) { refused=true; }
     trace::active=false;
     if(!refused || trace::largest>=4096 || force_source.reads!=0) return 4;
+    // Obtain the actual arena contract independently of the complete-force
+    // allocation trace, and release these outputs before tracing that endpoint.
+    std::size_t triples_arena_bytes=0;
+    {
+      generativeqc::cc::TriplesResponseOptions options;
+      options.max_bytes=256ULL<<20;
+      const auto triples=generativeqc::cc::triples_response_cpu(
+          state.problem,state.solved,state.eps_o,state.eps_v,options);
+      triples_arena_bytes=triples.arena_bytes;
+    }
     trace::start();
     const auto force=generativeqc::cc::rccsdt_force_cpu(system,force_source,*state.reference,
                                                 state.problem,state.solved,state.eps_o,state.eps_v,
@@ -198,6 +212,7 @@ int main(int argc,char** argv) {
        (state.problem.foo.capacity()-old_capacity)*sizeof(double)) return 6;
     std::cout << "{\"nested_peak\":" << trace::peak
               << ",\"largest_allocation\":" << trace::largest
+              << ",\"triples_arena_bytes\":" << triples_arena_bytes
               << ",\"source_reads\":" << force_source.reads
               << ",\"retained\":" << plan.retained_input_bytes
               << ",\"planned_peak\":" << plan.peak_bytes << "}\n";

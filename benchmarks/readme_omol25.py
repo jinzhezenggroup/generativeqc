@@ -47,6 +47,7 @@ class EndpointSpec:
     method: str
     basis: str
     schema: str
+    reference_full_fock: bool = False
 
     @property
     def native_method(self) -> str:
@@ -68,6 +69,9 @@ def source_hashes() -> dict[str, str]:
     paths = (
         "python/generativeqc/calculator.py",
         "python/generativeqc/ks.py",
+        "python/generativeqc/_ks_snapshot.py",
+        "python/generativeqc/_snapshot_grid_cache.py",
+        "python/generativeqc/resources_ks.py",
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/batch.py",
         "python/generativeqc_compiler/method/stationary_resources.py",
@@ -146,6 +150,11 @@ def protocol(
                 "reference_gradient_tolerance": 1e-10,
                 "screening_tolerance": 1e-12,
                 "reference_direct_scf_tolerance": 1e-14,
+                "reference_fock_policy": (
+                    "full-density-rebuild"
+                    if benchmark.reference_full_fock
+                    else "incremental"
+                ),
                 "max_iterations": 100,
                 "energy_gate": 1e-8,
                 "force_gate": 1e-7,
@@ -290,6 +299,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                     reference_basis,
                     spec,
                     xc=benchmark.method.upper().replace("-", "_"),
+                    full_fock=benchmark.reference_full_fock,
                 )
                 from gpu4pyscf.dft import libxc
                 from gpu4pyscf.lib import cutensor
@@ -353,6 +363,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         "status": 0,
                         "iterations": convergence["iterations"],
                         "scf_jk_builds": work["scf_jk_builds"],
+                        "scf_final_residuals": convergence["final_residuals"],
                         "warm_start_used": seed is not None,
                         **({"reference_vv10_domain": domain} if domain else {}),
                         "seconds": seconds,

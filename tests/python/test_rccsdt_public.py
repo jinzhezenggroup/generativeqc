@@ -317,7 +317,7 @@ def test_public_native_rccsdt_cuda_batch_forces(
 
 
 def test_public_force_admits_reported_endpoint_budget() -> None:
-    """The reported total includes preparation and retained response lifetimes."""
+    """Admission charges the selected schedule; a tighter cap can shrink MO tiles."""
     atoms, _, _ = _reference_case("h2o")
     reference = _calculator().singlepoint(atoms, properties=("energy", "forces"))
     peak = reference.correlation.planned_endpoint_peak_bytes
@@ -327,7 +327,18 @@ def test_public_force_admits_reported_endpoint_budget() -> None:
     )
     assert exact.correlation.numeric_capacity_bytes <= peak
     np.testing.assert_allclose(exact.forces, reference.forces, rtol=0, atol=1e-12)
+    # The roomy peak now includes an optional whole-basis MO tile. One byte less
+    # may select a smaller source tile instead of rejecting a valid force. The
+    # native allocation probe separately enforces the force stage's exact cap
+    # and one-byte-short rejection when that unavoidable stage is dominant.
+    tighter = _calculator(correlation_memory_budget_bytes=peak - 1).singlepoint(
+        atoms, properties=("energy", "forces")
+    )
+    assert tighter.correlation.numeric_capacity_bytes <= peak - 1
+    assert tighter.correlation.planned_endpoint_peak_bytes <= peak - 1
+    assert tighter.cc_performance.source_reads > reference.cc_performance.source_reads
+    np.testing.assert_allclose(tighter.forces, reference.forces, rtol=0, atol=1e-12)
     with pytest.raises(RuntimeError, match="error 7|host budget|memory budget"):
-        _calculator(correlation_memory_budget_bytes=peak - 1).singlepoint(
+        _calculator(correlation_memory_budget_bytes=1).singlepoint(
             atoms, properties=("energy", "forces")
         )

@@ -15,10 +15,14 @@ from generativeqc_compiler.xc.grid_native import emit_grid_adjoint, emit_grid_pa
 from test_stationary_geometry_kernel_host import PREFIX
 
 
-@pytest.mark.parametrize("atoms", [12, 33, 96, 128])
+@pytest.mark.parametrize(
+    ("atoms", "aos"),
+    [(12, 2), (33, 2), (96, 2), (128, 2), (12, 96), (12, 1024), (96, 768), (128, 1024)],
+)
 def test_emitted_cooperative_kernel_routes_tails_and_sticky_failure(
     tmp_path: Path,
     atoms: int,
+    aos: int,
 ) -> None:
     compiler = shutil.which("c++")
     if compiler is None:
@@ -46,7 +50,15 @@ double* geometry_pair_storage;
         "*error=1; return fallback;",
         "std::atomic_ref(*error).store(1); return fallback;",
     )
-    begin = _STATIONARY_SCIENTIFIC_KERNELS.index("__device__ bool geometry_point_ao(")
+    prefix = prefix.replace(
+        "void ao_pullback(", "std::atomic<size_t> ao_evaluations{0};\nvoid ao_pullback("
+    ).replace(
+        "  for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];",
+        "  ++ao_evaluations;\n  for (size_t j=0;j<4;++j) out[j]=c[j]*w[j];",
+    )
+    begin = _STATIONARY_SCIENTIFIC_KERNELS.index(
+        "__device__ bool geometry_point_setup("
+    )
     end = _STATIONARY_SCIENTIFIC_KERNELS.index(
         "}  // namespace generativeqc_stationary_cuda", begin
     )
@@ -62,7 +74,7 @@ double* geometry_pair_storage;
         + kernels
         + r"""
 int main() {
-  constexpr size_t na=ATOMS,n=2,np=(na>32?5:17),pairs=na*(na-1)/2;
+  constexpr size_t na=ATOMS,n=AOS,np=(na>32?5:17),pairs=na*(na-1)/2;
   constexpr size_t state_count=na<=32?pairs:4*(2*na-5)/2;
   double centers[3*na];
   for(size_t a=0;a<na;++a) {
@@ -71,7 +83,12 @@ int main() {
   std::vector<generativeqc_grid_adjoint::CenterPair> geometry(pairs);
   if(!generativeqc_grid_adjoint::prepare_center_geometry(centers,na,1e-12,geometry.data(),
                                                          local_norm,local_ratio_geometry)) return 1;
-  const int64_t ao_atoms[n]{0,na-1};
+  std::vector<int64_t> ao_atoms(n);
+  std::vector<size_t> active_ids(n);
+  for(size_t ao_index=0;ao_index<n;++ao_index) {
+    ao_atoms[ao_index]=(ao_index*7)%na;
+    active_ids[ao_index]=n-1-ao_index;
+  }
   for(bool cached:{false,true}) for(bool implicit:{false,true}) for(bool external:{false,true})
   for(size_t capacity:{size_t(1),size_t(7)}) for(size_t points:{size_t(0),size_t(1),np}) {
     const size_t lanes=std::min(capacity,points);
@@ -79,6 +96,10 @@ int main() {
     std::vector<double> storage(8*state_count+2,987654);
     geometry_pair_storage=storage.data()+1;
     std::vector<double> xyz(3*points),features(10*points,1),ao(10*points*n,0.5),work(8*points*n,0.75);
+    for(size_t value_index=0;value_index<ao.size();++value_index)
+      ao[value_index]=0.4*std::sin(0.17*value_index);
+    for(size_t value_index=0;value_index<work.size();++value_index)
+      work[value_index]=0.3*std::cos(0.13*value_index);
     std::vector<double> weights(points,0.3),raw(points,0.2),seeds(6*(np+7),0.15);
     std::vector<int64_t> owners(points);
     for(size_t p=0;p<points;++p) {
@@ -87,11 +108,12 @@ int main() {
     }
     const auto* center_pairs=cached?geometry.data():nullptr;
     int error=0,producer_error=0;
-    generativeqc::dft::GridTaskView view{points,n,n,features.data(),ao.data(),xyz.data(),nullptr,&producer_error};
+    generativeqc::dft::GridTaskView view{points,n,n,features.data(),ao.data(),xyz.data(),
+                                       implicit?active_ids.data():nullptr,&producer_error};
     auto invoke=[&](bool cooperative,size_t lane,size_t rank) {
       blockIdx.x=cooperative?lane:lane/32; threadIdx.x=cooperative?rank:lane%32;
       auto kernel=cooperative?geometry_cooperative_kernel:geometry_kernel;
-      kernel(view,work.data(),ao_atoms,implicit?nullptr:owners.data(),4,3,centers,na,
+      kernel(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),4,3,centers,na,
              weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
              lanes,partial.data()+1,scratch.data()+1,center_pairs,&error);
     };
@@ -117,33 +139,40 @@ int main() {
         for(auto& worker:workers) worker.join();
       }
     };
+    ao_evaluations=0;
     execute();
     const auto actual=reduce();
     if(error) return 2;
+    if(ao_evaluations!=2*n*points) return 7;
+    for(size_t coordinate=0;coordinate<6*na;++coordinate)
+      if(expected[coordinate]!=actual[coordinate]) return 8;
     for(size_t k=0;k<9*na;++k) if(std::abs(expected[k]-actual[k])>2e-11) return 3;
     if(partial.front()!=987654 || partial.back()!=987654 || scratch.front()!=987654 ||
        scratch.back()!=987654 || storage.front()!=987654 || storage.back()!=987654) return 4;
     if(!points) continue;
     // Invalid input late in a worker never publishes any partial output.
-    for(int invalid=0;invalid<5;++invalid) {
+    for(int invalid=0;invalid<6;++invalid) {
       const auto old_xyz=xyz,old_raw=raw,old_seeds=seeds;
+      const auto old_atoms=ao_atoms;
       if(invalid==0) std::copy(centers,centers+3,xyz.end()-3);
       if(invalid==1) raw.back()=std::numeric_limits<double>::quiet_NaN();
       if(invalid==2) producer_error=1;
       if(invalid==3) view.nao=1;
       if(invalid==4) { if(!external) continue; seeds[5*(np+7)+points+1]=std::numeric_limits<double>::infinity(); }
+      if(invalid==5) ao_atoms.back()=-1;
       error=0; execute();
       const auto failed=reduce();
       if(!error) return 5;
       for(double value:failed) if(value!=0) return 6;
       xyz=old_xyz; raw=old_raw; seeds=old_seeds; producer_error=0; view.nao=n;
+      ao_atoms=old_atoms;
       // Rebind potentially replaced vector storage before the next replay.
       view.points=xyz.data();
     }
   }
   return 0;
 }
-""".replace("ATOMS", str(atoms))
+""".replace("ATOMS", str(atoms)).replace("AOS", str(aos))
     )
     binary = tmp_path / "kernel"
     process = subprocess.run(

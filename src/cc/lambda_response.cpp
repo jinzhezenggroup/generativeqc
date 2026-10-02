@@ -290,7 +290,8 @@ static LambdaResult solve_lambda_cpu_impl(const Problem& p, const SolverResult& 
   result.diagnostic.operator_actions = solved.operator_actions;
   result.diagnostic.numeric_capacity_bytes = capacity;
   result.diagnostic.shared_program_hash = generated::lambda_transpose_program_hash;
-  result.diagnostic.independent_program_hash = generated::lambda_independent_transpose_program_hash;
+  result.diagnostic.independent_program_hash =
+      generated::lambda_independent_transpose_selected_program_hash(p.nocc, p.nvir);
   return result;
 }
 
