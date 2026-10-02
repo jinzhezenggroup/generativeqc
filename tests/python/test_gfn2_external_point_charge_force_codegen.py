@@ -100,9 +100,9 @@ def test_native_codegen_needs_no_site_packages(tmp_path: Path) -> None:
 
 
 def test_production_force_consumers_do_not_restore_handwritten_q_over_r3() -> None:
-    cpu = (
-        ROOT / "src/xtb/native/src/model/gfn2/external_point_charges.cpp"
-    ).read_text(encoding="utf-8")
+    cpu = (ROOT / "src/xtb/native/src/model/gfn2/external_point_charges.cpp").read_text(
+        encoding="utf-8"
+    )
     cuda = (
         ROOT / "src/xtb/native/src/backends/cuda/gfn2_external_point_charges.cu"
     ).read_text(encoding="utf-8")

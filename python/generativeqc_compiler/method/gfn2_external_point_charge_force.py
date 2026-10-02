@@ -21,9 +21,7 @@ from generativeqc_compiler.tensor.ir import (
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
-GFN2_EXTERNAL_POINT_CHARGE_FORCE_VERSION = (
-    "gfn2-external-point-charge-force-ir-v1"
-)
+GFN2_EXTERNAL_POINT_CHARGE_FORCE_VERSION = "gfn2-external-point-charge-force-ir-v1"
 
 
 def _input(name: str, *, differentiable: bool = False) -> Node:
