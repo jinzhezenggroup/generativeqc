@@ -162,10 +162,14 @@ generativeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const dou
         energies[batch] += pair.energy;
 
         if (forces != nullptr) {
-          const double force_scale = -pair.distance_derivative / distance;
-          const double fx = force_scale * dx;
-          const double fy = force_scale * dy;
-          const double fz = force_scale * dz;
+          double fx = 0.0;
+          double fy = 0.0;
+          double fz = 0.0;
+          if (!generativeqc::xtb::generated::project_gfn2_pair_radial_adjoint(
+                  pair.distance_derivative, -1.0, 1.0 / distance, dx, dy, dz, fx, fy, fz)) {
+            error = "compiler-generated GFN2 repulsion Cartesian force projection failed";
+            return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
+          }
           forces[first_index * 3] += fx;
           forces[first_index * 3 + 1] += fy;
           forces[first_index * 3 + 2] += fz;
