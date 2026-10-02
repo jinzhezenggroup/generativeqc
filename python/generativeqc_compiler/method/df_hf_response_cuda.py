@@ -115,23 +115,21 @@ inline cublasStatus_t df_rhf_charge_contract(
                      potentials + begin, auxiliary_stride);
 }}
 
-/** Recover the fitted RHF charge from an already formed occupied projection.
- *
- * For D = w C C^T and S_P = C^T B_P C, cyclic trace invariance gives
- * D:B_P = w tr(S_P).  The final-K handoff already proves that C and B*C
- * belong to the same final determinant, so this reduction can replace a
- * second traversal of the retained fitted three-center tensor.
+/** Recover the full-rank fitted RHF Coulomb potential from the rooted
+ * occupied projection. For D = w C C^T, S_P = C^T B_P C and U = X S with
+ * X=M^-1/2, linearity of trace gives X(D:B) = w tr(U). The final-K handoff
+ * already proves that C and B*C belong to the same final determinant.
  */
-static __global__ void df_rhf_charge_from_final_projection(
+static __global__ void df_rhf_potential_from_rooted_projection(
     std::size_t auxiliary, std::size_t rank, double density_scale,
-    const double* projected, double* charges) {{
+    const double* rooted, double* potentials) {{
   const auto q = std::size_t{{blockIdx.x}} * blockDim.x + threadIdx.x;
   if (q >= auxiliary) return;
   const auto rr = rank * rank;
   double value = 0.0;
   for (std::size_t i = 0; i < rank; ++i)
-    value += projected[q * rr + i * (rank + 1)];
-  charges[q] = density_scale * value;
+    value += rooted[q * rr + i * (rank + 1)];
+  potentials[q] = density_scale * value;
 }}
 
 }}  // namespace generated
