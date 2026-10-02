@@ -1386,14 +1386,14 @@ class Calculator:
     def resolved_model(
         self, atoms: typing.Any, *, charge: typing.Any = 0, multiplicity: typing.Any = 1
     ) -> ResolvedModel:
-        """Resolve the scientific HF or MP2 identity for comparisons.
+        """Resolve the scientific HF or canonical correlated model identity.
 
         Unlike a prepared-plan signature, this identity excludes execution
         backend, iteration tolerances, screening and schedules. Fitting and its
         actual auxiliary basis remain mathematical choices. This method only
         resolves compact basis metadata; it performs no integral/SCF work.
         """
-        if self._method not in (*_HF_METHODS, _native.METHOD_MP2):
+        if self._method not in (*_HF_METHODS, *_CORRELATED_METHODS):
             raise NotImplementedError("accuracy model is unavailable for this method")
         atoms = tuple(Atom.from_value(atom) for atom in atoms)
         self._preflight_hf_basis(atoms)

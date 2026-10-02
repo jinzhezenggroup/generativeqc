@@ -34,23 +34,41 @@ std::size_t checked_add(std::size_t a, std::size_t b) {{
 }}
 int main() {{
   struct {{ {diagnostic_type} numeric_capacity_bytes; }} diagnostic{{}};
+  auto update_capacity = [&](std::size_t retained, std::size_t triples_workspace_bytes,
+                             std::size_t warm_reservation) {{
+    struct {{ std::size_t external_reservation_bytes; }} state{{warm_reservation}};
+    {statement.group(0)}
+  }};
   for (std::uint64_t old : {{0ULL, 0x100000010ULL}})
-    for (std::size_t retained : {{std::size_t(0), std::size_t(0x100000020ULL)}}) {{
-      const std::size_t triples_workspace_bytes=31;
-      diagnostic.numeric_capacity_bytes=old;
-      {statement.group(0)}
-      const auto expected=old > retained+31 ? old : retained+31;
-      if (diagnostic.numeric_capacity_bytes!=expected) return 1;
+    for (std::size_t retained : {{std::size_t(0), std::size_t(0x100000020ULL)}})
+      for (std::size_t warm : {{std::size_t(0), std::size_t(0x100000030ULL)}}) {{
+        diagnostic.numeric_capacity_bytes=old;
+        update_capacity(retained, 31, warm);
+        const auto phase_capacity=retained+31+warm;
+        const auto expected=old > phase_capacity ? old : phase_capacity;
+        if (diagnostic.numeric_capacity_bytes!=expected) return 1;
+      }}
+  const auto limit=std::numeric_limits<std::size_t>::max();
+  for (bool overflow_in_warm_add : {{false, true}}) {{
+    diagnostic.numeric_capacity_bytes=17;
+    try {{
+      update_capacity(overflow_in_warm_add ? limit-31 : limit, 31,
+                      overflow_in_warm_add ? 1 : 0);
+      return 2;
+    }} catch (const std::length_error&) {{
+      if (diagnostic.numeric_capacity_bytes!=17) return 3;
     }}
+  }}
 }}
 """
     path, executable = tmp_path / "capacity.cpp", tmp_path / "capacity"
     path.write_text(harness)
-    subprocess.run(
+    compiled = subprocess.run(
         [compiler, "-std=c++20", "-Wall", "-Werror", str(path), "-o", str(executable)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=30,
     )
+    assert compiled.returncode == 0, compiled.stderr
     subprocess.run([str(executable)], check=True, timeout=10)

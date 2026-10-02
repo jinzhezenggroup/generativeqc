@@ -58,11 +58,24 @@ struct State {
   struct { double total_energy{10}; } solved;
   std::optional<int> reference{1};
   int problem{}, eps_o{}, eps_v{};
-  std::size_t budget{1024};
+  std::size_t budget{1024}, external_reservation_bytes{64};
+  double reference_energy_change{1e-11}, reference_density_rms{1e-12};
+  std::size_t reference_iterations{8};
 };
 int failure_mode{};
 bool cuda_mode{};
 int force_backend{};
+int warm_captures{};
+bool warm_updates{};
+namespace warm_reference {
+int capture(int, int, double energy_change, double density_rms, std::size_t iterations) {
+  ++warm_captures;
+  if (energy_change!=1e-11 || density_rms!=1e-12 || iterations!=8)
+    throw std::runtime_error("invalid reference diagnostics");
+  if (failure_mode==6) throw std::bad_alloc();
+  return 42;
+}
+}
 namespace integrals { struct ElectronInteractionSource {}; }
 namespace posthf {
 struct RawSource : integrals::ElectronInteractionSource {
@@ -125,10 +138,12 @@ struct Owner {
   std::optional<Diagnostic> last_;
   std::optional<Performance> last_performance_;
   int system_{};
+  int warm_state_{-7};
   std::optional<int> cpu_exact_plan_{1};
   struct { double ccsd_denominator_threshold{1e-10}; } descriptor_;
   Result run(bool compute_forces) {
     State state;
+    int* retained_warm_state=warm_updates ? &warm_state_ : nullptr;
     if (failure_mode==2) state.reference.reset();
     last_=state.diagnostic; // Retain the existing CC convergence diagnostic.
     const std::size_t retained=16, triples_virtual_count=7, triples_workspace_bytes=32;
@@ -139,21 +154,28 @@ struct Owner {
   }
 };
 int main(int argc,char** argv) {
-  if(argc!=3) return 99;
+  if(argc!=4) return 99;
   failure_mode=std::atoi(argv[1]);
   cuda_mode=std::atoi(argv[2])!=0;
+  warm_updates=std::atoi(argv[3])!=0;
+  const bool expect_failure=(failure_mode>=2 && failure_mode<=5) ||
+                            (failure_mode==6 && warm_updates);
   Owner owner;
   try {
     const auto result=owner.run(failure_mode!=0);
-    if(failure_mode>=2 || !owner.last_ || result.energy!=10.25) return 1;
+    if(expect_failure || !owner.last_ || result.energy!=10.25) return 1;
     if(owner.last_->ccsd_t_virtual_triples!=7) return 2;
-    if(failure_mode==1 &&
+    if(owner.warm_state_!=(warm_updates ? 42 : -7) || warm_captures!=(warm_updates ? 1 : 0))
+      return 6;
+    if(owner.last_->numeric_capacity_bytes!=(failure_mode==0 ? 112u : 320u)) return 7;
+    if(failure_mode!=0 &&
        (result.forces.size()!=3 ||
         owner.last_->force_provenance_flags!=(cuda_mode ? 15u : 7u) ||
         force_backend!=(cuda_mode ? 2 : 1)))
       return 3;
   } catch(const std::exception&) {
-    if(failure_mode<2 || !owner.last_) return 4;
+    if(!expect_failure || !owner.last_) return 4;
+    if(owner.warm_state_!=-7 || warm_captures!=(failure_mode==6 ? 1 : 0)) return 8;
     if(owner.last_->ccsd_t_virtual_triples!=0 || owner.last_->ccsd_t_triples_energy!=0 ||
        owner.last_->ccsd_t_equation_hash[0]!='\0') return 5;
   }
@@ -161,7 +183,7 @@ int main(int argc,char** argv) {
 """,
         encoding="utf-8",
     )
-    subprocess.run(
+    compiled = subprocess.run(
         [
             compiler,
             "-std=c++20",
@@ -172,24 +194,31 @@ int main(int argc,char** argv) {
             "-o",
             str(executable),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=30,
     )
+    assert compiled.returncode == 0, compiled.stderr
     return executable
 
 
 def test_post_triples_diagnostic_is_published_only_after_success(
     publication: Path,
 ) -> None:
-    for mode in range(6):
+    for mode in range(7):
         for cuda in (False, True):
-            result = subprocess.run(
-                [str(publication), str(mode), str(int(cuda))],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            assert result.returncode == 0, (mode, cuda, result.stderr)
+            for warm_updates in (False, True):
+                result = subprocess.run(
+                    [
+                        str(publication),
+                        str(mode),
+                        str(int(cuda)),
+                        str(int(warm_updates)),
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                assert result.returncode == 0, (mode, cuda, warm_updates, result.stderr)
