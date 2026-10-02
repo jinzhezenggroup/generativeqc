@@ -15,6 +15,7 @@
 
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/resource_ledger.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda_density_fitting.hpp"
@@ -544,6 +545,131 @@ std::vector<double> reference_range_exchange(const generativeqc::core::System& s
                        ? generativeqc::integrals::build_integrals(system, false, true).eri
                        : generativeqc::integrals::build_range_eri(system, range, omega);
   return reference_exchange_from_eri(eri, generativeqc::molecule::ao_count(system), density);
+}
+
+/** Deny each real optional allocation through the external resource ledger,
+ * while leaving the provider's own budget unchanged. Check the usable fallback
+ * and its retained charge, rather than only exercising shape-budget rejection.
+ */
+void spd_optional_allocation_fallback() {
+  namespace runtime = generativeqc::runtime;
+  struct LedgerScope {
+    std::shared_ptr<runtime::DeviceResourceLedger> previous{runtime::active_device_resource_ledger};
+    std::shared_ptr<runtime::DeviceResourceLedger> ledger{
+        std::make_shared<runtime::DeviceResourceLedger>()};
+    explicit LedgerScope(std::size_t limit) {
+      ledger->limit = limit;
+      ledger->device = 0;
+      runtime::active_device_resource_ledger = ledger;
+    }
+    ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
+  };
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 2, {{0.5, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  constexpr std::size_t budget = 64U << 20;
+  using Plan = std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)>;
+  std::vector<std::size_t> limits;
+  std::size_t canonical_begin{}, rows_begin{}, metadata_begin{};
+  {
+    LedgerScope scope(budget);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    Plan plan(raw, &destroy_cuda_direct_jk_plan);
+    require(plan->generated_exchange && plan->canonical_cartesian && plan->canonical_pairs &&
+                plan->canonical_row_prefix && plan->batch.shell_ao_offsets,
+            "allocation fault baseline lacks SPD/canonical/row/derivative storage");
+    std::size_t prefix = plan->generated_exchange->device_bytes;
+    for (std::size_t index = 0; index < plan->allocations.size(); ++index) {
+      const auto* pointer = plan->allocations[index];
+      if (pointer == plan->canonical_batch.shell_direct_ao_offsets) canonical_begin = index;
+      if (pointer == plan->canonical_exchange) rows_begin = index + 1U;
+      if (pointer == plan->batch.shell_ao_offsets) metadata_begin = index;
+      std::lock_guard<std::mutex> lock(runtime::device_resource_mutex);
+      const auto found = runtime::device_allocation_owners.find(plan->allocations[index]);
+      require(found != runtime::device_allocation_owners.end(), "unregistered provider allocation");
+      prefix += found->second.bytes;
+      limits.push_back(prefix - 1U);
+    }
+    require(canonical_begin && canonical_begin < rows_begin && rows_begin < metadata_begin &&
+                metadata_begin < limits.size() && prefix == diagnostic.device_bytes &&
+                prefix == scope.ledger->live,
+            "provider allocation inventory does not match its retained charge");
+    plan.reset();
+    require(scope.ledger->live == 0, "baseline provider leaked tracked device storage");
+  }
+  const auto n = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(n * n);
+  for (std::size_t index = 0; index < density.size(); ++index)
+    density[index] = std::cos(0.31 * (index / n) + 0.17 * (index % n)) / n;
+  const std::array<std::vector<double>, 3> eri{
+      generativeqc::integrals::build_integrals(system, false).eri,
+      generativeqc::integrals::build_range_eri(system, generativeqc::integrals::CoulombRange::Short,
+                                               0.37),
+      generativeqc::integrals::build_range_eri(system, generativeqc::integrals::CoulombRange::Long,
+                                               0.37)};
+  for (std::size_t index = canonical_begin; index < limits.size(); ++index) {
+    LedgerScope scope(limits[index]);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    Plan plan(raw, &destroy_cuda_direct_jk_plan);
+    require(scope.ledger->rejected > 0 && detail.empty() &&
+                diagnostic.device_bytes == scope.ledger->live &&
+                diagnostic.device_bytes <= limits[index] && plan->generated_exchange &&
+                plan->generated_exchange->force_capability &&
+                direct_jk_generated_full_range_value_available(*plan),
+            "optional allocation failure lost the generated owner or its resource accounting");
+    require(bool(plan->canonical_pairs) == (index >= rows_begin) &&
+                bool(plan->canonical_row_prefix) == (index >= metadata_begin),
+            "optional allocation failure left a partial source or discarded its earlier owner");
+    if (index < rows_begin)
+      require(!plan->canonical_cartesian && !plan->canonical_transform &&
+                  !plan->canonical_density && plan->canonical_pair_offsets.empty(),
+              "failed canonical source retained stale availability metadata");
+    if (index >= metadata_begin)
+      require(!plan->batch.shell_ao_offsets && !plan->batch.shell_pair_first &&
+                  !plan->batch.shell_pair_second && !plan->batch.total_shell_pairs,
+              "failed derivative metadata retained dangling pointers");
+    std::size_t op_index = 0;
+    for (auto op : {FockOperator::FullRange, FockOperator::ShortRange, FockOperator::LongRange}) {
+      auto spec = make_hf_fock_spec(FockSpin::Restricted);
+      spec.coulomb.present = false;
+      spec.exchange.op = op;
+      spec.exchange.omega = op == FockOperator::FullRange ? 0.0 : 0.37;
+      const auto expected = reference_exchange_from_eri(eri[op_index++], n, density);
+      direct_device(plan.get(), spec, density, {}, {}, expected, {});
+    }
+    plan.reset();
+    require(scope.ledger->live == 0, "failed optional preparation leaked tracked device storage");
+  }
+  // Through-f canonical preparation retains its established required behavior.
+  system.shells[1].angular_momentum = 3;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const auto minimum = cuda_direct_jk_device_bytes(1, generativeqc::molecule::ao_count(system), 2,
+                                                   system.shells.size(), 2, 1);
+  LedgerScope scope(minimum);
+  CudaDirectJkPlan* raw{};
+  CudaDirectJkDiagnostic diagnostic;
+  const auto status =
+      create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail);
+  Plan plan(raw, &destroy_cuda_direct_jk_plan);
+  require(status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && !plan && scope.ledger->rejected > 0 &&
+              scope.ledger->live == 0,
+          "through-f required allocation failure was hidden or leaked storage");
 }
 
 /** SPD full-range coverage must not send SR/LR back to ordered AO^4 work.
@@ -1830,6 +1956,7 @@ void direct_providers(bool through_f_response) {
 int main(int argc, char** argv) {
   try {
     if (argc == 2 && std::string(argv[1]) == "--spd-range-only") {
+      spd_optional_allocation_fallback();
       spd_canonical_range_values();
       std::cout << "CUDA SPD generated/full and canonical/SR/LR value gates PASS\n";
       return 0;
@@ -1839,6 +1966,7 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-values-only") {
+      spd_optional_allocation_fallback();
       spd_canonical_range_values();
       canonical_screening_rows();
       canonical_screened_values();
@@ -1864,6 +1992,7 @@ int main(int argc, char** argv) {
             "expected optional --mixed-census-only, --range-response-only, or "
             "--through-f-response");
     const bool through_f_response = argc == 2;
+    spd_optional_allocation_fallback();
     spd_canonical_range_values();
     direct_value_dispatch_selection();
     mixed_coulomb_work_census();
