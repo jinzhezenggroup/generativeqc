@@ -26,18 +26,18 @@ def test_storage_rejects_a_different_spin_specialization(
         pytest.skip("native admission requires a host C++ compiler")
     # Compile the actual production allocation function, not a Python replica.
     header = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
-    function = re.search(r"size_t allocation\([^\n]*\) \{.*?\n\}", header, re.DOTALL)
+    function = re.search(r"size_t allocation\([^)]*\) \{.*?\n\}", header, re.DOTALL)
     assert function is not None
     source = f"""#include <cstddef>
 #include <stdexcept>
 using std::size_t;
-constexpr size_t workers=32, record_stride=26, map_stride=8;
+constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_scratch_bytes=8<<20;
 constexpr unsigned stationary_spin_blocks={blocks};
 constexpr unsigned stationary_source_count=7;
 {function.group()}
 int main() {{
-  if (allocation(2, 3, 8, 4, 4, {blocks}) == 0) return 1;
-  try {{ allocation(2, 3, 8, 4, 4, {3 - blocks}); }}
+  if (allocation(2, 3, 8, 4, 4, {blocks}, 4) == 0) return 1;
+  try {{ allocation(2, 3, 8, 4, 4, {3 - blocks}, 4); }}
   catch (const std::invalid_argument&) {{ return 0; }}
   return 2;
 }}
