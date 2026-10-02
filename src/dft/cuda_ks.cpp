@@ -1921,10 +1921,16 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     // The resident nonlocal replay body overwrites raw full-grid features in
-    // stream order. The last completed physical body therefore leaves the same
-    // final-density feature lease as ordinary stage_xc(). Graph replay remains
-    // disabled for nonlocal composition.
-    if (impl_->generation != impl_->final_generation)
+    // stream order. A terminal iteration does not copy its proposal back into
+    // density, so at most one already-submitted second body sees the unchanged
+    // final density. Its feature overwrite is therefore still the final-state
+    // lease even though logical generation publication includes that bounded
+    // speculative body. Graph replay remains disabled for nonlocal composition.
+    const bool exact_generation = impl_->generation == impl_->final_generation;
+    const bool bounded_terminal_overwrite =
+        impl_->device_chunk_mode && impl_->generation > impl_->final_generation &&
+        impl_->generation - impl_->final_generation < kCudaKsChunkCapacity;
+    if (!exact_generation && !bounded_terminal_overwrite)
       throw std::logic_error("CUDA KS resident nonlocal features are not the final generation");
     if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient || !impl_->xc_layout.npoint)
       throw std::logic_error("CUDA KS resident nonlocal feature storage is unavailable");
