@@ -60,7 +60,9 @@ struct CudaDirectJkPlan {
    * a faster default. Set before enqueueing to compare retained sources without
    * changing capability, precision, derivative ownership or public API. */
   bool bounded_value_opt_in{false};
-  /** Automatic symmetry-canonical source for through-f plans. Angular buckets
+  /** Optional symmetry-canonical source for uncovered operators/classes. SPD
+   * full-range generated owners retain priority; SR/LR also use this source.
+   * Angular buckets
    * keep each kernel's recurrence order fixed, including f-shell quartets.
    * All storage is charged to the existing optional provider budget. */
   const std::int32_t* canonical_pairs{};

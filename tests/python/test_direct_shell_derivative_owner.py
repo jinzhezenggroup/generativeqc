@@ -203,7 +203,12 @@ def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     assert "launch_bounded_shell_range_exchange_source(" in owner
     assert "p.force_cursor, range," in owner
     assert "p.force_cursor, false, true" in owner
-    schedule = direct[direct.index("info.schedule = plan->generated_exchange") :]
+    # The diagnostic expression can wrap after '=' when another fallback label
+    # is added. Check its policy independently of clang-format's line wrapping.
+    normalized = " ".join(direct.split())
+    schedule = normalized[
+        normalized.index("info.schedule = plan->generated_exchange") :
+    ]
     schedule = schedule[: schedule.index("} else if (plan->generated_coulomb)")]
     assert "direct_jk_bounded_value_enabled(*plan)" in schedule
     assert "bounded_value_capability" not in schedule

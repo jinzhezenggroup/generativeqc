@@ -546,6 +546,135 @@ std::vector<double> reference_range_exchange(const generativeqc::core::System& s
   return reference_exchange_from_eri(eri, generativeqc::molecule::ao_count(system), density);
 }
 
+/** SPD full-range coverage must not send SR/LR back to ordered AO^4 work.
+ * Compare independently formed CPU ERIs at two geometries, including arbitrary
+ * density orientation. Count actual source work separately from endpoint time.
+ */
+void spd_canonical_range_values() {
+  for (unsigned angular : {0U, 1U, 2U}) {
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      generativeqc::core::System first;
+      first.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+      first.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, angular, {{0.5, 1.0}}}};
+      if (angular == 2U) first.shells.push_back({0, 1, {{0.7, 1.0}}});
+      first.electron_count = 2;
+      first.basis_representation = representation;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(first, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      auto second = first;
+      second.atoms[1].position[2] += 0.17;
+      const auto n = generativeqc::molecule::ao_count(first);
+      const auto matrix = n * n;
+      std::vector<double> alpha(2U * matrix), beta(2U * matrix);
+      for (std::size_t index = 0; index < alpha.size(); ++index) {
+        alpha[index] = std::cos(0.31 * (index / n) + 0.17 * (index % n)) / n;
+        beta[index] = std::sin(0.23 * (index / n) - 0.37 * (index % n)) / n;
+      }
+      CudaDirectJkPlan* raw{};
+      CudaDirectJkDiagnostic diagnostic;
+      constexpr std::size_t budget = 64U << 20;
+      require(create_cuda_direct_jk_plan(0, {first, second}, 1, 0.0, budget, &raw, diagnostic,
+                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+          raw, &destroy_cuda_direct_jk_plan);
+      require(plan->canonical_pairs && plan->canonical_cartesian && plan->canonical_row_prefix &&
+                  plan->generated_exchange && plan->generated_exchange->force_capability &&
+                  direct_jk_generated_full_range_value_available(*plan) &&
+                  diagnostic.device_bytes <= budget,
+              "SPD range source displaced generated full-range ownership or exceeded budget");
+      std::size_t primitives = 0;
+      for (const auto& shell : first.shells) primitives += 2U * shell.primitives.size();
+      const auto minimum =
+          cuda_direct_jk_device_bytes(2, n, 4, 2U * first.shells.size(), primitives, 1);
+      // At the exact old generated-owner capacity, the new optional source
+      // must disappear while the full-range value/force owner remains intact.
+      const auto generated_budget = minimum + plan->generated_exchange->device_bytes;
+      CudaDirectJkPlan* constrained_raw{};
+      CudaDirectJkDiagnostic constrained_diagnostic;
+      require(
+          create_cuda_direct_jk_plan(0, {first, second}, 1, 0.0, generated_budget, &constrained_raw,
+                                     constrained_diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> constrained(
+          constrained_raw, &destroy_cuda_direct_jk_plan);
+      require(!constrained->canonical_pairs &&
+                  direct_jk_generated_full_range_value_available(*constrained) &&
+                  constrained->generated_exchange->force_capability &&
+                  constrained_diagnostic.device_bytes == generated_budget,
+              "optional canonical range storage displaced the constrained SPD owner");
+      DeviceMatrix census(std::vector<double>(2U, 0.0));
+      plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(census.pointer);
+      const auto source_n = static_cast<std::size_t>(plan->canonical_batch.nbf);
+      const auto pairs = source_n * (source_n + 1U) / 2U;
+      const auto quartets = 2U * pairs * (pairs + 1U) / 2U;
+      const std::array<std::vector<double>, 2> full_eri{
+          generativeqc::integrals::build_integrals(first, false).eri,
+          generativeqc::integrals::build_integrals(second, false).eri};
+      for (auto op : {FockOperator::FullRange, FockOperator::ShortRange, FockOperator::LongRange}) {
+        constexpr double omega = 0.37;
+        const auto range = op == FockOperator::ShortRange
+                               ? generativeqc::integrals::CoulombRange::Short
+                               : generativeqc::integrals::CoulombRange::Long;
+        const std::array<std::vector<double>, 2> range_eri{
+            op == FockOperator::FullRange
+                ? full_eri[0]
+                : generativeqc::integrals::build_range_eri(first, range, omega),
+            op == FockOperator::FullRange
+                ? full_eri[1]
+                : generativeqc::integrals::build_range_eri(second, range, omega)};
+        for (auto spin : {FockSpin::Restricted, FockSpin::Unrestricted})
+          for (bool want_j : {false, true})
+            for (bool want_k : {false, true}) {
+              auto spec = make_hf_fock_spec(spin);
+              spec.coulomb.present = want_j;
+              spec.exchange.present = want_k;
+              spec.exchange.op = op;
+              spec.exchange.omega = op == FockOperator::FullRange ? 0.0 : omega;
+              std::vector<double> expected_j, expected_a, expected_b;
+              for (std::size_t item = 0; item < 2U; ++item) {
+                const std::vector<double> a(alpha.begin() + item * matrix,
+                                            alpha.begin() + (item + 1U) * matrix);
+                const std::vector<double> b(beta.begin() + item * matrix,
+                                            beta.begin() + (item + 1U) * matrix);
+                if (want_j) {
+                  auto j_spec = make_hf_fock_spec(spin);
+                  j_spec.exchange.present = false;
+                  const auto j = build_exact_direct_jk(
+                      resolve_fock_build(j_spec, FockBackend::Cpu, 0.0), n, full_eri[item], a,
+                      spin == FockSpin::Unrestricted ? b : std::vector<double>{});
+                  expected_j.insert(expected_j.end(), j.coulomb.begin(), j.coulomb.end());
+                }
+                if (want_k) {
+                  const auto ka = reference_exchange_from_eri(range_eri[item], n, a);
+                  expected_a.insert(expected_a.end(), ka.begin(), ka.end());
+                  if (spin == FockSpin::Unrestricted) {
+                    const auto kb = reference_exchange_from_eri(range_eri[item], n, b);
+                    expected_b.insert(expected_b.end(), kb.begin(), kb.end());
+                  }
+                }
+              }
+              direct_device(plan.get(), spec, alpha, beta, expected_j, expected_a, expected_b);
+              std::array<std::uint64_t, 2> work{};
+              check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                               cudaMemcpyDeviceToHost));
+              const bool canonical = want_k && op != FockOperator::FullRange;
+              require(work[0] == (canonical ? quartets : 0U) &&
+                          work[1] == (canonical ? quartets * (want_j ? 2U : 1U) : 0U),
+                      "SPD generated/canonical selection disagrees with actual source work");
+              direct_device(constrained.get(), spec, alpha, beta, expected_j, expected_a,
+                            expected_b);
+            }
+      }
+      std::cout << "{\"spd_source_aos\":" << source_n << ",\"batch\":2,\"lr_quartets\":" << quartets
+                << ",\"device_bytes\":" << diagnostic.device_bytes
+                << ",\"generated_only_bytes\":" << generated_budget << "}\n";
+    }
+  }
+}
+
 /** Qualify the through-f shell value owner and retain the canonical source as
  * the independent range/resource fallback. CPU integral matrices are an oracle
  * only; production never borrows them. */
@@ -1700,11 +1829,17 @@ void direct_providers(bool through_f_response) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--spd-range-only") {
+      spd_canonical_range_values();
+      std::cout << "CUDA SPD generated/full and canonical/SR/LR value gates PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--canonical-work-only") {
       canonical_work_census();
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-values-only") {
+      spd_canonical_range_values();
       canonical_screening_rows();
       canonical_screened_values();
       canonical_one_electron_reuse();
@@ -1729,6 +1864,7 @@ int main(int argc, char** argv) {
             "expected optional --mixed-census-only, --range-response-only, or "
             "--through-f-response");
     const bool through_f_response = argc == 2;
+    spd_canonical_range_values();
     direct_value_dispatch_selection();
     mixed_coulomb_work_census();
     mixed_coulomb_work_census(true);
