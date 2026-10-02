@@ -14,8 +14,8 @@ namespace generativeqc::scf {
 
 /** Select resident value sources without changing the requested mathematics.
  * Generated J/K are exact FP64 full-range consumers on the same provider stream.
- * Mixed-J, range-separated K and missing optional capacity deliberately retain
- * the generic source.
+ * Through-f SR/LR K may use the retained bounded shell owner; mixed-J and
+ * missing optional capacity deliberately retain the generic source.
  */
 struct DirectJkValueDispatch {
   bool generated_coulomb{}, generated_exchange{}, generic_coulomb{}, generic_exchange{};
@@ -98,8 +98,14 @@ inline bool direct_jk_generated_full_range_value_available(const CudaDirectJkPla
  * does not select the SCF value schedule. */
 inline bool direct_jk_generated_exchange_value_available(const CudaDirectJkPlan& plan,
                                                          const FockBuildSpec& spec) noexcept {
-  return direct_jk_generated_full_range_value_available(plan) && spec.derivative_order == 0 &&
-         spec.exchange.present && spec.exchange.op == FockOperator::FullRange;
+  if (spec.derivative_order != 0 || !spec.exchange.present || !plan.generated_exchange ||
+      !plan.generated_exchange->shared)
+    return false;
+  if (spec.exchange.op == FockOperator::FullRange)
+    return direct_jk_generated_full_range_value_available(plan);
+  return plan.generated_exchange->bounded_value_capability && spec.exchange.omega > 0.0 &&
+         (spec.exchange.op == FockOperator::ShortRange ||
+          spec.exchange.op == FockOperator::LongRange);
 }
 
 }  // namespace generativeqc::scf
