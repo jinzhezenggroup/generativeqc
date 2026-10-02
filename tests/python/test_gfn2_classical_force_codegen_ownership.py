@@ -1,10 +1,9 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
-SOURCE = (
-    ROOT / "src/xtb/native/src/backends/cuda/gfn2_classical_force.cu"
-).read_text(encoding="utf-8")
+SOURCE = (ROOT / "src/xtb/native/src/backends/cuda/gfn2_classical_force.cu").read_text(
+    encoding="utf-8"
+)
 
 
 def _between(start: str, end: str) -> str:
