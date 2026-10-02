@@ -15,6 +15,7 @@ from pyscf import cc, gto, scf
 from pyscf.cc import ccsd_t_lambda
 from pyscf.grad import ccsd_t as gradients
 
+from benchmarks._retention import raw_output_path
 from benchmarks.readme_hf_scaling import scaling_cases
 
 
@@ -22,7 +23,7 @@ def main() -> None:
     """Keep corrected triples Lambda response separate from production code."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--atoms", nargs="+", type=int, default=[6, 12, 24])
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if pyscf.__version__ != "2.14.0":
         raise RuntimeError("reference qualification requires PySCF 2.14.0")

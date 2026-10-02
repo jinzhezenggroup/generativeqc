@@ -15,6 +15,7 @@ from time import perf_counter
 
 from generativeqc import Calculator
 
+from benchmarks._retention import raw_output_path
 from benchmarks.readme_hf_scaling import scaling_cases
 
 
@@ -25,7 +26,7 @@ def main() -> None:
     parser.add_argument("--forces", action="store_true")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--budget", type=int, default=8 << 30)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     atoms = scaling_cases()[f"water-{args.atoms}"].atoms
     moved = [

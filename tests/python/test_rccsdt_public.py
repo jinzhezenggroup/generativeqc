@@ -19,6 +19,16 @@ GRADIENTS = ROOT / "tests/reference_data/cc/gradients"
 TRIPLES = ROOT / "tests/reference_data/cc/rccsd-t.json"
 
 
+def test_force_rejects_unqualified_larger_cluster() -> None:
+    """Larger reference fixtures do not silently broaden the public domain."""
+    oracle = json.loads((GRADIENTS / "water_clusters_ccsdt.json").read_text())
+    atoms = next(row["inputs"] for row in oracle["rows"] if row["atoms"] == 24)
+    with pytest.raises(
+        NotImplementedError, match="force AO dimension exceeds its qualified domain"
+    ):
+        _calculator().singlepoint(atoms, properties=("energy", "forces"))
+
+
 @pytest.mark.parametrize(
     "atoms_count",
     (6, 12) if os.environ.get("GENERATIVEQC_RCCSDT_LARGE_TEST") == "1" else (6,),
