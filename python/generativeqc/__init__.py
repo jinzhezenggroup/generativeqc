@@ -90,6 +90,7 @@ from .force_aware_scf import (
     ScfForceErrorEstimate,
     ScfForceErrorEstimator,
 )
+from .initial_guess import InitialGuessSpec
 from .ks import FunctionalSpec, KsOptions
 from .ks_diagnostics import (
     KsDiagnostic,
@@ -183,6 +184,7 @@ __all__ = [
     "HFConvergence",
     "HFPhysicalResidualAudit",
     "InactiveEigensolverProfileEntry",
+    "InitialGuessSpec",
     "KsDiagnostic",
     "KsEnergyComponents",
     "KsIteration",

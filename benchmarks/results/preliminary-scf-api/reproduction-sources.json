@@ -1,0 +1,154 @@
+{
+  "format_version": 1,
+  "native_library_receipts": [
+    {
+      "build_source_revision": "6bf930be60b688fe5917d8fb03464cb44c37be58",
+      "build_source_tree": "5783753bfad4cbef30d318df1e14a22bef8b8a43",
+      "equivalent_public_build_revision": "f955122039e0f90d5adb11c921396a90a0b3f0e7",
+      "library_sha256": "82856b490be279ecde772d2feb6684953271246abac94c5f3748fe945f922c24",
+      "production_source_sha256": "50fa5bd80f608a9f02c54a1463bf841d8dfb5beb101bce787b4dbb976e96fc89",
+      "receipt_scope": "Original frozen CPU RelWithDebInfo binary; see immutable native-build-provenance.json. Not a follow-up rebuild."
+    },
+    {
+      "build_source_revision": "c49e93cfb5419f707c1b67abe7d9249d0524f7d6",
+      "build_source_tree": "b668b7facf642364dae7cd461aacb174fc7479d3",
+      "library_sha256": "062fde24c94a5466e55a144e436e262b6d4671b26366d10d553518af247e0e93",
+      "production_source_sha256": "ba040420e0cfa7bc9665fe3e1a5bc8068fd26ce189304ef89196cacdca2a775b",
+      "receipt_scope": "Recorded post-integration native library; build-identity recompilation at c49. Reused for separately passed planner/ABI regression and normal/-fshort-enums client checks. It was NOT rebuilt after the planner/ABI repair and is NOT the historical timing binary."
+    }
+  ],
+  "scope": "Checksum-bound admission metadata for NEW reproductions only. Historical scientific evidence and binary/source receipts are immutable. Unknown source hashes fail closed. Unknown rebuilt library hashes are recorded without invented build equivalence.",
+  "source_hash_definition": "SHA256 of canonical JSON path-to-file-SHA256 map for tracked/existing and untracked production files under src/include/python/cmake and CMakeLists.txt; sorted keys and compact separators",
+  "sources": [
+    {
+      "id": "frozen-measured-2026-10-02",
+      "kind": "frozen-measured-source",
+      "production_source_sha256": "50fa5bd80f608a9f02c54a1463bf841d8dfb5beb101bce787b4dbb976e96fc89",
+      "public_revision": "f955122039e0f90d5adb11c921396a90a0b3f0e7",
+      "public_source_url": "https://github.com/jinzhezenggroup/generativeqc/commit/f955122039e0f90d5adb11c921396a90a0b3f0e7",
+      "public_tree": "5783753bfad4cbef30d318df1e14a22bef8b8a43",
+      "review_scope": "Exact frozen production-source map. Public source tree equals the historical native build tree; the measured checkout adds only tests/notes. A rerun still produces NEW measurements.",
+      "reviewed_compatible_library_sha256": [
+        "82856b490be279ecde772d2feb6684953271246abac94c5f3748fe945f922c24"
+      ]
+    },
+    {
+      "id": "cuda-integrated-2026-10-02",
+      "kind": "reviewed-follow-up-source",
+      "production_source_sha256": "ba040420e0cfa7bc9665fe3e1a5bc8068fd26ce189304ef89196cacdca2a775b",
+      "public_revision": "04cef391cbe2d2ca13be60f9b336f9704b891301",
+      "public_source_url": "https://github.com/jinzhezenggroup/generativeqc/commit/04cef391cbe2d2ca13be60f9b336f9704b891301",
+      "public_tree": "2e1a209f952521f3347dc213c67fe7cd152d921a",
+      "review_scope": "Reviewed follow-up integration of the 16 listed CUDA-related production files. Not the measured source, and no historical timing or numerical qualification is transferred to it. All runs are NEW.",
+      "reviewed_compatible_library_sha256": [
+        "062fde24c94a5466e55a144e436e262b6d4671b26366d10d553518af247e0e93"
+      ],
+      "reviewed_production_changes": [
+        {
+          "after_sha256": "26d8ce66c99bd8c7c00ce7ad850a30445f5835a8f77f08b6f02718190787ec04",
+          "before_sha256": "d5a5fa7abdc67de04c887bb5cab467ab7ac5ec118854b143339b15468bf12208",
+          "path": "python/generativeqc_compiler/method/df_hf_response_cuda.py"
+        },
+        {
+          "after_sha256": "5434fb24a1e4c3f9d6fc28a4633fe42cc2d47533564691f8a27cd6b01222bf96",
+          "before_sha256": "530ef16c3988c825400bba2d0685f241700c93c42b9a0835f5788ba54d28519b",
+          "path": "src/cc/cuda_solver.cu"
+        },
+        {
+          "after_sha256": "2e88b09fefb77fbeb48ef591511474c254a42fcc1b5b7e700aaaec716177e3f2",
+          "before_sha256": "8d86473ce947e63a0d4326ca9885bb77e01faa529b805a856b08e275048b4337",
+          "path": "src/dft/cuda_ks.cpp"
+        },
+        {
+          "after_sha256": "4339bd811c4eb3e3b92d172394c365bbfa4e17b5db1f0bc44fcd189c43eae545",
+          "before_sha256": "74359b394a9c0a3c703202be771de5176198851e4d3d30d6ab8c3112a8d9c2ec",
+          "path": "src/scf/cuda/df_response_weights.cu"
+        },
+        {
+          "after_sha256": "5b4167cfe7d765cb59e314483bbc77bacfb9e3ee0467a30329348213deef3506",
+          "before_sha256": "ec660ca61f4000032e9ff53f09c84a85b60310a428f0eeba337fe864fb18b894",
+          "path": "src/scf/cuda/direct_bounded_contraction.cuh"
+        },
+        {
+          "after_sha256": "8bf2f25adab542de991486e250d496257b52e11257df3e6b85676f85b926b46a",
+          "before_sha256": "ce523bbc85c4cdfe1aaf716db493a0472137e2d2197c992e820e7011eea443cd",
+          "path": "src/scf/cuda/direct_bounded_fallback.cu"
+        },
+        {
+          "after_sha256": "a96da6ecf6a5efae417507a39a0fd8234f3a12dc8f414c734c7a03ca83656072",
+          "before_sha256": "ac4f113348e677a8d2a27ab1e2972a2c450f3e0df8ad44d5e4913347680927e1",
+          "path": "src/scf/cuda/direct_bounded_fallback.hpp"
+        },
+        {
+          "after_sha256": "08113a8d275b1f9a6b3d83bff0ee8368610f0073e75af6234555e0c6064ff15e",
+          "before_sha256": "9945f4f257b5c4f817c8dae144d263b00c83aad6d6f715f0dedde31e24d7f144",
+          "path": "src/scf/cuda/direct_coulomb.cpp"
+        },
+        {
+          "after_sha256": "f5ba291302591097b33c0d95eac86b3d01057002ddbc0676b541971303f32110",
+          "before_sha256": "3c3b43e7d8186f8a8dad934168eb2b1b15f606f215ca765d8888685ef4444e14",
+          "path": "src/scf/cuda/direct_coulomb.hpp"
+        },
+        {
+          "after_sha256": "6f4d4d913d9149237b299b1033661dc626c6e1f54cf0197d0b0f79be9116356f",
+          "before_sha256": "19ae105e522121b75145f162e3c7d087cc5b937e68d54f5a5c83d7af9a87b71b",
+          "path": "src/scf/cuda/direct_fock_quartet.cuh"
+        },
+        {
+          "after_sha256": "66d655f7d0af1d6f1cea0e73c7e33a57d0d634c66852b96386259dfa62b5f5c7",
+          "before_sha256": "6ea5a6ce980c5709ca6de1d4d917b2fb6a5b5f398e89454e526ee79de5349742",
+          "path": "src/scf/cuda/direct_jk.cpp"
+        },
+        {
+          "after_sha256": "8d3c70122759242898ca431d13553d0c19b0e86c5facb168d936a6584b58a011",
+          "before_sha256": "76f91f98283366f4d0de8b3d71a6993aa2fc453cb0cc19802ab0d4f6455e68a7",
+          "path": "src/scf/cuda/direct_jk_kernels.cu"
+        },
+        {
+          "after_sha256": "47f7347f77da533bdd5b162715d8cd9e5d56ba6158494b0703b4f582e10b58a3",
+          "before_sha256": "a4a6413c1f034342706cdfc59b36681ddc92d78eb663f0b87407e3dee70fbeec",
+          "path": "src/scf/cuda/direct_jk_kernels.hpp"
+        },
+        {
+          "after_sha256": "8249a6f428daf2d6de36ee547072076402b9a713df02b9d10c37de64fba4469e",
+          "before_sha256": "0379a11aa9fbee1b99e4714ab085439b39f4e5ed5e02604f1b897260e84172c2",
+          "path": "src/scf/cuda/direct_jk_plan.hpp"
+        },
+        {
+          "after_sha256": "27468cbccdd22e419d7135b14f59de60bbd2a1f14bf06806500e3a852327b4dd",
+          "before_sha256": "3871612ca353993ccd1d73624b88a9a92618acd3a441375d81f7fb8b523dd5d1",
+          "path": "src/xtb/native/CUDA_SOURCE_PROVENANCE.json"
+        },
+        {
+          "after_sha256": "ac15635c54b9c5c88d004e11ce9560c71f9b2fe608fa176920e0f45579830a98",
+          "before_sha256": "455acea343f8acd9f4f0edcce38d605ada07942bfe94e49876deff9e158bbbbf",
+          "path": "src/xtb/native/src/backends/cuda/gfn2_classical_force.cu"
+        }
+      ]
+    },
+    {
+      "id": "planner-abi-follow-up-2026-10-02",
+      "kind": "reviewed-follow-up-source",
+      "parent_mapping": "cuda-integrated-2026-10-02",
+      "production_source_sha256": "67bfd5ebc0454b0783166f63bf5fa01a9823a448b5d0d9398b6381e7565b321a",
+      "review_revision": "df7f07acdecd18b5f4abe8981368c2ff834536cb",
+      "review_scope": "Untimed follow-up to the CUDA integration: CPU Python LDA g-shell decline/resource planning and portable C initial-guess tag width (int32_t alias, including -fshort-enums clients) changed. These are explicit semantic/ABI changes, not byte-equivalence to the measured CPU source. Focused repair/API and normal/short-enum client tests are separate regression evidence; no SCF timing rerun or native rebuild is claimed.",
+      "review_tree": "5d7d5674628759ba840575863f5cdb075c501a9b",
+      "reviewed_compatible_library_sha256": [
+        "062fde24c94a5466e55a144e436e262b6d4671b26366d10d553518af247e0e93"
+      ],
+      "reviewed_production_changes": [
+        {
+          "after_sha256": "0fc91c92485a815bc808aa53b12aec927178a9684a780ae4cf23ba9da719f769",
+          "before_sha256": "b71c35b2369b8d1b5add79cccccbdd4511579e0c83ee963e54ff7d2eaa0066e0",
+          "path": "include/generativeqc/generativeqc.h"
+        },
+        {
+          "after_sha256": "adb2bbc4b5d81e1a2f6cde1ab9544cebcbda9cbcb60a061d686d3dd36cf49c10",
+          "before_sha256": "42b50010c1287c25745bc833d7ebb92bb67c62ee7ed9aca6d6744efd6dabe26f",
+          "path": "python/generativeqc/initial_guess.py"
+        }
+      ]
+    }
+  ]
+}

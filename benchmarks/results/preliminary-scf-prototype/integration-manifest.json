@@ -1,0 +1,36 @@
+{
+  "pr": 1683,
+  "previous_remote_head": "da851e9aada2cd4ae386aaa4af3be2100a852ee3",
+  "master": "0e8ae228e04ee0e04d4a1e7b9def38d759de8f45",
+  "local_head": "8ba615aacd9f02708b39782cc71b68f27bbe1af6",
+  "tree": "42cc3f8f871523a4d48304f520a5e967e61cea6e",
+  "parents": [
+    "da851e9aada2cd4ae386aaa4af3be2100a852ee3",
+    "0e8ae228e04ee0e04d4a1e7b9def38d759de8f45"
+  ],
+  "cli_files_changed_from_reviewed_head": [],
+  "prior_build_preserved_at": "/workspace/scratch/1b7630fc9eb4/native-cli-final-evidence/prior-cpu-review",
+  "validation": "passed",
+  "build_kind": "Audited incremental execution of CMake/Ninja-generated commands, without editing Ninja logs; not a full or clean build",
+  "source_build_directory": "/workspace/scratch/1b7630fc9eb4/gqc-cli-master-integration-1683/build/cpu-review",
+  "changed_objects_recompiled": [
+    "CMakeFiles/generativeqc.dir/src/methods/dft_method.cpp.o",
+    "CMakeFiles/generativeqc_dft_api_tests.dir/tests/native/test_dft_api.cpp.o"
+  ],
+  "retained_object_hashes_verified": 209,
+  "generated_commands_compared": 250,
+  "generated_ccache_launchers_verified": 211,
+  "relinked_targets": 7,
+  "ccache_version": "4.14",
+  "ccache_cacheable_calls": 4,
+  "ccache_misses": 4,
+  "ccache_hits": 0,
+  "ctests_passed": 16,
+  "route_energy_force_deltas": "all zero",
+  "basis_primitives_matched": 818,
+  "independent_pyscf_df_error": 1.3322676295501878e-15,
+  "precommit": "passed",
+  "installed_native_dft_empty_path": "passed",
+  "bse_installed_license_cmp": "passed",
+  "library_sha256": "670c81365bde477f32e5a7fc6af1cff5e489a42e118651aca77090fd00626258"
+}

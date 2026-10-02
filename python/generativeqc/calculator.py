@@ -36,6 +36,7 @@ from .accuracy import AccuracyAssessment, ResolvedModel, TargetAccuracy
 from .basis import BasisSet
 from .basis_capabilities import require_basis, resolved_basis_metadata
 from .elements import checked_integer
+from .initial_guess import InitialGuessSpec, read_initial_guess_diagnostic
 from .profiles import canonical_hash
 
 if TYPE_CHECKING:
@@ -183,6 +184,7 @@ class Calculator:
         target_accuracy: TargetAccuracy | None = None,
         resource_budget: typing.Any = None,
         ks_options: typing.Any = None,
+        initial_guess: InitialGuessSpec | None = None,
         dispersion_memory_budget_bytes: int = 256 * 1024 * 1024,
     ) -> None:
         """Create a calculator, optionally selecting CPU or CUDA DF.
@@ -229,6 +231,11 @@ class Calculator:
             if not isinstance(resource_budget, ResourceBudget):
                 raise TypeError("resource_budget must be a ResourceBudget")
         self._resource_budget = resource_budget
+        if initial_guess is not None and not isinstance(
+            initial_guess, InitialGuessSpec
+        ):
+            raise TypeError("initial_guess must be an InitialGuessSpec or None")
+        self._initial_guess = initial_guess
         if (
             type(dispersion_memory_budget_bytes) is not int
             or not 0 < dispersion_memory_budget_bytes < 2**64
@@ -1010,6 +1017,37 @@ class Calculator:
                     "DFT accuracy-model identities are not implemented yet"
                 )
 
+        if self._initial_guess is not None:
+            from .initial_guess import require_initial_guess_library
+
+            restricted = self._method == _native.METHOD_RHF or (
+                self._ks_options is not None
+                and self._ks_options.method_ir.spin == "unpolarized"
+            )
+            if (
+                self._device_name != "cpu"
+                or self._precision_mode != _native.PRECISION_FP64
+                or self._density_fitting_mode != _native.DENSITY_FITTING_NONE
+                or not restricted
+                or basis_has_ecp
+                or self._capabilities.family
+                not in ("hartree_fock", "density_functional")
+            ):
+                raise NotImplementedError(
+                    "preliminary SCF requires CPU FP64 all-electron restricted exact HF/KS"
+                )
+            require_initial_guess_library(self._library)
+            self._capabilities = replace(
+                self._capabilities,
+                supported_properties=frozenset({"energy"}),
+                supported_second_order=frozenset(),
+            )
+
+    @property
+    def initial_guess(self) -> InitialGuessSpec | None:
+        """Immutable execution-only cold-start policy; None preserves core guessing."""
+        return self._initial_guess
+
     @property
     def capabilities(self) -> MethodCapabilities:
         """Report capabilities for the selected backend/basis execution context."""
@@ -1108,6 +1146,8 @@ class Calculator:
             descriptor.ccsd_damping = self._ccsd_damping
             descriptor.ccsd_level_shift = self._ccsd_level_shift
             descriptor.ccsd_frozen_core = self._ccsd_frozen_core
+        if self._initial_guess is not None:
+            descriptor.initial_guess = ctypes.pointer(self._initial_guess.native())
         return descriptor
 
     def _precision_provenance(
@@ -1636,6 +1676,27 @@ class Calculator:
         multiplicities: typing.Any = None,
         ks_options: typing.Any = None,
     ) -> typing.Any:
+        from .initial_guess import with_initial_guess_resources
+
+        systems = tuple(tuple(system) for system in systems)
+        request = self._base_resource_request(
+            systems,
+            charges=charges,
+            multiplicities=multiplicities,
+            ks_options=ks_options,
+        )
+        return with_initial_guess_resources(
+            request, self, systems, charges, multiplicities
+        )
+
+    def _base_resource_request(
+        self,
+        systems: typing.Any,
+        *,
+        charges: typing.Any = None,
+        multiplicities: typing.Any = None,
+        ks_options: typing.Any = None,
+    ) -> typing.Any:
         """Resolve this calculator's active scientific controls without executing."""
         if self._capabilities.family == "density_functional":
             if self._density_fitting_mode != _native.DENSITY_FITTING_NONE:
@@ -2148,6 +2209,7 @@ class Calculator:
                     precision=item.precision,
                     physical_residual_rms=item.physical_residual_rms,
                     ks_diagnostic=item.ks_diagnostic,
+                    initial_guess=item.initial_guess,
                     ks_transport_diagnostic=batch.ks_transport_diagnostics[0],
                     dispersion=item.dispersion,
                 )
@@ -2331,6 +2393,7 @@ class Calculator:
                 cc_performance=cc_performance,
                 physical_residual_rms=physical_residual_rms,
                 ks_diagnostic=ks_diagnostic,
+                initial_guess=read_initial_guess_diagnostic(self._library, calculation),
                 ks_transport_diagnostic=ks_transport_diagnostic,
             )
         finally:
