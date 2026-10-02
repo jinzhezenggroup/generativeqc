@@ -330,6 +330,7 @@ macro(generativeqc_configure_cuda_backend target)
     foreach(_input IN LISTS _generativeqc_identity_inputs)
       if(_input MATCHES "^python/generativeqc_compiler/(common|integral|xc|dft)/.*\\.(py|json)$" OR
          _input STREQUAL "python/generativeqc_compiler/__init__.py" OR
+         _input STREQUAL "python/generativeqc_compiler/method/stationary_resources.py" OR
          _input IN_LIST _generativeqc_stationary_contract_assets)
         list(APPEND _generativeqc_stationary_contract_inputs "${CMAKE_CURRENT_SOURCE_DIR}/${_input}")
       endif()
@@ -422,6 +423,7 @@ macro(generativeqc_configure_cuda_backend target)
           "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/stationary_gradient_cuda.cuh"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_cuda.py"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_gradient.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_resources.py"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/geometry_cuda.py"
         ARGS
@@ -499,6 +501,7 @@ macro(generativeqc_configure_cuda_backend target)
           "${CMAKE_CURRENT_SOURCE_DIR}/src/dft/stationary_gradient_cuda.cuh"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_cuda.py"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_gradient.py"
+          "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/stationary_resources.py"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/spec.py"
           "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/xc/geometry_cuda.py"
         ARGS

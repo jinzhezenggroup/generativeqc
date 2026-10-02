@@ -120,6 +120,7 @@ from generativeqc.ks import (
     resolve_ks_method,
     resolve_ks_options,
 )
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.dft.ao import jet_indices
 from generativeqc_compiler.dft.grid import GridSpec, MolecularGrid
 from generativeqc_compiler.dft.plan import plan_tiles
@@ -136,6 +137,11 @@ from generativeqc_compiler.method.stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
+)
+from generativeqc_compiler.method.stationary_resources import (
+    plan_stationary_cuda_resources,
+    stationary_cuda_allocation_bytes,
+    stationary_native_pair_reserve,
 )
 
 if _SOURCE_ONLY_FINDER in sys.meta_path:
@@ -249,13 +255,13 @@ PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
     "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
-    "aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e"
+    "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
     "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
-    "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
+    "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
 )
 PYTHON_GRID_CONTRACT_SHA256 = (
     "03a43444cd793167823c0c30c0b66b51c2a464d8f65946118dd781813dc7f0a4"
@@ -279,13 +285,13 @@ NATIVE_GRID_ABI_CONTRACT_SHA256 = (
     "d4930bf86b781cd4a77f152380439ac8a6b168d1846f42325bb2d6a3e7e638e4"
 )
 STATIONARY_AOT_CMAKE_CONTRACT_SHA256 = (
-    "7d95518ef56532d978c5015ee116b356f63a0599f45ca50e8e1ab452efc9574d"
+    "2ddd2b7a77c992bc9812914e1a31b8dbbc1a332d4fab8b3ec92c239ff6ff2228"
 )
 STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "34bc6b3c49fdb6661587b46f5aa374e911a2c921b5a6940661f5464347d64cf9"
+    "78e657ba5eb865ead768d7d18575977508bdd34ede9f2fc7a51aae3f09baa652"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -318,28 +324,28 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "89d3e7889d50a6a3ff1ca31c26ad2cc8e2f2dee72f4d66f3e9a717834fbfdb3c"
+    "2b7ff05ad84060c657b76576ef2afc3adf206262313ae681ae66db2ba021319a"
 )
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
+    "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
 )
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6"
+    "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "cb5d69c2486d3566af7bb61f42eabc51df3d0a514b1ee8a00e1e6a74a0339a9a"
+    "5f2e8924e1d97f1668edefc95caec70b96223244afadfc2aac97ad254d601b82"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
-    "e680ab29f69ce35c9758e4f3ebd916e889d3f553dc9816dd07e9b7b740624544"
+    "47b73fb800b28abeea23bdef2feab6c18b3c9747508b02522e322f758d5fe878"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
-    "0690d2e8ed965c27150051eb1f4957e26038a8c2e1307de13db8458df032fa7b"
+    "52e4b914ac2baa804db89f85f331f05835bdb4786e981777a6ea4303743d058a"
 )
 NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
-    "78b78cdf74f26e51d470452b94b872750a88770001ec51a8293f4f1685e4ba9f"
+    "fa3f0b989c571b4abd7d983fc0a6f3eafce3059a889b53c97bdd06bd416509fa"
 )
 NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
     "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -348,22 +354,22 @@ NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256 = (
     "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
 )
 NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
-    "b2356eca0b5eafd0e3c67f59d334a769e38df765fc730a4c839757204d0a455b"
+    "efc8f4643fdd271782ad62ecc29d387f279347bae98fb78fc3bb78146743ef80"
 )
 NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
-    "f555f778eaf4af1e8fac5e75e7f26d1d40827a43ee12f8c5a71ffe179a6a1891"
+    "4770b1100e26c8e79012054f25dedfe5857635342fff64ef1fe61eb97a047d8d"
 )
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
-    "8e860af42cfac78b7849f4d0b3f47f8d94d2ceeefb5ec2d0d2ce2a9a828565d8"
+    "680742eea07b5e65ee26b1e45820f865c26b06d35921eb85caa19cd8d59a3ed3"
 )
 NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "ed21f18ca4a41d861f0e96310d6a85ea56b03b46a3343fe8741b73cd0182434b"
+    "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -382,10 +388,19 @@ GRID_PLAN_DEFINITION = (
     "plan_tiles(basis, backend='cuda', order=2 if needs_first else 1, "
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
+GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
+    "de8487535c96e9dc73ab21f9e95dd86a5ac281751e4a814ecf49cf237da09c3b"
+)
+MINIMUM_SOURCE_BYTES_DEFINITION = (
+    "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
+    "points=tile_points, tasks=primitive_tile, spins=plan.spin_blocks, "
+    "sources=len(source_names), geometry_lanes=min(32, tile_points))"
+)
 SOURCE_BYTES_DEFINITION = (
-    "8 * (22 * primitive_tile + 2 * basis.nprimitive + 4 * n + "
-    "(579 + 3 * len(source_names)) * na + 3 * tile_points + "
-    "2 * plan.spin_blocks * n * n) + 256"
+    "plan_stationary_cuda_resources(atoms=na, aos=n, primitives=basis.nprimitive, "
+    "points=tile_points, tasks=primitive_tile, spins=plan.spin_blocks, "
+    "sources=len(source_names), target=target, budget_bytes=max_device_bytes - "
+    "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - native_geometry_reserve).allocation_bytes"
 )
 HOST_BOUND_DEFINITION = (
     "grid_plan.host_bytes + 8 * (34 * primitive_tile + "
@@ -396,7 +411,7 @@ HOST_BOUND_DEFINITION = (
     "4 * n + 80) + max((tp.host_bytes for tp in tensor_plans.values()), default=0)"
 )
 AVAILABLE_DEVICE_BYTES_DEFINITION = (
-    "max_device_bytes - grid_plan.peak_bytes - source_bytes"
+    "max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes"
 )
 GATE_PREDICATES = {
     "primitive_metric_range": "records > np.iinfo(np.uint64).max",
@@ -674,7 +689,16 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             STATIONARY_TASK_EXECUTOR_CONTRACT_SHA256,
         ),
     }
-    page_contract = {"public_wrapper_sha256": wrapper_digest}
+    resource_source = (
+        repository / "python/generativeqc_compiler/method/stationary_resources.py"
+    )
+    resource_digest = _lf_sha256(resource_source.read_bytes())
+    if resource_digest != GEOMETRY_RESOURCES_CONTRACT_SHA256:
+        raise RuntimeError("stationary CUDA geometry-resource contract changed")
+    page_contract = {
+        "public_wrapper_sha256": wrapper_digest,
+        "geometry_resources_sha256": resource_digest,
+    }
     for label, (class_name, method_name, expected_digest) in page_methods.items():
         class_node = classes.get(class_name)
         methods = (
@@ -777,6 +801,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "ingredients",
             "needs_first",
             "grid_plan",
+            "minimum_source_bytes",
             "source_bytes",
             "available",
             "host_bound",
@@ -798,6 +823,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "ingredients": INGREDIENTS_DEFINITION,
         "needs_first": NEEDS_FIRST_DEFINITION,
         "grid_plan": GRID_PLAN_DEFINITION,
+        "minimum_source_bytes": MINIMUM_SOURCE_BYTES_DEFINITION,
         "source_bytes": SOURCE_BYTES_DEFINITION,
         "available": AVAILABLE_DEVICE_BYTES_DEFINITION,
         "host_bound": HOST_BOUND_DEFINITION,
@@ -811,6 +837,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "ingredients": "native semilocal ingredient provenance",
         "needs_first": "grid derivative-order",
         "grid_plan": "grid-plan input",
+        "minimum_source_bytes": "minimum-source-bytes",
         "source_bytes": "source-bytes",
         "available": "available-device-bytes",
         "host_bound": "host-bound",
@@ -976,11 +1003,12 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "functional_ingredients_definition": INGREDIENTS_DEFINITION,
         "grid_derivative_order_definition": NEEDS_FIRST_DEFINITION,
         "grid_plan_definition": GRID_PLAN_DEFINITION,
+        "minimum_source_bytes_definition": MINIMUM_SOURCE_BYTES_DEFINITION,
         "source_bytes_definition": SOURCE_BYTES_DEFINITION,
         "host_bound_definition": HOST_BOUND_DEFINITION,
         "available_device_bytes_definition": AVAILABLE_DEVICE_BYTES_DEFINITION,
         "additional_device_admission": (
-            "additional_device_peak_bound < additional_device_budget"
+            "minimum_additional_device_bytes < additional_device_budget and additional_device_peak_bound <= additional_device_budget"
         ),
         "gate_predicates": dict(GATE_PREDICATES),
         "tile_points": default("tile_points"),
@@ -1283,18 +1311,35 @@ def _method_resources(
         # from the live budget gate before recording the required bytes.
         budget_bytes=(1 << 63) - 1,
     )
-    source_bytes = (
-        8
-        * (
-            22 * primitive_tile
-            + 2 * basis.nprimitive
-            + 4 * basis.nao
-            + (579 + 3 * len(source_names)) * atom_count
-            + 3 * tile_points
-            + 2 * plan.spin_blocks * basis.nao * basis.nao
-        )
-        + 256
+    shape = {
+        "atoms": atom_count,
+        "aos": basis.nao,
+        "primitives": basis.nprimitive,
+        "points": tile_points,
+        "tasks": primitive_tile,
+        "spins": plan.spin_blocks,
+        "sources": len(source_names),
+    }
+    minimum = stationary_cuda_allocation_bytes(
+        **shape, geometry_lanes=min(32, tile_points)
     )
+    native_reserve = min(
+        max(0, limits["additional_device_bytes"] - grid_plan.peak_bytes - minimum),
+        stationary_native_pair_reserve(
+            atoms=atom_count, aos=basis.nao, primitives=basis.nprimitive
+        ),
+    )
+    resources = plan_stationary_cuda_resources(
+        **shape,
+        target=cuda_target_info("sm_120"),
+        # Preserve a losing minimum-byte requirement instead of hiding it by
+        # throwing before the capacity report records the failure.
+        budget_bytes=max(
+            minimum,
+            limits["additional_device_bytes"] - grid_plan.peak_bytes - native_reserve,
+        ),
+    )
+    source_bytes = resources.allocation_bytes
     device_bound = grid_plan.peak_bytes + source_bytes
     host_bound = grid_plan.host_bytes + 8 * (
         34 * primitive_tile
@@ -1313,7 +1358,11 @@ def _method_resources(
         {
             "grid_tile_peak_bytes": grid_plan.peak_bytes,
             "stationary_source_bytes": source_bytes,
+            "stationary_geometry_lanes": resources.geometry_lanes,
+            "stationary_geometry_scratch_bytes": resources.geometry_scratch_bytes,
             "additional_device_peak_bound": device_bound,
+            "minimum_additional_device_bytes": grid_plan.peak_bytes + minimum,
+            "stationary_native_pair_reserve_bytes": native_reserve,
             "additional_device_budget": limits["additional_device_bytes"],
             "additional_host_numeric_bound": host_bound,
             "additional_host_budget": limits["additional_host_bytes"],
@@ -1409,7 +1458,13 @@ def _case_failures(
                     cap=limits[key],
                 )
             )
-    if memory["additional_device_peak_bound"] >= limits["additional_device_bytes"]:
+    if (
+        memory.get(
+            "minimum_additional_device_bytes", memory["additional_device_peak_bound"]
+        )
+        >= limits["additional_device_bytes"]
+        or memory["additional_device_peak_bound"] > limits["additional_device_bytes"]
+    ):
         failures.append(
             _failure(
                 "additional_device_budget",
@@ -2033,6 +2088,10 @@ def _build_report(
             for key, memory in method_memory.items()
         }
         maximum_memory = {
+            "minimum_additional_device_bytes": max(
+                item["minimum_additional_device_bytes"]
+                for item in method_memory.values()
+            ),
             "additional_device_peak_bound": max(
                 item["additional_device_peak_bound"] for item in method_memory.values()
             ),

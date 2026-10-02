@@ -71,6 +71,11 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryGradientPlan,
     StationaryMeanField,
 )
+from generativeqc_compiler.method.stationary_resources import (
+    plan_stationary_cuda_resources,
+    stationary_cuda_allocation_bytes,
+    stationary_native_pair_reserve,
+)
 from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 from generativeqc_compiler.xc._generated_native_semilocal import (
@@ -541,7 +546,7 @@ class _CudaSources:
         self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
-            [ct.c_int] * 3 + [ct.c_size_t] * 8 + [ct.POINTER(ct.c_void_p), *tail]
+            [ct.c_int] * 3 + [ct.c_size_t] * 10 + [ct.POINTER(ct.c_void_p), *tail]
         )
         lib.stationary_topology.argtypes = [
             ct.c_void_p,
@@ -685,6 +690,17 @@ class _CudaSources:
         ]
         lib.stationary_destroy.argtypes = [ct.c_void_p]
         lib.stationary_destroy.restype = None
+        self.resources = plan_stationary_cuda_resources(
+            atoms=basis.natom,
+            aos=basis.nao,
+            primitives=basis.nprimitive,
+            points=points,
+            tasks=records,
+            spins=spin_blocks,
+            sources=len(source_names),
+            target=compiler.target if target is None else target,
+            budget_bytes=budget,
+        )
         self._call(
             "stationary_create",
             device,
@@ -697,6 +713,8 @@ class _CudaSources:
             spin_blocks,
             page_work_budget,
             budget,
+            self.resources.geometry_lanes,
+            self.resources.geometry_threads,
             ct.byref(self.handle),
         )
         if profile_device:
@@ -1477,8 +1495,8 @@ class _CudaSources:
         return out
 
     def metrics(self) -> typing.Any:
-        values = (ct.c_uint64 * 14)()
-        if self.library.stationary_metrics(self.handle, values, 14):
+        values = (ct.c_uint64 * 18)()
+        if self.library.stationary_metrics(self.handle, values, 18):
             raise RuntimeError("stationary metrics unavailable")
         metrics = dict(
             zip(
@@ -1497,6 +1515,10 @@ class _CudaSources:
                     "d2h_calls",
                     "synchronizations",
                     "geometry_batches",
+                    "geometry_lane_capacity",
+                    "geometry_threads",
+                    "geometry_scratch_bytes",
+                    "geometry_peak_lanes",
                 ),
                 values,
             )
@@ -1929,6 +1951,7 @@ class PreparedStationaryCudaExecution:
                     "integral_terms": integral_terms,
                     "primitive_page_work_budget": page_work_budget,
                     "grid_allocation_bytes": grid_plan.allocation_bytes,
+                    "geometry_resources": asdict(sources.resources),
                 },
                 "tensor_plans": tuple(
                     (name, tensor_plans[name].identity) for name in sorted(tensor_plans)
@@ -2187,19 +2210,19 @@ def _complete_rks_cuda_gradient_diagnostic(
         active_ao_capacity=n,
         budget_bytes=max_device_bytes,
     )
-    source_bytes = (
-        8
-        * (
-            22 * primitive_tile
-            + 2 * basis.nprimitive
-            + 4 * n
-            + (579 + 3 * len(source_names)) * na
-            + 3 * tile_points
-            + 2 * plan.spin_blocks * n * n
-        )
-        + 256
+    # Admit the bounded fallback first. Optional lane expansion uses only the
+    # space left after every other retained force owner has been planned.
+    minimum_source_bytes = stationary_cuda_allocation_bytes(
+        atoms=na,
+        aos=n,
+        primitives=basis.nprimitive,
+        points=tile_points,
+        tasks=primitive_tile,
+        spins=plan.spin_blocks,
+        sources=len(source_names),
+        geometry_lanes=min(32, tile_points),
     )
-    available = max_device_bytes - grid_plan.peak_bytes - source_bytes
+    available = max_device_bytes - grid_plan.peak_bytes - minimum_source_bytes
     if available <= 0:
         raise ValueError("stationary additional-device budget exceeded")
     tensor_plans = {}
@@ -2289,6 +2312,41 @@ def _complete_rks_cuda_gradient_diagnostic(
             raise ValueError("ECP additional-host byte budget exceeded")
         if ecp_workspace > max_device_bytes:
             raise ValueError("ECP additional-device budget exceeded")
+    # Lane expansion is optional: retain the old native provider allowance so
+    # a tighter geometry budget cannot disable or OOM an already-admitted
+    # prepared integral path. If the old remainder was itself too small, keep
+    # all of it and leave that existing provider decision unchanged. The fitted
+    # provider has a separate resource contract, so preserve its full allowance
+    # rather than borrowing the Direct provider's one-electron estimate.
+    native_geometry_reserve = (
+        max(0, available - sum(value.peak_bytes for value in tensor_plans.values()))
+        if not ecp and bool(getattr(state._source, "density_fitted", False))
+        else min(
+            max(
+                0, available - sum(value.peak_bytes for value in tensor_plans.values())
+            ),
+            stationary_native_pair_reserve(
+                atoms=na, aos=n, primitives=basis.nprimitive
+            ),
+        )
+        if not ecp
+        and callable(getattr(state._source, "cuda_integral_derivatives", None))
+        else 0
+    )
+    source_bytes = plan_stationary_cuda_resources(
+        atoms=na,
+        aos=n,
+        primitives=basis.nprimitive,
+        points=tile_points,
+        tasks=primitive_tile,
+        spins=plan.spin_blocks,
+        sources=len(source_names),
+        target=target,
+        budget_bytes=max_device_bytes
+        - grid_plan.peak_bytes
+        - sum(value.peak_bytes for value in tensor_plans.values())
+        - native_geometry_reserve,
+    ).allocation_bytes
     cache = Path(cache)
     spec = state._source.grid_spec
     if prepared is None:
@@ -2445,15 +2503,29 @@ def _complete_rks_cuda_gradient_diagnostic(
                 source_before, grid_before = sources.metrics(), ao.metrics()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
+        fitted_integral_provider = getattr(
+            state._source, "density_fitted_integral_derivatives", None
+        )
+        direct_integral_provider = getattr(
+            state._source, "cuda_integral_derivatives", None
+        )
         use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
-        integral_provider = getattr(state._source, "cuda_integral_derivatives", None)
+        integral_provider = (
+            fitted_integral_provider
+            if use_fitted_integrals
+            else direct_integral_provider
+        )
         native_integral_budget = max_device_bytes - peak
         if not ecp and native_integral_budget > 0 and callable(integral_provider):
             with timeline.phase("prepared_stationary_integral_derivatives"):
-                native_integral = integral_provider(
-                    na,
-                    native_integral_budget,
-                    range_exchange=False,
+                native_integral = (
+                    integral_provider(na, native_integral_budget)
+                    if use_fitted_integrals
+                    else integral_provider(
+                        na,
+                        native_integral_budget,
+                        range_exchange=False,
+                    )
                 )
             if native_integral is not None:
                 native_integral_components, native_integral_resources = native_integral
@@ -2585,22 +2657,99 @@ def _complete_rks_cuda_gradient_diagnostic(
                 sources.nuclear(atom, other, charges)
         sources.flush()
         grid = state.grid
+        grid_points = len(grid.points)
+        resident_grid_provider = getattr(state._source, "cuda_resident_grid", None)
+        resident_grid = (
+            resident_grid_provider() if callable(resident_grid_provider) else None
+        )
+        if resident_grid is not None:
+            if (
+                resident_grid.device != device
+                or resident_grid.point_count != grid_points
+            ):
+                raise ValueError(
+                    "resident molecular-grid lease differs from stationary state"
+                )
+            points_per_atom = (
+                spec.radial_points * spec.angular_polar * spec.angular_azimuth
+            )
+            if points_per_atom <= 0 or grid_points != na * points_per_atom:
+                raise ValueError(
+                    "resident molecular grid is not the expected atom-major GridSpec"
+                )
+            if profile_device:
+                grid_residency = {
+                    "grid_owner_source": "profile-host-materialized-atom-major-index",
+                    "grid_owner_h2d_bytes": grid_points * 8,
+                    "grid_point_source": "exact-native-resident-grid",
+                    "grid_point_h2d_bytes": 0,
+                    "grid_weight_source": "profile-host-snapshot",
+                    "grid_weight_h2d_bytes": grid_points * 8,
+                    "grid_atomic_measure_source": "profile-host-snapshot",
+                    "grid_atomic_measure_h2d_bytes": grid_points * 8,
+                }
+            else:
+                grid_residency = {
+                    "grid_owner_source": "implicit-atom-major-index",
+                    "grid_owner_h2d_bytes": 0,
+                    "grid_point_source": "exact-native-resident-grid",
+                    "grid_point_h2d_bytes": 0,
+                    "grid_weight_source": "exact-native-resident-grid",
+                    "grid_weight_h2d_bytes": 0,
+                    "grid_atomic_measure_source": "exact-native-resident-grid",
+                    "grid_atomic_measure_h2d_bytes": 0,
+                }
+        else:
+            points_per_atom = 0
+            grid_residency = {
+                "grid_owner_source": "host-grid-owners",
+                "grid_owner_h2d_bytes": grid_points * 8,
+                "grid_point_source": "host-grid-points",
+                "grid_point_h2d_bytes": 3 * grid_points * 8,
+                "grid_weight_source": "host-grid-weights",
+                "grid_weight_h2d_bytes": grid_points * 8,
+                "grid_atomic_measure_source": "host-grid-atomic-measures",
+                "grid_atomic_measure_h2d_bytes": grid_points * 8,
+            }
         with timeline.phase("xc_geometry_enqueue"):
-            for begin in range(0, len(grid.points), tile_points):
-                end = min(begin + tile_points, len(grid.points))
-                with ao.feature_task(
-                    grid.points[begin:end],
-                    None,
-                    ingredients,
-                    defer_error_to_consumer=True,
-                ) as task:
-                    sources.geometry(
-                        task,
-                        np.asarray(grid.owners[begin:end], dtype=np.int64),
-                        grid.weights[begin:end],
-                        state._source.atomic_weights[begin:end],
-                        functional=functional,
-                    )
+            for begin in range(0, grid_points, tile_points):
+                end = min(begin + tile_points, grid_points)
+                if resident_grid is not None:
+                    point_pointer = resident_grid.points + 3 * begin * 8
+                    with ao.feature_task_device_points(
+                        point_pointer,
+                        end - begin,
+                        None,
+                        ingredients,
+                    ) as task:
+                        sources.geometry_molecular_resident_weights(
+                            task,
+                            begin,
+                            points_per_atom,
+                            resident_grid.weights + begin * 8,
+                            grid.weights[begin:end] if profile_device else None,
+                            resident_grid.atomic_weights + begin * 8,
+                            (
+                                state._source.atomic_weights[begin:end]
+                                if profile_device
+                                else None
+                            ),
+                            functional=functional,
+                        )
+                else:
+                    with ao.feature_task(
+                        grid.points[begin:end],
+                        None,
+                        ingredients,
+                        defer_error_to_consumer=True,
+                    ) as task:
+                        sources.geometry(
+                            task,
+                            np.asarray(grid.owners[begin:end], dtype=np.int64),
+                            grid.weights[begin:end],
+                            state._source.atomic_weights[begin:end],
+                            functional=functional,
+                        )
         with timeline.phase("xc_geometry_drain"):
             sources.drain_geometry()
         with timeline.phase("source_d2h_publication"):
@@ -2698,6 +2847,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 else _grid_metric_delta(grid_after, grid_before)
             )
             work["borrowed_grid_streams"] = tuple(sorted(sources.borrowed_streams))
+            work.update(grid_residency)
             work["primitive_pages"] = sources.primitive_pages
             work["primitive_page_peak_records"] = sources.primitive_page_peak_records
             work["primitive_record_page_budget"] = max_primitive_records
@@ -2885,6 +3035,16 @@ def _complete_rks_cuda_gradient_diagnostic(
         grid_artifact_kind=grid_artifact.metadata.get("artifact_kind", "runtime-jit"),
         artifacts=artifacts_record,
     )
+    if use_fitted_integrals:
+        work["density_fitted_response_resources_included"] = False
+        work["native_integral_resource_scope"] = (
+            "compact-publication-and-host-one-electron-only"
+        )
+        work["additional_device_peak_bound_scope"] = (
+            "stationary-consumer-only; excludes DF-provider response scratch"
+        )
+        work["transfer_work"]["density_fitted_response_included"] = False
+        work["host_scope"] += "; retained H'/S' source contraction"
     timeline_record = timeline.finish()
     work.update(
         endpoint_seconds=timeline_record["endpoint_seconds"],

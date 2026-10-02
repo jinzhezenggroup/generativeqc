@@ -79,6 +79,24 @@ def _reduction_program() -> Program:
     return Program({"reduced": reduce_sum(values, (1,))})
 
 
+def _streamed_einsum_program() -> Program:
+    lane_space = IndexSpace("compile_stream_lane", "batch", 7)
+    inner_space = IndexSpace("compile_stream_inner", "batch", 64)
+    lane = Index("q", lane_space)
+    inner = Index("k", inner_space)
+    a = input_tensor(
+        "streamed_einsum_a",
+        TensorSpec((lane, inner), dtype="float64", role="input"),
+    )
+    b = input_tensor(
+        "streamed_einsum_b",
+        TensorSpec((lane, inner), dtype="float64", role="input"),
+    )
+    virtual = multiply(a, b)
+    reduced = einsum("qk,qk->q", virtual, b)
+    return Program({"result": reduce_sum(reduced, (0,))})
+
+
 def _check_source(path: Path) -> None:
     source = path.read_text()
     if "tensor_static_initialize" not in source:
@@ -142,6 +160,31 @@ def main() -> None:
         args.cache / "reduction-cub",
     )
 
+    streamed_einsum_plan = plan_cuda(
+        _streamed_einsum_program(),
+        compiler.target,
+        schedule=TensorSchedule(
+            stream_reductions=True,
+            streamed_gemm_reduction=True,
+        ),
+        reassociate_contractions=False,
+    )
+    streamed_einsum = compile_cuda(
+        streamed_einsum_plan,
+        compiler,
+        args.cache / "streamed-einsum-generated",
+    )
+    streamed_einsum_source = (streamed_einsum.library.parent / "program.cu").read_text()
+    if (
+        "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)"
+        not in streamed_einsum_source
+    ):
+        raise RuntimeError(
+            "streamed einsum source lacks block-parallel reduction lowering"
+        )
+    if "gemm(ctx," in streamed_einsum_source:
+        raise RuntimeError("streamed einsum unexpectedly retained GEMM lowering")
+
     if plan.static_data_bytes <= 0 or plan.host_bytes < plan.static_data_bytes:
         raise RuntimeError("TensorIR static-data resource accounting is incomplete")
     for artifact, filename in (
@@ -197,6 +240,14 @@ def main() -> None:
                     "compile_seconds"
                 ],
                 "cub_reduction_resources": cub_reduction.metadata["resources"],
+                "streamed_einsum_plan": streamed_einsum_plan.identity,
+                "streamed_einsum_source_bytes": streamed_einsum.metadata[
+                    "generated_source_bytes"
+                ],
+                "streamed_einsum_compile_seconds": streamed_einsum.metadata[
+                    "compile_seconds"
+                ],
+                "streamed_einsum_resources": streamed_einsum.metadata["resources"],
             },
             sort_keys=True,
         )

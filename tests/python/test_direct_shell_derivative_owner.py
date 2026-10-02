@@ -65,13 +65,15 @@ def test_generated_exchange_value_eligibility_is_request_owned(tmp_path: Path) -
     if compiler is None:
         pytest.skip("requires a C++ compiler")
     header = _source("src/scf/cuda/direct_jk_plan.hpp")
-    helper_start = header.index(
-        "inline bool direct_jk_generated_full_range_value_available("
-    )
-    helper_end = header.index("\n}", helper_start) + 2
+    helper_start = header.index("inline bool direct_jk_bounded_value_enabled(")
     start = header.index("inline bool direct_jk_generated_exchange_value_available(")
     end = header.index("\n}", start) + 2
-    predicate = header[helper_start:helper_end] + "\n" + header[start:end]
+    predicate = header[helper_start:end]
+    policy_field = next(
+        line.strip()
+        for line in header.splitlines()
+        if "bool bounded_value_opt_in" in line
+    )
     start = header.index("struct DirectJkValueDispatch")
     end = header.index("/** Own one exact public-AO provider", start)
     dispatch = header[start:end]
@@ -90,17 +92,21 @@ struct GeneratedExchangeValueCapability {
 struct CudaDirectJkPlan {
   GeneratedExchangeValueCapability* generated_exchange{};
   unsigned derivative_order{};
+  POLICY_FIELD
 };
-"""
+""".replace("POLICY_FIELD", policy_field)
         + dispatch
         + predicate
         + r"""
 }
 int main() {
   using namespace generativeqc::scf;
+  assert(!CudaDirectJkPlan{}.bounded_value_opt_in);
   for (bool value_capability : {false, true})
     for (bool bounded_value_capability : {false, true})
+    for (bool bounded_opt_in : {false, true})
       for (bool available : {false, true})
+      for (bool shared_available : {false, true})
         for (unsigned order : {0U, 1U})
         for (bool want_j : {false, true})
           for (bool want_k : {false, true})
@@ -108,27 +114,31 @@ int main() {
                                 FockOperator::LongRange})
               for (bool mixed_j : {false, true}) {
                 SharedValueCapability shared{value_capability};
-                GeneratedExchangeValueCapability exchange{&shared, bounded_value_capability};
-                CudaDirectJkPlan plan{available ? &exchange : nullptr, 0U};
+                GeneratedExchangeValueCapability exchange{
+                    shared_available ? &shared : nullptr, bounded_value_capability};
+                CudaDirectJkPlan plan{available ? &exchange : nullptr, 0U, bounded_opt_in};
                 FockBuildSpec spec;
                 spec.derivative_order = order;
                 spec.coulomb.present = want_j;
                 spec.exchange.present = want_k;
                 spec.exchange.op = radial;
                 spec.exchange.omega = radial == FockOperator::FullRange ? 0.0 : 0.37;
-                const bool expected =
-                    available && order == 0 && want_k &&
-                    ((radial == FockOperator::FullRange &&
-                      (value_capability || bounded_value_capability)) ||
-                     (radial != FockOperator::FullRange && bounded_value_capability));
+                const bool expected_bounded =
+                    available && shared_available && bounded_value_capability && bounded_opt_in;
+                assert(direct_jk_bounded_value_enabled(plan) == expected_bounded);
+                const bool expected_shell =
+                    available && shared_available && (value_capability || expected_bounded);
+                assert(direct_jk_generated_full_range_value_available(plan) == expected_shell);
+                const bool expected = order == 0 && want_k &&
+                    (radial == FockOperator::FullRange ? expected_shell : expected_bounded);
                 const bool selected = direct_jk_generated_exchange_value_available(plan, spec);
                 assert(selected == expected);
-                const auto route = direct_jk_value_dispatch(true, selected, want_j, want_k,
-                                                            mixed_j);
+                const auto route = direct_jk_value_dispatch(expected_shell, selected, want_j,
+                                                            want_k, mixed_j);
                 assert(route.generated_exchange == (expected && !mixed_j));
                 assert(route.generic_exchange == (want_k && !route.generated_exchange));
-                assert(route.generated_coulomb == (want_j && !mixed_j));
-                assert(route.generic_coulomb == (want_j && mixed_j));
+                assert(route.generated_coulomb == (want_j && expected_shell && !mixed_j));
+                assert(route.generic_coulomb == (want_j && !route.generated_coulomb));
               }
 }
 """
@@ -159,7 +169,7 @@ int main() {
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_through_f_shell_values_precede_canonical_fallback() -> None:
+def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
     owner = _source("src/scf/cuda/direct_coulomb.cpp")
     assert "const bool bounded_through_f = through_f;" in direct
@@ -171,8 +181,12 @@ def test_through_f_shell_values_precede_canonical_fallback() -> None:
     assert "enqueue_generated_coulomb(*plan->generated_exchange" in direct
     assert "launch_bounded_shell_fock_source(" in owner
     assert "launch_bounded_shell_range_exchange_source(" in owner
-    assert "p.force_cursor, false, true" in owner
     assert "p.force_cursor, range," in owner
+    assert "p.force_cursor, false, true" in owner
+    schedule = direct[direct.index("info.schedule = plan->generated_exchange") :]
+    schedule = schedule[: schedule.index("} else if (plan->generated_coulomb)")]
+    assert "direct_jk_bounded_value_enabled(*plan)" in schedule
+    assert "bounded_value_capability" not in schedule
 
 
 def test_rsh_value_join_reuses_one_shell_density_preparation() -> None:
@@ -193,8 +207,93 @@ def test_rsh_value_join_reuses_one_shell_density_preparation() -> None:
     assert "has_range_correction && !fused_rsh_values" in ks
 
 
-def test_canonical_screening_fixture_does_not_disable_default_provider_gate() -> None:
-    """Match the screened oracle's route without weakening default-route coverage."""
+def test_rsh_value_join_preserves_value_policy_and_buffer_contract(
+    tmp_path: Path,
+) -> None:
+    """Compile production span checks and cover every fused writable buffer."""
+    direct = _source("src/scf/cuda/direct_jk.cpp")
+    begin = direct.index("generativeqc_status enqueue_cuda_direct_rsh_values_device(")
+    body = direct[begin : direct.index("\n}\n", begin)]
+    assert "!direct_jk_bounded_value_enabled(*plan)" in body
+    assert body.index("GENERATIVEQC_STATUS_NOT_IMPLEMENTED") < body.index(
+        "return direct_jk_guard("
+    )
+    assert "correction = direct_jk_strategy(" in body
+    check_start = body.index("const auto bytes = direct_jk_product(")
+    check_end = body.index("direct_jk_check(cudaMemsetAsync(primary_error")
+    checks = body[check_start:check_end]
+    assert "for (unsigned i = 0; i < 5; ++i)" in checks
+    assert "const double* inputs[]{density, beta};" in checks
+    assert (
+        "direct_jk_require_disjoint(primary_error, sizeof(int), range_error" in checks
+    )
+    for status in ("primary_error", "range_error"):
+        assert f"direct_jk_require_disjoint(input, bytes, {status}" in checks
+        assert f"direct_jk_require_disjoint(outputs[i], bytes, {status}" in checks
+
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a C++ compiler")
+    start = direct.index("void direct_jk_require_disjoint(")
+    helper = direct[start : direct.index("\n}", start) + 2]
+    harness = (
+        r"""
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+void direct_jk_require(bool condition, const char* message) {
+  if (!condition) throw std::invalid_argument(message);
+}
+"""
+        + helper
+        + r"""
+int main() {
+  const auto p = [](std::uintptr_t x) { return reinterpret_cast<const void*>(x); };
+  direct_jk_require_disjoint(p(128), 64, p(192), 64);
+  direct_jk_require_disjoint(p(192), 64, p(128), 64);
+  direct_jk_require_disjoint(nullptr, 64, p(128), 64);
+  const auto rejected = [&](std::uintptr_t a, std::size_t na,
+                            std::uintptr_t b, std::size_t nb) {
+    try { direct_jk_require_disjoint(p(a), na, p(b), nb); }
+    catch (const std::invalid_argument&) { return true; }
+    return false;
+  };
+  assert(rejected(128, 64, 128, 64));
+  assert(rejected(128, 64, 160, 64));
+  assert(rejected(160, 64, 128, 64));
+  assert(rejected(128, 64, 144, sizeof(int)));
+  assert(rejected(144, sizeof(int), 128, 64));
+  assert(rejected(std::numeric_limits<std::uintptr_t>::max() - 7, 8, 128, 64));
+  assert(rejected(128, 64, std::numeric_limits<std::uintptr_t>::max() - 7, 8));
+}
+"""
+    )
+    source = tmp_path / "rsh_writable_spans.cpp"
+    executable = tmp_path / "rsh_writable_spans"
+    source.write_text(harness)
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            str(source),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_canonical_screening_fixture_preserves_default_and_opt_in_coverage() -> None:
+    """Keep the screened oracle distinct while testing both retained value routes."""
     source = _source("tests/native/test_cuda_fock_provider.cpp")
 
     def body(name: str) -> str:
@@ -202,7 +301,7 @@ def test_canonical_screening_fixture_does_not_disable_default_provider_gate() ->
         return source[begin : source.index("\n}\n", begin)]
 
     screened = body("canonical_screened_values")
-    override = "plan->generated_exchange->bounded_value_capability = false;"
+    override = "plan->bounded_value_opt_in = false;"
     assert screened.count(override) == 1
     assert screened.index(override) < screened.index("direct_device(")
     assert "!direct_jk_generated_full_range_value_available(*plan)" in screened
@@ -218,8 +317,11 @@ def test_canonical_screening_fixture_does_not_disable_default_provider_gate() ->
     default = body("canonical_value_provider")
     assert default.index("direct_device(") < default.index(override)
     assert "plan->generated_exchange->bounded_value_capability &&" in default
-    assert "plan->generated_exchange->bounded_value_capability = bounded;" in default
-    assert "work[0] == (canonical_range_exchange ? quartets : 0U)" in default
+    assert "for (bool bounded_opt_in : {false, true})" in default
+    assert "plan->bounded_value_opt_in = bounded_opt_in;" in default
+    assert "!plan->bounded_value_opt_in" in default
+    assert "plan->bounded_value_opt_in = bounded;" in default
+    assert "work[0] == (canonical_route ? quartets : 0U)" in default
     assert "work[1] == radial_passes * quartets" in default
     for fixture in (screened, default):
         assert "FockSpin::Restricted, FockSpin::Unrestricted" in fixture

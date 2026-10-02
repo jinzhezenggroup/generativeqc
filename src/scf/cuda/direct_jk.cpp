@@ -50,6 +50,14 @@ std::size_t direct_jk_product(std::size_t a, std::size_t b) {
   if (!generativeqc::runtime::checked_multiply(a, b, out)) throw std::bad_alloc();
   return out;
 }
+void direct_jk_require_disjoint(const void* a, std::size_t na, const void* b, std::size_t nb) {
+  if (!a || !b) return;
+  const auto x = reinterpret_cast<std::uintptr_t>(a), y = reinterpret_cast<std::uintptr_t>(b);
+  direct_jk_require(x <= std::numeric_limits<std::uintptr_t>::max() - na &&
+                        y <= std::numeric_limits<std::uintptr_t>::max() - nb &&
+                        (x + na <= y || y + nb <= x),
+                    "device direct J/K writable buffers alias");
+}
 void direct_jk_finite(const std::vector<double>& values) {
   for (double value : values) direct_jk_require(std::isfinite(value), "nonfinite direct J/K data");
 }
@@ -644,9 +652,9 @@ generativeqc_status create_cuda_direct_jk_plan(
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
       info.schedule = plan->generated_exchange->shared->value_capability
                           ? "generated-shell-coulomb+exchange/generic-jk-fallback"
-                          : (plan->generated_exchange->bounded_value_capability
+                          : (direct_jk_bounded_value_enabled(*plan)
                                  ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
-                                 : "force-only-shell-derivative/generic-jk-fallback");
+                                 : "retained-shell-owner/generic-jk-fallback");
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +
@@ -864,28 +872,23 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           "device direct J/K mixed-work counter is misaligned");
     }
     const auto bytes = direct_jk_product(elements, sizeof(double));
-    const auto disjoint = [&](const void* a, std::size_t na, const void* b, std::size_t nb) {
-      if (!a || !b) return;
-      const auto x = reinterpret_cast<std::uintptr_t>(a), y = reinterpret_cast<std::uintptr_t>(b);
-      direct_jk_require(x <= std::numeric_limits<std::uintptr_t>::max() - na &&
-                            y <= std::numeric_limits<std::uintptr_t>::max() - nb &&
-                            (x + na <= y || y + nb <= x),
-                        "device direct J/K writable buffers alias");
-    };
     const double* inputs[]{density, beta};
     double* outputs[]{coulomb, alpha_exchange, beta_exchange};
     for (const auto* input : inputs) {
-      disjoint(input, bytes, numerical_error, sizeof(int));
-      disjoint(input, bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
+      direct_jk_require_disjoint(input, bytes, numerical_error, sizeof(int));
+      direct_jk_require_disjoint(input, bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
     }
-    disjoint(numerical_error, sizeof(int), mixed_coulomb_work_count, sizeof(std::uint64_t));
+    direct_jk_require_disjoint(numerical_error, sizeof(int), mixed_coulomb_work_count,
+                               sizeof(std::uint64_t));
     for (unsigned i = 0; i < 3; ++i) {
       if (!outputs[i]) continue;
       pointer(outputs[i]);
-      for (const auto* input : inputs) disjoint(input, bytes, outputs[i], bytes);
-      disjoint(outputs[i], bytes, numerical_error, sizeof(int));
-      disjoint(outputs[i], bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
-      for (unsigned j = 0; j < i; ++j) disjoint(outputs[i], bytes, outputs[j], bytes);
+      for (const auto* input : inputs) direct_jk_require_disjoint(input, bytes, outputs[i], bytes);
+      direct_jk_require_disjoint(outputs[i], bytes, numerical_error, sizeof(int));
+      direct_jk_require_disjoint(outputs[i], bytes, mixed_coulomb_work_count,
+                                 sizeof(std::uint64_t));
+      for (unsigned j = 0; j < i; ++j)
+        direct_jk_require_disjoint(outputs[i], bytes, outputs[j], bytes);
     }
     direct_jk_check(cudaMemsetAsync(numerical_error, 0, sizeof(int), plan->stream));
     if (mixed_coulomb_work_count)
@@ -992,13 +995,13 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
     const double* beta, std::size_t elements, double* coulomb, double* full_alpha_exchange,
     double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
     int* primary_error, int* range_error, std::string& detail) {
-  if (plan == nullptr || plan->generated_exchange == nullptr ||
-      !plan->generated_exchange->bounded_value_capability) {
-    detail = "prepared Direct owner has no bounded range-value lease";
+  if (plan == nullptr || !direct_jk_bounded_value_enabled(*plan)) {
+    detail = "prepared Direct bounded range values are unavailable or not opted in";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   return direct_jk_guard(plan, detail, [&] {
     primary = direct_jk_strategy(plan, primary, 0, plan->diagnostic.batch_size);
+    correction = direct_jk_strategy(plan, correction, 0, plan->diagnostic.batch_size);
     const bool unrestricted = primary.spin == FockSpin::Unrestricted;
     direct_jk_require(
         primary.derivative_order == 0 && primary.coulomb.present &&
@@ -1043,6 +1046,23 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
       if (value) device_pointer(value);
     device_pointer(primary_error);
     device_pointer(range_error);
+
+    const auto bytes = direct_jk_product(elements, sizeof(double));
+    const double* inputs[]{density, beta};
+    double* outputs[]{coulomb, full_alpha_exchange, full_beta_exchange, range_alpha_exchange,
+                      range_beta_exchange};
+    for (const auto* input : inputs) {
+      direct_jk_require_disjoint(input, bytes, primary_error, sizeof(int));
+      direct_jk_require_disjoint(input, bytes, range_error, sizeof(int));
+    }
+    direct_jk_require_disjoint(primary_error, sizeof(int), range_error, sizeof(int));
+    for (unsigned i = 0; i < 5; ++i) {
+      for (const auto* input : inputs) direct_jk_require_disjoint(input, bytes, outputs[i], bytes);
+      direct_jk_require_disjoint(outputs[i], bytes, primary_error, sizeof(int));
+      direct_jk_require_disjoint(outputs[i], bytes, range_error, sizeof(int));
+      for (unsigned j = 0; j < i; ++j)
+        direct_jk_require_disjoint(outputs[i], bytes, outputs[j], bytes);
+    }
 
     direct_jk_check(cudaMemsetAsync(primary_error, 0, sizeof(int), plan->stream));
     direct_jk_check(cudaMemsetAsync(range_error, 0, sizeof(int), plan->stream));

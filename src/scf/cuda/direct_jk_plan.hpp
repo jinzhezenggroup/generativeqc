@@ -14,8 +14,8 @@ namespace generativeqc::scf {
 
 /** Select resident value sources without changing the requested mathematics.
  * Generated J/K are exact FP64 full-range consumers on the same provider stream.
- * Through-f SR/LR K may use the retained bounded shell owner; mixed-J and
- * missing optional capacity deliberately retain the generic source.
+ * Through-f SR/LR K requires the explicit bounded value qualification opt-in;
+ * mixed-J and missing optional capacity retain the canonical/generic source.
  */
 struct DirectJkValueDispatch {
   bool generated_coulomb{}, generated_exchange{}, generic_coulomb{}, generic_exchange{};
@@ -55,6 +55,11 @@ struct CudaDirectJkPlan {
   CudaDirectJkDiagnostic diagnostic{};
   std::unique_ptr<cuda_execution::GeneratedCoulombPlan> generated_coulomb;
   std::unique_ptr<cuda_execution::GeneratedExchangePlan> generated_exchange;
+  /** Internal qualification switch, deliberately disabled for production.
+   * Availability of the bounded through-f value lease does not qualify it as
+   * a faster default. Set before enqueueing to compare retained sources without
+   * changing capability, precision, derivative ownership or public API. */
+  bool bounded_value_opt_in{false};
   /** Automatic symmetry-canonical source for through-f plans. Angular buckets
    * keep each kernel's recurrence order fixed, including f-shell quartets.
    * All storage is charged to the existing optional provider budget. */
@@ -85,12 +90,21 @@ struct CudaDirectJkPlan {
   ~CudaDirectJkPlan();
 };
 
-/** Complete full-range shell value ownership may be either entirely
- * generated/native or generated/native plus HF's bounded higher-l fallback. */
+/** Bounded value selection is separate from the owner's retained capability.
+ * Other value joins must use this gate too; derivative consumers do not. */
+inline bool direct_jk_bounded_value_enabled(const CudaDirectJkPlan& plan) noexcept {
+  return plan.bounded_value_opt_in && plan.generated_exchange != nullptr &&
+         plan.generated_exchange->shared != nullptr &&
+         plan.generated_exchange->bounded_value_capability;
+}
+
+/** Complete generated/native coverage stays automatic. Incomplete coverage
+ * uses the canonical/generic production source unless qualification explicitly
+ * opts into HF's bounded higher-l value fallback. */
 inline bool direct_jk_generated_full_range_value_available(const CudaDirectJkPlan& plan) noexcept {
   return plan.generated_exchange != nullptr && plan.generated_exchange->shared != nullptr &&
          (plan.generated_exchange->shared->value_capability ||
-          plan.generated_exchange->bounded_value_capability);
+          direct_jk_bounded_value_enabled(plan));
 }
 
 /** A derivative-capable provider owner may still use its full-range value
@@ -103,7 +117,7 @@ inline bool direct_jk_generated_exchange_value_available(const CudaDirectJkPlan&
     return false;
   if (spec.exchange.op == FockOperator::FullRange)
     return direct_jk_generated_full_range_value_available(plan);
-  return plan.generated_exchange->bounded_value_capability && spec.exchange.omega > 0.0 &&
+  return direct_jk_bounded_value_enabled(plan) && spec.exchange.omega > 0.0 &&
          (spec.exchange.op == FockOperator::ShortRange ||
           spec.exchange.op == FockOperator::LongRange);
 }

@@ -93,7 +93,9 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
         system_count = 1
         _batch = None
         _context = None
-        _calculator = SimpleNamespace(_method_name="test-selector")
+        _calculator = SimpleNamespace(
+            _method_name="test-selector", _density_fitting_mode=0
+        )
         _library = library
 
         def _ensure_open(self) -> None:
@@ -129,7 +131,7 @@ def test_snapshot_domain_is_shared_and_rejects_mismatch(
         "typing": typing,
         "np": np,
         "PreparedBatch": Batch,
-        "_native": SimpleNamespace(check=check),
+        "_native": SimpleNamespace(check=check, DENSITY_FITTING_NONE=0),
         "native_xc_functional_code": lambda method: code,
         "scf_domain_for_method": domain,
         "SPLIT_HYBRID_SCF_DOMAIN": "split-hybrid",

@@ -135,6 +135,67 @@ void direct_device_failures(CudaDirectJkPlan* plan, const std::vector<double>& a
   }
 }
 
+void direct_rsh_device(CudaDirectJkPlan* plan, FockBuildSpec correction,
+                       const std::vector<double>& a, const std::vector<double>& b,
+                       const std::vector<double>& expected_j,
+                       const std::vector<double>& expected_full_a,
+                       const std::vector<double>& expected_full_b,
+                       const std::vector<double>& expected_range_a,
+                       const std::vector<double>& expected_range_b) {
+  const bool unrestricted = correction.spin == FockSpin::Unrestricted;
+  auto primary = make_hf_fock_spec(correction.spin);
+  primary.derivative_order = correction.derivative_order = 0;
+  correction.coulomb.present = false;
+  const std::vector<double> sentinel(a.size(), 123.0);
+  DeviceMatrix da(a), db(b), j(sentinel), full_a(sentinel), full_b(sentinel), range_a(sentinel),
+      range_b(sentinel), primary_error({123.0}), range_error({123.0});
+  std::string detail;
+  const auto enqueue = [&](double* full_output, double* range_output, int* range_failure) {
+    return enqueue_cuda_direct_rsh_values_device(
+        plan, primary, correction, da.pointer, unrestricted ? db.pointer : nullptr, a.size(),
+        j.pointer, full_output, unrestricted ? full_b.pointer : nullptr, range_output,
+        unrestricted ? range_b.pointer : nullptr, reinterpret_cast<int*>(primary_error.pointer),
+        range_failure, detail);
+  };
+  auto* range_failure = reinterpret_cast<int*>(range_error.pointer);
+  if (!plan->bounded_value_opt_in) {
+    require(enqueue(full_a.pointer, range_a.pointer, range_failure) ==
+                GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+            "fused RSH bypassed the default bounded-value policy");
+    for (const auto* output : {&j, &full_a, &full_b, &range_a, &range_b}) output->verify(sentinel);
+    primary_error.verify({123.0});
+    range_error.verify({123.0});
+  } else {
+    require(enqueue(full_a.pointer, full_a.pointer, range_failure) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "fused RSH accepted overlapping full/range exchange outputs");
+    require(
+        enqueue(da.pointer, range_a.pointer, range_failure) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "fused RSH accepted overlapping density/output buffers");
+    require(
+        enqueue(full_a.pointer, range_a.pointer, reinterpret_cast<int*>(primary_error.pointer)) ==
+            GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+        "fused RSH accepted overlapping numerical status buffers");
+    require(enqueue(full_a.pointer, range_a.pointer, reinterpret_cast<int*>(range_a.pointer)) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "fused RSH accepted overlapping output/status buffers");
+    require(enqueue(full_a.pointer, range_a.pointer, range_failure) == GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    check(cudaStreamSynchronize(cuda_direct_jk_stream(plan)));
+    int first = -1, second = -1;
+    check(cudaMemcpy(&first, primary_error.pointer, sizeof(first), cudaMemcpyDeviceToHost));
+    check(cudaMemcpy(&second, range_error.pointer, sizeof(second), cudaMemcpyDeviceToHost));
+    require(first == 0 && second == 0, "fused RSH failed numerical validation");
+    j.verify(expected_j);
+    full_a.verify(expected_full_a);
+    full_b.verify(unrestricted ? expected_full_b : sentinel);
+    range_a.verify(expected_range_a);
+    range_b.verify(unrestricted ? expected_range_b : sentinel);
+  }
+  da.verify(a);
+  db.verify(b);
+}
+
 void mixed_coulomb_work_census(bool through_f = false) {
   generativeqc::core::System system;
   system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
@@ -313,6 +374,56 @@ void prepared_interaction_source_device(const generativeqc::core::System& system
           "prepared CUDA interaction source silently published a host ERI");
 }
 
+void mixed_coulomb_preserves_strict_exchange() {
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
+  const std::vector<double> density{0.9, 0.2, -0.1, 0.7};
+  const std::vector<double> zeros(matrix, 0.0);
+  CudaDirectJkPlan* raw{};
+  CudaDirectJkDiagnostic diagnostic;
+  require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, 32U * 1024U * 1024U, &raw, diagnostic,
+                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+      raw, &destroy_cuda_direct_jk_plan);
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  DeviceMatrix device_density(density), strict_j(zeros), strict_k(zeros), mixed_j(zeros),
+      mixed_k(zeros), error({0.0});
+  DeviceCounter count;
+  auto* failure = reinterpret_cast<int*>(error.pointer);
+  require(enqueue_cuda_direct_jk_device(plan.get(), spec, device_density.pointer, nullptr, matrix,
+                                        strict_j.pointer, strict_k.pointer, nullptr, failure,
+                                        detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  count.set(0);
+  require(enqueue_cuda_direct_jk_device_mixed_j(plan.get(), spec, device_density.pointer, nullptr,
+                                                matrix, mixed_j.pointer, mixed_k.pointer, nullptr,
+                                                failure, detail,
+                                                count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+  require(count.get() > 0, "mixed-J hybrid did not execute mixed Coulomb work");
+  std::vector<double> strict_exchange(matrix), mixed_exchange(matrix);
+  check(cudaMemcpy(strict_exchange.data(), strict_k.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  check(cudaMemcpy(mixed_exchange.data(), mixed_k.pointer, matrix * sizeof(double),
+                   cudaMemcpyDeviceToHost));
+  for (std::size_t i = 0; i < matrix; ++i)
+    require(std::isfinite(strict_exchange[i]) && std::isfinite(mixed_exchange[i]) &&
+                std::abs(strict_exchange[i] - mixed_exchange[i]) < 3e-12,
+            "mixed-J hybrid changed strict FP64 exchange");
+}
+
 void direct_value_dispatch_selection() {
   const auto hybrid = direct_jk_value_dispatch(true, true, true, false);
   require(hybrid.generated_coulomb && !hybrid.generic_coulomb && hybrid.generic_exchange,
@@ -475,6 +586,10 @@ void canonical_value_provider() {
                   plan->generated_exchange->shared &&
                   !plan->generated_exchange->shared->value_capability,
               "through-f shell owner/canonical fallback was not prepared");
+      require(!plan->bounded_value_opt_in &&
+                  !direct_jk_generated_full_range_value_available(*plan) &&
+                  std::string(diagnostic.schedule).find("canonical-cartesian-jk/") == 0,
+              "through-f production values did not retain the canonical default");
       require(diagnostic.device_bytes <= 64U << 20,
               "canonical source exceeded its explicit budget");
       DeviceMatrix census(std::vector<double>(2U, 0.0));
@@ -534,30 +649,61 @@ void canonical_value_provider() {
                   }
                 }
               }
-              direct_device(plan.get(), spec, alpha,
-                            spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
-                            expected_j, expected_alpha, expected_beta);
-              if (plan->canonical_work_count) {
-                std::array<std::uint64_t, 2> work{};
-                check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
-                                 cudaMemcpyDeviceToHost));
-                const auto source_dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
-                const auto pairs = source_dimension * (source_dimension + 1U) / 2U;
-                const auto quartets = diagnostic.batch_size * pairs * (pairs + 1U) / 2U;
-                require(work[0] == 0U && work[1] == 0U,
-                        "bounded shell value ownership leaked work into the canonical source");
-              }
-              if (want_k && plan->canonical_transform) {
-                const auto* spans = plan->canonical_projection_spans;
-                require(spans, "shell-local projection inventory was not retained");
-                const bool bounded = plan->generated_exchange->bounded_value_capability;
-                plan->generated_exchange->bounded_value_capability = false;
-                plan->canonical_projection_spans = nullptr;
+              for (bool bounded_opt_in : {false, true}) {
+                plan->bounded_value_opt_in = bounded_opt_in;
                 direct_device(plan.get(), spec, alpha,
                               spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
                               expected_j, expected_alpha, expected_beta);
-                plan->canonical_projection_spans = spans;
-                plan->generated_exchange->bounded_value_capability = bounded;
+                if (plan->canonical_work_count) {
+                  std::array<std::uint64_t, 2> work{};
+                  check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                                   cudaMemcpyDeviceToHost));
+                  const auto source_dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
+                  const auto pairs = source_dimension * (source_dimension + 1U) / 2U;
+                  const auto quartets = diagnostic.batch_size * pairs * (pairs + 1U) / 2U;
+                  const bool canonical_range_exchange = want_k && op != FockOperator::FullRange;
+                  const bool canonical_route = (want_j || want_k) && !bounded_opt_in;
+                  const auto radial_passes =
+                      canonical_route ? (canonical_range_exchange && want_j ? 2U : 1U) : 0U;
+                  require(work[0] == (canonical_route ? quartets : 0U) &&
+                              work[1] == radial_passes * quartets,
+                          "default/opt-in value selection disagrees with executed canonical work");
+                }
+                if (want_j && want_k && op != FockOperator::FullRange) {
+                  std::vector<double> expected_full_alpha, expected_full_beta;
+                  for (std::size_t item = 0; item < 2U; ++item) {
+                    const std::vector<double> item_alpha(alpha.begin() + item * matrix,
+                                                         alpha.begin() + (item + 1U) * matrix);
+                    const auto full_alpha =
+                        reference_exchange_from_eri(full_eri[item], dimension, item_alpha);
+                    expected_full_alpha.insert(expected_full_alpha.end(), full_alpha.begin(),
+                                               full_alpha.end());
+                    if (spin == FockSpin::Unrestricted) {
+                      const std::vector<double> item_beta(beta.begin() + item * matrix,
+                                                          beta.begin() + (item + 1U) * matrix);
+                      const auto full_beta =
+                          reference_exchange_from_eri(full_eri[item], dimension, item_beta);
+                      expected_full_beta.insert(expected_full_beta.end(), full_beta.begin(),
+                                                full_beta.end());
+                    }
+                  }
+                  direct_rsh_device(plan.get(), spec, alpha,
+                                    spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
+                                    expected_j, expected_full_alpha, expected_full_beta,
+                                    expected_alpha, expected_beta);
+                }
+                if (want_k && plan->canonical_transform) {
+                  const auto* spans = plan->canonical_projection_spans;
+                  require(spans, "shell-local projection inventory was not retained");
+                  const bool bounded = plan->bounded_value_opt_in;
+                  plan->bounded_value_opt_in = false;
+                  plan->canonical_projection_spans = nullptr;
+                  direct_device(plan.get(), spec, alpha,
+                                spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
+                                expected_j, expected_alpha, expected_beta);
+                  plan->canonical_projection_spans = spans;
+                  plan->bounded_value_opt_in = bounded;
+                }
               }
             }
           }
@@ -603,12 +749,9 @@ void canonical_value_provider() {
         expected_k.insert(expected_k.end(), reference.exchange_alpha.begin(),
                           reference.exchange_alpha.end());
       }
-      const bool dense_bounded =
-          dense->generated_exchange && dense->generated_exchange->bounded_value_capability;
-      if (dense->generated_exchange) dense->generated_exchange->bounded_value_capability = false;
+      require(!dense->bounded_value_opt_in,
+              "dense canonical fallback unexpectedly opted into bounded values");
       direct_device(dense.get(), spec, alpha, {}, expected_j, expected_k, {});
-      if (dense->generated_exchange)
-        dense->generated_exchange->bounded_value_capability = dense_bounded;
     }
   }
 }
@@ -655,11 +798,15 @@ void canonical_one_electron_reuse() {
               "metadata");
       auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
       value_spec.derivative_order = 0;
+      require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
+              "bounded through-f values were selected without explicit qualification");
+      plan->bounded_value_opt_in = true;
       require(direct_jk_generated_exchange_value_available(*plan, value_spec),
               "bounded through-f shell owner was not admitted for full-range value exchange");
       value_spec.derivative_order = 1;
       require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
               "derivative request incorrectly selected the zero-order value route");
+      plan->bounded_value_opt_in = false;
       std::vector<double> shell_rsh, canonical_rsh;
       constexpr double omega = 0.3;
       require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
@@ -832,10 +979,10 @@ void canonical_screened_values() {
                   !plan->generated_exchange->shared->value_capability,
               "screened canonical fallback and competing through-f shell owner were not prepared");
       // This oracle screens Cartesian AO pairs before public projection. The
-      // default shell provider applies a different shell+density predicate.
+      // opt-in shell provider applies a different shell+density predicate.
       // Select only this fixture's canonical fallback; canonical_value_provider
-      // independently retains and checks the default bounded value route.
-      plan->generated_exchange->bounded_value_capability = false;
+      // independently checks both default canonical and opt-in bounded values.
+      plan->bounded_value_opt_in = false;
       require(!direct_jk_generated_full_range_value_available(*plan),
               "canonical screening fixture still selects a competing full-range shell source");
       DeviceMatrix census(std::vector<double>(2U));
@@ -1029,43 +1176,49 @@ void canonical_work_census() {
     const auto source_dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
     const auto pairs = source_dimension * (source_dimension + 1U) / 2U;
     const auto quartets = pairs * (pairs + 1U) / 2U;
-    for (auto operation : {FockOperator::FullRange, FockOperator::LongRange}) {
-      auto spec = make_hf_fock_spec(FockSpin::Restricted);
-      spec.derivative_order = 0;
-      spec.exchange.op = operation;
-      spec.exchange.omega = operation == FockOperator::FullRange ? 0.0 : 0.37;
-      spec.coulomb.present = operation == FockOperator::FullRange;
-      check(cudaStreamSynchronize(plan->stream));
-      const auto started = std::chrono::steady_clock::now();
-      const auto enqueue_status = enqueue_cuda_direct_jk_device(
-          plan.get(), spec, input.pointer, nullptr, matrix,
-          spec.coulomb.present ? coulomb.pointer : nullptr, exchange.pointer, nullptr,
-          reinterpret_cast<int*>(error.pointer), detail);
-      require(enqueue_status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
-      check(cudaStreamSynchronize(plan->stream));
-      const auto seconds =
-          std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-      std::array<std::uint64_t, 2> work{};
-      check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
-                       cudaMemcpyDeviceToHost));
-      int numerical_error{};
-      check(cudaMemcpy(&numerical_error, error.pointer, sizeof(int), cudaMemcpyDeviceToHost));
-      require(numerical_error == 0, "census source produced nonfinite values");
-      if (operation == FockOperator::FullRange) {
-        require(work[0] == 0U && work[1] == 0U,
-                "full-range through-f value unexpectedly entered the canonical AO source");
-      } else {
-        require(work[0] == quartets && work[1] == quartets,
-                "range fallback repeated or omitted a canonical candidate/radial evaluation");
+    require(!plan->bounded_value_opt_in && !direct_jk_generated_full_range_value_available(*plan),
+            "work census did not start with canonical production selection");
+    for (bool bounded_opt_in : {false, true}) {
+      plan->bounded_value_opt_in = bounded_opt_in;
+      for (auto operation : {FockOperator::FullRange, FockOperator::LongRange}) {
+        auto spec = make_hf_fock_spec(FockSpin::Restricted);
+        spec.derivative_order = 0;
+        spec.exchange.op = operation;
+        spec.exchange.omega = operation == FockOperator::FullRange ? 0.0 : 0.37;
+        spec.coulomb.present = operation == FockOperator::FullRange;
+        check(cudaStreamSynchronize(plan->stream));
+        const auto started = std::chrono::steady_clock::now();
+        const auto enqueue_status = enqueue_cuda_direct_jk_device(
+            plan.get(), spec, input.pointer, nullptr, matrix,
+            spec.coulomb.present ? coulomb.pointer : nullptr, exchange.pointer, nullptr,
+            reinterpret_cast<int*>(error.pointer), detail);
+        require(enqueue_status == GENERATIVEQC_STATUS_SUCCESS, detail.c_str());
+        check(cudaStreamSynchronize(plan->stream));
+        const auto seconds =
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        std::array<std::uint64_t, 2> work{};
+        check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                         cudaMemcpyDeviceToHost));
+        int numerical_error{};
+        check(cudaMemcpy(&numerical_error, error.pointer, sizeof(int), cudaMemcpyDeviceToHost));
+        require(numerical_error == 0, "census source produced nonfinite values");
+        const bool bounded_route = bounded_opt_in && operation == FockOperator::FullRange;
+        if (bounded_route) {
+          require(work[0] == 0U && work[1] == 0U,
+                  "full-range through-f value unexpectedly entered the canonical AO source");
+        } else {
+          require(work[0] == quartets && work[1] == quartets,
+                  "canonical values repeated or omitted a candidate/radial evaluation");
+        }
+        std::cout << "{\"public_aos\":" << dimension << ",\"source_aos\":" << source_dimension
+                  << ",\"operator\":\""
+                  << (operation == FockOperator::FullRange ? "full-JK" : "long-K")
+                  << "\",\"route\":\"" << (bounded_route ? "bounded-shell" : "canonical")
+                  << "\",\"bounded_value_opt_in\":" << (bounded_opt_in ? "true" : "false")
+                  << ",\"candidate_quartets\":" << work[0]
+                  << ",\"evaluated_radial_eris\":" << work[1] << ",\"seconds\":" << seconds
+                  << ",\"device_bytes\":" << diagnostic.device_bytes << "}\n";
       }
-      std::cout << "{\"public_aos\":" << dimension << ",\"source_aos\":" << source_dimension
-                << ",\"operator\":\""
-                << (operation == FockOperator::FullRange ? "full-JK" : "long-K")
-                << "\",\"route\":\""
-                << (operation == FockOperator::FullRange ? "bounded-shell" : "canonical-range")
-                << "\",\"candidate_quartets\":" << work[0]
-                << ",\"evaluated_radial_eris\":" << work[1] << ",\"seconds\":" << seconds
-                << ",\"device_bytes\":" << diagnostic.device_bytes << "}\n";
     }
   }
 }
@@ -1355,16 +1508,20 @@ void direct_providers(bool through_f_response) {
       if (derivatives) {
         auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
         value_spec.derivative_order = 0;
-        require(direct_jk_generated_exchange_value_available(*plan, value_spec),
-                "complete shell value ownership was not retained");
+        require(direct_jk_generated_exchange_value_available(*plan, value_spec) == (angular <= 2),
+                "generated SPD/canonical through-f default selection changed");
         if (angular == 3U)
           require(plan->generated_exchange && plan->generated_exchange->bounded_value_capability &&
                       plan->generated_exchange->shared &&
                       !plan->generated_exchange->shared->value_capability,
                   "f-shell value ownership did not use the bounded Direct-HF fallback");
+        plan->bounded_value_opt_in = true;
+        require(direct_jk_generated_exchange_value_available(*plan, value_spec),
+                "explicit bounded qualification did not complete shell value ownership");
         value_spec.derivative_order = 1;
         require(!direct_jk_generated_exchange_value_available(*plan, value_spec),
                 "derivative request incorrectly selected generated value exchange");
+        plan->bounded_value_opt_in = false;
       }
       // A value-only owner may use generated pure J; exact generic capacity
       // must still be a usable fallback. Both consume nonsymmetric densities
@@ -1556,7 +1713,8 @@ int main(int argc, char** argv) {
     if (argc == 2 && std::string(argv[1]) == "--mixed-census-only") {
       mixed_coulomb_work_census();
       mixed_coulomb_work_census(true);
-      std::cout << "CUDA mixed Coulomb work census PASS\n";
+      mixed_coulomb_preserves_strict_exchange();
+      std::cout << "CUDA mixed Coulomb work census and strict exchange PASS\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {
@@ -1572,6 +1730,7 @@ int main(int argc, char** argv) {
     direct_value_dispatch_selection();
     mixed_coulomb_work_census();
     mixed_coulomb_work_census(true);
+    mixed_coulomb_preserves_strict_exchange();
     device_selection();
     range_exchange_provider();
     range_exchange_derivatives();
