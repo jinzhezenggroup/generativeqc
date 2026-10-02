@@ -1,6 +1,6 @@
 # Proposal: scaled Boys moments for the exact long-range Coulomb interval
 
-Status: proposed; standalone device qualification passed, composed timing pending
+Status: proposed; standalone and composed device qualification passed
 Date: 2026-10-02
 
 ## Problem
@@ -121,8 +121,27 @@ The exact third-party defective component has not yet been isolated.
 
 PR #1711 has since merged as master `06459d469`. This radial PR is rebased on that
 master, so its eventual production behavior composes both optimizations. The
-evidence above identifies the earlier standalone binary; fresh composed device
-qualification and matched endpoint timings remain required before promotion.
+evidence above identifies the earlier standalone binary. Composed source
+`5017795ac` (the subsequent `007532670` changes documentation only) passed
+48 FMA on/off moment tests, canonical values, range derivatives, work census,
+and all three independent RKS/UKS endpoints on node1 Slurm 5339. The library is
+`51bb65500f26ea7820cabd591c36c18943fe5bdf6736a681fd36e666a31ffa59`.
+Every cold, priming, three warm, three fixed-state force, and changed-geometry
+sample also passes the qualified references. Maximum energy/force errors are
+3.22e-12 Eh / 1.34e-9 Eh/Bohr at six atoms and 7.17e-12 / 9.08e-10 at twelve.
+Composed twelve-atom cold/warm-median/moved times are 168.126/24.010/93.446 s;
+six-atom times are 17.943/6.071/13.686 s. These diagnostic grids do not establish
+full-grid scaling. A matched shell-versus-composed allocation is running.
+
+Node1 Slurm 5300 separately completes the same-device standalone comparison
+at twelve atoms: baseline cold/warm-median/moved 562.022/93.588/312.576 s;
+standalone radial 516.095/89.810/294.793 s, with three warm samples and the same
+iteration counts. Every sample passes the independent CPU oracle, maximum
+4.38e-12 Eh / 9.07e-10 Eh/Bohr. The warm endpoint improvement is 4.21%, much
+smaller than the isolated radial speedup because Hermite recurrence and force
+work remain. Do not compare these matched values with a different allocation's
+composed times as a controlled speedup.
+
 The complete 24-atom, 48 x 16 x 32 grid cases are still running. Raw scientific
 records, input scripts, binary hashes and phase journals are retained locally in
 `.artifacts/lr-moments/` and on the explicitly authorized Slurm nodes under
