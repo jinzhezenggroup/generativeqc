@@ -87,8 +87,8 @@ def test_nonlocal_pair_generation_is_standalone_and_deterministic(
     assert str(tmp_path) not in first
     # Twelve unchanged ordered closures plus the separately versioned, bounded
     # VV10 derivative policies; the latter never replaces the fallback.
-    assert first.count("// TensorIR logical hash: ") == 14
-    assert first.count("GENERATIVEQC_NONLOCAL_PAIR_HD inline bool pair_") == 14
+    assert first.count("// TensorIR logical hash: ") == 17
+    assert first.count("GENERATIVEQC_NONLOCAL_PAIR_HD inline bool pair_") == 16
     assert "#define GENERATIVEQC_NONLOCAL_PAIR_HD __host__ __device__" in first
     # The runtime owns numerical failure observation, including outputs that
     # are not consumed physically but remain part of raw CPU admission.
@@ -319,10 +319,15 @@ def native_pair_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         + "\n  }\n}\n"
         + r"""
 extern "C" void denominator_probe(int geometry, const double* x, double* actual, double* expected) {
-  const auto a = geometry
+  const bool g = geometry & 1;
+  const bool admitted = geometry & 2;
+  const auto a = admitted
+      ? (g ? generated::pair_values_vv10_admitted<true>(x[0], x[1], x[2], x[3], x[4])
+           : generated::pair_values_vv10_admitted<false>(x[0], x[1], x[2], x[3], x[4]))
+      : g
       ? generated::pair_values_vv10_rational<true>(x[0], x[1], x[2], x[3], x[4], x[5])
       : generated::pair_values_vv10_rational<false>(x[0], x[1], x[2], x[3], x[4], x[5]);
-  const auto b = geometry
+  const auto b = g
       ? legacy_cuda<Vv10Variant::vv10, true, true>(x[0], x[1], x[2], x[3], x[4], x[5])
       : legacy_cuda<Vv10Variant::vv10, true, false>(x[0], x[1], x[2], x[3], x[4], x[5]);
   actual[0] = a.phi; actual[1] = a.dphi_domega;
@@ -376,11 +381,16 @@ def _same_fp64(actual: float, expected: float) -> bool:
 
 
 def _evaluate_denominator(
-    native: ct.CDLL, values: tuple[float, ...], geometry: bool = True
+    native: ct.CDLL,
+    values: tuple[float, ...],
+    geometry: bool = True,
+    admitted: bool = False,
 ) -> tuple[list[float], list[float]]:
     inputs = (ct.c_double * 6)(*values)
     actual, expected = (ct.c_double * 4)(), (ct.c_double * 4)()
-    native.denominator_probe(geometry, inputs, actual, expected)
+    native.denominator_probe(
+        int(geometry) | (2 if admitted else 0), inputs, actual, expected
+    )
     return list(actual), list(expected)
 
 
@@ -409,6 +419,27 @@ def test_rational_derivatives_preserve_energy_and_reduce_divisions(
 
 
 @pytest.mark.parametrize("geometry", [False, True])
+def test_unit_reciprocal_energy_has_distinct_identity(geometry: bool) -> None:
+    from generativeqc_compiler.method.nonlocal_pair import build_nonlocal_pair_program
+    from generativeqc_compiler.tensor.program import node_hashes
+
+    previous = build_nonlocal_pair_program(
+        "vv10", geometry=geometry, rational_derivatives=True
+    )
+    unit = build_nonlocal_pair_program(
+        "vv10", geometry=geometry, rational_derivatives=True, reciprocal_energy=True
+    )
+    assert unit.logical_hash != previous.logical_hash
+    assert (
+        node_hashes(unit.live_nodes)[unit.outputs["phi"]]
+        != node_hashes(previous.live_nodes)[previous.outputs["phi"]]
+    )
+    assert sum(n.op == "divide" for n in unit.live_nodes) == 1
+    with pytest.raises(ValueError, match="requires bounded"):
+        build_nonlocal_pair_program("vv10", reciprocal_energy=True)
+
+
+@pytest.mark.parametrize("geometry", [False, True])
 def test_rational_derivatives_retain_ordered_extreme_fallback(
     native_pair_probe: ct.CDLL,
     geometry: bool,
@@ -431,16 +462,18 @@ def test_rational_derivatives_retain_ordered_extreme_fallback(
             lower <= v <= upper for v in values[1:5]
         )
         for i, (a, b) in enumerate(zip(actual, expected, strict=True)):
-            if admitted and i != 0:
+            if admitted:
                 assert a == pytest.approx(b, rel=2e-15, abs=0), values
             else:
                 assert _same_fp64(a, b), (values, i, a, b)
 
 
 @pytest.mark.parametrize("geometry", [False, True])
+@pytest.mark.parametrize("admitted", [False, True])
 def test_rational_derivatives_match_high_precision_energy_differences(
     native_pair_probe: ct.CDLL,
     geometry: bool,
+    admitted: bool,
 ) -> None:
     # Independently differentiate the scalar energy in all consumed arguments.
     # Random exponents and interval endpoints exercise conditioning, not only
@@ -457,10 +490,11 @@ def test_rational_derivatives_match_high_precision_energy_differences(
         return Decimal("-1.5") / (gi * gj * (gi + gj))
 
     for values in cases:
-        actual, _ = _evaluate_denominator(native_pair_probe, values, geometry)
+        actual, _ = _evaluate_denominator(native_pair_probe, values, geometry, admitted)
         with localcontext() as context:
             context.prec = 90
             x = list(map(Decimal.from_float, values))
+            assert actual[0] == pytest.approx(float(phi(x)), rel=2e-15, abs=0), values
             for output, argument in [(1, 1), (2, 3), *([(3, 0)] if geometry else [])]:
                 step = max(Decimal(1), abs(x[argument])) * Decimal("1e-30")
                 plus, minus = x.copy(), x.copy()

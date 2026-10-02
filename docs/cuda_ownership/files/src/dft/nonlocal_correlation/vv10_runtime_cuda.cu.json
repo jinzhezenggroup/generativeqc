@@ -1,18 +1,18 @@
 {
   "path": "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu",
-  "reason": "Bounded VV10/rVV10 CUDA primitive with compiler-owned local-scale and pair scalar mathematics. Native CUDA retains ordered-pair traversal, active-partner compaction, row chain composition/reduction, device workspace, validation and failure publication; the remaining row composition is tracked as maintained scientific execution until separately generated.",
+  "reason": "Bounded VV10/rVV10 CUDA primitive with compiler-owned local-scale, pair and admitted row-feature scalar mathematics. Native CUDA owns pair traversal, stable compaction, linear domain admission, device workspace, reduction and failure publication; the original general row chain remains maintained scientific execution.",
   "regions": [
     {
       "start": "using PairKernelValues = generated::PairValues;",
       "stop": "unsigned launch_blocks(",
       "role": "runtime",
-      "reason": "Dispatch into compiler-owned ordered or bounded VV10 scalar closures; no handwritten pair mathematics. The rational closure preserves the energy root, explicitly qualifies derivative rounding, and retains the ordered closure outside its admitted domain."
+      "reason": "Dispatch into compiler-owned ordered or bounded scalar closures. The general VV10 closure keeps its energy root; a separately admitted molecular closure qualifies unit-reciprocal and row-contraction rounding. Exceptional-domain fallbacks remain explicit."
     },
     {
       "start": "void enqueue_vv10_molecular_domain_cuda(",
       "stop": null,
       "role": "runtime",
-      "reason": "Caller-owned MolecularV1 padding, resident CUDA layout/enqueue and the compatibility host wrapper share one bounded execution family: validation precedes screening, pair algebra remains unchanged, ordered device reduction is deterministic, and H2D/D2H staging exists only in the wrapper. Resident rows use a flat one-dimensional launch with a finite grid-limit fallback; VV10/rVV10 and requested output contracts are specialized outside the ordered pair loop, while row arithmetic and ordered energy reduction remain unchanged."
+      "reason": "Caller-owned molecular padding, resident layout/enqueue and compatibility host staging share bounded execution. Validation precedes screening. Stable compaction and stream-ordered linear admission select the qualified molecular arithmetic specialization, with the original general closure retained on rejection. Workspace capacity and ordered energy reduction remain unchanged; flat row launches retain finite grid-limit fallback."
     }
   ],
   "role": "scientific",
