@@ -60,9 +60,11 @@ inline cublasStatus_t df_occupied_project_panel(
 
 /** Finish the exact fitted occupied projection from the final-K linear
  * factor U[mu,j,Q]=sum_nu B[Q,mu,nu] C[nu,j]. The packed K kernel stores Q
- * fastest, so one GEMM contracts C over mu into [i,j,Q] order. The caller
- * gathers that result into [Q,i,j]; treating U as Q-major GEMM batches reads
- * unrelated occupied/auxiliary elements once rank or auxiliary exceeds one.
+ * fastest, so one GEMM contracts C over mu into [i,j,Q] order. Consumers may
+ * either gather that result into [Q,i,j] or keep the Q-fast pair-major view and
+ * absorb the transpose into a following contraction. Treating U as Q-major
+ * GEMM batches directly reads unrelated occupied/auxiliary elements once rank
+ * or auxiliary exceeds one.
  */
 inline cublasStatus_t df_occupied_finish_projection(
     cublasHandle_t blas, int n, int rank, int auxiliary,
