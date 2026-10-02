@@ -395,6 +395,35 @@ class _ResidentNonlocalForceOwner:
     _RESET = "generativeqc_internal_nonlocal_cuda_force_reset_v1"
     _METRICS = "generativeqc_internal_nonlocal_cuda_force_metrics_v1"
 
+    @staticmethod
+    def required_device_bytes(
+        library: typing.Any, point_count: int, tile_points: int
+    ) -> int:
+        """Ask the allocating native owner for capacity without device work.
+
+        The full-grid force arena cannot be tiled by reducing the AO tile size.
+        Querying it explicitly avoids arbitrary fractions of an unrelated total
+        force allowance and keeps its inventory out of Python planning code.
+        """
+        point_count = _positive_uint32(point_count, "point_count")
+        tile_points = _positive_uint32(tile_points, "tile_points")
+        query = getattr(
+            library, "generativeqc_internal_nonlocal_cuda_force_bytes_v1", None
+        )
+        if query is None:
+            raise RuntimeError(
+                "loaded native library lacks resident nonlocal force capacity query"
+            )
+        query.argtypes = [
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint64),
+        ]
+        query.restype = ctypes.c_int
+        result = ctypes.c_uint64()
+        _native.check(library, query(point_count, tile_points, ctypes.byref(result)))
+        return result.value
+
     def __init__(
         self,
         spec: NonlocalCorrelationSpec,

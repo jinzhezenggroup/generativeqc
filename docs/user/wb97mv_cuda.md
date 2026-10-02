@@ -100,6 +100,12 @@ The generic stationary integral-descriptor fallback remains qualified through
 d shells. Additional derivative numeric storage is
 bounded by 1 GiB device and 2 GiB host capacity; admission can fail below the
 shape limits when its conservative inventory exceeds these allowances.
+`KsOptions.nonlocal_memory_budget_bytes` defaults to 1 GiB and bounds the
+nonlocal provider separately. Capacity is allocated for the actual grid, not
+preallocated to this limit. An explicit smaller cap remains a hard limit. The
+force planner queries its native pair/seed owner's exact required capacity and
+includes it with all other live owners under the total force allowances above.
+Reducing the AO tile cannot reduce this full-grid pair/seed allocation.
 These bounds exclude existing SCF state, compiler processes, CUDA modules and
 driver-managed recurrence stacks. Host work includes snapshot validation and
 exports, tiling, and total-density/VV10-active-domain packing. The VV10 cutoff
