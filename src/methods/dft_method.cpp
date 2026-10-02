@@ -901,6 +901,11 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const auto status = cuda_->resident_final_density(expected, density_binding, detail);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
     const auto grid = grid_.cuda_view();
+    if (density_binding && !grid &&
+        options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused) {
+      detail = "host-unfused KS owner has no resident molecular grid";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     if (!density_binding || !grid || grid.device != density_binding.device_id) {
       detail = "CUDA KS resident molecular-grid binding is invalid";
       return GENERATIVEQC_STATUS_INTERNAL_ERROR;
