@@ -9,6 +9,8 @@
 #include "backends/cuda/cuda_atomics.cuh"
 #include "backends/cuda/gfn2_classical_force.cuh"
 #include "backends/cuda/gfn2_parameters.cuh"
+#include "generated_gfn2_es2_native.hpp"
+#include "generated_gfn2_pair_native.hpp"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace {
@@ -610,21 +612,24 @@ __global__ void repulsion_gradient_kernel(Gfn2ClassicalForceDevicePlan plan,
       const parameters::gfn2::ElementParameters lower_element = g_gfn2_elements[lower_number - 1];
       const double distance = sqrt(distance_squared);
       const bool light_pair = upper_number <= 2 && lower_number <= 2;
-      const double exponent =
-          light_pair ? g_gfn2_global.repulsion_klight : g_gfn2_global.repulsion_kexp;
-      const double distance_power = light_pair ? distance : distance * sqrt(distance);
       const double pair_alpha = upper_sqrt_alpha * sqrt(lower_element.arep);
-      const double pair_energy =
-          upper_element.zeff * lower_element.zeff * exp(-pair_alpha * distance_power) / distance;
-      const double force_scale =
-          (pair_alpha * exponent * distance_power + 1.0) * pair_energy / distance_squared;
-      const double force[3] = {force_scale * dx, force_scale * dy, force_scale * dz};
-      bool finite_pair = isfinite(pair_energy) && isfinite(force_scale);
+      const double pair_charge = upper_element.zeff * lower_element.zeff;
+      generativeqc::xtb::generated::Gfn2RepulsionPairResult pair{};
+      if (!generativeqc::xtb::generated::evaluate_gfn2_repulsion_pair(
+              distance, pair_alpha, pair_charge, light_pair, pair)) {
+        atomicExch(&valid, 0);
+        continue;
+      }
+      const double gradient_scale = pair.distance_derivative / distance;
+      bool finite_pair = isfinite(gradient_scale);
+      const double gradient[3] = {
+          gradient_scale * dx, gradient_scale * dy, gradient_scale * dz};
       for (int axis = 0; axis < 3; ++axis) {
-        /* Existing repulsion primitive publishes force; this composer stores dE/dR. */
         finite_pair =
-            add_finite_atomic(workspace.gradient_scratch + upper_coordinate + axis, -force[axis]) &&
-            add_finite_atomic(workspace.gradient_scratch + lower_coordinate + axis, force[axis]) &&
+            add_finite_atomic(workspace.gradient_scratch + upper_coordinate + axis,
+                              gradient[axis]) &&
+            add_finite_atomic(workspace.gradient_scratch + lower_coordinate + axis,
+                              -gradient[axis]) &&
             finite_pair;
       }
       if (!finite_pair) {
@@ -763,25 +768,35 @@ __global__ void es2_gradient_kernel(Gfn2ClassicalForceDevicePlan plan,
           const std::int64_t matrix =
               matrix_begin + (upper_shell - shell_begin) * shells + lower_shell - shell_begin;
           const double kernel = plan.es2_cache.coulomb_matrix[matrix];
-          double term = input.shell_charges[upper_shell] * kernel;
-          term *= input.shell_charges[lower_shell];
-          term *= kernel;
-          term *= kernel;
-          const double updated = weighted + term;
-          if (!(kernel > 0.0) || !isfinite(kernel) || !isfinite(term) || !isfinite(updated)) {
+          double shell_weight = 0.0;
+          if (!(kernel > 0.0) || !isfinite(kernel) ||
+              !generativeqc::xtb::generated::evaluate_gfn2_es2_cached_gradient_weight(
+                  kernel, input.shell_charges[upper_shell],
+                  input.shell_charges[lower_shell], shell_weight)) {
+            finite_result = false;
+            break;
+          }
+          const double updated = weighted + shell_weight;
+          if (!isfinite(updated)) {
             finite_result = false;
             break;
           }
           weighted = updated;
         }
       }
-      const double sign = atom == upper ? -1.0 : 1.0;
+      const double dx = input.positions[upper * 3] - input.positions[lower * 3];
+      const double dy = input.positions[upper * 3 + 1] - input.positions[lower * 3 + 1];
+      const double dz = input.positions[upper * 3 + 2] - input.positions[lower * 3 + 2];
+      double pair_gradient[3]{};
+      if (!generativeqc::xtb::generated::project_gfn2_es2_gradient(
+              weighted, dx, dy, dz, pair_gradient[0], pair_gradient[1], pair_gradient[2])) {
+        finite_result = false;
+      }
+      const double sign = atom == upper ? 1.0 : -1.0;
       for (int axis = 0; finite_result && axis < 3; ++axis) {
-        const double displacement =
-            input.positions[upper * 3 + axis] - input.positions[lower * 3 + axis];
-        const double term = sign * weighted * displacement;
+        const double term = sign * pair_gradient[axis];
         const double updated = contribution[axis] + term;
-        if (!isfinite(displacement) || !isfinite(term) || !isfinite(updated)) {
+        if (!isfinite(updated)) {
           finite_result = false;
         } else {
           contribution[axis] = updated;
