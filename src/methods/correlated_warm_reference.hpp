@@ -38,7 +38,7 @@ inline void set_coordinates(core::System& system, const std::vector<double>& val
 }
 
 inline std::size_t payload_bytes(std::size_t density_count, std::size_t coordinate_count) {
-  return checked_mul(sizeof(double), checked_add(density_count, coordinate_count));
+  return posthf::checked_mul(sizeof(double), posthf::checked_add(density_count, coordinate_count));
 }
 
 inline std::size_t reservation_bytes(const core::System& system,
@@ -48,8 +48,9 @@ inline std::size_t reservation_bytes(const core::System& system,
     result = payload_bytes(initial_state->density.size(), initial_state->coordinates.size());
   if (retain_candidate) {
     const auto n = molecule::ao_count(system);
-    result =
-        checked_add(result, payload_bytes(checked_mul(n, n), checked_mul(3, system.atoms.size())));
+    result = posthf::checked_add(
+        result,
+        payload_bytes(posthf::checked_mul(n, n), posthf::checked_mul(3, system.atoms.size())));
   }
   return result;
 }
@@ -76,7 +77,7 @@ inline scf::HfWarmState capture(const core::System& system, const hf::PhysicalRe
 inline void validate_checkpoint(const core::System& template_system, const scf::HfWarmState& state,
                                 std::string_view method_name) {
   const auto n = molecule::ao_count(template_system);
-  const auto expected_density = checked_mul(n, n);
+  const auto expected_density = posthf::checked_mul(n, n);
   if (state.density.size() != expected_density ||
       !valid_coordinates(state.coordinates, template_system) || state.iterations < 0 ||
       !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||

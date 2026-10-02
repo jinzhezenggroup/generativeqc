@@ -104,7 +104,7 @@ struct GeneratedCoulombPlan {
   cudaStream_t stream{};
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
-  std::uint64_t class_mask{};
+  std::uint64_t class_mask{}, value_class_mask{};
   bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};

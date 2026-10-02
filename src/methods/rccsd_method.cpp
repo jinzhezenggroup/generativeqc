@@ -19,6 +19,7 @@
 #include "cc/rccsdt_force.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
+#include "methods/correlated_cuda_source.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -29,6 +30,9 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
+#if GENERATIVEQC_HAS_CUDA
+#include "generated_direct_resident_psss_schedule.cuh"
+#endif
 
 namespace generativeqc::methods::detail {
 namespace {
@@ -159,6 +163,9 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
                           const hf::PhysicalReference& ref, const cc::SolverOptions& options,
                           bool cuda, int device, posthf::ProviderWork& provider_work,
                           generativeqc_tensor::Metrics& provider_metrics) {
+  // A failed optional source may already have performed real work. Preserve
+  // cumulative diagnostics, but validate the compiler schedule for this attempt.
+  const auto initial_work = provider_work;
   cc::Problem p;
   p.nocc = ref.nocc;
   p.reference_retained_bytes = retained_reference_bytes(ref);
@@ -287,13 +294,15 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
       *targets[request] = std::move(outputs[local]);
     }
   }
-  if (provider_work.source_scans != reuse.batches.size() ||
-      provider_work.source_reads != source_tile_plan.source_reads)
+  const auto source_scans = provider_work.source_scans - initial_work.source_scans;
+  const auto source_reads = provider_work.source_reads - initial_work.source_reads;
+  const auto source_values = provider_work.source_values - initial_work.source_values;
+  if (source_scans != reuse.batches.size() || source_reads != source_tile_plan.source_reads)
     throw std::logic_error("RCCSD source-reuse execution disagrees with compiler schedule");
   const auto ao2 = posthf::checked_mul(n, n);
   const auto ao4 = posthf::checked_mul(ao2, ao2);
-  const auto expected_source_values = posthf::checked_mul(ao4, provider_work.source_scans);
-  if (provider_work.source_values != expected_source_values)
+  const auto expected_source_values = posthf::checked_mul(ao4, source_scans);
+  if (source_values != expected_source_values)
     throw std::logic_error("RCCSD AO source value count disagrees with compiler schedule");
   p.provider_peak_bytes = reuse.peak_bytes;
   p.provider_host_bytes = retained;
@@ -317,11 +326,18 @@ RccsdNativeState execute_rccsd_prepared(
     runtime::ExecutionContext& execution, const core::System& system,
     const scf::ScfOptions& reference_options, const cc::SolverOptions& solver_options,
     std::size_t reference_capacity, scf::PreparedFockPlan* prepared_exact,
-    const std::vector<double>* initial_density, bool* warm_start_fallback) {
+    const std::vector<double>* initial_density, bool* warm_start_fallback,
+    std::unique_ptr<scf::PreparedFockPlan>* cuda_source_cache) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
     if (warm_start_fallback) *warm_start_fallback = false;
+    // A previous correlation source must not coexist with the next native
+    // CUDA RHF arena. CPU keeps its qualified shared reference/source owner.
+    if (cuda) {
+      if (cuda_source_cache) cuda_source_cache->reset();
+      prepared_exact = nullptr;
+    }
     const auto reference_started = std::chrono::steady_clock::now();
     const auto run_reference = [&](const std::vector<double>* seed) {
       if (prepared_exact) {
@@ -358,6 +374,40 @@ RccsdNativeState execute_rccsd_prepared(
     const auto reference = hf.reference;
     hf.density.clear();
     hf.density.shrink_to_fit();
+    const auto problem_started = std::chrono::steady_clock::now();
+    std::size_t source_preparation_peak = 0;
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda && cuda_source_cache) {
+      std::size_t primitives = 0, s_shells = 0, p_shells = 0;
+      for (const auto& shell : system.shells) {
+        primitives = posthf::checked_add(primitives, shell.primitives.size());
+        s_shells += shell.angular_momentum == 0;
+        p_shells += shell.angular_momentum == 1;
+      }
+      const auto n = molecule::ao_count(system);
+      const auto device_bytes = scf::cuda_direct_jk_device_bytes(
+          1, n, system.atoms.size(), system.shells.size(), primitives, 0);
+      const auto source_plan = plan_correlated_cuda_source(
+          n, molecule::cartesian_ao_count(system), system.atoms.size(), system.shells.size(),
+          primitives, s_shells, p_shells, scf::cuda_execution::kResidentPsssThreads,
+          posthf::source_capacity(system), retained_reference_bytes(*reference), device_bytes,
+          solver_options.max_bytes);
+      if (source_plan.admitted) {
+        source_preparation_peak = source_plan.peak_bytes;
+        try {
+          const auto strategy = scf::resolve_fock_build(
+              scf::make_hf_fock_spec(scf::FockSpin::Restricted), scf::FockBackend::Cuda, 0.0);
+          auto candidate = std::make_unique<scf::PreparedFockPlan>(
+              system, nullptr, strategy, execution.device_id(), source_plan.device_bytes);
+          *cuda_source_cache = std::move(candidate);
+          prepared_exact = cuda_source_cache->get();
+        } catch (const std::bad_alloc&) {
+          // Optional Direct storage cannot displace the existing bounded
+          // RawSource route. No partially prepared owner is published.
+        }
+      }
+    }
+#endif
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
     state.reference = reference;
@@ -381,22 +431,54 @@ RccsdNativeState execute_rccsd_prepared(
       raw_source = std::make_unique<posthf::RawSource>(system);
       source = raw_source.get();
     }
-    const auto problem_started = std::chrono::steady_clock::now();
-    state.problem = build_problem(*source, *reference, solver_options, cuda, execution.device_id(),
-                                  provider_work, provider_metrics);
+    const auto build = [&] {
+      return build_problem(*source, *reference, solver_options, cuda, execution.device_id(),
+                           provider_work, provider_metrics);
+    };
+    const auto retire_optional_source = [&] {
+      if (!cuda || !cuda_source_cache || !*cuda_source_cache) return false;
+      prepared_source.reset();
+      cuda_source_cache->reset();
+      prepared_exact = nullptr;
+      return true;
+    };
+    try {
+      state.problem = build();
+    } catch (const std::length_error&) {
+      if (!retire_optional_source()) throw;
+      raw_source = std::make_unique<posthf::RawSource>(system);
+      source = raw_source.get();
+      state.problem = build();
+    } catch (const std::bad_alloc&) {
+      if (!retire_optional_source()) throw;
+      raw_source = std::make_unique<posthf::RawSource>(system);
+      source = raw_source.get();
+      state.problem = build();
+    }
     const double problem_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - problem_started).count();
     // Provider planning already charged this source. Subsequent CC/(T)/force
     // stages must additionally retain the prepared owner beside the reference.
+    const auto prepared_retained = prepared_exact ? prepared_source->retained_numeric_bytes() : 0;
     if (prepared_exact)
-      state.problem.reference_retained_bytes = posthf::checked_add(
-          state.problem.reference_retained_bytes, prepared_source->retained_numeric_bytes());
+      state.problem.reference_retained_bytes =
+          posthf::checked_add(state.problem.reference_retained_bytes, prepared_retained);
     prepared_source.reset();
     raw_source.reset();
     allocation_stage = "CC resident solve";
     const auto solver_started = std::chrono::steady_clock::now();
-    state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
-                        : cc::solve_cpu(state.problem, solver_options);
+    try {
+      state.solved = cuda ? cc::solve_cuda(state.problem, solver_options, execution.device_id())
+                          : cc::solve_cpu(state.problem, solver_options);
+    } catch (const std::length_error&) {
+      if (!retire_optional_source()) throw;
+      state.problem.reference_retained_bytes -= prepared_retained;
+      state.solved = cc::solve_cuda(state.problem, solver_options, execution.device_id());
+    } catch (const std::bad_alloc&) {
+      if (!retire_optional_source()) throw;
+      state.problem.reference_retained_bytes -= prepared_retained;
+      state.solved = cc::solve_cuda(state.problem, solver_options, execution.device_id());
+    }
     const double solver_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - solver_started).count();
     state.budget = solver_options.max_bytes;
@@ -407,9 +489,9 @@ RccsdNativeState execute_rccsd_prepared(
     diagnostic.reference_energy = reference->energy;
     diagnostic.reference_residual = reference->commutator_residual;
     diagnostic.minimum_absolute_denominator = state.problem.minimum_absolute_denominator;
-    diagnostic.numeric_capacity_bytes =
-        std::max({reference_capacity, state.problem.provider_peak_bytes,
-                  state.solved.diagnostic.numeric_capacity_bytes});
+    diagnostic.numeric_capacity_bytes = std::max(
+        {reference_capacity, reference->numeric_capacity_bytes, source_preparation_peak,
+         state.problem.provider_peak_bytes, state.solved.diagnostic.numeric_capacity_bytes});
     diagnostic.mo_host_staging = cuda ? 1 : 0;
     diagnostic.correlation_owned_device_bytes = std::max<std::size_t>(
         provider_metrics.owned_device_bytes, state.solved.diagnostic.owned_device_bytes);
@@ -545,7 +627,7 @@ class RccsdPrepared final : public PreparedCalculation {
     reference_options.reference_memory_budget_bytes -= warm_capacity;
     solver_options.max_bytes -= warm_capacity;
 
-    if (!cpu_exact_plan_) {
+    if (!execution_.cuda_requested() && !cpu_exact_plan_) {
       const auto backend =
           execution_.cuda_requested() ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
       const auto strategy =
@@ -557,7 +639,7 @@ class RccsdPrepared final : public PreparedCalculation {
     auto state = execute_rccsd_prepared(execution_, system_, reference_options, solver_options,
                                         reference_capacity_, cpu_exact_plan_.get(),
                                         initial_state ? &initial_state->density : nullptr,
-                                        warm_start_fallback);
+                                        warm_start_fallback, &cpu_exact_plan_);
     state.external_reservation_bytes = warm_capacity;
     state.diagnostic.numeric_capacity_bytes =
         posthf::checked_add(state.diagnostic.numeric_capacity_bytes, warm_capacity);
@@ -824,7 +906,7 @@ RccsdNativeState run_rccsd_native_state(
                       "RCCSD bounded RHF reference exceeds correlation memory budget");
   scf::PreparedFockPlan* prepared_exact = nullptr;
   if (prepared_exact_cache) {
-    if (!*prepared_exact_cache) {
+    if (!execution.cuda_requested() && !*prepared_exact_cache) {
       const auto backend =
           execution.cuda_requested() ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
       const auto strategy =
@@ -835,9 +917,9 @@ RccsdNativeState run_rccsd_native_state(
     }
     prepared_exact = prepared_exact_cache->get();
   }
-  auto state =
-      execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
-                             prepared_exact, initial_density, warm_start_fallback);
+  auto state = execute_rccsd_prepared(execution, system, reference, solver_options,
+                                      reference_capacity, prepared_exact, initial_density,
+                                      warm_start_fallback, prepared_exact_cache);
   state.external_reservation_bytes = external_reservation_bytes;
   state.diagnostic.numeric_capacity_bytes =
       posthf::checked_add(state.diagnostic.numeric_capacity_bytes, external_reservation_bytes);

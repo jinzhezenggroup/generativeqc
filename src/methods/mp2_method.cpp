@@ -147,10 +147,19 @@ class Mp2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
                           "HF did not converge; no MP2 energy evaluated");
 
-      if (retained_warm_state)
-        *retained_warm_state =
-            warm_reference::capture(system_, std::move(hf.density), hf.energy, hf.energy_change,
-                                    hf.density_rms, static_cast<int>(hf.iterations));
+      if (retained_warm_state) {
+        // Preserve #1701: CUDA exports its immutable reference density, while
+        // the iterative CPU vector transfers its existing allocation. A ternary
+        // with the const reference would introduce an extra temporary/copy.
+        if (hf.density.empty())
+          *retained_warm_state =
+              warm_reference::capture(system_, hf.reference->density, hf.energy, hf.energy_change,
+                                      hf.density_rms, static_cast<int>(hf.iterations));
+        else
+          *retained_warm_state =
+              warm_reference::capture(system_, std::move(hf.density), hf.energy, hf.energy_change,
+                                      hf.density_rms, static_cast<int>(hf.iterations));
+      }
       const auto& ref = *hf.reference;
       // Release the iterative density. The exact CPU prepared owner remains
       // alive when present so correlation can borrow its already-built ERIs.

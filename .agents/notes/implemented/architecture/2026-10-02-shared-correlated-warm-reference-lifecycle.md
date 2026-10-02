@@ -35,12 +35,28 @@ batch metadata was rejected because it would violate the method numeric-memory c
 - A failed CC, triples, or force endpoint does not replace the last-good warm snapshot.
 - Geometry/basis density validation happens before restored state is committed.
 - No T1/T2, DIIS, triples, or response state is transported by this lifecycle.
+- Preserve #1701's explicit MP2 density branches when calling the shared capture
+  helper: move a populated iterative vector, otherwise copy the immutable physical
+  reference density once. Combining those operands in a conditional expression
+  would reintroduce an extra density allocation on the CPU path.
+- CUDA warm/cold references use the native CUDA RHF owner. Optional correlation
+  source preparation follows successful reference validation and remains inside
+  the phase budget after both retained warm payloads have been reserved.
 
 ## Evidence
 
 Public MP2, RCCSD, and RCCSD(T) batch tests cover cold-to-warm replay, geometry movement, clearing,
 checkpoint restore, budget admission, and item-local failure behavior. Existing strict RHF and
 correlated numerical gates remain unchanged.
+
+Canonical RCCSD and RCCSD(T) now have explicit resolved model identities so the
+existing portable checkpoint save/load path can validate them. The schema admits
+only the current all-electron, unfrozen, conventional, closed-shell CC contract;
+method, basis, ordered nuclei, geometry and spin identities remain strict. This
+identity adapter does not admit correlated target-accuracy or progressive
+projection execution. Cross-method imports remain rejected even with warm
+admission, and changed geometry still requires explicit warm admission followed
+by a fresh native reference solve.
 
 ## Consequences
 
@@ -57,7 +73,8 @@ validated orbital/amplitude transport.
 
 - #1503
 - #1696
+- #1701
 - #190
 
-Agent: ChatGPT
-Model: GPT-5.6 Sol
+Original author attribution: ChatGPT
+Integration review: dot

@@ -108,6 +108,25 @@ same generated bundled catalog and must accompany an enabled density-fitting
 mode. This CLI layer does not change the existing metric threshold or planner
 policy.
 
+## Run native DFT energies
+
+Native DFT methods already present in the generated method manifest can use the
+same bundled Gaussian-basis resolver:
+
+```bash
+generativeqc run molecule.xyz \
+  --method pbe-rks \
+  --basis def2-svp \
+  --representation spherical \
+  --backend cpu
+```
+
+The selector is resolved from the native method manifest rather than a second
+CLI-specific DFT list. This slice exposes the manifest DFT energy endpoint with
+conventional Coulomb only. DFT density fitting and DFT forces remain
+fail-closed at argument validation and require separate qualification before
+the CLI exposes them.
+
 ## Manage local profile activation
 
 The native executable also owns the profile-cache operations that do not need

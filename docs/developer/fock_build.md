@@ -15,6 +15,20 @@ insufficient optional capacity. KS planning charges both owners; warm J calls
 keep their density and result on the provider stream. Qualification rationale
 is tracked in the [pure-J candidate note](../../.agents/notes/proposed/2026-09-23-generated-pure-j-consumer.md).
 
+Complete generated/native full-range J/K coverage remains automatic. Through-f
+value requests use the retained canonical source by default, or the generic
+source when optional canonical capacity is unavailable. The Direct-HF bounded
+value implementation remains available for explicit internal qualification:
+set `CudaDirectJkPlan::bounded_value_opt_in` before enqueueing a request, without
+changing `GeneratedExchangePlan::bounded_value_capability`. This is a per-plan
+test/benchmark switch, not a public Fock option or an environment override.
+`direct_jk_bounded_value_enabled()` is the common admission gate for value
+consumers; retaining a bounded derivative lease does not enable bounded values.
+Range-separated K retains its canonical/generic route. Both selections preserve
+the existing strict-FP64 value mathematics and derivative ownership. The
+[bounded value policy note](../../.agents/notes/implemented/performance/2026-10-02-through-f-value-policy.md)
+records the measured regression and requirements for future default promotion.
+
 ## Public prepared API
 
 `FockPlan` owns normalized geometry, orbital/auxiliary data and native sources.

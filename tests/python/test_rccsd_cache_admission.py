@@ -59,7 +59,8 @@ int cc_options(const generativeqc_method_descriptor&,std::size_t) { return 0; }
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,int,std::size_t,scf::PreparedFockPlan* p,
-                                      const std::vector<double>*, bool*) {
+                                      const std::vector<double>*, bool*,
+                                      std::unique_ptr<scf::PreparedFockPlan>*) {
   ++executions;
   return {p != nullptr,0,{80}};
 }
@@ -80,7 +81,8 @@ int main(int argc,char** argv) {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
                                         nullptr,nullptr,0);
     if (mode < 2) return 2;
-    const bool expect_cache = mode == 2 || mode >= 4;
+    // CUDA source preparation belongs after native RHF, inside execution.
+    const bool expect_cache = mode >= 4;
     if (result.cached != expect_cache) return 3;
     if (allocations != (expect_cache ? 1 : 0) || executions != 1) return 4;
     if (expect_cache) {
