@@ -6,11 +6,14 @@ semilocal meta-GGA, 15% short-range exchange, 100% long-range exchange
 (`omega=0.3`), and self-consistent VV10. Nuclear repulsion, overlap/Pulay,
 AO motion, quadrature-point motion and Becke partition response are included.
 
-Numerical acceptance covers restricted H2, unrestricted H3, and spherical
-def2-SVP water, including independent GPU4PySCF forces and reconverged energy
-finite differences. Performance at the HF README's water-cluster sizes is
-not qualified. The retained [qualification evidence](../../benchmarks/results/wb97mv-cuda-20260926/README.md)
-records completed measurements and incomplete attempts separately.
+Numerical acceptance covers restricted H2, unrestricted H3, spherical def2-SVP
+and def2-TZVP water, water with the full local spherical def2-TZVPD snapshot,
+and unrestricted NH₂/def2-TZVP,
+including independent GPU4PySCF forces and reconverged energy finite differences.
+The retained [SVP qualification](../../benchmarks/results/wb97mv-cuda-20260926/README.md)
+and [OMol25-level benchmark](../../benchmarks/results/omol25-wb97mv-20261001/README.md)
+record completed endpoints and incomplete attempts separately; acceptance on a
+small molecule does not qualify scaling at every HF water-cluster size.
 
 ```python
 from generativeqc import Calculator
@@ -30,9 +33,27 @@ spin. Energy-only requests avoid derivative work. Forces are the negative
 energy gradient. No CPU integral derivative, reference SCF or finite difference
 is part of the production force path.
 
-The complete Python force consumer admits built-in STO-3G and def2-SVP, or
-explicit all-electron s/p/d bases, in Cartesian or spherical representation.
-ECPs, density fitting and mixed precision are outside this force contract.
+The through-f opt-in gates include def2-TZVP RKS/UKS and local def2-TZVPD RKS.
+When the optional retained Direct shell-force owner is unavailable, the existing
+bounded CUDA one-electron fallback stages native basis metadata. This is not a
+CPU derivative or oracle fallback; its H2D work is reported explicitly.
+
+The complete Python force consumer admits built-in STO-3G, def2-SVP and
+def2-TZVP, or explicit/local all-electron bases through f angular momentum, in
+Cartesian or spherical representation. A basis such as def2-TZVPD is not
+bundled and must be supplied as a local basis record. ECPs, density fitting and
+mixed precision are outside this force contract.
+
+For the H/O-only benchmark snapshot in a repository checkout, load the exact
+diffuse basis rather than substituting the bundled def2-TZVP name:
+
+```python
+from generativeqc import Calculator, load_basis
+
+basis = load_basis("benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json")
+calculator = Calculator(method="wb97m-v", basis=basis, device="cuda")
+result = calculator.singlepoint(water, properties=("energy", "forces"))
+```
 
 Capability discovery is intentionally layered. ``method_capabilities()`` is the
 backend-neutral registry view and therefore reports the DFT carrier as
@@ -50,15 +71,52 @@ owners on unchanged geometry and rebuild them on geometric changes. A live
 SCF-generation token is checked before and after force assembly; failures
 discard Python-owned derivative scratch and preserve per-item error reporting.
 
+Through-f direct workloads automatically select exact FP64 angular-bucketed
+J/K contraction under the existing provider budget; no performance option is
+required. When its complete resident inventory fits, the source reuses HF's
+normalized Cartesian integrals and public/source projections rather than
+repeating spherical component expansion inside each quartet. Shell-local
+transform spans bound projection work by the small shell component count,
+not a dense cubic AO contraction; Cartesian public bases bypass identity
+projection entirely. Full J and K share each symmetry-unique source ERI. Native Schwarz keys are
+sorted within angular buckets and inclusive row spans omit rejected quartets
+before traversal, preserving the exact product-based screening predicate.
+RSH derivatives reuse that geometry-bound schedule and the same compiler-owned
+integral algebra. Screening is defined in the selected source representation,
+with identical full-range Schwarz admission for its J/K and RSH force consumers.
+Generated SPD workloads retain their existing HF source owner.
+If optional sort/scan storage does not fit, execution keeps dense canonical
+contraction. If Cartesian metadata/projection storage does not fit, the smaller
+public-AO canonical source remains; if its pair/matrix storage also does not fit,
+or mixed-J is requested, execution keeps the generic bounded source.
+No four-index tensor is retained. Work counting
+is available only through a borrowed native test/profiler observer, not a user
+performance switch. These changes do not establish 100-atom endpoint parity.
+See the [scheduling decision](../../.agents/notes/implemented/performance/2026-10-01-default-screened-through-f.md).
+
 The consumer has explicit limits of 128 atoms, 1024 AOs, four million quadrature
-points, and s/p/d angular momentum. Additional derivative numeric storage is
+points, and angular momentum through f for the WB97M-V geometry composition.
+The generic stationary integral-descriptor fallback remains qualified through
+d shells. Additional derivative numeric storage is
 bounded by 1 GiB device and 2 GiB host capacity; admission can fail below the
 shape limits when its conservative inventory exceeds these allowances.
 These bounds exclude existing SCF state, compiler processes, CUDA modules and
 driver-managed recurrence stacks. Host work includes snapshot validation and
 exports, tiling, and total-density/VV10-active-domain packing. The VV10 cutoff
 is `rho >= 1e-8` on both pair legs, using the same active-branch convention as
-SCF. Finite memory bounds do not imply scalable endpoint work: the retained
+SCF.
+
+Matched GPU4PySCF comparisons must configure the same VV10 density mask in both
+SCF and analytic forces. GPU4PySCF 1.8.1 defaults to `rho >= 1e-10`, while the
+native MolecularV1 and PySCF CPU contracts use `rho >= 1e-8`. The OMol25 runner
+scopes both imported comparator constants together, records this policy and
+GPU4PySCF's separate `|weight| > 1e-14` screening, and restores defaults after
+each reference call. Sharing grid coordinates alone does not match VV10 work.
+Neither native mathematics nor the `1e-8 Eh` / `1e-7 Eh/Bohr` acceptance gates
+are changed. See the
+[OMol25 protocol](../../benchmarks/results/omol25-wb97mv-20261001/README.md).
+
+Finite memory bounds do not imply scalable endpoint work: the retained
 generic exchange/derivative provider and quadratic VV10 pairs remain material
 performance costs.
 
@@ -71,7 +129,7 @@ energies and grid-responsive analytic forces, reconverged energy finite
 differences, warm replay, geometry rebuild and failed-neighbor isolation:
 
 ```bash
-srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:20:00 \
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=02:30:00 \
   env GENERATIVEQC_TEST_WB97MV_CUDA=1 PYTHONPATH=python:. \
   python -m pytest tests/python/test_wb97mv_complete_cuda.py -q
 srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 --time=00:15:00 \

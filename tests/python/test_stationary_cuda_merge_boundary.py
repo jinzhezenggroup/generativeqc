@@ -69,7 +69,7 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
     monkeypatch.setattr(
         runtime,
         "_layout",
-        lambda _basis: (
+        lambda _basis, *, integral_derivatives=True: (
             primitives,
             aos,
             ((("", 0.5),), (("", 0.75),)),

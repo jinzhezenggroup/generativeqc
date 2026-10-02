@@ -1,0 +1,92 @@
+{
+  "schema": "generativeqc.canonical-public-ao-jk-qualification.v1",
+  "master": "8154ab3df56a10900dd267039b857021a1054721",
+  "library_sha256": "096147bb0e1d95dd90005c899dc163fc0fc9789e97b419ad3830edaf93d4c5ab",
+  "production_patch_sha256": "a6c072b00bb78f3a811830cf209c391ee2aab6c2d8c9c46b6c08366c99800ec0",
+  "source_file_sha256": {
+    "python/generativeqc/calculator.py": "1030f85f2093e722ed1e152fcc5519f9791050c4dab1778e73dd31957aca3e9c",
+    "python/generativeqc/ks.py": "5bc4f2334a6f845e70e80f80ccbf20f056e8bf830c2dfb3502806f222140ec0e",
+    "python/generativeqc/_stationary_cuda.py": "ae7b71d819096553132e19ee0dea495c3229b81a072e551651dbaffa584d12ee",
+    "python/generativeqc/_stationary_wb97mv_cuda.py": "3d831e49d1776e1c0ccafd1becc55d7a79b7407f69926828b1f18800d030791b",
+    "benchmarks/readme_omol25.py": "3916ef60b68bb51e2c1b0c5ac6137516927947a45ea55885c81659faf5d8316c",
+    "benchmarks/readme_wb97mv.py": "2389308a6b16b1b1ca03a6fc7fc72d2ec63ca431b94ea753fa2c3cf2d589d280",
+    "benchmarks/compare_df_direct_endpoint.py": "834f4cb77d9faf469b7528114c7863700c10e75385a749369ab5a0134a2e21ec",
+    "src/scf/cuda/direct_jk.cpp": "5d67f83ef3d3be3d9b193ebb44bf4440a8b60215fa97a09fe6aad919e9dd27d8",
+    "src/scf/cuda/direct_jk_kernels.cu": "5a90e9f30748140d658f34236c5f83133bfae34f008ad016e5a33a90268d7884",
+    "src/scf/cuda/direct_jk_kernels.hpp": "ec14ad3c76cc73b76a40b7ec6365961b949bf9f759f213b244f667b72ce1f7e6",
+    "src/scf/cuda/direct_jk_plan.hpp": "51dfd8a5a5aa538ecf88fd9ed6b52f9744dea0e3de571c5d471e02a924e3b366"
+  },
+  "scheduler": {
+    "SLURM_JOB_ID": "11955",
+    "partition": "main",
+    "gres": "gpu:5090:1",
+    "time_limit": "00:03:00"
+  },
+  "settings": {
+    "GENERATIVEQC_CUDA_CANONICAL_JK": "1",
+    "GENERATIVEQC_CUDA_CANONICAL_JK_CENSUS": "1"
+  },
+  "independent_value_gate": {
+    "status": "passed",
+    "reference": "CPU full/SR/LR ERIs",
+    "max_absolute_matrix_tolerance": 3e-10,
+    "domains": [
+      "s/p/d/f",
+      "Cartesian and spherical",
+      "restricted and unrestricted",
+      "nonsymmetric densities",
+      "two geometries",
+      "all output masks",
+      "radial evaluation reuse counts",
+      "invalid-density recovery",
+      "minimum-budget fallback"
+    ]
+  },
+  "work_census": [
+    {
+      "aos": 58,
+      "operator": "full-JK",
+      "candidate_quartets": 1464616,
+      "evaluated_radial_eris": 1464616,
+      "seconds": 0.189557,
+      "device_bytes": 340046
+    },
+    {
+      "aos": 58,
+      "operator": "long-K",
+      "candidate_quartets": 1464616,
+      "evaluated_radial_eris": 1464616,
+      "seconds": 0.242466,
+      "device_bytes": 340046
+    },
+    {
+      "aos": 116,
+      "operator": "full-JK",
+      "candidate_quartets": 23028291,
+      "evaluated_radial_eris": 23028291,
+      "seconds": 0.42383,
+      "device_bytes": 1353364
+    },
+    {
+      "aos": 116,
+      "operator": "long-K",
+      "candidate_quartets": 23028291,
+      "evaluated_radial_eris": 23028291,
+      "seconds": 0.567403,
+      "device_bytes": 1353364
+    }
+  ],
+  "work_census_contract": "Instrumented value enqueue plus stream synchronization on a single-primitive synthetic spherical basis, without SCF, XC, VV10, or forces. These seconds are diagnostic, not OMol25 endpoint latencies.",
+  "host_tests": {
+    "passed": 110,
+    "skipped": 16,
+    "seconds": 8.37,
+    "log_sha256": "8b7d35885457495ed264b699d5614e12c299fb57cf8fd3a7db824bc8954e1cf5"
+  },
+  "endpoint_evidence": "endpoint-preview.json identifies the earlier PR-head preview separately; no later-master full force timing or candidate UKS endpoint is claimed.",
+  "log_sha256": {
+    "current-acceptance-final.log": "4e636175823f9aab90a6c931ceec1b82d8aa41bb25ef040fb517acf22c2465e2",
+    "current-matrix-gates-final.log": "ea47480f5171f837a5c5b3530209526b402eb4cdf03ae463551067baf5c3be46",
+    "current-work-census-final.jsonl": "5c5a766a8fd4d65dec93ff1d3f1daeadac4f288199480fcaf950f31a9ea2827e"
+  }
+}
