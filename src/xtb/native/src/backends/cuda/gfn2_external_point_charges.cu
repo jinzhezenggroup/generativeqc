@@ -7,6 +7,7 @@
 
 #include "backends/cuda/cuda_atomics.cuh"
 #include "backends/cuda/gfn2_external_point_charges.cuh"
+#include "generated_gfn2_external_point_charge_force.hpp"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace {
@@ -489,13 +490,10 @@ __device__ bool evaluate_point_charge_pair_force(double atom_x, double atom_y, d
   const double inverse_average_hardness = 2.0 / (shell_hardness + point_hardness);
   const double softened_distance = hypot(hypot(dx, dy), hypot(dz, inverse_average_hardness));
   const double inverse_distance = 1.0 / softened_distance;
-  const double force_scale =
-      shell_charge * point_charge * inverse_distance * inverse_distance * inverse_distance;
-  force->x = force_scale * dx;
-  force->y = force_scale * dy;
-  force->z = force_scale * dz;
   return softened_distance > 0.0 && isfinite(softened_distance) && isfinite(inverse_distance) &&
-         isfinite(force_scale) && isfinite(force->x) && isfinite(force->y) && isfinite(force->z);
+         generativeqc::xtb::generated::evaluate_gfn2_external_point_charge_force(
+             inverse_distance, shell_charge, point_charge, dx, dy, dz,
+             force->x, force->y, force->z);
 }
 
 __global__ void external_point_charge_force_kernel(Gfn2ExternalPointChargeDeviceBatch batch,
