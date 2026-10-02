@@ -63,10 +63,10 @@ struct Gfn2RuntimeResult {
   bool converged = false;
 };
 
-class Gfn2RuntimeBridge {
+class Gfn2RuntimeBridge : public core::ContextWorkspace {
  public:
   Gfn2RuntimeBridge(Gfn2RuntimeBackend backend, int device_id);
-  ~Gfn2RuntimeBridge();
+  ~Gfn2RuntimeBridge() override;
 
   Gfn2RuntimeBridge(const Gfn2RuntimeBridge&) = delete;
   Gfn2RuntimeBridge& operator=(const Gfn2RuntimeBridge&) = delete;
