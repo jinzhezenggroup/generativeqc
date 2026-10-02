@@ -673,9 +673,9 @@ static cudaError_t contract_occupied_response(
         a, r, transformed_projected, projected);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
-    checked(generated::df_occupied_apply_metric_root(
-        blas, ai, static_cast<int>(rr), metric.inverse_square_root, projected,
-        transformed_projected));
+    checked(generated::df_occupied_apply_metric_root(blas, ai, static_cast<int>(rr),
+                                                     metric.inverse_square_root, projected,
+                                                     transformed_projected));
     generated::df_rhf_potential_from_rooted_projection<<<blocks(a), threads, 0, stream>>>(
         a, r, factor.density_scale, transformed_projected, potentials);
     error = cudaGetLastError();
@@ -812,8 +812,8 @@ static cudaError_t contract_occupied_response(
         // Preserve weak metric directions until after applying the charge
         // projection. Forming X X^T first also destabilizes occupied response.
         const auto ti = static_cast<int>(terms.size());
-        checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ti, ai, &one,
-                            metric.eigenvectors, ai, charges, ai, &zero, potentials, ai));
+        checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors,
+                            ai, charges, ai, &zero, potentials, ai));
         if (fitted_occupied)
           cuda_df::launch_scale_metric_projection(stream, a, terms.size(), metric.eigenvalues, true,
                                                   potentials);
@@ -822,8 +822,8 @@ static cudaError_t contract_occupied_response(
               a, terms.size(), metric.eigenvalues, potentials);
         error = cudaGetLastError();
         if (error != cudaSuccess) return error;
-        checked(cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ai, ti, ai, &one,
-                            metric.eigenvectors, ai, potentials, ai, &zero, charges, ai));
+        checked(cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors,
+                            ai, potentials, ai, &zero, charges, ai));
         std::swap(charges, potentials);
         runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms", 2);
       }
