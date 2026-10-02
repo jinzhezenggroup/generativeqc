@@ -1339,9 +1339,16 @@ int main() {
             // together with this sp batch's source/SCF buffers under the
             // resolved hard-cap value allowance.
             // A stale default cache used to bypass that active limit.
-            require(replay.size() == 2 && replay[0].status == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
-                        replay[1].status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && !cached.plan,
-                    "DF cache bypassed an infeasible replacement budget");
+            require(
+                replay.size() == 2 && replay[0].status == GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+                    replay[1].status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && !cached.plan,
+                ("DF cache bypassed an infeasible replacement budget; budget_bytes=" +
+                 std::to_string(budget) + "; result_count=" + std::to_string(replay.size()) +
+                 "; status[0]=" + (replay.empty() ? "missing" : std::to_string(replay[0].status)) +
+                 "; status[1]=" +
+                 (replay.size() < 2 ? "missing" : std::to_string(replay[1].status)) +
+                 "; cached_plan=" + (cached.plan ? "non-null" : "null"))
+                    .c_str());
             continue;
           }
           require(replay.size() == 2 && replay[0].status == GENERATIVEQC_STATUS_SUCCESS &&
