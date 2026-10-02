@@ -44,3 +44,20 @@ Issue #1480.
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
+
+## Failure publication audit
+
+The diagnostic borrows the CUDA KS owner's live J/K/range-K buffers and the
+semilocal XC owner's potential/totals. After any component submission, an error
+drains the same provider stream and revokes the KS final-state, final-frame and
+stationary-weight views, including the final generation. It also clears partial
+profile results. Preflight rejection preserves the prior token; successful
+repeated profiles preserve it as well. The last-good warm density is separate
+storage and is retained for explicit recovery.
+
+The executed-host control-flow test covers both spins, exact and fitted provider
+routing, nonlocal/host-XC omissions, repeated profiles, and faults during enqueue,
+event completion, XC execution and numerical-status checks. These tests validate
+publication and buffer routing, not GPU numerical or performance acceptance.
+
+Agent: dot

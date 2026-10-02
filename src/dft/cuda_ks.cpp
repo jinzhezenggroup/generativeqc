@@ -18,6 +18,7 @@
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/compiled_execution_region.hpp"
+#include "runtime/cuda_resources.cuh"
 #include "runtime/host_component_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/solver_region_cuda.cuh"
@@ -1946,6 +1947,18 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
     std::string& detail) {
   profile = {};
   detail.clear();
+  bool submitted = false, complete = false;
+  const auto revoke_failed_profile = [&]() noexcept {
+    if (!submitted || complete) return;
+    // The diagnostic borrows the published owner's mutable J/K/XC buffers.
+    // A partial replay cannot retain a lease on those buffers. Drain before
+    // revoking all final-state views; the last-good warm seed stays separate.
+    (void)cudaSetDevice(impl_->device);
+    (void)cudaStreamSynchronize(impl_->stream);
+    invalidate_final_state();
+    profile = {};
+  };
+  runtime::ResourceScopeExit failed_profile(revoke_failed_profile);
   try {
     const auto current = impl_->token();
     if (expected.version != 1 || expected != current)
@@ -1960,6 +1973,7 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
     runtime::OwnedCudaEvent begin(impl_->device), end(impl_->device);
     const auto timed = [&](auto&& submit) {
       begin.record(impl_->stream);
+      submitted = true;
       submit();
       end.record(impl_->stream);
       end.synchronize();
@@ -1981,7 +1995,7 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
 
       if (auto* direct = impl_->provider.cuda_direct_source()) {
         profile.milliseconds[slot] = timed([&] {
-          check(scf::execute_cuda_direct_jk_device(
+          check(scf::enqueue_cuda_direct_jk_device(
                     direct, spec, impl_->density, beta, impl_->matrix,
                     spec.coulomb.present ? impl_->j : nullptr,
                     spec.exchange.present ? impl_->exchange : nullptr,
@@ -2045,6 +2059,7 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
 
     if (impl_->token() != current)
       throw std::invalid_argument("CUDA KS final-state eligibility changed during profiling");
+    complete = true;
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const std::bad_alloc&) {
     detail = "CUDA KS fixed-density component profile exceeded its resource budget";
