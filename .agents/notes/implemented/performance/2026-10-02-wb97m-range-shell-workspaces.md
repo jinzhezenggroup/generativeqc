@@ -102,6 +102,28 @@ Raw inputs, node3 component reports and binary identities remain in the ignored
 `.artifacts/wb97m-large/` checkout artifacts; the CPU/reference diagnosis is
 retained under `.artifacts/lr-moments/` in the separate radial candidate checkout.
 
+On 2026-10-03, node1 Slurm 5300 completed a same-device twelve-atom comparison,
+using spherical def2-TZVP, the diagnostic 24 x 8 x 16 moving grid and the same
+1e-11/1e-9/1e-12 energy/density/screening controls. Three warm repeats retain each
+engine's fixed post-cold density; both use one SCF iteration every time.
+
+| Complete SCF + analytic forces | Baseline (s) | Hermite candidate (s) |
+| --- | ---: | ---: |
+| Cold process, 22 iterations | 562.022 | 243.096 |
+| Warm median, 3 repeats | 93.588 | 28.723 |
+| Changed geometry, 11 iterations | 312.576 | 125.791 |
+
+Warm improvement is 3.258x. Every cold/priming/warm/fixed-force/moved sample passes
+the independent CPU oracle; maximum energy/force errors over both variants are
+5.46e-12 Eh / 9.08e-10 Eh/Bohr. These twelve-atom diagnostic measurements still
+do not establish the requested large-system advantage over GPU4PySCF. The
+default-grid 24-atom cases remain pending. The baseline and candidate libraries
+have SHA-256 `a42867f83c4391d4f764cf661d26edf026648adf79708a33569e65c0341a2b8b`
+and `ccdd1a26743b65db07ed0956efe7ae4907dee6fc005867dd4acbcf5455619e9a`.
+Reproduce the scientific case with `benchmarks.dft_force_matrix --method wb97m-v
+--system water-12 --basis def2-tzvp --repeats 3`; phase journals and the compact
+all-sample receipt are in the radial checkout's `.artifacts/lr-moments/`.
+
 ## Rejected alternatives and next decision
 
 Enabling the opt-in bounded value provider is a separate scheduling change and
