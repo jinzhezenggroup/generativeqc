@@ -35,7 +35,8 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     rsh_end = source.index("cudaError_t enqueue_generated_coulomb(", rsh_begin)
     rsh_body = source[rsh_begin:rsh_end]
     assert rsh_body.count("launch_bounded_shell_rsh_derivatives(") == 1
-    assert "launch_bounded_shell_range_exchange_derivative(" not in rsh_body
+    assert rsh_body.count("launch_bounded_shell_range_exchange_derivative(") == 1
+    assert "if (omega == 0.3)" in rsh_body
     assert "for (unsigned source" not in rsh_body
     assert "direct_bounded_fallback.hpp" not in source
     assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer

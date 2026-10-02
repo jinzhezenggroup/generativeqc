@@ -54,7 +54,7 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ("route", "failed_step"),
     [
         (route, step)
-        for route, count in (("full_range", 8), ("rsh", 8))
+        for route, count in (("full_range", 8), ("rsh", 8), ("rsh_split", 14))
         for step in range(count)
     ],
 )
@@ -91,22 +91,24 @@ PREFIX = r"""
 #include <new>
 #include <stdexcept>
 #include <utility>
+#include <tuple>
 #include <vector>
 using cudaError_t = int;
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaMemcpyDeviceToHost=2;
 int step=0, fail_step=0, syncs=0; bool throw_error=false;
-unsigned source_count=2;
+unsigned source_count=2, submitted_copies=0;
 bool tracking=false, pending=false, freed_pending=false;
-void* watched=nullptr;
+void* watched[32]{}; unsigned watched_count=0; bool split=false;
 void* operator new(std::size_t n) {
   void* p=std::malloc(n);
   if(!p) throw std::bad_alloc();
-  if(tracking && n==3*source_count*sizeof(double)) watched=p;
+  if(tracking && (n==3*sizeof(double) || n==6*sizeof(double) || n==9*sizeof(double)))
+    watched[watched_count++ % 32]=p;
   return p;
 }
 void operator delete(void* p) noexcept {
-  if(p==watched && pending) freed_pending=true;
+  for(auto* allocated:watched) if(p==allocated && pending) freed_pending=true;
   std::free(p);
 }
 void operator delete(void* p,std::size_t) noexcept { ::operator delete(p); }
@@ -124,13 +126,13 @@ int cudaMemsetAsync(void* dst,int value,std::size_t n,cudaStream_t) {
 int cudaGetLastError() { return operation(); }
 int cudaMemcpyAsync(void* dst,const void* src,std::size_t n,int,cudaStream_t) {
   int error=operation(); if(error) return error;
-  const auto expected=3*source_count*sizeof(double);
+  const auto expected=(split ? (submitted_copies==0 ? 6U : 3U) : 3*source_count)*sizeof(double);
   if(n!=expected || copy_count>=1U)
     throw std::runtime_error("bad copy");
   copies[copy_count].dst=dst;
   copies[copy_count].bytes=n;
   std::memcpy(copies[copy_count++].values,src,n);
-  pending=true; return cudaSuccess;
+  ++submitted_copies; pending=true; return cudaSuccess;
 }
 int cudaStreamSynchronize(cudaStream_t) {
   ++syncs;
@@ -160,8 +162,30 @@ struct GeneratedExchangePlan {
 int prepare_generated_exchange_density(GeneratedExchangePlan&,bool,const double*,const double*) {
   return operation();
 }
-template<class... Args> void launch_bounded_shell_energy_derivative(Args&&...) {}
-template<class... Args> void launch_bounded_shell_rsh_derivatives(Args&&...) {}
+// Independent labelled source values expose both coefficient and force-sign
+// mistakes in the host decomposition, without evaluating any integral kernel.
+template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... args) {
+  const auto values=std::make_tuple(args...);
+  auto* force=std::get<14>(values);
+  for(unsigned i=0;i<3;++i) {
+    force[i]=-std::get<16>(values)*(1+i);
+    force[3+i]=-std::get<17>(values)*(10+i);
+  }
+}
+template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
+  const auto values=std::make_tuple(args...);
+  auto* force=std::get<14>(values);
+  for(unsigned i=0;i<3;++i) force[i]=-std::get<18>(values)*(20+i);
+}
+template<class... Args> void launch_bounded_shell_rsh_derivatives(Args&&... args) {
+  const auto values=std::make_tuple(args...);
+  auto* force=std::get<14>(values);
+  for(unsigned i=0;i<3;++i) {
+    force[i]=-std::get<17>(values)*(1+i);
+    force[3+i]=-std::get<18>(values)*(-10.0);
+    force[6+i]=-std::get<19>(values)*(20+i);
+  }
+}
 """
 
 SUFFIX = r"""
@@ -169,7 +193,8 @@ SUFFIX = r"""
 int main(int argc,char** argv) {
   fail_step=argc>1 ? std::atoi(argv[1]) : 0;
   throw_error=argc>2 && std::atoi(argv[2]);
-  source_count=(argc>3 && std::strcmp(argv[3],"rsh")==0) ? 3U : 2U;
+  split=argc>3 && std::strcmp(argv[3],"rsh_split")==0;
+  source_count=(argc>3 && std::strcmp(argv[3],"full_range")!=0) ? 3U : 2U;
   using namespace generativeqc::scf::cuda_execution;
   Shared shared;
   std::uint32_t pair=0,head=0; unsigned long long cursor=0;
@@ -177,11 +202,12 @@ int main(int argc,char** argv) {
   GeneratedExchangePlan plan{&shared,true,&pair,&bound,force,&cursor,&head};
   std::vector<double> output{99.0};
   const auto execute = [&]() {
+    submitted_copies=0;
     return source_count==2
         ? execute_generated_full_range_energy_derivatives(
             plan,false,&density,nullptr,1.0,-0.5,output)
         : execute_generated_rsh_energy_derivatives(
-            plan,false,&density,nullptr,1.0,-0.1,-0.5,0.4,output);
+            plan,false,&density,nullptr,1.0,-0.1,-0.5,split ? 0.3 : 0.4,output);
   };
   tracking=true;
   int status=0; bool threw=false;
@@ -194,14 +220,19 @@ int main(int argc,char** argv) {
     if(throw_error ? !threw : status!=7) {std::cerr<<"lost injected failure";return 4;}
     if(output!=std::vector<double>{99.0}) {std::cerr<<"published partial result";return 5;}
   } else {
-    if(threw || status || output!=std::vector<double>(3*source_count,0.0)) {
-      std::cerr<<"successful result changed";return 6;
+    if(threw || status || output.size()!=3*source_count) return 6;
+    for(unsigned i=0;i<3;++i) {
+      if(std::abs(output[i]-(1+i))>1e-12 ||
+         std::abs(output[3+i]-(source_count==2 ? -0.5*(10+i) : 1.0))>1e-12 ||
+         (source_count==3 && std::abs(output[6+i]+0.5*(20+i))>1e-12)) {
+        std::cerr<<"published derivative source/sign/coefficient changed";return 6;
+      }
     }
-    if(syncs!=1) {std::cerr<<"extra success-path synchronization";return 7;}
+    if(syncs!=(split ? 2 : 1)) {std::cerr<<"extra success-path synchronization";return 7;}
   }
   // Reuse the same retained owner after the failed call.
   step=0;fail_step=0;syncs=0;throw_error=false;
-  if(execute()!=cudaSuccess || pending || syncs!=1) {
+  if(execute()!=cudaSuccess || pending || syncs!=(split ? 2 : 1)) {
     std::cerr<<"owner did not recover";return 8;
   }
 }
