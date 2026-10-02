@@ -77,9 +77,10 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
 
 /** Intrusive CUDA-event timings for J/K/XC replay at the exact resident final
  * density. No SCF step or new final-state generation is executed. */
-generativeqc_status dft_cuda_fixed_density_profile(
-    PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
-    KsFixedDensityProfile& profile, std::string& detail);
+generativeqc_status dft_cuda_fixed_density_profile(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   KsFixedDensityProfile& profile,
+                                                   std::string& detail);
 
 /** Borrow the final device-resident total rho/grad-rho for the exact KS
  * token. Pointers remain owned by the prepared CUDA KS plan and are valid only

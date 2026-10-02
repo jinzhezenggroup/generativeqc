@@ -422,8 +422,7 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
             profile = row.get("scf_profile")
             if isinstance(profile, Mapping):
                 fixed_density_missing.update(
-                    str(name)
-                    for name in profile.get("missing_expected_components", ())
+                    str(name) for name in profile.get("missing_expected_components", ())
                 )
             else:
                 expected = row.get("expected_components")
