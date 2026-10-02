@@ -31,7 +31,12 @@ tests passed.
 
 Node1 job 5378 compared 40000-point kernels (1.6 billion ordered pairs): about
 0.158 seconds original versus 0.136 seconds with reciprocal reuse. This roughly
-16% kernel improvement did not survive the complete endpoint comparison.
+16% kernel improvement cannot improve this WB97M-V endpoint: it changed the
+rVV10 closure, while the method dispatches VV10. The retained profiler names
+`pair_kernel_ordered<(Vv10Variant)1,...>` and the enum defines VV10=1, rVV10=2.
+The microbenchmark explicitly selects rVV10. Thus the endpoint comparison below
+is not evidence against applying reciprocal reuse to the actual VV10 closure;
+it is evidence that the experiment targeted the wrong specialization.
 Node1 job 5379 used the same GPU, water24/192 spherical def2-SVP AOs, the full
 48x16x32 grid (589824 points), three timed warm samples and matched reference
 VV10 masks. Original cold/warm median was 355.527/65.2817 seconds; reciprocal
@@ -50,6 +55,7 @@ The reciprocal library SHA256 was
 A library left in that experiment build directory does not describe subsequently
 reverted source; rebuild before drawing new provenance conclusions.
 
-Revisit only when a different schedule, workload or generated closure demonstrates
+Before revisiting, verify the method registry, emitted closure and measured kernel
+specialization agree. Revisit when a different schedule, workload or generated closure demonstrates
 repeatable complete SCF plus analytic-force benefit with semantic work counts,
 independent per-sample numerical gates, and preserved bounded fallbacks.
