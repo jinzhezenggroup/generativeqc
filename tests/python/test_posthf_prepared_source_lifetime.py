@@ -23,6 +23,7 @@ PREFIX = r"""
 #include <optional>
 #include <stdexcept>
 int plan_live=0, view_live=0, raw_live=0;
+int source_failure=0;
 std::size_t plan_bytes=64;
 namespace integrals {
 struct ElectronInteractionSource {
@@ -43,7 +44,10 @@ struct PreparedFockInteractionSourceView : integrals::ElectronInteractionSource 
 }
 namespace posthf {
 struct RawSource : integrals::ElectronInteractionSource {
-  explicit RawSource(int,const int* = nullptr) { ++raw_live; }
+  explicit RawSource(int,const int* = nullptr) {
+    if (plan_live || view_live) std::abort();
+    ++raw_live;
+  }
   ~RawSource() { --raw_live; }
   std::size_t retained_numeric_bytes() const override { return 16; }
 };
@@ -57,7 +61,18 @@ struct Problem { std::size_t reference_retained_bytes=100, provider_peak_bytes{}
 struct State { Problem problem; };
 struct Execution { int device_id() const { return 0; } };
 Problem build_problem(const integrals::ElectronInteractionSource& source,
-                      int,int,bool,int,int&,int&) {
+                      int,int,bool,int,int& work,int& metrics) {
+  // Real providers increment work before a source read may fail. Validate only
+  // this attempt's delta while retaining both attempts in endpoint diagnostics.
+  const int initial_work=work, initial_metrics=metrics;
+  ++work; ++metrics;
+  if (plan_live && source_failure) {
+    const int failure=source_failure; source_failure=0;
+    if (failure==1) throw std::length_error("optional provider admission");
+    throw std::bad_alloc();
+  }
+  if (work-initial_work!=1 || metrics-initial_metrics!=1)
+    throw std::logic_error("invalid provider attempt counters");
   // The provider already charges the source exactly once during its own phase.
   return {100, source.retained_numeric_bytes()+110};
 }
@@ -104,22 +119,27 @@ int mp2_case(bool prepared,bool compute_forces) {
   } else if (prepared && (!plan_live || raw_live)) return 4;
   return 0;
 }
-int cc_case(bool prepared) {
+int cc_case(bool prepared,bool optional_cuda=false,int failure=0) {
   std::unique_ptr<scf::PreparedFockPlan> owner;
   if (prepared) owner=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=owner.get();
+  auto* cuda_source_cache=&owner;
   State state;
   int system=0, reference_value=0, solver_options=0, provider_work=0, provider_metrics=0;
   const auto* reference=&reference_value;
-  const bool cuda=!prepared;
+  const bool cuda=optional_cuda || !prepared;
+  source_failure=failure;
   Execution execution;
+  const auto problem_started=std::chrono::steady_clock::now();
   std::unique_ptr<posthf::RawSource> raw_source;
 """
         + cc_handoff
         + r"""
-  if (state.problem.reference_retained_bytes != (prepared ? 164u : 100u)) return 5;
-  if (state.problem.provider_peak_bytes != (prepared ? 174u : 126u)) return 6;
-  if (raw_live || view_live || plan_live != int(prepared)) return 7;
+  const bool kept=prepared && !failure;
+  if (state.problem.reference_retained_bytes != (kept ? 164u : 100u)) return 5;
+  if (state.problem.provider_peak_bytes != (kept ? 174u : 126u)) return 6;
+  if (raw_live || view_live || plan_live != int(kept)) return 7;
+  if (provider_work != (failure ? 2 : 1) || provider_metrics != provider_work) return 11;
   return 0;
 }
 int main(int argc,char** argv) {
@@ -128,11 +148,12 @@ int main(int argc,char** argv) {
   int result=0;
   if (mode < 4) result=mp2_case(mode < 2,mode%2);
   else if (mode < 6) result=cc_case(mode==4);
-  else {
+  else if (mode==6) {
     plan_bytes=std::numeric_limits<std::size_t>::max();
     try { (void)cc_case(true); return 9; }
     catch (const std::overflow_error&) {}
   }
+  else result=cc_case(true,true,mode-7);
   if (plan_live || view_live || raw_live) return 10;
   return result;
 }
@@ -153,7 +174,7 @@ int main(int argc,char** argv) {
 
 
 def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> None:
-    for mode in range(7):
+    for mode in range(10):
         process = subprocess.run(
             [str(source_probe), str(mode)],
             capture_output=True,

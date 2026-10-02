@@ -42,8 +42,16 @@ class PreparedFockInteractionSourceView final : public integrals::ElectronIntera
   }
   std::size_t retained_numeric_bytes() const override {
     auto bytes = plan_.cpu_observation_capacity();
-    if (plan_.cuda_direct_source())
+    if (plan_.cuda_direct_source()) {
       bytes = checked_add(bytes, plan_.diagnostic().direct.device_bytes);
+      bytes = checked_add(bytes, plan_.diagnostic().direct.host_bytes);
+      const auto& system = plan_.system();
+      bytes = checked_add(bytes, checked_mul(system.atoms.capacity(), sizeof(core::Atom)));
+      bytes = checked_add(bytes, checked_mul(system.shells.capacity(), sizeof(core::Shell)));
+      for (const auto& shell : system.shells)
+        bytes =
+            checked_add(bytes, checked_mul(shell.primitives.capacity(), sizeof(core::Primitive)));
+    }
     return bytes;
   }
 
