@@ -458,9 +458,9 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
   return cudaGetLastError();
 }
 
-cudaError_t enqueue_generated_exchange_prepared(
-    GeneratedExchangePlan& p, bool unrestricted, double* alpha_exchange, double* beta_exchange,
-    DirectCoulombRange range, double omega) {
+cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool unrestricted,
+                                                double* alpha_exchange, double* beta_exchange,
+                                                DirectCoulombRange range, double omega) {
   const bool full_range = range == DirectCoulombRange::Full;
   cudaError_t error = cudaSuccess;
   auto& shared = *p.shared;
@@ -556,9 +556,9 @@ cudaError_t enqueue_generated_exchange_prepared(
   return cudaGetLastError();
 }
 
-cudaError_t enqueue_generated_coulomb_prepared(
-    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double* coulomb) {
+cudaError_t enqueue_generated_coulomb_prepared(GeneratedExchangePlan& p, bool unrestricted,
+                                               const double* alpha, const double* beta,
+                                               double* coulomb) {
   auto& shared = *p.shared;
   auto error = enqueue_generated_coulomb_direct(shared, alpha, beta);
   if (error != cudaSuccess) return error;
@@ -579,9 +579,10 @@ cudaError_t enqueue_generated_coulomb_prepared(
 
 }  // namespace
 
-cudaError_t enqueue_generated_exchange(
-    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double* alpha_exchange, double* beta_exchange, DirectCoulombRange range, double omega) {
+cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
+                                       const double* alpha, const double* beta,
+                                       double* alpha_exchange, double* beta_exchange,
+                                       DirectCoulombRange range, double omega) {
   const bool full_range = range == DirectCoulombRange::Full;
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
       (!full_range && !p.bounded_value_capability))
@@ -591,10 +592,9 @@ cudaError_t enqueue_generated_exchange(
       (!full_range && (!std::isfinite(omega) || omega <= 0.0)))
     return cudaErrorInvalidValue;
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
-  return error == cudaSuccess
-             ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange, beta_exchange,
-                                                   range, omega)
-             : error;
+  return error == cudaSuccess ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange,
+                                                                    beta_exchange, range, omega)
+                              : error;
 }
 
 cudaError_t execute_generated_full_range_energy_derivatives(
@@ -785,11 +785,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricte
              : error;
 }
 
-cudaError_t enqueue_generated_rsh_values(
-    GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double* coulomb, double* full_alpha_exchange, double* full_beta_exchange,
-    double* range_alpha_exchange, double* range_beta_exchange, DirectCoulombRange range,
-    double omega) {
+cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& p, bool unrestricted,
+                                         const double* alpha, const double* beta, double* coulomb,
+                                         double* full_alpha_exchange, double* full_beta_exchange,
+                                         double* range_alpha_exchange, double* range_beta_exchange,
+                                         DirectCoulombRange range, double omega) {
   if (p.shared == nullptr || !p.bounded_value_capability || coulomb == nullptr ||
       full_alpha_exchange == nullptr || range_alpha_exchange == nullptr ||
       (unrestricted ? (full_beta_exchange == nullptr || range_beta_exchange == nullptr)
@@ -801,7 +801,7 @@ cudaError_t enqueue_generated_rsh_values(
   error = enqueue_generated_coulomb_prepared(p, unrestricted, alpha, beta, coulomb);
   if (error != cudaSuccess) return error;
   error = enqueue_generated_exchange_prepared(p, unrestricted, full_alpha_exchange,
-                                               full_beta_exchange, DirectCoulombRange::Full, 0.0);
+                                              full_beta_exchange, DirectCoulombRange::Full, 0.0);
   if (error != cudaSuccess) return error;
   return enqueue_generated_exchange_prepared(p, unrestricted, range_alpha_exchange,
                                              range_beta_exchange, range, omega);

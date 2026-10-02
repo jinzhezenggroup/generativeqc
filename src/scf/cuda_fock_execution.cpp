@@ -315,12 +315,12 @@ generativeqc_status enqueue_prepared_cuda_rsh_values(
   const auto& primary = plan.strategy();
   const auto& p = primary.spec;
   const auto& c = correction.spec;
-  const bool valid_primary =
-      binding && source && primary.backend == FockBackend::Cuda && p.derivative_order == 0 &&
-      p.coulomb.present && p.coulomb.approximation == FockApproximation::Exact &&
-      p.coulomb.op == FockOperator::FullRange && p.exchange.present &&
-      p.exchange.approximation == FockApproximation::Exact &&
-      p.exchange.op == FockOperator::FullRange;
+  const bool valid_primary = binding && source && primary.backend == FockBackend::Cuda &&
+                             p.derivative_order == 0 && p.coulomb.present &&
+                             p.coulomb.approximation == FockApproximation::Exact &&
+                             p.coulomb.op == FockOperator::FullRange && p.exchange.present &&
+                             p.exchange.approximation == FockApproximation::Exact &&
+                             p.exchange.op == FockOperator::FullRange;
   const bool valid_correction =
       correction.backend == FockBackend::Cuda && c.derivative_order == 0 && c.spin == p.spin &&
       !c.coulomb.present && c.exchange.present &&
@@ -331,10 +331,10 @@ generativeqc_status enqueue_prepared_cuda_rsh_values(
     detail = "prepared CUDA RSH value plans have incompatible scientific identity";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
-  return enqueue_cuda_direct_rsh_values_device(
-      source, p, c, density, beta, matrix_elements, coulomb, full_alpha_exchange,
-      full_beta_exchange, range_alpha_exchange, range_beta_exchange, primary_error, range_error,
-      detail);
+  return enqueue_cuda_direct_rsh_values_device(source, p, c, density, beta, matrix_elements,
+                                               coulomb, full_alpha_exchange, full_beta_exchange,
+                                               range_alpha_exchange, range_beta_exchange,
+                                               primary_error, range_error, detail);
 }
 
 generativeqc_status enqueue_prepared_cuda_exchange_correction(

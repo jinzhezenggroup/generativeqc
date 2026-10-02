@@ -988,10 +988,10 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
 }
 
 generativeqc_status enqueue_cuda_direct_rsh_values_device(
-    CudaDirectJkPlan* plan, FockBuildSpec primary, FockBuildSpec correction,
-    const double* density, const double* beta, std::size_t elements, double* coulomb,
-    double* full_alpha_exchange, double* full_beta_exchange, double* range_alpha_exchange,
-    double* range_beta_exchange, int* primary_error, int* range_error, std::string& detail) {
+    CudaDirectJkPlan* plan, FockBuildSpec primary, FockBuildSpec correction, const double* density,
+    const double* beta, std::size_t elements, double* coulomb, double* full_alpha_exchange,
+    double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
+    int* primary_error, int* range_error, std::string& detail) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->bounded_value_capability) {
     detail = "prepared Direct owner has no bounded range-value lease";
@@ -1013,15 +1013,15 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
              correction.exchange.op == FockOperator::LongRange) &&
             std::isfinite(correction.exchange.omega) && correction.exchange.omega > 0.0,
         "resident fused RSH value request has incompatible scientific identity");
-    direct_jk_require(
-        elements == plan->matrix_elements && density != nullptr && coulomb != nullptr &&
-            full_alpha_exchange != nullptr && range_alpha_exchange != nullptr &&
-            primary_error != nullptr && range_error != nullptr &&
-            (unrestricted ? beta != nullptr && full_beta_exchange != nullptr &&
-                                range_beta_exchange != nullptr
-                          : beta == nullptr && full_beta_exchange == nullptr &&
-                                range_beta_exchange == nullptr),
-        "resident fused RSH value buffers or dimensions are invalid");
+    direct_jk_require(elements == plan->matrix_elements && density != nullptr &&
+                          coulomb != nullptr && full_alpha_exchange != nullptr &&
+                          range_alpha_exchange != nullptr && primary_error != nullptr &&
+                          range_error != nullptr &&
+                          (unrestricted ? beta != nullptr && full_beta_exchange != nullptr &&
+                                              range_beta_exchange != nullptr
+                                        : beta == nullptr && full_beta_exchange == nullptr &&
+                                              range_beta_exchange == nullptr),
+                      "resident fused RSH value buffers or dimensions are invalid");
 
     int current = -1;
     direct_jk_check(cudaGetDevice(&current));
@@ -1032,8 +1032,13 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
       direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
                         "resident fused RSH requires current-device buffers");
     };
-    const void* buffers[]{density,          beta,          coulomb, full_alpha_exchange,
-                          full_beta_exchange, range_alpha_exchange, range_beta_exchange};
+    const void* buffers[]{density,
+                          beta,
+                          coulomb,
+                          full_alpha_exchange,
+                          full_beta_exchange,
+                          range_alpha_exchange,
+                          range_beta_exchange};
     for (const auto* value : buffers)
       if (value) device_pointer(value);
     device_pointer(primary_error);

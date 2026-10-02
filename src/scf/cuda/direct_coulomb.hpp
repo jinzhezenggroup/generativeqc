@@ -102,11 +102,11 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestr
 /** Enqueue primary full-range J/K plus one SR/LR correction after a
  * single public-to-Cartesian spin-density transform and shell-density-bound
  * reduction. Through-f bounded shell value capability is required. */
-cudaError_t enqueue_generated_rsh_values(
-    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
-    double* coulomb, double* full_alpha_exchange, double* full_beta_exchange,
-    double* range_alpha_exchange, double* range_beta_exchange, DirectCoulombRange range,
-    double omega);
+cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& plan, bool unrestricted,
+                                         const double* alpha, const double* beta, double* coulomb,
+                                         double* full_alpha_exchange, double* full_beta_exchange,
+                                         double* range_alpha_exchange, double* range_beta_exchange,
+                                         DirectCoulombRange range, double omega);
 
 /** Execute separate full-range J' and K' fixed-density energy derivatives
  * through the retained shell topology. Output is source-major [J,K], each
