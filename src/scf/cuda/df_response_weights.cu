@@ -660,9 +660,9 @@ static cudaError_t contract_occupied_response(
   if (error != cudaSuccess) return error;
   if (reuse_final_fitted_projection) {
     // The final-K lease already contains B*C for the exact canonical RHF
-    // determinant. Finish S_P=C^T B_P C once, derive D:B_P from its trace,
-    // and keep S for the exchange response below. This removes the otherwise
-    // redundant retained fitted-B unpack + AO-density charge traversal.
+    // determinant. Finish S_P=C^T B_P C once, root it as U=X*S, and derive
+    // X(D:B)_P=w*tr(U_P). The same U remains live for exchange response. This
+    // removes the fitted-B charge traversal and its separate charge-root work.
     const auto& factor = buffers.occupied_factors[0];
     const auto r = factor.rank, rr = r * r;
     runtime::cuda_trace::TraceRegion reuse("final_fitted_projection_charge_reuse", stream);
@@ -849,9 +849,9 @@ static cudaError_t contract_occupied_response(
       runtime::cuda_trace::TraceRegion products("exchange_response_occupied_products", stream);
       if (reuse_final_fitted_projection) {
         if (t != 0) return cudaErrorInvalidValue;
-        // S_P was formed once above so its diagonal could also supply the
-        // fitted Coulomb charge. Keep that exact projection for metric-root
-        // and pseudo-density work; do not touch the retained B owner again.
+        // U=X*S was formed once above so its diagonal could supply the
+        // physical Coulomb potential. Keep that same rooted projection for
+        // exchange metric/pseudo-density work; do not touch retained B again.
       } else if (read_values) {
         // Keep the existing eigenfactor inverse ordering. Its input and output
         // alternate between these disjoint intervals; previous spin factors
