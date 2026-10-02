@@ -992,10 +992,12 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
     const double* density, const double* beta, std::size_t elements, double* coulomb,
     double* full_alpha_exchange, double* full_beta_exchange, double* range_alpha_exchange,
     double* range_beta_exchange, int* primary_error, int* range_error, std::string& detail) {
+  if (plan == nullptr || plan->generated_exchange == nullptr ||
+      !plan->generated_exchange->bounded_value_capability) {
+    detail = "prepared Direct owner has no bounded range-value lease";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
   return direct_jk_guard(plan, detail, [&] {
-    direct_jk_require(plan != nullptr && plan->generated_exchange != nullptr &&
-                          plan->generated_exchange->bounded_value_capability,
-                      "prepared Direct owner has no bounded range-value lease");
     primary = direct_jk_strategy(plan, primary, 0, plan->diagnostic.batch_size);
     const bool unrestricted = primary.spin == FockSpin::Unrestricted;
     direct_jk_require(
@@ -1030,8 +1032,9 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
       direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
                         "resident fused RSH requires current-device buffers");
     };
-    for (const auto* value : {density, beta, coulomb, full_alpha_exchange, full_beta_exchange,
-                              range_alpha_exchange, range_beta_exchange})
+    const void* buffers[]{density,          beta,          coulomb, full_alpha_exchange,
+                          full_beta_exchange, range_alpha_exchange, range_beta_exchange};
+    for (const auto* value : buffers)
       if (value) device_pointer(value);
     device_pointer(primary_error);
     device_pointer(range_error);
