@@ -486,6 +486,7 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     // Even an empty point tile publishes its new map and clears prior errors;
     // a borrowed view must never expose the previous task's AO labels.
     if (!npoint) {
+      p.density_jets_ready = features && !p.use_orbitals;
       p.view_ready = true;
       return;
     }

@@ -375,6 +375,38 @@ if(GENERATIVEQC_BUILD_TESTS)
              COMMAND generativeqc_cli basis list --json)
     set_tests_properties(generativeqc_cli_basis_list PROPERTIES
                          PASS_REGULAR_EXPRESSION "def2-svp")
+    add_test(NAME generativeqc_cli_gaussian_contract
+             COMMAND "${Python3_EXECUTABLE}"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_gaussian.py"
+                     $<TARGET_FILE:generativeqc_cli>)
+    add_test(NAME generativeqc_cli_rhf_cpu
+             COMMAND generativeqc_cli run
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     --method rhf --basis sto-3g --backend cpu --units bohr
+                     --forces --json)
+    set_tests_properties(generativeqc_cli_rhf_cpu PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"basis\":\"sto-3g\"")
+    add_test(NAME generativeqc_cli_uhf_cpu
+             COMMAND generativeqc_cli run
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     --method uhf --basis sto-3g --backend cpu --units bohr
+                     --charge 1 --multiplicity 2 --json)
+    set_tests_properties(generativeqc_cli_uhf_cpu PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"method\":\"uhf\"")
+    add_test(NAME generativeqc_cli_rhf_df_cpu
+             COMMAND generativeqc_cli run
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     --method rhf --basis sto-3g --backend cpu --units bohr
+                     --density-fitting cpu --auxiliary-basis def2-svp --json)
+    set_tests_properties(generativeqc_cli_rhf_df_cpu PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"density_fitting\":\"cpu\"")
+    add_test(NAME generativeqc_cli_pbe_rks_cpu
+             COMMAND generativeqc_cli run
+                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/h2_bohr.xyz"
+                     --method pbe-rks --basis sto-3g --backend cpu --units bohr
+                     --json)
+    set_tests_properties(generativeqc_cli_pbe_rks_cpu PROPERTIES
+                         PASS_REGULAR_EXPRESSION "\"method\":\"pbe-rks\"")
     add_test(NAME generativeqc_cli_profile_safety
              COMMAND "${Python3_EXECUTABLE}"
                      "${CMAKE_CURRENT_SOURCE_DIR}/tests/native/test_cli_profile_cache.py"

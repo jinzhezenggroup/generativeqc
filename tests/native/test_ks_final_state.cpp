@@ -136,6 +136,27 @@ void cuda_global_hybrid_identity() {
       require(hybrid.validate(), b3lyp ? "CUDA B3LYP final-state identity rejected"
                                        : "CUDA PBE0 final-state identity rejected");
 
+      const auto exact = hybrid;
+      for (const auto j : {FockApproximation::Exact, FockApproximation::DensityFitted})
+        for (const auto k : {FockApproximation::Exact, FockApproximation::DensityFitted}) {
+          auto spec = exact.id.determinant.model.spec;
+          spec.coulomb.approximation = j;
+          spec.exchange.approximation = k;
+          hybrid = exact;
+          hybrid.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
+          hybrid.sync();
+          const bool admitted = j == k && (!b3lyp || j == FockApproximation::Exact);
+          require(hybrid.validate() == admitted, "CUDA hybrid accepted an unqualified J/K pair");
+          if (admitted) {
+            spec.exchange.coefficient -= 0.01;
+            hybrid.id.determinant.model = resolve_fock_build(spec, FockBackend::Cuda, 0.0, 1e-10);
+            hybrid.sync();
+            require(!hybrid.validate(),
+                    "CUDA hybrid accepted wrong matched-provider exchange fraction");
+          }
+        }
+      hybrid = exact;
+
       hybrid.id.determinant.model = cuda_global_hybrid_fock(spin, (b3lyp ? 0.2 : 0.25) + 0.01);
       hybrid.sync();
       require(!hybrid.validate(), b3lyp ? "CUDA B3LYP accepted wrong exact-exchange fraction"

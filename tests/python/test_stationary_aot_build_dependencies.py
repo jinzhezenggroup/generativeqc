@@ -32,6 +32,9 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
         )
     )
     expected = source_hashes("common", "integral", "xc", "dft", assets=assets)
+    expected["python/generativeqc_compiler/method/stationary_resources.py"] = (
+        "explicit-resource-module"
+    )
     workflow = (ROOT / "cmake/GenerativeQCCuda.cmake").read_text()
     selection = workflow.split("set(_generativeqc_stationary_contract_assets", 1)[1]
     selection = (
@@ -64,10 +67,11 @@ def test_aot_manifest_dependency_filter_matches_compatibility_hashes(
     )
 
 
+@pytest.mark.parametrize("changed_scope", ["common", "stationary_resources"])
 @pytest.mark.parametrize("functional", [0, 1, 2])
 @pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
 def test_shared_compiler_source_changes_invalidate_aot_contract(
-    functional: int, spin: str, monkeypatch: pytest.MonkeyPatch
+    functional: int, spin: str, changed_scope: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A new shared compiler source revision must reject an older artifact."""
     original_hash = common_paths.file_hash
@@ -75,11 +79,17 @@ def test_shared_compiler_source_changes_invalidate_aot_contract(
 
     def source_revision_hash(path: Path) -> str:
         digest = original_hash(path)
-        if revision["changed"] and path.is_relative_to(common_paths.PACKAGE / "common"):
+        selected = (
+            path.is_relative_to(common_paths.PACKAGE / "common")
+            if changed_scope == "common"
+            else path.name == "stationary_resources.py"
+        )
+        if revision["changed"] and selected:
             return "0" * 64
         return digest
 
     monkeypatch.setattr(common_paths, "file_hash", source_revision_hash)
+    monkeypatch.setattr(stationary_cuda, "file_hash", source_revision_hash)
     identity = stationary_cuda.stationary_aot_contract_identity
     identity.cache_clear()
     try:
