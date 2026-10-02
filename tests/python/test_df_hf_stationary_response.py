@@ -183,8 +183,8 @@ def test_final_projection_charge_reuse_avoids_retained_fitted_charge_pass() -> N
     assert "df_rhf_charge_from_final_projection" in reuse
     assert "response_final_fitted_charge_reused" in reuse
     assert "launch_unpack_df_values" not in reuse
-    assert "gather_final_fitted_projection" not in reuse
     assert "df_rhf_charge_contract" not in reuse
+    assert "gather_final_fitted_projection" not in source
     assert source.count("generated::df_occupied_finish_projection(") == 1
 
 
