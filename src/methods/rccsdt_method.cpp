@@ -107,9 +107,9 @@ class RccsdtPrepared final : public PreparedCalculation {
 
     const auto warm_capacity = posthf::warm_reference::reservation_bytes(
         system_, initial_state, retained_warm_state != nullptr);
-    auto state = run_rccsd_native_state(
-        execution_, system_, descriptor_, &cpu_exact_plan_,
-        initial_state ? &initial_state->density : nullptr, warm_start_fallback, warm_capacity);
+    auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,
+                                        initial_state ? &initial_state->density : nullptr,
+                                        warm_start_fallback, warm_capacity);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -170,10 +170,10 @@ class RccsdtPrepared final : public PreparedCalculation {
       performance.triples_seconds = triples_seconds;
       diagnostic.minimum_absolute_denominator =
           std::min(diagnostic.minimum_absolute_denominator, triples_minimum_denominator);
-      diagnostic.numeric_capacity_bytes = std::max<std::uint64_t>(
-          diagnostic.numeric_capacity_bytes,
-          checked_add(checked_add(retained, triples_workspace_bytes),
-                      state.external_reservation_bytes));
+      diagnostic.numeric_capacity_bytes =
+          std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes,
+                                  checked_add(checked_add(retained, triples_workspace_bytes),
+                                              state.external_reservation_bytes));
       diagnostic.ccsd_t_triples_energy = triples_energy;
       diagnostic.ccsd_t_virtual_triples = triples_virtual_count;
       diagnostic.ccsd_t_workspace_bytes = triples_workspace_bytes;

@@ -27,7 +27,8 @@ inline std::vector<double> coordinates(const core::System& system) {
 
 inline bool valid_coordinates(const std::vector<double>& values, const core::System& system) {
   return values.size() == 3 * system.atoms.size() &&
-         std::all_of(values.begin(), values.end(), [](double value) { return std::isfinite(value); });
+         std::all_of(values.begin(), values.end(),
+                     [](double value) { return std::isfinite(value); });
 }
 
 inline void set_coordinates(core::System& system, const std::vector<double>& values) {
@@ -40,15 +41,14 @@ inline std::size_t payload_bytes(std::size_t density_count, std::size_t coordina
 }
 
 inline std::size_t reservation_bytes(const core::System& system,
-                                     const scf::HfWarmState* initial_state,
-                                     bool retain_candidate) {
+                                     const scf::HfWarmState* initial_state, bool retain_candidate) {
   std::size_t result = 0;
   if (initial_state)
     result = payload_bytes(initial_state->density.size(), initial_state->coordinates.size());
   if (retain_candidate) {
     const auto n = molecule::ao_count(system);
-    result = checked_add(
-        result, payload_bytes(checked_mul(n, n), checked_mul(3, system.atoms.size())));
+    result =
+        checked_add(result, payload_bytes(checked_mul(n, n), checked_mul(3, system.atoms.size())));
   }
   return result;
 }

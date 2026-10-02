@@ -554,10 +554,10 @@ class RccsdPrepared final : public PreparedCalculation {
       cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(
           system_, nullptr, strategy, execution_.cuda_requested() ? execution_.device_id() : -1);
     }
-    auto state = execute_rccsd_prepared(
-        execution_, system_, reference_options, solver_options, reference_capacity_,
-        cpu_exact_plan_.get(), initial_state ? &initial_state->density : nullptr,
-        warm_start_fallback);
+    auto state = execute_rccsd_prepared(execution_, system_, reference_options, solver_options,
+                                        reference_capacity_, cpu_exact_plan_.get(),
+                                        initial_state ? &initial_state->density : nullptr,
+                                        warm_start_fallback);
     state.external_reservation_bytes = warm_capacity;
     state.diagnostic.numeric_capacity_bytes =
         posthf::checked_add(state.diagnostic.numeric_capacity_bytes, warm_capacity);
@@ -758,7 +758,8 @@ class RccsdPreparedBatch final : public PreparedBatch {
   }
   void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
     if (!warm_starts_enabled_ || states.size() != size())
-      throw std::invalid_argument("checkpoint restore requires a matching warm-enabled RCCSD batch");
+      throw std::invalid_argument(
+          "checkpoint restore requires a matching warm-enabled RCCSD batch");
     for (std::size_t index = 0; index < size(); ++index)
       if (states[index])
         posthf::warm_reference::validate_checkpoint(systems_[index], *states[index], "RCCSD");
@@ -834,9 +835,9 @@ RccsdNativeState run_rccsd_native_state(
     }
     prepared_exact = prepared_exact_cache->get();
   }
-  auto state = execute_rccsd_prepared(execution, system, reference, solver_options,
-                                      reference_capacity, prepared_exact, initial_density,
-                                      warm_start_fallback);
+  auto state =
+      execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
+                             prepared_exact, initial_density, warm_start_fallback);
   state.external_reservation_bytes = external_reservation_bytes;
   state.diagnostic.numeric_capacity_bytes =
       posthf::checked_add(state.diagnostic.numeric_capacity_bytes, external_reservation_bytes);
@@ -908,9 +909,8 @@ std::unique_ptr<PreparedBatch> prepare_rccsd_batch(const Capabilities& capabilit
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
           "RCCSD prepared batch requires one homogeneous (nocc,nvir) shape; split ragged groups");
   }
-  return std::make_unique<RccsdPreparedBatch>(
-      capabilities, context, std::move(systems), descriptor,
-      (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0);
+  return std::make_unique<RccsdPreparedBatch>(capabilities, context, std::move(systems), descriptor,
+                                              (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0);
 }
 
 }  // namespace generativeqc::methods::detail

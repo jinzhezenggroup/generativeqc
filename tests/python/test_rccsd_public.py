@@ -192,7 +192,8 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
         forced = prepared.execute(properties=("energy", "forces"), strict=True)
         assert all(item.forces is not None for item in forced.items)
         assert all(
-            item.warm_start_used and not item.warm_start_fallback for item in forced.items
+            item.warm_start_used and not item.warm_start_fallback
+            for item in forced.items
         )
         partial = prepared.execute([np.zeros((1, 3)), None])
         assert partial.failure_indices == (0,)
@@ -204,7 +205,8 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
         )
         repeated = prepared.execute(strict=True)
         assert all(
-            item.warm_start_used and not item.warm_start_fallback for item in repeated.items
+            item.warm_start_used and not item.warm_start_fallback
+            for item in repeated.items
         )
         assert tuple(item.energy for item in repeated.items) == pytest.approx(
             tuple(item.energy for item in first.items), abs=2e-10
@@ -214,12 +216,22 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
             [[xyz[0], xyz[1], xyz[2] + 0.015] for _, xyz in atoms], dtype=np.float64
         )
         changed_reference = calc.singlepoint(
-            [(z, tuple(xyz)) for (z, _), xyz in zip(atoms, changed_coordinates, strict=True)],
+            [
+                (z, tuple(xyz))
+                for (z, _), xyz in zip(atoms, changed_coordinates, strict=True)
+            ],
             properties=("energy",),
         )
-        changed = prepared.execute([changed_coordinates, None], properties=("energy",), strict=True)
-        assert changed.items[0].warm_start_used and not changed.items[0].warm_start_fallback
-        assert changed.items[0].energy == pytest.approx(changed_reference.energy, abs=2e-9)
+        changed = prepared.execute(
+            [changed_coordinates, None], properties=("energy",), strict=True
+        )
+        assert (
+            changed.items[0].warm_start_used
+            and not changed.items[0].warm_start_fallback
+        )
+        assert changed.items[0].energy == pytest.approx(
+            changed_reference.energy, abs=2e-9
+        )
 
         prepared.clear_warm_starts()
         cleared = prepared.execute(strict=True)
@@ -241,9 +253,7 @@ def test_public_rccsd_checkpoint_restores_hf_warm_state(tmp_path: Path) -> None:
         assert all(item["restored_fields"] == ["density"] for item in report["items"])
         replay = target.execute(properties=("energy",), strict=True)
 
-    np.testing.assert_allclose(
-        replay.energies, baseline.energies, atol=2e-10, rtol=0
-    )
+    np.testing.assert_allclose(replay.energies, baseline.energies, atol=2e-10, rtol=0)
     assert all(
         item.warm_start_used and not item.warm_start_fallback for item in replay.items
     )
