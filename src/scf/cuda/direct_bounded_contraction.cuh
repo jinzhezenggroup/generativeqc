@@ -25,12 +25,15 @@ __device__ inline __noinline__ void contract_bounded_direct_fock_subtile(
     DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* fock, std::size_t subtile,
-    unsigned lane, bool coulomb_only = false, bool exchange_only = false) {
+    unsigned lane, bool coulomb_only = false, bool exchange_only = false,
+    generativeqc::integrals::CoulombRange range =
+        generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
 #define GENERATIVEQC_BOUNDED_FOCK_CASE(order)                                                 \
   case order:                                                                                 \
     contract_fock_direct_quartet_subtile<Unrestricted, order>(                                \
         batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, fock, \
-        nullptr, subtile, lane, coulomb_only, exchange_only);                                 \
+        nullptr, subtile, lane, coulomb_only, exchange_only, range, omega);                   \
     break
   switch (angular_order) {
     GENERATIVEQC_BOUNDED_FOCK_CASE(0);
