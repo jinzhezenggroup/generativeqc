@@ -1147,10 +1147,23 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         density = np.repeat(
             np.eye(basis.nao)[None, :, :] * 0.2, plan.spin_blocks, axis=0
         )
+        # Sources borrow this stream; destroy them before their grid owner.
+        grid = stack.enter_context(
+            CudaGrid(
+                basis,
+                compile_grid(compiler, tmp_path),
+                order=2,
+                tile_points=point_capacity,
+                active_ao_capacity=basis.nao,
+                ingredients=("rho", "gradient", "tau"),
+            )
+        )
         sources = []
+        lane_bytes = 144 * basis.natom
+        maximum_lanes = min(2048, (8 << 20) // lane_bytes)
         for lanes, cached, cooperative in (
             (lanes, cached, cooperative)
-            for lanes in (32, 256, 2048)
+            for lanes in (32, 256, maximum_lanes)
             for cached in (False, True)
             for cooperative in (False, True)
         ):
@@ -1179,11 +1192,19 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                     cooperative_becke=cooperative,
                 )
             )
-            assert owner.metrics()["geometry_lane_capacity"] == lanes
-            assert owner.metrics()["owned_device_bytes"] == budget
-            assert owner.metrics()["center_geometry_bytes"] == (
-                48 * pairs if cached else 0
+            # The planner spends spare bytes on lanes before retaining centers.
+            # Only the capped panel guarantees a cached route for larger systems.
+            center_bytes = 48 * pairs if cached else 0
+            selected_lanes = min(maximum_lanes, lanes + center_bytes // lane_bytes)
+            retained_centers = center_bytes if selected_lanes == lanes else 0
+            assert owner.metrics()["geometry_lane_capacity"] == selected_lanes
+            assert owner.metrics()["owned_device_bytes"] == (
+                budget
+                - center_bytes
+                + (selected_lanes - lanes) * lane_bytes
+                + retained_centers
             )
+            assert owner.metrics()["center_geometry_bytes"] == retained_centers
             selected = cooperative and atom_count <= 32
             assert owner.metrics()["becke_threads_per_point"] == (32 if selected else 1)
             assert owner.metrics()["becke_shared_bytes"] == (
@@ -1192,16 +1213,6 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             with pytest.raises((ValueError, RuntimeError)):
                 owner.reset_geometry(-1.0)
             sources.append(owner)
-        grid = stack.enter_context(
-            CudaGrid(
-                basis,
-                compile_grid(compiler, tmp_path),
-                order=2,
-                tile_points=point_capacity,
-                active_ao_capacity=basis.nao,
-                ingredients=("rho", "gradient", "tau"),
-            )
-        )
         previous = None
         for repeat, current_basis in enumerate(
             (basis, basis, moved_basis, moved_basis, basis, moved_basis, basis)
