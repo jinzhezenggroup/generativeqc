@@ -746,10 +746,13 @@ __global__ void publish_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceIn
   }
   const std::int64_t begin = batch.matrix_offsets[system];
   const std::int64_t end = batch.matrix_offsets[system + 1];
-  for (std::int64_t matrix = begin + threadIdx.x; matrix < end; matrix += blockDim.x) {
+  for (std::int64_t matrix = begin + std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       matrix < end; matrix += std::int64_t{gridDim.y} * blockDim.x) {
     results.density[matrix] = workspace.density_scratch[matrix];
     results.energy_weighted_density[matrix] = workspace.weighted_density_scratch[matrix];
   }
+  // Matrix copies are tiled, but scalar diagnostics have one publishing owner.
+  if (blockIdx.y != 0) return;
   if (threadIdx.x == 0) {
     results.band_energies[system] = workspace.band_energy_scratch[system];
     results.occupation_sums[system] = workspace.occupation_sum_scratch[system];
@@ -769,11 +772,13 @@ __global__ void spin_publish_kernel(Gfn2DensityDeviceBatch batch, Gfn2Wavefuncti
   }
   const std::int64_t matrix_begin = layout.spin_matrix_offsets[system];
   const std::int64_t matrix_end = layout.spin_matrix_offsets[system + 1];
-  for (std::int64_t matrix = matrix_begin + threadIdx.x; matrix < matrix_end;
-       matrix += blockDim.x) {
+  for (std::int64_t matrix = matrix_begin + std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       matrix < matrix_end; matrix += std::int64_t{gridDim.y} * blockDim.x) {
     results.density[matrix] = workspace.density_scratch[matrix];
     results.energy_weighted_density[matrix] = workspace.weighted_density_scratch[matrix];
   }
+  // Channel and system diagnostics must never be written by multiple tiles.
+  if (blockIdx.y != 0) return;
   const std::int64_t channel_begin = layout.spin_channel_offsets[system];
   const std::int64_t channel_end = layout.spin_channel_offsets[system + 1];
   for (std::int64_t channel = channel_begin + threadIdx.x; channel < channel_end;
@@ -1210,7 +1215,8 @@ cudaError_t evaluate_gfn2_restricted_density_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  publish_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
+  const dim3 publication_grid(contract_grid.x, contract_grid.z);
+  publish_kernel<<<publication_grid, kThreadsPerBlock, 0, stream>>>(
       batch, input, results, workspace, system_errors);
   return cudaGetLastError();
 }
@@ -1263,7 +1269,8 @@ cudaError_t evaluate_gfn2_spin_density_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  spin_publish_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
+  const dim3 publication_grid(contract_grid.x, contract_grid.z);
+  spin_publish_kernel<<<publication_grid, kThreadsPerBlock, 0, stream>>>(
       batch, layout, input, results, workspace, system_errors);
   return cudaGetLastError();
 }

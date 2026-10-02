@@ -27,6 +27,10 @@ def test_electronic_tile_policy_limits(tmp_path: Path) -> None:
         + emit_gfn2_electronic_schedule()
         + r"""
 int main() {
+  if (gfn2_occupation_solve_count(1,4,4)!=1) return 11;
+  if (gfn2_occupation_solve_count(1,4,3)!=2) return 12;
+  if (gfn2_occupation_solve_count(2,4,4)!=2) return 13;
+  if (gfn2_occupation_solve_count(1,0,0)!=1) return 14;
   if (gfn2_electronic_matrix_tiles(1,1)!=1) return 1;
   if (gfn2_electronic_matrix_tiles(256,1)!=1) return 2;
   if (gfn2_electronic_matrix_tiles(257,1)!=2) return 3;
@@ -46,8 +50,9 @@ int main() {
     subprocess.run([str(binary)], check=True, timeout=10)
 
 
-def test_tiled_electronic_cuda_publication(tmp_path: Path) -> None:
-    """Real-GPU oracle covers ragged spin layouts and errors in later tiles."""
+@pytest.mark.parametrize("family", ["matrices", "occupations"])
+def test_tiled_electronic_cuda_publication(tmp_path: Path, family: str) -> None:
+    """Real kernels gate ragged matrix tiles and exact spin-task sharing."""
     if os.environ.get("GENERATIVEQC_TEST_GFN2_CUDA") != "1":
         pytest.skip("explicit GFN2 CUDA qualification is disabled")
     if not os.environ.get("SLURM_JOB_ID"):
@@ -71,13 +76,19 @@ def test_tiled_electronic_cuda_publication(tmp_path: Path) -> None:
     )
     objects = []
     native = ROOT / "src/xtb/native"
-    for i, source in enumerate(
+    sources = (
         (
             ROOT / "tests/native/test_gfn2_electronic_schedule.cu",
             native / "src/backends/cuda/gfn2_hamiltonian.cu",
             native / "src/backends/cuda/gfn2_density.cu",
         )
-    ):
+        if family == "matrices"
+        else (
+            ROOT / "tests/native/test_gfn2_occupation_sharing.cu",
+            native / "src/backends/cuda/gfn2_occupations.cu",
+        )
+    )
+    for i, source in enumerate(sources):
         output = tmp_path / f"part{i}.o"
         subprocess.run(
             [

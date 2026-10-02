@@ -651,7 +651,10 @@ __global__ void publish_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch,
   }
   const std::int64_t begin = batch.matrix_offsets[system];
   const std::int64_t end = batch.matrix_offsets[system + 1];
-  for (std::int64_t element = begin + threadIdx.x; element < end; element += blockDim.x) {
+  // The preceding assembly launch has settled every tile's system error.
+  // Publication tiles only copy disjoint entries from the accepted matrix.
+  for (std::int64_t element = begin + std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       element < end; element += std::int64_t{gridDim.y} * blockDim.x) {
     output.matrix[element] = workspace.matrix_scratch[element];
   }
 }
@@ -669,7 +672,10 @@ __global__ void publish_spin_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch
   }
   const std::int64_t begin = layout.spin_matrix_offsets[system];
   const std::int64_t end = layout.spin_matrix_offsets[system + 1];
-  for (std::int64_t element = begin + threadIdx.x; element < end; element += blockDim.x) {
+  // The preceding assembly launch has settled every tile's system error.
+  // Publication tiles only copy disjoint entries from the accepted matrix.
+  for (std::int64_t element = begin + std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       element < end; element += std::int64_t{gridDim.y} * blockDim.x) {
     output.matrix[element] = workspace.matrix_scratch[element];
   }
 }
@@ -1007,8 +1013,7 @@ cudaError_t assemble_gfn2_hamiltonian_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  publish_hamiltonian_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
-                               stream>>>(batch, activity, output, workspace, system_errors);
+  publish_hamiltonian_kernel<<<assembly_grid, kThreadsPerBlock, 0, stream>>>(batch, activity, output, workspace, system_errors);
   return check_launch();
 }
 
@@ -1051,8 +1056,7 @@ cudaError_t assemble_gfn2_spin_hamiltonian_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  publish_spin_hamiltonian_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock,
-                                    0, stream>>>(batch, layout, activity, output, workspace,
+  publish_spin_hamiltonian_kernel<<<assembly_grid, kThreadsPerBlock, 0, stream>>>(batch, layout, activity, output, workspace,
                                                  system_errors);
   return check_launch();
 }
