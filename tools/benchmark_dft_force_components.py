@@ -348,22 +348,26 @@ def _matrix_records(
 
         fixed_density_profile = case.get("fixed_density_scf_profile")
         if isinstance(fixed_density_profile, Mapping):
-            result.append(
-                {
-                    "metadata": {
-                        **base,
-                        "scenario": "diagnostic_fixed_density_scf_profile",
-                        "measurement_boundary": fixed_density_profile.get(
-                            "measurement_boundary"
-                        ),
-                    },
-                    "status": str(fixed_density_profile.get("status", "unknown")),
-                    "expected_components": list(
-                        fixed_density_profile.get("expected_components", ())
+            row = {
+                "metadata": {
+                    **base,
+                    "scenario": "diagnostic_fixed_density_scf_profile",
+                    "measurement_boundary": fixed_density_profile.get(
+                        "measurement_boundary"
                     ),
-                    "error": fixed_density_profile.get("reason"),
-                }
-            )
+                    "fixed_density": fixed_density_profile.get("fixed_density"),
+                    "scf_replayed": fixed_density_profile.get("scf_replayed"),
+                },
+                "status": str(fixed_density_profile.get("status", "unknown")),
+                "expected_components": list(
+                    fixed_density_profile.get("expected_components", ())
+                ),
+                "error": fixed_density_profile.get("reason"),
+            }
+            profile = fixed_density_profile.get("profile")
+            if isinstance(profile, Mapping):
+                row["scf_profile"] = dict(profile)
+            result.append(row)
     return result
 
 
@@ -415,9 +419,16 @@ def _coverage(records: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
         if scenario.startswith("fixed_final_state_"):
             fixed_final_state_records += 1
         if scenario == "diagnostic_fixed_density_scf_profile":
-            expected = row.get("expected_components")
-            if isinstance(expected, list):
-                fixed_density_missing.update(str(name) for name in expected)
+            profile = row.get("scf_profile")
+            if isinstance(profile, Mapping):
+                fixed_density_missing.update(
+                    str(name)
+                    for name in profile.get("missing_expected_components", ())
+                )
+            else:
+                expected = row.get("expected_components")
+                if isinstance(expected, list):
+                    fixed_density_missing.update(str(name) for name in expected)
         components = row.get("components")
         if isinstance(components, Mapping):
             routes.add(str(components.get("source_route")))
