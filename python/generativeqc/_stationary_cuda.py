@@ -2683,22 +2683,99 @@ def _complete_rks_cuda_gradient_diagnostic(
                 sources.nuclear(atom, other, charges)
         sources.flush()
         grid = state.grid
+        grid_points = len(grid.points)
+        resident_grid_provider = getattr(state._source, "cuda_resident_grid", None)
+        resident_grid = (
+            resident_grid_provider() if callable(resident_grid_provider) else None
+        )
+        if resident_grid is not None:
+            if (
+                resident_grid.device != device
+                or resident_grid.point_count != grid_points
+            ):
+                raise ValueError(
+                    "resident molecular-grid lease differs from stationary state"
+                )
+            points_per_atom = (
+                spec.radial_points * spec.angular_polar * spec.angular_azimuth
+            )
+            if points_per_atom <= 0 or grid_points != na * points_per_atom:
+                raise ValueError(
+                    "resident molecular grid is not the expected atom-major GridSpec"
+                )
+            if profile_device:
+                grid_residency = {
+                    "grid_owner_source": "profile-host-materialized-atom-major-index",
+                    "grid_owner_h2d_bytes": grid_points * 8,
+                    "grid_point_source": "exact-native-resident-grid",
+                    "grid_point_h2d_bytes": 0,
+                    "grid_weight_source": "profile-host-snapshot",
+                    "grid_weight_h2d_bytes": grid_points * 8,
+                    "grid_atomic_measure_source": "profile-host-snapshot",
+                    "grid_atomic_measure_h2d_bytes": grid_points * 8,
+                }
+            else:
+                grid_residency = {
+                    "grid_owner_source": "implicit-atom-major-index",
+                    "grid_owner_h2d_bytes": 0,
+                    "grid_point_source": "exact-native-resident-grid",
+                    "grid_point_h2d_bytes": 0,
+                    "grid_weight_source": "exact-native-resident-grid",
+                    "grid_weight_h2d_bytes": 0,
+                    "grid_atomic_measure_source": "exact-native-resident-grid",
+                    "grid_atomic_measure_h2d_bytes": 0,
+                }
+        else:
+            points_per_atom = 0
+            grid_residency = {
+                "grid_owner_source": "host-grid-owners",
+                "grid_owner_h2d_bytes": grid_points * 8,
+                "grid_point_source": "host-grid-points",
+                "grid_point_h2d_bytes": 3 * grid_points * 8,
+                "grid_weight_source": "host-grid-weights",
+                "grid_weight_h2d_bytes": grid_points * 8,
+                "grid_atomic_measure_source": "host-grid-atomic-measures",
+                "grid_atomic_measure_h2d_bytes": grid_points * 8,
+            }
         with timeline.phase("xc_geometry_enqueue"):
-            for begin in range(0, len(grid.points), tile_points):
-                end = min(begin + tile_points, len(grid.points))
-                with ao.feature_task(
-                    grid.points[begin:end],
-                    None,
-                    ingredients,
-                    defer_error_to_consumer=True,
-                ) as task:
-                    sources.geometry(
-                        task,
-                        np.asarray(grid.owners[begin:end], dtype=np.int64),
-                        grid.weights[begin:end],
-                        state._source.atomic_weights[begin:end],
-                        functional=functional,
-                    )
+            for begin in range(0, grid_points, tile_points):
+                end = min(begin + tile_points, grid_points)
+                if resident_grid is not None:
+                    point_pointer = resident_grid.points + 3 * begin * 8
+                    with ao.feature_task_device_points(
+                        point_pointer,
+                        end - begin,
+                        None,
+                        ingredients,
+                    ) as task:
+                        sources.geometry_molecular_resident_weights(
+                            task,
+                            begin,
+                            points_per_atom,
+                            resident_grid.weights + begin * 8,
+                            grid.weights[begin:end] if profile_device else None,
+                            resident_grid.atomic_weights + begin * 8,
+                            (
+                                state._source.atomic_weights[begin:end]
+                                if profile_device
+                                else None
+                            ),
+                            functional=functional,
+                        )
+                else:
+                    with ao.feature_task(
+                        grid.points[begin:end],
+                        None,
+                        ingredients,
+                        defer_error_to_consumer=True,
+                    ) as task:
+                        sources.geometry(
+                            task,
+                            np.asarray(grid.owners[begin:end], dtype=np.int64),
+                            grid.weights[begin:end],
+                            state._source.atomic_weights[begin:end],
+                            functional=functional,
+                        )
         with timeline.phase("xc_geometry_drain"):
             sources.drain_geometry()
         with timeline.phase("source_d2h_publication"):
@@ -2796,6 +2873,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 else _grid_metric_delta(grid_after, grid_before)
             )
             work["borrowed_grid_streams"] = tuple(sorted(sources.borrowed_streams))
+            work.update(grid_residency)
             work["primitive_pages"] = sources.primitive_pages
             work["primitive_page_peak_records"] = sources.primitive_page_peak_records
             work["primitive_record_page_budget"] = max_primitive_records
