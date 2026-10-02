@@ -72,8 +72,8 @@ class Mp2Prepared final : public PreparedCalculation {
       // The prior last-good seed must survive failure, and a candidate seed
       // stays live until the complete endpoint succeeds. Charge both numeric
       // payloads to every phase; warm-disabled execution retains its old budget.
-      const auto warm_capacity = warm_reference::reservation_bytes(
-          system_, initial_state, retained_warm_state != nullptr);
+      const auto warm_capacity =
+          warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
       if (warm_capacity >= budget_ || reference_capacity_ > budget_ - warm_capacity)
         throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                           "MP2 warm state and reference exceed numeric memory budget");
@@ -148,9 +148,9 @@ class Mp2Prepared final : public PreparedCalculation {
                           "HF did not converge; no MP2 energy evaluated");
 
       if (retained_warm_state)
-        *retained_warm_state = warm_reference::capture(
-            system_, std::move(hf.density), hf.energy, hf.energy_change, hf.density_rms,
-            static_cast<int>(hf.iterations));
+        *retained_warm_state =
+            warm_reference::capture(system_, std::move(hf.density), hf.energy, hf.energy_change,
+                                    hf.density_rms, static_cast<int>(hf.iterations));
       const auto& ref = *hf.reference;
       // Release the iterative density. The exact CPU prepared owner remains
       // alive when present so correlation can borrow its already-built ERIs.

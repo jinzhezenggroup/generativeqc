@@ -69,7 +69,8 @@ inline scf::HfWarmState capture(const core::System& system, std::vector<double> 
 
 inline scf::HfWarmState capture(const core::System& system, const hf::PhysicalReference& reference,
                                 double energy_change, double density_rms, int iterations) {
-  return capture(system, reference.density, reference.energy, energy_change, density_rms, iterations);
+  return capture(system, reference.density, reference.energy, energy_change, density_rms,
+                 iterations);
 }
 
 inline void validate_checkpoint(const core::System& template_system, const scf::HfWarmState& state,
