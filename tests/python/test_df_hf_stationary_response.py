@@ -200,6 +200,12 @@ def test_final_projection_potential_reuse_avoids_retained_fitted_charge_pass() -
     assert "gather_final_fitted_projection" in reuse
     assert "df_rhf_charge_contract" not in reuse
     assert source.count("generated::df_occupied_finish_projection(") == 1
+    exchange = source[source.index("exchange_response_occupied_weight_gemm") :]
+    retained_start = exchange.index("if (retained_root) {")
+    retained_stop = exchange.index("} else if (fitted_occupied)", retained_start)
+    retained = exchange[retained_start:retained_stop]
+    assert "if (reuse_final_fitted_projection)" in retained
+    assert "U=X*S was formed" in retained
 
 
 def test_metric_custom_rule_is_explicit_fixed_rank_pseudoinverse() -> None:
