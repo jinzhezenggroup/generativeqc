@@ -157,16 +157,20 @@ def test_generated_source_weights_match_resolved_finite_differences() -> None:
 def test_final_projection_trace_recovers_fitted_rhf_charge(
     symmetric: bool, density_scale: float
 ) -> None:
-    """D:B equals the scaled trace of C^T B C without requiring B symmetry."""
+    """The trace recovers D:B across occupied gauge and optional B asymmetry."""
     rng = np.random.default_rng(1690 + 10 * int(symmetric) + int(2 * density_scale))
     n, r, a = 9, 4, 7
-    coefficients = np.linalg.qr(rng.normal(size=(n, r)))[0]
+    density_coefficients = np.linalg.qr(rng.normal(size=(n, r)))[0]
+    occupied_rotation = np.linalg.qr(rng.normal(size=(r, r)))[0]
+    final_coefficients = density_coefficients @ occupied_rotation
     fitted = rng.normal(size=(a, n, n))
     if symmetric:
         fitted = 0.5 * (fitted + fitted.transpose(0, 2, 1))
-    density = density_scale * coefficients @ coefficients.T
+    density = density_scale * density_coefficients @ density_coefficients.T
     direct = np.einsum("mn,qmn->q", density, fitted)
-    projected = np.einsum("mi,qmn,nj->qij", coefficients, fitted, coefficients)
+    projected = np.einsum(
+        "mi,qmn,nj->qij", final_coefficients, fitted, final_coefficients
+    )
     reused = density_scale * np.trace(projected, axis1=1, axis2=2)
     np.testing.assert_allclose(reused, direct, atol=3e-13, rtol=3e-13)
 
