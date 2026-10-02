@@ -47,7 +47,7 @@ through-f Full/SR/LR matrix, all-center derivative, one-electron reuse, mixed-J,
 DF layout/selection, and generic budget gates under node1 Slurm 5355. All six
 independent complete RKS/UKS WB97M-V tests pass, including STO-3G, def2-SVP,
 def2-TZVP, local def2-TZVPD and reconverged displaced-energy checks. Full-grid
-cold/warm/moved evidence remains needed before promotion. Keep 1e-8 Eh /
+changed-geometry and larger-case evidence remain in progress. Keep 1e-8 Eh /
 1e-7 Eh/Bohr acceptance across all samples.
 
 The first candidate library is
@@ -62,6 +62,24 @@ remote logs are retained under `.artifacts/wb97m-spd-range/` and
 `/home/jzzeng/codes/wb97m-20261002/`. Failed initial transfers/profile launches
 remain failed records. Node5 requires preloading the copied build's CUDA 12.9
 runtime; its system CUDA preload otherwise lacks `cudaStreamGetDevice`.
+
+## Controlled 24-atom complete endpoint
+
+Node1 Slurm 5359 measures spherical def2-SVP, WB97M-V, grid 48 x 16 x 32
+(589824 points), on one RTX 5090. The complete SCF plus host-returned force
+endpoint takes 381.379 s cold and 67.887 s median over three warm calls.
+GPU4PySCF takes 123.671 s cold and 27.748 s warm. All five measured pairs
+(cold, priming and three repeats) pass: maximum energy error 2.2852e-11 Eh
+and force error 4.1661e-10 Eh/Bohr. Native iterations are 18 cold and one
+warm. This does **not** establish a GPU4PySCF speed advantage.
+
+The reference uses the comparator's original 1e-11 energy / 1e-8 orbital
+convergence controls, direct_scf_tol=1e-14 and the same 1e-8 VV10 density
+threshold in SCF and force. No physical acceptance gate was relaxed.
+The initial pre-composed full-grid baseline was still incomplete after more
+than 80 minutes; its cancellation is not a baseline timing or an isolated
+speedup. Subsequent rebasing onto merged #1713 does not change the identities
+of the binaries measured here.
 
 ## Revisit when
 
