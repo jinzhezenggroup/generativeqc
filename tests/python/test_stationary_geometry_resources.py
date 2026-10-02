@@ -291,10 +291,11 @@ def test_optional_lanes_preserve_existing_native_admission_budget() -> None:
             assert plan.geometry_lanes > 32
 
 
+@pytest.mark.parametrize("cooperative", [False, True])
 @pytest.mark.parametrize("direct_available", [False, True])
 @pytest.mark.parametrize("allowance", [432, 433, 1 << 20])
 def test_fitted_provider_retains_its_full_admitted_allowance(
-    direct_available: bool, allowance: int
+    direct_available: bool, allowance: int, cooperative: bool
 ) -> None:
     from generativeqc_compiler.method.stationary_resources import (
         stationary_native_pair_reserve,
@@ -347,9 +348,14 @@ def test_fitted_provider_retains_its_full_admitted_allowance(
     assert reserve == allowance
     minimum = stationary_cuda_allocation_bytes(**SHAPE, geometry_lanes=32)
     plan = plan_stationary_cuda_resources(
-        **SHAPE, target=TARGET, budget_bytes=minimum + allowance - reserve
+        **SHAPE,
+        target=TARGET,
+        budget_bytes=minimum + allowance - reserve,
+        cooperative_becke=cooperative,
     )
     assert plan.geometry_lanes == 32
+    assert plan.becke_threads_per_point == (32 if cooperative else 1)
+    assert plan.becke_shared_bytes == (4240 if cooperative else 0)
     assert minimum + allowance - plan.allocation_bytes == allowance
 
 

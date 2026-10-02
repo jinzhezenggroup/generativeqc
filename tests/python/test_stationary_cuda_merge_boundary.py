@@ -37,6 +37,7 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
 
     names = (
         "stationary_create",
+        "stationary_configure_becke",
         "stationary_topology",
         "stationary_reset",
         "stationary_geometry_reset",

@@ -486,6 +486,7 @@ class _CudaSources:
         profile_device: bool = False,
         source_names: tuple[str, ...] = _SOURCE_NAMES,
         integral_derivatives: bool = True,
+        cooperative_becke: bool = False,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
@@ -548,6 +549,12 @@ class _CudaSources:
         lib.stationary_create.argtypes = (
             [ct.c_int] * 3 + [ct.c_size_t] * 10 + [ct.POINTER(ct.c_void_p), *tail]
         )
+        lib.stationary_configure_becke.argtypes = [
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_size_t,
+            *tail,
+        ]
         lib.stationary_topology.argtypes = [
             ct.c_void_p,
             _DOUBLE,
@@ -702,6 +709,7 @@ class _CudaSources:
             sources=len(source_names),
             target=compiler.target if target is None else target,
             budget_bytes=budget,
+            cooperative_becke=cooperative_becke,
         )
         self._call(
             "stationary_create",
@@ -718,6 +726,12 @@ class _CudaSources:
             self.resources.geometry_lanes,
             self.resources.geometry_threads,
             ct.byref(self.handle),
+        )
+        self._call(
+            "stationary_configure_becke",
+            self.handle,
+            self.resources.becke_threads_per_point,
+            self.resources.becke_shared_bytes,
         )
         if profile_device:
             self.enable_profile()
@@ -1497,8 +1511,8 @@ class _CudaSources:
         return out
 
     def metrics(self) -> typing.Any:
-        values = (ct.c_uint64 * 21)()
-        if self.library.stationary_metrics(self.handle, values, 21):
+        values = (ct.c_uint64 * 24)()
+        if self.library.stationary_metrics(self.handle, values, 24):
             raise RuntimeError("stationary metrics unavailable")
         metrics = dict(
             zip(
@@ -1524,6 +1538,9 @@ class _CudaSources:
                     "center_geometry_bytes",
                     "center_distance_evaluations",
                     "center_geometry_preparations",
+                    "becke_threads_per_point",
+                    "becke_shared_bytes",
+                    "becke_pair_state_evaluations",
                 ),
                 values,
             )
@@ -2037,6 +2054,7 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "geometry_batches",
         "center_distance_evaluations",
         "center_geometry_preparations",
+        "becke_pair_state_evaluations",
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]

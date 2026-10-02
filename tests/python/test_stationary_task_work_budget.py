@@ -92,6 +92,9 @@ def test_task_metrics_are_reported_per_execution() -> None:
         "center_geometry_bytes": 144,
         "center_distance_evaluations": 3,
         "center_geometry_preparations": 1,
+        "becke_pair_state_evaluations": 18,
+        "becke_threads_per_point": 32,
+        "becke_shared_bytes": 4240,
     }
     after = {
         "owned_device_bytes": 1024,
@@ -106,6 +109,9 @@ def test_task_metrics_are_reported_per_execution() -> None:
         "center_geometry_bytes": 144,
         "center_distance_evaluations": 6,
         "center_geometry_preparations": 2,
+        "becke_pair_state_evaluations": 39,
+        "becke_threads_per_point": 32,
+        "becke_shared_bytes": 4240,
     }
 
     delta = runtime._metric_delta(after, before)
@@ -117,6 +123,9 @@ def test_task_metrics_are_reported_per_execution() -> None:
     assert delta["center_geometry_bytes"] == 144
     assert delta["center_distance_evaluations"] == 3
     assert delta["center_geometry_preparations"] == 1
+    assert delta["becke_pair_state_evaluations"] == 21
+    assert delta["becke_threads_per_point"] == 32
+    assert delta["becke_shared_bytes"] == 4240
 
 
 PREAMBLE = r"""

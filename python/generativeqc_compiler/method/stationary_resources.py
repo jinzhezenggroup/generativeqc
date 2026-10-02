@@ -12,6 +12,10 @@ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 GEOMETRY_MAX_LANES = 2048
 GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
 GEOMETRY_THREADS = 32
+BECKE_COOPERATIVE_MAX_ATOMS = 32
+BECKE_COOPERATIVE_THREADS = 32
+BECKE_PAIR_STATE_BYTES = 64
+BECKE_COOPERATIVE_CONTROL_BYTES = 16
 _SIZE_MAX = (1 << 64) - 1
 
 
@@ -71,6 +75,8 @@ class StationaryCudaResources:
     geometry_scratch_bytes: int
     allocation_bytes: int
     center_geometry_bytes: int
+    becke_threads_per_point: int = 1
+    becke_shared_bytes: int = 0
 
 
 def plan_stationary_cuda_resources(
@@ -84,6 +90,7 @@ def plan_stationary_cuda_resources(
     sources: int,
     target: CudaTargetInfo,
     budget_bytes: int,
+    cooperative_becke: bool = False,
 ) -> StationaryCudaResources:
     """Choose up to one lane per point within the admitted owner's byte budget.
 
@@ -91,6 +98,8 @@ def plan_stationary_cuda_resources(
     A tail uses only min(planned lanes, tail points) of the retained panels.
     No device probe or allocation is part of this compiler planning function.
     """
+    if type(cooperative_becke) is not bool:
+        raise ValueError("cooperative Becke selection must be boolean")
     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:
         raise ValueError("stationary CUDA byte budget is not representable")
     minimum = stationary_cuda_allocation_bytes(
@@ -121,8 +130,26 @@ def plan_stationary_cuda_resources(
     center_bytes = 48 * (atoms * (atoms - 1) // 2)
     if center_bytes > budget_bytes - allocation:
         center_bytes = 0
+    becke_threads, shared_bytes = 1, 0
+    required_shared = BECKE_COOPERATIVE_CONTROL_BYTES + BECKE_PAIR_STATE_BYTES * (
+        atoms * (atoms - 1) // 2
+    )
+    if (
+        cooperative_becke
+        and 1 < atoms <= BECKE_COOPERATIVE_MAX_ATOMS
+        and target.maximum_threads_per_block >= BECKE_COOPERATIVE_THREADS
+        and required_shared
+        <= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)
+    ):
+        becke_threads, shared_bytes = BECKE_COOPERATIVE_THREADS, required_shared
     return StationaryCudaResources(
-        lanes, threads, per_lane * lanes, allocation + center_bytes, center_bytes
+        lanes,
+        threads,
+        per_lane * lanes,
+        allocation + center_bytes,
+        center_bytes,
+        becke_threads,
+        shared_bytes,
     )
 
 
