@@ -175,6 +175,24 @@ def test_through_f_shell_values_precede_canonical_fallback() -> None:
     assert "p.force_cursor, range," in owner
 
 
+def test_rsh_value_join_reuses_one_shell_density_preparation() -> None:
+    owner = _source("src/scf/cuda/direct_coulomb.cpp")
+    begin = owner.index("cudaError_t enqueue_generated_rsh_values(")
+    end = owner.index("\n}\n\n}  // namespace generativeqc::scf::cuda_execution", begin)
+    body = owner[begin:end]
+    assert body.count("prepare_generated_exchange_density(") == 1
+    assert "enqueue_generated_coulomb_prepared(" in body
+    assert body.count("enqueue_generated_exchange_prepared(") == 2
+
+    facade = _source("src/scf/cuda_fock_execution.cpp")
+    assert "enqueue_cuda_direct_rsh_values_device(" in facade
+
+    ks = _source("src/dft/cuda_ks.cpp")
+    assert ks.count("enqueue_prepared_cuda_rsh_values(") == 2
+    assert "jk_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED" in ks
+    assert "has_range_correction && !fused_rsh_values" in ks
+
+
 def test_canonical_screening_fixture_does_not_disable_default_provider_gate() -> None:
     """Match the screened oracle's route without weakening default-route coverage."""
     source = _source("tests/native/test_cuda_fock_provider.cpp")
