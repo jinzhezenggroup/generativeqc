@@ -110,3 +110,12 @@ Raw receipts remain in `.artifacts/wb97m-full-lr-review/results/`.
 Master `0d9d763e3` is then integrated, adding the separately qualified geometry
 schedule and VV10 denominator changes. The fresh integrated binary and real-device
 qualification must be identified separately from the standalone results above.
+
+The current-master integrated library is
+`d6570a548775b313515dd7dc2254b7b542582b05c8da9052731d1134b118e177`.
+It passes all 97 focused host tests and all seven independent complete
+molecular/rebuild/stale-state GPU tests in node1 Slurm job 5477 (198.19 s).
+Verified ccache/compiler/source receipts and the completed standalone larger
+and moved results above are retained; no new default48 timing is attributed
+to this integrated binary. A separately qualified admission+full/LR stack is
+measured independently and cannot isolate this proposal's benefit.
