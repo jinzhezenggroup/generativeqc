@@ -99,6 +99,12 @@ class PreparedFockPlan {
                                         const std::vector<double>& beta = {}) const;
   FockEnergyDerivativeComponents energy_derivative_components(
       const std::vector<double>& density, const std::vector<double>& beta = {}) const;
+  /** CUDA-DF component response using a method-owned exact final-K Cocc/U lease.
+   * Exchange consumes the one-shot projection first; Coulomb then executes the
+   * ordinary exact response. CPU/non-fitted owners reject this internal path. */
+  FockEnergyDerivativeComponents energy_derivative_components_with_fitted_projection(
+      const std::vector<double>& density, const std::vector<double>& beta,
+      const CudaDfBorrowedFittedProjection& projection) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */

@@ -422,6 +422,39 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
   return impl_->cpu_view ? impl_->cpu_view->energy_derivative_components(density, beta)
                          : impl_->cuda_view->energy_derivative_components(density, beta);
 }
+FockEnergyDerivativeComponents
+PreparedFockPlan::energy_derivative_components_with_fitted_projection(
+    const std::vector<double>& density, const std::vector<double>& beta,
+    const CudaDfBorrowedFittedProjection& projection) const {
+  if (!projection || !impl_->cuda_view || !impl_->cuda_df || !impl_->fitted)
+    throw std::invalid_argument(
+        "final fitted projection response requires the prepared CUDA DF provider");
+
+  auto derivative_spec = impl_->diagnostic.strategy.spec;
+  derivative_spec.derivative_order = 1;
+  const auto derivative_strategy = resolve_fock_build(
+      derivative_spec, FockBackend::Cuda, impl_->diagnostic.strategy.screening_tolerance,
+      impl_->diagnostic.strategy.metric_relative_threshold);
+  CudaFockProviderView provider(impl_->cuda_df.get(), *impl_->fitted);
+  provider.validate(derivative_strategy);
+  provider.validate_density(density, beta, true);
+
+  FockEnergyDerivativeComponents result{std::vector<double>(impl_->diagnostic.ncoord),
+                                        std::vector<double>(impl_->diagnostic.ncoord)};
+  // U aliases provider projection scratch and is a one-shot lease. Consume K
+  // before the ordinary J response is allowed to reuse that scratch.
+  if (derivative_spec.exchange.present) {
+    auto exchange = derivative_spec;
+    exchange.coulomb.present = false;
+    result.exchange = provider.derivative(exchange, density, beta, &projection);
+  }
+  if (derivative_spec.coulomb.present) {
+    auto coulomb = derivative_spec;
+    coulomb.exchange.present = false;
+    result.coulomb = provider.derivative(coulomb, density, beta);
+  }
+  return result;
+}
 std::vector<double> PreparedFockPlan::retained_energy_derivative(
     const std::vector<double>& density, const std::vector<double>& beta) const {
   return impl_->cpu_view ? impl_->cpu_view->retained_energy_derivative(density, beta)
