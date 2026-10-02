@@ -57,3 +57,12 @@ CPU-oracle gate. Cold/priming/warm/moved times are
 166.592983 / 23.188834 / 22.537709 / 91.752514 s, with 22/1/1/11 iterations.
 All samples pass, max energy 1.3074e-12 Eh and force 8.9654e-10 Eh/Bohr.
 Node2 job 2113 is qualifying default48 separately.
+
+
+Node2 job 2113 subsequently completed default48 with the same experimental
+`f10568...` bundle: cold 1285.424123 s/21 iterations; three one-iteration warm
+samples 164.260404, 164.587469, 164.372893 s (median 164.372893 s).
+GPU4PySCF cold was 480.598031 s and warm median 161.567557 s. All five
+pairs pass, maximum energy 3.342393e-11 Eh and force 5.886314e-10 Eh/Bohr.
+This bundle remains slower at both endpoints and contains rejected staging;
+it is not the final standalone admission candidate.
