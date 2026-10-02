@@ -340,8 +340,6 @@ RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext& execution,
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
-    if (cuda && prepared_exact)
-      throw std::invalid_argument("CUDA RCCSD cannot borrow a CPU prepared exact source");
     const auto reference_started = std::chrono::steady_clock::now();
     scf::ScfResult hf;
     if (prepared_exact) {
@@ -526,14 +524,8 @@ class RccsdPrepared final : public PreparedCalculation {
     if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
-    if (!execution_.cuda_requested() && !cpu_exact_plan_) {
-      const auto strategy =
-          scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
-                                  scf::FockBackend::Cpu, reference_options_.screening_tolerance);
-      cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(system_, nullptr, strategy);
-    }
-    auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
-                                        reference_capacity_, cpu_exact_plan_.get());
+    auto state = run_rccsd_native_state(execution_, system_, descriptor_,
+                                        &cpu_exact_plan_);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -751,18 +743,16 @@ RccsdNativeState run_rccsd_native_state(
                       "RCCSD bounded RHF reference exceeds correlation memory budget");
   scf::PreparedFockPlan* prepared_exact = nullptr;
   if (prepared_exact_cache) {
-    if (execution.cuda_requested()) {
-      if (*prepared_exact_cache)
-        throw std::invalid_argument("CUDA RCCSD cannot retain a CPU prepared exact source");
-    } else {
-      if (!*prepared_exact_cache) {
-        const auto strategy =
-            scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted),
-                                    scf::FockBackend::Cpu, reference.screening_tolerance);
-        *prepared_exact_cache = std::make_unique<scf::PreparedFockPlan>(system, nullptr, strategy);
-      }
-      prepared_exact = prepared_exact_cache->get();
+    if (!*prepared_exact_cache) {
+      const auto backend =
+          execution.cuda_requested() ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+      const auto strategy =
+          scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted), backend,
+                                  reference.screening_tolerance);
+      *prepared_exact_cache = std::make_unique<scf::PreparedFockPlan>(
+          system, nullptr, strategy, execution.cuda_requested() ? execution.device_id() : -1);
     }
+    prepared_exact = prepared_exact_cache->get();
   }
   return execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
                                 prepared_exact);
