@@ -377,12 +377,29 @@ generativeqc_status create_cuda_direct_jk_plan(
     // Derivative capability is orthogonal to the value schedule. When budgeted,
     // retain the same generated full-range exchange owner for stationary shell
     // derivatives; value-only plans keep its force scratch disabled.
-    // Preserve complete generated SPD coverage. Through-f plans automatically
-    // reuse canonical sources when their optional storage fits the same budget.
+    // Full-range SPD coverage does not cover SR/LR exchange. Reserve its
+    // existing generated owner first, then use only the remaining budget for
+    // canonical range sources. This keeps an optional range acceleration from
+    // displacing the established full-range value/force provider.
     const bool through_f = std::any_of(host.shell_angular.begin(), host.shell_angular.end(),
                                        [](auto angular) { return angular == 3; });
+    if (!through_f && budget > plan->device_bytes) {
+      const auto optional_budget = budget - plan->device_bytes;
+      plan->generated_exchange = prepare_generated_exchange(
+          host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
+          derivative_order != 0, false);
+      if (!plan->generated_exchange)
+        plan->generated_coulomb = prepare_generated_coulomb(
+            host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
+      // Generated owners account for their own allocations; diagnostic totals
+      // add them below. Reduce this local allowance without double charging.
+      if (plan->generated_exchange)
+        budget -= plan->generated_exchange->device_bytes;
+      else if (plan->generated_coulomb)
+        budget -= plan->generated_coulomb->device_bytes;
+    }
     std::size_t span_host_preparation_bytes = 0;
-    if (through_f) {
+    {
       const auto cart_elements =
           direct_jk_product(systems.size(), direct_jk_product(host.direct_nbf, host.direct_nbf));
       const auto cart_matrix_bytes = direct_jk_product(cart_elements, sizeof(double));
@@ -599,7 +616,7 @@ generativeqc_status create_cuda_direct_jk_plan(
         metadata_fence.complete();
       }
     }
-    if (budget > plan->device_bytes) {
+    if (through_f && budget > plan->device_bytes) {
       const auto optional_budget = budget - plan->device_bytes;
       // Generated/native streaming owns its qualified classes; through-f plans
       // retain HF's bounded shell dispatcher for the remaining higher-l value
@@ -650,11 +667,13 @@ generativeqc_status create_cuda_direct_jk_plan(
                          sizeof(GeneratedCoulombPlan) +
                          runtime::vector_bytes(plan->generated_exchange->shared->allocations);
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
-      info.schedule = plan->generated_exchange->shared->value_capability
-                          ? "generated-shell-coulomb+exchange/generic-jk-fallback"
-                          : (direct_jk_bounded_value_enabled(*plan)
-                                 ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
-                                 : "retained-shell-owner/generic-jk-fallback");
+      info.schedule =
+          plan->generated_exchange->shared->value_capability
+              ? (plan->canonical_pairs ? "generated-shell-coulomb+exchange/canonical-range-fallback"
+                                       : "generated-shell-coulomb+exchange/generic-jk-fallback")
+              : (direct_jk_bounded_value_enabled(*plan)
+                     ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
+                     : "retained-shell-owner/generic-jk-fallback");
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +
