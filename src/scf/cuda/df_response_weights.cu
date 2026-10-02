@@ -668,11 +668,7 @@ static cudaError_t contract_occupied_response(
     runtime::cuda_trace::TraceRegion reuse("final_fitted_projection_charge_reuse", stream);
     checked(generated::df_occupied_finish_projection(blas, ni, static_cast<int>(r), ai,
                                                      factor.coefficients, final_fitted_projection,
-                                                     transformed_projected));
-    gather_final_fitted_projection<<<blocks(a * rr), threads, 0, stream>>>(
-        a, r, transformed_projected, projected);
-    error = cudaGetLastError();
-    if (error != cudaSuccess) return error;
+                                                     projected));
     generated::df_rhf_charge_from_final_projection<<<blocks(a), threads, 0, stream>>>(
         a, r, factor.density_scale, projected, charges);
     error = cudaGetLastError();
@@ -685,6 +681,8 @@ static cudaError_t contract_occupied_response(
     runtime::cuda_trace::trace_counter("response_occupied_projection_flops", 2 * a * n * rr);
     runtime::cuda_trace::trace_counter("response_final_fitted_charge_reused", 1);
     runtime::cuda_trace::trace_counter("response_final_fitted_charge_trace_elements", a * r);
+    runtime::cuda_trace::trace_counter("response_final_fitted_projection_gather_elements_avoided",
+                                       a * rr);
     runtime::cuda_trace::trace_counter("response_retained_fitted_charge_source_elements_avoided",
                                        fitted_occupied->pair_count * a);
     runtime::cuda_trace::trace_counter("response_retained_fitted_charge_unpack_elements_avoided",
@@ -944,8 +942,14 @@ static cudaError_t contract_occupied_response(
       if (metric.full_rank) {
         auto* fitted = transformed_projected + retained;
         if (retained_root) {
-          checked(generated::df_occupied_apply_metric_root(
-              blas, ai, rri, metric.inverse_square_root, projected, fitted));
+          if (reuse_final_fitted_projection) {
+            checked(generated::df_occupied_apply_metric_root_pair_major(
+                blas, ai, rri, metric.inverse_square_root, projected, fitted));
+            runtime::cuda_trace::trace_counter("response_pair_major_metric_root", 1);
+          } else {
+            checked(generated::df_occupied_apply_metric_root(
+                blas, ai, rri, metric.inverse_square_root, projected, fitted));
+          }
           runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
           runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
         } else if (fitted_occupied) {
