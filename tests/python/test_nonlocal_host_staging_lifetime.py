@@ -93,7 +93,10 @@ def test_ordered_energy_reduction_prefetch_keeps_left_to_right_fp64() -> None:
     assert "staged[threadIdx.x] = energy_terms[index]" in kernel
     assert "for (std::size_t i = 0; i < width; ++i) sum += staged[i]" in kernel
     assert "atomicAdd" not in kernel
-    assert "reduce_energy_ordered_kernel<<<1, kOrderedEnergyLoadThreads, 0, stream>>>" in source
+    assert (
+        "reduce_energy_ordered_kernel<<<1, kOrderedEnergyLoadThreads, 0, stream>>>"
+        in source
+    )
 
 
 def test_resident_enqueue_has_no_hidden_allocation_transfer_or_fence() -> None:
