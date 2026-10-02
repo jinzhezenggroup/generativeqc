@@ -16,7 +16,8 @@ bounded fallback remain part of CUDA execution.
 ## Scientific ownership
 
 The compiler emits the following production mathematics. Backend owners retain
-ragged storage traversal, validation, scheduling, accumulation and publication.
+ragged storage traversal, validation, accumulation and publication, and launch
+the compiler-selected schedules where available.
 
 | Science | Compiler owner | Production consumers |
 | --- | --- | --- |
@@ -39,6 +40,35 @@ SCC iteration/mixing/convergence, occupations, generalized eigensolver provider
 selection, workspace/cache lifetime, per-system errors and public method
 admission remain native runtime responsibilities. Generation needs no installed
 GenerativeQC runtime, GPU, or scientific oracle.
+
+CPU S/D/Q generation evaluates a complete Cartesian shell block per primitive
+pair, sharing the Gaussian prefactor and recurrence intermediates across its
+up to 36 outputs. Native contraction order, screening and spherical transforms
+remain unchanged. CUDA keeps one Cartesian pair per lane and hoists only DAG
+nodes common to every component alternative before the component switch.
+Both routes retain FP64 arithmetic and the checked primitive entry points.
+
+CUDA electronic Hamiltonian assembly and density contraction use the policy in
+`method/gfn2_electronic_schedule.py`: 256 threads per block and up to 128 tiles
+per system. Host-visible mean matrix size selects the tile count; each system
+strides over its actual device extent. Small matrices retain one tile. This
+requires no additional storage or device-to-host metadata transfer, including
+for imbalanced ragged batches. One triangular pair owns both matrix
+directions, preserving scalar arithmetic and spin packing. Density contraction
+retains the full orbital sum in each lane; orbital and trace reduction orders
+and finite-range checks are unchanged. Native validation
+and whole-system publication remain separate launches; an error in any tile
+suppresses the entire system's output.
+
+`benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
+matched fresh-SCC settings. It records cold, repeated and changed-geometry
+timings, every SCC iteration count, numerical outputs and loaded binary hashes.
+Run CUDA measurements inside Slurm as described below; compare the resulting
+JSON files using `--reference`, `--candidate` and `--output`. Both reports must
+use the same geometries and settings, and every sample participates in the
+energy/force gate regardless of its iteration count. xTBloom's high-level API
+also returns atomic charges; that additional output is retained in the
+comparator's endpoint contract.
 
 ## Remaining native scientific work
 

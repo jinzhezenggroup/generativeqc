@@ -103,6 +103,7 @@ function(generativeqc_add_gfn2_runtime target)
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_electronic.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_electronic_contract.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_electronic_runtime.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_electronic_schedule.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ad_program.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
       ARGS --output "${GENERATIVEQC_GFN2_ELECTRONIC_CUDA_HEADER}"

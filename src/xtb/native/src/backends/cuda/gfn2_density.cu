@@ -7,11 +7,12 @@
 #include <limits>
 
 #include "backends/cuda/gfn2_density.cuh"
+#include "generated_gfn2_electronic_native.cuh"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace {
 
-constexpr int kThreadsPerBlock = 256;
+constexpr int kThreadsPerBlock = generativeqc::xtb::generated::gfn2_electronic_threads;
 constexpr std::int64_t kMaximumInt64 = 9223372036854775807LL;
 
 static_assert((kThreadsPerBlock & (kThreadsPerBlock - 1)) == 0,
@@ -249,7 +250,10 @@ __global__ void contract_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceI
   const std::int64_t matrix_begin = batch.matrix_offsets[system];
   const std::int64_t count = orbital_end - orbital_begin;
   const std::int64_t pair_count = triangle_inclusive(count);
-  for (std::int64_t pair = threadIdx.x; pair < pair_count; pair += blockDim.x) {
+  // Tile independent matrix outputs, retaining the full ordered orbital
+  // reduction and its finite-range checks within each original thread.
+  for (std::int64_t pair = std::int64_t{blockIdx.z} * blockDim.x + threadIdx.x; pair < pair_count;
+       pair += std::int64_t{gridDim.z} * blockDim.x) {
     const MatrixPair indices = matrix_pair(pair);
     double density = 0.0;
     double weighted_density = 0.0;
@@ -565,7 +569,8 @@ __global__ void spin_contract_kernel(Gfn2DensityDeviceBatch batch,
   const std::int64_t matrix_begin = layout.spin_matrix_offsets[system] + channel * matrix_count;
   const std::int64_t orbital_begin = layout.spin_orbital_offsets[system] + channel * count;
   const std::int64_t pair_count = triangle_inclusive(count);
-  for (std::int64_t pair = threadIdx.x; pair < pair_count; pair += blockDim.x) {
+  for (std::int64_t pair = std::int64_t{blockIdx.z} * blockDim.x + threadIdx.x; pair < pair_count;
+       pair += std::int64_t{gridDim.z} * blockDim.x) {
     const MatrixPair indices = matrix_pair(pair);
     double density = 0.0;
     double weighted_density = 0.0;
@@ -1184,8 +1189,11 @@ cudaError_t evaluate_gfn2_restricted_density_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  contract_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
-      batch, input, workspace, system_errors, device_error);
+  const dim3 contract_grid(static_cast<unsigned>(batch.batch_size), 1U,
+                           generativeqc::xtb::generated::gfn2_electronic_matrix_tiles(
+                               batch.total_matrix_elements, batch.batch_size));
+  contract_kernel<<<contract_grid, kThreadsPerBlock, 0, stream>>>(batch, input, workspace,
+                                                                  system_errors, device_error);
   status = cudaGetLastError();
   if (status != cudaSuccess) {
     return status;
@@ -1228,7 +1236,10 @@ cudaError_t evaluate_gfn2_spin_density_cuda(
     return status;
   }
   const dim3 channel_grid(static_cast<unsigned int>(batch.batch_size), 2u, 1u);
-  spin_contract_kernel<<<channel_grid, kThreadsPerBlock, 0, stream>>>(
+  const dim3 contract_grid(static_cast<unsigned>(batch.batch_size), 2U,
+                           generativeqc::xtb::generated::gfn2_electronic_matrix_tiles(
+                               batch.total_matrix_elements, batch.batch_size));
+  spin_contract_kernel<<<contract_grid, kThreadsPerBlock, 0, stream>>>(
       batch, layout, input, workspace, system_errors, device_error);
   status = cudaGetLastError();
   if (status != cudaSuccess) {
