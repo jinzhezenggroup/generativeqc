@@ -400,3 +400,84 @@ def test_full_rank_adjoints_using_emitted_helpers(
     actual_m = -0.5 * np.outer(q, q) + 0.25 * scale**2 * np.einsum("pij,qij->pq", u, u)
     np.testing.assert_allclose(actual_a, ref_a, atol=1e-11, rtol=1e-10)
     np.testing.assert_allclose(actual_m, ref_m, atol=1e-11, rtol=1e-10)
+
+
+def test_rooted_final_projection_weights_match_independent_energy_derivative(
+    native: ct.CDLL,
+) -> None:
+    """Emitted finish/root calls feed both response terms and a raw-energy oracle."""
+    rng = np.random.default_rng(1694)
+    n, r, a, weight, exchange = 7, 3, 9, 2.0, 0.25
+    c = np.linalg.qr(rng.normal(size=(n, r)))[0]
+    gauge = np.linalg.qr(rng.normal(size=(r, r)))[0]
+    density = weight * c @ c.T
+    q = np.linalg.qr(rng.normal(size=(a, a)))[0]
+    metric = (q * np.linspace(0.8, 3.0, a)) @ q.T
+    root = (q / np.sqrt(np.linspace(0.8, 3.0, a))) @ q.T
+    raw = rng.normal(size=(a, n, n))
+    raw = (raw + raw.transpose(0, 2, 1)) * 0.5
+    fitted = np.einsum("pq,qmn->pmn", root, raw)
+    delta_raw = rng.normal(size=raw.shape)
+    delta_raw = (delta_raw + delta_raw.transpose(0, 2, 1)) * 0.5
+    delta_metric = rng.normal(size=metric.shape)
+    delta_metric = (delta_metric + delta_metric.T) * 0.5
+
+    def energy(values: np.ndarray, m: np.ndarray) -> float:
+        solved = np.linalg.solve(m, values.reshape(a, -1)).reshape(a, n, n)
+        charge = np.einsum("mn,qmn->q", density, values)
+        return float(
+            0.5 * charge @ np.linalg.solve(m, charge)
+            - exchange * np.einsum("qij,ki,qkl,lj->", values, density, solved, density)
+        )
+
+    analytic = []
+    for frame in (c, c @ gauge):
+        coefficients = np.asfortranarray(frame)
+        linear = np.empty((a * r, n), order="F")
+        for p in range(a):
+            for j in range(r):
+                linear[p + a * j] = (fitted[p] @ coefficients)[:, j]
+        projected = np.full(a * r * r, np.nan)
+        rooted = np.full_like(projected, np.nan)
+        assert (
+            native.finish_project(
+                n, r, a, pointer(coefficients), pointer(linear), pointer(projected), 0
+            )
+            == 0
+        )
+        assert (
+            native.retained_metric(
+                a,
+                r * r,
+                pointer(np.asfortranarray(root)),
+                pointer(projected),
+                pointer(rooted),
+                0,
+            )
+            == 0
+        )
+        u = np.stack(
+            [
+                rooted[p * r * r : (p + 1) * r * r].reshape((r, r), order="F")
+                for p in range(a)
+            ]
+        )
+        potential = weight * np.trace(u, axis1=1, axis2=2)
+        raw_weight = density[None] * potential[
+            :, None, None
+        ] - 2 * exchange * weight**2 * np.einsum(
+            "mi,qij,nj->qmn", coefficients, u, coefficients
+        )
+        metric_weight = -0.5 * np.outer(
+            potential, potential
+        ) + exchange * weight**2 * np.einsum("pij,qij->pq", u, u)
+        analytic.append(
+            float(np.vdot(raw_weight, delta_raw) + np.vdot(metric_weight, delta_metric))
+        )
+    np.testing.assert_allclose(analytic[0], analytic[1], atol=3e-12, rtol=3e-13)
+    for step in (1e-4, 3e-5, 1e-5):
+        finite = (
+            energy(raw + step * delta_raw, metric + step * delta_metric)
+            - energy(raw - step * delta_raw, metric - step * delta_metric)
+        ) / (2 * step)
+        assert abs(finite - analytic[0]) < 2e-6
