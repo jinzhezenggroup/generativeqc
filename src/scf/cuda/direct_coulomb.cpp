@@ -462,6 +462,7 @@ cudaError_t enqueue_generated_exchange_prepared(
     GeneratedExchangePlan& p, bool unrestricted, double* alpha_exchange, double* beta_exchange,
     DirectCoulombRange range, double omega) {
   const bool full_range = range == DirectCoulombRange::Full;
+  cudaError_t error = cudaSuccess;
   auto& shared = *p.shared;
   const auto b = shared.batch;
   const std::size_t batch = static_cast<std::size_t>(b.batch_size);
