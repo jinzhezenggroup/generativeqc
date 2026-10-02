@@ -19,6 +19,26 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 - Preserve durable rationale for non-trivial architecture, numerics, performance,
   and compatibility decisions as Agent Notes under `.agents/notes/`.
 
+## Compiler caching
+
+- Use `ccache` for local C++ and CUDA builds, including PR qualification builds.
+  Verify `ccache --version` before configuring; if it is unavailable, report the
+  missing prerequisite rather than silently starting an uncached full build.
+- Configure CMake with `-DCMAKE_CXX_COMPILER_LAUNCHER=ccache` and
+  `-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache`. Existing automatic cache selection is
+  acceptable only after verifying that the generated compiler commands actually
+  invoke `ccache`; the cache launcher may be a normal CMake variable rather than
+  a `CMakeCache.txt` entry.
+- Reuse the existing cache across builds. Do not clear or disable it for ordinary
+  validation. Do not weaken cache correctness with sloppiness settings or override
+  build/source identities to obtain hits.
+- For isolated worktree builds, prefer matching in-tree build directory layouts
+  and set `CCACHE_BASEDIR` to each checkout root, not just its build directory,
+  so equivalent compiler input paths can reuse cached objects across worktrees.
+- Retain `ccache --show-stats` before and after substantial compilation so cache
+  use can be distinguished from cache hits. Compiler caching does not replace
+  clean source provenance or real-device execution evidence.
+
 ## Release authority
 
 - Repository cleanup, benchmark evidence retention, fixes, PRs and merges do
