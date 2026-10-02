@@ -1,6 +1,6 @@
 # Proposal: skip MolecularV1 screened VV10 rows in resident CUDA SCF
 
-Status: proposed; complete endpoint timing in progress
+Status: proposed; larger and changed-geometry qualification in progress
 Date: 2026-10-03
 
 ## Problem and decision
@@ -38,8 +38,20 @@ The first library SHA256 is
 An intrusive 24-atom def2-SVP, grid 48 x 16 x 32 one-iteration profile takes
 16.137 s, versus 18.207 s in the earlier unmasked allocation; these separate
 profiles are only bottleneck diagnostics, not controlled endpoint speedups.
-Same-device cold/warm complete endpoints are running under node1 Slurm 5359.
-Maintain the all-sample 1e-8 Eh / 1e-7 Eh/Bohr gates.
+Same-device complete endpoints under node1 Slurm 5359 are now complete:
+
+| Complete SCF + force | SPD unmasked | Screened rows | GPU4PySCF paired with screened rows |
+| --- | ---: | ---: | ---: |
+| Cold seconds | 381.379 | 358.585 | 123.351 |
+| Three-repeat warm median seconds | 67.887 | 65.668 | 27.747 |
+
+The warm improvement is 1.034x with one SCF iteration in both native variants.
+Cold native iterations differ (18 versus 19), so cold timings include different
+SCF trajectories. Every one of the five screened-row/reference pairs passes:
+maximum energy error 2.9104e-11 Eh and force error 2.9813e-10 Eh/Bohr.
+These are 24 atoms, 192 spherical def2-SVP AOs and 589824 grid points. Native
+remains slower than GPU4PySCF; there is no large-system advantage claim.
+The all-sample 1e-8 Eh / 1e-7 Eh/Bohr gates remain unchanged.
 
 The 24-atom GPU4PySCF reference converges with the repository's established
 1e-11 energy / 1e-8 orbital-gradient norm controls. An earlier diagnostic's
@@ -53,6 +65,22 @@ Source patches/archive, build/ccache receipts and raw reports are retained in
 ignored `.artifacts/wb97m-vv10-mask/` and the authorized remote task directory
 `/home/jzzeng/codes/wb97m-20261002/`. Molecular active-pair counts are not yet
 exported; grid-square capacities must not be mislabeled as measured work.
+
+## Larger-case resource and environment diagnosis
+
+The default 256 MiB nonlocal budget rejects the 48/96-atom full grid during
+preparation. Explicit 1 GiB SCF-budget diagnostics do not qualify default
+scalability. The force driver independently limits its nonlocal owner to one
+quarter of a 1 GiB total device allowance; its resident allocation is about
+240 bytes per point, so that second limit also prevents these larger cases.
+Subsequent diagnostic runs explicitly allow 4 GiB total force memory and
+retain the 1 GiB nonlocal cap. Neither control changes scientific work.
+
+Node2 job 2045 additionally failed during force JIT because the default GCC 12
+installation lacks cc1plus. GCC 11 is complete and is selected through
+NVCC_CCBIN for reruns. Node5 job 1387 was stopped after diagnosing the
+predictable force-capacity failure. These are failed/cancelled records, not
+timing or accuracy evidence. Default resource planning still needs its own fix.
 
 ## Revisit when
 
