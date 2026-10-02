@@ -62,8 +62,10 @@ primitive quartet, radial evaluation or density contraction is removed.
 ## Qualification
 
 The host-executed generated-helper check covers all 55 canonical s/p/d/f shell
-classes, six geometries/component samples, Full/SR/LR and all four atom seeds:
-15,840 value/Dual3 comparisons against the retained generic Cartesian evaluator.
+classes, six general component samples plus pure x/y/z-axis quartets, Full/SR/LR,
+separate double values and all four Dual3 atom seeds: 25,245 comparisons against
+the retained generic Cartesian evaluator. Pure-axis ffff reaches pair power six
+and the terminal Hermite boundary read at t=7.
 It validates the storage specialization, not independent scientific accuracy or
 CUDA performance. Fourteen existing code-generation guards and compiler/SCF/
 electronic-structure/CUDA-ownership checks also pass.

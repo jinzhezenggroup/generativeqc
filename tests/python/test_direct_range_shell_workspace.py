@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_all_shell_classes_preserve_range_values_and_dual_geometry(
     tmp_path: Path,
 ) -> None:
-    """Exercise all 55 s/p/d/f classes, each range and all four seeded centers."""
+    """Exercise 55 shell classes, pure-axis bounds, double and all Dual3 seeds."""
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
         pytest.skip("host generated-kernel check requires c++ and ccache")
@@ -83,9 +83,14 @@ template<unsigned A, unsigned B, unsigned C, unsigned D>
 void check() {
   const unsigned momenta[4]{A,B,C,D};
   const double exponents[4]{0.45,0.8,1.2,0.7};
-  for (unsigned sample = 0; sample < 6; ++sample) {
+  for (unsigned sample = 0; sample < 9; ++sample) {
     Angular angular[4];
-    for (unsigned i = 0; i < 4; ++i) angular[i] = component(momenta[i], sample * (2*i+1) + i);
+    for (unsigned i = 0; i < 4; ++i) {
+      // The pure-axis tuples reach the maximum pair power, including ffff t=6.
+      angular[i] = sample < 6 ? component(momenta[i], sample * (2*i+1) + i)
+          : Angular{sample == 6 ? momenta[i] : 0, sample == 7 ? momenta[i] : 0,
+                    sample == 8 ? momenta[i] : 0};
+    }
     for (unsigned seed = 0; seed < 4; ++seed) {
       Vec3<Dual3> centers[4];
       for (unsigned i = 0; i < 4; ++i) {
@@ -106,6 +111,19 @@ void check() {
         compare(actual.derivative_x,expected.derivative_x);
         compare(actual.derivative_y,expected.derivative_y);
         compare(actual.derivative_z,expected.derivative_z);
+        if (seed == 0) {
+          // Scalar values instantiate a different radial moment count from AD.
+          Vec3<double> positions[4];
+          for (unsigned i = 0; i < 4; ++i)
+            positions[i] = {centers[i].x.value, centers[i].y.value, centers[i].z.value};
+          const double value = primitive_eri_cartesian_shell_pairs<A,B,C,D>(
+              exponents[0],positions[0],angular[0], exponents[1],positions[1],angular[1],
+              exponents[2],positions[2],angular[2], exponents[3],positions[3],angular[3],range,omega);
+          const double control = primitive_eri_cartesian<A+B+C+D>(
+              exponents[0],positions[0],angular[0], exponents[1],positions[1],angular[1],
+              exponents[2],positions[2],angular[2], exponents[3],positions[3],angular[3],range,omega);
+          compare(value,control);
+        }
       }
     }
   }
@@ -146,4 +164,4 @@ CALLS
         text=True,
         timeout=60,
     )
-    assert "15840 value/dual comparisons" in result.stdout
+    assert "25245 value/dual comparisons" in result.stdout
