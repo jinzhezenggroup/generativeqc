@@ -524,8 +524,17 @@ class RccsdPrepared final : public PreparedCalculation {
     if (compute_forces && molecule::ao_count(system_) > 12)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
-    auto state = run_rccsd_native_state(execution_, system_, descriptor_,
-                                        &cpu_exact_plan_);
+    if (!cpu_exact_plan_) {
+      const auto backend =
+          execution_.cuda_requested() ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+      const auto strategy =
+          scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted), backend,
+                                  reference_options_.screening_tolerance);
+      cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(
+          system_, nullptr, strategy, execution_.cuda_requested() ? execution_.device_id() : -1);
+    }
+    auto state = execute_rccsd_prepared(execution_, system_, reference_options_, solver_options_,
+                                        reference_capacity_, cpu_exact_plan_.get());
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
