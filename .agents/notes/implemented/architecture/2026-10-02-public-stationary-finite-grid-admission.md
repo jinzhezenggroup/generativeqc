@@ -68,6 +68,24 @@ No NVIDIA device/NVCC was available for this change. The historical independent
 relaxes nor solves that separate validation problem. The exact current-head GPU
 ladder is in `docs/maintainer/stationary_large_domain_qualification.md`.
 
+### Current-source capacity audit compatibility
+
+The source-only DFT-MP audit moves from `stationary-capacity.v1` to `v2`: the
+former schema conflated private diagnostic work guards with public capacity and
+modeled the old small-domain gate. The new fields separate native owner bounds,
+AO-task fallback eligibility, diagnostic guards, public overrides, mandatory
+windows and unexecuted native-provider requirements. Historical v1 reports,
+frozen manifests and receipts are preserved verbatim. A static preflight pass
+cannot be promoted into runtime/GPU/numerical qualification. The frozen DFT-MP
+96-atom grid has 7,962,624 points / 72,619,135,440 visits, distinct from the
+2,359,296-point / 21,516,784,080-visit PBE0 ladder above. Tests retain fail-closed
+source mutations and cover optional versus mandatory work limits, native/fallback
+boundaries, paired-host admission, complete windows and method-specific logical
+reference work. The audit also corrects a pre-existing label: current public
+semilocal forces select packaged AOT, while global hybrids use the runtime
+compiler. Package inventory remains availability evidence only. No runtime or
+scientific production change is part of this tooling correction.
+
 ## Consequences / revisit
 
 Extra chunk error fences can add overhead. No speedup or large-case numerical

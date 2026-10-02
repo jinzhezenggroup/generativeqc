@@ -35,6 +35,39 @@ For `P` points and `A` atoms the complete native pair-visit census is
 per-chunk work. Complete-endpoint benchmarks retain the route, resource bounds,
 and work record independently for cold, warm, moved and moved-warm endpoints.
 
+## Source-only DFT-MP capacity audit
+
+From a clean checkout, run the current-source audit in a fresh interpreter:
+
+```bash
+PYTHONPATH=python:. python tools/dft_mp_v1/qualify_capacity.py --output /tmp/dft-mp-capacity.json
+```
+
+The `stationary-capacity.v2` report audits the current compiler, native allocation,
+endpoint and public forwarding contracts against the unchanged frozen DFT-MP-v1
+inputs. It separately reports native owner capacity, the small AO-task fallback
+envelope, private diagnostic guards, public complete-grid overrides, mandatory
+submission windows and per-method host/device bounds. The Direct paired host
+reserve is charged before host admission. The device bound includes the paired
+reserve; the stationary/grid-only bound and remaining native-provider allowance
+are also explicit. Logical AO-task reference counts are method-specific and are
+not reported as executed native work. Required native-provider availability and
+budget qualification remain `NOT_RUN`.
+
+The frozen DFT-MP grid is distinct from the PBE0 ladder below: its 96-atom case
+has **7,962,624 points and 72,619,135,440 pair visits**. With current defaults its
+windows contain at most 10,752 points / 98,058,240 pair visits. All 35 frozen
+FP64 force rows pass the current static capacity preflight; larger domains must
+still return complete native integral derivatives at runtime. This result proves
+neither GPU execution nor numerical or performance qualification. Private
+`diagnostic_admission` retains its own whole-grid failures separately.
+
+Package inventory is availability-only evidence: semilocal public rows select
+packaged AOT, whereas global hybrids select the runtime-compiler path. Neither a
+package declaration nor static admission qualifies its executable. Historical v1
+reports, frozen inputs and receipts remain unchanged; do not reinterpret their
+older admission fields as v2 results.
+
 ## Frozen PBE0 acceptance ladder
 
 Use the existing `benchmarks.readme_pbe0` protocol and its checked-in offline
