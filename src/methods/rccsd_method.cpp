@@ -24,7 +24,7 @@
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
 #include "posthf/source_reuse_schedule_generated.hpp"
-#include "posthf/warm_reference.hpp"
+#include "methods/correlated_warm_reference.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
@@ -534,7 +534,7 @@ class RccsdPrepared final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD forces are qualified only through 12 AOs");
 
-    const auto warm_capacity = posthf::warm_reference::reservation_bytes(
+    const auto warm_capacity = warm_reference::reservation_bytes(
         system_, initial_state, retained_warm_state != nullptr);
     if (warm_capacity >= solver_options_.max_bytes ||
         reference_capacity_ > solver_options_.max_bytes - warm_capacity)
@@ -568,7 +568,7 @@ class RccsdPrepared final : public PreparedCalculation {
 
     const auto retain_reference = [&] {
       if (retained_warm_state && state.reference)
-        *retained_warm_state = posthf::warm_reference::capture(
+        *retained_warm_state = warm_reference::capture(
             system_, *state.reference, state.reference_energy_change, state.reference_density_rms,
             state.reference_iterations);
     };
@@ -680,7 +680,7 @@ class RccsdPreparedBatch final : public PreparedBatch {
     owner_coordinates_.reserve(systems_.size());
     for (const auto& system : systems_) {
       owners_.push_back(prepare_rccsd_calculation(capabilities_, *context_, system, descriptor_));
-      owner_coordinates_.push_back(posthf::warm_reference::coordinates(system));
+      owner_coordinates_.push_back(warm_reference::coordinates(system));
     }
   }
 
@@ -701,12 +701,12 @@ class RccsdPreparedBatch final : public PreparedBatch {
       result.calculation.executed_backend = execution_.backend();
       try {
         auto target = systems_[index];
-        auto target_coordinates = posthf::warm_reference::coordinates(target);
+        auto target_coordinates = warm_reference::coordinates(target);
         if (!coordinates.empty() && coordinates[index]) {
-          if (!posthf::warm_reference::valid_coordinates(*coordinates[index], target))
+          if (!warm_reference::valid_coordinates(*coordinates[index], target))
             throw std::invalid_argument("invalid RCCSD batch item coordinates");
           target_coordinates = *coordinates[index];
-          posthf::warm_reference::set_coordinates(target, target_coordinates);
+          warm_reference::set_coordinates(target, target_coordinates);
         }
         if (target_coordinates != owner_coordinates_[index]) {
           auto candidate = prepare_rccsd_calculation(capabilities_, *context_, target, descriptor_);
@@ -762,7 +762,7 @@ class RccsdPreparedBatch final : public PreparedBatch {
           "checkpoint restore requires a matching warm-enabled RCCSD batch");
     for (std::size_t index = 0; index < size(); ++index)
       if (states[index])
-        posthf::warm_reference::validate_checkpoint(systems_[index], *states[index], "RCCSD");
+        warm_reference::validate_checkpoint(systems_[index], *states[index], "RCCSD");
     for (std::size_t index = 0; index < size(); ++index)
       if (states[index]) warm_states_[index].swap(states[index]);
   }
