@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,72 @@ from tools.validate_ccsd_t_gradient import analytic_oracle
 ROOT = Path(__file__).resolve().parents[2]
 GRADIENTS = ROOT / "tests/reference_data/cc/gradients"
 TRIPLES = ROOT / "tests/reference_data/cc/rccsd-t.json"
+
+
+@pytest.mark.parametrize(
+    "atoms_count",
+    (6, 12) if os.environ.get("GENERATIVEQC_RCCSDT_LARGE_TEST") == "1" else (6,),
+)
+def test_cluster_force_reference_warm_state_and_directional_energy(
+    energy_device: str, atoms_count: int
+) -> None:
+    """Qualify larger relaxed forces with corrected independent triples Lambda.
+
+    The 14-AO case runs routinely. Explicit large qualification also exercises
+    28 AOs; these complete response endpoints can take several minutes.
+    Regenerate the independent records with benchmarks/ccsdt_cluster_oracle.py.
+    """
+    oracle = json.loads((GRADIENTS / "water_clusters_ccsdt.json").read_text())
+    pack = ROOT / "python/generativeqc/data/basis_pack.json"
+    assert hashlib.sha256(pack.read_bytes()).hexdigest() == oracle["basis_pack_sha256"]
+    rows = {
+        row["geometry"]: row for row in oracle["rows"] if row["atoms"] == atoms_count
+    }
+    atoms = rows["original"]["inputs"]
+    calc = _calculator(
+        device=energy_device,
+        basis_representation="spherical",
+        correlation_memory_budget_bytes=8 << 30,
+    )
+    with calc.prepare_batch([atoms]) as prepared:
+        for geometry, coordinates in (
+            ("original", None),
+            ("original", None),
+            ("changed", [xyz for _, xyz in rows["changed"]["inputs"]]),
+        ):
+            result = prepared.execute(
+                properties=("energy", "forces"), coordinates=[coordinates], strict=True
+            ).items[0]
+            reference = rows[geometry]
+            assert result.converged
+            assert result.energy == pytest.approx(reference["energy"], abs=3e-9)
+            np.testing.assert_allclose(
+                result.forces, reference["forces"], atol=1e-6, rtol=0
+            )
+            assert result.correlation is not None
+            assert result.correlation.ccsd_t_triples_energy == pytest.approx(
+                reference["triples"], abs=2e-9
+            )
+            assert result.correlation.response_absolute_residual < 1e-9
+            if geometry == "original":
+                original_force = np.asarray(result.forces)
+
+    if atoms_count == 6:
+        direction = np.random.default_rng(155214).normal(size=(atoms_count, 3))
+        direction -= direction.mean(axis=0)
+        direction /= np.linalg.norm(direction)
+        analytic = -float(np.vdot(original_force, direction))
+        coordinates = np.asarray([xyz for _, xyz in atoms])
+        for step in (2e-4, 1e-4):
+            energies = []
+            for sign in (-1, 1):
+                displaced = coordinates + sign * step * direction
+                moved = [
+                    (z, xyz.tolist())
+                    for (z, _), xyz in zip(atoms, displaced, strict=True)
+                ]
+                energies.append(calc.singlepoint(moved, properties=("energy",)).energy)
+            assert abs((energies[1] - energies[0]) / (2 * step) - analytic) < 2e-6
 
 
 def _reference_case(name: str) -> tuple[list[tuple[int, list[float]]], dict, float]:
