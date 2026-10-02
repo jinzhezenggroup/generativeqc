@@ -23,8 +23,8 @@ using PairKernelValues = generated::PairValues;
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, double ki,
                                                double kj, double row_inverse_kappa) {
-  if constexpr (Variant == Vv10Variant::vv10 && Features && Geometry)
-    return generated::pair_values_vv10_reciprocal_geometry(r2, wi, wj, ki, kj, row_inverse_kappa);
+  if constexpr (Variant == Vv10Variant::vv10 && Features)
+    return generated::pair_values_vv10_rational<Geometry>(r2, wi, wj, ki, kj, row_inverse_kappa);
   return generated::pair_values<Variant, Features, Geometry, true>(r2, wi, wj, ki, kj,
                                                                    row_inverse_kappa);
 }

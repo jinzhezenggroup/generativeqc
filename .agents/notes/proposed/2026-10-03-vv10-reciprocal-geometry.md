@@ -62,3 +62,7 @@ Unbounded replacement of division is not justified by molecular test success;
 the ordered fallback and independent scalar tests remain required.
 Promote only after repeatable complete endpoint benefit, geometry rebuild and
 larger-size qualification. A kernel-only improvement is insufficient.
+
+## Superseded candidate
+
+The [one-denominator proposal](2026-10-03-vv10-energy-denominator.md) replaces this closure in the current PR. The measurements above remain historical evidence for the four-division binary, not qualification of the replacement.
