@@ -283,7 +283,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "a40fd88e037c48da64a4ae02ba5c9be97b01d37abb085f11223dc4f24f9cba56",
+        "geometry_resources_sha256": "681474a5c9456a76db9059e48fcfd1447289b455d9291a6df80951789a231589",
         "public_wrapper_sha256": (
             "ded1b7e2cc0a93881cc17b4da32a3695bdbaf05421535ac3dcc4efb646da003b"
         ),
@@ -345,10 +345,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "5f1a660cb0bb3c0cd0a4d952ff24347762c906c7918c779ef14c9a4ec192712e"
+            "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
         ),
         "native_geometry_enqueue_sha256": (
-            "b390ebea5e5289b2fccdd7e0f2af92af825f76a7667047913911e0cf190af01c"
+            "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -357,7 +357,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "7a06757b893e51c6924675c88c66c6d0817923904283bf48378fb4e8302f47be"
         ),
         "native_configure_becke_sha256": (
-            "06531973e05e6cce4e21160a5f069229123d12d493a8822cad004bd68cd84403"
+            "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
         ),
         "native_metrics_sha256": (
             "21e067818117b8ebaf8eeb218aeface0680681fdd6f39285ed6f981c3cef969a"
