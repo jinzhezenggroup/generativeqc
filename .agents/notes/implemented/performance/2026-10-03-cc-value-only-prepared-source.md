@@ -44,9 +44,22 @@ allowance, checks the retained bytes and derivative order, verifies device-only
 source ownership and compares the returned tile with independent CPU integrals.
 
 CPU public CCSD/CCSD(T) and force resource tests pass (27 passed, 12 CUDA skips).
-Node1 Slurm job 5357 passes all 37 public CPU/CUDA tests. Complete endpoint timing,
-matched PySCF oracle comparisons and sanitizer evidence are collected separately;
-this source fix does not expand the public 12-AO force qualification boundary.
+Node1 Slurm job 5357 passes all 37 public CPU/CUDA tests, the complete native
+CUDA Fock provider suite (including the exact source allowance), and full 7-AO
+force memcheck with zero errors. This source fix does not expand the public
+12-AO force qualification boundary.
+
+The [retained complete-endpoint evidence](../../../../benchmarks/results/cc-value-source-20261003/summary.json)
+compares all cold, twice-warm and changed-geometry outputs with matched PySCF
+2.14.0 references. Maximum errors are 1.5e-12 Eh for total energy, 1.5e-14 Eh
+for triples and 1.3e-8 Eh/bohr for forces. Semantic CC work counters are unchanged.
+On a pinned CPU core, 28-AO cold execution decreases from 101.96 to 5.92 seconds
+and changed geometry from 100.88 to 5.89 seconds; warm execution remains about
+5.65 seconds. On node1, CUDA warm execution decreases from a 62.93-second mean
+to 13.61 seconds. Cold/changed GPU times decrease from 110.57/104.71 to
+61.54/55.46 seconds; RHF preparation still dominates them. Nodes were shared
+and GPU comparisons used separate Slurm allocations. Source timing alone
+measures CUDA submission, so use complete provider/endpoint time to assess work.
 
 ## Revisit when
 
