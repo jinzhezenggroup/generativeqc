@@ -42,9 +42,9 @@ def pinned_reference() -> None:
 
 @pytest.mark.parametrize(
     "options",
-    ({"precision": "auto"}, {"density_fitting": "cuda"}, {"host_unfused": True}),
+    ({"density_fitting": "cuda"}, {"host_unfused": True}),
 )
-def test_global_hybrid_force_does_not_inherit_unqualified_execution(
+def test_global_hybrid_force_preserves_execution_boundaries(
     options: dict,
 ) -> None:
     from generativeqc import Calculator, GridSpec, KsOptions
@@ -58,6 +58,19 @@ def test_global_hybrid_force_does_not_inherit_unqualified_execution(
         ks_options=KsOptions(grid=GridSpec(), xc_schedule=schedule),
         **options,
     )
+    if options.get("density_fitting"):
+        # The separately qualified DF response owner now supports FP64 forces;
+        # it must not inherit the direct owner's component-wise AUTO admission.
+        assert "forces" in calc.capabilities.supported_properties
+        with pytest.raises(NotImplementedError, match="requires precision='fp64'"):
+            Calculator(
+                method="pbe0-rks",
+                device="cuda",
+                precision="auto",
+                ks_options=KsOptions(grid=GridSpec(), xc_schedule=schedule),
+                **options,
+            )
+        return
     assert "forces" not in calc._capabilities.supported_properties
     with pytest.raises((ValueError, NotImplementedError)):
         calc.singlepoint(
@@ -65,9 +78,70 @@ def test_global_hybrid_force_does_not_inherit_unqualified_execution(
         )
 
 
-@pytest.mark.parametrize("name", ("PBE0", "B3LYP", "M06-2X", "MN15", "PBE0-alias"))
+def test_pbe0_auto_force_uses_strict_final_state() -> None:
+    """AUTO may lower qualified SCF components; the published force uses the FP64-refined state."""
+    from generativeqc import Calculator, GridSpec, KsOptions
+
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    calc = Calculator(
+        method="pbe0-rks",
+        device="cuda",
+        basis="sto-3g",
+        precision="auto",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
+        ),
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        max_iterations=200,
+    )
+    result = calc.singlepoint(
+        [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))],
+        properties=("energy", "forces"),
+    )
+    assert result.converged and np.isfinite(result.forces).all()
+    assert result.precision is not None
+    assert result.precision["requested_mode"] == "auto"
+    assert result.precision["effective_bits"] == 32
+    assert result.precision["strict_refinement_applied"] is True
+    assert result.precision["refinement_iterations"] >= 1
+
+
+@pytest.mark.parametrize("name", ("M06-2X", "MN15"))
 @pytest.mark.parametrize("spin", ("rks", "uks"))
-def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
+def test_split_hybrid_auto_force_remains_fail_closed(name: str, spin: str) -> None:
+    """Generated split hybrids may use AUTO energy, but force AUTO is not qualified."""
+    from generativeqc import Calculator, GridSpec, KsOptions
+
+    calc = Calculator(
+        method=f"{name.lower()}-{spin}",
+        device="cuda",
+        basis="sto-3g",
+        precision="auto",
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+    )
+    assert "forces" not in calc.capabilities.supported_properties
+
+
+@pytest.mark.parametrize(
+    "name,precision",
+    (
+        ("PBE0", "fp64"),
+        ("PBE0", "auto"),
+        ("B3LYP", "fp64"),
+        ("B3LYP", "auto"),
+        ("M06-2X", "fp64"),
+        ("MN15", "fp64"),
+        ("PBE0-alias", "fp64"),
+        ("PBE0-alias", "auto"),
+    ),
+)
+@pytest.mark.parametrize("spin", ("rks", "uks"))
+def test_public_cuda_global_hybrid_force(
+    name: str, spin: str, precision: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from generativeqc import Calculator, GridSpec, KsOptions
     from generativeqc._dft_gradient import StationaryKsState
     from generativeqc_compiler.dft import NativeAO
@@ -102,6 +176,7 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
         method=method,
         device="cuda",
         basis="sto-3g",
+        precision=precision,
         ks_options=KsOptions(
             grid=GridSpec(radial_points=32, angular_polar=10, angular_azimuth=20),
             composition=composition,
@@ -114,12 +189,22 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
     with calc.prepare_batch(
         [atoms], multiplicities=[multiplicity], warm_start=True
     ) as batch:
+        # Retain the executed owner evidence without changing the force route.
+        # A descriptor count alone cannot establish which native source ran.
+        force_work = []
+        force_consumer = batch._public_dft_cuda_force
+
+        def observed_force(index: int, force_atoms: object) -> tuple:
+            forces, work = force_consumer(index, force_atoms)
+            force_work.append(work)
+            return forces, work
+
+        monkeypatch.setattr(batch, "_public_dft_cuda_force", observed_force)
         with no_cpu_derivatives():
             public = batch.execute(properties=("energy", "forces"), strict=True).items[
                 0
             ]
         with NativeAO(atoms, multiplicity=multiplicity) as basis:
-            primitive_count = basis.nprimitive
             state = StationaryKsState.from_native(batch, basis)
             try:
                 reference_energy, reference_gradient = (
@@ -133,6 +218,11 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
             finally:
                 state._source.close()
         assert public.executed_backend == "cuda" and public.converged
+        if precision == "auto":
+            assert public.precision is not None
+            assert public.precision["requested_mode"] == "auto"
+            assert public.precision["strict_refinement_applied"] is True
+            assert public.precision["refinement_iterations"] >= 1
         assert public.energy == pytest.approx(reference_energy, abs=2e-8)
         np.testing.assert_allclose(
             public.forces, -reference_gradient, atol=2e-7, rtol=0
@@ -144,13 +234,31 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
             ]
         np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
         assert batch._stationary_cuda_execution._lease.executions == 2
-        # Full-range J'/K' is now owned by the prepared Direct shell source;
-        # the stationary AO descriptor owner retains only one-electron/Pulay
-        # and nuclear work. Exact exchange remains a logical source slot.
+        # Exact exchange remains a logical source slot even though its
+        # derivative arithmetic belongs to the prepared native integral owner.
         assert "exact_exchange" in batch._stationary_cuda_execution.sources.source_names
-        per_execution = (len(atoms) + 2) * primitive_count**2 + len(atoms) * (
-            len(atoms) - 1
-        ) // 2
+        # The prepared native integral owner supplies one-electron/Pulay and
+        # full-range J'/K'. The generated stationary descriptor owner retains
+        # only nuclear pair work; grid geometry is accounted separately.
+        per_execution = len(atoms) * (len(atoms) - 1) // 2
+        assert len(force_work) == 2
+        for work in force_work:
+            assert (
+                work["stationary_integral_derivative_route"]
+                == "prepared-native-complete"
+            )
+            assert work["stationary_native_integral_sources"] == (
+                "one_electron",
+                "overlap_pulay",
+                "coulomb",
+                "exact_exchange",
+            )
+            assert work["stationary_task_executor"]["sources"] == ()
+            assert (
+                work["stationary_task_executor"]["logical_primitive_records"]
+                == per_execution
+            )
+            assert work["primitive_records"] == per_execution
         assert (
             batch._stationary_cuda_execution.sources.metrics()["primitive_records"]
             == 2 * per_execution
@@ -201,16 +309,23 @@ def test_public_cuda_global_hybrid_force(name: str, spin: str) -> None:
     assert abs(estimates[-1] - estimates[-2]) < 1e-6
     assert abs(estimates[-1] - analytic) < 1e-6
     _record_evidence(
-        f"{name.lower()}-{spin}",
+        f"{name.lower()}-{spin}-{precision}",
         {
             "method": method,
             "reference_xc": reference_xc,
+            "precision": precision,
             "energy_error": abs(public.energy - reference_energy),
             "gradient_max_error": float(
                 np.max(np.abs(public.forces + reference_gradient))
             ),
             "translation_residual": float(np.max(np.abs(public.forces.sum(axis=0)))),
             "primitive_records_per_execution": per_execution,
+            "stationary_integral_derivative_route": force_work[0][
+                "stationary_integral_derivative_route"
+            ],
+            "stationary_native_integral_sources": force_work[0][
+                "stationary_native_integral_sources"
+            ],
             "replay_max_error": float(np.max(np.abs(replay.forces - public.forces))),
             "geometry_reuse_max_error": geometry_reuse_error,
             "finite_difference": estimates,

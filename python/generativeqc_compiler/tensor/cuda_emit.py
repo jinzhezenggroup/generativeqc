@@ -104,6 +104,55 @@ def _reduce_source_index(
     return _flat(source, source_shape), prod(reduction_shape)
 
 
+def _einsum_reduction_term(
+    plan: typing.Any,
+    i: int,
+    prefix: typing.Any = "",
+    *,
+    logical: str = "z",
+    reduction: str = "r",
+) -> tuple[str, int]:
+    """Return one einsum reduction term and its flattened reduction extent."""
+
+    step = plan.steps[i]
+    node = step.node
+    if node.op != "einsum":
+        raise ValueError("einsum reduction term requires a TensorIR einsum node")
+    domains: dict[str, int] = {}
+    for child, labels in zip(node.inputs, node.attrs["labels"], strict=True):
+        domains.update(zip(labels, child.spec.shape, strict=True))
+    reduced = tuple(
+        label for label in sorted(domains) if label not in node.attrs["output"]
+    )
+    reduction_shape = tuple(domains[label] for label in reduced)
+    output_coordinates = [
+        _coordinate(logical, node.spec.shape, axis)
+        for axis in range(len(node.spec.shape))
+    ]
+    mapping = dict(zip(node.attrs["output"], output_coordinates, strict=True))
+    mapping.update(
+        (label, _coordinate(reduction, reduction_shape, axis))
+        for axis, label in enumerate(reduced)
+    )
+    values = [
+        _read(
+            child,
+            _flat(
+                [mapping[label] for label in labels],
+                plan.steps[child].node.spec.shape,
+            ),
+            prefix,
+        )
+        for child, labels in zip(step.inputs, node.attrs["labels"], strict=True)
+    ]
+    scalar = scalar_type(node.spec.dtype)
+    mul = scalar.intrinsic("mul")
+    term = values[0]
+    for value in values[1:]:
+        term = f"{mul}({term}, {value})"
+    return term, prod(reduction_shape)
+
+
 def _convert(value: str, source: typing.Any, target: typing.Any) -> str:
     if source.dtype == target.dtype:
         return value
@@ -168,35 +217,12 @@ def _value(plan: typing.Any, i: typing.Any, prefix: typing.Any = "") -> typing.A
         lines.append(f"return finite(::{function}({arguments}), error, {i});")
         return "\n".join(lines)
     if node.op == "einsum":
-        domains = {}
-        for child, labels in zip(node.inputs, a["labels"], strict=True):
-            domains.update(zip(labels, child.spec.shape, strict=True))
-        reduced = tuple(label for label in sorted(domains) if label not in a["output"])
-        reduction_shape = tuple(domains[label] for label in reduced)
-        mapping = dict(zip(a["output"], c, strict=True))
-        mapping.update(
-            (label, _coordinate("r", reduction_shape, axis))
-            for axis, label in enumerate(reduced)
-        )
-        values = [
-            _read(
-                child,
-                _flat(
-                    [mapping[label] for label in labels],
-                    plan.steps[child].node.spec.shape,
-                ),
-                prefix,
-            )
-            for child, labels in zip(args, a["labels"], strict=True)
-        ]
-        term = values[0]
-        for value in values[1:]:
-            term = f"{mul}({term}, {value})"
+        term, reduction_size = _einsum_reduction_term(plan, i, prefix)
         accumulated_term = _convert(term, scalar, accumulator)
         narrowed = _convert(f"finite(value, error, {i})", accumulator, scalar)
         scaled = f"{mul}({narrowed}, {scalar.literal(a['coefficient'])})"
         return f"""{acc_ty} value = {accumulator.zero};
-{reduction_pragma}for (I r = 0; r < {_integer(prod(reduction_shape))}; ++r)
+{reduction_pragma}for (I r = 0; r < {_integer(reduction_size)}; ++r)
     value = {acc_add}(value, {accumulated_term});
 return finite({scaled}, error, {i});"""
     if node.op == "runtime_indexed_select":
@@ -416,6 +442,34 @@ def _cooperative_reduce(plan: typing.Any, i: int) -> bool:
     return cooperative_reduction_provider(plan, i) is not None
 
 
+def _cooperative_reduction_expression(
+    plan: typing.Any, i: int, prefix: typing.Any = ""
+) -> tuple[str, int, str]:
+    """Return contribution, extent and checked output for one block reduction."""
+
+    step = plan.steps[i]
+    node = step.node
+    scalar = scalar_type(node.spec.dtype)
+    accumulator = scalar_type(_value_precision(plan, i).accumulation_dtype)
+    if node.op == "reduce":
+        source_index, reduction_size = _reduce_source_index(node)
+        contribution = _convert(
+            _read(step.inputs[0], source_index, prefix), scalar, accumulator
+        )
+        result = _convert("value", accumulator, scalar)
+        return contribution, reduction_size, f"finite({result}, error, {i})"
+    if node.op == "einsum":
+        term, reduction_size = _einsum_reduction_term(plan, i, prefix)
+        contribution = _convert(term, scalar, accumulator)
+        narrowed = _convert(f"finite(value, error, {i})", accumulator, scalar)
+        scaled = (
+            f"{scalar.intrinsic('mul')}("
+            f"{narrowed}, {scalar.literal(node.attrs['coefficient'])})"
+        )
+        return contribution, reduction_size, f"finite({scaled}, error, {i})"
+    raise ValueError("cooperative reduction requires a reduce or einsum step")
+
+
 def _generated_cooperative_reduce_kernel(
     plan: typing.Any, i: int, prefix: typing.Any = ""
 ) -> str:
@@ -424,11 +478,9 @@ def _generated_cooperative_reduce_kernel(
     scalar = scalar_type(node.spec.dtype)
     accumulator = scalar_type(_value_precision(plan, i).accumulation_dtype)
     acc_add = accumulator.intrinsic("add")
-    source_index, reduction_size = _reduce_source_index(node)
-    contribution = _convert(
-        _read(step.inputs[0], source_index, prefix), scalar, accumulator
+    contribution, reduction_size, result = _cooperative_reduction_expression(
+        plan, i, prefix
     )
-    result = _convert("value", accumulator, scalar)
     threads = plan.schedule.threads
     warps = (threads + 31) // 32
     reduction_pragma = (
@@ -454,7 +506,7 @@ def _generated_cooperative_reduce_kernel(
             for (int offset = 16; offset > 0; offset >>= 1)
                 value = {acc_add}(value, __shfl_down_sync(0xffffffffu, value, offset));
             if (lane == 0)
-                reinterpret_cast<{scalar.ctype}*>(p + {step.offset})[{target}] = finite({result}, error, {i});
+                reinterpret_cast<{scalar.ctype}*>(p + {step.offset})[{target}] = {result};
         }}
         __syncthreads();
     }}
@@ -469,11 +521,9 @@ def _cub_cooperative_reduce_kernel(
     scalar = scalar_type(node.spec.dtype)
     accumulator = scalar_type(_value_precision(plan, i).accumulation_dtype)
     acc_add = accumulator.intrinsic("add")
-    source_index, reduction_size = _reduce_source_index(node)
-    contribution = _convert(
-        _read(step.inputs[0], source_index, prefix), scalar, accumulator
+    contribution, reduction_size, result = _cooperative_reduction_expression(
+        plan, i, prefix
     )
-    result = _convert("value", accumulator, scalar)
     threads = plan.schedule.threads
     reduction_pragma = (
         ""
@@ -500,7 +550,7 @@ __global__ void {prefix}kernel_{i}(unsigned char* p, int* error) {{
         value = BlockReduce(temp_storage).Reduce(value, {add_name}{{}});
         if (threadIdx.x == 0)
             reinterpret_cast<{scalar.ctype}*>(p + {step.offset})[{target}] =
-                finite({result}, error, {i});
+                {result};
         __syncthreads();
     }}
 }}"""
