@@ -1,6 +1,9 @@
 #include "scf/cuda_fock_execution.hpp"
 
+#include <limits>
+
 #include "scf/cuda/df_jk_internal.hpp"
+#include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda_density_fitting_device.hpp"
 #include "scf/cuda_direct_jk_device.hpp"
@@ -62,6 +65,33 @@ PreparedCudaOccupiedFockBinding prepared_cuda_occupied_fock_binding(
     return {};
   return {execution.device_id, execution.stream, execution.source_identity, execution.nbf,
           spec.spin == FockSpin::Unrestricted};
+}
+
+PreparedCudaOccupiedProjectionBinding prepared_cuda_occupied_projection_binding(
+    const PreparedFockPlan& plan, std::size_t rank) noexcept {
+  const auto execution = prepared_cuda_occupied_fock_binding(plan);
+  auto* source = plan.cuda_fitted_source();
+  if (!execution || execution.unrestricted || !source || !rank || !source->naux ||
+      source->batch_size != 1 || source->completed_occupied_projection_rank != rank ||
+      !source->projection_scratch_generation ||
+      source->projection_scratch_generation == std::numeric_limits<std::uint64_t>::max() ||
+      source->streamed || !source->resident_exchange_enabled || source->row_tile != source->nbf ||
+      !source->three_center || !source->auxiliary_tile_values ||
+      source->metric_full_rank.size() != 1 || !source->metric_full_rank[0] || rank > source->nbf ||
+      rank > static_cast<std::size_t>(std::numeric_limits<int>::max()) / source->naux)
+    return {};
+  const bool packed = df_packed_pairs(source->value_storage.pairs);
+  const bool complete_projection =
+      packed ? rank <= source->value_storage.rank_capacity : source->auxiliary_tile == source->naux;
+  if (!complete_projection) return {};
+  return {execution.device_id,
+          execution.stream,
+          execution.source_identity,
+          source->auxiliary_tile_values,
+          source->nbf,
+          source->naux,
+          rank,
+          source->projection_scratch_generation};
 }
 
 PreparedCudaDirectDerivativeBinding prepared_cuda_direct_derivative_binding(
