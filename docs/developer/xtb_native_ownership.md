@@ -130,6 +130,15 @@ bitwise AO equality against the single-block route, atom adjoints against an
 independent long-double analytic oracle, and complete molecular forces against
 tblite references. Failed or gated systems preserve all public accumulators.
 
+Integral-force admission uses the compiler policy in
+`integral/gfn2_force_schedule.py`: one block per system with 64 threads up to a
+rounded-up mean of 4096 matrix elements, or 256 threads above that boundary.
+Every actual ragged extent is still scanned once; atom/shell/primitive validation
+and gradient-seed initialization remain in that block. The schedule adds no
+storage, launches or synchronization. Scientific shell-pair force evaluation and
+its fixed 64-lane reduction remain unchanged. Native qualification checks late
+adjoint and metadata faults, gated peers and Graph replay at both widths.
+
 `benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
 matched fresh-SCC settings. It records cold, repeated and changed-geometry
 timings, every SCC iteration count, numerical outputs and loaded binary hashes.
