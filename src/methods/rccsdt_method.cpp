@@ -22,6 +22,7 @@
 #include "posthf/raw_source.hpp"
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
+#include "scf/mean_field.hpp"
 
 namespace generativeqc::methods::detail {
 namespace {
@@ -109,6 +110,12 @@ class RccsdtPrepared final : public PreparedCalculation {
   }
 
   Result execute(bool compute_forces) override {
+    return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
+  }
+
+  Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
+                                     bool* warm_start_fallback,
+                                     std::optional<scf::HfWarmState>* retained_warm_state) {
     std::lock_guard<std::mutex> lock(mutex_);
     last_.reset();
     last_performance_.reset();
@@ -116,7 +123,10 @@ class RccsdtPrepared final : public PreparedCalculation {
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "native RCCSD(T) forces are qualified only through 12 AOs");
 
-    auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_);
+    auto state =
+        run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,
+                               initial_state ? &initial_state->density : nullptr,
+                               warm_start_fallback);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -267,6 +277,16 @@ class RccsdtPrepared final : public PreparedCalculation {
                     std::min<std::size_t>(64, force.response_operator_hash.size()),
                     diagnostic.response_operator_hash);
       }
+      if (retained_warm_state && state.reference) {
+        scf::HfWarmState warm;
+        warm.density = state.reference->density;
+        warm.coordinates = positions(system_);
+        warm.energy = state.reference->energy;
+        warm.energy_change = state.reference_energy_change;
+        warm.density_rms = state.reference_density_rms;
+        warm.iterations = state.reference_iterations;
+        *retained_warm_state = std::move(warm);
+      }
       last_ = diagnostic;
       last_performance_ = performance;
       return state.result;
@@ -293,11 +313,13 @@ class RccsdtPreparedBatch final : public PreparedBatch {
  public:
   RccsdtPreparedBatch(Capabilities capabilities, core::ContextState& context,
                       std::vector<core::System> systems,
-                      const generativeqc_method_descriptor& descriptor)
+                      const generativeqc_method_descriptor& descriptor, bool warm_starts_enabled)
       : capabilities_(capabilities),
         execution_(context),
         context_(&context),
-        systems_(std::move(systems)) {
+        systems_(std::move(systems)),
+        warm_starts_enabled_(warm_starts_enabled),
+        warm_states_(systems_.size()) {
     descriptor_ = descriptor;
     descriptor_.density_fitting_auxiliary_basis = nullptr;
     descriptor_.ks_options = nullptr;
@@ -341,7 +363,17 @@ class RccsdtPreparedBatch final : public PreparedBatch {
               prepare_rccsdt_calculation(capabilities_, *context_, target, descriptor_);
           owner_coordinates_[index] = std::move(target_coordinates);
         }
-        result.calculation = owners_[index]->execute(compute_forces);
+        const bool has_warm_state = warm_starts_enabled_ && warm_states_[index].has_value();
+        result.warm_start_used = has_warm_state;
+        bool warm_start_fallback = false;
+        std::optional<scf::HfWarmState> next_warm_state;
+        auto& owner = static_cast<RccsdtPrepared&>(*owners_[index]);
+        result.calculation = owner.execute_with_reference_seed(
+            compute_forces, has_warm_state ? &*warm_states_[index] : nullptr,
+            &warm_start_fallback,
+            warm_starts_enabled_ && warm_start_updates_enabled_ ? &next_warm_state : nullptr);
+        result.warm_start_fallback = warm_start_fallback;
+        if (next_warm_state) warm_states_[index].swap(next_warm_state);
         result.status = result.calculation.convergence.converged
                             ? GENERATIVEQC_STATUS_SUCCESS
                             : GENERATIVEQC_STATUS_NOT_CONVERGED;
@@ -365,14 +397,39 @@ class RccsdtPreparedBatch final : public PreparedBatch {
     return owners_[index]->cc_performance_diagnostic();
   }
 
-  void clear_warm_starts() override {}
-  std::size_t warm_density_size(std::size_t) const override { return 0; }
-  const std::optional<scf::HfWarmState>& warm_state(std::size_t) const override {
-    static const std::optional<scf::HfWarmState> empty;
-    return empty;
+  void clear_warm_starts() override {
+    for (auto& state : warm_states_) state.reset();
   }
-  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>>) override {}
-  void set_warm_start_updates(bool) override {}
+  std::size_t warm_density_size(std::size_t index) const override {
+    const auto n = molecule::ao_count(systems_.at(index));
+    if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n)
+      throw std::invalid_argument("RCCSD(T) warm density dimensions overflow");
+    return n * n;
+  }
+  const std::optional<scf::HfWarmState>& warm_state(std::size_t index) const override {
+    return warm_states_.at(index);
+  }
+  void restore_warm_states(std::vector<std::optional<scf::HfWarmState>> states) override {
+    if (!warm_starts_enabled_ || states.size() != size())
+      throw std::invalid_argument(
+          "checkpoint restore requires a matching warm-enabled RCCSD(T) batch");
+    for (std::size_t index = 0; index < size(); ++index) {
+      if (!states[index]) continue;
+      const auto& state = *states[index];
+      if (state.density.size() != warm_density_size(index) ||
+          !valid_positions(state.coordinates, systems_[index]) || state.iterations < 0 ||
+          !std::isfinite(state.energy) || !std::isfinite(state.energy_change) ||
+          !std::isfinite(state.density_rms) || state.density_rms < 0)
+        throw std::invalid_argument(
+            "invalid RCCSD(T) checkpoint state dimensions or diagnostics");
+      auto source = systems_[index];
+      set_positions(source, state.coordinates);
+      scf::validate_hf_warm_density(source, GENERATIVEQC_METHOD_RHF, state.density);
+    }
+    for (std::size_t index = 0; index < size(); ++index)
+      if (states[index]) warm_states_[index].swap(states[index]);
+  }
+  void set_warm_start_updates(bool enabled) override { warm_start_updates_enabled_ = enabled; }
   runtime::ExecutionResourceSnapshot execution_resources(
       std::size_t index) const noexcept override {
     if (index >= owners_.size() || !owners_[index]) return {};
@@ -399,6 +456,9 @@ class RccsdtPreparedBatch final : public PreparedBatch {
   runtime::ExecutionContext execution_;
   core::ContextState* context_{};
   std::vector<core::System> systems_;
+  bool warm_starts_enabled_{};
+  bool warm_start_updates_enabled_{true};
+  std::vector<std::optional<scf::HfWarmState>> warm_states_;
   generativeqc_method_descriptor descriptor_{};
   std::vector<std::unique_ptr<PreparedCalculation>> owners_;
   std::vector<std::vector<double>> owner_coordinates_;
@@ -431,6 +491,7 @@ std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(
     const Capabilities& capabilities, core::ContextState& context,
     std::vector<core::System> systems, const generativeqc_method_descriptor& descriptor,
     generativeqc_batch_flags flags) {
+  const bool warm_starts_enabled = (flags & GENERATIVEQC_BATCH_ENABLE_WARM_STARTS) != 0;
   constexpr auto supported_flags =
       static_cast<generativeqc_batch_flags>(GENERATIVEQC_BATCH_ENABLE_WARM_STARTS);
   if ((flags & ~supported_flags) != 0)
@@ -448,8 +509,8 @@ std::unique_ptr<PreparedBatch> prepare_rccsdt_batch(
                         "RCCSD(T) prepared batch requires one homogeneous (nocc,nvir) shape; split "
                         "ragged groups");
   }
-  return std::make_unique<RccsdtPreparedBatch>(capabilities, context, std::move(systems),
-                                               descriptor);
+  return std::make_unique<RccsdtPreparedBatch>(
+      capabilities, context, std::move(systems), descriptor, warm_starts_enabled);
 }
 
 }  // namespace generativeqc::methods::detail
