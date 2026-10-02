@@ -107,6 +107,24 @@ inline cublasStatus_t df_occupied_apply_metric_root(
                      &zero, fitted, rank_squared);
 }
 
+/** Apply the same second metric root directly to the final-K pair-major
+ * projection. pair_major is the column-major [auxiliary, occ*occ] view with
+ * Q fastest. Transposing that view in GEMM yields the ordinary
+ * [occ*occ, auxiliary] response layout without a separate gather.
+ */
+inline cublasStatus_t df_occupied_apply_metric_root_pair_major(
+    cublasHandle_t blas, int auxiliary, int rank_squared,
+    const double* inverse_root, const double* pair_major, double* fitted) {
+  if (auxiliary <= 0 || rank_squared <= 0 || !inverse_root || !pair_major ||
+      !fitted || pair_major == fitted)
+    return CUBLAS_STATUS_INVALID_VALUE;
+  const double one = 1, zero = 0;
+  return cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N,
+                     rank_squared, auxiliary, auxiliary, &one,
+                     pair_major, auxiliary, inverse_root, auxiliary,
+                     &zero, fitted, rank_squared);
+}
+
 inline cublasStatus_t df_occupied_from_metric_eigenbasis(
     cublasHandle_t blas, int auxiliary, int rank_squared,
     const double* eigenvectors, const double* eigenfactors, double* projected) {
