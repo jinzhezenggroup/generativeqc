@@ -17,9 +17,12 @@ CudaResources::~CudaResources() {
   if (solver_ != nullptr) (void)cusolverDnDestroy(solver_);
   if (blas_ != nullptr) (void)cublasDestroy(blas_);
   if (stream_ != nullptr) {
-    // Both allocations come from CUDA's stream-ordered device pool. Queue
+    // Numeric allocations come from CUDA's stream-ordered device pool. Queue
     // their release on the owning bucket stream so destroying one plan does
     // not impose a device-wide synchronization on unrelated workloads.
+    if (reference_eri_ != nullptr) {
+      (void)runtime::resource_cuda_free_async(reference_eri_, stream_);
+    }
     if (solver_workspace_ != nullptr) {
       (void)runtime::resource_cuda_free_async(solver_workspace_, stream_);
     }
