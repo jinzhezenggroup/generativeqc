@@ -398,8 +398,12 @@ RccsdNativeState execute_rccsd_prepared(
       if (source_plan.admitted) {
         source_preparation_peak = source_plan.peak_bytes;
         try {
-          const auto strategy = scf::resolve_fock_build(
-              scf::make_hf_fock_spec(scf::FockSpin::Restricted), scf::FockBackend::Cuda, 0.0);
+          auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+          // Admission above reserves value-only Direct storage. The default
+          // Fock spec requests derivatives and would make this exact allowance
+          // fail, silently routing every source tile through the host fallback.
+          spec.derivative_order = 0;
+          const auto strategy = scf::resolve_fock_build(spec, scf::FockBackend::Cuda, 0.0);
           auto candidate = std::make_unique<scf::PreparedFockPlan>(
               system, nullptr, strategy, execution.device_id(), source_plan.device_bytes);
           *cuda_source_cache = std::move(candidate);
@@ -633,9 +637,12 @@ class RccsdPrepared final : public PreparedCalculation {
     if (!execution_.cuda_requested() && !cpu_exact_plan_) {
       const auto backend =
           execution_.cuda_requested() ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
+      auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+      // RHF and the borrowed MO source consume values. The relaxed CC force
+      // contracts derivatives later with its own admitted, final weights.
+      spec.derivative_order = 0;
       const auto strategy =
-          scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted), backend,
-                                  reference_options.screening_tolerance);
+          scf::resolve_fock_build(spec, backend, reference_options.screening_tolerance);
       cpu_exact_plan_ = std::make_unique<scf::PreparedFockPlan>(
           system_, nullptr, strategy, execution_.cuda_requested() ? execution_.device_id() : -1);
     }
@@ -911,9 +918,11 @@ RccsdNativeState run_rccsd_native_state(
     if (!execution.cuda_requested() && !*prepared_exact_cache) {
       const auto backend =
           execution.cuda_requested() ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
-      const auto strategy =
-          scf::resolve_fock_build(scf::make_hf_fock_spec(scf::FockSpin::Restricted), backend,
-                                  reference.screening_tolerance);
+      auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
+      // Match the value-only reference/source consumer; no coordinate-major
+      // derivative tensor is needed or read during energy preparation.
+      spec.derivative_order = 0;
+      const auto strategy = scf::resolve_fock_build(spec, backend, reference.screening_tolerance);
       *prepared_exact_cache = std::make_unique<scf::PreparedFockPlan>(
           system, nullptr, strategy, execution.cuda_requested() ? execution.device_id() : -1);
     }
