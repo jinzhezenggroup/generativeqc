@@ -33,8 +33,8 @@ def projection_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     public = (ROOT / "src/dft/cuda_ks.hpp").read_text()
     legacy = _definition(owner, "  void enqueue_legacy()")
     submission_begin = legacy.index("      pending_fitted_occupied =")
-    submission_end = legacy.index("      generativeqc_status jk_status;")
-    submitted = legacy[legacy.index("      check(jk_status, detail);") :]
+    submission_end = legacy.index("      generativeqc_status jk_status")
+    submitted = legacy[legacy.index("\n      check(jk_status, detail);") :]
     capture = _definition(submitted, "      if (use_occupied_fitted) {")
     unit = r"""
 #include <array>
