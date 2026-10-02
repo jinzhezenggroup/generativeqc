@@ -593,9 +593,14 @@ generativeqc_status create_cuda_direct_jk_plan(
     }
     if (budget > plan->device_bytes) {
       const auto optional_budget = budget - plan->device_bytes;
-      plan->generated_exchange =
-          prepare_generated_exchange(host, plan->batch, plan->stream, device_id,
-                                     screening_tolerance, optional_budget, derivative_order != 0);
+      // Value shell kernels are qualified only through d, but the shared
+      // bounded force scheduler and Cartesian recurrence cover s/p/d/f. Keep a
+      // force-only shell lease for derivative-capable through-f plans while
+      // leaving value J/K on the canonical/generic provider.
+      const bool force_only_through_f = derivative_order != 0 && through_f;
+      plan->generated_exchange = prepare_generated_exchange(
+          host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
+          derivative_order != 0, force_only_through_f);
       if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
@@ -638,7 +643,9 @@ generativeqc_status create_cuda_direct_jk_plan(
                          sizeof(GeneratedCoulombPlan) +
                          runtime::vector_bytes(plan->generated_exchange->shared->allocations);
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
-      info.schedule = "generated-shell-coulomb+exchange/generic-jk-fallback";
+      info.schedule = plan->generated_exchange->shared->value_capability
+                          ? "generated-shell-coulomb+exchange/generic-jk-fallback"
+                          : "force-only-shell-derivative/generic-jk-fallback";
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +
@@ -933,6 +940,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     } else if (spec.coulomb.present || spec.exchange.present) {
       auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
                                                          : plan->generated_coulomb.get();
+      if (generated_coulomb && !generated_coulomb->value_capability) generated_coulomb = nullptr;
       // Derivative capability is an owner maximum, not a value-schedule request.
       // Force-capable owners retain generated exchange state that is also valid
       // for the zero-order SCF K build.

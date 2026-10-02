@@ -37,11 +37,9 @@ GeneratedCoulombPlan::~GeneratedCoulombPlan() {
   for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
 }
 
-std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch& host,
-                                                                DeviceBatch borrowed,
-                                                                cudaStream_t stream, int device,
-                                                                double screening,
-                                                                std::size_t budget) try {
+std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
+    const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
+    std::size_t budget, bool allow_force_only_shell_classes) try {
   cudaDeviceProp properties{};
   check(cudaGetDeviceProperties(&properties, device));
   generated::select_profile_for_device(device, properties.major, properties.minor);
@@ -50,7 +48,9 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   const auto present = present_direct_shell_class_mask(host);
   const auto generated_mask =
       generated::enabled_fock_shell_class_mask() & kGeneratedStreamingFockShellClassMask;
-  if ((present & ~(generated_mask | kNativeStreamingFockShellClassMask)) != 0) return {};
+  const auto value_mask = generated_mask | kNativeStreamingFockShellClassMask;
+  const bool value_capability = (present & ~value_mask) == 0;
+  if (!value_capability && !allow_force_only_shell_classes) return {};
   std::vector<std::uint32_t> order, offsets;
   if (!make_bounded_stream_shell_pair_order(host, order, offsets)) return {};
   const std::size_t batch = borrowed.batch_size;
@@ -124,6 +124,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(const HostBatch&
   plan->stream = stream;
   plan->screening = screening;
   plan->class_mask = present;
+  plan->value_capability = value_capability;
   // Reuse the target-legal HF worker and recurrence-stack policy; a prepared
   // KS owner must not rely on an earlier HF call having raised the CUDA limit.
   plan->worker_blocks = static_cast<unsigned>(properties.multiProcessorCount) *
@@ -254,8 +255,10 @@ GeneratedExchangePlan::~GeneratedExchangePlan() {
 
 std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
     const HostBatch& host, DeviceBatch borrowed, cudaStream_t stream, int device, double screening,
-    std::size_t budget, bool force_capability) try {
-  auto shared = prepare_generated_coulomb(host, borrowed, stream, device, screening, budget);
+    std::size_t budget, bool force_capability, bool allow_force_only_shell_classes) try {
+  if (allow_force_only_shell_classes && !force_capability) return {};
+  auto shared = prepare_generated_coulomb(host, borrowed, stream, device, screening, budget,
+                                          allow_force_only_shell_classes);
   if (!shared) return {};
 
   const std::size_t batch = static_cast<std::size_t>(borrowed.batch_size);
@@ -449,6 +452,7 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
                                        const double* alpha, const double* beta,
                                        double* alpha_exchange, double* beta_exchange) {
+  if (p.shared == nullptr || !p.shared->value_capability) return cudaErrorNotSupported;
   if (alpha_exchange == nullptr ||
       (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr))
     return cudaErrorInvalidValue;
@@ -634,6 +638,7 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
 
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
                                       const double* beta, double* coulomb) {
+  if (!p.value_capability) return cudaErrorNotSupported;
   const auto b = p.batch;
   const auto matrix = std::size_t(b.batch_size) * b.nbf * b.nbf;
   const auto cartesian = std::size_t(b.batch_size) * b.direct_nbf * b.direct_nbf;
