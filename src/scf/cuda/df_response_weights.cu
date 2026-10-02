@@ -18,21 +18,6 @@ namespace {
 constexpr unsigned threads = 128;
 unsigned blocks(std::size_t size) { return static_cast<unsigned>((size + threads - 1) / threads); }
 
-/** The final-K projection has Q fastest, while response panels store each
- * occupied matrix column-major within Q. Preserve that orientation even for
- * diagnostic fitted tensors that are not exactly symmetric in AO indices.
- */
-__global__ void gather_final_fitted_projection(std::size_t auxiliary, std::size_t rank,
-                                               const double* pair_major, double* projected) {
-  const auto element = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
-  const auto rr = rank * rank;
-  if (element >= auxiliary * rr) return;
-  const auto q = element / rr;
-  const auto i = element % rank;
-  const auto j = (element / rank) % rank;
-  projected[element] = pair_major[(i * rank + j) * auxiliary + q];
-}
-
 /** Scalar kernels preserve their original per-output summation order. The
  * exchange metric dot uses the plan's cuBLAS GEMV below, with this scalar
  * kernel retained for ablation. Both routes use the same bounded raw panel;
