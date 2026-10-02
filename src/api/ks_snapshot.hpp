@@ -40,6 +40,12 @@ generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
     void** source_stream);
+/** Four CUDA-event milliseconds [J, full-K, range-K, semilocal-XC] plus a
+ * presence bitmask. This private diagnostic replays the exact resident D and
+ * never runs an SCF iteration. */
+generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* milliseconds,
+    std::size_t count, std::uint32_t* present_mask);
 generativeqc_status generativeqc_ks_snapshot_cuda_resident_grid_v2(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** points, const double** weights, const double** atomic_weights,

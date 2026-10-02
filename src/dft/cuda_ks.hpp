@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -127,6 +128,15 @@ struct CudaKsResidentNonlocalFeaturesBinding {
   }
 };
 
+/** Intrusive fixed-density component profile against one exact final-state
+ * token. Times are CUDA-event milliseconds for provider/XC device work only;
+ * event creation, validation and status reads are deliberately outside them.
+ * Bit 0=J, 1=primary full-range K, 2=range-correction K, 3=semilocal XC. */
+struct CudaKsFixedDensityProfile {
+  std::array<double, 4> milliseconds{};
+  std::uint32_t present_mask{};
+};
+
 /** Native ordinary-stream LDA/PBE RKS/UKS trajectory. The borrowed common
  * Fock plan must outlive it. Model/grid/functional identity is immutable;
  * changing it requires a new owner. Symmetric overlap and core initial density
@@ -198,6 +208,12 @@ class CudaKsPlan {
   generativeqc_status resident_final_nonlocal_features(
       const CudaKsFinalStateToken& expected, CudaKsResidentNonlocalFeaturesBinding& binding,
       std::string& detail) const;
+  /** Intrusively replay J/K/XC at the exact resident final density without
+   * executing SCF or publishing a new density/XC generation. This is a
+   * diagnostic boundary only; nonlocal XC is intentionally excluded. */
+  generativeqc_status profile_fixed_density_components(const CudaKsFinalStateToken& expected,
+                                                       CudaKsFixedDensityProfile& profile,
+                                                       std::string& detail);
   /** Export a detached, strictly validated current physical state. Exact-token
    * comparison
    * precedes transfer; eligibility is rechecked before publication.

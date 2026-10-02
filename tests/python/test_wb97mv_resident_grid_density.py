@@ -20,7 +20,7 @@ def test_wb97mv_grid_density_never_roundtrips_through_host() -> None:
 
 def test_snapshot_resident_density_is_token_checked() -> None:
     begin = SNAPSHOT.index("    def cuda_resident_density(")
-    end = SNAPSHOT.index("    def cuda_full_range_derivatives(", begin)
+    end = SNAPSHOT.index("\n    def ", begin + 1)
     body = SNAPSHOT[begin:end]
     assert body.count("self.check_current()") == 2
     assert "generativeqc_ks_snapshot_cuda_resident_density_v1" in body

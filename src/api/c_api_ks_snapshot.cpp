@@ -607,6 +607,35 @@ generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
   }
 }
 
+generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* milliseconds,
+    std::size_t count, std::uint32_t* present_mask) {
+  if (!batch || !snapshot || !milliseconds || count != 4 || !present_mask)
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::fill(milliseconds, milliseconds + count, 0.0);
+  *present_mask = 0;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  try {
+    auto status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    generativeqc::methods::detail::KsFixedDensityProfile profile;
+    std::string detail;
+    status = generativeqc::methods::detail::dft_cuda_fixed_density_profile(
+        *batch->plan, snapshot->index, snapshot->token, profile, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) {
+      batch->context->last_detail = detail;
+      return status;
+    }
+    status = check_current(*batch, *snapshot);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    std::copy(profile.milliseconds.begin(), profile.milliseconds.end(), milliseconds);
+    *present_mask = profile.present_mask;
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(&batch->context->last_detail);
+  }
+}
+
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count) {

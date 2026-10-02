@@ -340,10 +340,18 @@ def test_extract_matrix_retains_fixed_final_state_and_fixed_density_gap() -> Non
                     }
                 ],
                 "fixed_density_scf_profile": {
-                    "status": "unavailable",
+                    "status": "measured",
                     "measurement_boundary": "fixed_density_scf_components",
+                    "fixed_density": True,
+                    "scf_replayed": False,
                     "expected_components": ["scf_fock_j", "semilocal_ao_grid_xc"],
-                    "reason": "no fixed-density boundary",
+                    "profile": {
+                        "profiled_ms": {
+                            "scf_fock_j": 0.7,
+                            "semilocal_ao_grid_xc": 1.2,
+                        },
+                        "missing_expected_components": [],
+                    },
                 },
             }
         ],
@@ -362,15 +370,15 @@ def test_extract_matrix_retains_fixed_final_state_and_fixed_density_gap() -> Non
 
     assert fixed["metadata"]["measurement_boundary"] == "fixed_final_state_force"
     assert fixed["metadata"]["scf_replayed"] is False
-    assert missing["status"] == "unavailable"
+    assert missing["status"] == "measured"
     assert missing["expected_components"] == ["scf_fock_j", "semilocal_ao_grid_xc"]
+    assert missing["scf_profile"]["profiled_ms"]["scf_fock_j"] == 0.7
     assert coverage["fixed_final_state_records"] == 1
     assert coverage["work_count_stages_observed"] == ["executed", "generated"]
     assert coverage["work_capacity_metrics_observed"] == ["ordered_quartets"]
-    assert coverage["fixed_density_scf_expected_components_missing"] == [
-        "scf_fock_j",
-        "semilocal_ao_grid_xc",
-    ]
+    assert coverage["fixed_density_scf_expected_components_missing"] == []
+    assert "scf_fock_j" in coverage["scf_profiled_components_observed"]
+    assert "semilocal_ao_grid_xc" in coverage["scf_profiled_components_observed"]
 
 
 def test_stationary_normalizer_retains_complete_grid_plan_and_native_route() -> None:
