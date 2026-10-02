@@ -137,3 +137,14 @@ relinked the library. Seven native suites, 62 new-API Python cases and 67
 existing default-path regressions passed again. The performance source/binary
 identities remain pinned to the earlier measured campaign; these integration
 checks are not relabeled as a new timing campaign.
+
+## Review corrections
+
+Follow-up review aligned resource planning with the native early LDA decline
+for g-shell targets: the target inventory is retained, while only eligible
+items contribute preliminary reservations in mixed batches. Tests include a
+charged eligible item following an ineligible one and preserve genuine provider
+errors. The public initial-guess tag follows the header's fixed-width int32_t
+convention, with normal and `-fshort-enums` clients tested against the same
+native parser. These are untimed follow-up corrections; the historical timing
+source and binary identities remain unchanged.

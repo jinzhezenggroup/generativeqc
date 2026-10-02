@@ -169,16 +169,28 @@
       "sha256": "9c9192627bcf9122f69ddeb2092f9b49301dca4d2d2dcc6e19b5f88e1658075f"
     },
     {
-      "bytes": 9021,
+      "bytes": 10971,
       "path": "README.md",
       "role": "summary",
-      "sha256": "1a447e1622cad03d38cd832ee842906452ffc62b79914daffa33ea5b1cd7bf90"
+      "sha256": "6a0186f1320ae172f35f4001ae6264d794f00e507543145d8d459f23ab6152e4"
     },
     {
-      "bytes": 3385,
+      "bytes": 10474,
       "path": "reproduce.py",
       "role": "reproduction",
-      "sha256": "20edce299131b90127c9dc88474d86b0e2dcebfd53fdc61014d3795be52ee2e8"
+      "sha256": "c55d0d95fe9d202bd39d38b76dfe423ffabc77e3bcdd24620066586120032e80"
+    },
+    {
+      "bytes": 9144,
+      "path": "new_campaign.py",
+      "role": "reproduction",
+      "sha256": "1d1e825c7f5191e45f8054ee16e146b48fd1cea8f2d40d5e1b497e391f780a2e"
+    },
+    {
+      "bytes": 9242,
+      "path": "reproduction-sources.json",
+      "role": "reproduction",
+      "sha256": "05b385482267a2bda80351031beb72b42d2b1b28b60088adaff60a62ae966e2d"
     }
   ],
   "reproduction": {
@@ -186,9 +198,11 @@
       "python3",
       "benchmarks/results/preliminary-scf-api/reproduce.py",
       "--source-root",
-      "VERIFIED_API_SOURCE_CHECKOUT",
+      "CHECKOUT_AT_f955122039e0f90d5adb11c921396a90a0b3f0e7",
       "--library",
       "PATH_TO_CPU_LIBRARY/libgenerativeqc.so",
+      "--source-map",
+      "frozen-measured-2026-10-02",
       "--output",
       ".artifacts/preliminary-scf-api-reproduction",
       "--run"

@@ -670,10 +670,8 @@ typedef struct generativeqc_ks_options {
 GENERATIVEQC_API uint32_t generativeqc_ks_options_version(void);
 
 /** Explicit preliminary SCF; never an automatic/default selection. */
-typedef enum generativeqc_initial_guess_kind {
-  GENERATIVEQC_INITIAL_GUESS_HF = 1,
-  GENERATIVEQC_INITIAL_GUESS_LDA = 2
-} generativeqc_initial_guess_kind;
+typedef int32_t generativeqc_initial_guess_kind;
+enum { GENERATIVEQC_INITIAL_GUESS_HF = 1, GENERATIVEQC_INITIAL_GUESS_LDA = 2 };
 
 /** CPU FP64, all-electron, restricted exact energy endpoints only. Zero-valued
  * controls select 32 iterations, DIIS 8, tolerances 1e-6/1e-4 and 256 MiB.

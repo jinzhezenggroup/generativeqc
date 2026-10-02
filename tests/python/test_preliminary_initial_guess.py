@@ -346,3 +346,198 @@ def test_native_rejects_short_nested_options_before_preparation(native: None) ->
         if system.value:
             library.generativeqc_system_destroy(system)
         library.generativeqc_context_destroy(context)
+
+
+def preliminary_decline_basis() -> typing.Any:
+    from generativeqc.basis import (
+        BasisProvenance,
+        BasisSet,
+        BasisShell,
+        ElementBasis,
+    )
+
+    s = BasisShell(0, ("1",), (("1",),))
+    g = BasisShell(4, ("0.1",), (("1",),))
+    return BasisSet(
+        "preliminary-decline-He-Li",
+        (ElementBasis(2, (s, g)), ElementBasis(3, (s,))),
+        BasisProvenance("test-local", "1", "CC0", "0" * 64),
+        representation="spherical",
+    )
+
+
+def test_lda_decline_planning_preserves_target_and_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import resources_ks
+    from generativeqc.resources_hf import hf_resource_request
+
+    systems = [[(2, (0, 0, 0))]]
+    basis = preliminary_decline_basis()
+    target = hf_resource_request(systems, basis=basis, basis_representation="spherical")
+    calc = SimpleNamespace(
+        _initial_guess=InitialGuessSpec("lda"),
+        _basis=basis,
+        _representation_name="spherical",
+        _library=None,
+    )
+
+    def forbidden(*args: typing.Any, **kwargs: typing.Any) -> None:
+        pytest.fail("deterministically declined LDA must not construct a KS owner")
+
+    monkeypatch.setattr(resources_ks, "ks_resource_request", forbidden)
+    actual = with_initial_guess_resources(target, calc, systems, None, None)
+    assert actual.candidates == target.candidates
+    assert actual.scope_exclusions == target.scope_exclusions
+    assert actual.identity.topology == target.identity.topology
+    assert actual.identity != target.identity
+    assert json.loads(actual.identity.schedule)["initial_guess"] == json.loads(
+        json.dumps(calc._initial_guess.to_payload())
+    )
+
+
+def test_mixed_lda_decline_charges_only_eligible_preparation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from generativeqc import resources_ks
+    from generativeqc.resources_hf import hf_resource_request
+
+    he = [(2, (0, 0, 0))]
+    li = [(3, (1, 0, 0))]
+    systems = [he, li, he]
+    basis = preliminary_decline_basis()
+    target = hf_resource_request(
+        systems, basis=basis, basis_representation="spherical", charges=[0, 1, 0]
+    )
+    calc = SimpleNamespace(
+        _initial_guess=InitialGuessSpec("lda"),
+        _basis=basis,
+        _representation_name="spherical",
+        _library=None,
+    )
+    original = resources_ks.ks_resource_request
+    seen = []
+
+    def recorded(systems: typing.Any, **options: typing.Any) -> typing.Any:
+        result = original(systems, **options)
+        seen.append((systems, options, result))
+        return result
+
+    monkeypatch.setattr(resources_ks, "ks_resource_request", recorded)
+    actual = with_initial_guess_resources(target, calc, systems, [0, 1, 0], [1] * 3)
+    selected, options, preliminary = seen[0]
+    assert selected == (li,)
+    assert options["charges"] == (1,) and options["multiplicities"] == (1,)
+    extra = tuple(
+        replace(e, name=f"preliminary {e.name}")
+        for e in preliminary.candidates[0].estimates
+    )
+    assert actual.candidates[0].estimates == (*target.candidates[0].estimates, *extra)
+    assert actual.identity.topology == target.identity.topology
+
+    def genuine_failure(*args: typing.Any, **kwargs: typing.Any) -> None:
+        raise NotImplementedError("independent eligible-provider failure")
+
+    monkeypatch.setattr(resources_ks, "ks_resource_request", genuine_failure)
+    with pytest.raises(
+        NotImplementedError, match="independent eligible-provider failure"
+    ):
+        with_initial_guess_resources(target, calc, systems, [0, 1, 0], [1] * 3)
+
+
+def test_native_lda_decline_with_global_budget(native: None) -> None:
+    from generativeqc import ResourceBudget
+
+    systems = [[(2, (0, 0, 0))]]
+    options = {
+        "method": "rhf",
+        "basis": preliminary_decline_basis(),
+        "basis_representation": "spherical",
+        "device": "cpu",
+    }
+    direct = Calculator(**options).singlepoint(systems[0], properties=("energy",))
+    policy = InitialGuessSpec("lda")
+    peak = (
+        Calculator(**options, initial_guess=policy)
+        .estimate_resources(systems)
+        .peak_bytes["host"]
+    )
+    calc = Calculator(
+        **options, initial_guess=policy, resource_budget=ResourceBudget(host_bytes=peak)
+    )
+    actual = calc.singlepoint(systems[0], properties=("energy",))
+    assert actual.converged and actual.energy == pytest.approx(direct.energy, abs=1e-10)
+    assert actual.initial_guess["outcome"] == "preparation_failed"
+    assert actual.initial_guess["preliminary_iterations"] == 0
+    assert actual.initial_guess["preparation_numeric_capacity"] == 0
+
+
+@pytest.mark.parametrize("short_enums", [False, True])
+def test_public_kind_is_fixed_width_against_native_parser(
+    native: None, tmp_path: typing.Any, short_enums: bool
+) -> None:
+    import os
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    compiler = shutil.which(os.environ.get("CXX", "c++"))
+    ccache = shutil.which(os.environ.get("CCACHE", "ccache"))
+    if compiler is None or ccache is None:
+        pytest.skip("C++ compiler and ccache required for client ABI probe")
+    root = Path(__file__).resolve().parents[2]
+    library = Path(_native.load_library(device="cpu")._name).resolve()
+    source = tmp_path / "initial_guess_client.cpp"
+    source.write_text(r"""
+#include <cstdint>
+#include <cstring>
+#include <type_traits>
+#include "scf/preliminary_guess.hpp"
+static_assert(std::is_same_v<generativeqc_initial_guess_kind, std::int32_t>);
+int main() {
+  for (const auto kind : {GENERATIVEQC_INITIAL_GUESS_HF, GENERATIVEQC_INITIAL_GUESS_LDA}) {
+    generativeqc_initial_guess_options value;
+    std::memset(&value, 0xa5, sizeof(value));
+    value.struct_size = sizeof(value);
+    value.abi_version = GENERATIVEQC_ABI_VERSION;
+    value.kind = kind;
+    value.max_iterations = value.diis_history = 0;
+    value.energy_tolerance = value.density_tolerance = 0;
+    value.maximum_numeric_bytes = 0;
+    value.radial_points = value.angular_polar = value.angular_azimuth = 0;
+    const auto parsed = generativeqc::scf::initial_guess::preliminary_options(&value);
+    if (!parsed || static_cast<std::int32_t>(parsed->kind) != kind) return 1;
+  }
+}
+""")
+    output = tmp_path / "initial_guess_client"
+    subprocess.run([ccache, "--version"], check=True, capture_output=True)
+    object_file = tmp_path / "initial_guess_client.o"
+    command = [ccache, compiler, "-std=c++20", "-O0", "-c"]
+    if short_enums:
+        command.append("-fshort-enums")
+    command += [
+        "-I",
+        str(root / "include"),
+        "-I",
+        str(root / "src"),
+        str(source),
+        "-o",
+        str(object_file),
+    ]
+    compiled = subprocess.run(command, check=False, capture_output=True, text=True)
+    assert compiled.returncode == 0, compiled.stderr
+    subprocess.run(
+        [
+            compiler,
+            str(object_file),
+            str(library),
+            f"-Wl,-rpath,{library.parent}",
+            "-o",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run([str(output)], check=True, capture_output=True, text=True)

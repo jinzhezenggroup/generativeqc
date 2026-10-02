@@ -175,6 +175,27 @@ def with_initial_guess_resources(
     policy = calculator._initial_guess
     if policy is None:
         return request
+    schedule = {
+        **json.loads(request.identity.schedule),
+        "initial_guess": policy.to_payload(),
+    }
+    identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
+    if policy.kind == "lda":
+        # The native provider declines >f before constructing a source owner.
+        # Use the target's already validated, ordered topology rather than
+        # constructing an inadmissible KS inventory or swallowing its errors.
+        items = json.loads(request.identity.topology)["items"]
+        if len(items) != len(systems):
+            raise ValueError("preliminary SCF topology does not match the batch")
+        angular = [item["orbital"]["maximum_angular"] for item in items]
+        if any(type(value) is not int or value < 0 for value in angular):
+            raise ValueError("invalid preliminary SCF angular topology")
+        eligible = [i for i, value in enumerate(angular) if value <= 3]
+        if not eligible:
+            return replace(request, identity=identity)
+        systems = tuple(systems[i] for i in eligible)
+        charges = tuple(items[i]["electrons"]["ionic_charge"] for i in eligible)
+        multiplicities = tuple(items[i]["electrons"]["multiplicity"] for i in eligible)
     common = {
         "basis": calculator._basis,
         "basis_representation": calculator._representation_name,
@@ -201,11 +222,6 @@ def with_initial_guess_resources(
         preliminary = ks_resource_request(
             systems, method="lda-rks", ks_options=KsOptions(grid=policy.grid), **common
         )
-    schedule = {
-        **json.loads(request.identity.schedule),
-        "initial_guess": policy.to_payload(),
-    }
-    identity = replace(request.identity, schedule=json.dumps(schedule, sort_keys=True))
     if not preliminary.candidates:
         return replace(
             request,

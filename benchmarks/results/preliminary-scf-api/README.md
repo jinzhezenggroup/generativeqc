@@ -1,6 +1,8 @@
 # Preliminary SCF: actual Python API evidence
 
-This publication measures the implemented `Calculator(initial_guess=...)` API.
+This publication records `Calculator(initial_guess=...)` measurements at the
+frozen source snapshot below. Later source mappings admit NEW reproductions;
+they do not inherit these historical timings or qualification.
 It is separate from [the earlier native prototype](../preliminary-scf-prototype/README.md):
 none of that prototype's timings, oracle claims or sample counts are reused here.
 The performance decision remains **inconclusive/non-promotable**.
@@ -122,33 +124,61 @@ an independent full-matrix oracle are missing. Native paired matches do not
 establish the global ground state or unrestricted stability. No GPU, forces,
 large-molecule win or production/default promotion follows from this campaign.
 
-## Reproduction without unpublished Git dependencies
+## Reproduction from explicit reviewed source snapshots
 
-`run.py` is the exact measured harness; `inputs.json` is its exact input fixture.
-`reproduce.py` is a thin portable launcher. It accepts an explicit
-`--build-source-revision`, or current HEAD, only after the complete production
-source map has the exact aggregate SHA-256 recorded in `provenance.json`.
-This supports an equivalent public upload even if its commit SHA differs from
-the local measured/build commits. Those local commit IDs remain historical
-provenance, not required public Git objects. Rebuilding may change the binary
-hash; the new hash is recorded rather than rewritten to match this campaign.
+`run.py` and `inputs.json` remain byte-exact historical files. The new launcher
+verifies every publication-bound checksum before reading the source allowlist
+or loading code. `reproduction-sources.json` admits only full exact aggregate
+production-source hashes; undeclared source changes fail closed.
 
-With a verified equivalent checkout and an already built CPU library:
+The mappings distinguish:
+
+- `frozen-measured-2026-10-02`: exact historical production source, available
+  publicly at [f9551220](https://github.com/jinzhezenggroup/generativeqc/commit/f955122039e0f90d5adb11c921396a90a0b3f0e7).
+  This public tree equals the original native build tree
+- `cuda-integrated-2026-10-02`: the 16 listed CUDA-related integration changes,
+  available at [04cef391](https://github.com/jinzhezenggroup/generativeqc/commit/04cef391cbe2d2ca13be60f9b336f9704b891301).
+  It is an untimed follow-up, not the measured source
+- `planner-abi-follow-up-2026-10-02`: subsequent CPU Python LDA g-shell
+  decline/resource-planning and portable C option-tag-width repairs. Both
+  source changes and exact before/after hashes are listed. These semantic/ABI
+  changes are explicitly untimed; this is not pure-CUDA or CPU-byte equivalence
+
+All executions, including exact-source replays, are labeled **NEW reproduction**.
+The existing 18 raw rows, solver history, numerical gates and source/library
+receipts are unchanged. The original `provenance.json` retains its historical
+launcher-policy description; the new checksum-bound mapping is the current
+reproduction admission policy.
+
+Native binary provenance is separate from the checkout's Python/header source.
+Known `82856b49...` retains its original build receipt. Known `062fde24...`
+retains its actual `c49e93cf...` integration-build receipt even when used with
+the reviewed planner/ABI repair. That binary was not rebuilt after those
+repairs. Explicit compatibility covers the passed focused/API and normal/
+`-fshort-enums` client regressions; it does not create new timing evidence.
+Unknown rebuilt library hashes are allowed and recorded as unknown-build or
+caller-declared provenance, never equated with either known binary. An optional
+`--build-source-revision` is a caller declaration, not a compiler attestation.
+No old local commit must exist merely to read a known byte-bound receipt.
+
+For the exact frozen experiment, use a checkout of the public `f9551220...`
+revision and a compatible CPU library. For a reviewed current-source experiment,
+use the repaired checkout and its explicit compatible or rebuilt library:
 
 ```bash
 python benchmarks/results/preliminary-scf-api/reproduce.py \
-  --source-root /path/to/verified-api-source \
-  --library /path/to/verified-api-source/build/cpu-review/libgenerativeqc.so \
-  --output .artifacts/preliminary-scf-api-reproduction
-# This checks source identity and prints the command without running SCF.
-# Add --run only when ready to execute all 18 fresh processes.
-# Optionally name the supplied library's verified --build-source-revision.
+  --source-root . --library build/cpu-review/libgenerativeqc.so \
+  --output .artifacts/preliminary-scf-api-new-run
+# This is a read-only mapped dry-run. It does not load the native library.
+# Add --run to produce NEW measurements in a new scratch directory.
+# Optionally require --source-map frozen-measured-2026-10-02 for exact-source replay.
 ```
 
-Build the library with the repository's ccache-enabled CPU instructions and
-record any changed toolchain/configuration; the launcher does not fetch,
-install or build anything. New raw output must use a new scratch directory.
-The standard `generativeqc.validation` envelope stores timings and solver
-history in checksum-bound `record_parts`; all full paired density samples
-are retained. `tools/evidence.py publish` validates and creates the local
-storage manifest. It does not upload files or authorize performance promotion.
+`new_campaign.py` owns only new-run orchestration and truthful receipts. It
+reuses the frozen per-process worker, row acceptance function and standard
+summarizer; no scientific solver or timing worker is copied. Every new run
+records its actual source revision/tree/hash, actual library SHA-256, known or
+unknown native build provenance, selected mapping, and `reproduction-context.json`.
+The historical publication is never overwritten or relabeled. The three-repeat
+performance decision remains non-promotable; no new benchmark was run to make
+this reproduction repair.
