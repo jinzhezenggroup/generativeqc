@@ -85,8 +85,10 @@ def test_nonlocal_pair_generation_is_standalone_and_deterministic(
     assert first == second
     assert str(ROOT) not in first
     assert str(tmp_path) not in first
-    assert first.count("// TensorIR logical hash: ") == 12
-    assert first.count("GENERATIVEQC_NONLOCAL_PAIR_HD inline bool pair_") == 12
+    # Twelve unchanged ordered closures plus the separately versioned, bounded
+    # VV10 radial policy; the latter never replaces the fallback.
+    assert first.count("// TensorIR logical hash: ") == 13
+    assert first.count("GENERATIVEQC_NONLOCAL_PAIR_HD inline bool pair_") == 13
     assert "#define GENERATIVEQC_NONLOCAL_PAIR_HD __host__ __device__" in first
     # The runtime owns numerical failure observation, including outputs that
     # are not consumed physically but remain part of raw CPU admission.
@@ -312,7 +314,22 @@ def native_pair_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         )
     source, library = directory / "pair_probe.cpp", directory / "pair_probe.so"
     source.write_text(
-        _LEGACY_CPP + "\n".join(branches) + "\n  }\n}\n", encoding="utf-8"
+        _LEGACY_CPP
+        + "\n".join(branches)
+        + "\n  }\n}\n"
+        + r"""
+extern "C" void reciprocal_probe(const double* x, double* actual, double* expected) {
+  const auto a = generated::pair_values_vv10_reciprocal_geometry(
+      x[0], x[1], x[2], x[3], x[4], x[5]);
+  const auto b = legacy_cuda<Vv10Variant::vv10, true, true>(
+      x[0], x[1], x[2], x[3], x[4], x[5]);
+  actual[0] = a.phi; actual[1] = a.dphi_domega;
+  actual[2] = a.dphi_dkappa; actual[3] = a.dphi_dr2;
+  expected[0] = b.phi; expected[1] = b.dphi_domega;
+  expected[2] = b.dphi_dkappa; expected[3] = b.dphi_dr2;
+}
+""",
+        encoding="utf-8",
     )
     subprocess.run(
         [
@@ -335,6 +352,8 @@ def native_pair_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     native = ct.CDLL(str(library))
     native.pair_probe.argtypes = [ct.c_int, *(ct.POINTER(ct.c_double),) * 3]
     native.pair_probe.restype = None
+    native.reciprocal_probe.argtypes = [ct.POINTER(ct.c_double)] * 3
+    native.reciprocal_probe.restype = None
     return native
 
 
@@ -352,6 +371,91 @@ def _same_fp64(actual: float, expected: float) -> bool:
         return math.isnan(actual)
     # This also distinguishes infinity signs, signed zero, and every finite ULP.
     return struct.pack("=d", actual) == struct.pack("=d", expected)
+
+
+def _evaluate_reciprocal(
+    native: ct.CDLL, values: tuple[float, ...]
+) -> tuple[list[float], list[float]]:
+    inputs = (ct.c_double * 6)(*values)
+    actual, expected = (ct.c_double * 4)(), (ct.c_double * 4)()
+    native.reciprocal_probe(inputs, actual, expected)
+    return list(actual), list(expected)
+
+
+def test_reciprocal_geometry_preserves_other_roots_and_reuses_two_divisions() -> None:
+    from generativeqc_compiler.method.nonlocal_pair import build_nonlocal_pair_program
+    from generativeqc_compiler.tensor.program import node_hashes
+
+    ordered = build_nonlocal_pair_program("vv10")
+    shared = build_nonlocal_pair_program("vv10", reciprocal_geometry=True)
+    hashes = node_hashes(shared.live_nodes)
+    old = node_hashes(ordered.live_nodes)
+    for name in OUTPUTS[:3]:
+        assert hashes[shared.outputs[name]] == old[ordered.outputs[name]]
+    assert hashes[shared.outputs["dphi_dr2"]] != old[ordered.outputs["dphi_dr2"]]
+    assert sum(n.op == "divide" for n in ordered.live_nodes) == 6
+    assert sum(n.op == "divide" for n in shared.live_nodes) == 4
+    for kwargs in ({"features": False}, {"geometry": False}):
+        with pytest.raises(ValueError, match="requires VV10"):
+            build_nonlocal_pair_program("vv10", reciprocal_geometry=True, **kwargs)
+
+
+def test_reciprocal_geometry_retains_ordered_extreme_fallback(
+    native_pair_probe: ct.CDLL,
+) -> None:
+    lower, upper = 2.0**-32, 2.0**32
+    cases = _pair_cases()
+    for index in range(6):
+        for bound in (lower, upper):
+            for value in (
+                math.nextafter(bound, 0),
+                bound,
+                math.nextafter(bound, math.inf),
+            ):
+                sample = [0.75, 0.9, 1.1, 1.2, 1.4, 1.0 / 1.2]
+                sample[index] = value
+                cases.append(tuple(sample))
+    for values in cases:
+        actual, expected = _evaluate_reciprocal(native_pair_probe, values)
+        admitted = 0 <= values[0] <= upper and all(
+            lower <= v <= upper for v in values[1:5]
+        )
+        for i, (a, b) in enumerate(zip(actual, expected, strict=True)):
+            if admitted and i == 3:
+                assert a == pytest.approx(b, rel=1e-15, abs=0), values
+            else:
+                assert _same_fp64(a, b), (values, i, a, b)
+
+
+def test_reciprocal_geometry_matches_high_precision_energy_differences(
+    native_pair_probe: ct.CDLL,
+) -> None:
+    # Independent differentiation of the scalar energy, with 90 decimal digits,
+    # covers the entire admitted exponent interval rather than typical molecules
+    # alone. Feature and energy operation orders are separately frozen above.
+    rng = random.Random(71929)
+    cases = [tuple(2.0 ** rng.uniform(-32, 32) for _ in range(6)) for _ in range(512)]
+    cases += [tuple(v for _ in range(6)) for v in (2.0**-32, 1.0, 2.0**32)]
+    cases += [(0.0, *case[1:]) for case in cases[:16]]
+    for values in cases:
+        actual, _ = _evaluate_reciprocal(native_pair_probe, values)
+        with localcontext() as context:
+            context.prec = 90
+            r2, wi, wj, ki, kj, _ = map(Decimal.from_float, values)
+
+            def phi(
+                r: Decimal,
+                wi: Decimal = wi,
+                wj: Decimal = wj,
+                ki: Decimal = ki,
+                kj: Decimal = kj,
+            ) -> Decimal:
+                gi, gj = ki + wi * r, kj + wj * r
+                return Decimal("-1.5") / (gi * gj * (gi + gj))
+
+            step = max(Decimal(1), abs(r2)) * Decimal("1e-30")
+            expected = float((phi(r2 + step) - phi(r2 - step)) / (2 * step))
+        assert actual[3] == pytest.approx(expected, rel=3e-15, abs=0), values
 
 
 def _pair_cases() -> list[tuple[float, ...]]:
