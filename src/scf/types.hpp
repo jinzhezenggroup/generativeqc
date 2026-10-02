@@ -10,6 +10,7 @@
 #include "generativeqc/generativeqc.h"
 #include "hf/reference.hpp"
 #include "scf/fock_build.hpp"
+#include "scf/initial_guess/preliminary_types.hpp"
 #include "scf/precision_work.hpp"
 
 namespace generativeqc::scf {
@@ -163,6 +164,8 @@ struct ScfOptions {
   /** Retain the already evaluated CPU RKS F[D] for an explicit snapshot read.
    * No extra Fock build, canonicalization or W is performed by energy-only SCF. */
   bool retain_ks_state{};
+  /** Explicit bounded cold-start preparation; absent preserves the core guess. */
+  std::optional<initial_guess::PreliminaryOptions> preliminary_guess;
 };
 
 /** Internal mean-field result, including state retained for warm starts. */
@@ -206,6 +209,7 @@ struct ScfResult {
   dft::RksDensityDiagnostic xc_density_diagnostic;
   /** Populated by KS solvers; HF diagnostics and stopping rules are unchanged. */
   dft::ScfDiagnostic dft_diagnostic;
+  initial_guess::PreliminaryDiagnostic preliminary_guess;
 };
 
 }  // namespace generativeqc::scf

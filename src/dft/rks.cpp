@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include "dft/ao_grid.hpp"
@@ -23,6 +24,7 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/solver/diis.hpp"
 #include "scf/solver/proposal_control.hpp"
@@ -595,6 +597,25 @@ ScfResult run_rks(
   const std::size_t n = ints.nbf;
   const std::size_t occupied = static_cast<std::size_t>(system.electron_count / 2);
   if (occupied > n) throw std::runtime_error("basis has fewer orbitals than occupied pairs");
+  if (options.preliminary_guess) {
+    if constexpr (std::is_same_v<std::remove_cvref_t<PrimaryPlan>, PreparedFockPlan>) {
+      ScfOptions target_options = options;
+      target_options.preliminary_guess.reset();
+      auto retained = runtime::add_capacity(
+          plan.cpu_observation_capacity(),
+          runtime::vector_capacities(basis.packed, grid.points(), grid.weights(), grid.owners()));
+      if (long_range_correction)
+        retained =
+            runtime::add_capacity(retained, long_range_correction->cpu_observation_capacity());
+      return initial_guess::run_with_preliminary_guess(
+          plan, options, initial_density, retained, [&](const std::vector<double>* seed) {
+            return run_rks(plan, long_range_correction, basis, grid, target_options, seed,
+                           evaluate_xc, method_name, nonlocal_correlation, nonlocal_domain);
+          });
+    } else {
+      throw std::invalid_argument("preliminary SCF is not qualified for this Fock provider");
+    }
+  }
   const Matrix orthogonalizer = symmetric_orthogonalizer(ints.overlap, n);
   std::optional<EigenResult> initial_orbitals;
   Matrix density = prepare_initial_density(system, ints, orthogonalizer, occupied, initial_density,

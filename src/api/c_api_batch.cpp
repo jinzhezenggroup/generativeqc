@@ -6,6 +6,7 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/precision.hpp"
 #include "generativeqc/generativeqc.h"
@@ -13,6 +14,13 @@
 #include "runtime/host_component_trace.hpp"
 
 extern "C" {
+
+generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_initial_guess_diagnostic* out) {
+  if (!batch || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  return generativeqc::api::copy_initial_guess_diagnostic(batch->initial_guesses[index], out);
+}
 
 generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
                                                const generativeqc_system* const* systems,
@@ -26,7 +34,9 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *batch = nullptr;
-  if (!generativeqc::api::valid_descriptor(descriptor)) {
+  if (!generativeqc::api::valid_descriptor(descriptor) ||
+      (descriptor->initial_guess &&
+       !generativeqc::api::valid_descriptor(descriptor->initial_guess))) {
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
 
@@ -51,6 +61,7 @@ generativeqc_status generativeqc_batch_prepare(generativeqc_context* context,
     candidate->precision_work.resize(system_count);
     candidate->scf_diagnostics.resize(system_count);
     candidate->ks_diagnostics.resize(system_count);
+    candidate->initial_guesses.resize(system_count);
     candidate->plan = generativeqc::methods::prepare_batch(
         context->state, std::move(native_systems), *descriptor, flags);
     *batch = candidate.release();
@@ -493,6 +504,7 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   // replay, so it belongs to the same serialized operation as execution.
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
+  std::fill(batch->initial_guesses.begin(), batch->initial_guesses.end(), std::nullopt);
   // Method-owned tokens must follow the same invalidation boundary as the
   // cached diagnostics, including malformed descriptors and output counts.
   try {
@@ -562,6 +574,8 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
       if (item.status == GENERATIVEQC_STATUS_SUCCESS ||
           item.status == GENERATIVEQC_STATUS_NOT_CONVERGED) {
         batch->ks_diagnostics[i] = std::move(item.calculation.ks_diagnostic);
+        if (item.calculation.preliminary_guess.requested_kind)
+          batch->initial_guesses[i] = item.calculation.preliminary_guess;
         batch->precision[i] = item.calculation.precision;
         batch->incremental_direct_jk[i] = item.calculation.incremental_direct_jk;
         if (item.calculation.physical_residual_rms)

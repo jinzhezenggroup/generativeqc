@@ -669,6 +669,58 @@ typedef struct generativeqc_ks_options {
 /** Current KS execution-plan ABI schema. No legacy prefix layouts are accepted. */
 GENERATIVEQC_API uint32_t generativeqc_ks_options_version(void);
 
+/** Explicit preliminary SCF; never an automatic/default selection. */
+typedef enum generativeqc_initial_guess_kind {
+  GENERATIVEQC_INITIAL_GUESS_HF = 1,
+  GENERATIVEQC_INITIAL_GUESS_LDA = 2
+} generativeqc_initial_guess_kind;
+
+/** CPU FP64, all-electron, restricted exact energy endpoints only. Zero-valued
+ * controls select 32 iterations, DIIS 8, tolerances 1e-6/1e-4 and 256 MiB.
+ * LDA uses an independent v1 coarse grid (defaults 8/6/12); HF has no grid.
+ * maximum_numeric_bytes bounds preliminary numeric payloads, excluding object
+ * headers/allocator/runtime overhead and the retained target owner. Compose
+ * both owners through ResourceBudget for a whole-endpoint host capacity bound.
+ */
+typedef struct generativeqc_initial_guess_options {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  generativeqc_initial_guess_kind kind;
+  uint32_t max_iterations;
+  uint32_t diis_history;
+  double energy_tolerance;
+  double density_tolerance;
+  uint64_t maximum_numeric_bytes;
+  uint32_t radial_points;
+  uint32_t angular_polar;
+  uint32_t angular_azimuth;
+} generativeqc_initial_guess_options;
+
+/** 0 disabled, 1 existing-density bypass, 2 used, 3 preparation failure,
+ * 4 preparation budget skipped, 5 seeded target failed and core was retried.
+ * Target convergence remains reported by the ordinary result descriptor. */
+typedef struct generativeqc_initial_guess_diagnostic {
+  uint32_t struct_size;
+  uint32_t abi_version;
+  uint32_t requested_kind;
+  uint32_t outcome;
+  uint32_t preliminary_iterations;
+  uint64_t preliminary_fock_builds;
+  uint32_t target_attempts;
+  uint32_t discarded_target_iterations;
+  uint64_t discarded_target_fock_builds;
+  uint64_t preparation_numeric_capacity;
+  double preparation_seconds;
+  /** 0 when an exception prevented counting a discarded attempt completely. */
+  uint32_t work_counters_complete;
+} generativeqc_initial_guess_diagnostic;
+
+GENERATIVEQC_API uint32_t generativeqc_initial_guess_options_version(void);
+GENERATIVEQC_API generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
+    const generativeqc_calculation* calculation, generativeqc_initial_guess_diagnostic* out);
+GENERATIVEQC_API generativeqc_status generativeqc_batch_get_initial_guess_diagnostic(
+    const generativeqc_batch* batch, uint32_t index, generativeqc_initial_guess_diagnostic* out);
+
 /** Current method preparation descriptor. Callers must provide this complete layout. */
 typedef struct generativeqc_method_descriptor {
   uint32_t struct_size;
@@ -711,6 +763,9 @@ typedef struct generativeqc_method_descriptor {
   /** Frozen occupied orbitals are not implemented for the native RCCSD owner.
    * Zero means all occupied orbitals are correlated. */
   uint32_t ccsd_frozen_core;
+  /** Optional execution-only cold-start policy. Pointee is copied at preparation.
+   * Existing explicit/imported/retained density always takes precedence. */
+  const generativeqc_initial_guess_options* initial_guess;
 } generativeqc_method_descriptor;
 
 /**

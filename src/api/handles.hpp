@@ -36,6 +36,7 @@ struct generativeqc_calculation {
   /** Completed-run SCF measures; cleared before a new backend execution. */
   std::optional<generativeqc_scf_diagnostic> scf_diagnostic;
   std::optional<generativeqc::dft::ScfDiagnostic> ks_diagnostic;
+  std::optional<generativeqc::scf::initial_guess::PreliminaryDiagnostic> initial_guess;
 };
 
 struct generativeqc_batch {
@@ -52,6 +53,8 @@ struct generativeqc_batch {
   /** Separate from the fixed-stride legacy batch output array. */
   std::vector<std::optional<generativeqc_scf_diagnostic>> scf_diagnostics;
   std::vector<std::optional<generativeqc::dft::ScfDiagnostic>> ks_diagnostics;
+  std::vector<std::optional<generativeqc::scf::initial_guess::PreliminaryDiagnostic>>
+      initial_guesses;
 };
 
 #endif

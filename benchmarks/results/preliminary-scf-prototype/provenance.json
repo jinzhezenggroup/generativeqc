@@ -1,0 +1,79 @@
+{
+  "build_kind": "Audited incremental CMake/Ninja command integration, not a clean or full build; see integration-manifest.json",
+  "build_type": "CPU RelWithDebInfo",
+  "campaigns": [
+    {
+      "campaign": "root",
+      "endpoints": 96,
+      "failures": 0,
+      "original_records": {
+        "bytes": 246586,
+        "path": "root/records.jsonl",
+        "sha256": "c0befe83b640b1228d55444c29513f32861b2a6ef93a23db21b3b340ac6b11e2"
+      }
+    },
+    {
+      "campaign": "coarse",
+      "endpoints": 72,
+      "failures": 0,
+      "original_records": {
+        "bytes": 379844,
+        "path": "coarse/records.jsonl",
+        "sha256": "d8b9e683d448562d41a78083b4009aac6bf4dc99207798f728e1ae3e09ba7051"
+      }
+    },
+    {
+      "campaign": "cluster",
+      "endpoints": 6,
+      "failures": 0,
+      "original_records": {
+        "bytes": 289850,
+        "path": "cluster/records.jsonl",
+        "sha256": "055484ab02257d9b17af21fd35933c02f87e0d7cd02f9daf65730e76a18de025"
+      }
+    },
+    {
+      "campaign": "hf-preliminary",
+      "endpoints": 18,
+      "failures": 0,
+      "original_records": {
+        "bytes": 465665,
+        "path": "hf-preliminary/records.jsonl",
+        "sha256": "c25a1a52b37a185b4592f4e5543aa08eed15f017bbcbc6898358378728c32875"
+      }
+    },
+    {
+      "campaign": "hf-lda-preliminary",
+      "endpoints": 32,
+      "failures": 0,
+      "original_records": {
+        "bytes": 829941,
+        "path": "hf-lda-preliminary/records.jsonl",
+        "sha256": "eda986200103b137236608b1c6fed66140eefdcfec5134ba84546bd04104bfb0"
+      }
+    }
+  ],
+  "excluded": "All smoke files, abandoned hf/ reversed-direction smoke, run logs and generated executables are excluded. The five campaign records contain no failures. Full original raw files remain unchanged in the measurement workspace.",
+  "library_sha256": "670c81365bde477f32e5a7fc6af1cff5e489a42e118651aca77090fd00626258",
+  "mapping_check": "git rev-parse of both commits confirms the exact same tree; the measured revision is not rewritten",
+  "measured_dirty": false,
+  "measured_revision": "8ba615aacd9f02708b39782cc71b68f27bbe1af6",
+  "measured_tree": "42cc3f8f871523a4d48304f520a5e967e61cea6e",
+  "omitted_density_encoding": "SHA256 over UTF-8 json.dumps(array,sort_keys=True,separators=(comma,colon),allow_nan=False), preserving array order and all Python float round-trip values; full native density arrays are available from a rerun",
+  "omitted_oracle_grid": {
+    "bytes": 1689340,
+    "regenerator": "oracle_grid.cpp captured in inputs/root.json",
+    "sha256": "849a8b989f6ebbb3e9e0597af04f641f515e285339866033ffcfe8ad9414574c"
+  },
+  "public_equivalent_revision": "3b04ecbda28dcecab6fb9db3ca2b4cdf10ba99bc",
+  "public_equivalent_tree": "42cc3f8f871523a4d48304f520a5e967e61cea6e",
+  "public_integration_pr": "https://github.com/jinzhezenggroup/generativeqc/pull/1683",
+  "public_source_url": "https://github.com/jinzhezenggroup/generativeqc/commit/3b04ecbda28dcecab6fb9db3ca2b4cdf10ba99bc",
+  "source_capture_encoding": "inputs/*.json sources values are exact original UTF-8 file contents, including missing final newlines. SHA256 is over value.encode(utf-8). Protocols are preserved as parsed values; original protocol byte hashes identify the measurement files. Historical run.py is retained for audit only, not executed because it embeds historical provenance.",
+  "source_comparison_scope": "source-comparison.json compares six selected source files with already-fetched e4bd02570a9063dba6e107448826c70714d55c75; not latest-live-master and not API implementation qualification",
+  "toolchain_gaps": [
+    "C++ compiler version not retained in campaign protocols",
+    "Native harness compilation command/flags and duration not recorded",
+    "OpenBLAS version not recorded"
+  ]
+}
