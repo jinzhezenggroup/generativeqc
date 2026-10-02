@@ -104,3 +104,28 @@ remain necessary. Raising the force totals is not part of this change.
 No equation, precision, grid, density mask or source sum changes. This scheduling
 change does not remove quadratic nonlocal pairs or integral derivative work and
 does not yet establish a large-system speed advantage over GPU4PySCF.
+
+## Controlled current-master native comparison
+
+After #1716, #1732 and #1725, node1 Slurm job 5457 compares `capacity3` and
+`geometry3` sequentially on one scheduled RTX5090 with eight CPUs. Both source
+variants load the identical fresh native library
+`4de9e573ead858f0ced6b1575843c49d38cd4ac0781c499a5254ff2b6d418846`.
+Its production source is equivalent to master `9a5871dca`. Only the Python/
+compiler geometry schedule differs between these two samples.
+
+Full24 cold times are 345.448991 -> 344.134119 s, both 18 iterations. Three-repeat
+warm medians are 57.543343 -> 55.602866 s (1.0349x), with one iteration each.
+Candidate repeats are 55.602866, 55.600166 and 56.010368 s. GPU4PySCF warm
+median is 27.533330 s. The shared native improvements subsume much of the
+historical 1.149x gain; that historical ratio is not the current-master claim.
+
+Every one of five pairs passes for each variant. Candidate max energy error is
+2.762591e-11 Eh and force error 4.164110e-10 Eh/Bohr; baseline maxima are
+2.773959e-11 and 4.161756e-10. Tile counts retain the documented 2304 -> 576
+AO submissions and 4608 -> 1152 geometry submissions, with unchanged complete
+grid visits. Actual post-screen pair/quartet counts remain unexported.
+The same job first passes all seven independent complete/rebuild tests with the
+latest one-division library and this identical Python/compiler schedule.
+Complete JSONs and shared-library provenance are retained under ignored
+`.artifacts/latest-master/results/` in the geometry review worktree.
