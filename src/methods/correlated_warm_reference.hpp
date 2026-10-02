@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "core/types.hpp"
@@ -53,16 +54,22 @@ inline std::size_t reservation_bytes(const core::System& system,
   return result;
 }
 
-inline scf::HfWarmState capture(const core::System& system, const hf::PhysicalReference& reference,
-                                double energy_change, double density_rms, int iterations) {
+inline scf::HfWarmState capture(const core::System& system, std::vector<double> density,
+                                double energy, double energy_change, double density_rms,
+                                int iterations) {
   scf::HfWarmState state;
-  state.density = reference.density;
+  state.density = std::move(density);
   state.coordinates = coordinates(system);
-  state.energy = reference.energy;
+  state.energy = energy;
   state.energy_change = energy_change;
   state.density_rms = density_rms;
   state.iterations = iterations;
   return state;
+}
+
+inline scf::HfWarmState capture(const core::System& system, const hf::PhysicalReference& reference,
+                                double energy_change, double density_rms, int iterations) {
+  return capture(system, reference.density, reference.energy, energy_change, density_rms, iterations);
 }
 
 inline void validate_checkpoint(const core::System& template_system, const scf::HfWarmState& state,
