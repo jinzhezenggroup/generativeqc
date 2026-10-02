@@ -964,15 +964,14 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (!device_nonlocal) {
       potential = xc->enqueue_replay_body(density, elements);
     } else {
-      potential = xc->enqueue_replay_density_features(
-          density, elements, nonlocal_raw_density, nonlocal_raw_gradient);
+      potential = xc->enqueue_replay_density_features(density, elements, nonlocal_raw_density,
+                                                      nonlocal_raw_gradient);
       const auto quadrature = xc->grid_view();
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_molecular_domain_cuda(
-            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold,
-            quadrature.weights, nonlocal_raw_density, nonlocal_raw_gradient,
-            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
-            nonlocal_domain_error);
+            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
+            nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
+            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
       });
       run_resident_nonlocal_cuda([&] {
         nlc::enqueue_vv10_cuda_device(
@@ -981,9 +980,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             nonlocal_workspace, nonlocal_layout.workspace_bytes, nonlocal_workspace, nonlocal_vrho,
             nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error);
       });
-      xc->enqueue_replay_nonlocal_potential(
-          nonlocal_effective_weights, nonlocal_effective_gradient, nonlocal_vrho, nonlocal_vsigma,
-          nonlocal_workspace);
+      xc->enqueue_replay_nonlocal_potential(nonlocal_effective_weights, nonlocal_effective_gradient,
+                                            nonlocal_vrho, nonlocal_vsigma, nonlocal_workspace);
     }
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,

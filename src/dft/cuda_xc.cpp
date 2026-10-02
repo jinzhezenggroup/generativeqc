@@ -276,8 +276,7 @@ void CudaXcPlan::enqueue_density_features(const double* density, std::size_t ele
                total_gradient);
 }
 
-CudaXcView CudaXcPlan::enqueue_replay_density_features(const double* density,
-                                                       std::size_t elements,
+CudaXcView CudaXcPlan::enqueue_replay_density_features(const double* density, std::size_t elements,
                                                        double* total_density,
                                                        double* total_gradient) {
   if (layout_.response)
@@ -308,24 +307,27 @@ void CudaXcPlan::publish_submitted_generation(std::uint64_t generation) {
   ++transfers_.evaluations;
 }
 
-void CudaXcPlan::enqueue_nonlocal_potential(
-    std::uint64_t generation, const double* effective_weights, const double* total_gradient,
-    const double* vrho, const double* vsigma, const double* nonlocal_energy) {
-  enqueue_nonlocal_potential_impl(generation, true, effective_weights, total_gradient, vrho,
-                                  vsigma, nonlocal_energy);
+void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
+                                            const double* effective_weights,
+                                            const double* total_gradient, const double* vrho,
+                                            const double* vsigma, const double* nonlocal_energy) {
+  enqueue_nonlocal_potential_impl(generation, true, effective_weights, total_gradient, vrho, vsigma,
+                                  nonlocal_energy);
 }
 
-void CudaXcPlan::enqueue_replay_nonlocal_potential(
-    const double* effective_weights, const double* total_gradient, const double* vrho,
-    const double* vsigma, const double* nonlocal_energy) {
+void CudaXcPlan::enqueue_replay_nonlocal_potential(const double* effective_weights,
+                                                   const double* total_gradient, const double* vrho,
+                                                   const double* vsigma,
+                                                   const double* nonlocal_energy) {
   enqueue_nonlocal_potential_impl(0, false, effective_weights, total_gradient, vrho, vsigma,
                                   nonlocal_energy);
 }
 
-void CudaXcPlan::enqueue_nonlocal_potential_impl(
-    std::uint64_t generation, bool publish_generation, const double* effective_weights,
-    const double* total_gradient, const double* vrho, const double* vsigma,
-    const double* nonlocal_energy) {
+void CudaXcPlan::enqueue_nonlocal_potential_impl(std::uint64_t generation, bool publish_generation,
+                                                 const double* effective_weights,
+                                                 const double* total_gradient, const double* vrho,
+                                                 const double* vsigma,
+                                                 const double* nonlocal_energy) {
   check_device();
   if (layout_.response)
     throw std::invalid_argument("XC response plan cannot accumulate a physical nonlocal potential");
