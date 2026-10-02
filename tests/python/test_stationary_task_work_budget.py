@@ -89,6 +89,9 @@ def test_task_metrics_are_reported_per_execution() -> None:
         "grid_pair_visits": 17,
         "task_descriptors": 9,
         "task_batches": 3,
+        "center_geometry_bytes": 144,
+        "center_distance_evaluations": 3,
+        "center_geometry_preparations": 1,
     }
     after = {
         "owned_device_bytes": 1024,
@@ -100,6 +103,9 @@ def test_task_metrics_are_reported_per_execution() -> None:
         "grid_pair_visits": 29,
         "task_descriptors": 14,
         "task_batches": 5,
+        "center_geometry_bytes": 144,
+        "center_distance_evaluations": 6,
+        "center_geometry_preparations": 2,
     }
 
     delta = runtime._metric_delta(after, before)
@@ -108,6 +114,9 @@ def test_task_metrics_are_reported_per_execution() -> None:
     assert delta["task_batches"] == 2
     assert delta["primitive_records"] == 17
     assert delta["owned_device_bytes"] == 1024
+    assert delta["center_geometry_bytes"] == 144
+    assert delta["center_distance_evaluations"] == 3
+    assert delta["center_geometry_preparations"] == 1
 
 
 PREAMBLE = r"""
@@ -119,6 +128,7 @@ PREAMBLE = r"""
 #include <stdexcept>
 using std::size_t;
 namespace generativeqc_stationary_cuda {}
+namespace generativeqc_grid_adjoint { struct CenterPair; }
 constexpr size_t task_stride=9;
 using cudaEvent_t = void*;
 using cudaStream_t = void*;

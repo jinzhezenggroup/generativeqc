@@ -274,12 +274,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "de8487535c96e9dc73ab21f9e95dd86a5ac281751e4a814ecf49cf237da09c3b",
+        "geometry_resources_sha256": "99ce4fe1c67c4faa91999f1eeebc5b66a2203c40e7ca99b30d39136f12a0205a",
         "public_wrapper_sha256": (
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "78e657ba5eb865ead768d7d18575977508bdd34ede9f2fc7a51aae3f09baa652"
+            "c05bd360f51062ee5f593429670303ca96f8f0a6863af30ce4feb1a82fdc6f26"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -315,19 +315,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "2b7ff05ad84060c657b76576ef2afc3adf206262313ae681ae66db2ba021319a"
+            "62d61c9ce7ad0b4f50a9bc02c636834aa2b816e44e326ada3e5b6facd83db7ca"
         ),
         "native_owner_sha256": (
-            "5f2e8924e1d97f1668edefc95caec70b96223244afadfc2aac97ad254d601b82"
+            "7b41328a1daaf4dcd4b3884bc29d248c25b7294ad8e69e53eaa966096f3212d9"
         ),
         "native_allocation_sha256": (
-            "47b73fb800b28abeea23bdef2feab6c18b3c9747508b02522e322f758d5fe878"
+            "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
         ),
         "native_create_sha256": (
-            "52e4b914ac2baa804db89f85f331f05835bdb4786e981777a6ea4303743d058a"
+            "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
         ),
         "native_reset_sha256": (
-            "fa3f0b989c571b4abd7d983fc0a6f3eafce3059a889b53c97bdd06bd416509fa"
+            "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
         ),
         "native_tasks_sha256": (
             "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -336,16 +336,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "efc8f4643fdd271782ad62ecc29d387f279347bae98fb78fc3bb78146743ef80"
+            "8b34352ef1a6638e90072d0071705dd288466b511f02186434be69e486ddc66d"
         ),
         "native_geometry_enqueue_sha256": (
-            "4770b1100e26c8e79012054f25dedfe5857635342fff64ef1fe61eb97a047d8d"
+            "9cdbea99b233dc5528f6a600c2f1650d1f619a6bb3c51d6353b787501a4c1b70"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_metrics_sha256": (
-            "680742eea07b5e65ee26b1e45820f865c26b06d35921eb85caa19cd8d59a3ed3"
+            "0ec299536fb1da83e09a8e0e2dd93350604b90e75d907f202e159913c5dabd80"
         ),
         "native_finish_span_sha256": (
             "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
@@ -383,8 +383,11 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "tile_points=tile_points, active_ao_capacity=n, "
         "budget_bytes=max_device_bytes)"
     )
-    assert result["admission_limits"]["source_bytes_definition"].startswith(
+    assert result["admission_limits"]["source_resources_definition"].startswith(
         "plan_stationary_cuda_resources(atoms=na"
+    )
+    assert result["admission_limits"]["source_bytes_definition"] == (
+        "source_resources.allocation_bytes"
     )
     assert result["admission_limits"]["host_bound_definition"].startswith(
         "grid_plan.host_bytes + 8 * (34 * primitive_tile"
@@ -584,8 +587,11 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         row for row in rows if row["id"] == "pbe/rks/water32/fp64_energy_forces"
     )
     assert water32["resource_requirements"]["additional_device_peak_bound"] == (
-        356_801_792
+        356_801_792 + 48 * (96 * 95 // 2)
     )
+    assert water32["resource_requirements"][
+        "stationary_center_geometry_bytes"
+    ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
         192_187_488
     )
