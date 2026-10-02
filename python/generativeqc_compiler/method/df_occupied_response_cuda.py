@@ -107,6 +107,45 @@ inline cublasStatus_t df_occupied_apply_metric_root(
                      &zero, fitted, rank_squared);
 }
 
+/** Diagonal-first coordinates for a symmetric occupied matrix. The first
+ * rank entries retain the trace directly; each remaining entry denotes both
+ * (i,j) and (j,i), with unit weight until the Gram contraction below.
+ * The caller must prove symmetry from its physical packed AO source.
+ */
+#if defined(__CUDACC__)
+__host__ __device__
+#endif
+inline std::size_t df_occupied_symmetric_pair(
+    std::size_t rank, std::size_t i, std::size_t j) {
+  if (i == j) return i;
+  const auto hi = i > j ? i : j, lo = i > j ? j : i;
+  return rank + hi * (hi - 1) / 2 + lo;
+}
+
+/** Add the symmetric occupied Gram into the lower auxiliary triangle.
+ * Diagonal pairs contribute once and off-diagonal pairs twice, reproducing
+ * sum_ij U[P,i,j] U[Q,i,j] without sqrt(2) rescaling. beta=1 preserves the
+ * already accumulated Coulomb response. The caller mirrors the triangle
+ * before any consumer reads the complete metric adjoint.
+ */
+inline cublasStatus_t df_occupied_symmetric_metric_gram(
+    cublasHandle_t blas, int auxiliary, int rank, double coefficient,
+    const double* factors, double* metric) {
+  if (auxiliary <= 0 || rank <= 0 || !factors || !metric || factors == metric)
+    return CUBLAS_STATUS_INVALID_VALUE;
+  const auto pairs = static_cast<long long>(rank) * (rank + 1LL) / 2;
+  if (pairs > std::numeric_limits<int>::max()) return CUBLAS_STATUS_INVALID_VALUE;
+  const auto stride = static_cast<int>(pairs);
+  const double one = 1, twice = 2 * coefficient;
+  auto status = cublasDsyrk(blas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
+                           auxiliary, rank, &coefficient, factors, stride,
+                           &one, metric, auxiliary);
+  if (status != CUBLAS_STATUS_SUCCESS || stride == rank) return status;
+  return cublasDsyrk(blas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
+                      auxiliary, stride - rank, &twice, factors + rank, stride,
+                      &one, metric, auxiliary);
+}
+
 inline cublasStatus_t df_occupied_from_metric_eigenbasis(
     cublasHandle_t blas, int auxiliary, int rank_squared,
     const double* eigenvectors, const double* eigenfactors, double* projected) {

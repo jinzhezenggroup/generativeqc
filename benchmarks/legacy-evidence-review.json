@@ -5,6 +5,11 @@
       "reason": "Reviewed retained large evidence for CG01 protocol evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/cg01/README.md"
     },
+    "cpu-eri-coulomb-20261001": {
+      "owner": "cpu-eri-coulomb-20261001",
+      "reason": "Reviewed compact scientific and negative evidence for the focused compiler Coulomb-root reuse increment. Exact original text records, including failures and outliers, are deterministically compressed, with mechanically reproducible duplicate observation aggregates omitted and a non-task ambient setup inventory replaced by task-specific dependency versions. No source binary/build artifact or retention-policy exception is introduced.",
+      "review_document": "benchmarks/results/cpu-eri-coulomb-20261001/README.md"
+    },
     "cuda-ownership": {
       "owner": "cuda-ownership",
       "reason": "Reviewed retained large evidence for CUDA ownership retirement evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -60,6 +65,11 @@
       "reason": "Reviewed retained large evidence for Generated DF value promotion (#142). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/generated-df-values-142/README.md"
     },
+    "hf-df-96-20261003": {
+      "owner": "HF DF occupied performance qualification",
+      "reason": "Complete checked scalar comparisons, independent force arrays, resource boundaries and semantic work counters for the 96-atom optimization and larger-size fallback. Raw profiler traces, logs and binaries remain ignored; no timing sample is filtered.",
+      "review_document": "benchmarks/results/hf-df-96-20261003/README.md"
+    },
     "issue206-device-response": {
       "owner": "issue206-device-response",
       "reason": "Reviewed retained large evidence for Device response weights for retained DF values (#206). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -92,7 +102,7 @@
     },
     "issue377-379-df": {
       "owner": "issue377-379-df",
-      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377–379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for Occupied DF execution and compact source qualification (#377\u2013379). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue377-379-df/README.md"
     },
     "issue394-deferred": {
@@ -102,7 +112,7 @@
     },
     "issue404-407-df": {
       "owner": "issue404-407-df",
-      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404–407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
+      "reason": "Reviewed retained large evidence for DF tuning, screening and final-projection evidence (#404\u2013407). Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/issue404-407-df/README.md"
     },
     "issue404-combined-rys": {
@@ -194,11 +204,6 @@
       "owner": "xc-contractions",
       "reason": "Reviewed retained large evidence for Native CPU XC contraction evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
       "review_document": "benchmarks/results/xc-contractions/README.md"
-    },
-    "cpu-eri-coulomb-20261001": {
-      "owner": "cpu-eri-coulomb-20261001",
-      "reason": "Reviewed compact scientific and negative evidence for the focused compiler Coulomb-root reuse increment. Exact original text records, including failures and outliers, are deterministically compressed, with mechanically reproducible duplicate observation aggregates omitted and a non-task ambient setup inventory replaced by task-specific dependency versions. No source binary/build artifact or retention-policy exception is introduced.",
-      "review_document": "benchmarks/results/cpu-eri-coulomb-20261001/README.md"
     }
   },
   "files": [
@@ -953,6 +958,38 @@
       "sha256": "9b51375c88ba0bac93e87d198fc258d190073927c68a8b3d39e99cccde016009",
       "classification": "required-compact-accepted-evidence",
       "role": "Hash-bound source/build/runtime provenance, bytecode inventories, regression and ownership receipts, independent generated-DAG/header audits, raw and resolved endpoint PC profiles with failed profiler diagnostics; no binary, full generated header, or build tree. The unrelated ambient package inventory is transparently omitted and replaced by task-specific dependency versions."
+    },
+    {
+      "path": "benchmarks/results/hf-df-96-20261003/comparison.json",
+      "family": "hf-df-96-20261003",
+      "bytes": 293370,
+      "sha256": "9dce78c397fa09c600f8ea1b3064e4e311fc9ea178581de5832bb91b0c8c80f7",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All complete same-card baseline/response-only/combined/reverse-order observations and grouped work, with independent energy/force oracle arrays."
+    },
+    {
+      "path": "benchmarks/results/hf-df-96-20261003/larger.json",
+      "family": "hf-df-96-20261003",
+      "bytes": 279491,
+      "sha256": "5a14b744a5c3abccee61d50ceac4826b38c8e77ab4c6f168e46b9ee1258696c4",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All 99-atom baseline/candidate numerical and timing observations, resource estimates and the unchanged 108-atom admission failure."
+    },
+    {
+      "path": "benchmarks/results/hf-df-96-20261003/references.json",
+      "family": "hf-df-96-20261003",
+      "bytes": 230576,
+      "sha256": "0f7243dd0c8746721e84d2165c61efd9470f96b5ce8c9d074159d1a8b5713f92",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Independent original/moved force arrays and all 144 reference timing/work observations for the README figure."
+    },
+    {
+      "path": "benchmarks/results/hf-df-96-20261003/work.json",
+      "family": "hf-df-96-20261003",
+      "bytes": 151016,
+      "sha256": "7d1ceb7450dda487888660352e5846e6e09c13c50027b0ee4df21c3d9103ec37",
+      "classification": "required-compact-accepted-evidence",
+      "role": "All grouped semantic work counters for the six DF figure workloads, excluding raw profiler launch records."
     }
   ],
   "schema": "generativeqc.legacy-large-evidence-review.v1",
