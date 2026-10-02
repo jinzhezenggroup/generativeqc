@@ -1,6 +1,6 @@
 # Proposal: admit complete-grid nonlocal forces by their actual native capacity
 
-Status: proposed; device and complete endpoint qualification in progress
+Status: proposed; device and complete default48 endpoint qualification pass
 Date: 2026-10-03
 
 ## Problem
@@ -50,8 +50,16 @@ raises RuntimeError with native OUT_OF_MEMORY (7). That test expectation was
 corrected and all capacity tests rerun; production behavior was not changed.
 The qualified library SHA256 is
 `f1253b0aa722ff119f6dc99ff61731f0da1ac473e38f53a8ef2233beb24a9c47`.
-The full 48-atom comparator with public defaults is running under node1 job 5382;
-its pending result is not a scalability or performance pass.
+Node1 job 5382 completes the full 48-atom comparator with public defaults:
+384 spherical def2-SVP AOs, 1179648 grid points, WB97M-V RKS, unchanged total
+1 GiB device / 2 GiB host force limits. All three pairs (cold, priming, one timed
+warm repeat) pass, with maximum energy error 4.525e-11 Eh and force error
+1.707e-10 Eh/Bohr. Native cold/warm times are 2092.459/284.679 seconds versus
+GPU4PySCF 520.076/175.466 seconds. Cold SCF iterations are 30 versus 18 and
+warm iterations one versus four. This qualifies default-capacity completion;
+it is not a speedup claim or a robust multi-repeat performance estimate.
+The 96-atom native-allocation boundary test does not establish a default96
+complete endpoint; that qualification remains separate.
 
 The build uses verified ccache and explicit CXX/CUDA launchers with checkout-root
 CCACHE_BASEDIR. Build receipts and subsequent endpoint results are retained under
