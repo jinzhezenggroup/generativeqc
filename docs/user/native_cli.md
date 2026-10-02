@@ -68,11 +68,29 @@ Energies are Hartree and forces are Hartree/Bohr. Add `--json` for
 machine-readable output. Native CUDA SDK builds may select `--backend cuda`;
 unsupported build/device combinations fail closed.
 
-The native `run` command currently accepts `gfn2-xtb` (and its `gfn2`
-alias). Gaussian-basis HF/DFT calculations already have native C/C++ execution
-APIs, but the CLI still needs a native named-basis/data resolver before those
-methods can accept user-friendly XYZ input without Python.
+## Run RHF/UHF with bundled Gaussian bases
 
+The native CLI can also expand the generated bundled basis catalog directly
+into the public C/C++ system descriptor:
+
+```bash
+/opt/generativeqc/bin/generativeqc run molecule.xyz \
+  --method rhf \
+  --basis def2-svp \
+  --representation spherical \
+  --backend cpu \
+  --forces
+```
+
+`rhf` and `uhf` use the same exact bundled decimal basis records as the
+Python frontend. The currently bundled names are reported by
+`generativeqc basis list`. GFN2-xTB continues to own its intrinsic basis, so
+passing `--basis` or `--representation` with GFN2 is rejected instead of
+being silently ignored.
+
+This slice keeps density fitting and DFT method selection separate so their
+approximation/model controls can be reviewed independently in later native CLI
+layers.
 
 ## Manage local profile activation
 
