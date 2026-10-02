@@ -132,6 +132,11 @@ class CudaXcPlan {
    * after the runtime chooses warmup/capture/replay/fallback. */
   CudaXcView enqueue_replay_body(const double* density, std::size_t elements,
                                  CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64);
+  /** Replay-runtime counterpart that also exports total rho/grad-rho for a
+   * resident nonlocal consumer. Logical generation publication remains owned
+   * by publish_submitted_generation() after the runtime selects physical work. */
+  CudaXcView enqueue_replay_density_features(const double* density, std::size_t elements,
+                                             double* total_density, double* total_gradient);
   /** Execute the ordinary physical XC evaluation while also publishing total
    * rho and grad-rho to caller-owned full-grid device buffers. This adds no
    * plan-owned storage and is admitted only for GGA/meta-GGA ingredient sets. */
@@ -144,6 +149,12 @@ class CudaXcPlan {
   void enqueue_nonlocal_potential(std::uint64_t generation, const double* effective_weights,
                                   const double* total_gradient, const double* vrho,
                                   const double* vsigma, const double* nonlocal_energy);
+  /** Replay-runtime counterpart for the same nonlocal AO assembly. It mutates
+   * the current semilocal potential/totals but performs no generation
+   * publication; the surrounding SolverRegion publishes the physical body once. */
+  void enqueue_replay_nonlocal_potential(const double* effective_weights,
+                                         const double* total_gradient, const double* vrho,
+                                         const double* vsigma, const double* nonlocal_energy);
   /** Differentiate the fixed native density on GPU, including AO/feature and
    * matrix assembly. Signed directions use the same input layout as density. */
   void enqueue_response(const double* density, const double* direction, std::size_t elements,
@@ -162,6 +173,10 @@ class CudaXcPlan {
                     std::uint64_t generation, CudaXcDensityPrecision precision,
                     double* total_density = nullptr, double* total_gradient = nullptr,
                     bool publish_generation = true);
+  void enqueue_nonlocal_potential_impl(std::uint64_t generation, bool publish_generation,
+                                       const double* effective_weights,
+                                       const double* total_gradient, const double* vrho,
+                                       const double* vsigma, const double* nonlocal_energy);
   CudaXcLayout layout_;
   CudaXcPointLauncher point_launcher_{};
   CudaXcTransfers transfers_;
