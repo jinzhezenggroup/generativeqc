@@ -21,6 +21,9 @@ from generativeqc_compiler.method.gfn2_h0_force_runtime import (
     build_gfn2_h0_onsite_vjp_program,
     build_gfn2_h0_pulay_seed_program,
 )
+from generativeqc_compiler.method.gfn2_h0_force_schedule import (
+    emit_gfn2_h0_force_schedule,
+)
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 if typing.TYPE_CHECKING:
@@ -200,6 +203,7 @@ def native_header() -> str:
 #pragma once
 
 #include <cmath>
+#include <cstdint>
 
 #if defined(__CUDACC__)
 #define GENERATIVEQC_GFN2_H0_HD __host__ __device__
@@ -208,6 +212,8 @@ def native_header() -> str:
 #endif
 
 namespace generativeqc::xtb::generated {{
+
+{emit_gfn2_h0_force_schedule()}
 
 inline constexpr const char* gfn2_h0_force_runtime_version =
     "{GFN2_H0_FORCE_RUNTIME_VERSION}";

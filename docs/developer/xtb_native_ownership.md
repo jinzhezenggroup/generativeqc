@@ -49,7 +49,7 @@ the compiler-selected schedules where available.
 | S/D/Q Cartesian primitives | `integral/gfn2_sdq.py`, `integral/gfn2_sdq_cpu.py` | CPU and CUDA integral values/coordinate response |
 | Electronic pair Hamiltonian and S/D/Q adjoints | `method/gfn2_electronic_runtime.py` | CPU and CUDA electronic owners |
 | ES2, ES3 and AES2 | `method/gfn2_es2_runtime.py`, `method/gfn2_es3_runtime.py`, `method/gfn2_aes2.py`, `method/gfn2_aes2_schedule.py` | CPU/CUDA electrostatics and bounded AES2 CUDA scheduling |
-| H0 shell factors, CN/radial/Cartesian adjoints and AO adjoint updates | `method/gfn2_h0_force_runtime.py` | CPU H0 values/VJP and CUDA H0 values/forces |
+| H0 shell factors, CN/radial/Cartesian adjoints and AO adjoint updates | `method/gfn2_h0_force_runtime.py`, `method/gfn2_h0_force_schedule.py` | CPU H0 values/VJP and CUDA H0 values/forces with bounded shell-pair scheduling |
 | Shell spin energy and potential | `method/gfn2_spin_runtime.py` | CPU and CUDA spin owners |
 
 Paths in this table are relative to `python/generativeqc_compiler/`. H0 value and force
@@ -107,6 +107,18 @@ The native schedule harness compares these paths by adding independent single-at
 systems to select the fused policy, including ragged tails, Graph replay and
 failure publication. Potential outputs must be bitwise equal; VJP outputs have a
 tight FP64 roundoff gate because materialization changes NVCC's FMA boundary.
+
+H0/Pulay CUDA force contraction distributes ordered shell pairs across at most
+256 blocks of 128 threads per system. The compiler chooses the width from the
+rounded-up mean pair count; native traversal strides over each actual ragged
+extent. Small means retain a single block. Each pair owns a disjoint AO block
+and preserves its AO reduction order. Atom gradients and coordination adjoints
+retain FP64 atomic accumulation with unspecified inter-pair order. Input scans,
+seed initialization and whole-system publication each remain outside the tiled
+contraction, with no additional storage or synchronization. Qualification checks
+bitwise AO equality against the single-block route, atom adjoints against an
+independent long-double analytic oracle, and complete molecular forces against
+tblite references. Failed or gated systems preserve all public accumulators.
 
 `benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
 matched fresh-SCC settings. It records cold, repeated and changed-geometry
