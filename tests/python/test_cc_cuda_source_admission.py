@@ -143,6 +143,7 @@ PREFIX = r"""
 #include "methods/correlated_cuda_source.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 int live=0,native_calls=0,host_calls=0,allocations=0;
+int warm_failure=0;
 bool converged=true,fail_source=false;
 std::size_t given_budget=0;
 namespace generativeqc::molecule {
@@ -181,14 +182,21 @@ ScfResult physical() {
   ref->density.resize(4);
   return {converged,{},converged ? ref : nullptr};
 }
-ScfResult run_prepared_fock_strategy(const PreparedFockPlan&,const ScfOptions&) {
+ScfResult run_prepared_fock_strategy(const PreparedFockPlan&,const ScfOptions&,
+                                    const std::vector<double>*) {
   ++host_calls; return physical();
 }
-ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int) {
+ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int,
+                       const std::vector<double>* seed) {
   if (live) throw std::runtime_error("prior source survived into native reference");
-  ++native_calls; return physical();
+  ++native_calls;
+  if (seed && warm_failure==1) throw std::runtime_error("injected warm reference failure");
+  if (seed && warm_failure==2) return {};
+  return physical();
 }
-ScfResult run_rhf(const core::System&,const ScfOptions&) {++host_calls; return physical();}
+ScfResult run_rhf(const core::System&,const ScfOptions&,const std::vector<double>*) {
+  ++host_calls; return physical();
+}
 std::size_t cuda_direct_jk_device_bytes(std::size_t,std::size_t,std::size_t,
                                       std::size_t,std::size_t,unsigned) {return 8192;}
 }
@@ -205,17 +213,22 @@ int main() {
   for (auto& shell : system.shells) shell.primitives.resize(1);
   runtime::ExecutionContext execution; scf::ScfOptions reference; cc::SolverOptions solver;
   std::unique_ptr<scf::PreparedFockPlan> cache;
-  for (int mode=0;mode<5;++mode) {
+  const std::vector<double> seed(4,0.5);
+  for (int mode=0;mode<7;++mode) {
     cache=std::make_unique<scf::PreparedFockPlan>();
     native_calls=host_calls=allocations=0; given_budget=0;
     converged=mode!=2; fail_source=mode==3; solver.max_bytes=mode==1 ? 1 : 1<<20;
+    warm_failure=mode>=5 ? mode-4 : 0;
+    bool fallback=false;
     try {
       auto result=methods::detail::execute_rccsd_prepared(
-          execution,system,reference,solver,0,cache.get(),&cache);
-      if (mode==2 || native_calls!=1 || host_calls) return 1;
-      if (result.prepared!=(mode==0 || mode==4)) return 2;
-      if ((mode==0 || mode==3 || mode==4) && given_budget!=8192) return 3;
+          execution,system,reference,solver,0,cache.get(),mode>=5 ? &seed : nullptr,
+          &fallback,&cache);
+      if (mode==2 || native_calls!=(mode>=5 ? 2 : 1) || host_calls) return 1;
+      if (result.prepared!=(mode==0 || mode>=4)) return 2;
+      if ((mode==0 || mode>=3) && given_budget!=8192) return 3;
       if (mode==1 && allocations) return 4;
+      if (fallback!=(mode>=5)) return 8;
     } catch (const methods::detail::MethodError&) {
       if (mode!=2 || allocations || cache) return 5;
     }
@@ -226,7 +239,7 @@ int main() {
   cache=std::make_unique<scf::PreparedFockPlan>(); native_calls=host_calls=0;
   auto* original=cache.get();
   auto result=methods::detail::execute_rccsd_prepared(
-      execution,system,reference,solver,0,cache.get(),&cache);
+      execution,system,reference,solver,0,cache.get(),nullptr,nullptr,&cache);
   if (!result.prepared || cache.get()!=original || native_calls || host_calls!=1) return 7;
 }
 """

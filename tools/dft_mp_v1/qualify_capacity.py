@@ -18,6 +18,7 @@ import json
 import re
 import subprocess
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
@@ -139,8 +140,13 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryMeanField,
 )
 from generativeqc_compiler.method.stationary_resources import (
+    STATIONARY_MAX_AOS,
+    STATIONARY_MAX_ATOMS,
+    STATIONARY_MAX_PRIMITIVES,
+    plan_stationary_cuda_grid_work,
     plan_stationary_cuda_resources,
     stationary_cuda_allocation_bytes,
+    stationary_cuda_requires_native_integrals,
     stationary_native_pair_reserve,
 )
 
@@ -172,6 +178,11 @@ _LOCAL_HELPERS = {
     "stationary_runtime_sources": stationary_runtime_sources,
     "StationaryGradientPlan": StationaryGradientPlan,
     "StationaryMeanField": StationaryMeanField,
+    "plan_stationary_cuda_grid_work": plan_stationary_cuda_grid_work,
+    "plan_stationary_cuda_resources": plan_stationary_cuda_resources,
+    "stationary_cuda_allocation_bytes": stationary_cuda_allocation_bytes,
+    "stationary_cuda_requires_native_integrals": stationary_cuda_requires_native_integrals,
+    "stationary_native_pair_reserve": stationary_native_pair_reserve,
 }
 
 
@@ -209,7 +220,7 @@ _IMPORTED_LOCAL_MODULE_SOURCES = {
     and (path := Path(source).resolve()).is_relative_to(SOURCE_PYTHON)
 }
 
-SCHEMA = "generativeqc.dft-mp-v1.stationary-capacity.v1"
+SCHEMA = "generativeqc.dft-mp-v1.stationary-capacity.v2"
 SEMILOCAL_FUNCTIONALS = {"lda": 0, "pbe": 1, "r2scan": 2}
 FP64_FORCE_METHODS = frozenset((*SEMILOCAL_FUNCTIONALS, "pbe0", "b3lyp"))
 SEMILOCAL_ABI_IDS = {
@@ -258,7 +269,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
+    "b0f74c3900d7754fc9a2b4c25878c4e82ea2586aaa4578d3559f22a67c083cde"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -324,7 +335,7 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "62d61c9ce7ad0b4f50a9bc02c636834aa2b816e44e326ada3e5b6facd83db7ca"
+    "1b4e6a5979f74cfe8afd8e4df20c4be3614bdc7bf80fe683c64aa57db953e389"
 )
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
     "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
@@ -333,7 +344,7 @@ NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
     "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
+    "ded1b7e2cc0a93881cc17b4da32a3695bdbaf05421535ac3dcc4efb646da003b"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -354,10 +365,10 @@ NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256 = (
     "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
 )
 NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
-    "5f1a660cb0bb3c0cd0a4d952ff24347762c906c7918c779ef14c9a4ec192712e"
+    "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
 )
 NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
-    "b390ebea5e5289b2fccdd7e0f2af92af825f76a7667047913911e0cf190af01c"
+    "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
 )
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -366,7 +377,7 @@ NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
     "7a06757b893e51c6924675c88c66c6d0817923904283bf48378fb4e8302f47be"
 )
 NATIVE_STATIONARY_CONFIGURE_BECKE_CONTRACT_SHA256 = (
-    "06531973e05e6cce4e21160a5f069229123d12d493a8822cad004bd68cd84403"
+    "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
 )
 NATIVE_STATIONARY_METRICS_CONTRACT_SHA256 = (
     "21e067818117b8ebaf8eeb218aeface0680681fdd6f39285ed6f981c3cef969a"
@@ -385,7 +396,20 @@ PRIMITIVE_RECORDS_DEFINITION = (
     "(1 + int(has_exchange)) * primitive_sum ** 4 + "
     "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
 )
-GRID_PAIR_VISITS_DEFINITION = "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
+GRID_PAIR_VISITS_DEFINITION = "grid_work.grid_pair_visits"
+GRID_WORK_DEFINITION = (
+    "plan_stationary_cuda_grid_work(atoms=na, grid_points=len(state.grid.points), "
+    "tile_points=tile_points, max_grid_points=max_grid_points, "
+    "max_grid_pair_visits=max_grid_pair_visits, "
+    "max_pending_tiles=max_pending_grid_tiles, "
+    "max_pending_pair_visits=max_pending_grid_pair_visits)"
+)
+NATIVE_REQUIREMENT_DEFINITION = "stationary_cuda_requires_native_integrals(atoms=na, aos=n, primitives=basis.nprimitive)"
+NATIVE_HOST_RESERVE_DEFINITION = (
+    "stationary_native_pair_reserve(atoms=na, aos=n, primitives=basis.nprimitive) "
+    "if not ecp and (not bool(getattr(state._source, 'density_fitted', False))) "
+    "and callable(getattr(state._source, 'cuda_integral_derivatives', None)) else 0"
+)
 METHOD_IR_DEFINITION = "state._source.method_ir"
 FUNCTIONAL_LOWERING_DEFINITION = "int(state._source.metadata[6])"
 INGREDIENTS_DEFINITION = "state._source.functional.ingredients"
@@ -395,7 +419,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "928668e2a3117c166651c974d5d377bface8990a3b290c404bf84e39a81eda42"
+    "681474a5c9456a76db9059e48fcfd1447289b455d9291a6df80951789a231589"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -422,8 +446,6 @@ AVAILABLE_DEVICE_BYTES_DEFINITION = (
 )
 GATE_PREDICATES = {
     "primitive_metric_range": "records > np.iinfo(np.uint64).max",
-    "grid_points": "len(state.grid.points) > max_grid_points",
-    "grid_pair_visits": "pair_visits > max_grid_pair_visits",
     "additional_device": "available <= 0",
     "additional_host": "host_bound > max_host_bytes",
 }
@@ -616,21 +638,15 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
 
 
 def _source_limits(repository: Path) -> dict[str, Any]:
-    """Read the current owner's literal shape caps and public work defaults."""
+    """Bind current compiler/native capacity and private diagnostic defaults.
+
+    Public whole-grid overrides are audited independently in _source_public_route.
+    A static-cap pass remains conditional on the required native provider result.
+    """
 
     snapshot_functional_contract = _snapshot_functional_contract(repository)
     source_path = repository / STATIONARY_OWNER["file"]
     source = source_path.read_text(encoding="utf-8")
-    small = re.search(
-        r"if not 1 <= na <= (?P<atoms>\d+) or not 1 <= n <= (?P<aos>\d+):\s+"
-        r'raise ValueError\("CUDA diagnostic small-domain atom/AO cap exceeded"\)',
-        source,
-    )
-    primitives = re.search(
-        r"if not 1 <= basis\.nprimitive <= (?P<primitives>\d+):\s+"
-        r'raise ValueError\("CUDA diagnostic primitive-topology cap exceeded"\)',
-        source,
-    )
     tree = ast.parse(source)
     functions = [
         node
@@ -808,6 +824,9 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             and node.targets[0].id == name
         ]
         for name in (
+            "requires_native_integrals",
+            "grid_work",
+            "native_integral_host_reserve",
             "primitive_sum",
             "records",
             "pair_visits",
@@ -831,6 +850,9 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         name: ast.unparse(nodes[0].value) for name, nodes in definition_nodes.items()
     }
     expected_definitions = {
+        "requires_native_integrals": NATIVE_REQUIREMENT_DEFINITION,
+        "grid_work": GRID_WORK_DEFINITION,
+        "native_integral_host_reserve": NATIVE_HOST_RESERVE_DEFINITION,
         "primitive_sum": PRIMITIVE_SUM_DEFINITION,
         "records": PRIMITIVE_RECORDS_DEFINITION,
         "pair_visits": GRID_PAIR_VISITS_DEFINITION,
@@ -846,6 +868,9 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "host_bound": HOST_BOUND_DEFINITION,
     }
     definition_labels = {
+        "requires_native_integrals": "native-integral requirement",
+        "grid_work": "bounded grid-work plan",
+        "native_integral_host_reserve": "native-integral host reserve",
         "primitive_sum": "primitive-sum",
         "records": "primitive-record",
         "pair_visits": "grid-pair-visits",
@@ -870,8 +895,6 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ]
     gate_labels = {
         "primitive_metric_range": "logical primitive metric range",
-        "grid_points": "grid-point",
-        "grid_pair_visits": "grid-pair-visits",
         "additional_device": "positive additional-device remainder",
         "additional_host": "additional-host",
     }
@@ -962,9 +985,32 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if nuclear_pair_loop_digest != STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA nuclear-pair loop contract changed")
     page_contract["nuclear_pair_loop_sha256"] = nuclear_pair_loop_digest
-    if small is None or primitives is None:
+    # Hashes retain complete fail-closed coverage; these structural checks explain
+    # the critical admission ordering and concurrent host ownership explicitly.
+    native_requirement = definition_nodes["requires_native_integrals"][0]
+    grid_work = definition_nodes["grid_work"][0]
+    if (
+        not native_requirement.lineno
+        < grid_work.lineno
+        < definition_nodes["records"][0].lineno
+    ):
+        raise RuntimeError("stationary CUDA admission gate order changed")
+    reserve_additions = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.AugAssign)
+        and ast.unparse(node.target) == "host_bound"
+        and isinstance(node.op, ast.Add)
+        and ast.unparse(node.value) == "native_integral_host_reserve"
+    ]
+    if (
+        len(reserve_additions) != 1
+        or not definition_nodes["native_integral_host_reserve"][0].lineno
+        < reserve_additions[0].lineno
+        < host_gates[0].lineno
+    ):
         raise RuntimeError(
-            "stationary CUDA admission source no longer matches the audited gates"
+            "stationary CUDA native host-reserve admission order changed"
         )
     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
 
@@ -975,13 +1021,12 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         return value
 
     messages = (
-        "CUDA diagnostic small-domain atom/AO cap exceeded",
-        "CUDA diagnostic primitive-topology cap exceeded",
+        "enlarged stationary CUDA domains require prepared native integral derivatives",
         "primitive work count exceeds uint64 metric range",
-        "grid point work budget exceeded",
-        "grid work budget exceeded",
         "stationary additional-device budget exceeded",
         "stationary additional-host byte budget exceeded",
+        "native stationary host staging exceeds admitted reserve",
+        "prepared native integral derivatives are unavailable within the admitted ",
     )
     positions = [source.find(message) for message in messages]
     if any(position < 0 for position in positions):
@@ -995,13 +1040,33 @@ def _source_limits(repository: Path) -> dict[str, Any]:
 
     return {
         "owner": STATIONARY_OWNER,
-        "small_domain": {
-            "atom_count": int(small.group("atoms")),
-            "ao_count": int(small.group("aos")),
+        "resource_owner": "python/generativeqc_compiler/method/stationary_resources.py",
+        "native_owner_capacity": {
+            "atom_count": STATIONARY_MAX_ATOMS,
+            "ao_count": STATIONARY_MAX_AOS,
+            "basis_primitive_count": STATIONARY_MAX_PRIMITIVES,
         },
-        "basis_primitive_count": int(primitives.group("primitives")),
+        "ao_task_fallback_capacity": {
+            "atom_count": 32,
+            "ao_count": 128,
+            "basis_primitive_count": 4096,
+        },
+        "native_integral_requirement_definition": NATIVE_REQUIREMENT_DEFINITION,
+        "native_integral_host_reserve_definition": NATIVE_HOST_RESERVE_DEFINITION,
+        "host_bound_total_definition": "host_bound + native_integral_host_reserve",
+        "grid_work_definition": GRID_WORK_DEFINITION,
+        "diagnostic_work_limits": {
+            "grid_points": default("max_grid_points"),
+            "grid_pair_visits": default("max_grid_pair_visits"),
+        },
+        "grid_work_capacity": {
+            "grid_points": 1 << 40,
+            "grid_pair_visits": (1 << 64) - 1,
+        },
+        "pending_grid_tiles": default("max_pending_grid_tiles"),
+        "pending_grid_pair_visits": default("max_pending_grid_pair_visits"),
         "primitive_records": default("max_primitive_records"),
-        "primitive_records_scope": "per_native_page",
+        "primitive_records_scope": "per_native_page_on_ao_task_fallback_only",
         "primitive_logical_metric_limit": (1 << 64) - 1,
         "primitive_sum_definition": PRIMITIVE_SUM_DEFINITION,
         "primitive_records_definition": PRIMITIVE_RECORDS_DEFINITION,
@@ -1033,18 +1098,19 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "tile_points": default("tile_points"),
         "primitive_tile": default("primitive_tile"),
         "integral_terms": default("integral_terms"),
-        "grid_points": default("max_grid_points"),
-        "grid_pair_visits": default("max_grid_pair_visits"),
         "additional_device_bytes": default("max_device_bytes"),
         "additional_host_bytes": default("max_host_bytes"),
         "gate_order": [
-            "small_domain_atom_ao_cap",
-            "primitive_topology_cap",
-            "primitive_logical_metric_range",
+            "native_owner_capacity",
+            "grid_work_capacity",
             "grid_point_work_budget",
             "grid_pair_work_budget",
+            "pending_grid_pair_budget",
+            "native_integral_provider_required",
+            "primitive_logical_metric_range",
             "additional_device_budget",
             "additional_host_budget",
+            "native_integral_result_required",
             "primitive_descriptor_page_budget",
         ],
     }
@@ -1342,11 +1408,12 @@ def _method_resources(
     minimum = stationary_cuda_allocation_bytes(
         **shape, geometry_lanes=min(32, tile_points)
     )
+    native_host_reserve = stationary_native_pair_reserve(
+        atoms=atom_count, aos=basis.nao, primitives=basis.nprimitive
+    )
     native_reserve = min(
         max(0, limits["additional_device_bytes"] - grid_plan.peak_bytes - minimum),
-        stationary_native_pair_reserve(
-            atoms=atom_count, aos=basis.nao, primitives=basis.nprimitive
-        ),
+        native_host_reserve,
     )
     resources = plan_stationary_cuda_resources(
         **shape,
@@ -1375,16 +1442,27 @@ def _method_resources(
     )
     return (
         {
+            "resource_scope": (
+                "additional stationary/grid and Direct paired-provider numeric owners; "
+                "excludes retained SCF state, snapshot exports, Python/compiler objects and driver/modules"
+            ),
             "grid_tile_peak_bytes": grid_plan.peak_bytes,
             "stationary_source_bytes": source_bytes,
             "stationary_geometry_lanes": resources.geometry_lanes,
             "stationary_geometry_scratch_bytes": resources.geometry_scratch_bytes,
             "stationary_center_geometry_bytes": resources.center_geometry_bytes,
-            "additional_device_peak_bound": device_bound,
+            "stationary_grid_device_peak_bound": device_bound,
+            # The provider has not executed. Charge its reserved allowance,
+            # rather than reporting the stationary/grid owners as the full peak.
+            "additional_device_peak_bound": device_bound + native_reserve,
+            "native_integral_device_budget": max(
+                0, limits["additional_device_bytes"] - device_bound
+            ),
             "minimum_additional_device_bytes": grid_plan.peak_bytes + minimum,
             "stationary_native_pair_reserve_bytes": native_reserve,
             "additional_device_budget": limits["additional_device_bytes"],
-            "additional_host_numeric_bound": host_bound,
+            "stationary_native_integral_host_reserve_bytes": native_host_reserve,
+            "additional_host_numeric_bound": host_bound + native_host_reserve,
             "additional_host_budget": limits["additional_host_bytes"],
         },
         plan,
@@ -1399,9 +1477,27 @@ def _failure(
     cap: Any,
     exceeded: list[str] | None = None,
 ) -> dict[str, Any]:
+    resource_function = (
+        "stationary_cuda_requires_native_integrals"
+        if gate == "native_owner_capacity"
+        else "plan_stationary_cuda_grid_work"
+        if gate
+        in (
+            "grid_work_capacity",
+            "grid_point_work_budget",
+            "grid_pair_work_budget",
+            "pending_grid_pair_budget",
+        )
+        else None
+    )
     result = {
         "gate": gate,
-        "owner": STATIONARY_OWNER,
+        "owner": STATIONARY_OWNER
+        if resource_function is None
+        else {
+            "file": "python/generativeqc_compiler/method/stationary_resources.py",
+            "function": resource_function,
+        },
         "message": message,
         "required": required,
         "cap": cap,
@@ -1416,44 +1512,66 @@ def _case_failures(
     requirements: dict[str, Any],
     memory: dict[str, Any],
     limits: dict[str, Any],
+    *,
+    work_mode: str = "public",
 ) -> list[dict[str, Any]]:
     failures = []
-    exceeded = [
-        name
-        for name, actual, cap in (
-            (
-                "atom_count",
-                shape["atom_count"],
-                limits["small_domain"]["atom_count"],
-            ),
-            (
-                "ao_count",
-                shape["ao_count_spherical"],
-                limits["small_domain"]["ao_count"],
-            ),
-        )
-        if actual > cap
-    ]
-    if exceeded:
-        failures.append(
-            _failure(
-                "small_domain_atom_ao_cap",
-                "CUDA diagnostic small-domain atom/AO cap exceeded",
-                required={
-                    "atom_count": shape["atom_count"],
-                    "ao_count": shape["ao_count_spherical"],
-                },
-                cap=limits["small_domain"],
-                exceeded=exceeded,
+    capacity = limits["native_owner_capacity"]
+    for name, actual in (
+        ("atom_count", shape["atom_count"]),
+        ("ao_count", shape["ao_count_spherical"]),
+        ("basis_primitive_count", shape["basis_primitive_count"]),
+    ):
+        if not 1 <= actual <= capacity[name]:
+            failures.append(
+                _failure(
+                    "native_owner_capacity",
+                    "stationary CUDA "
+                    + {
+                        "atom_count": "atoms",
+                        "ao_count": "aos",
+                        "basis_primitive_count": "primitives",
+                    }[name]
+                    + " exceeds resource caps",
+                    required={name: actual},
+                    cap={name: capacity[name]},
+                    exceeded=[name],
+                )
             )
-        )
-    if shape["basis_primitive_count"] > limits["basis_primitive_count"]:
+    for key in ("grid_points", "grid_pair_visits"):
+        minimum = 1 if key == "grid_points" else 0
+        if not minimum <= requirements[key] <= limits["grid_work_capacity"][key]:
+            failures.append(
+                _failure(
+                    "grid_work_capacity",
+                    "stationary grid work exceeds resource/metric range",
+                    required={key: requirements[key]},
+                    cap={key: limits["grid_work_capacity"][key]},
+                )
+            )
+    for key, gate, message in (
+        ("grid_points", "grid_point_work_budget", "grid point work budget exceeded"),
+        ("grid_pair_visits", "grid_pair_work_budget", "grid work budget exceeded"),
+    ):
+        cap = limits[f"{work_mode}_work_limits"][key]
+        if cap is not None and requirements[key] > cap:
+            failures.append(
+                _failure(gate, message, required=requirements[key], cap=cap)
+            )
+    tile_visits = (
+        2
+        * min(requirements["grid_points"], limits["tile_points"])
+        * shape["atom_count"]
+        * (shape["atom_count"] - 1)
+        // 2
+    )
+    if tile_visits > limits["pending_grid_pair_visits"]:
         failures.append(
             _failure(
-                "primitive_topology_cap",
-                "CUDA diagnostic primitive-topology cap exceeded",
-                required=shape["basis_primitive_count"],
-                cap=limits["basis_primitive_count"],
+                "pending_grid_pair_budget",
+                "stationary grid tile exceeds pending pair-visit budget",
+                required=tile_visits,
+                cap=limits["pending_grid_pair_visits"],
             )
         )
     if requirements["primitive_records"] > limits["primitive_logical_metric_limit"]:
@@ -1465,19 +1583,6 @@ def _case_failures(
                 cap=limits["primitive_logical_metric_limit"],
             )
         )
-    for key, gate, message in (
-        ("grid_points", "grid_point_work_budget", "grid point work budget exceeded"),
-        ("grid_pair_visits", "grid_pair_work_budget", "grid work budget exceeded"),
-    ):
-        if requirements[key] > limits[key]:
-            failures.append(
-                _failure(
-                    gate,
-                    message,
-                    required=requirements[key],
-                    cap=limits[key],
-                )
-            )
     if (
         memory.get(
             "minimum_additional_device_bytes", memory["additional_device_peak_bound"]
@@ -1502,7 +1607,17 @@ def _case_failures(
                 cap=limits["additional_host_bytes"],
             )
         )
-    if requirements["primitive_descriptor_peak_records"] > limits["primitive_records"]:
+    fallback_capacity = limits["ao_task_fallback_capacity"]
+    requires_native = (
+        shape["atom_count"] > fallback_capacity["atom_count"]
+        or shape["ao_count_spherical"] > fallback_capacity["ao_count"]
+        or shape["basis_primitive_count"] > fallback_capacity["basis_primitive_count"]
+    )
+    if (
+        not requires_native
+        and requirements["primitive_descriptor_peak_records"]
+        > limits["primitive_records"]
+    ):
         failures.append(
             _failure(
                 "primitive_descriptor_page_budget",
@@ -1521,7 +1636,7 @@ def _admission_record(failures: list[dict[str, Any]]) -> dict[str, Any]:
         "failures": failures,
         "scope": (
             "static source/resource preflight only; no SCF, CUDA execution, "
-            "AOT binary, numerical, or performance qualification"
+            "native derivative-provider availability, AOT binary, numerical, or performance qualification"
         ),
     }
 
@@ -1567,7 +1682,7 @@ def _source_package_inventory(repository: Path) -> dict[str, Any]:
     }
 
 
-def _source_public_route(repository: Path) -> dict[str, str]:
+def _source_public_route(repository: Path) -> dict[str, Any]:
     """Fail closed if the source predicates supporting the reported route move."""
 
     calculator = (repository / "python/generativeqc/calculator.py").read_text(
@@ -1647,6 +1762,29 @@ def _source_public_route(repository: Path) -> dict[str, str]:
     ]
     if len(force_methods) != 1:
         raise RuntimeError("public CUDA force route is missing or ambiguous")
+    kwargs_nodes = [
+        node.value
+        for node in ast.walk(force_methods[0])
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "kwargs"
+            for target in node.targets
+        )
+        and isinstance(node.value, ast.Dict)
+    ]
+    if len(kwargs_nodes) != 1:
+        raise RuntimeError("public stationary kwargs are missing or ambiguous")
+    kwargs = {
+        ast.literal_eval(key): value
+        for key, value in zip(kwargs_nodes[0].keys, kwargs_nodes[0].values, strict=True)
+        if isinstance(key, ast.Constant)
+    }
+    work_limits = {}
+    for key in ("grid_points", "grid_pair_visits"):
+        node = kwargs.get(f"max_{key}")
+        if not isinstance(node, ast.Constant) or node.value is not None:
+            raise RuntimeError("public complete-grid work override changed")
+        work_limits[key] = None
     batch_digest = _source_node_sha256(batch, force_methods[0])
     if batch_digest != PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256:
         raise RuntimeError("public CUDA force route changed")
@@ -1655,6 +1793,7 @@ def _source_public_route(repository: Path) -> dict[str, str]:
         "global_hybrid_force_predicate_sha256": hybrid_digest,
         "force_capability_promotion_sha256": promotion_digest,
         "cuda_force_method_sha256": batch_digest,
+        "whole_grid_work_limits": work_limits,
     }
 
 
@@ -1991,6 +2130,7 @@ def _build_report(
     spd_expansion = _spd_expansion_contract(repository)
     source_package = _source_package_inventory(repository)
     public_route = _source_public_route(repository)
+    limits["public_work_limits"] = dict(public_route["whole_grid_work_limits"])
     public_route["registry_manifest_sha256"] = _lf_sha256(
         (repository / "manifests/public_methods.json").read_bytes()
     )
@@ -2083,8 +2223,34 @@ def _build_report(
             "grid_points": native_grid_points,
             "grid_pair_visits": (1 + 2 * native_grid_points) * atom_pairs,
         }
+        grid_work = plan_stationary_cuda_grid_work(
+            atoms=shape["atom_count"],
+            grid_points=native_grid_points,
+            tile_points=limits["tile_points"],
+            max_grid_points=limits["public_work_limits"]["grid_points"],
+            max_grid_pair_visits=limits["public_work_limits"]["grid_pair_visits"],
+            max_pending_tiles=limits["pending_grid_tiles"],
+            max_pending_pair_visits=limits["pending_grid_pair_visits"],
+        )
+        if grid_work.grid_pair_visits != requirements["grid_pair_visits"]:
+            raise RuntimeError("compiler grid work disagrees with native census")
+        native_integral_admission = {
+            "required": stationary_cuda_requires_native_integrals(
+                atoms=shape["atom_count"],
+                aos=shape["ao_count_spherical"],
+                primitives=shape["basis_primitive_count"],
+            ),
+            "provider_and_budget_qualification": "NOT_RUN",
+            "enlarged_domain_failure_behavior": (
+                "fail closed; enlarged domains cannot use AO-task fallback"
+            ),
+            "small_domain_fallback": "bounded AO-task route remains available",
+            "stationary_primitive_records_if_native_complete": atom_pairs,
+            "ao_task_descriptors_if_native_complete": 0,
+        }
         method_memory = {}
         method_plans = {}
+        method_requirements = {}
         for row in rows_by_case.get(case_name, ()):
             spin = "unpolarized" if row["spin"] == "rks" else "polarized"
             selector = f"{row['method']}-{row['spin']}"
@@ -2095,6 +2261,15 @@ def _build_report(
                     method_ir,
                     StationaryMeanField(SCF_POINT_MODEL),
                 )
+                method_requirements[key] = {
+                    **requirements,
+                    "primitive_records": (
+                        (1 + int(bool(method_ir.full_range_exact_exchange)))
+                        * primitive_sum**4
+                        + (shape["atom_count"] + 2) * primitive_sum**2
+                        + atom_pairs
+                    ),
+                }
                 method_memory[key], method_plans[key] = _method_resources(
                     basis,
                     atom_count=shape["atom_count"],
@@ -2104,7 +2279,9 @@ def _build_report(
                     plan=plan,
                 )
         admission_by_method_spin = {
-            key: _admission_record(_case_failures(shape, requirements, memory, limits))
+            key: _admission_record(
+                _case_failures(shape, method_requirements[key], memory, limits)
+            )
             for key, memory in method_memory.items()
         }
         maximum_memory = {
@@ -2119,7 +2296,13 @@ def _build_report(
                 item["additional_host_numeric_bound"] for item in method_memory.values()
             ),
         }
-        failures = _case_failures(shape, requirements, maximum_memory, limits)
+        maximum_requirements = {
+            **requirements,
+            "primitive_records": max(
+                item["primitive_records"] for item in method_requirements.values()
+            ),
+        }
+        failures = _case_failures(shape, maximum_requirements, maximum_memory, limits)
         record = {
             "id": case_name,
             "classification": frozen["classification"],
@@ -2136,9 +2319,21 @@ def _build_report(
                 "changed_grid": changed_grid.identity,
             },
             "requirements": {
-                **requirements,
+                **maximum_requirements,
+                "primitive_records_scope": "maximum logical AO-task reference across requested methods; not executed native work",
+                "grid_work_plan": asdict(grid_work),
+                "native_integral_admission": native_integral_admission,
                 "memory_by_method_spin": method_memory,
             },
+            "diagnostic_admission": _admission_record(
+                _case_failures(
+                    shape,
+                    maximum_requirements,
+                    maximum_memory,
+                    limits,
+                    work_mode="diagnostic",
+                )
+            ),
             "requested_rows": sorted(
                 row["id"] for row in rows_by_case.get(case_name, ())
             ),
@@ -2149,6 +2344,7 @@ def _build_report(
         case_work[case_name] = {
             "basis": basis,
             "plans": method_plans,
+            "requirements": method_requirements,
             "memory": method_memory,
             "admission_by_method_spin": admission_by_method_spin,
             "record": record,
@@ -2201,7 +2397,7 @@ def _build_report(
                         "shape"
                     ]["ao_count_spherical"],
                     **{
-                        key: case_work[frozen_row["case"]]["record"]["requirements"][
+                        key: case_work[frozen_row["case"]]["requirements"][method_key][
                             key
                         ]
                         for key in (
@@ -2211,6 +2407,13 @@ def _build_report(
                             "grid_pair_visits",
                         )
                     },
+                    "primitive_records_scope": "logical AO-task reference; not executed native work",
+                    "grid_work_plan": case_work[frozen_row["case"]]["record"][
+                        "requirements"
+                    ]["grid_work_plan"],
+                    "native_integral_admission": case_work[frozen_row["case"]][
+                        "record"
+                    ]["requirements"]["native_integral_admission"],
                     "primitive_page_work_budget": limits["primitive_records"],
                     **case_work[frozen_row["case"]]["memory"][method_key],
                 },
@@ -2223,10 +2426,19 @@ def _build_report(
                     "selector_contract": selector_cache[selector],
                 },
                 "public_route": {
-                    "scientific_runtime_compilation_required": False,
-                    "selection": "all-electron packaged stationary CUDA",
+                    "scientific_runtime_compilation_required": method
+                    not in SEMILOCAL_FUNCTIONALS,
+                    "selection": (
+                        "runtime-compiled stationary CUDA"
+                        if method not in SEMILOCAL_FUNCTIONALS
+                        else "all-electron packaged stationary CUDA"
+                    ),
                     "owner": "python/generativeqc/batch.py::_public_dft_cuda_force",
-                    "missing_aot_behavior": "fail closed; no NVCC fallback",
+                    "missing_aot_behavior": (
+                        "not selected by this public route"
+                        if method not in SEMILOCAL_FUNCTIONALS
+                        else "fail closed; no NVCC fallback"
+                    ),
                     "source_audited": True,
                 },
                 "packaged_aot": {
@@ -2238,6 +2450,8 @@ def _build_report(
                     ),
                     "architecture": "sm_120",
                     "source_package_declared": True,
+                    "selected_by_public_route": method in SEMILOCAL_FUNCTIONALS,
+                    "scope": "package availability evidence only; not execution qualification",
                     "source_owner": "cmake/GenerativeQCCuda.cmake",
                     "contract_identity": stationary_aot_profile_contract_identity(
                         f"{method}_{'rks' if spin == 'unpolarized' else 'uks'}",
@@ -2257,6 +2471,7 @@ def _build_report(
         "python/generativeqc/batch.py",
         "python/generativeqc/ks.py",
         "python/generativeqc_compiler/method/stationary_cuda.py",
+        "python/generativeqc_compiler/method/stationary_resources.py",
         "python/generativeqc_compiler/dft/ao.py",
         "python/generativeqc_compiler/dft/grid.py",
         "python/generativeqc_compiler/xc/quadrature_cuda.py",

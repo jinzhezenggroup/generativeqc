@@ -492,9 +492,8 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
     }
     if (active)
       ctx.section(detailed_profile, ctx.metrics.kernel_ms, [&] {
-        ao_kernel<<<blocks(p.jets * npoint * active, 128), 128, 0, ctx.stream>>>(
-            p.basis, p.natom, p.nprimitive, active, task_points, npoint, p.jets, p.ao, ctx.error,
-            p.local && !identity_map ? p.ao_ids : nullptr);
+        scheduled_ao(ctx.stream, p.basis, p.natom, p.nprimitive, active, task_points, npoint,
+                     p.jets, p.ao, ctx.error, p.local && !identity_map ? p.ao_ids : nullptr);
         cuda_check(cudaGetLastError());
       });
     if (features && p.use_orbitals) {

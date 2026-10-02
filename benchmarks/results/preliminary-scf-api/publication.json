@@ -1,0 +1,216 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Three repeats below the five-pair promotion gate; descriptive fresh-process API comparison only; no independent full-matrix oracle or measured compilation cost",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 13617,
+      "path": "samples/00-water-631g-direct.json",
+      "role": "samples",
+      "sha256": "1feceaa99537a8c3ff687f6520374c88f65c63977803f577b19087ea444644a9"
+    },
+    {
+      "bytes": 12544,
+      "path": "samples/01-water-631g-hf.json",
+      "role": "samples",
+      "sha256": "6a867e56405a4ed8f10404386529c440ad8bacb6effe73c3b8facc843c880b06"
+    },
+    {
+      "bytes": 12941,
+      "path": "samples/02-water-631g-lda.json",
+      "role": "samples",
+      "sha256": "8e8932ee8544e3475d0fe2b8dc708e63ef99127597ea7c55b382f2f60e53b5dc"
+    },
+    {
+      "bytes": 62422,
+      "path": "samples/03-water-tetramer-631g-direct.json",
+      "role": "samples",
+      "sha256": "5642de5f9455b68b06c880ca8d2f2af46a655292f7b557fa2c2d774cce875fd2"
+    },
+    {
+      "bytes": 60329,
+      "path": "samples/04-water-tetramer-631g-hf.json",
+      "role": "samples",
+      "sha256": "3ae2240aa0a4fe4e50791fbd5089be252059ae848d70444cd5752b0b5a0b8fe4"
+    },
+    {
+      "bytes": 60608,
+      "path": "samples/05-water-tetramer-631g-lda.json",
+      "role": "samples",
+      "sha256": "609d364a25cdd5695676a4f19c737b362cf71398622de47a877389e3fee17825"
+    },
+    {
+      "bytes": 60322,
+      "path": "samples/06-water-tetramer-631g-hf.json",
+      "role": "samples",
+      "sha256": "981c180be10ed99650d53afb160887e0bd2a05b9539eebf2cbbb0f28e49091d1"
+    },
+    {
+      "bytes": 60607,
+      "path": "samples/07-water-tetramer-631g-lda.json",
+      "role": "samples",
+      "sha256": "ecae765c14367d92316ab1002342e85aef245653c619e632ccb0ce3aeef26265"
+    },
+    {
+      "bytes": 62424,
+      "path": "samples/08-water-tetramer-631g-direct.json",
+      "role": "samples",
+      "sha256": "e7e0606127701cddd21e10c84dac0bf6f7295dc1ad5924f4be3f3d5b220b4fb7"
+    },
+    {
+      "bytes": 12545,
+      "path": "samples/09-water-631g-hf.json",
+      "role": "samples",
+      "sha256": "5c9c369d00149a3391de6775db2f8b2480c6b46bd71d83e1a1187f977a7b1d5b"
+    },
+    {
+      "bytes": 12946,
+      "path": "samples/10-water-631g-lda.json",
+      "role": "samples",
+      "sha256": "d8a9601c219d461450f8f881a4a0fb58f1e086b81b30450189a9c47c58512e33"
+    },
+    {
+      "bytes": 13625,
+      "path": "samples/11-water-631g-direct.json",
+      "role": "samples",
+      "sha256": "4125acdc380d457b889d5d44c0e35992599e62a2e318be8e82742ad47d67d9a1"
+    },
+    {
+      "bytes": 12945,
+      "path": "samples/12-water-631g-lda.json",
+      "role": "samples",
+      "sha256": "b08777640e8993513535c1d99891da1f60a9baab1d95601862e9772e5a515db1"
+    },
+    {
+      "bytes": 13628,
+      "path": "samples/13-water-631g-direct.json",
+      "role": "samples",
+      "sha256": "8ba49a9c2cce8987ed25bf445c21d98436b5867946810a391aa7852f9cc5f992"
+    },
+    {
+      "bytes": 12545,
+      "path": "samples/14-water-631g-hf.json",
+      "role": "samples",
+      "sha256": "c88583d8b9626a62f0cf8e102a72698271f0f132a0810bbe9ea310f3c50116f2"
+    },
+    {
+      "bytes": 60604,
+      "path": "samples/15-water-tetramer-631g-lda.json",
+      "role": "samples",
+      "sha256": "cbff12b5fcbf8085a1ea182f0a306812e6691c6203dd35950642de1af556bbd1"
+    },
+    {
+      "bytes": 62418,
+      "path": "samples/16-water-tetramer-631g-direct.json",
+      "role": "samples",
+      "sha256": "1dba1595f92e6f3a8f6c98a65d492df2d9e0673bc950e2c32a64e56279d13f5b"
+    },
+    {
+      "bytes": 60322,
+      "path": "samples/17-water-tetramer-631g-hf.json",
+      "role": "samples",
+      "sha256": "a6e6cf68552fccbc203c94b5b55b962021d4bdbd2394f8bf47deff9a43fddafb"
+    },
+    {
+      "bytes": 20920,
+      "path": "solver-history.json",
+      "role": "samples",
+      "sha256": "028ec85f60b085b6c03e15be3fc603ee303ca3f1ae246c0b1df745e4d3cf2487"
+    },
+    {
+      "bytes": 5507,
+      "path": "paired-errors.json",
+      "role": "summary",
+      "sha256": "5a2e4dab0a4dd3e410c3470585c6379130d35364de5a59ea047641d0a8c758f4"
+    },
+    {
+      "bytes": 4435,
+      "path": "provenance.json",
+      "role": "summary",
+      "sha256": "9bf6aae4cc305ac3138498204f1cc7798ada72c5efaa1f96c884586c6a21b731"
+    },
+    {
+      "bytes": 29305,
+      "path": "run.py",
+      "role": "reproduction",
+      "sha256": "ed2541effe234bab14282f105fa648e2eb633c82f8ec25b3a7e563c1f5dc071d"
+    },
+    {
+      "bytes": 5169,
+      "path": "inputs.json",
+      "role": "input",
+      "sha256": "710414e4170c16000f2a55b9bcb284cf0db1933926d9d1fcd2b10915283c2183"
+    },
+    {
+      "bytes": 4641,
+      "path": "native-build-provenance.json",
+      "role": "summary",
+      "sha256": "f75722b28fde68e96a224bb8d0fd16285353eed3d97afc309c360a35380fe8fb"
+    },
+    {
+      "bytes": 2068,
+      "path": "regression-summary.json",
+      "role": "summary",
+      "sha256": "ae9eb010e2bbd7b53ec9ae05633944f012eedfe3dcd20f4382f3dc598b3404a4"
+    },
+    {
+      "bytes": 23415,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "59968eb91af09ff9862d08441bb3ce46eb9af14765aab730ca67ac27d4e9d34e"
+    },
+    {
+      "bytes": 4097,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "9c9192627bcf9122f69ddeb2092f9b49301dca4d2d2dcc6e19b5f88e1658075f"
+    },
+    {
+      "bytes": 10971,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "6a0186f1320ae172f35f4001ae6264d794f00e507543145d8d459f23ab6152e4"
+    },
+    {
+      "bytes": 10474,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "c55d0d95fe9d202bd39d38b76dfe423ffabc77e3bcdd24620066586120032e80"
+    },
+    {
+      "bytes": 9144,
+      "path": "new_campaign.py",
+      "role": "reproduction",
+      "sha256": "1d1e825c7f5191e45f8054ee16e146b48fd1cea8f2d40d5e1b497e391f780a2e"
+    },
+    {
+      "bytes": 9242,
+      "path": "reproduction-sources.json",
+      "role": "reproduction",
+      "sha256": "05b385482267a2bda80351031beb72b42d2b1b28b60088adaff60a62ae966e2d"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python3",
+      "benchmarks/results/preliminary-scf-api/reproduce.py",
+      "--source-root",
+      "CHECKOUT_AT_f955122039e0f90d5adb11c921396a90a0b3f0e7",
+      "--library",
+      "PATH_TO_CPU_LIBRARY/libgenerativeqc.so",
+      "--source-map",
+      "frozen-measured-2026-10-02",
+      "--output",
+      ".artifacts/preliminary-scf-api-reproduction",
+      "--run"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "154e3207d08207b950a93db7e4064a95098270fa"
+  }
+}

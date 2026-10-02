@@ -1,0 +1,832 @@
+{
+  "attachments": [],
+  "backend_selected": "cpu",
+  "block_errors": {
+    "water-631g/hf/0/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.273625649389487e-11,
+      "max_scaled_error": 1.273625649389487e-05,
+      "passed": true,
+      "rms_error": 2.162849899182377e-12,
+      "rtol": 0.0,
+      "shape": [
+        169
+      ]
+    },
+    "water-631g/hf/0/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 9.947598300641403e-14,
+      "max_scaled_error": 9.947598300641403e-06,
+      "passed": true,
+      "rms_error": 9.947598300641403e-14,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-631g/hf/1/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.273625649389487e-11,
+      "max_scaled_error": 1.273625649389487e-05,
+      "passed": true,
+      "rms_error": 2.162849899182377e-12,
+      "rtol": 0.0,
+      "shape": [
+        169
+      ]
+    },
+    "water-631g/hf/1/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 9.947598300641403e-14,
+      "max_scaled_error": 9.947598300641403e-06,
+      "passed": true,
+      "rms_error": 9.947598300641403e-14,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-631g/hf/2/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.273625649389487e-11,
+      "max_scaled_error": 1.273625649389487e-05,
+      "passed": true,
+      "rms_error": 2.162849899182377e-12,
+      "rtol": 0.0,
+      "shape": [
+        169
+      ]
+    },
+    "water-631g/hf/2/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 9.947598300641403e-14,
+      "max_scaled_error": 9.947598300641403e-06,
+      "passed": true,
+      "rms_error": 9.947598300641403e-14,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-631g/lda/0/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.1679879285964034e-11,
+      "max_scaled_error": 1.1679879285964034e-05,
+      "passed": true,
+      "rms_error": 2.5684633432341635e-12,
+      "rtol": 0.0,
+      "shape": [
+        169
+      ]
+    },
+    "water-631g/lda/0/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.9895196601282805e-13,
+      "max_scaled_error": 1.9895196601282805e-05,
+      "passed": true,
+      "rms_error": 1.9895196601282805e-13,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-631g/lda/1/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.1679879285964034e-11,
+      "max_scaled_error": 1.1679879285964034e-05,
+      "passed": true,
+      "rms_error": 2.5684633432341635e-12,
+      "rtol": 0.0,
+      "shape": [
+        169
+      ]
+    },
+    "water-631g/lda/1/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.9895196601282805e-13,
+      "max_scaled_error": 1.9895196601282805e-05,
+      "passed": true,
+      "rms_error": 1.9895196601282805e-13,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-631g/lda/2/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.1679879285964034e-11,
+      "max_scaled_error": 1.1679879285964034e-05,
+      "passed": true,
+      "rms_error": 2.5684633432341635e-12,
+      "rtol": 0.0,
+      "shape": [
+        169
+      ]
+    },
+    "water-631g/lda/2/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.9895196601282805e-13,
+      "max_scaled_error": 1.9895196601282805e-05,
+      "passed": true,
+      "rms_error": 1.9895196601282805e-13,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-tetramer-631g/hf/0/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 7.122084033639453e-10,
+      "max_scaled_error": 0.0007122084033639453,
+      "passed": true,
+      "rms_error": 5.4393890859910084e-11,
+      "rtol": 0.0,
+      "shape": [
+        2704
+      ]
+    },
+    "water-tetramer-631g/hf/0/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.9895196601282805e-12,
+      "max_scaled_error": 0.00019895196601282805,
+      "passed": true,
+      "rms_error": 1.9895196601282805e-12,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-tetramer-631g/hf/1/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 7.122084033639453e-10,
+      "max_scaled_error": 0.0007122084033639453,
+      "passed": true,
+      "rms_error": 5.4393890859910084e-11,
+      "rtol": 0.0,
+      "shape": [
+        2704
+      ]
+    },
+    "water-tetramer-631g/hf/1/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.9895196601282805e-12,
+      "max_scaled_error": 0.00019895196601282805,
+      "passed": true,
+      "rms_error": 1.9895196601282805e-12,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-tetramer-631g/hf/2/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 7.122084033639453e-10,
+      "max_scaled_error": 0.0007122084033639453,
+      "passed": true,
+      "rms_error": 5.4393890859910084e-11,
+      "rtol": 0.0,
+      "shape": [
+        2704
+      ]
+    },
+    "water-tetramer-631g/hf/2/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.9895196601282805e-12,
+      "max_scaled_error": 0.00019895196601282805,
+      "passed": true,
+      "rms_error": 1.9895196601282805e-12,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-tetramer-631g/lda/0/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 5.152103188521551e-10,
+      "max_scaled_error": 0.0005152103188521551,
+      "passed": true,
+      "rms_error": 3.653923695986337e-11,
+      "rtol": 0.0,
+      "shape": [
+        2704
+      ]
+    },
+    "water-tetramer-631g/lda/0/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 2.0463630789890885e-12,
+      "max_scaled_error": 0.00020463630789890885,
+      "passed": true,
+      "rms_error": 2.0463630789890885e-12,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-tetramer-631g/lda/1/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 5.152103188521551e-10,
+      "max_scaled_error": 0.0005152103188521551,
+      "passed": true,
+      "rms_error": 3.653923695986337e-11,
+      "rtol": 0.0,
+      "shape": [
+        2704
+      ]
+    },
+    "water-tetramer-631g/lda/1/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 2.0463630789890885e-12,
+      "max_scaled_error": 0.00020463630789890885,
+      "passed": true,
+      "rms_error": 2.0463630789890885e-12,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    },
+    "water-tetramer-631g/lda/2/density": {
+      "atol": 1e-06,
+      "max_absolute_error": 5.152103188521551e-10,
+      "max_scaled_error": 0.0005152103188521551,
+      "passed": true,
+      "rms_error": 3.653923695986337e-11,
+      "rtol": 0.0,
+      "shape": [
+        2704
+      ]
+    },
+    "water-tetramer-631g/lda/2/energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 2.0463630789890885e-12,
+      "max_scaled_error": 0.00020463630789890885,
+      "passed": true,
+      "rms_error": 2.0463630789890885e-12,
+      "rtol": 0.0,
+      "shape": [
+        1
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "Corrected-build wall interval is recorded, but interrupted pre-repair compilation and shared ccache activity prevent an isolated total/cold compile-cost measurement",
+    "seconds": null
+  },
+  "device": {
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "affinity_isolated": false,
+    "kind": "cpu",
+    "models": [
+      "INTEL(R) XEON(R) PLATINUM 8573C"
+    ],
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41"
+  },
+  "hardware": {
+    "reason": "CPU identity/affinity captured; no exclusive CPU allocation or load isolation",
+    "status": "not-run"
+  },
+  "hash_reasons": {
+    "ir": "This API lifecycle experiment invokes the existing native MethodIR-owned target; no separately emitted generated IR artifact was retained"
+  },
+  "hashes": {
+    "equation": "f97c808b00b47555569d3bd4197f732547c256778a3e3de2dec629d771cf9a95",
+    "ir": null,
+    "schedule": "8a3b64c8084356ccc72122d9bf3cddac53216a66bbc9200e71bceefab9eb6c89",
+    "source": "50fa5bd80f608a9f02c54a1463bf841d8dfb5beb101bce787b4dbb976e96fc89"
+  },
+  "inputs_hash": "7232cf07601a07f00e62f6e4b7416de34ca6e8e1623f9ba169c189e9a5a73582",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Every child reports Linux process ru_maxrss after cleanup (imports/endpoint/export); this is not a measured owner-allocation or exclusive endpoint numeric peak"
+  },
+  "performance": {
+    "reason": "Three repeats below the five-pair promotion gate; descriptive fresh-process API comparison only; no independent full-matrix oracle or measured compilation cost",
+    "status": "not-run"
+  },
+  "record_parts": {
+    "solver_iterations": [
+      {
+        "bytes": 20920,
+        "path": "solver-history.json",
+        "sha256": "028ec85f60b085b6c03e15be3fc603ee303ca3f1ae246c0b1df745e4d3cf2487"
+      }
+    ],
+    "timings": [
+      {
+        "bytes": 13617,
+        "path": "samples/00-water-631g-direct.json",
+        "sha256": "1feceaa99537a8c3ff687f6520374c88f65c63977803f577b19087ea444644a9"
+      },
+      {
+        "bytes": 12544,
+        "path": "samples/01-water-631g-hf.json",
+        "sha256": "6a867e56405a4ed8f10404386529c440ad8bacb6effe73c3b8facc843c880b06"
+      },
+      {
+        "bytes": 12941,
+        "path": "samples/02-water-631g-lda.json",
+        "sha256": "8e8932ee8544e3475d0fe2b8dc708e63ef99127597ea7c55b382f2f60e53b5dc"
+      },
+      {
+        "bytes": 62422,
+        "path": "samples/03-water-tetramer-631g-direct.json",
+        "sha256": "5642de5f9455b68b06c880ca8d2f2af46a655292f7b557fa2c2d774cce875fd2"
+      },
+      {
+        "bytes": 60329,
+        "path": "samples/04-water-tetramer-631g-hf.json",
+        "sha256": "3ae2240aa0a4fe4e50791fbd5089be252059ae848d70444cd5752b0b5a0b8fe4"
+      },
+      {
+        "bytes": 60608,
+        "path": "samples/05-water-tetramer-631g-lda.json",
+        "sha256": "609d364a25cdd5695676a4f19c737b362cf71398622de47a877389e3fee17825"
+      },
+      {
+        "bytes": 60322,
+        "path": "samples/06-water-tetramer-631g-hf.json",
+        "sha256": "981c180be10ed99650d53afb160887e0bd2a05b9539eebf2cbbb0f28e49091d1"
+      },
+      {
+        "bytes": 60607,
+        "path": "samples/07-water-tetramer-631g-lda.json",
+        "sha256": "ecae765c14367d92316ab1002342e85aef245653c619e632ccb0ce3aeef26265"
+      },
+      {
+        "bytes": 62424,
+        "path": "samples/08-water-tetramer-631g-direct.json",
+        "sha256": "e7e0606127701cddd21e10c84dac0bf6f7295dc1ad5924f4be3f3d5b220b4fb7"
+      },
+      {
+        "bytes": 12545,
+        "path": "samples/09-water-631g-hf.json",
+        "sha256": "5c9c369d00149a3391de6775db2f8b2480c6b46bd71d83e1a1187f977a7b1d5b"
+      },
+      {
+        "bytes": 12946,
+        "path": "samples/10-water-631g-lda.json",
+        "sha256": "d8a9601c219d461450f8f881a4a0fb58f1e086b81b30450189a9c47c58512e33"
+      },
+      {
+        "bytes": 13625,
+        "path": "samples/11-water-631g-direct.json",
+        "sha256": "4125acdc380d457b889d5d44c0e35992599e62a2e318be8e82742ad47d67d9a1"
+      },
+      {
+        "bytes": 12945,
+        "path": "samples/12-water-631g-lda.json",
+        "sha256": "b08777640e8993513535c1d99891da1f60a9baab1d95601862e9772e5a515db1"
+      },
+      {
+        "bytes": 13628,
+        "path": "samples/13-water-631g-direct.json",
+        "sha256": "8ba49a9c2cce8987ed25bf445c21d98436b5867946810a391aa7852f9cc5f992"
+      },
+      {
+        "bytes": 12545,
+        "path": "samples/14-water-631g-hf.json",
+        "sha256": "c88583d8b9626a62f0cf8e102a72698271f0f132a0810bbe9ea310f3c50116f2"
+      },
+      {
+        "bytes": 60604,
+        "path": "samples/15-water-tetramer-631g-lda.json",
+        "sha256": "cbff12b5fcbf8085a1ea182f0a306812e6691c6203dd35950642de1af556bbd1"
+      },
+      {
+        "bytes": 62418,
+        "path": "samples/16-water-tetramer-631g-direct.json",
+        "sha256": "1dba1595f92e6f3a8f6c98a65d492df2d9e0673bc950e2c32a64e56279d13f5b"
+      },
+      {
+        "bytes": 60322,
+        "path": "samples/17-water-tetramer-631g-hf.json",
+        "sha256": "a6e6cf68552fccbc203c94b5b55b962021d4bdbd2394f8bf47deff9a43fddafb"
+      }
+    ]
+  },
+  "residuals": {
+    "0": {
+      "independently_evaluated": false,
+      "value": 4.765753681333781e-12
+    },
+    "1": {
+      "independently_evaluated": false,
+      "value": 5.764743133062933e-12
+    },
+    "10": {
+      "independently_evaluated": false,
+      "value": 1.0412820563662543e-11
+    },
+    "11": {
+      "independently_evaluated": false,
+      "value": 4.765753681333781e-12
+    },
+    "12": {
+      "independently_evaluated": false,
+      "value": 1.0412820563662543e-11
+    },
+    "13": {
+      "independently_evaluated": false,
+      "value": 4.765753681333781e-12
+    },
+    "14": {
+      "independently_evaluated": false,
+      "value": 5.764743133062933e-12
+    },
+    "15": {
+      "independently_evaluated": false,
+      "value": 5.918093402198133e-12
+    },
+    "16": {
+      "independently_evaluated": false,
+      "value": 8.949678861161504e-11
+    },
+    "17": {
+      "independently_evaluated": false,
+      "value": 8.214913574378837e-11
+    },
+    "2": {
+      "independently_evaluated": false,
+      "value": 1.0412820563662543e-11
+    },
+    "3": {
+      "independently_evaluated": false,
+      "value": 8.949678861161504e-11
+    },
+    "4": {
+      "independently_evaluated": false,
+      "value": 8.214913574378837e-11
+    },
+    "5": {
+      "independently_evaluated": false,
+      "value": 5.918093402198133e-12
+    },
+    "6": {
+      "independently_evaluated": false,
+      "value": 8.214913574378837e-11
+    },
+    "7": {
+      "independently_evaluated": false,
+      "value": 5.918093402198133e-12
+    },
+    "8": {
+      "independently_evaluated": false,
+      "value": 8.949678861161504e-11
+    },
+    "9": {
+      "independently_evaluated": false,
+      "value": 5.764743133062933e-12
+    }
+  },
+  "revision": "154e3207d08207b950a93db7e4064a95098270fa",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "comparison_kind": "solver",
+    "density_storage": "Every exported density is retained in full in the standard timing diagnostic, with its canonical-JSON hash; no density sample deduplication or rounding",
+    "endpoint_boundary": "Input argument materialization + Calculator constructor + prepare_batch + execute(returned diagnostics); library loading in constructor included. API imports, final-state export, close and process launch excluded and recorded separately. Fresh warm-enabled batch retains final density but has no imported/reused initial density and executes exactly once.",
+    "fixture": {
+      "basis_name": "6-31G (exact earlier PySCF-derived Cartesian primitive coefficients, explicit Shell input)",
+      "basis_per_element": {
+        "1": [
+          {
+            "angular_momentum": 0,
+            "primitives": [
+              [
+                18.731137,
+                0.0334946
+              ],
+              [
+                2.8253937,
+                0.23472695
+              ],
+              [
+                0.6401217,
+                0.81375733
+              ]
+            ]
+          },
+          {
+            "angular_momentum": 0,
+            "primitives": [
+              [
+                0.1612778,
+                1.0
+              ]
+            ]
+          }
+        ],
+        "8": [
+          {
+            "angular_momentum": 0,
+            "primitives": [
+              [
+                5484.6717,
+                0.0018311
+              ],
+              [
+                825.23495,
+                0.0139501
+              ],
+              [
+                188.04696,
+                0.0684451
+              ],
+              [
+                52.9645,
+                0.2327143
+              ],
+              [
+                16.89757,
+                0.470193
+              ],
+              [
+                5.7996353,
+                0.3585209
+              ]
+            ]
+          },
+          {
+            "angular_momentum": 0,
+            "primitives": [
+              [
+                15.539616,
+                -0.1107775
+              ],
+              [
+                3.5999336,
+                -0.1480263
+              ],
+              [
+                1.0137618,
+                1.130767
+              ]
+            ]
+          },
+          {
+            "angular_momentum": 0,
+            "primitives": [
+              [
+                0.2700058,
+                1.0
+              ]
+            ]
+          },
+          {
+            "angular_momentum": 1,
+            "primitives": [
+              [
+                15.539616,
+                0.0708743
+              ],
+              [
+                3.5999336,
+                0.3397528
+              ],
+              [
+                1.0137618,
+                0.7271586
+              ]
+            ]
+          },
+          {
+            "angular_momentum": 1,
+            "primitives": [
+              [
+                0.2700058,
+                1.0
+              ]
+            ]
+          }
+        ]
+      },
+      "cases": {
+        "water-631g": {
+          "atoms": [
+            [
+              8,
+              [
+                0.0,
+                0.0,
+                0.0
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                -1.43233673,
+                1.10715266
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                1.43233673,
+                1.10715266
+              ]
+            ]
+          ],
+          "charge": 0,
+          "expected_grid_points": 20736,
+          "expected_nao": 13,
+          "expected_primitive_count": 22,
+          "expected_shell_count": 9,
+          "multiplicity": 1
+        },
+        "water-tetramer-631g": {
+          "atoms": [
+            [
+              8,
+              [
+                0.0,
+                0.0,
+                0.0
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                -1.43233673,
+                1.10715266
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                1.43233673,
+                1.10715266
+              ]
+            ],
+            [
+              8,
+              [
+                0.0,
+                0.0,
+                5.5
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                -1.43233673,
+                6.60715266
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                1.43233673,
+                6.60715266
+              ]
+            ],
+            [
+              8,
+              [
+                0.0,
+                0.0,
+                11.0
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                -1.43233673,
+                12.10715266
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                1.43233673,
+                12.10715266
+              ]
+            ],
+            [
+              8,
+              [
+                0.0,
+                0.0,
+                16.5
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                -1.43233673,
+                17.60715266
+              ]
+            ],
+            [
+              1,
+              [
+                0.0,
+                1.43233673,
+                17.60715266
+              ]
+            ]
+          ],
+          "charge": 0,
+          "expected_grid_points": 82944,
+          "expected_nao": 52,
+          "expected_primitive_count": 88,
+          "expected_shell_count": 36,
+          "multiplicity": 1
+        }
+      },
+      "preliminary_scope": "InitialGuessSpec(kind) defaults: max_iterations=32, DIIS=8, energy/density=1e-6/1e-4, maximum_numeric_bytes=256MiB; LDA grid8x6x12. This differs from the prototype preparation maximum150 and is deliberately the new API default.",
+      "source_basis_sha256": "7fd17e1e1825a45023ef037db7597567320f8be649b7f1fc6e255597eb3ae571",
+      "source_geometry_cpp_sha256": "ffbe166a87d4acaee359a60a6adcd5d5b7c62fb405d1e0ed05c631edc9ee49eb",
+      "source_scope": "Exact inputs from frozen prototype only; all execution uses the new Calculator API",
+      "target": {
+        "basis_representation": "cartesian",
+        "density_fitting": "none",
+        "density_tolerance": 1e-08,
+        "device": "cpu",
+        "diis_history": 8,
+        "energy_tolerance": 1e-10,
+        "grid": [
+          24,
+          12,
+          24
+        ],
+        "max_iterations": 150,
+        "method": "pbe0-rks",
+        "precision": "fp64",
+        "screening_tolerance": 1e-12
+      },
+      "units": "Bohr"
+    },
+    "independent_oracle_scope": "Native direct/candidate comparison only. Historical prototype water PySCF spot-check is not relabeled as an independent validation of every new API endpoint.",
+    "regression_summary": "regression-summary.json",
+    "repeats": 3,
+    "residual_limit": 1e-08,
+    "scope": "New API only; unrelated to frozen prototype timing records"
+  },
+  "solver_trace_reason": "Final target KS iteration history retained; preliminary trajectories not exported; failed attempts have their native diagnostic coverage",
+  "stages": {
+    "compilation": {
+      "reason": "Completed corrected CPU RelWithDebInfo build and linked API/default/native tests; see native-build-provenance.json. Partial pre-repair compilation and shared cache activity preclude a cold/full compilation-time claim.",
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "18 requested API endpoint attempts; failures preserved",
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": "Native paired energy/density and reported-residual check only; missing/failed pairs prevent passage; no independent whole-matrix oracle",
+      "status": "pass"
+    },
+    "production": {
+      "reason": "No default or broad performance qualification",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": "Source snapshot and library hash compared before/after campaign",
+      "status": "pass"
+    }
+  },
+  "subject": "Actual preliminary-SCF Calculator API: fresh single-item prepared batches",
+  "tier": "endpoint",
+  "toolchain": {
+    "build_source_revision": "6bf930be60b688fe5917d8fb03464cb44c37be58",
+    "build_source_tree": "5783753bfad4cbef30d318df1e14a22bef8b8a43",
+    "compiler": "c++ (Debian 14.2.0-19) 14.2.0",
+    "configuration": {
+      "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+      "CMAKE_CUDA_COMPILER_LAUNCHER": "ccache",
+      "CMAKE_CXX_COMPILER": "/usr/bin/c++",
+      "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+      "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g0 -DNDEBUG",
+      "GENERATIVEQC_CPU_LINALG_PROVIDER": "openblas",
+      "GENERATIVEQC_ENABLE_CUDA": "OFF",
+      "GENERATIVEQC_OPENBLAS_HAS_GLOBAL_THREADS": "1",
+      "GENERATIVEQC_OPENBLAS_HAS_LAPACKE": "1",
+      "GENERATIVEQC_PYTHON_WHEEL": "ON"
+    },
+    "library_sha256": "82856b490be279ecde772d2feb6684953271246abac94c5f3748fe945f922c24",
+    "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]"
+  }
+}

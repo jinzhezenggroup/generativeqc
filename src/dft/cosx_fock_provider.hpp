@@ -47,6 +47,11 @@ class PreparedCosxFockPlan {
 
   scf::DirectJkMatrices build(const std::vector<double>& density,
                               const std::vector<double>& beta = {});
+  /** Split fixed-density molecular derivatives by the physical J/K source.
+   * This is the stationary-gradient seam: scientific coefficients are applied
+   * exactly once by the same prepared providers used by value-side SCF. */
+  scf::FockEnergyDerivativeComponents energy_derivative_components(
+      const std::vector<double>& density, const std::vector<double>& beta = {});
   /** Fixed-density two-electron molecular gradient using exactly the prepared
    * RI-J/COSX-K semantics. One-electron/Pulay/nuclear terms remain method-owned. */
   std::vector<double> energy_derivative(const std::vector<double>& density,

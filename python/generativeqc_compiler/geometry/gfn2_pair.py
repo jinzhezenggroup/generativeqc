@@ -140,3 +140,35 @@ def build_gfn2_runtime_pair_kernel() -> Program:
             "generation": "TensorIR forward AD",
         },
     )
+
+
+def build_gfn2_runtime_pair_cartesian_projection_program() -> Program:
+    """Project a generated radial derivative into one Cartesian adjoint."""
+
+    parameter = TensorSpec((), role="input", differentiable=False)
+    distance_derivative = input_tensor("distance_derivative", parameter)
+    radial_adjoint = input_tensor("radial_adjoint", parameter)
+    inverse_distance = input_tensor("inverse_distance", parameter)
+    dx = input_tensor("dx", parameter)
+    dy = input_tensor("dy", parameter)
+    dz = input_tensor("dz", parameter)
+
+    scale = multiply(radial_adjoint, distance_derivative)
+    scale = multiply(scale, inverse_distance)
+    return Program(
+        {
+            "gx": multiply(scale, dx),
+            "gy": multiply(scale, dy),
+            "gz": multiply(scale, dz),
+        },
+        provenance={
+            "kind": "gfn2-runtime-pair-cartesian-projection",
+            "version": GFN2_PAIR_RUNTIME_VERSION,
+            "derived_from": linearize(
+                build_gfn2_runtime_pair_primal(),
+                ("distance",),
+                outputs=("coordination", "repulsion_energy"),
+            ).derivative_hash,
+            "generation": "TensorIR radial chain-rule projection",
+        },
+    )

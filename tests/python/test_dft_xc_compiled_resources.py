@@ -43,7 +43,7 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
             registers=24,
         ),
         resource(
-            "generativeqc::dft::cuda_xc_detail::(anonymous namespace)::ao_kernel(double*)",
+            "generativeqc::dft::cuda_xc_detail::(anonymous namespace)::ao_radial_kernel_4(double*)",
             registers=52,
         ),
         resource(
@@ -85,7 +85,9 @@ def pbe_resources(*, spill: bool = False) -> tuple[KernelResources, ...]:
 
 
 def test_complete_region_selects_only_active_pbe_scopes() -> None:
-    shape = GridXcCompiledResourceShape(npoint=4096, tile_points=256, nao=96, spins=2)
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+    )
     evidence = native_grid_xc_compiled_region_evidence(
         pbe_resources(),
         shape=shape,
@@ -110,7 +112,7 @@ def test_complete_region_selects_only_active_pbe_scopes() -> None:
 @pytest.mark.parametrize(
     "missing",
     (
-        "ao_kernel",
+        "ao_radial_kernel_4",
         "tiled_density_product",
         "density_features",
         "evaluate_points<4",
@@ -118,7 +120,9 @@ def test_complete_region_selects_only_active_pbe_scopes() -> None:
     ),
 )
 def test_complete_region_fails_closed_when_one_scope_is_missing(missing: str) -> None:
-    shape = GridXcCompiledResourceShape(npoint=4096, tile_points=256, nao=96, spins=2)
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+    )
     rows = tuple(row for row in pbe_resources() if missing not in row.function)
     with pytest.raises(ValueError, match="missing"):
         native_grid_xc_compiled_region_evidence(
@@ -131,10 +135,12 @@ def test_complete_region_fails_closed_when_one_scope_is_missing(missing: str) ->
 
 
 def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
-    shape = GridXcCompiledResourceShape(npoint=32, tile_points=16, nao=7, spins=2)
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=32, tile_points=16, nao=7, spins=2
+    )
     rows = (
         resource("validate_density(double*)"),
-        resource("ao_kernel(double*)"),
+        resource("ao_radial_kernel_4(double*)"),
         resource("density_product<false>(double*)", registers=61),
         resource("density_features<false>(double*)", registers=62),
         resource("evaluate_points<4, false>(double*)", registers=63),
@@ -158,7 +164,9 @@ def test_small_ao_shape_selects_scalar_density_and_vxc_variants() -> None:
 
 
 def test_partial_final_tile_includes_tiled_and_scalar_resource_paths() -> None:
-    shape = GridXcCompiledResourceShape(npoint=4100, tile_points=256, nao=96, spins=2)
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=4100, tile_points=256, nao=96, spins=2
+    )
     rows = (
         *pbe_resources(),
         resource("density_product<false>(double*)", registers=91),
@@ -185,7 +193,9 @@ def test_partial_final_tile_includes_tiled_and_scalar_resource_paths() -> None:
 
 
 def test_compiled_evidence_cannot_be_relabelled_to_another_shape() -> None:
-    shape = GridXcCompiledResourceShape(npoint=4096, tile_points=256, nao=96, spins=2)
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+    )
     first = native_grid_xc_compiled_region_evidence(
         pbe_resources(),
         shape=shape,
@@ -205,9 +215,12 @@ def test_compiled_evidence_cannot_be_relabelled_to_another_shape() -> None:
 def test_point_specialization_tracks_feature_width_not_functional_code(
     suffix: str, functional: str, feature_terms: int, registers: int, spill_bytes: int
 ) -> None:
-    shape = GridXcCompiledResourceShape(npoint=4096, tile_points=256, nao=96, spins=2)
+    shape = GridXcCompiledResourceShape(
+        ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
+    )
     rows = (
         *(row for row in pbe_resources() if "evaluate_points" not in row.function),
+        resource("ao_kernel(double*)", registers=52),
         resource(f"evaluate_points<1{suffix}, false>(double*)", registers=32),
         resource(
             f"evaluate_points<4{suffix}, false>(double*)",
@@ -245,9 +258,89 @@ def test_missing_pbe_width_cannot_be_replaced_by_an_inactive_kernel(
         native_grid_xc_compiled_region_evidence(
             rows,
             shape=GridXcCompiledResourceShape(
-                npoint=4096, tile_points=256, nao=96, spins=2
+                ao_radial_reuse=True, npoint=4096, tile_points=256, nao=96, spins=2
             ),
             functional="PBE",
             target=TARGET,
             source_identity="missing-native-pbe",
+        )
+
+
+@pytest.mark.parametrize(
+    "inactive",
+    [
+        "ao_kernel",
+        "ao_kernel_fp32",
+        "ao_radial_kernel_10",
+        "ao_radial_kernel_4_fp32",
+        "ao_radial_kernel_40",
+    ],
+)
+def test_missing_pbe_radial_variant_fails_closed(inactive: str) -> None:
+    rows = tuple(
+        row for row in pbe_resources() if "ao_radial_kernel_4(" not in row.function
+    )
+    with pytest.raises(ValueError, match="strict-FP64 AO kernel"):
+        native_grid_xc_compiled_region_evidence(
+            (*rows, resource(f"{inactive}(double*)", registers=255)),
+            shape=GridXcCompiledResourceShape(
+                ao_radial_reuse=True, npoint=256, tile_points=256, nao=96, spins=2
+            ),
+            functional="PBE",
+            target=TARGET,
+            source_identity="missing-active-ao",
+        )
+
+
+def test_ao_resource_pressure_excludes_inactive_radial_variants() -> None:
+    rows = (
+        *pbe_resources(),
+        resource("ao_kernel(double*)", registers=255),
+        resource("ao_radial_kernel_10(double*)", registers=255, spill_store_bytes=256),
+        resource("ao_radial_kernel_4_fp32(double*)", registers=255),
+        resource("ao_radial_kernel_40(double*)", registers=255),
+    )
+    evidence = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=GridXcCompiledResourceShape(
+            ao_radial_reuse=True, npoint=256, tile_points=256, nao=96, spins=2
+        ),
+        functional="PBE",
+        target=TARGET,
+        source_identity="active-ao-only",
+    )
+    assert evidence.profitability.compiled_registers_per_thread == 80
+    assert evidence.profitability.spill_bytes == 0
+    assert [row.function for row in dict(evidence.scopes)["ao_jets"]] == [
+        rows[0].function,
+        rows[1].function,
+    ]
+
+
+def test_default_ao_evidence_remains_scalar_and_selector_is_bound() -> None:
+    rows = (*pbe_resources(), resource("ao_kernel(double*)", registers=53))
+    shape = GridXcCompiledResourceShape(npoint=256, tile_points=256, nao=96, spins=2)
+    evidence = native_grid_xc_compiled_region_evidence(
+        rows,
+        shape=shape,
+        functional="PBE",
+        target=TARGET,
+        source_identity="default-scalar-ao",
+    )
+    assert not shape.ao_radial_reuse
+    assert (
+        tuple(row.function for row in dict(evidence.scopes)["ao_jets"])[-1]
+        == "ao_kernel(double*)"
+    )
+    with pytest.raises(ValueError, match="binding identity is stale"):
+        replace(evidence, shape=replace(shape, ao_radial_reuse=True))
+    with pytest.raises(TypeError, match="selector must be boolean"):
+        replace(shape, ao_radial_reuse=1)
+    with pytest.raises(ValueError, match="strict-FP64 AO kernel"):
+        native_grid_xc_compiled_region_evidence(
+            pbe_resources(),
+            shape=shape,
+            functional="PBE",
+            target=TARGET,
+            source_identity="default-missing-scalar-ao",
         )

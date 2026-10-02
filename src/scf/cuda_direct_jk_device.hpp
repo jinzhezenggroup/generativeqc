@@ -55,6 +55,16 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
                                                   double* alpha_exchange, double* beta_exchange,
                                                   int* numerical_error, std::string& detail);
 
+/** Enqueue primary full-range J/K and one exact SR/LR K correction after one
+ * Direct shell-density preparation. This seam is available only when the
+ * retained bounded shell owner covers the range value request; callers keep
+ * the ordinary two-call fallback for other domains. */
+generativeqc_status enqueue_cuda_direct_rsh_values_device(
+    CudaDirectJkPlan* plan, FockBuildSpec primary, FockBuildSpec correction, const double* density,
+    const double* beta, std::size_t matrix_elements, double* coulomb, double* full_alpha_exchange,
+    double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
+    int* primary_error, int* range_error, std::string& detail);
+
 /** Experimental value-only variant: evaluate Coulomb ERI recurrences in FP32
  * while retaining FP64 density reads, screening, accumulation and output.
  * Exchange remains FP64. The optional caller-owned device counter is cleared

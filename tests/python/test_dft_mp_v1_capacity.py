@@ -77,7 +77,7 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
 def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
     result = report()
 
-    assert result["schema"] == "generativeqc.dft-mp-v1.stationary-capacity.v1"
+    assert result["schema"] == "generativeqc.dft-mp-v1.stationary-capacity.v2"
     assert result["source"]["sha"] == SOURCE_SHA
     assert result["source"]["qualifier_sha256"] == qualify_capacity._lf_sha256(
         (ROOT / "tools/dft_mp_v1/qualify_capacity.py").read_bytes()
@@ -167,6 +167,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
         ),
     }
     assert result["public_route"] == {
+        "whole_grid_work_limits": {"grid_points": None, "grid_pair_visits": None},
         "registry_manifest_sha256": qualify_capacity._lf_sha256(
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
@@ -180,7 +181,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
         ),
         "cuda_force_method_sha256": (
-            "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
+            "b0f74c3900d7754fc9a2b4c25878c4e82ea2586aaa4578d3559f22a67c083cde"
         ),
         "prepared_aot_selection_sha256": (
             "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
@@ -255,13 +256,21 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     result = report()
     cases = {item["id"]: item for item in result["cases"]}
 
-    assert result["admission_limits"]["small_domain"] == {
+    assert result["admission_limits"]["native_owner_capacity"] == {
+        "atom_count": 128,
+        "ao_count": 1024,
+        "basis_primitive_count": 16384,
+    }
+    assert result["admission_limits"]["ao_task_fallback_capacity"] == {
         "atom_count": 32,
         "ao_count": 128,
+        "basis_primitive_count": 4096,
     }
-    assert result["admission_limits"]["basis_primitive_count"] == 4096
     assert result["admission_limits"]["primitive_records"] == 16_000_000
-    assert result["admission_limits"]["primitive_records_scope"] == "per_native_page"
+    assert (
+        result["admission_limits"]["primitive_records_scope"]
+        == "per_native_page_on_ao_task_fallback_only"
+    )
     assert result["admission_limits"]["primitive_logical_metric_limit"] == (2**64 - 1)
     assert result["admission_limits"]["primitive_page_budget_bindings"] == [
         "max_primitive_records",
@@ -274,9 +283,9 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "928668e2a3117c166651c974d5d377bface8990a3b290c404bf84e39a81eda42",
+        "geometry_resources_sha256": "681474a5c9456a76db9059e48fcfd1447289b455d9291a6df80951789a231589",
         "public_wrapper_sha256": (
-            "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
+            "ded1b7e2cc0a93881cc17b4da32a3695bdbaf05421535ac3dcc4efb646da003b"
         ),
         "initializer_sha256": (
             "c29ed5e27de74d03e92e035fdba81f745e1f4f608fa6b175cdf9ca315402a5b5"
@@ -315,7 +324,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "62d61c9ce7ad0b4f50a9bc02c636834aa2b816e44e326ada3e5b6facd83db7ca"
+            "1b4e6a5979f74cfe8afd8e4df20c4be3614bdc7bf80fe683c64aa57db953e389"
         ),
         "native_owner_sha256": (
             "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -336,10 +345,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "5f1a660cb0bb3c0cd0a4d952ff24347762c906c7918c779ef14c9a4ec192712e"
+            "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
         ),
         "native_geometry_enqueue_sha256": (
-            "b390ebea5e5289b2fccdd7e0f2af92af825f76a7667047913911e0cf190af01c"
+            "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -348,7 +357,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "7a06757b893e51c6924675c88c66c6d0817923904283bf48378fb4e8302f47be"
         ),
         "native_configure_becke_sha256": (
-            "06531973e05e6cce4e21160a5f069229123d12d493a8822cad004bd68cd84403"
+            "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
         ),
         "native_metrics_sha256": (
             "21e067818117b8ebaf8eeb218aeface0680681fdd6f39285ed6f981c3cef969a"
@@ -362,7 +371,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "(na + 2) * primitive_sum ** 2 + na * (na - 1) // 2"
     )
     assert result["admission_limits"]["grid_pair_visits_definition"] == (
-        "(1 + 2 * len(state.grid.points)) * na * (na - 1) // 2"
+        "grid_work.grid_pair_visits"
     )
     assert result["admission_limits"]["grid_derivative_order_definition"] == (
         "'sigma' in ingredients"
@@ -405,31 +414,40 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "minimum_additional_device_bytes < additional_device_budget and additional_device_peak_bound <= additional_device_budget"
     )
     assert result["admission_limits"]["gate_order"] == [
-        "small_domain_atom_ao_cap",
-        "primitive_topology_cap",
-        "primitive_logical_metric_range",
+        "native_owner_capacity",
+        "grid_work_capacity",
         "grid_point_work_budget",
         "grid_pair_work_budget",
+        "pending_grid_pair_budget",
+        "native_integral_provider_required",
+        "primitive_logical_metric_range",
         "additional_device_budget",
         "additional_host_budget",
+        "native_integral_result_required",
         "primitive_descriptor_page_budget",
     ]
     assert result["admission_limits"]["gate_predicates"] == {
         "primitive_metric_range": "records > np.iinfo(np.uint64).max",
-        "grid_points": "len(state.grid.points) > max_grid_points",
-        "grid_pair_visits": "pair_visits > max_grid_pair_visits",
         "additional_device": "available <= 0",
         "additional_host": "host_bound > max_host_bytes",
     }
     assert result["admission_limits"]["tile_points"] == 256
     assert result["admission_limits"]["primitive_tile"] == 4096
     assert result["admission_limits"]["integral_terms"] == 32
-    assert result["admission_limits"]["grid_points"] == 1_000_000
-    assert result["admission_limits"]["grid_pair_visits"] == 100_000_000
+    assert result["admission_limits"]["diagnostic_work_limits"] == {
+        "grid_points": 1_000_000,
+        "grid_pair_visits": 100_000_000,
+    }
+    assert result["admission_limits"]["public_work_limits"] == {
+        "grid_points": None,
+        "grid_pair_visits": None,
+    }
+    assert result["admission_limits"]["pending_grid_tiles"] == 64
+    assert result["admission_limits"]["pending_grid_pair_visits"] == 100_000_000
 
-    assert cases["water8"]["requirements"]["primitive_records"] == 11_577_114_516
-    assert cases["water16"]["requirements"]["primitive_records"] == 185_210_590_824
-    assert cases["water32"]["requirements"]["primitive_records"] == 2_963_193_862_608
+    assert cases["water8"]["requirements"]["primitive_records"] == 23_151_431_572
+    assert cases["water16"]["requirements"]["primitive_records"] == 370_399_663_720
+    assert cases["water32"]["requirements"]["primitive_records"] == 5_926_219_028_944
     assert all(
         case["requirements"]["primitive_descriptor_peak_records"] == 625
         for case in cases.values()
@@ -437,39 +455,44 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert cases["caffeine"]["requirements"]["grid_pair_visits"] == 1_098_842_388
     assert cases["ace_glygly_nme"]["requirements"]["grid_pair_visits"] == 1_401_753_925
 
-    assert cases["water8"]["admission"]["first_blocker"]["gate"] == (
-        "small_domain_atom_ao_cap"
+    # Public complete-grid admission is separate from the still-bounded private
+    # diagnostic defaults and does not claim native provider execution succeeded.
+    assert all(
+        case["admission"]["outcome"] == "passes_static_stationary_caps"
+        for case in cases.values()
     )
-    assert cases["water8"]["admission"]["first_blocker"]["exceeded"] == ["ao_count"]
-    assert cases["water16"]["admission"]["first_blocker"]["exceeded"] == [
-        "atom_count",
-        "ao_count",
-    ]
-    assert cases["water32"]["admission"]["first_blocker"]["exceeded"] == [
-        "atom_count",
-        "ao_count",
-    ]
-    assert cases["caffeine"]["admission"]["first_blocker"]["exceeded"] == ["ao_count"]
-    assert cases["ace_glygly_nme"]["admission"]["first_blocker"]["exceeded"] == [
-        "ao_count"
-    ]
-    assert cases["benzene"]["admission"]["first_blocker"]["gate"] == (
-        "grid_pair_work_budget"
+    assert all(case["admission"]["first_blocker"] is None for case in cases.values())
+    for case_name in ("water8", "water16", "water32", "caffeine", "ace_glygly_nme"):
+        requirement = cases[case_name]["requirements"]["native_integral_admission"]
+        assert requirement["required"] is True
+        assert requirement["provider_and_budget_qualification"] == "NOT_RUN"
+        assert (
+            "cannot use AO-task fallback"
+            in requirement["enlarged_domain_failure_behavior"]
+        )
+    assert (
+        cases["benzene"]["requirements"]["native_integral_admission"]["required"]
+        is False
+    )
+    assert (
+        cases["benzene"]["diagnostic_admission"]["first_blocker"]["gate"]
+        == "grid_pair_work_budget"
     )
     for sentinel in ("water", "oh", "o2", "water_dimer"):
-        assert cases[sentinel]["admission"]["outcome"] == (
-            "passes_static_stationary_caps"
-        )
-        assert cases[sentinel]["admission"]["first_blocker"] is None
-
-    # Losing gates remain visible after the first failure; the report is not a
-    # pass/fail truncation that hides the production-scale work.
-    water32_gates = [item["gate"] for item in cases["water32"]["admission"]["failures"]]
-    assert water32_gates == [
-        "small_domain_atom_ao_cap",
-        "grid_point_work_budget",
-        "grid_pair_work_budget",
+        assert cases[sentinel]["diagnostic_admission"]["first_blocker"] is None
+    water32_gates = [
+        item["gate"] for item in cases["water32"]["diagnostic_admission"]["failures"]
     ]
+    assert water32_gates == ["grid_point_work_budget", "grid_pair_work_budget"]
+    assert cases["water32"]["requirements"]["grid_work_plan"] == {
+        "grid_points": 7_962_624,
+        "tile_points": 256,
+        "tile_count": 31_104,
+        "chunk_points": 10_752,
+        "chunk_count": 741,
+        "grid_pair_visits": 72_619_135_440,
+        "chunk_pair_visits": 98_058_240,
+    }
 
 
 def test_report_covers_every_required_fp64_force_row_and_aot_route(
@@ -482,8 +505,8 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     assert result["summary"] == {
         "required_fp64_force_rows": 35,
         "required_semilocal_fp64_force_rows": 22,
-        "statically_blocked_rows": 19,
-        "rows_passing_static_stationary_caps": 16,
+        "statically_blocked_rows": 0,
+        "rows_passing_static_stationary_caps": 35,
         "scientific_qualification": "NOT_RUN",
     }
     assert {row["method"] for row in rows} == {
@@ -515,10 +538,21 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         == row["stationary_plan"]["identity"]
         for row in rows
     )
-    assert all(
-        row["public_route"]["scientific_runtime_compilation_required"] is False
-        for row in rows
-    )
+    for row in rows:
+        hybrid = row["method"] in ("pbe0", "b3lyp")
+        route = row["public_route"]
+        assert route["scientific_runtime_compilation_required"] is hybrid
+        assert row["packaged_aot"]["selected_by_public_route"] is not hybrid
+        assert route["selection"] == (
+            "runtime-compiled stationary CUDA"
+            if hybrid
+            else "all-electron packaged stationary CUDA"
+        )
+        assert route["missing_aot_behavior"] == (
+            "not selected by this public route"
+            if hybrid
+            else "fail closed; no NVCC fallback"
+        )
     assert all(row["packaged_aot"]["source_package_declared"] is True for row in rows)
     assert result["stationary_aot_source_package"] == {
         "cmake_contract_sha256": (
@@ -584,22 +618,20 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
     b3lyp_benzene = next(
         row for row in rows if row["id"] == "b3lyp/rks/benzene/fp64_energy_forces"
     )
-    assert b3lyp_benzene["admission"]["outcome"] == "blocked"
-    assert b3lyp_benzene["admission"]["first_blocker"]["gate"] == (
-        "grid_pair_work_budget"
-    )
+    assert b3lyp_benzene["admission"]["outcome"] == "passes_static_stationary_caps"
+    assert b3lyp_benzene["admission"]["first_blocker"] is None
 
     water32 = next(
         row for row in rows if row["id"] == "pbe/rks/water32/fp64_energy_forces"
     )
     assert water32["resource_requirements"]["additional_device_peak_bound"] == (
-        356_801_792 + 48 * (96 * 95 // 2)
+        356_801_792 + 48 * (96 * 95 // 2) + 4_851_008
     )
     assert water32["resource_requirements"][
         "stationary_center_geometry_bytes"
     ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
-        192_187_488
+        192_187_488 + 4_851_008
     )
     assert water32["resource_requirements"]["additional_device_budget"] == 512 << 20
     assert water32["resource_requirements"]["additional_host_budget"] == 256 << 20
@@ -961,7 +993,7 @@ def test_primitive_budget_scope_fails_closed_when_whole_force_gate_returns(
         '        raise ValueError("primitive work budget exceeded")\n'
     )
     assert whole_force_gate not in source
-    marker = "    pair_visits = (1 + 2 * len(state.grid.points))"
+    marker = "    pair_visits = grid_work.grid_pair_visits"
     assert marker in source
     stationary_contract_tree(
         tmp_path, source.replace(marker, whole_force_gate + marker, 1)
@@ -1159,13 +1191,13 @@ def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
-    old = "for begin in range(0, grid_points, tile_points):"
+    old = "for begin in range(chunk_begin, chunk_end, tile_points):"
     assert source.count(old) == 1
     stationary_contract_tree(
         tmp_path,
         source.replace(
             old,
-            "for begin in range(0, grid_points, 2 * tile_points):",
+            "for begin in range(chunk_begin, chunk_end, 2 * tile_points):",
             1,
         ),
     )
@@ -1433,18 +1465,16 @@ def test_admission_gate_order_fails_closed_when_leading_gates_move(
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
-    small = (
-        "    if not 1 <= na <= 32 or not 1 <= n <= 128:\n"
-        '        raise ValueError("CUDA diagnostic small-domain atom/AO cap exceeded")\n'
+    native_begin = source.index(
+        "    requires_native_integrals = stationary_cuda_requires_native_integrals("
     )
-    primitives = (
-        "    if not 1 <= basis.nprimitive <= 4096:\n"
-        '        raise ValueError("CUDA diagnostic primitive-topology cap exceeded")\n'
+    grid_begin = source.index(
+        "    grid_work = plan_stationary_cuda_grid_work(", native_begin
     )
-    assert small + primitives in source
-    stationary_contract_tree(
-        tmp_path, source.replace(small + primitives, primitives + small, 1)
-    )
+    grid_end = source.index("    if requires_native_integrals and (", grid_begin)
+    native = source[native_begin:grid_begin]
+    grid = source[grid_begin:grid_end]
+    stationary_contract_tree(tmp_path, source.replace(native + grid, grid + native, 1))
 
     with pytest.raises(RuntimeError, match="admission gate order changed"):
         qualify_capacity._source_limits(tmp_path)
@@ -1470,7 +1500,9 @@ def test_admission_gate_order_fails_closed_when_memory_gates_move(
     swapped = swapped.replace("    # swapped-memory-gate\n", host, 1)
     stationary_contract_tree(tmp_path, swapped)
 
-    with pytest.raises(RuntimeError, match="admission gate order changed"):
+    with pytest.raises(
+        RuntimeError, match="native host-reserve admission order changed"
+    ):
         qualify_capacity._source_limits(tmp_path)
 
 
@@ -2000,12 +2032,22 @@ def test_device_budget_requires_a_positive_minimum_remainder(
     minimum: int, blocked: bool
 ) -> None:
     limits = {
-        "small_domain": {"atom_count": 32, "ao_count": 128},
-        "basis_primitive_count": 4096,
+        "native_owner_capacity": {
+            "atom_count": 128,
+            "ao_count": 1024,
+            "basis_primitive_count": 16384,
+        },
+        "ao_task_fallback_capacity": {
+            "atom_count": 32,
+            "ao_count": 128,
+            "basis_primitive_count": 4096,
+        },
+        "grid_work_capacity": {"grid_points": 1 << 40, "grid_pair_visits": 2**64 - 1},
+        "public_work_limits": {"grid_points": None, "grid_pair_visits": None},
+        "tile_points": 256,
+        "pending_grid_pair_visits": 100_000_000,
         "primitive_records": 16_000_000,
         "primitive_logical_metric_limit": 2**64 - 1,
-        "grid_points": 1_000_000,
-        "grid_pair_visits": 100_000_000,
         "additional_device_bytes": 512,
         "additional_host_bytes": 256,
     }
@@ -2036,12 +2078,22 @@ def test_device_budget_requires_a_positive_minimum_remainder(
 
 def test_primitive_descriptor_budget_is_page_local_and_ordered_after_host() -> None:
     limits = {
-        "small_domain": {"atom_count": 32, "ao_count": 128},
-        "basis_primitive_count": 4096,
+        "native_owner_capacity": {
+            "atom_count": 128,
+            "ao_count": 1024,
+            "basis_primitive_count": 16384,
+        },
+        "ao_task_fallback_capacity": {
+            "atom_count": 32,
+            "ao_count": 128,
+            "basis_primitive_count": 4096,
+        },
+        "grid_work_capacity": {"grid_points": 1 << 40, "grid_pair_visits": 2**64 - 1},
+        "public_work_limits": {"grid_points": None, "grid_pair_visits": None},
+        "tile_points": 256,
+        "pending_grid_pair_visits": 100_000_000,
         "primitive_records": 16_000_000,
         "primitive_logical_metric_limit": 2**64 - 1,
-        "grid_points": 1_000_000,
-        "grid_pair_visits": 100_000_000,
         "additional_device_bytes": 512,
         "additional_host_bytes": 256,
     }
@@ -2069,12 +2121,22 @@ def test_primitive_descriptor_budget_is_page_local_and_ordered_after_host() -> N
 
 def test_logical_primitive_metric_retains_uint64_range_gate() -> None:
     limits = {
-        "small_domain": {"atom_count": 32, "ao_count": 128},
-        "basis_primitive_count": 4096,
+        "native_owner_capacity": {
+            "atom_count": 128,
+            "ao_count": 1024,
+            "basis_primitive_count": 16384,
+        },
+        "ao_task_fallback_capacity": {
+            "atom_count": 32,
+            "ao_count": 128,
+            "basis_primitive_count": 4096,
+        },
+        "grid_work_capacity": {"grid_points": 1 << 40, "grid_pair_visits": 2**64 - 1},
+        "public_work_limits": {"grid_points": None, "grid_pair_visits": None},
+        "tile_points": 256,
+        "pending_grid_pair_visits": 100_000_000,
         "primitive_records": 16_000_000,
         "primitive_logical_metric_limit": 2**64 - 1,
-        "grid_points": 1_000_000,
-        "grid_pair_visits": 100_000_000,
         "additional_device_bytes": 512,
         "additional_host_bytes": 256,
     }
@@ -2146,3 +2208,281 @@ def test_cooperative_native_schedule_contract_fails_closed(
     )
     with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
         qualify_capacity._source_limits(tmp_path)
+
+
+def current_admission_fixture() -> tuple[dict, dict, dict, dict]:
+    limits = qualify_capacity._source_limits(ROOT)
+    limits["public_work_limits"] = qualify_capacity._source_public_route(ROOT)[
+        "whole_grid_work_limits"
+    ]
+    shape = {"atom_count": 2, "ao_count_spherical": 2, "basis_primitive_count": 2}
+    requirements = {
+        "primitive_records": 1,
+        "primitive_descriptor_peak_records": 1,
+        "grid_points": 1,
+        "grid_pair_visits": 3,
+    }
+    memory = {
+        "minimum_additional_device_bytes": 1,
+        "additional_device_peak_bound": 1,
+        "additional_host_numeric_bound": 1,
+    }
+    return limits, shape, requirements, memory
+
+
+@pytest.mark.parametrize(
+    "key,cap",
+    [
+        ("atom_count", 128),
+        ("ao_count_spherical", 1024),
+        ("basis_primitive_count", 16384),
+    ],
+)
+def test_current_native_owner_capacity_inclusive_boundary(key: str, cap: int) -> None:
+    limits, shape, requirements, memory = current_admission_fixture()
+    shape[key] = cap
+    assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
+    shape[key] = cap + 1
+    failures = qualify_capacity._case_failures(shape, requirements, memory, limits)
+    assert [failure["gate"] for failure in failures] == ["native_owner_capacity"]
+    assert (
+        failures[0]["owner"]["function"] == "stationary_cuda_requires_native_integrals"
+    )
+
+
+@pytest.mark.parametrize(
+    "key,cap",
+    [("grid_points", 1_000_000), ("grid_pair_visits", 100_000_000)],
+)
+def test_diagnostic_guards_are_optional_and_distinct_from_public_work(
+    key: str, cap: int
+) -> None:
+    limits, shape, requirements, memory = current_admission_fixture()
+    requirements[key] = cap
+    assert (
+        qualify_capacity._case_failures(
+            shape, requirements, memory, limits, work_mode="diagnostic"
+        )
+        == []
+    )
+    requirements[key] += 1
+    failures = qualify_capacity._case_failures(
+        shape, requirements, memory, limits, work_mode="diagnostic"
+    )
+    assert len(failures) == 1
+    assert failures[0]["required"] == cap + 1
+    assert failures[0]["cap"] == cap
+    assert failures[0]["owner"]["function"] == "plan_stationary_cuda_grid_work"
+    assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
+
+
+def test_public_complete_grid_still_enforces_pending_window_work() -> None:
+    limits, shape, requirements, memory = current_admission_fixture()
+    shape["atom_count"] = 96
+    requirements.update(grid_points=2_359_296, grid_pair_visits=21_516_784_080)
+    visits_per_tile = 2 * limits["tile_points"] * (96 * 95 // 2)
+    limits["pending_grid_pair_visits"] = visits_per_tile
+    assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
+    limits["pending_grid_pair_visits"] -= 1
+    failures = qualify_capacity._case_failures(shape, requirements, memory, limits)
+    assert [failure["gate"] for failure in failures] == ["pending_grid_pair_budget"]
+    assert failures[0]["required"] == visits_per_tile
+
+
+@pytest.mark.parametrize(
+    "key,cap", [("grid_points", 1 << 40), ("grid_pair_visits", 2**64 - 1)]
+)
+def test_public_work_retains_representable_capacity(key: str, cap: int) -> None:
+    limits, shape, requirements, memory = current_admission_fixture()
+    requirements[key] = cap
+    assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
+    requirements[key] += 1
+    failures = qualify_capacity._case_failures(shape, requirements, memory, limits)
+    assert [failure["gate"] for failure in failures] == ["grid_work_capacity"]
+
+
+def test_native_required_domain_never_admits_ao_descriptor_fallback_work() -> None:
+    limits, shape, requirements, memory = current_admission_fixture()
+    requirements["primitive_descriptor_peak_records"] = limits["primitive_records"] + 1
+    assert [
+        failure["gate"]
+        for failure in qualify_capacity._case_failures(
+            shape, requirements, memory, limits
+        )
+    ] == ["primitive_descriptor_page_budget"]
+    # The public larger-domain route must succeed through complete native sources
+    # or fail at runtime; the unused AO descriptor page is not its capacity gate.
+    shape["ao_count_spherical"] = 129
+    assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
+
+
+def test_paired_host_reserve_is_charged_before_inclusive_host_admission() -> None:
+    result = report()
+    row = next(
+        row
+        for row in result["rows"]
+        if row["id"] == "pbe0/rks/water32/fp64_energy_forces"
+    )
+    memory = row["resource_requirements"]
+    assert memory["stationary_native_integral_host_reserve_bytes"] == 4_851_008
+    assert memory["additional_host_numeric_bound"] == 197_047_712
+    assert memory["additional_device_peak_bound"] == (
+        memory["stationary_grid_device_peak_bound"]
+        + memory["stationary_native_pair_reserve_bytes"]
+    )
+    assert memory["native_integral_device_budget"] == (
+        memory["additional_device_budget"] - memory["stationary_grid_device_peak_bound"]
+    )
+    limits = result["admission_limits"]
+    case = next(case for case in result["cases"] if case["id"] == "water32")
+    limits["additional_host_bytes"] = memory["additional_host_numeric_bound"]
+    assert qualify_capacity._case_failures(case["shape"], memory, memory, limits) == []
+    limits["additional_host_bytes"] -= 1
+    failures = qualify_capacity._case_failures(case["shape"], memory, memory, limits)
+    assert [failure["gate"] for failure in failures] == ["additional_host_budget"]
+
+
+def test_logical_primitive_work_and_native_work_are_method_specific() -> None:
+    result = report()
+    rows = {row["id"]: row for row in result["rows"]}
+    pbe = rows["pbe/rks/water32/fp64_energy_forces"]["resource_requirements"]
+    pbe0 = rows["pbe0/rks/water32/fp64_energy_forces"]["resource_requirements"]
+    assert pbe["primitive_records"] == 2_963_193_862_608
+    assert pbe0["primitive_records"] == 5_926_219_028_944
+    for requirement in (pbe, pbe0):
+        native = requirement["native_integral_admission"]
+        assert native["required"] is True
+        assert native["provider_and_budget_qualification"] == "NOT_RUN"
+        assert native["stationary_primitive_records_if_native_complete"] == 4560
+        assert native["ao_task_descriptors_if_native_complete"] == 0
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        ("STATIONARY_MAX_ATOMS = 128", "STATIONARY_MAX_ATOMS = 129"),
+        ("STATIONARY_MAX_AOS = 1024", "STATIONARY_MAX_AOS = 1025"),
+        ("STATIONARY_MAX_PRIMITIVES = 16384", "STATIONARY_MAX_PRIMITIVES = 16385"),
+        (
+            "return atoms > 32 or aos > 128 or primitives > 4096",
+            "return atoms > 96 or aos > 768 or primitives > 4096",
+        ),
+        (
+            "if max_grid_points is not None and grid_points > max_grid_points:",
+            "if max_grid_points is not None and grid_points >= max_grid_points:",
+        ),
+        ("if tile_visits > max_pending_pair_visits:", "if False:"),
+        (
+            "yield begin, min(begin + self.chunk_points, self.grid_points)",
+            "yield begin, min(begin + self.chunk_points - 1, self.grid_points)",
+        ),
+        ("2 * chunk_points * pairs,", "chunk_points * pairs,"),
+        ("+ 48 * atoms", "+ 24 * atoms"),
+    ],
+)
+def test_current_resource_admission_and_work_changes_fail_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    stationary_contract_tree(
+        tmp_path, (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    )
+    path = tmp_path / "python/generativeqc_compiler/method/stationary_resources.py"
+    source = path.read_text()
+    assert old in source
+    path.write_text(source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match="geometry-resource contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new,message",
+    [
+        (
+            "grid_points=len(state.grid.points),",
+            "grid_points=len(state.grid.points) // 2,",
+            "bounded grid-work plan definition changed",
+        ),
+        (
+            "max_pending_tiles=max_pending_grid_tiles,",
+            "max_pending_tiles=4096,",
+            "bounded grid-work plan definition changed",
+        ),
+        (
+            "max_pending_pair_visits=max_pending_grid_pair_visits,",
+            "max_pending_pair_visits=1 << 40,",
+            "bounded grid-work plan definition changed",
+        ),
+        (
+            "    host_bound += native_integral_host_reserve\n",
+            "",
+            "native host-reserve admission order changed",
+        ),
+        (
+            "if requires_native_integrals and not native_complete_integrals:",
+            "if False:",
+            "endpoint owner contract changed",
+        ),
+        (
+            "for chunk_begin, chunk_end in grid_work.chunks():",
+            "for chunk_begin, chunk_end in [(0, grid_points)]:",
+            "endpoint owner contract changed",
+        ),
+        (
+            "                sources.drain_geometry()\n",
+            "                pass\n",
+            "endpoint owner contract changed",
+        ),
+        (
+            '        or work["xc_points"] != grid_work.grid_points\n',
+            "",
+            "endpoint owner contract changed",
+        ),
+        (
+            'work["grid_pair_visits"] != pair_visits',
+            'work["grid_pair_visits"] > pair_visits',
+            "endpoint owner contract changed",
+        ),
+        (
+            "            > native_integral_host_reserve\n",
+            "            > max_host_bytes\n",
+            "endpoint owner contract changed",
+        ),
+    ],
+)
+def test_current_endpoint_windows_native_requirement_and_reserve_fail_closed(
+    tmp_path: Path, old: str, new: str, message: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert old in source
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match=message):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize("key", ["max_grid_points", "max_grid_pair_visits"])
+def test_public_override_cannot_silently_inherit_diagnostic_limits(
+    tmp_path: Path, key: str
+) -> None:
+    copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
+    path = tmp_path / "python/generativeqc/batch.py"
+    source = path.read_text()
+    old = f'"{key}": None,'
+    assert old in source
+    path.write_text(source.replace(old, f'"{key}": 1_000_000,', 1))
+    with pytest.raises(
+        RuntimeError, match="public complete-grid work override changed"
+    ):
+        qualify_capacity._source_public_route(tmp_path)
+
+
+@pytest.mark.parametrize("points,blocked", [(0, True), (1, False)])
+def test_empty_grid_rejected_but_one_atom_zero_pair_work_is_valid(
+    points: int, blocked: bool
+) -> None:
+    limits, shape, requirements, memory = current_admission_fixture()
+    shape["atom_count"] = 1
+    requirements.update(grid_points=points, grid_pair_visits=0)
+    failures = qualify_capacity._case_failures(shape, requirements, memory, limits)
+    assert [failure["gate"] for failure in failures] == (
+        ["grid_work_capacity"] if blocked else []
+    )

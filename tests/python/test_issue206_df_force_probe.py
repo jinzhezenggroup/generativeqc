@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import typing
 from pathlib import Path
@@ -13,9 +14,36 @@ import pytest
 from benchmarks import issue206_df_force_probe as probe
 
 
+def _git(root: Path, *args: str) -> str:
+    return subprocess.check_output(
+        [
+            "git",
+            "-c",
+            "user.name=Protocol fixture",
+            "-c",
+            "user.email=protocol@example.invalid",
+            "-c",
+            "commit.gpgsign=false",
+            *args,
+        ],
+        cwd=root,
+        text=True,
+    ).strip()
+
+
 @pytest.fixture
 def protocol(tmp_path: typing.Any, monkeypatch: typing.Any) -> typing.Any:
     """Use an identifiable fake binary; sample calls never touch CUDA."""
+    # Keep the real provenance checks, but scope them to this test's source.
+    # Parallel pytest-cov workers create/rename untracked .coverage.* files in
+    # the actual checkout while these synthetic benchmark samples are running.
+    source = tmp_path / "source"
+    source.mkdir()
+    _git(source, "init", "-q")
+    (source / "source.py").write_text("original source\n")
+    _git(source, "add", "source.py")
+    _git(source, "commit", "-qm", "protocol source")
+    monkeypatch.setattr(probe, "_git_root", lambda: source)
     library = tmp_path / "libgenerativeqc.so"
     library.write_bytes(b"protocol-only native library")
     # main() selects this binary through the process environment. Register it
@@ -132,6 +160,56 @@ def test_changed_binary_never_publishes_a_ledger(
     with pytest.raises(RuntimeError, match="changed during"):
         probe.main()
     assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "mutation", ["tracked", "untracked-new", "untracked-edit", "revision"]
+)
+def test_changed_source_never_publishes_a_ledger(
+    protocol: typing.Any, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    _, output, energy, force = protocol
+    source = probe._git_root()
+    untracked = source / "local.py"
+    if mutation == "untracked-edit":
+        untracked.write_text("original local source\n")
+    samples = iter([energy, force])
+
+    def sample(*args: object) -> dict:
+        if mutation == "tracked":
+            (source / "source.py").write_text("changed tracked source\n")
+        elif mutation == "revision":
+            _git(source, "commit", "--allow-empty", "-qm", "new source revision")
+        else:
+            untracked.write_text("changed local source\n")
+        return next(samples)
+
+    monkeypatch.setattr(probe, "_sample", sample)
+    with pytest.raises(RuntimeError, match="source or native library changed"):
+        probe.main()
+    assert not output.exists()
+
+
+def test_protocol_source_is_isolated_from_external_coverage_files(
+    protocol: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    library, output, energy, force = protocol
+    outside = output.parent / ".coverage.worker"
+    before = probe._source_metadata(library)
+    samples = iter([energy, force])
+
+    def sample(*args: object) -> dict:
+        result = next(samples)
+        outside.write_text(str(result["has_forces"]))
+        return result
+
+    monkeypatch.setattr(probe, "_sample", sample)
+    probe.main()
+    assert probe._source_metadata(library) == before
+    assert json.loads(output.read_text())["source"] == before
+    assert before["repository"] == str(output.parent / "source")
+    assert before["git_dirty"] is False
+    assert before["untracked_sha256"] == {}
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,225 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Only 3 or 4 repeats per route/thermal/case, below standard five-pair gate; not a standard A/B campaign; no CPU affinity isolation, measured hardware model, peak memory, compilation duration or complete independent matrix/solver-trajectory evidence. Descriptive medians cannot promote a production policy.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 16904,
+      "path": "inputs/root.json",
+      "role": "input",
+      "sha256": "6a0c8323e8878d85ba327dbde19ffd96084f07c8b668eae2ffa916a858d88239"
+    },
+    {
+      "bytes": 16623,
+      "path": "summaries/root.json",
+      "role": "summary",
+      "sha256": "22625df16c12dfc32f98c9574bc9ac8dcb62d17407069cdca6b952af3fa77016"
+    },
+    {
+      "bytes": 15277,
+      "path": "inputs/coarse.json",
+      "role": "input",
+      "sha256": "616e106bc9ed4675d01b8550eb7d082776fdb12ca848748507dbaab9836fa0d6"
+    },
+    {
+      "bytes": 12459,
+      "path": "summaries/coarse.json",
+      "role": "summary",
+      "sha256": "d0cb84a36c7ee65dc61200f80f7999e58c381c2deb24e64c2067a4f25152a03b"
+    },
+    {
+      "bytes": 14886,
+      "path": "inputs/cluster.json",
+      "role": "input",
+      "sha256": "3991d875a0ec59271892fac0c20dddf608b3bb1776f05c9e96f9798d27bab01a"
+    },
+    {
+      "bytes": 1019,
+      "path": "summaries/cluster.json",
+      "role": "summary",
+      "sha256": "6617f5a5920693398673ce2d380d01e74659bd0c4484c491456895ce948f8b07"
+    },
+    {
+      "bytes": 15331,
+      "path": "inputs/hf-preliminary.json",
+      "role": "input",
+      "sha256": "c0521760159b6669134e419d439ec48213f9a9042a38d77f4d0e644d72db58ce"
+    },
+    {
+      "bytes": 3066,
+      "path": "summaries/hf-preliminary.json",
+      "role": "summary",
+      "sha256": "a3fcb7222f90850179ac98c4e683f75d97b2525afbf28a8f35d9f95dcf4fd4e7"
+    },
+    {
+      "bytes": 16713,
+      "path": "inputs/hf-lda-preliminary.json",
+      "role": "input",
+      "sha256": "df3bd1da0cdfdf578682b9206994196ab4614874790f2a4ed6d7e3ca92db014c"
+    },
+    {
+      "bytes": 4221,
+      "path": "summaries/hf-lda-preliminary.json",
+      "role": "summary",
+      "sha256": "10788474623dc7a3e2e2ef4f1bf7b25741bd7a2fff680ab6e5acb3e96d24cd82"
+    },
+    {
+      "bytes": 520,
+      "path": "oracle-result.json",
+      "role": "summary",
+      "sha256": "ad6ba4933e0b098ff0b58f66ff4a09b61515b8f3f577b9cf267d43040a134f68"
+    },
+    {
+      "bytes": 1930,
+      "path": "source-comparison.json",
+      "role": "summary",
+      "sha256": "5987ab76253fb42ff74fc3cf6785c13efe2361f3ea7cf06f5ad170d3a244b0d7"
+    },
+    {
+      "bytes": 1595,
+      "path": "integration-manifest.json",
+      "role": "summary",
+      "sha256": "5089600cf236afed6bf482da987b1b487b9010e8b65e9fd7e85dd0ece161fd05"
+    },
+    {
+      "bytes": 3785,
+      "path": "provenance.json",
+      "role": "summary",
+      "sha256": "23691f612a8a7e8be5d0d8da2c8a7d6b3221979e353d2d94854d1c795346db7c"
+    },
+    {
+      "bytes": 47053,
+      "path": "samples/root-repeat-0.json",
+      "role": "samples",
+      "sha256": "94c9247c0271be88360b3ec8c4a86c71b2c9fdc9918e3589dfd6b9b89d65226d"
+    },
+    {
+      "bytes": 47092,
+      "path": "samples/root-repeat-1.json",
+      "role": "samples",
+      "sha256": "f0ecb1727cc0c076fe97761a4bf5d2c9d55539153aa2a22b80bbfa2e90fa2052"
+    },
+    {
+      "bytes": 47084,
+      "path": "samples/root-repeat-2.json",
+      "role": "samples",
+      "sha256": "7054465eaa6005a44dd576f0739be5402c6275ddd335918a2f6b9effff7957f7"
+    },
+    {
+      "bytes": 35194,
+      "path": "samples/coarse-repeat-0.json",
+      "role": "samples",
+      "sha256": "ec9d46e33b98f4012d56074c9576230c9807864106e06eb27f5eceaa8c98327b"
+    },
+    {
+      "bytes": 35220,
+      "path": "samples/coarse-repeat-1.json",
+      "role": "samples",
+      "sha256": "9aa2cebed9207ea09582d65febf4ce1f48b4284996299abf9bd4b0ea402c62aa"
+    },
+    {
+      "bytes": 35219,
+      "path": "samples/coarse-repeat-2.json",
+      "role": "samples",
+      "sha256": "a0e614a5a10a2304438ed4f31ee2e54d7949563f230d2db752f9011c4ba8533f"
+    },
+    {
+      "bytes": 2858,
+      "path": "samples/cluster-repeat-0.json",
+      "role": "samples",
+      "sha256": "1c477e522f5630cf726c499e23647e49e5efcbf953b0055c23ded5b9cf0588cc"
+    },
+    {
+      "bytes": 2857,
+      "path": "samples/cluster-repeat-1.json",
+      "role": "samples",
+      "sha256": "457fba25f66f79bcfa41f9d8b3a9b3c560af8fa137fa33cc0d5d7c723a1f979b"
+    },
+    {
+      "bytes": 2862,
+      "path": "samples/cluster-repeat-2.json",
+      "role": "samples",
+      "sha256": "a18a43785c6b07409f70e8183063b52b18a4da5f7ed3e641c4eb52ee6a59057a"
+    },
+    {
+      "bytes": 8775,
+      "path": "samples/hf-preliminary-repeat-0.json",
+      "role": "samples",
+      "sha256": "8653abb99598d4c546321030a6abe7ed9fc5719d3ded190bddc12b7a8ab185c8"
+    },
+    {
+      "bytes": 8773,
+      "path": "samples/hf-preliminary-repeat-1.json",
+      "role": "samples",
+      "sha256": "4eb0b10403c3aed8b78c5d3c6a019fb21e12c5d2202f3baa3eaf65d935e94043"
+    },
+    {
+      "bytes": 8784,
+      "path": "samples/hf-preliminary-repeat-2.json",
+      "role": "samples",
+      "sha256": "35cef7d1348cd069c6706ca323f358face035965f5165b6fea84d63829e14069"
+    },
+    {
+      "bytes": 12330,
+      "path": "samples/hf-lda-preliminary-repeat-0.json",
+      "role": "samples",
+      "sha256": "218348edfe866ee5881725a0f27d077cd39acf9c13623e71fafb487094f6e42a"
+    },
+    {
+      "bytes": 12354,
+      "path": "samples/hf-lda-preliminary-repeat-1.json",
+      "role": "samples",
+      "sha256": "de37da138015d8ef6086bf8a7c2a80c6af799d8402abecc4568f206bc3433e1d"
+    },
+    {
+      "bytes": 12352,
+      "path": "samples/hf-lda-preliminary-repeat-2.json",
+      "role": "samples",
+      "sha256": "2b90778478e8541ad5cdfb75d6239b6e3e9f18c65bd74ba152ff0f98bdd75fe7"
+    },
+    {
+      "bytes": 12352,
+      "path": "samples/hf-lda-preliminary-repeat-3.json",
+      "role": "samples",
+      "sha256": "68d4115ec3bb638442b919b0c8e0d998df9ca6621381caa8815cdc5c9a715fdb"
+    },
+    {
+      "bytes": 14033,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "79b900c4207f9ac5bb56d43311d3750b32b89705bcd149fdd69d912d20a1c85a"
+    },
+    {
+      "bytes": 9225,
+      "path": "README.md",
+      "role": "summary",
+      "sha256": "49da705fcacbc48e0009490862ccb95ad89037d4e29666c1425a567ef4c7e473"
+    },
+    {
+      "bytes": 11891,
+      "path": "reproduce.py",
+      "role": "reproduction",
+      "sha256": "92b37be7868264e385e13867f2ca7dc5b8c979150e5fc67b629fbed62adf3ab1"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python3",
+      "benchmarks/results/preliminary-scf-prototype/reproduce.py",
+      "--source-root",
+      "SOURCE_CHECKOUT_AT_3b04ecbda28dcecab6fb9db3ca2b4cdf10ba99bc",
+      "--library",
+      "PATH_TO_CPU_RELWITHDEBINFO/libgenerativeqc.so",
+      "--output",
+      ".artifacts/preliminary-scf-reproduction"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "8ba615aacd9f02708b39782cc71b68f27bbe1af6"
+  }
+}

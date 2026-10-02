@@ -208,7 +208,8 @@ jobs:
             libcusolver-dev-12-9 \
             libcusparse-12-9 \
             libnvjitlink-12-9 \
-            python3-numpy
+            python3-numpy \
+            python3-pytest
           "$CUDACXX" --version
       - name: Install ccache 4.14
         run: |
@@ -329,6 +330,25 @@ jobs:
         run: >-
           cmake --build --preset cuda-release-sm120
           --target generativeqc_cuda_runtime_tests --parallel 3
+      - name: Compile opted-in AO radial kernels with release resources
+        # Default native emission intentionally omits this experimental schedule.
+        # Exercise its exact six kernel resource records without running a GPU.
+        env:
+          PYTHONPATH: python
+          GENERATIVEQC_GRID_CUDA_ARCH: sm_120
+          CUDA_VISIBLE_DEVICES: ""
+        run: |
+          test -x "$CUDACXX"
+          mkdir -p build/ao-radial-compiler
+          cat > build/ao-radial-compiler/nvcc <<'SH'
+          #!/bin/sh
+          exec ccache "$CUDACXX" "$@"
+          SH
+          chmod +x build/ao-radial-compiler/nvcc
+          export GENERATIVEQC_NVCC="$PWD/build/ao-radial-compiler/nvcc"
+          python3 -m pytest -q \
+            tests/python/test_cuda_ao_radial_reuse.py::test_emitted_ao_cuda_compiles_with_specialized_resources \
+            --basetemp build/ao-radial-compile
       # Merge-group refs are ephemeral, so saving actions/cache there cannot
       # accelerate the next queue group. Stable PR/master refs still benefit.
       - name: Save CUDA ccache immediately after build
@@ -429,6 +449,7 @@ jobs:
           path: |
             build/xc-compile
             build/native-xc-resource
+            build/ao-radial-compile
       - name: Preserve f-shell release resource report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

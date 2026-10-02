@@ -434,6 +434,22 @@ def _normalize_stationary(
     return {
         "schema": "generativeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
+        "grid_work_plan": dict(_mapping(work.get("grid_work_plan"))),
+        "native_integrals_required": work.get("native_integrals_required"),
+        "resource_bounds": {
+            name: _int_or_none(work.get(name))
+            for name in (
+                "additional_device_peak_bound",
+                "additional_device_budget",
+                "additional_host_numeric_bound",
+                "additional_host_budget",
+                "snapshot_host_bytes",
+                "native_integral_host_reserve",
+            )
+        },
+        "stationary_integral_derivative_route": work.get(
+            "stationary_integral_derivative_route"
+        ),
         "wall_seconds": wall,
         "profiled_ms": profiled_ms,
         "traffic": traffic,

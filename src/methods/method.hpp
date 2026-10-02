@@ -58,6 +58,7 @@ struct Result {
   /** Completed KS solve, moved through the adapter and ABI handle. Keeping a
    * single exported history owner preserves the method resource bound. */
   std::optional<dft::ScfDiagnostic> ks_diagnostic;
+  scf::initial_guess::PreliminaryDiagnostic preliminary_guess;
 };
 
 /** Method-neutral copy of the cumulative native CUDA KS movement ledger. */

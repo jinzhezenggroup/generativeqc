@@ -1,0 +1,14 @@
+{
+  "basis": "6-31G Cartesian",
+  "converged": true,
+  "energy_difference": -1.7053025658242404e-13,
+  "grid": "exact same native target coordinates/weights; no pruning",
+  "libxc_version": "7.0.0",
+  "max_density_difference": 1.5368928352188505e-11,
+  "method": "PBE0/RKS",
+  "native_energy": -76.30106408999514,
+  "oracle": "PySCF",
+  "oracle_energy": -76.30106408999531,
+  "pyscf_version": "2.14.0",
+  "scope": "Independent spot check on water/6-31G. No production dependency, no large-system or GPU oracle claim."
+}

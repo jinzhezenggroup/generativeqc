@@ -242,12 +242,37 @@ std::vector<FleetItemResult> FleetPlan::execute(
 
     const bool has_warm_density = warm_starts_enabled_ && warm_densities_[system_index].has_value();
     item.warm_start_used = has_warm_density;
+    unsigned ordinary_attempts = 0, discarded_iterations = 0;
+    std::size_t discarded_fock_builds = 0;
+    bool discarded_work_complete = true;
     const auto evaluate = [&](const std::vector<double>* initial_density) {
       const core::System auxiliary = auxiliary_for_geometry(auxiliary_template_, execution_system);
-      return run_fock_strategy_cached(
-          independent_fock_plans_[system_index], execution_system, &auxiliary, execution_options,
-          device_id_, initial_density,
-          cuda_df_orthogonalizers_.empty() ? nullptr : &cuda_df_orthogonalizers_[system_index]);
+      auto attempt_options = execution_options;
+      const bool warm_retry = has_warm_density && initial_density == nullptr;
+      if (warm_retry) attempt_options.preliminary_guess.reset();
+      ++ordinary_attempts;
+      try {
+        auto native = run_fock_strategy_cached(
+            independent_fock_plans_[system_index], execution_system, &auxiliary, attempt_options,
+            device_id_, initial_density,
+            cuda_df_orthogonalizers_.empty() ? nullptr : &cuda_df_orthogonalizers_[system_index]);
+        if (warm_retry && execution_options.preliminary_guess) {
+          auto& diagnostic = native.preliminary_guess;
+          diagnostic.requested_kind =
+              static_cast<std::uint32_t>(execution_options.preliminary_guess->kind);
+          diagnostic.outcome = initial_guess::PreliminaryOutcome::ExplicitDensity;
+          diagnostic.target_attempts = ordinary_attempts;
+          diagnostic.discarded_target_iterations = discarded_iterations;
+          diagnostic.discarded_target_fock_builds = discarded_fock_builds;
+          diagnostic.work_counters_complete = discarded_work_complete;
+        }
+        discarded_iterations += native.iterations;
+        discarded_fock_builds += native.fock_builds;
+        return native;
+      } catch (...) {
+        discarded_work_complete = false;
+        throw;
+      }
     };
     try {
       const std::vector<double>* initial_density =
@@ -266,7 +291,14 @@ std::vector<FleetItemResult> FleetPlan::execute(
       item.status =
           item.scf.converged ? GENERATIVEQC_STATUS_SUCCESS : GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;
     } catch (...) {
-      if (has_warm_density) {
+      const auto first_status = exception_status();
+      // The opt-in preparation contract propagates allocation failures. Keep
+      // the existing no-policy warm lifecycle unchanged, and do not restart
+      // a failed warm/core attempt after allocation exhaustion in this mode.
+      const bool allocation_failure =
+          execution_options.preliminary_guess && first_status == GENERATIVEQC_STATUS_OUT_OF_MEMORY;
+      const bool retry_exhausted = execution_options.preliminary_guess && ordinary_attempts >= 2;
+      if (has_warm_density && !allocation_failure && !retry_exhausted) {
         try {
           item.warm_start_fallback = true;
           item.scf = evaluate(nullptr);
@@ -276,7 +308,7 @@ std::vector<FleetItemResult> FleetPlan::execute(
           item.status = exception_status();
         }
       } else {
-        item.status = exception_status();
+        item.status = first_status;
       }
     }
 

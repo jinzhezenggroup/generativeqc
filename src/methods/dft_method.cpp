@@ -25,6 +25,7 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
 #include "scf/types.hpp"
 
@@ -212,6 +213,7 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       !std::isfinite(descriptor.screening_tolerance))
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT, "DFT tolerances must be finite");
   scf::ScfOptions options;
+  options.preliminary_guess = scf::initial_guess::preliminary_options(descriptor.initial_guess);
   options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
   options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;
   options.energy_tolerance =
@@ -288,6 +290,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   scf::FockBuildSpec fock;
   fock.spin =
       unrestricted(execution_plan) ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
+  if (options.preliminary_guess && fock.spin != scf::FockSpin::Restricted)
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "preliminary SCF requires a restricted target");
   fock.derivative_order = 0;
   fock.exchange.present = false;
   options.semilocal_exchange_scale = semilocal.exchange_scale;
@@ -525,6 +530,7 @@ dft::GridSpec ks_grid_options(const generativeqc_method_descriptor& descriptor,
 
 Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   Result result;
+  result.preliminary_guess = native.preliminary_guess;
   result.energy = native.energy;
   result.convergence.iterations = native.iterations;
   result.convergence.energy_change = native.energy_change;
@@ -879,6 +885,24 @@ class KsPreparedCalculation final : public PreparedCalculation {
     detail = "resident final density requires a CUDA build";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 #endif
+  }
+
+  generativeqc_status fixed_density_profile(const dft::CudaKsFinalStateToken& expected,
+                                            KsFixedDensityProfile& profile, std::string& detail) {
+    profile = {};
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_) {
+      dft::CudaKsFixedDensityProfile native;
+      const auto status = cuda_->profile_fixed_density_components(expected, native, detail);
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
+        profile.milliseconds = native.milliseconds;
+        profile.present_mask = native.present_mask;
+      }
+      return status;
+    }
+#endif
+    detail = "fixed-density component profiling requires a CUDA KS owner";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
 
   generativeqc_status resident_grid(const dft::CudaKsFinalStateToken& expected, int& device,
@@ -1331,8 +1355,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
   }
 
   /** Single-system and native batch paths share the same scientific owner. */
-  scf::ScfResult run(const std::vector<double>* initial_density, bool reuse_warm,
-                     bool update_warm) {
+  scf::ScfResult run(const std::vector<double>* initial_density, bool reuse_warm, bool update_warm,
+                     bool allow_preliminary = true) {
     invalidate_final_state();
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) {
@@ -1354,12 +1378,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
     // The CPU driver already samples its provider/grid. Add only the retained
     // last-good density, which coexists with its current/proposed densities.
     runtime::CpuRetainedCapacity retained_warm(runtime::vector_bytes(warm_));
+    auto execution_options = options_;
+    if (!allow_preliminary) execution_options.preliminary_guess.reset();
     scf::ScfResult native;
     if (execution_plan_.automatic_program) {
       native = unrestricted(execution_plan_)
-                   ? scf::run_semilocal_uks(fock_, basis_, grid_, options_,
+                   ? scf::run_semilocal_uks(fock_, basis_, grid_, execution_options,
                                             *execution_plan_.automatic_program, seed)
-                   : scf::run_semilocal_rks(fock_, basis_, grid_, options_,
+                   : scf::run_semilocal_rks(fock_, basis_, grid_, execution_options,
                                             *execution_plan_.automatic_program, seed);
     } else if (execution_plan_.generated_split_hybrid)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
@@ -1368,28 +1394,30 @@ class KsPreparedCalculation final : public PreparedCalculation {
       if (!range_correction_ || !nonlocal_)
         throw std::runtime_error("WB97M-V requires both range-exchange and nonlocal owners");
       native = unrestricted(execution_plan_)
-                   ? scf::run_wb97mv_uks(fock_, *range_correction_, basis_, grid_, options_,
-                                         *nonlocal_, seed)
-                   : scf::run_wb97mv_rks(fock_, *range_correction_, basis_, grid_, options_,
-                                         *nonlocal_, seed);
+                   ? scf::run_wb97mv_uks(fock_, *range_correction_, basis_, grid_,
+                                         execution_options, *nonlocal_, seed)
+                   : scf::run_wb97mv_rks(fock_, *range_correction_, basis_, grid_,
+                                         execution_options, *nonlocal_, seed);
     } else if (execution_plan_.range_exchange) {
       if (!range_correction_)
         throw std::runtime_error("KS range-exchange correction owner is missing");
       native = unrestricted(execution_plan_)
-                   ? scf::run_pbe_rsh_uks(fock_, *range_correction_, basis_, grid_, options_, seed,
-                                          nonlocal_.get())
-                   : scf::run_pbe_rsh_rks(fock_, *range_correction_, basis_, grid_, options_, seed,
-                                          nonlocal_.get());
+                   ? scf::run_pbe_rsh_uks(fock_, *range_correction_, basis_, grid_,
+                                          execution_options, seed, nonlocal_.get())
+                   : scf::run_pbe_rsh_rks(fock_, *range_correction_, basis_, grid_,
+                                          execution_options, seed, nonlocal_.get());
     } else if (execution_plan_.semilocal_family == dft::SemilocalFamily::B3lyp)
       native = unrestricted(execution_plan_)
-                   ? scf::run_b3lyp_uks(fock_, basis_, grid_, options_, seed)
-                   : scf::run_b3lyp_rks(fock_, basis_, grid_, options_, seed);
+                   ? scf::run_b3lyp_uks(fock_, basis_, grid_, execution_options, seed)
+                   : scf::run_b3lyp_rks(fock_, basis_, grid_, execution_options, seed);
     else if (execution_plan_.semilocal_family == dft::SemilocalFamily::Pbe && nonlocal_)
-      native = unrestricted(execution_plan_)
-                   ? scf::run_pbe_uks_nonlocal(fock_, basis_, grid_, options_, seed, *nonlocal_)
-                   : scf::run_pbe_rks_nonlocal(fock_, basis_, grid_, options_, seed, *nonlocal_);
+      native =
+          unrestricted(execution_plan_)
+              ? scf::run_pbe_uks_nonlocal(fock_, basis_, grid_, execution_options, seed, *nonlocal_)
+              : scf::run_pbe_rks_nonlocal(fock_, basis_, grid_, execution_options, seed,
+                                          *nonlocal_);
     else
-      native = scf::run_curated_semilocal_ks(fock_, basis_, grid_, options_,
+      native = scf::run_curated_semilocal_ks(fock_, basis_, grid_, execution_options,
                                              execution_plan_.semilocal_family,
                                              execution_plan_.spin_channels, seed);
     // This owner has immutable model/geometry/spin identity. Only successful
@@ -1712,8 +1740,22 @@ class KsPreparedBatch final : public PreparedBatch {
           }
 #endif
           runtime::CpuRetainedCapacity neighbors(host_numeric_capacity(i));
-          finish(i,
-                 item.plan->run(seed, reuse && item.resident_warm, warm_enabled_ && warm_updates_));
+          const auto discarded_iterations = result.calculation.convergence.iterations;
+          const auto discarded_fock_builds = result.calculation.fock_builds;
+          const bool discarded_complete = result.status == GENERATIVEQC_STATUS_NOT_CONVERGED;
+          auto native = item.plan->run(seed, reuse && item.resident_warm,
+                                       warm_enabled_ && warm_updates_, !attempt);
+          if (attempt && options_.preliminary_guess) {
+            auto& diagnostic = native.preliminary_guess;
+            diagnostic.requested_kind =
+                static_cast<std::uint32_t>(options_.preliminary_guess->kind);
+            diagnostic.outcome = scf::initial_guess::PreliminaryOutcome::ExplicitDensity;
+            diagnostic.target_attempts = 2;
+            diagnostic.discarded_target_iterations = discarded_iterations;
+            diagnostic.discarded_target_fock_builds = discarded_fock_builds;
+            diagnostic.work_counters_complete = discarded_complete;
+          }
+          finish(i, std::move(native));
         } catch (...) {
           result.status = item_exception_status();
         }
@@ -1852,6 +1894,16 @@ class KsPreparedBatch final : public PreparedBatch {
     matrix_elements = 0;
     spins = 0;
     source_stream = nullptr;
+    detail = "KS batch item has no prepared final-state owner";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+
+  generativeqc_status fixed_density_profile(std::size_t index,
+                                            const dft::CudaKsFinalStateToken& expected,
+                                            KsFixedDensityProfile& profile, std::string& detail) {
+    profile = {};
+    if (index < items_.size() && items_[index].plan)
+      return items_[index].plan->fixed_density_profile(expected, profile, detail);
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -2118,6 +2170,17 @@ generativeqc_status dft_cuda_resident_density(PreparedBatch& batch, std::size_t 
   spins = 0;
   source_stream = nullptr;
   detail = "resident final density requires a native KS batch";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status dft_cuda_fixed_density_profile(PreparedBatch& batch, std::size_t index,
+                                                   const dft::CudaKsFinalStateToken& expected,
+                                                   KsFixedDensityProfile& profile,
+                                                   std::string& detail) {
+  profile = {};
+  auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
+  if (ks) return ks->fixed_density_profile(index, expected, profile, detail);
+  detail = "fixed-density component profiling requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 

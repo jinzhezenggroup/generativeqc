@@ -43,15 +43,17 @@ def _identity(value: typing.Any, name: typing.Any) -> None:
 
 @dataclass(frozen=True)
 class ResolvedModel:
-    """Backend-independent all-electron HF or canonical MP2 model at a geometry.
+    """Backend-independent all-electron HF or canonical correlated model identity.
 
     Hashes identify actual ordered nuclei, coordinates, normalized basis data and
     AO conventions, not basis aliases or array dimensions. The metric threshold
     belongs to the fitted model: changing it changes the operator. Screening and
     iteration/arithmetic settings belong to the numerical experiment instead.
     DF's effective rank is recorded in evidence because it can vary by geometry.
-    DFT and correlated models require additional identities before this schema
-    can represent them; energy-only canonical MP2 is represented explicitly.
+    Canonical RCCSD and RCCSD(T) are restricted to the current unfrozen,
+    conventional, closed-shell contract. Their identity supports portable HF
+    checkpoints; it does not enable target-accuracy or progressive execution.
+    DFT requires additional functional identities before this schema can represent it.
     """
 
     method: str
@@ -73,8 +75,8 @@ class ResolvedModel:
             or self.schema_version != SCHEMA_VERSION
         ):
             raise ValueError("unsupported resolved-model schema")
-        if self.method not in ("rhf", "uhf", "mp2"):
-            raise ValueError("accuracy models currently support RHF/UHF and MP2")
+        if self.method not in ("rhf", "uhf", "mp2", "rccsd", "rccsd(t)"):
+            raise ValueError("unsupported HF/canonical correlated model")
         if self.hamiltonian != "all-electron-nonrelativistic-coulomb":
             raise ValueError("unsupported Hamiltonian/core treatment")
         if self.representation not in ("cartesian", "real_spherical"):
@@ -92,8 +94,15 @@ class ResolvedModel:
         unpaired = self.multiplicity - 1
         if unpaired > self.electron_count or (self.electron_count - unpaired) % 2:
             raise ValueError("inconsistent electron count and spin populations")
-        if self.method in ("rhf", "mp2") and self.multiplicity != 1:
-            raise ValueError("RHF and canonical MP2 require a closed-shell singlet")
+        if self.method != "uhf" and self.multiplicity != 1:
+            raise ValueError(
+                "RHF and canonical correlated models require a closed-shell singlet"
+            )
+        if (
+            self.method in ("rccsd", "rccsd(t)")
+            and self.approximation != "conventional"
+        ):
+            raise ValueError("canonical CC models require conventional integrals")
         if self.approximation == "conventional":
             if (
                 self.auxiliary_basis_hash is not None

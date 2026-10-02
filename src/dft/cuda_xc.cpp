@@ -276,6 +276,18 @@ void CudaXcPlan::enqueue_density_features(const double* density, std::size_t ele
                total_gradient);
 }
 
+CudaXcView CudaXcPlan::enqueue_replay_density_features(const double* density, std::size_t elements,
+                                                       double* total_density,
+                                                       double* total_gradient) {
+  if (layout_.response)
+    throw std::invalid_argument("XC response plan cannot publish physical replay features");
+  if (total_density == nullptr || total_gradient == nullptr)
+    throw std::invalid_argument("CUDA XC replay density-feature export requires both outputs");
+  enqueue_impl(density, nullptr, elements, 0, CudaXcDensityPrecision::Fp64, total_density,
+               total_gradient, false);
+  return {0, layout_.nao, layout_.spins, potential_, totals_, error_, stream_};
+}
+
 void CudaXcPlan::enqueue_response(const double* density, const double* direction,
                                   std::size_t elements, std::uint64_t generation) {
   if (!layout_.response) throw std::invalid_argument("XC plan was not prepared for response");
@@ -299,12 +311,32 @@ void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
                                             const double* effective_weights,
                                             const double* total_gradient, const double* vrho,
                                             const double* vsigma, const double* nonlocal_energy) {
+  enqueue_nonlocal_potential_impl(generation, true, effective_weights, total_gradient, vrho, vsigma,
+                                  nonlocal_energy);
+}
+
+void CudaXcPlan::enqueue_replay_nonlocal_potential(const double* effective_weights,
+                                                   const double* total_gradient, const double* vrho,
+                                                   const double* vsigma,
+                                                   const double* nonlocal_energy) {
+  enqueue_nonlocal_potential_impl(0, false, effective_weights, total_gradient, vrho, vsigma,
+                                  nonlocal_energy);
+}
+
+void CudaXcPlan::enqueue_nonlocal_potential_impl(std::uint64_t generation, bool publish_generation,
+                                                 const double* effective_weights,
+                                                 const double* total_gradient, const double* vrho,
+                                                 const double* vsigma,
+                                                 const double* nonlocal_energy) {
   check_device();
   if (layout_.response)
     throw std::invalid_argument("XC response plan cannot accumulate a physical nonlocal potential");
   if (layout_.feature_terms < 4 || layout_.ao_precision != CudaXcAoPrecision::Fp64)
     throw std::invalid_argument("CUDA nonlocal AO assembly requires strict-FP64 GGA ingredients");
-  generations_.require(generation);
+  if (publish_generation)
+    generations_.require(generation);
+  else if (generation != 0)
+    throw std::invalid_argument("CUDA replay nonlocal assembly received a logical generation");
   if (!effective_weights || !total_gradient || !vrho || !vsigma || !nonlocal_energy)
     throw std::invalid_argument("CUDA nonlocal AO assembly received a null device input");
   const auto scalar_bytes =
@@ -323,10 +355,10 @@ void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
       overlaps_arena(vsigma, scalar_bytes) || overlaps_arena(nonlocal_energy, sizeof(double)))
     throw std::invalid_argument("CUDA nonlocal AO inputs alias the semilocal XC workspace");
 
-  // The nonlocal phase mutates the semilocal potential/totals in place.
-  // Revoke the generation before the first asynchronous mutation so a launch
-  // failure can never expose a partially accumulated result.
-  generations_.revoke(generation);
+  // Ordinary execution revokes the published semilocal generation while the
+  // nonlocal contribution mutates it. Replay execution has no logical
+  // generation yet; the SolverRegion publishes only after physical submission.
+  if (publish_generation) generations_.revoke(generation);
   try {
 #if defined(GENERATIVEQC_TEST_HOOKS)
     const auto injected = fail_next_nonlocal_xc_status;
@@ -336,7 +368,7 @@ void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
     cuda_xc_detail::enqueue_nonlocal_potential(layout_, stream_, basis_, points_, effective_weights,
                                                total_gradient, vrho, vsigma, nonlocal_energy, ao_,
                                                coefficients_, potential_, totals_, error_);
-    generations_.commit(generation);
+    if (publish_generation) generations_.commit(generation);
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     (void)cudaStreamSynchronize(stream_);
     throw std::bad_alloc();
