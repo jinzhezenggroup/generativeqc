@@ -97,6 +97,8 @@ class PreparedFockPlan {
                          const std::vector<double>& beta = {}) const;
   std::vector<double> energy_derivative(const std::vector<double>& density,
                                         const std::vector<double>& beta = {}) const;
+  FockEnergyDerivativeComponents energy_derivative_components(
+      const std::vector<double>& density, const std::vector<double>& beta = {}) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */
@@ -107,7 +109,8 @@ class PreparedFockPlan {
    * excluded: they do not alter the prepared mathematical operator. */
   bool matches(const core::System& orbital, const core::System* auxiliary,
                const ResolvedFockBuild& strategy, int device_id, std::size_t device_budget_bytes,
-               unsigned minimum_direct_derivative_order = 0) const noexcept;
+               unsigned minimum_direct_derivative_order = 0,
+               unsigned minimum_fitted_derivative_order = 0) const noexcept;
 
  private:
   struct Impl;
