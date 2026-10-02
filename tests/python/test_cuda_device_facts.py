@@ -33,6 +33,8 @@ struct cudaDeviceProp {
 };
 cudaError_t cudaDeviceGetAttribute(int*,cudaDeviceAttr,int);
 cudaError_t cudaGetDeviceProperties(cudaDeviceProp*,int);
+cudaError_t cudaPeekAtLastError();
+cudaError_t cudaGetLastError();
 """
 
 HARNESS = r"""
@@ -43,7 +45,7 @@ HARNESS = r"""
 #include <cstring>
 #include <dlfcn.h>
 using namespace generativeqc::runtime;
-int mode=0, epoch=0, attributes=0, properties=0, opens=0;
+int mode=0, epoch=0, attributes=0, properties=0, opens=0, last_error=0, clears=0;
 int values[]={12,0,32,1024,2048,32,65536,49152,101376,102400,100};
 int sm(int device) { return 100+5*device+epoch; }
 std::size_t memory(int device) { return (std::size_t{1}<<35)+device+epoch; }
@@ -64,16 +66,18 @@ extern "C" void* dlsym(void*,const char* name) noexcept {
 }
 cudaError_t cudaDeviceGetAttribute(int* out,cudaDeviceAttr attr,int device) {
   ++attributes;
-  if (device<0) return 10;
-  if (attr==cudaDevAttrMaxThreadsPerBlock && (mode==1 || mode==6)) return cudaErrorNotSupported;
-  if (attr==cudaDevAttrMaxThreadsPerBlock && mode==5) return 42;
+  if (device<0) return last_error=10;
+  if (attr==cudaDevAttrMaxThreadsPerBlock && (mode==1 || mode==6 || mode==10))
+    return last_error=cudaErrorNotSupported;
+  if (attr==cudaDevAttrMaxThreadsPerBlock && mode==8) return last_error=cudaErrorInvalidValue;
+  if (attr==cudaDevAttrMaxThreadsPerBlock && mode==5) return last_error=42;
   *out=attr==cudaDevAttrMultiProcessorCount ? sm(device) : values[int(attr)];
   return cudaSuccess;
 }
 cudaError_t cudaGetDeviceProperties(cudaDeviceProp* out,int device) {
   ++properties;
-  if (device<0) return 10;
-  if (mode==6) return 43;
+  if (device<0) return last_error=10;
+  if (mode==6) return last_error=43;
   *out={};
   device_name(out->name,sizeof(out->name),device);
   out->major=values[0];out->minor=values[1];out->warpSize=values[2];
@@ -84,15 +88,28 @@ cudaError_t cudaGetDeviceProperties(cudaDeviceProp* out,int device) {
   out->totalGlobalMem=memory(device);
   return cudaSuccess;
 }
+cudaError_t cudaPeekAtLastError() { return last_error; }
+cudaError_t cudaGetLastError() {
+  ++clears;
+  const auto result=last_error;
+  last_error=0;
+  // An asynchronous illegal-address failure can surface during cleanup.
+  if (mode==10) return last_error=700;
+  return result;
+}
 void check(int device,int expected_error=0) {
   CudaTargetInfo result{}; result.warp_size=999;
   char name[256];std::memset(name,'x',sizeof(name));
   assert(cuda_device_facts(device,result,name)==expected_error);
   if (expected_error) {
+    assert(last_error==expected_error);
     assert(result.warp_size==0 && result.total_global_memory==0);
     for(char c:name) assert(c==0);
     return;
   }
+  // Model the next successful kernel's launch check: the handled probe error
+  // must not survive the authoritative full-property fallback.
+  assert(cudaPeekAtLastError()==cudaSuccess);
   assert(result.compute_capability_major==12 && result.compute_capability_minor==0);
   assert(result.warp_size==32 && result.maximum_threads_per_block==1024);
   assert(result.maximum_threads_per_sm==2048 && result.maximum_blocks_per_sm==32);
@@ -104,15 +121,28 @@ void check(int device,int expected_error=0) {
 }
 int main(int argc,char** argv) {
   assert(argc==2);mode=std::atoi(argv[1]);
+  if (mode==9 || mode==11) {
+    last_error=mode==9 ? 700 : cudaErrorInvalidValue;
+    check(7,last_error);
+    assert(attributes==0 && properties==0 && clears==0);
+    return 0;
+  }
+  if (mode==10) {
+    check(7,700);
+    assert(properties==0 && clears==1);
+    return 0;
+  }
   if (mode==5 || mode==6) {
     check(7,mode==5 ? 42 : 43);
     assert(properties==(mode==5 ? 0 : 1));
+    assert(clears==(mode==5 ? 0 : 1));
     return 0;
   }
   check(7);++epoch;check(7);check(2);check(7);
   // Both repeated and changed ordinals must observe fresh device/resource facts.
   if (mode==0) assert(properties==0 && attributes==44 && opens==1);
   else assert(properties==4);
+  assert(clears==((mode==1 || mode==8) ? 4 : 0));
   if (mode==7) assert(attributes==0 && opens==0); // CuMetal bypasses NVIDIA discovery.
   check(-1,10);
 }
@@ -158,7 +188,7 @@ def test_fresh_facts_and_failure_fallback(tmp_path: Path, provider: str) -> None
         objects.append(str(output))
     binary = tmp_path / "facts"
     subprocess.run([compiler, *objects, "-ldl", "-o", str(binary)], check=True)
-    for mode in [7] if provider == "cumetal" else range(7):
+    for mode in [7] if provider == "cumetal" else [*range(7), 8, 9, 10, 11]:
         subprocess.run([str(binary), str(mode)], check=True, timeout=10)
 
 
