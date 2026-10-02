@@ -104,6 +104,12 @@ extern "C" int retained_metric(int a,int rr,const double* x,const double* s,
   calls=0;fail_on=fail;
   return generativeqc::scf::generated::df_occupied_apply_metric_root(nullptr,a,rr,x,s,out);
 }
+extern "C" int retained_metric_pair_major(int a,int rr,const double* x,
+                                            const double* s,double* out,int fail) {
+  calls=0;fail_on=fail;
+  return generativeqc::scf::generated::df_occupied_apply_metric_root_pair_major(
+      nullptr,a,rr,x,s,out);
+}
 """
 
 
@@ -158,6 +164,8 @@ def native(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     lib.small_metric.restype = ct.c_int
     lib.retained_metric.argtypes = [ct.c_int] * 2 + [ptr] * 3 + [ct.c_int]
     lib.retained_metric.restype = ct.c_int
+    lib.retained_metric_pair_major.argtypes = [ct.c_int] * 2 + [ptr] * 3 + [ct.c_int]
+    lib.retained_metric_pair_major.restype = ct.c_int
     return lib
 
 
@@ -287,6 +295,41 @@ def test_small_metric_layout(
     assert native.call_count() == (1 if retained else 2)
 
 
+@pytest.mark.parametrize("a,r", [(1, 1), (3, 2), (9, 3), (17, 5)])
+@pytest.mark.parametrize("condition", [1.0, 1e3, 1e6, 1e10])
+def test_pair_major_retained_metric_root_layout(
+    native: ct.CDLL, a: int, r: int, condition: float
+) -> None:
+    """Q-fast final projections feed the metric root without a gather."""
+    rng = np.random.default_rng(1690 + a + r)
+    eigenvectors = np.asfortranarray(np.linalg.qr(rng.normal(size=(a, a)))[0])
+    eigenvalues = np.geomspace(1, condition, a)
+    inverse_root = np.asfortranarray(
+        (eigenvectors / np.sqrt(eigenvalues)) @ eigenvectors.T
+    )
+    projected = np.ascontiguousarray(rng.normal(size=(a, r, r)))
+    pair_major = np.asfortranarray(projected.reshape(a, r * r))
+    out = np.full_like(projected, np.nan)
+    assert (
+        native.retained_metric_pair_major(
+            a,
+            r * r,
+            pointer(inverse_root),
+            pointer(pair_major),
+            pointer(out),
+            0,
+        )
+        == 0
+    )
+    np.testing.assert_allclose(
+        out,
+        np.einsum("pq,qij->pij", inverse_root, projected),
+        atol=5e-14,
+        rtol=2e-12,
+    )
+    assert native.call_count() == 1
+
+
 def test_retained_metric_failure_and_alias_contract(native: ct.CDLL) -> None:
     """A failed BLAS call leaves output untouched; in-place contraction is invalid."""
     x = np.eye(3)
@@ -295,6 +338,20 @@ def test_retained_metric_failure_and_alias_contract(native: ct.CDLL) -> None:
     assert native.retained_metric(3, 4, pointer(x), pointer(s), pointer(out), 1) == 13
     assert np.isnan(out).all()
     assert native.retained_metric(3, 4, pointer(x), pointer(s), pointer(s), 0) == 7
+    out.fill(np.nan)
+    assert (
+        native.retained_metric_pair_major(
+            3, 4, pointer(x), pointer(s), pointer(out), 1
+        )
+        == 13
+    )
+    assert np.isnan(out).all()
+    assert (
+        native.retained_metric_pair_major(
+            3, 4, pointer(x), pointer(s), pointer(s), 0
+        )
+        == 7
+    )
 
 
 def test_96_atom_capacity_and_overflow(native: ct.CDLL) -> None:
