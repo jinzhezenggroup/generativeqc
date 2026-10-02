@@ -1055,39 +1055,33 @@ int main() {
         generativeqc_calculation* auto_calculation = nullptr;
         const auto auto_status = generativeqc_calculation_prepare(cuda_context, cuda_system,
                                                                   &auto_method, &auto_calculation);
-        // LDA/PBE admit mixed-J acceleration. r2SCAN and exact-exchange hybrids
-        // remain strict FP64 until their independent precision qualifications land.
-        if (ks == GENERATIVEQC_METHOD_R2SCAN_RKS || ks == GENERATIVEQC_METHOD_R2SCAN_UKS || pbe0 ||
-            b3lyp) {
-          require(auto_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED && auto_calculation == nullptr,
-                  "strict-FP64 CUDA KS method lost its explicit precision rejection");
-        } else {
-          require(auto_status == GENERATIVEQC_STATUS_SUCCESS && auto_calculation != nullptr,
-                  "CUDA KS automatic-precision preparation failed");
-          auto auto_result = unconverged;
-          const char* saved_chunk = std::getenv("GENERATIVEQC_CUDA_KS_CHUNK");
-          const std::string saved_chunk_value = saved_chunk ? saved_chunk : "";
-          require(setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
-                  "cannot enable the CUDA KS chunk integration regression");
-          require(generativeqc_calculation_execute(auto_calculation, &auto_result) ==
-                          GENERATIVEQC_STATUS_SUCCESS &&
-                      auto_result.converged == 1 &&
-                      std::abs(auto_result.energy - cold.energy) < 2e-8,
-                  "CUDA KS mixed-J target refinement changed the FP64 endpoint");
-          generativeqc_precision_provenance precision{sizeof(generativeqc_precision_provenance),
-                                                      GENERATIVEQC_ABI_VERSION};
-          require(generativeqc_calculation_get_precision_provenance(auto_calculation, &precision) ==
-                          GENERATIVEQC_STATUS_SUCCESS &&
-                      precision.requested_mode == GENERATIVEQC_PRECISION_AUTO &&
-                      precision.effective_bits == 32U && precision.strict_refinement_applied == 1 &&
-                      precision.refinement_iterations >= 1U,
-                  "CUDA KS mixed-J provenance omitted actual FP32 work or FP64 refinement");
-          require(saved_chunk
-                      ? setenv("GENERATIVEQC_CUDA_KS_CHUNK", saved_chunk_value.c_str(), 1) == 0
-                      : unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
-                  "cannot restore the CUDA KS chunk integration regression environment");
-          generativeqc_calculation_destroy(auto_calculation);
-        }
+        // AUTO is component-wise: Direct Coulomb J may use mixed arithmetic for every
+        // admitted direct method, qualified LDA/PBE/r2SCAN density contractions may
+        // additionally use FP32 products, while exact K/tau/final audits remain FP64.
+        require(auto_status == GENERATIVEQC_STATUS_SUCCESS && auto_calculation != nullptr,
+                "CUDA KS automatic-precision preparation failed");
+        auto auto_result = unconverged;
+        const char* saved_chunk = std::getenv("GENERATIVEQC_CUDA_KS_CHUNK");
+        const std::string saved_chunk_value = saved_chunk ? saved_chunk : "";
+        require(setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
+                "cannot enable the CUDA KS chunk integration regression");
+        require(generativeqc_calculation_execute(auto_calculation, &auto_result) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    auto_result.converged == 1 && std::abs(auto_result.energy - cold.energy) < 2e-8,
+                "CUDA KS component-wise AUTO target refinement changed the FP64 endpoint");
+        generativeqc_precision_provenance precision{sizeof(generativeqc_precision_provenance),
+                                                    GENERATIVEQC_ABI_VERSION};
+        require(generativeqc_calculation_get_precision_provenance(auto_calculation, &precision) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    precision.requested_mode == GENERATIVEQC_PRECISION_AUTO &&
+                    precision.effective_bits == 32U && precision.strict_refinement_applied == 1 &&
+                    precision.refinement_iterations >= 1U,
+                "CUDA KS AUTO provenance omitted actual FP32 work or FP64 refinement");
+        require(saved_chunk
+                    ? setenv("GENERATIVEQC_CUDA_KS_CHUNK", saved_chunk_value.c_str(), 1) == 0
+                    : unsetenv("GENERATIVEQC_CUDA_KS_CHUNK") == 0,
+                "cannot restore the CUDA KS chunk integration regression environment");
+        generativeqc_calculation_destroy(auto_calculation);
 
         if (ks == GENERATIVEQC_METHOD_LDA_RKS) {
           // Cover both the owner and generated-XC error boundaries. Neither

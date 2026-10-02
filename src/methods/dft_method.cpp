@@ -283,10 +283,6 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                       "DFT automatic precision currently requires CUDA");
   if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.d4_correction)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "PBE-D4 currently requires strict FP64");
-  if (descriptor.precision_mode == GENERATIVEQC_PRECISION_AUTO &&
-      dft::semilocal_family_requires_tau(execution_plan.semilocal_family))
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "meta-GGA DFT currently requires strict FP64");
   options.precision_mode = descriptor.precision_mode;
 
   scf::FockBuildSpec fock;
@@ -389,21 +385,26 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                                 options.semilocal_correlation_scale != 1.0 || fock.exchange.present;
   const double pbe0_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.125 : -0.25;
   const double b3lyp_fock_coefficient = fock.spin == scf::FockSpin::Restricted ? -0.1 : -0.2;
-  const bool strict_cuda_global_hybrid =
+  // AUTO is admitted per component by CudaKsPlan: Direct Coulomb J may use
+  // mixed arithmetic while exact exchange K remains strict FP64. Density-fitted
+  // global hybrids retain their separate strict-FP64 admission.
+  const bool cuda_global_hybrid =
       backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
       !execution_plan.nonlocal_correlation &&
-      options.precision_mode != GENERATIVEQC_PRECISION_AUTO && fock.exchange.present;
+      (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
+       options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
+      fock.exchange.present;
   const bool cuda_pbe0 =
-      strict_cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
+      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::Pbe &&
       options.semilocal_exchange_scale == 0.75 && options.semilocal_correlation_scale == 1.0 &&
       fock.exchange.coefficient == pbe0_fock_coefficient;
   const bool cuda_b3lyp =
-      strict_cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::B3lyp &&
+      cuda_global_hybrid && execution_plan.semilocal_family == dft::SemilocalFamily::B3lyp &&
       options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0 &&
       fock.exchange.coefficient == b3lyp_fock_coefficient;
   bool cuda_split_hybrid = false;
 #if GENERATIVEQC_HAS_CUDA
-  if (strict_cuda_global_hybrid && execution_plan.generated_split_hybrid &&
+  if (cuda_global_hybrid && execution_plan.generated_split_hybrid &&
       options.semilocal_exchange_scale == 1.0 && options.semilocal_correlation_scale == 1.0) {
     const auto composition =
         dft::generated::split_hybrid_composition(xc_functional_code(execution_plan));
