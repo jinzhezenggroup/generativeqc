@@ -14,12 +14,13 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("auxiliary", ["def2-svp", "cc-pvdz-jkfit"])
 @pytest.mark.parametrize(
-    "final_exchange,metric,corrected",
+    "final_exchange,metric,corrected,projection",
     [
-        ("auto", "auto", False),
-        ("occupied", "spectral", False),
-        ("auto", "auto", True),
-        ("dense", "spectral", True),
+        ("auto", "auto", False, "auto"),
+        ("auto", "auto", False, "off"),
+        ("occupied", "spectral", False, "auto"),
+        ("auto", "auto", True, "auto"),
+        ("dense", "spectral", True, "auto"),
     ],
 )
 def test_single_final_k_and_response_replay(
@@ -29,6 +30,7 @@ def test_single_final_k_and_response_replay(
     final_exchange: str,
     metric: str,
     corrected: bool,
+    projection: str,
 ) -> None:
     """Final K accepts exact/corrected factors without lending an absent raw owner."""
     assert os.environ.get("SLURM_JOB_ID")
@@ -59,6 +61,7 @@ def test_single_final_k_and_response_replay(
         "VALUE_STORAGE": "packed-single",
         "EXCHANGE": "occupied",
         "FINAL_EXCHANGE": final_exchange,
+        "FINAL_PROJECTION": projection,
         "RESPONSE_SPACE": "occupied",
         "OCCUPIED_RESPONSE_SOURCE": "fitted",
         "OCCUPIED_METRIC": metric,
@@ -86,6 +89,7 @@ def test_single_final_k_and_response_replay(
         density_tolerance=1e-10,
         max_iterations=100,
     )
+    observed_reuse = False
     with calc.prepare_batch([atoms], warm_start=True) as owner:
         for phase, geometry in enumerate((None, None, moved, moved)):
             trace = tmp_path / f"phase-{phase}.jsonl"
@@ -117,7 +121,41 @@ def test_single_final_k_and_response_replay(
             assert len(response) == 1
             counters = response[0]["counters"]
             assert counters.get("response_final_projection_reused", 0) == 0
-            assert counters.get("response_retained_fitted_projection_passes") == 1
+            # Even an unforced solve can need a strict final correction. Only
+            # the last accepted producer can publish the current exact lease;
+            # an earlier retained build may have been superseded by correction.
+            final_fitted = bool(
+                accepted and accepted[-1]["counters"].get("final_projection_fitted", 0)
+            )
+            reused = metric != "spectral" and projection != "off" and final_fitted
+            observed_reuse |= reused
+            assert counters.get("response_final_fitted_projection_reused", 0) == int(
+                reused
+            )
+            assert counters.get("response_final_fitted_potential_reused", 0) == int(
+                reused
+            )
+            assert counters.get("response_retained_fitted_projection_passes", 0) == int(
+                not reused
+            )
+            assert counters.get("response_occupied_charge_inverse_gemms", 0) == (
+                0 if reused else 2
+            )
+            assert counters.get(
+                "response_occupied_charge_inverse_gemms_avoided", 0
+            ) == (2 if reused else 0)
+            if reused:
+                assert counters.get("response_retained_fitted_charge_panels", 0) == 0
+                assert (
+                    counters["response_retained_fitted_charge_source_elements_avoided"]
+                    > 0
+                )
+                assert (
+                    counters["response_retained_fitted_charge_unpack_elements_avoided"]
+                    > 0
+                )
+            else:
+                assert counters["response_retained_fitted_charge_panels"] > 0
             assert counters.get("response_fitted_occupied_metric_root_gemms") == (
                 2 if metric == "spectral" else 1
             )
@@ -125,3 +163,11 @@ def test_single_final_k_and_response_replay(
                 metric != "spectral"
             )
             assert counters.get("response_scratch_bytes", 0) <= 64 << 20
+
+    if (
+        not corrected
+        and metric != "spectral"
+        and projection != "off"
+        and final_exchange != "dense"
+    ):
+        assert observed_reuse, "fixture did not exercise projection reuse"
