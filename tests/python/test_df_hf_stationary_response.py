@@ -154,10 +154,10 @@ def test_generated_source_weights_match_resolved_finite_differences() -> None:
 
 @pytest.mark.parametrize("symmetric", [False, True])
 @pytest.mark.parametrize("density_scale", [0.5, 2.0])
-def test_final_projection_trace_recovers_fitted_rhf_charge(
+def test_rooted_final_projection_recovers_fitted_rhf_potential(
     symmetric: bool, density_scale: float
 ) -> None:
-    """The trace recovers D:B across occupied gauge and optional B asymmetry."""
+    """Rooted trace recovers X(D:B) across occupied gauge and B asymmetry."""
     rng = np.random.default_rng(1690 + 10 * int(symmetric) + int(2 * density_scale))
     n, r, a = 9, 4, 7
     density_coefficients = np.linalg.qr(rng.normal(size=(n, r)))[0]
@@ -166,17 +166,26 @@ def test_final_projection_trace_recovers_fitted_rhf_charge(
     fitted = rng.normal(size=(a, n, n))
     if symmetric:
         fitted = 0.5 * (fitted + fitted.transpose(0, 2, 1))
+    metric_rotation = np.linalg.qr(rng.normal(size=(a, a)))[0]
+    metric_eigenvalues = np.geomspace(0.7, 3.1, a)
+    inverse_root = (
+        metric_rotation / np.sqrt(metric_eigenvalues)
+    ) @ metric_rotation.T
     density = density_scale * density_coefficients @ density_coefficients.T
-    direct = np.einsum("mn,qmn->q", density, fitted)
+    direct_charge = np.einsum("mn,qmn->q", density, fitted)
+    direct_potential = inverse_root @ direct_charge
     projected = np.einsum(
         "mi,qmn,nj->qij", final_coefficients, fitted, final_coefficients
     )
-    reused = density_scale * np.trace(projected, axis1=1, axis2=2)
-    np.testing.assert_allclose(reused, direct, atol=3e-13, rtol=3e-13)
+    rooted = np.einsum("pq,qij->pij", inverse_root, projected)
+    reused_potential = density_scale * np.trace(rooted, axis1=1, axis2=2)
+    np.testing.assert_allclose(
+        reused_potential, direct_potential, atol=4e-13, rtol=4e-13
+    )
 
 
-def test_final_projection_charge_reuse_avoids_retained_fitted_charge_pass() -> None:
-    """The qualified reuse branch must not unpack B or rerun an AO-density dot."""
+def test_final_projection_potential_reuse_avoids_retained_fitted_charge_pass() -> None:
+    """The qualified route roots S once and never rereads B for Coulomb charge."""
     root = Path(__file__).resolve().parents[2]
     source = (root / "src/scf/cuda/df_response_weights.cu").read_text()
     start = source.index("if (reuse_final_fitted_projection) {")
@@ -185,8 +194,10 @@ def test_final_projection_charge_reuse_avoids_retained_fitted_charge_pass() -> N
     )
     reuse = source[start:stop]
     assert "df_occupied_finish_projection" in reuse
-    assert "df_rhf_charge_from_final_projection" in reuse
-    assert "response_final_fitted_charge_reused" in reuse
+    assert "df_occupied_apply_metric_root" in reuse
+    assert "df_rhf_potential_from_rooted_projection" in reuse
+    assert "response_final_fitted_potential_reused" in reuse
+    assert "response_occupied_charge_inverse_gemms_avoided" in reuse
     assert "launch_unpack_df_values" not in reuse
     assert "gather_final_fitted_projection" in reuse
     assert "df_rhf_charge_contract" not in reuse
@@ -215,9 +226,9 @@ def test_production_native_lowering_is_bound_to_stationary_plan() -> None:
     assert "charge-contraction: tij,pij->tp" in cuda
     assert "tensorir-charge-lowering: direct-NT" in cuda
     assert "df_rhf_charge_contract" in cuda
-    assert "df_rhf_charge_from_final_projection" in cuda
-    assert "projected[q * rr + i * (rank + 1)]" in cuda
-    assert "charges[q] = density_scale * value" in cuda
+    assert "df_rhf_potential_from_rooted_projection" in cuda
+    assert "rooted[q * rr + i * (rank + 1)]" in cuda
+    assert "potentials[q] = density_scale * value" in cuda
     assert "cublasDgemm" in cuda
     for kernel in (
         "coulomb_weights_kernel",
