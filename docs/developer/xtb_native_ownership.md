@@ -40,6 +40,23 @@ selection, workspace/cache lifetime, per-system errors and public method
 admission remain native runtime responsibilities. Generation needs no installed
 GenerativeQC runtime, GPU, or scientific oracle.
 
+CPU S/D/Q generation evaluates a complete Cartesian shell block per primitive
+pair, sharing the Gaussian prefactor and recurrence intermediates across its
+up to 36 outputs. Native contraction order, screening and spherical transforms
+remain unchanged. CUDA keeps one Cartesian pair per lane and hoists only DAG
+nodes common to every component alternative before the component switch.
+Both routes retain FP64 arithmetic and the checked primitive entry points.
+
+`benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
+matched fresh-SCC settings. It records cold, repeated and changed-geometry
+timings, every SCC iteration count, numerical outputs and loaded binary hashes.
+Run CUDA measurements inside Slurm as described below; compare the resulting
+JSON files using `--reference`, `--candidate` and `--output`. Both reports must
+use the same geometries and settings, and every sample participates in the
+energy/force gate regardless of its iteration count. xTBloom's high-level API
+also returns atomic charges; that additional output is retained in the
+comparator's endpoint contract.
+
 ## Remaining native scientific work
 
 Compiler ownership is not complete. Integral contraction/representation
