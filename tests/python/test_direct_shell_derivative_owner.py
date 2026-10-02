@@ -122,14 +122,15 @@ int main() {
                 spec.coulomb.present = want_j;
                 spec.exchange.present = want_k;
                 spec.exchange.op = radial;
+                spec.exchange.omega = radial == FockOperator::FullRange ? 0.0 : 0.37;
                 const bool expected_bounded =
                     available && shared_available && bounded_value_capability && bounded_opt_in;
                 assert(direct_jk_bounded_value_enabled(plan) == expected_bounded);
                 const bool expected_shell =
                     available && shared_available && (value_capability || expected_bounded);
                 assert(direct_jk_generated_full_range_value_available(plan) == expected_shell);
-                const bool expected = expected_shell && order == 0 && want_k &&
-                                      radial == FockOperator::FullRange;
+                const bool expected = order == 0 && want_k &&
+                    (radial == FockOperator::FullRange ? expected_shell : expected_bounded);
                 const bool selected = direct_jk_generated_exchange_value_available(plan, spec);
                 assert(selected == expected);
                 const auto route = direct_jk_value_dispatch(expected_shell, selected, want_j,
@@ -179,7 +180,8 @@ def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     )
     assert "enqueue_generated_coulomb(*plan->generated_exchange" in direct
     assert "launch_bounded_shell_fock_source(" in owner
-    assert "p.force_cursor, true, false" in owner
+    assert "launch_bounded_shell_range_exchange_source(" in owner
+    assert "p.force_cursor, range," in owner
     assert "p.force_cursor, false, true" in owner
     schedule = direct[direct.index("info.schedule = plan->generated_exchange") :]
     schedule = schedule[: schedule.index("} else if (plan->generated_coulomb)")]

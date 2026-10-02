@@ -462,11 +462,15 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
 
 cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestricted,
                                        const double* alpha, const double* beta,
-                                       double* alpha_exchange, double* beta_exchange) {
-  if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability))
+                                       double* alpha_exchange, double* beta_exchange,
+                                       DirectCoulombRange range, double omega) {
+  const bool full_range = range == DirectCoulombRange::Full;
+  if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
+      (!full_range && !p.bounded_value_capability))
     return cudaErrorNotSupported;
   if (alpha_exchange == nullptr ||
-      (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr))
+      (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr) ||
+      (!full_range && (!std::isfinite(omega) || omega <= 0.0)))
     return cudaErrorInvalidValue;
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   if (error != cudaSuccess) return error;
@@ -485,39 +489,53 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
   error = cudaMemsetAsync(p.direct_exchange, 0,
                           product(product(spin_count, cartesian), sizeof(double)), shared.stream);
   if (error != cudaSuccess) return error;
-  error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
-                          shared.stream);
-  if (error != cudaSuccess) return error;
 
-  std::size_t count = 0;
-  const auto* kernels = generated::selected_fock_shell_kernels(count);
-  for (std::size_t i = 0; i < count; ++i) {
-    const auto cls = kernels[i].shell_class;
-    if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
-      continue;
-    error = generated::launch_shell_class_streaming_fock(
-        cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
-        b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
-        b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
-        p.heads + cls, nullptr, nullptr);
+  if (full_range) {
+    error = cudaMemsetAsync(
+        p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t), shared.stream);
     if (error != cudaSuccess) return error;
-  }
-  if (shared.class_mask & kNativeStreamingFockShellClassMask) {
-    launch_bounded_direct_dddd_streaming_kernel(
-        unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
-        shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
-        shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr, nullptr);
-    error = cudaGetLastError();
-    if (error != cudaSuccess) return error;
-  }
-  if (p.bounded_value_capability) {
+
+    std::size_t count = 0;
+    const auto* kernels = generated::selected_fock_shell_kernels(count);
+    for (std::size_t i = 0; i < count; ++i) {
+      const auto cls = kernels[i].shell_class;
+      if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
+        continue;
+      error = generated::launch_shell_class_streaming_fock(
+          cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
+          b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
+          b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
+          p.heads + cls, nullptr, nullptr);
+      if (error != cudaSuccess) return error;
+    }
+    if (shared.class_mask & kNativeStreamingFockShellClassMask) {
+      launch_bounded_direct_dddd_streaming_kernel(
+          unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
+          shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
+          shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr, nullptr);
+      error = cudaGetLastError();
+      if (error != cudaSuccess) return error;
+    }
+    if (p.bounded_value_capability) {
+      error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+      if (error != cudaSuccess) return error;
+      launch_bounded_shell_fock_source(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, shared.value_class_mask,
+          p.bounded_value_overflow, shared.schwarz, p.direct_spin, shared.active, p.direct_exchange,
+          p.force_cursor, false, true);
+      error = cudaGetLastError();
+      if (error != cudaSuccess) return error;
+    }
+  } else {
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
-    launch_bounded_shell_fock_source(
+    launch_bounded_shell_range_exchange_source(
         unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
         p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
-        p.system_density_bounds, shared.value_class_mask, p.bounded_value_overflow, shared.schwarz,
-        p.direct_spin, shared.active, p.direct_exchange, p.force_cursor, false, true);
+        p.system_density_bounds, p.bounded_value_overflow, shared.schwarz, p.direct_spin,
+        shared.active, p.direct_exchange, p.force_cursor, range, omega);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
   }
