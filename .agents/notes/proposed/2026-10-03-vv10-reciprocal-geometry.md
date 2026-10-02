@@ -1,6 +1,6 @@
 # Proposal: reuse feature reciprocals in the actual VV10 radial closure
 
-Status: proposed; independent host/device gates pass, endpoint comparison pending
+Status: proposed; independent and full24 endpoint gates pass, larger/rebuild pending
 Date: 2026-10-03
 
 ## Problem and actual dispatch
@@ -40,9 +40,15 @@ Node1 Slurm job 5402 passes all six independent complete RKS/UKS WB97M-V and
 reconverged displaced-energy tests in 193.73 seconds. Every molecular sample
 retains the 1e-8 Eh / 1e-7 Eh/Bohr gate.
 
-The same job is measuring geometry baseline versus candidate full24 endpoints,
-with three warm repeats and matched GPU4PySCF density masks. Results are pending;
-there is no endpoint benefit or large-system performance claim yet.
+The same job completes geometry baseline versus candidate full24 endpoints,
+with three warm repeats and matched GPU4PySCF density masks. Warm median falls
+from 56.708 to 53.884 seconds (1.052x), with one SCF iteration for each. Cold
+calls are 331.133 and 345.508 seconds, but use 18 and 19 SCF iterations;
+these cold times are not an equal-work comparison. All five candidate/reference
+pairs pass (maximum energy error 2.570e-11 Eh, force error 2.987e-10 Eh/Bohr).
+Pair traversal is unchanged; actual molecular active-pair counts remain unexported.
+Larger and geometry-rebuild qualification remain pending, and the native complete
+endpoint remains slower than GPU4PySCF. This does not achieve the overall goal.
 The candidate native library SHA256 is
 `4d2bababa025188f40d6f31bf24ba55001298cbcfa30da4e53d5e62f03ba1bb2`.
 Source archives, candidate patch, build/ccache receipts and results are retained
