@@ -458,8 +458,8 @@ cudaError_t prepare_generated_exchange_density(GeneratedExchangePlan& p, bool un
   return cudaGetLastError();
 }
 
-cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p,
-                                             const double* density, const double* beta);
+cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
+                                             const double* beta);
 cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb);
 
 cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool unrestricted,
