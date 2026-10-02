@@ -69,6 +69,8 @@ def source_hashes() -> dict[str, str]:
         "python/generativeqc/calculator.py",
         "python/generativeqc/ks.py",
         "python/generativeqc/_stationary_cuda.py",
+        "python/generativeqc/batch.py",
+        "python/generativeqc_compiler/method/stationary_resources.py",
         "python/generativeqc/_stationary_composite_cuda.py",
         "benchmarks/readme_omol25.py",
         "benchmarks/readme_pbe0.py",
@@ -452,6 +454,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                     save(f"{phase}/{max(0, repeat - 1)}")
                     cp.cuda.Stream.null.synchronize()
                     started = perf_counter()
+                    force_work = None
                     item = owner.execute(
                         coords, strict=False, properties=("energy", "forces")
                     ).items[0]
@@ -478,6 +481,11 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         "seconds": seconds,
                         "prepare_seconds": prepare,
                         "complete_seconds": seconds + prepare,
+                        "native_force_components": (
+                            normalize_force_work(force_work)
+                            if force_work is not None
+                            else None
+                        ),
                     }
                     retain(row, baseline)
                     if repeat == 0:

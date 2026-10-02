@@ -1,0 +1,59 @@
+{
+  "build_source_revision": "6bf930be60b688fe5917d8fb03464cb44c37be58",
+  "library_sha256": "82856b490be279ecde772d2feb6684953271246abac94c5f3748fe945f922c24",
+  "manifest_only_host_source_count": {
+    "passed": 39,
+    "scope": "Count reported by supplied native-build-provenance.json; its individual receipt is not part of this selected publication"
+  },
+  "native_suites": {
+    "passed": [
+      "generativeqc_fock_api_tests",
+      "generativeqc_native_tests",
+      "generativeqc_ks_final_state_tests",
+      "generativeqc_warm_subspace_tests",
+      "generativeqc_initial_density_tests",
+      "generativeqc_preliminary_initial_guess_tests",
+      "generativeqc_dft_api_tests"
+    ],
+    "raw_receipt_sha256": "7cd3cacf6487d5883caccb68176bcf2a69fed92cdcb6ae289e8a843a2d00f9a0"
+  },
+  "python_suites": {
+    "default-regression": {
+      "counts": {
+        "errors": 0,
+        "failed": 0,
+        "passed": 67,
+        "skipped": 0,
+        "tests": 67
+      },
+      "raw_receipt_sha256": "b03e7bb1a54babd7c3b708a45c408cef4fd4a308dca6be15686cd82f8caf2658",
+      "test_files": [
+        "tests.python.test_batch",
+        "tests.python.test_batch_constructor_cleanup",
+        "tests.python.test_batch_properties",
+        "tests.python.test_calculator",
+        "tests.python.test_checkpoint",
+        "tests.python.test_dft_batch",
+        "tests.python.test_hf_resources",
+        "tests.python.test_ks_diagnostics",
+        "tests.python.test_ks_resources"
+      ]
+    },
+    "new-api": {
+      "counts": {
+        "errors": 0,
+        "failed": 0,
+        "passed": 62,
+        "skipped": 0,
+        "tests": 62
+      },
+      "raw_receipt_sha256": "62b7faf07c87cb801d3e8f1f41a8b980faff70ec6e9ef3250a5d931abbe21d6b",
+      "test_files": [
+        "tests.python.test_preliminary_initial_guess",
+        "tests.python.test_preliminary_warm_retry_control"
+      ]
+    }
+  },
+  "scope": "Selected existing/new API regression receipts, not an independent oracle for every timing case",
+  "validation_revision": "154e3207d08207b950a93db7e4064a95098270fa"
+}

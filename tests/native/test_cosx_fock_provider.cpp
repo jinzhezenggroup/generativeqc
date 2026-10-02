@@ -142,7 +142,16 @@ void verify_restricted(const generativeqc::core::System& system, int device) {
       force_gpu.grid(), density, dft::CosxDensityConvention::rhf_spin_summed);
   for (std::size_t coordinate = 0; coordinate < expected_derivative.size(); ++coordinate)
     expected_derivative[coordinate] += reference_derivative.nuclear_gradient[coordinate];
+  const auto components = force_gpu.energy_derivative_components(density);
+  require(components.coulomb.size() == expected_derivative.size() &&
+              components.exchange.size() == expected_derivative.size(),
+          "prepared COSX split derivative components have the wrong shape");
+  std::vector<double> recomposed(components.coulomb.size());
+  for (std::size_t coordinate = 0; coordinate < recomposed.size(); ++coordinate)
+    recomposed[coordinate] = components.coulomb[coordinate] + components.exchange[coordinate];
   const auto actual_derivative = force_gpu.energy_derivative(density);
+  require(max_error(recomposed, actual_derivative) < 2.0e-12,
+          "prepared COSX split derivative components do not recompose the public response");
   require(max_error(actual_derivative, expected_derivative) < 3.0e-8,
           "prepared RI-J/COSX-K RHF derivative differs from independent J/K oracles");
   require(force_gpu.diagnostic().derivative.bounded_tiling &&

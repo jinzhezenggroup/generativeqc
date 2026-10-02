@@ -849,9 +849,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (range_correction->spec.exchange.op == scf::FockOperator::ShortRange ||
          range_correction->spec.exchange.op == scf::FockOperator::LongRange) &&
         range_correction->spec.exchange.omega > 0.0;
+    const bool resident_nonlocal_chunk =
+        rsh_chunk && device_nonlocal && nonlocal_correlation != nullptr;
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-        !fitted_coulomb && !nonlocal_correlation && !precision_schedule.any_mixed() && spins == 1 &&
+        !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
+        !precision_schedule.any_mixed() && spins == 1 &&
         (pure_semilocal_chunk || pbe0_chunk || rsh_chunk) && provider.system().ecp_terms.empty() &&
         configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
@@ -970,7 +973,29 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                             nullptr, jk_error, false, detail),
             detail);
     }
-    const auto potential = xc->enqueue_replay_body(density, elements);
+    CudaXcView potential;
+    if (!device_nonlocal) {
+      potential = xc->enqueue_replay_body(density, elements);
+    } else {
+      potential = xc->enqueue_replay_density_features(density, elements, nonlocal_raw_density,
+                                                      nonlocal_raw_gradient);
+      const auto quadrature = xc->grid_view();
+      run_resident_nonlocal_cuda([&] {
+        nlc::enqueue_vv10_molecular_domain_cuda(
+            stream, xc_layout.npoint, generated::kMolecularVv10DensityThreshold, quadrature.weights,
+            nonlocal_raw_density, nonlocal_raw_gradient, nonlocal_effective_weights,
+            nonlocal_effective_density, nonlocal_effective_gradient, nonlocal_domain_error);
+      });
+      run_resident_nonlocal_cuda([&] {
+        nlc::enqueue_vv10_cuda_device(
+            nonlocal_layout, nonlocal_correlation->parameters(), device, stream, quadrature.points,
+            nonlocal_effective_weights, nonlocal_effective_density, nonlocal_effective_gradient,
+            nonlocal_workspace, nonlocal_layout.workspace_bytes, nonlocal_workspace, nonlocal_vrho,
+            nonlocal_vsigma, nullptr, nullptr, nonlocal_pair_error);
+      });
+      xc->enqueue_replay_nonlocal_potential(nonlocal_effective_weights, nonlocal_effective_gradient,
+                                            nonlocal_vrho, nonlocal_vsigma, nonlocal_workspace);
+    }
     cuda_ks_detail::assemble_fock(stream, n, spins, hcore, j, exchange, exchange_coefficient,
                                   range_exchange, range_exchange_coefficient, potential.potential,
                                   enabled, fock);
@@ -1918,10 +1943,17 @@ generativeqc_status CudaKsPlan::resident_final_nonlocal_features(
       detail = "CUDA KS final state has no device-resident nonlocal features";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
-    // Device-resident nonlocal composition is deliberately excluded from the
-    // speculative chunk/replay route. The raw full-grid features are therefore
-    // the last ordinary stage_xc() generation iff they are the final state.
-    if (impl_->device_chunk_mode || impl_->generation != impl_->final_generation)
+    // The resident nonlocal replay body overwrites raw full-grid features in
+    // stream order. A terminal iteration does not copy its proposal back into
+    // density, so at most one already-submitted second body sees the unchanged
+    // final density. Its feature overwrite is therefore still the final-state
+    // lease even though logical generation publication includes that bounded
+    // speculative body. Graph replay remains disabled for nonlocal composition.
+    const bool exact_generation = impl_->generation == impl_->final_generation;
+    const bool bounded_terminal_overwrite =
+        impl_->device_chunk_mode && impl_->generation > impl_->final_generation &&
+        impl_->generation - impl_->final_generation < kCudaKsChunkCapacity;
+    if (!exact_generation && !bounded_terminal_overwrite)
       throw std::logic_error("CUDA KS resident nonlocal features are not the final generation");
     if (!impl_->nonlocal_raw_density || !impl_->nonlocal_raw_gradient || !impl_->xc_layout.npoint)
       throw std::logic_error("CUDA KS resident nonlocal feature storage is unavailable");

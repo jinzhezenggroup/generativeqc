@@ -379,3 +379,27 @@ def test_extract_matrix_retains_fixed_final_state_and_fixed_density_gap() -> Non
     assert coverage["fixed_density_scf_expected_components_missing"] == []
     assert "scf_fock_j" in coverage["scf_profiled_components_observed"]
     assert "semilocal_ao_grid_xc" in coverage["scf_profiled_components_observed"]
+
+
+def test_stationary_normalizer_retains_complete_grid_plan_and_native_route() -> None:
+    from benchmarks.dft_force_components import normalize_force_work
+
+    plan = {
+        "schema": "generativeqc.stationary-grid-work.v1",
+        "grid_points": 2359296,
+        "grid_pair_visits": 21516784080,
+        "chunk_count": 220,
+        "chunk_pair_visits": 98058240,
+    }
+    result = normalize_force_work(
+        {
+            "timeline": {"exclusive_wall_seconds": {}},
+            "grid_work_plan": plan,
+            "native_integrals_required": True,
+            "stationary_integral_derivative_route": "prepared-native-complete",
+        }
+    )
+    assert result["grid_work_plan"] == plan
+    assert result["native_integrals_required"] is True
+    assert result["stationary_integral_derivative_route"] == "prepared-native-complete"
+    assert result["work_counts"]["executed"] == {}

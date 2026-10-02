@@ -1,0 +1,42 @@
+{
+  "comparisons": [
+    {
+      "benchmark_source_sha256": "b919d3abb53ddf7f7dd1fa2b82b0982efc9e0e2a5c8f617e3135f721490cefaf",
+      "fetched_master_sha256": "b919d3abb53ddf7f7dd1fa2b82b0982efc9e0e2a5c8f617e3135f721490cefaf",
+      "path": "src/dft/rks.cpp",
+      "same": true
+    },
+    {
+      "benchmark_source_sha256": "42d1d9a86d0de73ad29c78c4bdecb5cf9929147456200d67314dcc14d65b99af",
+      "fetched_master_sha256": "42d1d9a86d0de73ad29c78c4bdecb5cf9929147456200d67314dcc14d65b99af",
+      "path": "src/scf/initial_guess/density.cpp",
+      "same": true
+    },
+    {
+      "benchmark_source_sha256": "baa8e4314ce7a3876fc459087da8e104d74ca7dfc4bfdcba9a261a08e9e0044c",
+      "fetched_master_sha256": "baa8e4314ce7a3876fc459087da8e104d74ca7dfc4bfdcba9a261a08e9e0044c",
+      "path": "src/scf/initial_guess/density.hpp",
+      "same": true
+    },
+    {
+      "benchmark_source_sha256": "3d1b54c07af77a7e5bb5d9faf5d568532e82c96a30c7dda4bb02f531b23f361e",
+      "fetched_master_sha256": "3d1b54c07af77a7e5bb5d9faf5d568532e82c96a30c7dda4bb02f531b23f361e",
+      "path": "src/scf/types.hpp",
+      "same": true
+    },
+    {
+      "benchmark_source_sha256": "2ec0792b0490c89654038a22b0950d62a495ddf793d96e323dfb9cf75fac597e",
+      "fetched_master_sha256": "2ec0792b0490c89654038a22b0950d62a495ddf793d96e323dfb9cf75fac597e",
+      "path": "src/scf/fock_prepared.cpp",
+      "same": true
+    },
+    {
+      "benchmark_source_sha256": "6ee4f3e3245f9bbfa49334c2d1eb7acc5365da2a739bbf5723d26738f421e43e",
+      "fetched_master_sha256": "6ee4f3e3245f9bbfa49334c2d1eb7acc5365da2a739bbf5723d26738f421e43e",
+      "path": "src/methods/gfn2_runtime_bridge.cpp",
+      "same": true
+    }
+  ],
+  "fetched_master": "e4bd02570a9063dba6e107448826c70714d55c75",
+  "note": "Read-only comparison to already-fetched origin/master, not a newly fetched or latest-live-master assertion. Benchmark uses pinned older audited source/library identity."
+}

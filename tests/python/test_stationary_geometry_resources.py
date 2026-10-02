@@ -98,14 +98,27 @@ def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
     function = re.search(r"size_t allocation\([^)]*\) \{.*?\n\}", header, re.DOTALL)
     assert function is not None
     checks = []
-    for atoms in (1, 12, 128):
+    for atoms, aos, primitives in (
+        (1, 96, 240),
+        (12, 96, 240),
+        (24, 192, 176),
+        (48, 384, 352),
+        (96, 768, 704),
+        (128, 1024, 16384),
+    ):
         for points in (1, 17, 256, 4096):
-            shape = {**SHAPE, "atoms": atoms, "points": points}
+            shape = {
+                **SHAPE,
+                "atoms": atoms,
+                "aos": aos,
+                "primitives": primitives,
+                "points": points,
+            }
             plan = plan_stationary_cuda_resources(
                 **shape, target=TARGET, budget_bytes=1 << 30
             )
             checks.append(
-                f"if(allocation({atoms},96,240,{points},256,2,{plan.geometry_lanes},true) != {plan.allocation_bytes}) return 1;"
+                f"if(allocation({atoms},{aos},{primitives},{points},256,2,{plan.geometry_lanes},true) != {plan.allocation_bytes}) return 1;"
             )
     source = tmp_path / "allocation.cpp"
     source.write_text(
@@ -247,6 +260,22 @@ int main() {
   runtime_failure=true;
   const int prior_allocations=allocations;
   if(!create(bytes+cache_bytes) || result || owners || arenas || allocations!=prior_allocations+1) return 18;
+  runtime_failure=false;
+  oom_above=std::numeric_limits<size_t>::max();
+  const size_t large_bytes=allocation(96,768,704,256,4096,2,256);
+  auto large=[&](size_t budget) {
+    return stationary_create(0,12,0,96,768,704,256,4096,2,16000000,budget,256,32,
+                             &result,error,sizeof(error));
+  };
+  const int before_large=allocations;
+  if(!large(large_bytes-1) || result || allocations!=before_large || owners) return 19;
+  if(large(large_bytes) || !result || allocations!=before_large+1 || owners!=1) return 20;
+  p=static_cast<Owner*>(result);
+  if(p->bytes!=large_bytes || p->atoms!=96 || p->aos!=768) return 21;
+  if(reinterpret_cast<unsigned char*>(p->weighted_density+2*768*768)-p->context.arena != large_bytes-256)
+    return 22;
+  delete p;
+  if(arenas || owners) return 23;
   return 0;
 }
 """
@@ -386,6 +415,9 @@ def test_native_pair_reserve_matches_actual_native_admission(tmp_path: Path) -> 
         (1, 1, 3),
         (3, 7, 21),
         (12, 96, 240),
+        (24, 192, 176),
+        (48, 384, 352),
+        (96, 768, 704),
         (128, 1024, 16384),
     ):
         checks.append(

@@ -3,6 +3,7 @@
 
 #include "api/error.hpp"
 #include "api/handles.hpp"
+#include "api/initial_guess_diagnostic.hpp"
 #include "api/ks_diagnostic.hpp"
 #include "api/precision.hpp"
 #include "generativeqc/generativeqc.h"
@@ -10,6 +11,15 @@
 #include "runtime/host_component_trace.hpp"
 
 extern "C" {
+
+uint32_t generativeqc_initial_guess_options_version(void) { return 1; }
+
+generativeqc_status generativeqc_calculation_get_initial_guess_diagnostic(
+    const generativeqc_calculation* calculation, generativeqc_initial_guess_diagnostic* out) {
+  if (!calculation) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  std::lock_guard<std::recursive_mutex> lock(calculation->context->mutex);
+  return generativeqc::api::copy_initial_guess_diagnostic(calculation->initial_guess, out);
+}
 
 generativeqc_status generativeqc_calculation_prepare(
     generativeqc_context* context, const generativeqc_system* system,
@@ -19,7 +29,9 @@ generativeqc_status generativeqc_calculation_prepare(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
   *calculation = nullptr;
-  if (!generativeqc::api::valid_descriptor(descriptor)) {
+  if (!generativeqc::api::valid_descriptor(descriptor) ||
+      (descriptor->initial_guess &&
+       !generativeqc::api::valid_descriptor(descriptor->initial_guess))) {
     return GENERATIVEQC_STATUS_ABI_MISMATCH;
   }
   std::lock_guard<std::recursive_mutex> context_lock(context->mutex);
@@ -48,6 +60,7 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
   }
   std::lock_guard<std::recursive_mutex> context_lock(calculation->context->mutex);
   calculation->precision_work.reset();
+  calculation->initial_guess.reset();
   // An attempted execution revokes any internal final-state token even if
   // the output descriptor is rejected before the method can run.
   try {
@@ -83,6 +96,8 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
     calculation->incremental_direct_jk = native.incremental_direct_jk;
     calculation->precision_available = true;
     calculation->ks_diagnostic = std::move(native.ks_diagnostic);
+    if (native.preliminary_guess.requested_kind)
+      calculation->initial_guess = native.preliminary_guess;
     if (native.physical_residual_rms) {
       calculation->scf_diagnostic = generativeqc_scf_diagnostic{
           sizeof(generativeqc_scf_diagnostic), GENERATIVEQC_ABI_VERSION,

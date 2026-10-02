@@ -381,3 +381,74 @@ def test_unsupported_native_plot_has_no_native_latency(tmp_path: Path) -> None:
         "f-shell force API unavailable (no native timings)"
         in (tmp_path / "omol25.svg").read_text()
     )
+
+
+@pytest.mark.parametrize("failure", ["SCF did not converge", "stationary force failed"])
+def test_native_failure_is_journaled_without_a_force_work_record(failure: str) -> None:
+    """Execute the real row/retention code with a failed strict=False endpoint."""
+    from types import CodeType, FunctionType
+
+    from benchmarks.dft_force_components import normalize_force_work
+
+    tree = ast.parse(inspect.getsource(main))
+    row = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Dict)
+        and any(
+            isinstance(key, ast.Constant) and key.value == "native_force_components"
+            for key in node.value.keys
+        )
+    )
+    retain = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "retain"
+    )
+    wrapper = ast.parse("def exercise():\n    pass").body[0]
+    wrapper.body = [retain, row] + ast.parse("retain(row, baseline)").body
+    code = compile(
+        ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[])),
+        "<native benchmark retention>",
+        "exec",
+    )
+    compiled = next(value for value in code.co_consts if isinstance(value, CodeType))
+    record = {"records": [], "stage": "cold/0"}
+    saved = []
+    scope = {
+        "Any": object,
+        "record": record,
+        "save": saved.append,
+        "check_record": check_record,
+        "normalize_force_work": normalize_force_work,
+        "force_work": None,
+        "phase": "cold",
+        "geometry_index": 0,
+        "repeat": 0,
+        "seconds": 2.5,
+        "prepare": 0.2,
+        "baseline": sample("cold", 0),
+        "item": SimpleNamespace(
+            energy=-76.0,
+            forces=None,
+            converged=failure != "SCF did not converge",
+            status=5,
+            status_message=failure,
+            iterations=100,
+            fock_builds=101,
+            energy_change=0.1,
+            density_rms=0.2,
+            warm_start_used=False,
+            warm_start_fallback=False,
+        ),
+    }
+    with pytest.raises(RuntimeError, match="independent energy/force gate failed"):
+        FunctionType(compiled, scope)()
+    assert saved == ["cold/0"]
+    assert len(record["records"]) == 1
+    failed = record["records"][0]
+    assert failed["detail"] == failure and failed["status"] == 5
+    assert failed["iterations"] == 100 and failed["seconds"] == 2.5
+    assert failed["native_force_components"] is None
+    assert failed["gate"] is False

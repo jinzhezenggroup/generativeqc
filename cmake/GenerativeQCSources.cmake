@@ -138,6 +138,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/reference/linalg.cpp
     src/scf/reference/mean_field.cpp
     src/scf/initial_guess/density.cpp
+    src/scf/preliminary_guess.cpp
     src/tensor/symmetric_matrix_function.cpp
     src/scf/cuda/rhf_policy.cpp)
 

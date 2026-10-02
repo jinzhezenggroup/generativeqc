@@ -138,9 +138,32 @@ void validate_system(const MethodDefinition& definition, const core::System& sys
   }
 }
 
+void validate_preliminary_system(const generativeqc_method_descriptor& descriptor,
+                                 const core::System& system) {
+  if (!descriptor.initial_guess) return;
+  if (system.multiplicity != 1 || system.electron_count <= 0 || system.electron_count % 2 ||
+      !system.ecp_terms.empty() ||
+      std::any_of(system.atoms.begin(), system.atoms.end(),
+                  [](const auto& atom) { return atom.ecp_core != 0; }))
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                      "preliminary SCF requires an all-electron restricted singlet");
+}
+
 void validate_option_family(const MethodDefinition& definition,
                             const generativeqc_method_descriptor& descriptor,
                             generativeqc_backend backend) {
+  if (descriptor.initial_guess) {
+    const auto family = definition.provider.domain.family;
+    if ((family != GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
+         family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL) ||
+        backend != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
+        descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64 ||
+        descriptor.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+        (family == GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK &&
+         descriptor.method != GENERATIVEQC_METHOD_RHF))
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "preliminary SCF requires CPU FP64 exact restricted HF/KS");
+  }
   if (descriptor.ks_options &&
       definition.provider.domain.family != GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -165,6 +188,7 @@ std::unique_ptr<PreparedCalculation> prepare_calculation(
   const MethodDefinition& definition = require_available(descriptor.method);
   validate_option_family(definition, descriptor, context.requested_backend);
   validate_system(definition, system);
+  validate_preliminary_system(descriptor, system);
   return definition.prepare_calculation(definition.provider.domain, context, system, descriptor);
 }
 
@@ -178,7 +202,10 @@ std::unique_ptr<PreparedBatch> prepare_batch(core::ContextState& context,
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "requested method does not support prepared batches");
   }
-  for (const core::System& system : systems) validate_system(definition, system);
+  for (const core::System& system : systems) {
+    validate_system(definition, system);
+    validate_preliminary_system(descriptor, system);
+  }
   return definition.prepare_batch(definition.provider.domain, context, std::move(systems),
                                   descriptor, flags);
 }

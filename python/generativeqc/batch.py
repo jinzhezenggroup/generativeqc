@@ -82,6 +82,7 @@ class BatchItemResult:
     correlation: CorrelationResult | None = None
     cc_performance: CcPerformanceResult | None = None
     dispersion: object | None = None
+    initial_guess: dict | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -216,6 +217,7 @@ class PreparedBatch:
         # Keep one retained execution per PreparedBatch and reprepare on topology drift.
         self._stationary_cuda_execution: typing.Any = None
         self._calculator = calculator
+        self._initial_guess_spec = calculator._initial_guess
         self._library = calculator._library
         self._systems = tuple(
             tuple(Atom.from_value(atom) for atom in system) for system in systems
@@ -652,6 +654,12 @@ class PreparedBatch:
                     ),
                     "aot_directory": native_library.parent if packaged else None,
                     "native_grid_library": native_library,
+                    # Public complete forces plan the actual finite grid. The
+                    # private diagnostic's whole-grid work guards are not
+                    # capacity limits: bounded submission windows and all
+                    # host/device byte admission remain mandatory.
+                    "max_grid_points": None,
+                    "max_grid_pair_visits": None,
                 }
                 try:
                     result = complete_rks_cuda_gradient_diagnostic(
@@ -809,6 +817,8 @@ class PreparedBatch:
         in the failed item's ``status_message``, including in strict mode.
         """
         self._ensure_open()
+        from .initial_guess import read_initial_guess_diagnostic
+
         if properties is None:
             properties = (
                 frozenset({"energy"})
@@ -841,6 +851,8 @@ class PreparedBatch:
             and self._calculator._capabilities.family == "density_functional"
         )
         native_compute_forces = compute_forces and not public_dft_forces
+        if self._calculator._initial_guess != self._initial_guess_spec:
+            raise RuntimeError("preliminary SCF policy changed; prepare a new batch")
         if self._calculator._model_signature() != self._model_signature:
             raise RuntimeError(
                 "prepared basis/model identity changed; prepare a new batch before reusing densities or Fock/DIIS state"
@@ -1221,6 +1233,9 @@ class PreparedBatch:
                     )
                     if self._calculator._ks_options is not None
                     else None,
+                    initial_guess=read_initial_guess_diagnostic(
+                        self._library, self._batch, index
+                    ),
                     correlation=correlation,
                     cc_performance=cc_performance,
                     dispersion=dispersion if succeeded else None,

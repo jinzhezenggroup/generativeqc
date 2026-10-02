@@ -19,6 +19,7 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/initial_guess/overlap.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/preliminary_guess.hpp"
 #include "scf/types.hpp"
 
 namespace generativeqc::methods::detail {
@@ -90,6 +91,7 @@ std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval() {
 
 scf::ScfOptions scf_options(const generativeqc_method_descriptor& descriptor) {
   scf::ScfOptions options;
+  options.preliminary_guess = scf::initial_guess::preliminary_options(descriptor.initial_guess);
   options.max_iterations = descriptor.max_iterations == 0 ? 100 : descriptor.max_iterations;
   options.diis_history = descriptor.diis_history == 0 ? 8 : descriptor.diis_history;
   options.energy_tolerance =
@@ -170,6 +172,7 @@ std::optional<core::System> normalized_auxiliary_template(const core::System& or
 
 Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   Result result;
+  result.preliminary_guess = native.preliminary_guess;
   result.energy = native.energy;
   result.forces = std::move(native.forces);
   result.convergence.iterations = native.iterations;

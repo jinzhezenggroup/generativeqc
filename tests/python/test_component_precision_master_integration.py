@@ -80,6 +80,7 @@ struct Owner {
   scf::ScfOptions options;
   CudaKsPrecisionSchedule precision_schedule;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
+  bool device_nonlocal{};
   void* nonlocal_correlation{};
   std::optional<scf::ResolvedFockBuild> range_correction;
   unsigned spins{1}, functional{semilocal_family_code(SemilocalFamily::Pbe)}, width{2};
@@ -145,6 +146,11 @@ int main() {
     rsh.range_correction->spec.exchange.op = scf::FockOperator::LongRange;
     rsh.range_correction->spec.exchange.omega = 0.3;
     rsh.precision_schedule = {coulomb, density};
+    assert(rsh.chunk() == (!coulomb && !density));
+    assert(!rsh.replay());
+    rsh.nonlocal_correlation = &rsh;
+    assert(!rsh.chunk());
+    rsh.device_nonlocal = true;
     assert(rsh.chunk() == (!coulomb && !density));
     assert(!rsh.replay());
     rsh.range_correction.reset();
