@@ -965,8 +965,9 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
       }
       if (dispatch.generated_exchange)
-        direct_jk_check(enqueue_generated_exchange(*plan->generated_exchange, unrestricted, density,
-                                                   beta, alpha_exchange, beta_exchange));
+        direct_jk_check(enqueue_generated_exchange(
+            *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
+            direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0));
       if (dispatch.generic_coulomb || dispatch.generic_exchange) {
         launch_independent_jk_kernel(
             static_cast<unsigned>(elements), kIndependentJkThreads, 0, plan->stream, plan->batch, 0,
