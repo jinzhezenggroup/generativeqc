@@ -18,6 +18,21 @@ namespace {
 constexpr unsigned threads = 128;
 unsigned blocks(std::size_t size) { return static_cast<unsigned>((size + threads - 1) / threads); }
 
+/** The final-K projection has Q fastest, while response panels store each
+ * occupied matrix column-major within Q. Preserve that orientation even for
+ * diagnostic fitted tensors that are not exactly symmetric in AO indices.
+ */
+__global__ void gather_final_fitted_projection(std::size_t auxiliary, std::size_t rank,
+                                               const double* pair_major, double* projected) {
+  const auto element = std::size_t{blockIdx.x} * blockDim.x + threadIdx.x;
+  const auto rr = rank * rank;
+  if (element >= auxiliary * rr) return;
+  const auto q = element / rr;
+  const auto i = element % rank;
+  const auto j = (element / rank) % rank;
+  projected[element] = pair_major[(i * rank + j) * auxiliary + q];
+}
+
 /** Scalar kernels preserve their original per-output summation order. The
  * exchange metric dot uses the plan's cuBLAS GEMV below, with this scalar
  * kernel retained for ablation. Both routes use the same bounded raw panel;
@@ -653,7 +668,11 @@ static cudaError_t contract_occupied_response(
     runtime::cuda_trace::TraceRegion reuse("final_fitted_projection_charge_reuse", stream);
     checked(generated::df_occupied_finish_projection(blas, ni, static_cast<int>(r), ai,
                                                      factor.coefficients, final_fitted_projection,
-                                                     projected));
+                                                     transformed_projected));
+    gather_final_fitted_projection<<<blocks(a * rr), threads, 0, stream>>>(
+        a, r, transformed_projected, projected);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
     generated::df_rhf_charge_from_final_projection<<<blocks(a), threads, 0, stream>>>(
         a, r, factor.density_scale, projected, charges);
     error = cudaGetLastError();
@@ -666,8 +685,6 @@ static cudaError_t contract_occupied_response(
     runtime::cuda_trace::trace_counter("response_occupied_projection_flops", 2 * a * n * rr);
     runtime::cuda_trace::trace_counter("response_final_fitted_charge_reused", 1);
     runtime::cuda_trace::trace_counter("response_final_fitted_charge_trace_elements", a * r);
-    runtime::cuda_trace::trace_counter("response_final_fitted_projection_gather_elements_avoided",
-                                       a * rr);
     runtime::cuda_trace::trace_counter("response_retained_fitted_charge_source_elements_avoided",
                                        fitted_occupied->pair_count * a);
     runtime::cuda_trace::trace_counter("response_retained_fitted_charge_unpack_elements_avoided",
@@ -927,14 +944,8 @@ static cudaError_t contract_occupied_response(
       if (metric.full_rank) {
         auto* fitted = transformed_projected + retained;
         if (retained_root) {
-          if (reuse_final_fitted_projection) {
-            checked(generated::df_occupied_apply_metric_root_pair_major(
-                blas, ai, rri, metric.inverse_square_root, projected, fitted));
-            runtime::cuda_trace::trace_counter("response_pair_major_metric_root", 1);
-          } else {
-            checked(generated::df_occupied_apply_metric_root(
-                blas, ai, rri, metric.inverse_square_root, projected, fitted));
-          }
+          checked(generated::df_occupied_apply_metric_root(
+              blas, ai, rri, metric.inverse_square_root, projected, fitted));
           runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
           runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
         } else if (fitted_occupied) {
