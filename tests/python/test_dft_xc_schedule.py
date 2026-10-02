@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import replace
 
 import pytest
 from generativeqc.autotune import dft_endpoint_gate
@@ -373,6 +374,26 @@ def test_compiled_gpu_pressure_flows_into_shared_dft_schedule_contract(
     provenance = dict(assessment.schedule_contract.provenance)
     assert provenance["compiled_resource_evidence"] == "dft.grid_xc.compiled_region"
     assert provenance["compiled_profitability_contract"] == "common.gpu_profitability"
+
+    # Experimental AO evidence cannot qualify the unchanged production schedule.
+    opted_in = native_grid_xc_compiled_region_evidence(
+        (rows[0], replace(rows[1], function="ao_radial_kernel_4(double*)"), *rows[2:]),
+        shape=replace(compiled.shape, ao_radial_reuse=True),
+        functional="PBE",
+        target=cuda_target_info("sm_120"),
+        source_identity=scientific().source_identity,
+    )
+    with pytest.raises(ValueError, match="shape differs from the candidate"):
+        assess_grid_xc_schedule(
+            DEVICE_FUSED,
+            shape,
+            limits,
+            device_xc_available=True,
+            observable="potential",
+            functional="PBE",
+            scientific=scientific(),
+            compiled_evidence=opted_in,
+        )
 
     wrong_source = native_grid_xc_compiled_region_evidence(
         rows,
