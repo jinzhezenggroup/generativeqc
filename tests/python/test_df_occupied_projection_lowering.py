@@ -340,16 +340,12 @@ def test_retained_metric_failure_and_alias_contract(native: ct.CDLL) -> None:
     assert native.retained_metric(3, 4, pointer(x), pointer(s), pointer(s), 0) == 7
     out.fill(np.nan)
     assert (
-        native.retained_metric_pair_major(
-            3, 4, pointer(x), pointer(s), pointer(out), 1
-        )
+        native.retained_metric_pair_major(3, 4, pointer(x), pointer(s), pointer(out), 1)
         == 13
     )
     assert np.isnan(out).all()
     assert (
-        native.retained_metric_pair_major(
-            3, 4, pointer(x), pointer(s), pointer(s), 0
-        )
+        native.retained_metric_pair_major(3, 4, pointer(x), pointer(s), pointer(s), 0)
         == 7
     )
 
