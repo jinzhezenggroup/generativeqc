@@ -293,7 +293,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         "d2h_bytes": 0,
         "launches": 1,
         "primitive_records": owner.integral_page.call_count + 1,
-        "xc_points": 0,
+        "xc_points": 4,
         "grid_pair_visits": 9,
         "stream": 0,
         "task_descriptors": owner.integral_page.call_count,

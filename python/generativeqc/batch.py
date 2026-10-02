@@ -654,6 +654,12 @@ class PreparedBatch:
                     ),
                     "aot_directory": native_library.parent if packaged else None,
                     "native_grid_library": native_library,
+                    # Public complete forces plan the actual finite grid. The
+                    # private diagnostic's whole-grid work guards are not
+                    # capacity limits: bounded submission windows and all
+                    # host/device byte admission remain mandatory.
+                    "max_grid_points": None,
+                    "max_grid_pair_visits": None,
                 }
                 try:
                     result = complete_rks_cuda_gradient_diagnostic(

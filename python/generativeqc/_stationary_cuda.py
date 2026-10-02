@@ -72,8 +72,10 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryMeanField,
 )
 from generativeqc_compiler.method.stationary_resources import (
+    plan_stationary_cuda_grid_work,
     plan_stationary_cuda_resources,
     stationary_cuda_allocation_bytes,
+    stationary_cuda_requires_native_integrals,
     stationary_native_pair_reserve,
 )
 from generativeqc_compiler.tensor.cuda_execute import PreparedCuda, compile_cuda
@@ -2097,14 +2099,19 @@ def _complete_rks_cuda_gradient_diagnostic(
     max_grid_points: typing.Any = 1_000_000,
     max_primitive_records: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
     max_grid_pair_visits: typing.Any = 100_000_000,
+    max_pending_grid_tiles: typing.Any = 64,
+    max_pending_grid_pair_visits: typing.Any = 100_000_000,
     max_ecp_pair_samples: int = 100_000_000,
     prepared: PreparedStationaryCudaExecution | None = None,
     profile_device: bool = False,
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
-    Domain: real FP64 direct all-electron s/p LDA/PBE/r2SCAN RKS/UKS, native version-three
-    unpruned grid and distinct noncolliding centers. No CPKS is required.
+    Domain: qualified real FP64 RKS/UKS compositions, native unpruned grid and
+    distinct noncolliding centers. Enlarged domains require the shared native
+    stationary integral owner. No CPKS is required. None for either whole-grid
+    work guard admits the finite complete grid, retaining bounded submission
+    windows and the unchanged host/device byte budgets.
     Device ordinal comes only from the opaque native snapshot. CUDA source
     accumulators, grid owner and one TensorIR consumer coexist under the stated
     additional-device budget; the pre-existing SCF owner/export and Python
@@ -2159,18 +2166,39 @@ def _complete_rks_cuda_gradient_diagnostic(
         (integral_terms, "integral_terms", 128),
         (max_device_bytes, "max_device_bytes", 1 << 40),
         (max_host_bytes, "max_host_bytes", 1 << 40),
-        (max_grid_points, "max_grid_points", 1 << 40),
         (max_primitive_records, "max_primitive_records", 1 << 40),
-        (max_grid_pair_visits, "max_grid_pair_visits", 1 << 40),
         (max_ecp_pair_samples, "max_ecp_pair_samples", 1 << 40),
     ):
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"{name} must be an integer in [1,{cap}]")
     na, n = basis.natom, basis.nao
-    if not 1 <= na <= 32 or not 1 <= n <= 128:
-        raise ValueError("CUDA diagnostic small-domain atom/AO cap exceeded")
-    if not 1 <= basis.nprimitive <= 4096:
-        raise ValueError("CUDA diagnostic primitive-topology cap exceeded")
+    requires_native_integrals = stationary_cuda_requires_native_integrals(
+        atoms=na, aos=n, primitives=basis.nprimitive
+    )
+    grid_work = plan_stationary_cuda_grid_work(
+        atoms=na,
+        grid_points=len(state.grid.points),
+        tile_points=tile_points,
+        max_grid_points=max_grid_points,
+        max_grid_pair_visits=max_grid_pair_visits,
+        max_pending_tiles=max_pending_grid_tiles,
+        max_pending_pair_visits=max_pending_grid_pair_visits,
+    )
+    if requires_native_integrals and (
+        ecp
+        or not callable(
+            getattr(
+                state._source,
+                "density_fitted_integral_derivatives"
+                if bool(getattr(state._source, "density_fitted", False))
+                else "cuda_integral_derivatives",
+                None,
+            )
+        )
+    ):
+        raise NotImplementedError(
+            "enlarged stationary CUDA domains require prepared native integral derivatives"
+        )
     _, aos, expansions, requests = _layout(basis)
     component_mode = _component_mode(expansions)
     primitive_sum = sum(
@@ -2193,11 +2221,7 @@ def _complete_rks_cuda_gradient_diagnostic(
     )
     if records > np.iinfo(np.uint64).max:
         raise ValueError("primitive work count exceeds uint64 metric range")
-    pair_visits = (1 + 2 * len(state.grid.points)) * na * (na - 1) // 2
-    if len(state.grid.points) > max_grid_points:
-        raise ValueError("grid point work budget exceeded")
-    if pair_visits > max_grid_pair_visits:
-        raise ValueError("grid work budget exceeded")
+    pair_visits = grid_work.grid_pair_visits
     # Preserve the actual composition; the public selector is only a label.
     method = state._source.method_ir
     plan = StationaryGradientPlan(
@@ -2278,6 +2302,19 @@ def _complete_rks_cuda_gradient_diagnostic(
         )
         + max((tp.host_bytes for tp in tensor_plans.values()), default=0)
     )
+    # The shared Direct provider can use its explicit paired one-electron
+    # fallback while these force owners coexist. Charge that host staging as
+    # well as reserving its device allowance below; incidental grid-plan slack
+    # is not a concurrent-owner resource contract. Retained SCF/snapshot storage
+    # remains outside this additional-consumer bound.
+    native_integral_host_reserve = (
+        stationary_native_pair_reserve(atoms=na, aos=n, primitives=basis.nprimitive)
+        if not ecp
+        and not bool(getattr(state._source, "density_fitted", False))
+        and callable(getattr(state._source, "cuda_integral_derivatives", None))
+        else 0
+    )
+    host_bound += native_integral_host_reserve
     if host_bound > max_host_bytes:
         raise ValueError("stationary additional-host byte budget exceeded")
     ecp_workspace = ecp_pair_samples = 0
@@ -2569,6 +2606,19 @@ def _complete_rks_cuda_gradient_diagnostic(
                 "Direct derivative fallback would change the Hamiltonian"
             )
         native_complete_integrals = native_integral_components is not None
+        if (
+            not use_fitted_integrals
+            and int(native_integral_resources.get("one_electron_host_peak_bytes", 0))
+            > native_integral_host_reserve
+        ):
+            raise RuntimeError(
+                "native stationary host staging exceeds admitted reserve"
+            )
+        if requires_native_integrals and not native_complete_integrals:
+            raise NotImplementedError(
+                "prepared native integral derivatives are unavailable within the admitted "
+                "budget; enlarged stationary CUDA domains cannot use AO-task fallback"
+            )
         resident_grid_density = None
         if native_complete_integrals:
             resident_provider = getattr(state._source, "cuda_resident_density", None)
@@ -2737,47 +2787,48 @@ def _complete_rks_cuda_gradient_diagnostic(
                 "grid_atomic_measure_source": "host-grid-atomic-measures",
                 "grid_atomic_measure_h2d_bytes": grid_points * 8,
             }
-        with timeline.phase("xc_geometry_enqueue"):
-            for begin in range(0, grid_points, tile_points):
-                end = min(begin + tile_points, grid_points)
-                if resident_grid is not None:
-                    point_pointer = resident_grid.points + 3 * begin * 8
-                    with ao.feature_task_device_points(
-                        point_pointer,
-                        end - begin,
-                        None,
-                        ingredients,
-                    ) as task:
-                        sources.geometry_molecular_resident_weights(
-                            task,
-                            begin,
-                            points_per_atom,
-                            resident_grid.weights + begin * 8,
-                            grid.weights[begin:end] if profile_device else None,
-                            resident_grid.atomic_weights + begin * 8,
-                            (
-                                state._source.atomic_weights[begin:end]
-                                if profile_device
-                                else None
-                            ),
-                            functional=functional,
-                        )
-                else:
-                    with ao.feature_task(
-                        grid.points[begin:end],
-                        None,
-                        ingredients,
-                        defer_error_to_consumer=True,
-                    ) as task:
-                        sources.geometry(
-                            task,
-                            np.asarray(grid.owners[begin:end], dtype=np.int64),
-                            grid.weights[begin:end],
-                            state._source.atomic_weights[begin:end],
-                            functional=functional,
-                        )
-        with timeline.phase("xc_geometry_drain"):
-            sources.drain_geometry()
+        for chunk_begin, chunk_end in grid_work.chunks():
+            with timeline.phase("xc_geometry_enqueue"):
+                for begin in range(chunk_begin, chunk_end, tile_points):
+                    end = min(begin + tile_points, chunk_end)
+                    if resident_grid is not None:
+                        point_pointer = resident_grid.points + 3 * begin * 8
+                        with ao.feature_task_device_points(
+                            point_pointer,
+                            end - begin,
+                            None,
+                            ingredients,
+                        ) as task:
+                            sources.geometry_molecular_resident_weights(
+                                task,
+                                begin,
+                                points_per_atom,
+                                resident_grid.weights + begin * 8,
+                                grid.weights[begin:end] if profile_device else None,
+                                resident_grid.atomic_weights + begin * 8,
+                                (
+                                    state._source.atomic_weights[begin:end]
+                                    if profile_device
+                                    else None
+                                ),
+                                functional=functional,
+                            )
+                    else:
+                        with ao.feature_task(
+                            grid.points[begin:end],
+                            None,
+                            ingredients,
+                            defer_error_to_consumer=True,
+                        ) as task:
+                            sources.geometry(
+                                task,
+                                np.asarray(grid.owners[begin:end], dtype=np.int64),
+                                grid.weights[begin:end],
+                                state._source.atomic_weights[begin:end],
+                                functional=functional,
+                            )
+            with timeline.phase("xc_geometry_drain"):
+                sources.drain_geometry()
         with timeline.phase("source_d2h_publication"):
             components = sources.finish()
         if native_complete_integrals:
@@ -2893,7 +2944,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         timeline.switch("owner_cleanup")
     timeline.switch("publication_validation")
     contract.validate(state)  # Replay/replacement/closure revokes publication.
-    if work["primitive_records"] != records or work["grid_pair_visits"] != pair_visits:
+    if (
+        work["primitive_records"] != records
+        or work["grid_pair_visits"] != pair_visits
+        or work["xc_points"] != grid_work.grid_points
+    ):
         raise RuntimeError("CUDA executed work disagrees with admitted source coverage")
     published_gradient = immutable(gradient)
     published_components = MappingProxyType(
@@ -2920,6 +2975,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         ecp_ordered_pairs=2 * n * n if ecp else 0,
         ecp_quadrature_pair_samples=ecp_pair_samples,
         ecp_pair_sample_budget=max_ecp_pair_samples,
+        grid_work_plan={
+            "schema": "generativeqc.stationary-grid-work.v1",
+            **asdict(grid_work),
+        },
+        native_integrals_required=requires_native_integrals,
         ordered_pairs=n * n,
         ordered_quartets=(1 + int(has_exchange)) * n**4,
         exchange_ordered_quartets=n**4 if has_exchange else 0,
@@ -2964,6 +3024,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             else ()
         ),
         native_integral_resources=dict(native_integral_resources),
+        native_integral_host_reserve=native_integral_host_reserve,
         additional_device_peak_bound=peak
         + int(native_integral_resources.get("one_electron_device_peak_bytes", 0)),
         additional_device_budget=max_device_bytes,
@@ -3116,6 +3177,8 @@ def complete_rks_cuda_gradient_diagnostic(
     max_grid_points: typing.Any = 1_000_000,
     max_primitive_records: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
     max_grid_pair_visits: typing.Any = 100_000_000,
+    max_pending_grid_tiles: typing.Any = 64,
+    max_pending_grid_pair_visits: typing.Any = 100_000_000,
     max_ecp_pair_samples: int = 100_000_000,
     prepared: PreparedStationaryCudaExecution | None = None,
     profile_device: bool = False,
@@ -3135,6 +3198,8 @@ def complete_rks_cuda_gradient_diagnostic(
         "max_grid_points": max_grid_points,
         "max_primitive_records": max_primitive_records,
         "max_grid_pair_visits": max_grid_pair_visits,
+        "max_pending_grid_tiles": max_pending_grid_tiles,
+        "max_pending_grid_pair_visits": max_pending_grid_pair_visits,
         "max_ecp_pair_samples": max_ecp_pair_samples,
         "prepared": prepared,
         "profile_device": profile_device,

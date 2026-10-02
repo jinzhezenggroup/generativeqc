@@ -160,6 +160,8 @@ def test_public_aot_force_does_not_probe_nvcc(
 
     def calculate(*args: object, **kwargs: object) -> SimpleNamespace:
         assert kwargs["compiler"] is None
+        assert kwargs["max_grid_points"] is None
+        assert kwargs["max_grid_pair_visits"] is None
         assert kwargs["target"] is target
         assert kwargs["aot_directory"] == tmp_path
         if missing_artifact:

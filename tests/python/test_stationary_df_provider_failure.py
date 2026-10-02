@@ -15,7 +15,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def _select(source: object, *, budget: int = 32, ecp: bool = False) -> object:
+def _select(
+    source: object,
+    *,
+    budget: int = 32,
+    ecp: bool = False,
+    required: bool = False,
+    host_reserve: int = 32,
+) -> object:
     path = ROOT / "python/generativeqc/_stationary_cuda.py"
     module = ast.parse(path.read_text())
     owner = next(
@@ -49,9 +56,7 @@ def _select(source: object, *, budget: int = 32, ecp: bool = False) -> object:
         if is_assignment(n, "native_integral_components")
     )
     stop = next(
-        i
-        for i, n in enumerate(block.body)
-        if is_assignment(n, "native_complete_integrals")
+        i for i, n in enumerate(block.body) if is_assignment(n, "resident_grid_density")
     )
     function = ast.parse("def select():\n    pass").body[0]
     assert isinstance(function, ast.FunctionDef)
@@ -74,6 +79,8 @@ def _select(source: object, *, budget: int = 32, ecp: bool = False) -> object:
             "max_device_bytes": budget,
             "peak": 0,
             "ecp": ecp,
+            "requires_native_integrals": required,
+            "native_integral_host_reserve": host_reserve,
             "na": 2,
             "np": np,
             "MappingProxyType": MappingProxyType,
@@ -140,6 +147,42 @@ def test_complete_fitted_response_and_explicit_exact_fallback_remain_distinct() 
     source.cuda_integral_derivatives.assert_called_once_with(
         2, 32, range_exchange=False
     )
+
+
+@pytest.mark.parametrize("failure", ["missing", "unavailable", "no-budget"])
+def test_enlarged_direct_domain_cannot_select_ao_task_fallback(failure: str) -> None:
+    source = SimpleNamespace(density_fitted=False)
+    if failure != "missing":
+        source.cuda_integral_derivatives = Mock(return_value=None)
+    with pytest.raises(NotImplementedError, match="cannot use AO-task fallback"):
+        _select(source, budget=0 if failure == "no-budget" else 32, required=True)
+
+
+def test_enlarged_domain_accepts_complete_native_owner_only() -> None:
+    output = np.zeros((4, 2, 3))
+    source = SimpleNamespace(
+        density_fitted=False,
+        cuda_integral_derivatives=Mock(return_value=(output, {})),
+    )
+    np.testing.assert_array_equal(_select(source, required=True), output)
+    source.cuda_integral_derivatives.assert_called_once_with(
+        2, 32, range_exchange=False
+    )
+
+
+@pytest.mark.parametrize("actual", [32, 33])
+def test_native_host_staging_must_fit_its_concurrent_reserve(actual: int) -> None:
+    source = SimpleNamespace(
+        density_fitted=False,
+        cuda_integral_derivatives=Mock(
+            return_value=(np.zeros((4, 2, 3)), {"one_electron_host_peak_bytes": actual})
+        ),
+    )
+    if actual == 32:
+        assert _select(source, required=True, host_reserve=32) is not None
+    else:
+        with pytest.raises(RuntimeError, match="host staging exceeds"):
+            _select(source, required=True, host_reserve=32)
 
 
 def _cpu_selection(source: object, execution: str) -> bool:
