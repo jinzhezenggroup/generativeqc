@@ -1,6 +1,6 @@
 # Proposal: scaled Boys moments for the exact long-range Coulomb interval
 
-Status: proposed; real-device and complete-endpoint qualification pending
+Status: proposed; standalone device qualification passed, composed timing pending
 Date: 2026-10-02
 
 ## Problem
@@ -88,3 +88,42 @@ before timing their composition.
 Revisit branch thresholds or the series bound only with independent dense and
 extreme-parameter evidence, and never weaken the positive SR or derivative
 contracts to obtain a timing win.
+
+## Device qualification and composition
+
+The standalone candidate `dedcbcfec` passed 48 RTX 5090 moment tests (FMA on/off),
+canonical full/SR/LR matrix checks, all-center range derivatives, and three
+independent complete RKS/UKS WB97M-V tests with reconverged finite differences.
+Slurm job 5299 on node1 also completed six- and twelve-atom cold, priming, warm,
+fixed-final-state and changed-geometry diagnostics with independent SCF states.
+All samples pass 1e-8 Eh / 1e-7 Eh/Bohr against the qualified references:
+six atoms use GPU4PySCF, while twelve use CPU PySCF/Libcint after detecting the
+GPU4PySCF analytic-gradient discrepancy described below. Maximum errors are
+3.07e-12 / 1.34e-9 at six atoms and 5.18e-12 / 9.09e-10 at twelve atoms.
+
+The work-census fixture's opt-in LR expectation was stale: both full and LR
+opt-in sources use the bounded provider. Correcting that expectation passes
+baseline and both separate candidates at 58/116 public AOs. Default candidate
+and radial counts are respectively 2,033,136 and 27,243,271, unchanged by either
+optimization. Zero canonical counters on bounded execution do not mean zero
+physical shell work. No molecular derivative quartet counter is exposed yet.
+
+The twelve-atom diagnostic found a pre-existing GPU4PySCF 1.8.1 force discrepancy,
+not a native optimization regression: baseline and Hermite candidate forces agree
+within 1.17e-12, but differ from GPU4PySCF by 4.47635e-5 Eh/Bohr. Independently
+reconverged GPU4PySCF directional energies at steps 1e-3/3e-4/1e-4 approach
+-0.01302778017 / -0.01302812829 / -0.01302815917 Eh/Bohr. Native analytic gives
+-0.01302816394; GPU4PySCF analytic gives -0.01296492998. Independent CPU
+PySCF/Libcint complete moving-grid gradients agree with native across both
+geometries and all samples to below 9.1e-10 Eh/Bohr. Do not loosen the gate or
+silently count the unqualified GPU4PySCF analytic force as an accepted oracle.
+The exact third-party defective component has not yet been isolated.
+
+PR #1711 has since merged as master `06459d469`. This radial PR is rebased on that
+master, so its eventual production behavior composes both optimizations. The
+evidence above identifies the earlier standalone binary; fresh composed device
+qualification and matched endpoint timings remain required before promotion.
+The complete 24-atom, 48 x 16 x 32 grid cases are still running. Raw scientific
+records, input scripts, binary hashes and phase journals are retained locally in
+`.artifacts/lr-moments/` and on the explicitly authorized Slurm nodes under
+`/home/jzzeng/codes/wb97m-20261002/`. No large-system advantage is established yet.
