@@ -245,11 +245,20 @@ class PreparedCompositeStationaryCudaGradient:
         )
         # Integral work belongs to the native source, never an AO^4 host loop.
         capacity = 1
-        nlc_budget = min(
-            source._batch._calculator.ks_options.nonlocal_memory_budget_bytes,
-            max_host_bytes // 4,
-            max_device_bytes // 4,
+        # The resident pair/seed arena scales with the complete grid, while the
+        # AO and geometry owners scale with one tile. Reserve its exact native
+        # capacity, then admit all simultaneously live owners under both totals.
+        # An explicit user cap still fails before any force allocation or JIT.
+        nlc_budget = _ResidentNonlocalForceOwner.required_device_bytes(
+            source._library, npnt, tile_points
         )
+        if (
+            nlc_budget
+            > source._batch._calculator.ks_options.nonlocal_memory_budget_bytes
+        ):
+            raise ValueError(
+                "resident nonlocal force exceeds nonlocal_memory_budget_bytes"
+            )
         # The Direct derivative source is retained by the prepared SCF owner and
         # is already charged to that owner's resource ledger. This allowance is
         # only for force-time one-electron/transient native work; do not reserve
