@@ -615,9 +615,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   const auto b = shared.batch;
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
   std::vector<double> result(2U * coordinates);
-  // Later source submissions can fail after an earlier D2H was queued. Drain
-  // before result is destroyed on every return/exception; success still has
-  // only the existing synchronization below.
+  // Drain any pending D2H before result is destroyed on failure or exception.
   struct HostResultDrain {
     cudaStream_t stream;
     bool active{true};
@@ -628,24 +626,22 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
                           shared.stream);
   if (error != cudaSuccess) return error;
-  const double coefficients[2][2] = {{coulomb_coefficient, 0.0}, {0.0, exchange_coefficient}};
-  for (unsigned source = 0; source < 2; ++source) {
-    if (coefficients[source][0] == 0.0 && coefficients[source][1] == 0.0) continue;
-    error = cudaMemsetAsync(p.force, 0, coordinates * sizeof(double), shared.stream);
-    if (error != cudaSuccess) return error;
-    error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
-    if (error != cudaSuccess) return error;
+  error = cudaMemsetAsync(p.force, 0, result.size() * sizeof(double), shared.stream);
+  if (error != cudaSuccess) return error;
+  error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+  if (error != cudaSuccess) return error;
+  if (coulomb_coefficient != 0.0 || exchange_coefficient != 0.0) {
     launch_bounded_shell_energy_derivative(
         unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
         p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
         p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
-        p.force_cursor, coefficients[source][0], coefficients[source][1]);
+        p.force_cursor, coulomb_coefficient, exchange_coefficient);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
-    error = cudaMemcpyAsync(result.data() + source * coordinates, p.force,
-                            coordinates * sizeof(double), cudaMemcpyDeviceToHost, shared.stream);
-    if (error != cudaSuccess) return error;
   }
+  error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
+                          cudaMemcpyDeviceToHost, shared.stream);
+  if (error != cudaSuccess) return error;
   error = cudaStreamSynchronize(shared.stream);
   if (error != cudaSuccess) return error;
   drain.active = false;
