@@ -32,6 +32,10 @@ generativeqc_status generativeqc_ks_snapshot_cuda_full_range_derivatives_v1(
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
+
+generativeqc_status generativeqc_ks_snapshot_density_fitted_integral_gradient_v1(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
+    std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count);
 generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int* device,
     const double** alpha, const double** beta, std::size_t* matrix_elements, unsigned* spins,
@@ -58,8 +62,7 @@ generativeqc_status generativeqc_ks_snapshot_wb97mv_model_v1(
 generativeqc_status generativeqc_ks_snapshot_hamiltonian_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, std::uint32_t* kind);
 /** Current primary Fock-provider proof. Approximation values follow the private
- * FockApproximation enum; an absent exchange term is UINT32_MAX. The metric
- * threshold is nonzero only when a density-fitted term is selected. */
+ * FockApproximation enum; an absent exchange term is UINT32_MAX. */
 generativeqc_status generativeqc_ks_snapshot_fock_provider_v1(
     const generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot,
     std::uint32_t* coulomb_approximation, std::uint32_t* exchange_approximation,

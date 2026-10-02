@@ -7,6 +7,7 @@
 #include "runtime/df_progress_trace.hpp"
 #include "scf/cuda/df_plan_internal.hpp"
 #include "scf/cuda/df_runtime.hpp"
+#include "scf/cuda/df_scf_library.hpp"
 #include "scf/cuda/df_scf_state.hpp"
 #include "scf/cuda/scf_diis_kernels.hpp"
 #include "scf/density_fitting.hpp"
@@ -117,14 +118,8 @@ generativeqc_status apply_scf_diis(CudaDensityFittingJkPlan& plan, PersistentScf
   // stride interleaves alpha/beta per system for the shared DIIS kernel.
   const auto product = [&](const double* left, const double* right, double* output,
                            std::size_t stride, double alpha = 1.0, double beta = 0.0) {
-    const auto status = cublasDgemmStridedBatched(
-        plan.blas, CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(plan.nbf), static_cast<int>(plan.nbf),
-        static_cast<int>(plan.nbf), &alpha, left, static_cast<int>(plan.nbf), matrix, right,
-        static_cast<int>(plan.nbf), matrix, &beta, output, static_cast<int>(plan.nbf), stride,
-        static_cast<int>(plan.batch_size));
-    return status == CUBLAS_STATUS_SUCCESS
-               ? GENERATIVEQC_STATUS_SUCCESS
-               : blas_failure(status, "CUDA DF DIIS physical residual", detail);
+    return scf_gemm_strided(plan, false, plan.batch_size, plan.nbf, left, matrix, right, matrix,
+                            output, stride, alpha, beta, "CUDA DF DIIS physical residual", detail);
   };
   runtime::cuda_trace::TraceRegion residual_products("diis_residual_products", plan.stream);
   for (unsigned spin = 0; spin < spins; ++spin) {

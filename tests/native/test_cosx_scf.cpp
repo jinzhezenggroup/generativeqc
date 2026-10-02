@@ -10,8 +10,10 @@
 
 #include "dft/cosx_reference.hpp"
 #include "dft/cosx_scf.hpp"
+#include "dft/xc.hpp"
 #include "molecule/basis.hpp"
 #include "scf/fock_prepared.hpp"
+#include "scf/mean_field.hpp"
 #include "scf/reference/mean_field.hpp"
 
 namespace {
@@ -51,6 +53,23 @@ generativeqc::scf::ResolvedFockBuild mixed_strategy(generativeqc::scf::FockSpin 
   spec.exchange.approximation = FockApproximation::SeminumericalCosx;
   spec.exchange.cosx = make_cosx_v1_spec(6, 4, 8, 3, 1.0e-12);
   return resolve_fock_build(spec, FockBackend::Cuda, 1.0e-12, 1.0e-10);
+}
+
+generativeqc::scf::ResolvedFockBuild pbe0_strategy(generativeqc::scf::FockSpin spin) {
+  using namespace generativeqc::scf;
+  auto spec = make_global_hybrid_fock_spec(spin, 0.25);
+  spec.coulomb.approximation = FockApproximation::DensityFitted;
+  spec.exchange.approximation = FockApproximation::SeminumericalCosx;
+  spec.exchange.cosx = make_cosx_v1_spec(6, 4, 8, 3, 1.0e-12);
+  return resolve_fock_build(spec, FockBackend::Cuda, 1.0e-12, 1.0e-10);
+}
+
+generativeqc::dft::GridSpec pbe_grid_spec() {
+  generativeqc::dft::GridSpec grid;
+  grid.radial_points = 12;
+  grid.angular_polar = 6;
+  grid.angular_azimuth = 12;
+  return grid;
 }
 
 generativeqc::scf::ResolvedFockBuild cpu_j_strategy(
@@ -120,6 +139,86 @@ generativeqc::scf::ScfOptions options() {
   out.energy_tolerance = 1.0e-10;
   out.density_tolerance = 1.0e-8;
   return out;
+}
+
+void verify_pbe0_rks(int device) {
+  using namespace generativeqc;
+  const auto system = hydrogen_dimer(0, 1);
+  const auto strategy = pbe0_strategy(scf::FockSpin::Restricted);
+  dft::PreparedCosxFockPlan plan(system, &system, strategy, 16, device);
+  const dft::AoBasis basis(system);
+  const dft::MolecularGrid grid(system, pbe_grid_spec());
+
+  auto control = options();
+  control.semilocal_exchange_scale = 0.75;
+  control.semilocal_correlation_scale = 1.0;
+  control.xc_tile_points = 31;
+  const auto result = scf::run_pbe0_cosx_rks(plan, basis, grid, control);
+  require(result.converged && result.iterations > 1 && result.forces.empty(),
+          "COSX PBE0 RKS did not converge");
+
+  const auto jk = plan.build(result.density);
+  auto fock = scf::assemble_fock(strategy, plan.one_electron().hcore, jk).alpha;
+  const auto two = scf::contract_fock_energy_components(strategy, jk, result.density);
+  const auto xc = dft::integrate_pbe_rks_with_tail_scaled(basis, grid, result.density,
+                                                          control.xc_tile_points, {}, 0.75, 1.0);
+  require(xc.potential.size() == fock.size(), "COSX PBE0 RKS XC/Fock shape mismatch");
+  for (std::size_t i = 0; i < fock.size(); ++i) fock[i] += xc.potential[i];
+  const auto residual = scf::reference::commutator_residual(
+      fock, result.density, plan.one_electron().overlap, plan.one_electron().nbf);
+  const double independent_energy = plan.one_electron().nuclear_repulsion +
+                                    scf::reference::dot(result.density, plan.one_electron().hcore) +
+                                    two.coulomb + two.exchange + xc.energy;
+  require(std::abs(independent_energy - result.energy) < 5.0e-9 &&
+              scf::reference::residual_rms(residual) < 1.0e-8,
+          "COSX PBE0 RKS endpoint disagrees with independent PBE + RI-J/COSX-K assembly");
+
+  const auto warm = scf::run_pbe0_cosx_rks(plan, basis, grid, control, &result.density);
+  require(
+      warm.converged && warm.initial_density_used && std::abs(warm.energy - result.energy) < 5.0e-9,
+      "COSX PBE0 RKS warm replay changed the endpoint");
+}
+
+void verify_pbe0_uks(int device) {
+  using namespace generativeqc;
+  const auto system = hydrogen_dimer(1, 2);
+  const auto strategy = pbe0_strategy(scf::FockSpin::Unrestricted);
+  dft::PreparedCosxFockPlan plan(system, &system, strategy, 16, device);
+  const dft::AoBasis basis(system);
+  const dft::MolecularGrid grid(system, pbe_grid_spec());
+
+  auto control = options();
+  control.semilocal_exchange_scale = 0.75;
+  control.semilocal_correlation_scale = 1.0;
+  control.xc_tile_points = 31;
+  const auto result = scf::run_pbe0_cosx_uks(plan, basis, grid, control);
+  require(result.converged && result.iterations > 1 && result.forces.empty(),
+          "COSX PBE0 UKS did not converge");
+
+  const auto n = plan.one_electron().nbf;
+  auto [alpha, beta] = scf::reference::split_spin_matrices(result.density, n * n);
+  const auto jk = plan.build(alpha, beta);
+  auto fock = scf::assemble_fock(strategy, plan.one_electron().hcore, jk);
+  const auto two = scf::contract_fock_energy_components(strategy, jk, alpha, beta);
+  const auto xc =
+      dft::integrate_pbe_uks_scaled(basis, grid, alpha, beta, control.xc_tile_points, 0.75, 1.0);
+  require(xc.potential[0].size() == fock.alpha.size() && xc.potential[1].size() == fock.beta.size(),
+          "COSX PBE0 UKS XC/Fock shape mismatch");
+  for (std::size_t i = 0; i < fock.alpha.size(); ++i) {
+    fock.alpha[i] += xc.potential[0][i];
+    fock.beta[i] += xc.potential[1][i];
+  }
+  const auto ra =
+      scf::reference::commutator_residual(fock.alpha, alpha, plan.one_electron().overlap, n);
+  const auto rb =
+      scf::reference::commutator_residual(fock.beta, beta, plan.one_electron().overlap, n);
+  const double independent_energy = plan.one_electron().nuclear_repulsion +
+                                    scf::reference::dot(alpha, plan.one_electron().hcore) +
+                                    scf::reference::dot(beta, plan.one_electron().hcore) +
+                                    two.coulomb + two.exchange + xc.energy;
+  require(std::abs(independent_energy - result.energy) < 5.0e-9 &&
+              std::max(scf::reference::residual_rms(ra), scf::reference::residual_rms(rb)) < 1.0e-8,
+          "COSX PBE0 UKS endpoint disagrees with independent PBE + RI-J/COSX-K assembly");
 }
 
 void verify_rhf(int device) {
@@ -264,7 +363,9 @@ int main() {
     if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
     verify_rhf(0);
     verify_uhf(0);
-    std::cout << "prepared COSX RHF/UHF value and analytic-force SCF PASS\n";
+    verify_pbe0_rks(0);
+    verify_pbe0_uks(0);
+    std::cout << "prepared COSX HF/PBE0 value and analytic-force SCF PASS\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

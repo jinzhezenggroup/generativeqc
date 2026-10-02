@@ -415,10 +415,23 @@ def _artifact_derivative_requests(
     return inventory
 
 
-def _layout(basis: typing.Any) -> typing.Any:
-    """Read normalized s/p/d public-AO records without evaluating integrals."""
-    if any(s.angular_momentum > 2 for s in basis.shells):
-        raise NotImplementedError("CUDA gradient diagnostic admits s/p/d bases only")
+def _layout(basis: typing.Any, *, integral_derivatives: bool = True) -> typing.Any:
+    """Read normalized public-AO records without evaluating integrals.
+
+    Generic stationary integral descriptors remain qualified through d shells.
+    Geometry-only consumers can reuse the same packed AO topology through f
+    without constructing the combinatorial Cartesian derivative inventory.
+    """
+    if type(integral_derivatives) is not bool:
+        raise TypeError("integral_derivatives must be boolean")
+    if integral_derivatives and any(s.angular_momentum > 2 for s in basis.shells):
+        raise NotImplementedError(
+            "CUDA gradient integral descriptors admit s/p/d bases only"
+        )
+    if not integral_derivatives and any(s.angular_momentum > 3 for s in basis.shells):
+        raise NotImplementedError(
+            "CUDA stationary geometry admits through f bases only"
+        )
     start = 3 * basis.natom
     primitives = basis.packed[start : start + 2 * basis.nprimitive].reshape(-1, 2)
     aos = basis.packed[start + 2 * basis.nprimitive :].reshape(-1, 16)
@@ -438,15 +451,24 @@ def _layout(basis: typing.Any) -> typing.Any:
         for row in aos
     )
     requests = (
-        derivative_requests(_component_domain(expansions))
-        if _component_mode(expansions)
-        else qualified_sp_requests()
+        (
+            derivative_requests(_component_domain(expansions))
+            if _component_mode(expansions)
+            else qualified_sp_requests()
+        )
+        if integral_derivatives
+        else (("nuclear", ()),)
     )
     return primitives, aos, expansions, requests
 
 
 class _CudaSources:
-    """Serialized finite owner; bounded AO tasks expand primitives only on CUDA."""
+    """Serialized finite owner; bounded AO tasks expand primitives only on CUDA.
+
+    Geometry-only owners use plain nuclear dispatch kinds, independently of
+    their AO angular momentum. Encoded Cartesian bindings belong exclusively
+    to the sharded integral-derivative dispatcher.
+    """
 
     def __init__(
         self,
@@ -463,8 +485,12 @@ class _CudaSources:
         timeline: _ExclusiveWallTimeline | None = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = _SOURCE_NAMES,
+        integral_derivatives: bool = True,
     ) -> None:
+        if type(integral_derivatives) is not bool:
+            raise TypeError("integral_derivatives must be boolean")
         self.source_names = source_names
+        self.integral_derivatives = integral_derivatives
         if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
             raise ValueError("stationary CUDA binary hash mismatch")
         self.artifact = artifact
@@ -492,9 +518,11 @@ class _CudaSources:
             basis.packed[: 3 * basis.natom].reshape(-1, 3)
         )
         self.ao_atoms = np.ascontiguousarray(_native_ao_atoms(basis), dtype=np.int64)
-        self.primitives, self.aos, expansions, requests = _layout(basis)
+        self.primitives, self.aos, expansions, requests = _layout(
+            basis, integral_derivatives=integral_derivatives
+        )
         self.expansions = tuple(expansions)
-        self.component_mode = _component_mode(self.expansions)
+        self.component_mode = integral_derivatives and _component_mode(self.expansions)
         self.components = tuple(expansion[0][0] for expansion in self.expansions)
         self.primitive_table = np.ascontiguousarray(self.primitives, dtype=np.float64)
         self.ao_ranges = np.ascontiguousarray(self.aos[:, 1:3], dtype=np.int64)
@@ -508,10 +536,13 @@ class _CudaSources:
             key: i
             for i, key in enumerate(_artifact_derivative_requests(requests, artifact))
         }
-        component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
-        self.component_ids = np.asarray(
-            [component_index[label] for label in self.components], dtype=np.int64
-        )
+        if integral_derivatives:
+            component_index = {label: i for i, label in enumerate(COMPONENT_LABELS)}
+            self.component_ids = np.asarray(
+                [component_index[label] for label in self.components], dtype=np.int64
+            )
+        else:
+            self.component_ids = None
         self.kind_tables: dict[tuple[str, int], np.ndarray] = {}
         tail = [ct.c_char_p, ct.c_size_t]
         lib.stationary_create.argtypes = (
@@ -803,6 +834,10 @@ class _CudaSources:
         charge: typing.Any = 1.0,
     ) -> None:
         """Append public-AO tasks while Cartesian primitive products stay native."""
+        if not self.integral_derivatives:
+            raise NotImplementedError(
+                "geometry-only stationary CUDA source does not admit integral tasks"
+            )
         indices = tuple(int(i) for i in indices)
         rank = len(indices)
         if rank not in (2, 4):
@@ -865,6 +900,10 @@ class _CudaSources:
         charge: float = 1.0,
     ) -> None:
         """Append one bounded logical page, vectorizing the scalar AO producer."""
+        if not self.integral_derivatives:
+            raise NotImplementedError(
+                "geometry-only stationary CUDA source does not admit integral tasks"
+            )
         coordinates = tuple(coordinates)
         if not coordinates:
             return
@@ -2283,9 +2322,13 @@ def _complete_rks_cuda_gradient_diagnostic(
     # Lane expansion is optional: retain the old native provider allowance so
     # a tighter geometry budget cannot disable or OOM an already-admitted
     # prepared integral path. If the old remainder was itself too small, keep
-    # all of it and leave that existing provider decision unchanged.
+    # all of it and leave that existing provider decision unchanged. The fitted
+    # provider has a separate resource contract, so preserve its full allowance
+    # rather than borrowing the Direct provider's one-electron estimate.
     native_geometry_reserve = (
-        min(
+        max(0, available - sum(value.peak_bytes for value in tensor_plans.values()))
+        if not ecp and bool(getattr(state._source, "density_fitted", False))
+        else min(
             max(
                 0, available - sum(value.peak_bytes for value in tensor_plans.values())
             ),
@@ -2297,7 +2340,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         and callable(getattr(state._source, "cuda_integral_derivatives", None))
         else 0
     )
-    source_bytes = plan_stationary_cuda_resources(
+    source_resources = plan_stationary_cuda_resources(
         atoms=na,
         aos=n,
         primitives=basis.nprimitive,
@@ -2310,7 +2353,8 @@ def _complete_rks_cuda_gradient_diagnostic(
         - grid_plan.peak_bytes
         - sum(value.peak_bytes for value in tensor_plans.values())
         - native_geometry_reserve,
-    ).allocation_bytes
+    )
+    source_bytes = source_resources.allocation_bytes
     cache = Path(cache)
     spec = state._source.grid_spec
     if prepared is None:
@@ -2467,15 +2511,29 @@ def _complete_rks_cuda_gradient_diagnostic(
                 source_before, grid_before = sources.metrics(), ao.metrics()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
+        fitted_integral_provider = getattr(
+            state._source, "density_fitted_integral_derivatives", None
+        )
+        direct_integral_provider = getattr(
+            state._source, "cuda_integral_derivatives", None
+        )
         use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
-        integral_provider = getattr(state._source, "cuda_integral_derivatives", None)
+        integral_provider = (
+            fitted_integral_provider
+            if use_fitted_integrals
+            else direct_integral_provider
+        )
         native_integral_budget = max_device_bytes - peak
         if not ecp and native_integral_budget > 0 and callable(integral_provider):
             with timeline.phase("prepared_stationary_integral_derivatives"):
-                native_integral = integral_provider(
-                    na,
-                    native_integral_budget,
-                    range_exchange=False,
+                native_integral = (
+                    integral_provider(na, native_integral_budget)
+                    if use_fitted_integrals
+                    else integral_provider(
+                        na,
+                        native_integral_budget,
+                        range_exchange=False,
+                    )
                 )
             if native_integral is not None:
                 native_integral_components, native_integral_resources = native_integral
@@ -2726,7 +2784,15 @@ def _complete_rks_cuda_gradient_diagnostic(
             work["bulk_pack_chunks"] = sources.bulk_pack_chunks
             work["bulk_packed_descriptors"] = sources.bulk_packed_descriptors
             work["scalar_packed_descriptors"] = sources.scalar_packed_descriptors
-        if work["owned_device_bytes"] != source_bytes:
+        # A typed cache-allocation failure may retain the exact direct arena.
+        # Keep admission/peak accounting conservative, but verify actual storage.
+        actual_center_bytes = work["center_geometry_bytes"]
+        planned_center_bytes = source_resources.center_geometry_bytes
+        if (
+            actual_center_bytes not in (0, planned_center_bytes)
+            or work["owned_device_bytes"]
+            != source_bytes - planned_center_bytes + actual_center_bytes
+        ):
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
     timeline.switch("publication_validation")
@@ -2907,6 +2973,16 @@ def _complete_rks_cuda_gradient_diagnostic(
         grid_artifact_kind=grid_artifact.metadata.get("artifact_kind", "runtime-jit"),
         artifacts=artifacts_record,
     )
+    if use_fitted_integrals:
+        work["density_fitted_response_resources_included"] = False
+        work["native_integral_resource_scope"] = (
+            "compact-publication-and-host-one-electron-only"
+        )
+        work["additional_device_peak_bound_scope"] = (
+            "stationary-consumer-only; excludes DF-provider response scratch"
+        )
+        work["transfer_work"]["density_fitted_response_included"] = False
+        work["host_scope"] += "; retained H'/S' source contraction"
     timeline_record = timeline.finish()
     work.update(
         endpoint_seconds=timeline_record["endpoint_seconds"],

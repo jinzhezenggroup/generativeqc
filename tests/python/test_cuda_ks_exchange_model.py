@@ -98,6 +98,18 @@ int main(int argc,char** argv) {
  else if(mode=="scale-x")state.model.semilocal_exchange_scale=0.73;
  else if(mode=="scale-c")state.model.semilocal_correlation_scale=0.5;
  else if(mode=="pbe0")state.model.semilocal_exchange_scale=0.75;
+ else if(mode.rfind("pbe0-df",0)==0) {
+   state.model.semilocal_exchange_scale=0.75;
+   f.spec.coulomb.approximation=scf::FockApproximation::DensityFitted;
+   f.spec.exchange.approximation=scf::FockApproximation::DensityFitted;
+   if(mode=="pbe0-df-wrong-k")f.spec.exchange.coefficient=-0.2;
+   else if(mode=="pbe0-df-mixed-j")f.spec.coulomb.approximation=scf::FockApproximation::Exact;
+   else if(mode=="pbe0-df-mixed-k")f.spec.exchange.approximation=scf::FockApproximation::Exact;
+   else if(mode=="pbe0-df-range")state.model.range_correction=scf::Fock{};
+   else if(mode=="pbe0-df-nlc")state.model.nonlocal_correlation=1;
+   else if(mode=="pbe0-df-scale-x")state.model.semilocal_exchange_scale=0.8;
+   else if(mode=="pbe0-df-scale-c")state.model.semilocal_correlation_scale=0.9;
+ }
  else if(mode=="pbe0-wrong-k") {
    state.model.semilocal_exchange_scale=0.75;f.spec.exchange.coefficient=-0.2;
  }
@@ -203,6 +215,21 @@ def model_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ),
         *(("exact", family, False) for family in (3, 4, 99)),
         ("pbe0", 1, True),
+        ("pbe0-df", 1, True),
+        ("pbe0-df", 0, False),
+        ("pbe0-df", 2, False),
+        *(
+            (mode, 1, False)
+            for mode in (
+                "pbe0-df-wrong-k",
+                "pbe0-df-mixed-j",
+                "pbe0-df-mixed-k",
+                "pbe0-df-range",
+                "pbe0-df-nlc",
+                "pbe0-df-scale-x",
+                "pbe0-df-scale-c",
+            )
+        ),
         ("pbe0-wrong-k", 1, False),
         ("pbe0-range-decoration", 1, False),
         ("pbe0-nlc-decoration", 1, False),

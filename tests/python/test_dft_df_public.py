@@ -97,7 +97,7 @@ def pyscf_energy_gradient(
     multiplicity: int,
     functional: str,
 ) -> tuple[float, np.ndarray]:
-    """Independent DF-SCF plus analytic auxiliary/metric and moving-grid response."""
+    """Independent DF-SCF plus auxiliary/metric and moving-grid response."""
     pyscf = pytest.importorskip("pyscf")
     from pyscf import dft, gto
 
@@ -179,6 +179,62 @@ def test_df_semilocal_matches_independent_reference(
 
 
 @pytest.mark.parametrize(
+    "method,functional,atoms,multiplicity,has_exchange",
+    [
+        ("pbe-rks", "PBE", WATER, 1, False),
+        ("r2scan-rks", "R2SCAN", WATER, 1, False),
+        ("pbe-uks", "PBE", [("Li", (0.0, 0.0, 0.0))], 2, False),
+        ("pbe0-rks", "PBE0", WATER, 1, True),
+    ],
+)
+def test_df_force_matches_independent_response(
+    device: str,
+    method: str,
+    functional: str,
+    atoms: Any,
+    multiplicity: int,
+    has_exchange: bool,
+) -> None:
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
+
+    calc = calculator(device, method)
+    assert "forces" in calc.capabilities.supported_properties
+    with calc.prepare_batch(
+        [atoms], multiplicities=[multiplicity], warm_start=True
+    ) as batch:
+        public = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        with NativeAO(
+            atoms,
+            basis=calc._basis,
+            representation=calc._representation_name,
+            multiplicity=multiplicity,
+        ) as basis:
+            state = StationaryKsState.from_native(batch, basis)
+            try:
+                coulomb, exchange, threshold = state._source.fock_provider_proof()
+                assert coulomb == "density-fitted"
+                assert exchange == ("density-fitted" if has_exchange else None)
+                assert threshold == calc._density_fitting_relative_threshold
+                reference_energy, reference_gradient = pyscf_energy_gradient(
+                    calc, state, atoms, multiplicity, functional
+                )
+            finally:
+                state._source.close()
+        assert public.executed_backend == (
+            "cuda" if device == "cuda" else "cpu_reference"
+        )
+        assert public.converged
+        assert public.energy == pytest.approx(reference_energy, abs=1e-8)
+        np.testing.assert_allclose(
+            public.forces, -reference_gradient, atol=3e-7, rtol=0
+        )
+        np.testing.assert_allclose(public.forces.sum(axis=0), 0, atol=2e-9, rtol=0)
+        replay = batch.execute(strict=True, properties=("energy", "forces")).items[0]
+        np.testing.assert_allclose(replay.forces, public.forces, atol=2e-8, rtol=0)
+
+
+@pytest.mark.parametrize(
     "method,functional", [("pbe0-rks", "PBE0"), ("b3lyp-rks", "B3LYP")]
 )
 def test_df_cpu_global_hybrid_matches_independent_reference(
@@ -221,8 +277,13 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
                 )
             ] == [3 * matrix_bytes, 0]
         else:
-            with pytest.raises(NotImplementedError):
-                NativeKsSnapshot(batch, 0)
+            snapshot = NativeKsSnapshot(batch, 0)
+            try:
+                coulomb, exchange, threshold = snapshot.fock_provider_proof()
+                assert coulomb == "density-fitted" and exchange is None
+                assert threshold == calc._density_fitting_relative_threshold
+            finally:
+                snapshot.close()
         transport_before_warm = (
             tuple(batch.ks_transport_diagnostics) if device == "cuda" else None
         )
@@ -265,15 +326,11 @@ def test_df_batch_warm_replay_rebinds_auxiliary_centers(device: str) -> None:
             ] == [0, density_bytes]
 
 
-def test_df_rejects_unqualified_force_precision_and_resource_consumers(
+def test_df_rejects_unqualified_precision_and_resource_consumers(
     device: str,
 ) -> None:
     calc = calculator(device)
-    if device == "cpu":
-        with pytest.raises(ValueError, match="does not support.*forces"):
-            calc.singlepoint(WATER, properties=("energy", "forces"))
-    else:
-        assert "forces" in calc.capabilities.supported_properties
+    assert "forces" in calc.capabilities.supported_properties
     with pytest.raises(NotImplementedError, match="resource plans"):
         calc.estimate_resources([WATER])
     if device == "cuda":

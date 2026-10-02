@@ -246,7 +246,7 @@ NATIVE_SYSTEM_BASIS_FORWARDING_CONTRACT_SHA256 = (
     "120936d57b90062a8a888892ce4d514ca8a62a0b2ced671afe3fce660b0414d5"
 )
 STATIONARY_LAYOUT_CONTRACT_SHA256 = (
-    "2f1bb49d43cbfd93e65f69c769ec26c9d04b84bfe5e4be2d705b1262a386b030"
+    "fa8c4ff2a644fd45ab4eb828a995c4e42c49c80adbe712b32d50f90b3d98fb74"
 )
 NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
     "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
@@ -255,7 +255,7 @@ PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
     "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
-    "aeebc6fd16661ab83f6a5e3e6e420963eba60c5ed358cdd760d69c202045cf0e"
+    "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
     "432072ea6ce50303e4e855bc29585fe00dc3b74a3dbee00f4490f15af1b15c3a"
@@ -291,16 +291,16 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "c960c6720625bfc7a64d6715937b440355808e449c26a8ee9fdf6135e8a273e9"
+    "c05bd360f51062ee5f593429670303ca96f8f0a6863af30ce4feb1a82fdc6f26"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
-    "d5f2d214d89a6c714edc52d81b6909e14b5c1b962234c6892c91c9d076e9d63b"
+    "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
 )
 STATIONARY_PAGE_SCALAR_CONTRACT_SHA256 = (
     "c5b8ef983462f6c56ebfe6bd6eb8d5cf98f92f36f3e5425504b596730846205f"
 )
 STATIONARY_PAGE_COMPONENT_INTEGRAL_CONTRACT_SHA256 = (
-    "c0eb9658bb707083073c9ea57b5021825691c35c0cc2ff6e2afa326c09159dc3"
+    "d3f61e820c8bcf0df4bf4fce639f342936b79aceb956cb6e9f43caa3d13cdaa3"
 )
 STATIONARY_PAGE_NUCLEAR_CONTRACT_SHA256 = (
     "1e86737d8732ef8637378ab925f829dfe229bcf049219c2705a0a4fbf7afdb85"
@@ -324,13 +324,13 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "b3918673701fb03bea3b4961c29c4c2ca0367f6b436462fa4b54f099af6df813"
+    "b600f2ccb9e5887e89174715139b4777ee850539317e71863031fc174a7a69eb"
 )
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
-    "d487a1a2a312dcb8f35b1db711ad98120390cce67fe85652bf2896e83236834c"
+    "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
 )
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "c441e0c44079c97a6defe5225f9c01d5126cefa4b9816397db2fb52ddb68c9e6"
+    "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
@@ -396,12 +396,13 @@ MINIMUM_SOURCE_BYTES_DEFINITION = (
     "points=tile_points, tasks=primitive_tile, spins=plan.spin_blocks, "
     "sources=len(source_names), geometry_lanes=min(32, tile_points))"
 )
-SOURCE_BYTES_DEFINITION = (
+SOURCE_RESOURCES_DEFINITION = (
     "plan_stationary_cuda_resources(atoms=na, aos=n, primitives=basis.nprimitive, "
     "points=tile_points, tasks=primitive_tile, spins=plan.spin_blocks, "
     "sources=len(source_names), target=target, budget_bytes=max_device_bytes - "
-    "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - native_geometry_reserve).allocation_bytes"
+    "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - native_geometry_reserve)"
 )
+SOURCE_BYTES_DEFINITION = "source_resources.allocation_bytes"
 HOST_BOUND_DEFINITION = (
     "grid_plan.host_bytes + 8 * (34 * primitive_tile + "
     "4 * plan.spin_blocks * n * n + 120 * na + "
@@ -802,6 +803,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "needs_first",
             "grid_plan",
             "minimum_source_bytes",
+            "source_resources",
             "source_bytes",
             "available",
             "host_bound",
@@ -824,6 +826,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "needs_first": NEEDS_FIRST_DEFINITION,
         "grid_plan": GRID_PLAN_DEFINITION,
         "minimum_source_bytes": MINIMUM_SOURCE_BYTES_DEFINITION,
+        "source_resources": SOURCE_RESOURCES_DEFINITION,
         "source_bytes": SOURCE_BYTES_DEFINITION,
         "available": AVAILABLE_DEVICE_BYTES_DEFINITION,
         "host_bound": HOST_BOUND_DEFINITION,
@@ -838,6 +841,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "needs_first": "grid derivative-order",
         "grid_plan": "grid-plan input",
         "minimum_source_bytes": "minimum-source-bytes",
+        "source_resources": "source-resources",
         "source_bytes": "source-bytes",
         "available": "available-device-bytes",
         "host_bound": "host-bound",
@@ -1004,6 +1008,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "grid_derivative_order_definition": NEEDS_FIRST_DEFINITION,
         "grid_plan_definition": GRID_PLAN_DEFINITION,
         "minimum_source_bytes_definition": MINIMUM_SOURCE_BYTES_DEFINITION,
+        "source_resources_definition": SOURCE_RESOURCES_DEFINITION,
         "source_bytes_definition": SOURCE_BYTES_DEFINITION,
         "host_bound_definition": HOST_BOUND_DEFINITION,
         "available_device_bytes_definition": AVAILABLE_DEVICE_BYTES_DEFINITION,
