@@ -855,6 +855,26 @@ void launch_bounded_shell_fock_source(
       output, cursor, coulomb_only, exchange_only);
 }
 
+void launch_bounded_shell_range_exchange_source(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DirectCoulombRange range, double omega) {
+  const DirectRangeOperator radial_operator =
+      range == DirectCoulombRange::Long
+          ? DirectRangeOperator::Long
+          : (range == DirectCoulombRange::Short ? DirectRangeOperator::Short
+                                                : DirectRangeOperator::Full);
+  launch_bounded_direct_range_exchange_fock_kernel(
+      unrestricted, worker_blocks, kBoundedDirectThreads, 0, stream, batch, screening,
+      shell_pair_bounds, shell_pair_density_bounds, pair_order, shell_pair_block_bounds,
+      system_density_bounds, class_state, schwarz_bounds, density, active, output, cursor,
+      radial_operator, omega);
+}
+
 void launch_bounded_shell_energy_derivative(
     bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell_pair_bounds,
