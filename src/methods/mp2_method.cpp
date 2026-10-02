@@ -379,6 +379,8 @@ class Mp2PreparedBatch final : public PreparedBatch {
 
   [[nodiscard]] std::size_t warm_density_size(std::size_t index) const override {
     const auto n = molecule::ao_count(systems_.at(index));
+    if (n == 0 || n > std::numeric_limits<std::size_t>::max() / n / sizeof(double))
+      throw std::invalid_argument("MP2 warm density dimensions overflow");
     return posthf::checked_mul(n, n);
   }
 
