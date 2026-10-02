@@ -7,7 +7,7 @@
     "src/backends/cuda/gfn2_hamiltonian_force.cu": "Consume the matching compiler-generated S/D/Q reverse-mode pair adjoints, including spin overlap.",
     "src/backends/cuda/gfn2_pairlist.cu": "Backport xTBloom #487: pass pair-list CUDA kernel descriptors by value so device code never dereferences launcher-stack host references. Consume the same compiler-generated TensorIR/AD coordination pair helper as dense geometry, preserving bitwise CN admission and canonical neighbor accumulation.",
     "src/backends/cuda/gfn2_preprocessing.cu": "Backport xTBloom #487: pass committed pair-list CUDA kernel descriptors by value for GPUs without pageable host-memory access.",
-    "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science; retain CUDA reduction and error ownership.",
+    "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science and radial Cartesian projection; retain native element-pair parameter composition, CUDA reduction, and error ownership.",
     "src/backends/cuda/gfn2_repulsion.cuh": "Add explicit generated-pair nonfinite arithmetic status.",
     "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, diagnostic snapshots, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback.",
     "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, and AO contraction arithmetic while retaining CUDA topology, validation, reductions, atomics, thresholds, and failure semantics.",
@@ -15,7 +15,9 @@
     "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
     "src/backends/cuda/gfn2_spin.cu": "Consume shared compiler TensorIR FMA potential/energy updates and symmetric-energy AD identity; retain ragged admission, restricted zero branch and scratch publication.",
     "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy.",
-    "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership."
+    "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership.",
+    "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
+    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -99,7 +101,7 @@
     "src/backends/cuda/gfn2_classical_force.cu": {
       "adapted": true,
       "upstream_sha256": "8b210634f051e4ff32a58afeac41f5271b7422f623808a747cb6bb3f075301c3",
-      "vendored_sha256": "455acea343f8acd9f4f0edcce38d605ada07942bfe94e49876deff9e158bbbbf"
+      "vendored_sha256": "b9cfa20ef98058905c86e108675ca445a9c908b454f8419a0d890b6b49986f21"
     },
     "src/backends/cuda/gfn2_classical_force.cuh": {
       "adapted": true,
@@ -194,7 +196,7 @@
     "src/backends/cuda/gfn2_external_point_charges.cu": {
       "adapted": true,
       "upstream_sha256": "c281a16ebbf89d9591b63a521a691b35b13872677617599309d015440e9c9790",
-      "vendored_sha256": "2c8eaab6093de44367553a287ca2630dc247475cdc0f24cccee808602480dc15"
+      "vendored_sha256": "3ec0d71a492d82e97fad6b19f1bb3c8067955e0db1b0a92af3099b9d2befa374"
     },
     "src/backends/cuda/gfn2_external_point_charges.cuh": {
       "adapted": true,
@@ -374,7 +376,7 @@
     "src/backends/cuda/gfn2_repulsion.cu": {
       "adapted": true,
       "upstream_sha256": "6a6a587f05ae54ecfa6df1c9fc7b3fadb799cae5c891366d2db5d56ad96d42b1",
-      "vendored_sha256": "a14306e4567cadc38754c62f086e3ee9f91de606015867ea18350afa6c93db17"
+      "vendored_sha256": "70859cb2ac1c54a7e6e2becb16fc0e95037a978a215ddadec0594c061d887c9d"
     },
     "src/backends/cuda/gfn2_repulsion.cuh": {
       "adapted": true,

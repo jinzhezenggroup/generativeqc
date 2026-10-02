@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from generativeqc_compiler.geometry.gfn2_pair import (
+    build_gfn2_runtime_pair_cartesian_projection_program,
     build_gfn2_runtime_pair_kernel,
     build_gfn2_runtime_pair_primal,
 )
@@ -72,6 +73,28 @@ def test_gfn2_runtime_pair_primal_matches_documented_scalar_equations() -> None:
     assert values["repulsion_energy"] == pytest.approx(repulsion, rel=1.0e-15)
 
 
+def test_gfn2_pair_cartesian_projection_matches_radial_chain_rule() -> None:
+    projection = build_gfn2_runtime_pair_cartesian_projection_program()
+    values = execute(
+        projection,
+        {
+            "distance_derivative": np.asarray(-0.73, dtype=np.float64),
+            "radial_adjoint": np.asarray(1.4, dtype=np.float64),
+            "inverse_distance": np.asarray(0.25, dtype=np.float64),
+            "dx": np.asarray(1.2, dtype=np.float64),
+            "dy": np.asarray(-0.8, dtype=np.float64),
+            "dz": np.asarray(0.3, dtype=np.float64),
+        },
+    ).outputs
+    scale = 1.4 * -0.73 * 0.25
+    np.testing.assert_allclose(
+        [values["gx"], values["gy"], values["gz"]],
+        [scale * 1.2, scale * -0.8, scale * 0.3],
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
 def test_gfn2_native_pair_codegen_needs_no_site_packages(tmp_path: Path) -> None:
     output = tmp_path / "generated_gfn2_pair_native.hpp"
     subprocess.run(
@@ -92,8 +115,9 @@ def test_gfn2_native_pair_codegen_needs_no_site_packages(tmp_path: Path) -> None
     assert "gfn2_pair_distance_jvp_hash" in source
     assert "evaluate_gfn2_coordination_pair" in source
     assert "evaluate_gfn2_repulsion_pair" in source
+    assert "project_gfn2_pair_radial_adjoint" in source
     assert "#define GENERATIVEQC_GFN2_PAIR_HOST_DEVICE __host__ __device__" in source
-    assert source.count("GENERATIVEQC_GFN2_PAIR_HOST_DEVICE inline bool") == 4
+    assert source.count("GENERATIVEQC_GFN2_PAIR_HOST_DEVICE inline bool") == 6
 
 
 def test_gfn2_cuda_pair_science_consumes_generated_helpers() -> None:
@@ -111,8 +135,10 @@ def test_gfn2_cuda_pair_science_consumes_generated_helpers() -> None:
     assert "kFirstSteepness" not in geometry
     assert "double logistic(" not in geometry
     assert "evaluate_gfn2_repulsion_pair" in repulsion
+    assert "project_gfn2_pair_radial_adjoint" in repulsion
     assert "distance_power" not in repulsion
     assert "pair_energy = pair_charge * exp" not in repulsion
+    assert "force_scale = -pair.distance_derivative / distance" not in repulsion
 
 
 def test_sparse_and_dense_cuda_coordination_share_generated_pair_science() -> None:

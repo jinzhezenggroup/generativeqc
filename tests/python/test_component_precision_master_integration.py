@@ -80,7 +80,9 @@ struct Owner {
   scf::ScfOptions options;
   CudaKsPrecisionSchedule precision_schedule;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
+  bool device_nonlocal{};
   void* nonlocal_correlation{};
+  std::optional<scf::ResolvedFockBuild> range_correction;
   unsigned spins{1}, functional{semilocal_family_code(SemilocalFamily::Pbe)}, width{2};
   double exchange_coefficient{-0.125};
   std::size_t n{8};
@@ -115,7 +117,16 @@ int main() {
   for (int excluded = 0; excluded != 7; ++excluded) {
     Owner p;
     if (excluded == 0) p.fitted_coulomb = true;
-    if (excluded == 1) p.has_range_correction = true;
+    if (excluded == 1) {
+      // A correction-only model must not enter through the semilocal arm.
+      p.has_range_correction = true;
+      p.range_correction.emplace();
+      p.range_correction->backend = scf::FockBackend::Cuda;
+      p.range_correction->spec.derivative_order = 0;
+      p.range_correction->spec.coulomb.present = false;
+      p.range_correction->spec.exchange.op = scf::FockOperator::LongRange;
+      p.range_correction->spec.exchange.omega = 0.3;
+    }
     if (excluded == 2) p.nonlocal_correlation = &p;
     if (excluded == 3) p.spins = 2;
     if (excluded == 4) p.provider.value.ecp_terms.push_back(1);
@@ -124,6 +135,26 @@ int main() {
       p.options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     assert(!p.chunk());
     if (excluded < 3) assert(!p.replay());
+  }
+  for (bool coulomb : {false, true}) for (bool density : {false, true}) {
+    Owner rsh;
+    rsh.has_exchange = rsh.has_range_correction = true;
+    rsh.range_correction.emplace();
+    rsh.range_correction->backend = scf::FockBackend::Cuda;
+    rsh.range_correction->spec.derivative_order = 0;
+    rsh.range_correction->spec.coulomb.present = false;
+    rsh.range_correction->spec.exchange.op = scf::FockOperator::LongRange;
+    rsh.range_correction->spec.exchange.omega = 0.3;
+    rsh.precision_schedule = {coulomb, density};
+    assert(rsh.chunk() == (!coulomb && !density));
+    assert(!rsh.replay());
+    rsh.nonlocal_correlation = &rsh;
+    assert(!rsh.chunk());
+    rsh.device_nonlocal = true;
+    assert(rsh.chunk() == (!coulomb && !density));
+    assert(!rsh.replay());
+    rsh.range_correction.reset();
+    assert(!rsh.chunk());
   }
   Owner large;
   large.n = 33;

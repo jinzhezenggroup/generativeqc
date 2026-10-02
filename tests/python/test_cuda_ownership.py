@@ -253,7 +253,7 @@ def test_stale_source_or_inconsistent_totals_cannot_claim_retirement(
         ),
         (
             "src/xtb/native/src/backends/cuda/gfn2_repulsion.cu",
-            "-pair.distance_derivative / distance",
+            "first_sqrt_alpha * sqrt(second_element.arep)",
         ),
     ],
 )

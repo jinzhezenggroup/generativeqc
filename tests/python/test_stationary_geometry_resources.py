@@ -47,7 +47,7 @@ def test_geometry_schedule_is_bounded_by_points_scratch_budget_and_target() -> N
             assert full.geometry_scratch_bytes == 144 * atoms * full.geometry_lanes
             assert full.geometry_scratch_bytes <= GEOMETRY_MAX_SCRATCH_BYTES
             assert full.allocation_bytes == stationary_cuda_allocation_bytes(
-                **shape, geometry_lanes=full.geometry_lanes
+                **shape, geometry_lanes=full.geometry_lanes, cache_center_geometry=True
             )
             for lanes in (1, min(32, full.geometry_lanes), full.geometry_lanes):
                 budget = stationary_cuda_allocation_bytes(**shape, geometry_lanes=lanes)
@@ -105,7 +105,7 @@ def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
                 **shape, target=TARGET, budget_bytes=1 << 30
             )
             checks.append(
-                f"if(allocation({atoms},96,240,{points},256,2,{plan.geometry_lanes}) != {plan.allocation_bytes}) return 1;"
+                f"if(allocation({atoms},96,240,{points},256,2,{plan.geometry_lanes},true) != {plan.allocation_bytes}) return 1;"
             )
     source = tmp_path / "allocation.cpp"
     source.write_text(
@@ -170,20 +170,26 @@ def test_native_create_allocates_exact_panels_and_cleans_up_on_failure(
 using cudaEvent_t=void*;
 using cudaStream_t=void*;
 namespace generativeqc_stationary_cuda {}
+namespace generativeqc_grid_adjoint { struct CenterPair { double values[6]; }; }
 constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
 constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_threads=32;
 constexpr size_t stationary_geometry_max_scratch_bytes=8<<20, task_stride=9;
-int allocations=0, owners=0, max_threads=1024;
-bool oom=false;
+int allocations=0, owners=0, arenas=0, max_threads=1024;
+bool oom=false, runtime_failure=false;
+size_t oom_above=std::numeric_limits<size_t>::max();
+struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
+int cudaGetLastError() { return 0; }
 struct Context {
   unsigned char* arena{};
   Context() { ++owners; }
-  ~Context() { delete[] arena; --owners; }
+  ~Context() { if(arena) --arenas; delete[] arena; --owners; }
   void prepare(int,int,int,size_t bytes,size_t error_offset,size_t,size_t,size_t,bool) {
     ++allocations;
     if(error_offset != bytes-256) throw std::runtime_error("bad error boundary");
     if(oom) throw std::bad_alloc();
-    arena=new unsigned char[bytes];
+    if(runtime_failure) throw std::runtime_error("injected non-allocation failure");
+    arena=new unsigned char[bytes]; ++arenas;
+    if(bytes>oom_above) throw DeviceAllocationError("injected post-allocation cache OOM");
   }
 };
 struct cudaDeviceProp { int maxThreadsPerBlock{}, maxThreadsDim[3]{}, maxGridSize[3]{}; };
@@ -217,8 +223,31 @@ int main() {
   if(p->scratch-p->partial!=256*9*12 || p->sources-p->scratch!=256*9*12) return 6;
   if(reinterpret_cast<unsigned char*>(p->weighted_density+2*96*96)-p->context.arena != bytes-256)
     return 7;
+  if(p->center_pairs || p->center_geometry_bytes) return 8;
   delete p;
-  return owners ? 8 : 0;
+  constexpr size_t cache_bytes=48*(12*11/2);
+  if(create(bytes+cache_bytes-1) || !result) return 9;
+  p=static_cast<Owner*>(result);
+  if(p->bytes!=bytes || p->center_pairs || p->center_geometry_bytes) return 10;
+  delete p;
+  if(create(bytes+cache_bytes) || !result) return 11;
+  p=static_cast<Owner*>(result);
+  if(p->bytes!=bytes+cache_bytes || !p->center_pairs || p->center_geometry_bytes!=cache_bytes) return 12;
+  if(reinterpret_cast<unsigned char*>(p->weighted_density+2*96*96)-p->context.arena != p->bytes-256)
+    return 13;
+  if(reinterpret_cast<double*>(p->center_pairs)!=p->centers+3*12 ||
+     reinterpret_cast<double*>(p->center_pairs)+cache_bytes/8!=p->weights) return 14;
+  delete p;
+  oom_above=bytes;
+  if(create(bytes+cache_bytes) || !result) return 15;
+  p=static_cast<Owner*>(result);
+  if(p->bytes!=bytes || p->center_pairs || p->center_geometry_bytes || owners!=1) return 16;
+  delete p;
+  if(arenas) return 17;
+  runtime_failure=true;
+  const int prior_allocations=allocations;
+  if(!create(bytes+cache_bytes) || result || owners || arenas || allocations!=prior_allocations+1) return 18;
+  return 0;
 }
 """
     )
@@ -262,10 +291,11 @@ def test_optional_lanes_preserve_existing_native_admission_budget() -> None:
             assert plan.geometry_lanes > 32
 
 
+@pytest.mark.parametrize("cooperative", [False, True])
 @pytest.mark.parametrize("direct_available", [False, True])
 @pytest.mark.parametrize("allowance", [432, 433, 1 << 20])
 def test_fitted_provider_retains_its_full_admitted_allowance(
-    direct_available: bool, allowance: int
+    direct_available: bool, allowance: int, cooperative: bool
 ) -> None:
     from generativeqc_compiler.method.stationary_resources import (
         stationary_native_pair_reserve,
@@ -318,9 +348,14 @@ def test_fitted_provider_retains_its_full_admitted_allowance(
     assert reserve == allowance
     minimum = stationary_cuda_allocation_bytes(**SHAPE, geometry_lanes=32)
     plan = plan_stationary_cuda_resources(
-        **SHAPE, target=TARGET, budget_bytes=minimum + allowance - reserve
+        **SHAPE,
+        target=TARGET,
+        budget_bytes=minimum + allowance - reserve,
+        cooperative_becke=cooperative,
     )
     assert plan.geometry_lanes == 32
+    assert plan.becke_threads_per_point == (32 if cooperative else 1)
+    assert plan.becke_shared_bytes == (4240 if cooperative else 0)
     assert minimum + allowance - plan.allocation_bytes == allowance
 
 
@@ -373,3 +408,20 @@ def test_native_pair_reserve_matches_actual_native_admission(tmp_path: Path) -> 
         timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
+
+
+def test_center_cache_uses_spare_budget_without_reducing_lanes() -> None:
+    shape = {**SHAPE, "points": 17, "atoms": 12}
+    base = stationary_cuda_allocation_bytes(**shape, geometry_lanes=17)
+    cache = 48 * 66
+    for extra, expected in ((0, 0), (cache - 1, 0), (cache, cache), (cache + 1, cache)):
+        plan = plan_stationary_cuda_resources(
+            **shape, target=TARGET, budget_bytes=base + extra
+        )
+        assert plan.geometry_lanes == 17
+        assert plan.center_geometry_bytes == expected
+        assert plan.allocation_bytes == base + expected
+    with pytest.raises(ValueError, match="boolean"):
+        stationary_cuda_allocation_bytes(
+            **shape, geometry_lanes=17, cache_center_geometry=1
+        )

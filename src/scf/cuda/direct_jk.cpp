@@ -50,6 +50,14 @@ std::size_t direct_jk_product(std::size_t a, std::size_t b) {
   if (!generativeqc::runtime::checked_multiply(a, b, out)) throw std::bad_alloc();
   return out;
 }
+void direct_jk_require_disjoint(const void* a, std::size_t na, const void* b, std::size_t nb) {
+  if (!a || !b) return;
+  const auto x = reinterpret_cast<std::uintptr_t>(a), y = reinterpret_cast<std::uintptr_t>(b);
+  direct_jk_require(x <= std::numeric_limits<std::uintptr_t>::max() - na &&
+                        y <= std::numeric_limits<std::uintptr_t>::max() - nb &&
+                        (x + na <= y || y + nb <= x),
+                    "device direct J/K writable buffers alias");
+}
 void direct_jk_finite(const std::vector<double>& values) {
   for (double value : values) direct_jk_require(std::isfinite(value), "nonfinite direct J/K data");
 }
@@ -593,14 +601,13 @@ generativeqc_status create_cuda_direct_jk_plan(
     }
     if (budget > plan->device_bytes) {
       const auto optional_budget = budget - plan->device_bytes;
-      // Value shell kernels are qualified only through d, but the shared
-      // bounded force scheduler and Cartesian recurrence cover s/p/d/f. Keep a
-      // force-only shell lease for derivative-capable through-f plans while
-      // leaving value J/K on the canonical/generic provider.
-      const bool force_only_through_f = derivative_order != 0 && through_f;
+      // Generated/native streaming owns its qualified classes; through-f plans
+      // retain HF's bounded shell dispatcher for the remaining higher-l value
+      // classes and, when requested, for stationary derivatives.
+      const bool bounded_through_f = through_f;
       plan->generated_exchange = prepare_generated_exchange(
           host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
-          derivative_order != 0, force_only_through_f);
+          derivative_order != 0, bounded_through_f);
       if (!plan->generated_exchange)
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
@@ -645,7 +652,9 @@ generativeqc_status create_cuda_direct_jk_plan(
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
       info.schedule = plan->generated_exchange->shared->value_capability
                           ? "generated-shell-coulomb+exchange/generic-jk-fallback"
-                          : "force-only-shell-derivative/generic-jk-fallback";
+                          : (direct_jk_bounded_value_enabled(*plan)
+                                 ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
+                                 : "retained-shell-owner/generic-jk-fallback");
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +
@@ -653,7 +662,7 @@ generativeqc_status create_cuda_direct_jk_plan(
       info.host_preparation_bytes += plan->generated_coulomb->host_preparation_bytes;
       info.schedule = "generated-shell-coulomb/generic-jk-fallback";
     }
-    if (plan->canonical_pairs)
+    if (plan->canonical_pairs && !direct_jk_generated_full_range_value_available(*plan))
       info.schedule = plan->canonical_cartesian
                           ? (plan->canonical_row_prefix
                                  ? "canonical-cartesian-jk/screened-rows/automatic"
@@ -863,28 +872,23 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           "device direct J/K mixed-work counter is misaligned");
     }
     const auto bytes = direct_jk_product(elements, sizeof(double));
-    const auto disjoint = [&](const void* a, std::size_t na, const void* b, std::size_t nb) {
-      if (!a || !b) return;
-      const auto x = reinterpret_cast<std::uintptr_t>(a), y = reinterpret_cast<std::uintptr_t>(b);
-      direct_jk_require(x <= std::numeric_limits<std::uintptr_t>::max() - na &&
-                            y <= std::numeric_limits<std::uintptr_t>::max() - nb &&
-                            (x + na <= y || y + nb <= x),
-                        "device direct J/K writable buffers alias");
-    };
     const double* inputs[]{density, beta};
     double* outputs[]{coulomb, alpha_exchange, beta_exchange};
     for (const auto* input : inputs) {
-      disjoint(input, bytes, numerical_error, sizeof(int));
-      disjoint(input, bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
+      direct_jk_require_disjoint(input, bytes, numerical_error, sizeof(int));
+      direct_jk_require_disjoint(input, bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
     }
-    disjoint(numerical_error, sizeof(int), mixed_coulomb_work_count, sizeof(std::uint64_t));
+    direct_jk_require_disjoint(numerical_error, sizeof(int), mixed_coulomb_work_count,
+                               sizeof(std::uint64_t));
     for (unsigned i = 0; i < 3; ++i) {
       if (!outputs[i]) continue;
       pointer(outputs[i]);
-      for (const auto* input : inputs) disjoint(input, bytes, outputs[i], bytes);
-      disjoint(outputs[i], bytes, numerical_error, sizeof(int));
-      disjoint(outputs[i], bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
-      for (unsigned j = 0; j < i; ++j) disjoint(outputs[i], bytes, outputs[j], bytes);
+      for (const auto* input : inputs) direct_jk_require_disjoint(input, bytes, outputs[i], bytes);
+      direct_jk_require_disjoint(outputs[i], bytes, numerical_error, sizeof(int));
+      direct_jk_require_disjoint(outputs[i], bytes, mixed_coulomb_work_count,
+                                 sizeof(std::uint64_t));
+      for (unsigned j = 0; j < i; ++j)
+        direct_jk_require_disjoint(outputs[i], bytes, outputs[j], bytes);
     }
     direct_jk_check(cudaMemsetAsync(numerical_error, 0, sizeof(int), plan->stream));
     if (mixed_coulomb_work_count)
@@ -898,7 +902,19 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         launch_independent_jk_finite_kernel(plan->stream, input, elements, numerical_error);
         direct_jk_check(cudaGetLastError());
       }
-    if ((spec.coulomb.present || spec.exchange.present) && plan->canonical_pairs && !mixed_j) {
+    auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
+                                                       : plan->generated_coulomb.get();
+    const bool generated_coulomb_available =
+        !mixed_j && (plan->generated_exchange
+                         ? direct_jk_generated_full_range_value_available(*plan)
+                         : generated_coulomb != nullptr && generated_coulomb->value_capability);
+    const bool generated_exchange_available =
+        !mixed_j && direct_jk_generated_exchange_value_available(*plan, spec);
+    const bool shell_values_cover_request =
+        !mixed_j && (!spec.coulomb.present || generated_coulomb_available) &&
+        (!spec.exchange.present || generated_exchange_available);
+    if ((spec.coulomb.present || spec.exchange.present) && plan->canonical_pairs && !mixed_j &&
+        !shell_values_cover_request) {
       const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
       const auto matrix = direct_jk_product(dimension, dimension);
       const auto spin_count = unrestricted ? 2U : 1U;
@@ -938,22 +954,24 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           direct_jk_check(cudaGetLastError());
         }
     } else if (spec.coulomb.present || spec.exchange.present) {
-      auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
-                                                         : plan->generated_coulomb.get();
-      if (generated_coulomb && !generated_coulomb->value_capability) generated_coulomb = nullptr;
       // Derivative capability is an owner maximum, not a value-schedule request.
-      // Force-capable owners retain generated exchange state that is also valid
-      // for the zero-order SCF K build.
-      const bool generated_exchange_available =
-          direct_jk_generated_exchange_value_available(*plan, spec);
+      // Full-range value ownership can combine generated/native classes with
+      // the bounded higher-l shell fallback.
       const auto dispatch =
-          direct_jk_value_dispatch(generated_coulomb != nullptr, generated_exchange_available,
+          direct_jk_value_dispatch(generated_coulomb_available, generated_exchange_available,
                                    spec.coulomb.present, spec.exchange.present, mixed_j);
-      if (dispatch.generated_coulomb)
-        direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+      if (dispatch.generated_coulomb) {
+        if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
+          direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted,
+                                                    density, beta, coulomb));
+        else
+          direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+      }
       if (dispatch.generated_exchange)
-        direct_jk_check(enqueue_generated_exchange(*plan->generated_exchange, unrestricted, density,
-                                                   beta, alpha_exchange, beta_exchange));
+        direct_jk_check(enqueue_generated_exchange(
+            *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
+            direct_exchange_range(spec.exchange),
+            spec.exchange.present ? spec.exchange.omega : 0.0));
       if (dispatch.generic_coulomb || dispatch.generic_exchange) {
         launch_independent_jk_kernel(
             static_cast<unsigned>(elements), kIndependentJkThreads, 0, plan->stream, plan->batch, 0,
@@ -969,6 +987,110 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           direct_jk_check(cudaGetLastError());
         }
     }
+  });
+}
+
+generativeqc_status enqueue_cuda_direct_rsh_values_device(
+    CudaDirectJkPlan* plan, FockBuildSpec primary, FockBuildSpec correction, const double* density,
+    const double* beta, std::size_t elements, double* coulomb, double* full_alpha_exchange,
+    double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
+    int* primary_error, int* range_error, std::string& detail) {
+  if (plan == nullptr || !direct_jk_bounded_value_enabled(*plan)) {
+    detail = "prepared Direct bounded range values are unavailable or not opted in";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    primary = direct_jk_strategy(plan, primary, 0, plan->diagnostic.batch_size);
+    correction = direct_jk_strategy(plan, correction, 0, plan->diagnostic.batch_size);
+    const bool unrestricted = primary.spin == FockSpin::Unrestricted;
+    direct_jk_require(
+        primary.derivative_order == 0 && primary.coulomb.present &&
+            primary.coulomb.approximation == FockApproximation::Exact &&
+            primary.coulomb.op == FockOperator::FullRange && primary.exchange.present &&
+            primary.exchange.approximation == FockApproximation::Exact &&
+            primary.exchange.op == FockOperator::FullRange && correction.derivative_order == 0 &&
+            correction.spin == primary.spin && !correction.coulomb.present &&
+            correction.exchange.present &&
+            correction.exchange.approximation == FockApproximation::Exact &&
+            (correction.exchange.op == FockOperator::ShortRange ||
+             correction.exchange.op == FockOperator::LongRange) &&
+            std::isfinite(correction.exchange.omega) && correction.exchange.omega > 0.0,
+        "resident fused RSH value request has incompatible scientific identity");
+    direct_jk_require(elements == plan->matrix_elements && density != nullptr &&
+                          coulomb != nullptr && full_alpha_exchange != nullptr &&
+                          range_alpha_exchange != nullptr && primary_error != nullptr &&
+                          range_error != nullptr &&
+                          (unrestricted ? beta != nullptr && full_beta_exchange != nullptr &&
+                                              range_beta_exchange != nullptr
+                                        : beta == nullptr && full_beta_exchange == nullptr &&
+                                              range_beta_exchange == nullptr),
+                      "resident fused RSH value buffers or dimensions are invalid");
+
+    int current = -1;
+    direct_jk_check(cudaGetDevice(&current));
+    direct_jk_require(current == plan->device_id, "resident fused RSH current device mismatch");
+    const auto device_pointer = [&](const void* value) {
+      cudaPointerAttributes attributes{};
+      direct_jk_check(cudaPointerGetAttributes(&attributes, value));
+      direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
+                        "resident fused RSH requires current-device buffers");
+    };
+    const void* buffers[]{density,
+                          beta,
+                          coulomb,
+                          full_alpha_exchange,
+                          full_beta_exchange,
+                          range_alpha_exchange,
+                          range_beta_exchange};
+    for (const auto* value : buffers)
+      if (value) device_pointer(value);
+    device_pointer(primary_error);
+    device_pointer(range_error);
+
+    const auto bytes = direct_jk_product(elements, sizeof(double));
+    const double* inputs[]{density, beta};
+    double* outputs[]{coulomb, full_alpha_exchange, full_beta_exchange, range_alpha_exchange,
+                      range_beta_exchange};
+    for (const auto* input : inputs) {
+      direct_jk_require_disjoint(input, bytes, primary_error, sizeof(int));
+      direct_jk_require_disjoint(input, bytes, range_error, sizeof(int));
+    }
+    direct_jk_require_disjoint(primary_error, sizeof(int), range_error, sizeof(int));
+    for (unsigned i = 0; i < 5; ++i) {
+      for (const auto* input : inputs) direct_jk_require_disjoint(input, bytes, outputs[i], bytes);
+      direct_jk_require_disjoint(outputs[i], bytes, primary_error, sizeof(int));
+      direct_jk_require_disjoint(outputs[i], bytes, range_error, sizeof(int));
+      for (unsigned j = 0; j < i; ++j)
+        direct_jk_require_disjoint(outputs[i], bytes, outputs[j], bytes);
+    }
+
+    direct_jk_check(cudaMemsetAsync(primary_error, 0, sizeof(int), plan->stream));
+    direct_jk_check(cudaMemsetAsync(range_error, 0, sizeof(int), plan->stream));
+    if (plan->canonical_work_count)
+      direct_jk_check(
+          cudaMemsetAsync(plan->canonical_work_count, 0, 2U * sizeof(std::uint64_t), plan->stream));
+    launch_independent_jk_finite_kernel(plan->stream, density, elements, primary_error);
+    direct_jk_check(cudaGetLastError());
+    if (beta) {
+      launch_independent_jk_finite_kernel(plan->stream, beta, elements, primary_error);
+      direct_jk_check(cudaGetLastError());
+    }
+
+    direct_jk_check(enqueue_generated_rsh_values(
+        *plan->generated_exchange, unrestricted, density, beta, coulomb, full_alpha_exchange,
+        full_beta_exchange, range_alpha_exchange, range_beta_exchange,
+        direct_exchange_range(correction.exchange), correction.exchange.omega));
+
+    for (const auto* output : {coulomb, full_alpha_exchange, full_beta_exchange})
+      if (output) {
+        launch_independent_jk_finite_kernel(plan->stream, output, elements, primary_error);
+        direct_jk_check(cudaGetLastError());
+      }
+    for (const auto* output : {range_alpha_exchange, range_beta_exchange})
+      if (output) {
+        launch_independent_jk_finite_kernel(plan->stream, output, elements, range_error);
+        direct_jk_check(cudaGetLastError());
+      }
   });
 }
 

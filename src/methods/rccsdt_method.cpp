@@ -200,13 +200,12 @@ class RccsdtPrepared final : public PreparedCalculation {
           throw std::runtime_error("RCCSD(T) force owner lost the converged RHF reference");
         const auto force_denominator_threshold =
             descriptor_.ccsd_denominator_threshold ? descriptor_.ccsd_denominator_threshold : 1e-10;
-        // Borrow the exact CPU interaction source that already owns the converged
-        // reference/problem lifecycle. CUDA remains on the RawSource compatibility
-        // adapter until #1500 exposes a device-native prepared source.
+        // Reuse the same prepared exact interaction owner for the force Hamiltonian.
+        // CUDA sources publish raw ERI tiles directly into the existing bounded MO transform.
         std::unique_ptr<posthf::RawSource> force_raw_source;
         std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
         const integrals::ElectronInteractionSource* force_source = nullptr;
-        if (!execution_.cuda_requested() && cpu_exact_plan_) {
+        if (cpu_exact_plan_) {
           force_prepared_source.emplace(*cpu_exact_plan_);
           force_source = &*force_prepared_source;
         } else {

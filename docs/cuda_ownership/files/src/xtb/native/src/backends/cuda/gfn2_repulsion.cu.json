@@ -1,6 +1,6 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_repulsion.cu",
-  "reason": "Compiler-generated pair repulsion energy/radial derivatives replace the scalar formula. Native code still composes element-pair alpha and charge, selects the light-pair policy, and maps the radial derivative to Cartesian forces. Retain this scientific composition; traversal, reduction, validation and publication remain runtime responsibilities.",
+  "reason": "Compiler-generated pair repulsion energy, radial derivatives, and Cartesian force projection replace the scalar formulas. Native code still composes element-pair alpha and charge and selects the light-pair policy. Retain this scientific composition; traversal, reduction, validation and publication remain runtime responsibilities.",
   "regions": [],
   "role": "scientific",
   "subsystem": "gfn2"

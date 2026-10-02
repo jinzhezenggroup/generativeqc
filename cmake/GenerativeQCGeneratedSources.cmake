@@ -335,6 +335,20 @@ macro(generativeqc_register_host_generated_sources target)
     ARGS --output "${GENERATIVEQC_GFN2_ES2_NATIVE_HEADER}"
     COMMENT "Generating compiler-owned GFN2 ES2 scalar kernels")
 
+  set(GENERATIVEQC_GFN2_EXTERNAL_POINT_CHARGE_FORCE_NATIVE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_external_point_charge_force.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_gfn2_external_point_charge_force_native_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_gfn2_external_point_charge_force.py"
+    OUTPUTS "${GENERATIVEQC_GFN2_EXTERNAL_POINT_CHARGE_FORCE_NATIVE_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_external_point_charge_force.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ad_program.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
+    ARGS --output "${GENERATIVEQC_GFN2_EXTERNAL_POINT_CHARGE_FORCE_NATIVE_HEADER}"
+    COMMENT "Generating compiler-owned GFN2 external point-charge force response")
+
   set(GENERATIVEQC_GFN2_H0_NATIVE_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_h0_native.hpp")
   generativeqc_register_generated_sources(

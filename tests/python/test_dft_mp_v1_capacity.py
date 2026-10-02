@@ -274,12 +274,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "de8487535c96e9dc73ab21f9e95dd86a5ac281751e4a814ecf49cf237da09c3b",
+        "geometry_resources_sha256": "928668e2a3117c166651c974d5d377bface8990a3b290c404bf84e39a81eda42",
         "public_wrapper_sha256": (
             "2b0efb7404a55c5f7ad29e6d98712b65561f566daf8384accca93ecf314c55f8"
         ),
         "initializer_sha256": (
-            "78e657ba5eb865ead768d7d18575977508bdd34ede9f2fc7a51aae3f09baa652"
+            "c29ed5e27de74d03e92e035fdba81f745e1f4f608fa6b175cdf9ca315402a5b5"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -315,19 +315,19 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "2b7ff05ad84060c657b76576ef2afc3adf206262313ae681ae66db2ba021319a"
+            "62d61c9ce7ad0b4f50a9bc02c636834aa2b816e44e326ada3e5b6facd83db7ca"
         ),
         "native_owner_sha256": (
-            "5f2e8924e1d97f1668edefc95caec70b96223244afadfc2aac97ad254d601b82"
+            "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
         ),
         "native_allocation_sha256": (
-            "47b73fb800b28abeea23bdef2feab6c18b3c9747508b02522e322f758d5fe878"
+            "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
         ),
         "native_create_sha256": (
-            "52e4b914ac2baa804db89f85f331f05835bdb4786e981777a6ea4303743d058a"
+            "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
         ),
         "native_reset_sha256": (
-            "fa3f0b989c571b4abd7d983fc0a6f3eafce3059a889b53c97bdd06bd416509fa"
+            "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
         ),
         "native_tasks_sha256": (
             "5b0148f4f48019115a82e638d1d6671dd2548f3df6141da6e5254c8967bad2bc"
@@ -336,16 +336,22 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
         "native_geometry_external_sha256": (
-            "efc8f4643fdd271782ad62ecc29d387f279347bae98fb78fc3bb78146743ef80"
+            "5f1a660cb0bb3c0cd0a4d952ff24347762c906c7918c779ef14c9a4ec192712e"
         ),
         "native_geometry_enqueue_sha256": (
-            "4770b1100e26c8e79012054f25dedfe5857635342fff64ef1fe61eb97a047d8d"
+            "b390ebea5e5289b2fccdd7e0f2af92af825f76a7667047913911e0cf190af01c"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
+        "native_launch_geometry_sha256": (
+            "7a06757b893e51c6924675c88c66c6d0817923904283bf48378fb4e8302f47be"
+        ),
+        "native_configure_becke_sha256": (
+            "06531973e05e6cce4e21160a5f069229123d12d493a8822cad004bd68cd84403"
+        ),
         "native_metrics_sha256": (
-            "680742eea07b5e65ee26b1e45820f865c26b06d35921eb85caa19cd8d59a3ed3"
+            "21e067818117b8ebaf8eeb218aeface0680681fdd6f39285ed6f981c3cef969a"
         ),
         "native_finish_span_sha256": (
             "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
@@ -383,8 +389,11 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "tile_points=tile_points, active_ao_capacity=n, "
         "budget_bytes=max_device_bytes)"
     )
-    assert result["admission_limits"]["source_bytes_definition"].startswith(
+    assert result["admission_limits"]["source_resources_definition"].startswith(
         "plan_stationary_cuda_resources(atoms=na"
+    )
+    assert result["admission_limits"]["source_bytes_definition"] == (
+        "source_resources.allocation_bytes"
     )
     assert result["admission_limits"]["host_bound_definition"].startswith(
         "grid_plan.host_bytes + 8 * (34 * primitive_tile"
@@ -584,8 +593,11 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         row for row in rows if row["id"] == "pbe/rks/water32/fp64_energy_forces"
     )
     assert water32["resource_requirements"]["additional_device_peak_bound"] == (
-        356_801_792
+        356_801_792 + 48 * (96 * 95 // 2)
     )
+    assert water32["resource_requirements"][
+        "stationary_center_geometry_bytes"
+    ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
         192_187_488
     )
@@ -2099,4 +2111,38 @@ def test_geometry_resource_budget_changes_fail_closed(tmp_path: Path) -> None:
         )
     )
     with pytest.raises(RuntimeError, match="geometry-resource contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "marker,old,new,gate",
+    [
+        (
+            "void launch_geometry(",
+            "owner.becke_threads_per_point > 1",
+            "false",
+            "native_launch_geometry_sha256",
+        ),
+        (
+            "int stationary_configure_becke(",
+            "p->atoms > stationary_becke_max_atoms",
+            "p->atoms > 128",
+            "native_configure_becke_sha256",
+        ),
+    ],
+)
+def test_cooperative_native_schedule_contract_fails_closed(
+    tmp_path: Path, marker: str, old: str, new: str, gate: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
+        encoding="utf-8"
+    )
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text(encoding="utf-8")
+    position = native.index(old, native.index(marker))
+    target.write_text(
+        native[:position] + new + native[position + len(old) :], encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match=f"{gate} contract changed"):
         qualify_capacity._source_limits(tmp_path)

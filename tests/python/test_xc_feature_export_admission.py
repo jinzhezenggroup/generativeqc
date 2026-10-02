@@ -17,27 +17,44 @@ enum class CudaXcDensityPrecision : std::uint8_t {
  Fp64=0,
  Fp32ComputeFp64Accumulate=1,
 };
+struct CudaXcView {
+ std::uint64_t generation;
+ std::size_t nao;
+ unsigned spins;
+ double *potential,*totals;
+ int* error;
+ void* stream;
+};
 struct CudaXcPlan {
- struct { bool response=false; } layout_;
+ struct { bool response=false; std::size_t nao=1; unsigned spins=1; } layout_;
+ double *potential_=nullptr,*totals_=nullptr;
+ int* error_=nullptr;
+ void* stream_=nullptr;
  unsigned submissions=0;
+ std::uint64_t seen_generation=99;
+ bool seen_publication=true;
  const double* seen_density=nullptr;
  double *seen_rho=nullptr,*seen_gradient=nullptr;
  void enqueue(const double*,std::size_t,std::uint64_t,
               CudaXcDensityPrecision precision=CudaXcDensityPrecision::Fp64);
  void enqueue_density_features(const double*,std::size_t,std::uint64_t,double*,double*);
- void enqueue_impl(const double* d,const double*,std::size_t,std::uint64_t,
-                   CudaXcDensityPrecision precision,double* rho=nullptr,double* gradient=nullptr) {
+ CudaXcView enqueue_replay_density_features(const double*,std::size_t,double*,double*);
+ void enqueue_impl(const double* d,const double*,std::size_t,std::uint64_t generation,
+                   CudaXcDensityPrecision precision,double* rho=nullptr,double* gradient=nullptr,
+                   bool publish_generation=true) {
   (void)precision;
   // Ordinary physical enqueue intentionally allows both optional outputs absent.
   if((rho==nullptr)!=(gradient==nullptr)) throw std::invalid_argument("partial output");
   ++submissions;seen_density=d;seen_rho=rho;seen_gradient=gradient;
+  seen_generation=generation;seen_publication=publish_generation;
  }
 };
 """
 DRIVER = r"""
 int main(int argc,char** argv) {
  if(argc!=4)return 99;
- const bool capture=std::atoi(argv[1])!=0,response=std::atoi(argv[2])!=0;
+ const unsigned capture=std::atoi(argv[1]);
+ const bool response=std::atoi(argv[2])!=0;
  const unsigned mask=std::atoi(argv[3]);
  CudaXcPlan plan;plan.layout_.response=response;
  double density=1,rho=0,gradient[3]{};
@@ -45,7 +62,11 @@ int main(int argc,char** argv) {
  double* gp=mask&2 ? gradient : nullptr;
  bool rejected=false;
  try {
-  if(capture) plan.enqueue_density_features(&density,1,1,rp,gp);
+  if(capture==2) {
+   const auto view=plan.enqueue_replay_density_features(&density,1,rp,gp);
+   if(view.generation!=0||view.nao!=1||view.spins!=1)return 4;
+  }
+  else if(capture) plan.enqueue_density_features(&density,1,1,rp,gp);
   else plan.enqueue(&density,1,1);
  } catch(const std::invalid_argument&) {rejected=true;}
  const bool expected_rejection=response||(capture&&mask!=3);
@@ -53,6 +74,8 @@ int main(int argc,char** argv) {
  if(plan.submissions!=(expected_rejection?0u:1u))return 2;
  if(!rejected&&(plan.seen_density!=&density||
     plan.seen_rho!=(capture?rp:nullptr)||plan.seen_gradient!=(capture?gp:nullptr)))return 3;
+ if(!rejected&&(plan.seen_generation!=(capture==2?0u:1u)||
+    plan.seen_publication!=(capture!=2)))return 5;
 }
 """
 
@@ -83,11 +106,12 @@ def capture_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.mark.parametrize("response", (False, True))
 @pytest.mark.parametrize("mask", range(4))
+@pytest.mark.parametrize("capture", (1, 2), ids=("ordinary", "replay"))
 def test_capture_requires_both_outputs(
-    capture_probe: Path, response: bool, mask: int
+    capture_probe: Path, response: bool, mask: int, capture: int
 ) -> None:
     result = subprocess.run(
-        [str(capture_probe), "1", str(int(response)), str(mask)],
+        [str(capture_probe), str(capture), str(int(response)), str(mask)],
         check=False,
         capture_output=True,
         text=True,

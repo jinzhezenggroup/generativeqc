@@ -305,6 +305,38 @@ generativeqc_status enqueue_prepared_cuda_occupied_fock(
   return status;
 }
 
+generativeqc_status enqueue_prepared_cuda_rsh_values(
+    const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
+    const double* beta, std::size_t matrix_elements, double* coulomb, double* full_alpha_exchange,
+    double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
+    int* primary_error, int* range_error, std::string& detail) {
+  const auto binding = prepared_cuda_fock_binding(plan);
+  auto* source = plan.cuda_direct_source();
+  const auto& primary = plan.strategy();
+  const auto& p = primary.spec;
+  const auto& c = correction.spec;
+  const bool valid_primary = binding && source && primary.backend == FockBackend::Cuda &&
+                             p.derivative_order == 0 && p.coulomb.present &&
+                             p.coulomb.approximation == FockApproximation::Exact &&
+                             p.coulomb.op == FockOperator::FullRange && p.exchange.present &&
+                             p.exchange.approximation == FockApproximation::Exact &&
+                             p.exchange.op == FockOperator::FullRange;
+  const bool valid_correction =
+      correction.backend == FockBackend::Cuda && c.derivative_order == 0 && c.spin == p.spin &&
+      !c.coulomb.present && c.exchange.present &&
+      c.exchange.approximation == FockApproximation::Exact &&
+      (c.exchange.op == FockOperator::ShortRange || c.exchange.op == FockOperator::LongRange) &&
+      c.exchange.omega > 0.0 && correction.screening_tolerance == primary.screening_tolerance;
+  if (!valid_primary || !valid_correction) {
+    detail = "prepared CUDA RSH value plans have incompatible scientific identity";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return enqueue_cuda_direct_rsh_values_device(source, p, c, density, beta, matrix_elements,
+                                               coulomb, full_alpha_exchange, full_beta_exchange,
+                                               range_alpha_exchange, range_beta_exchange,
+                                               primary_error, range_error, detail);
+}
+
 generativeqc_status enqueue_prepared_cuda_exchange_correction(
     const PreparedFockPlan& plan, const ResolvedFockBuild& correction, const double* density,
     const double* beta, std::size_t matrix_elements, double* alpha_exchange, double* beta_exchange,

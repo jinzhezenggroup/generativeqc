@@ -37,6 +37,7 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
 
     names = (
         "stationary_create",
+        "stationary_configure_becke",
         "stationary_topology",
         "stationary_reset",
         "stationary_geometry_reset",
@@ -149,8 +150,19 @@ def test_source_owner_validates_spin_storage_and_packs_ao_indices(
 
 
 @pytest.mark.parametrize("aot", (False, True))
+@pytest.mark.parametrize("resident_grid", (False, True))
+@pytest.mark.parametrize(
+    ("cache_bytes", "allocation_delta", "rejected"),
+    [(48, 0, False), (0, -48, False), (24, -24, True), (0, -47, True), (48, 1, True)],
+)
 def test_weight_fusion_orchestration_runs_without_a_device(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, aot: bool
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    aot: bool,
+    resident_grid: bool,
+    cache_bytes: int,
+    allocation_delta: int,
+    rejected: bool,
 ) -> None:
     from generativeqc import _stationary_cuda as runtime
 
@@ -235,7 +247,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     reduction = MagicMock()
     reduction.__enter__.return_value = reduction
     reduction.execute.return_value = SimpleNamespace(
-        outputs={"gradient": np.zeros((1, 3))},
+        outputs={"gradient": np.zeros((2, 3))},
         metrics={"owned_device_bytes": 128, "endpoint_ms": 0.1, "device_ms": 0.05},
     )
     monkeypatch.setattr(runtime, "PreparedCuda", lambda *_a, **_k: reduction)
@@ -244,9 +256,9 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     owner.__enter__.return_value = owner
     owner.borrowed_streams = set()
     owner.finish.return_value = {
-        name: np.zeros((1, 3)) for name in runtime._SOURCE_NAMES
+        name: np.zeros((2, 3)) for name in runtime._SOURCE_NAMES
     }
-    owner.reduced.return_value = np.zeros((1, 3))
+    owner.reduced.return_value = np.zeros((2, 3))
     admitted: dict[str, int] = {}
 
     def make_owner(
@@ -275,13 +287,14 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
     monkeypatch.setattr(runtime, "_CudaSources", make_owner)
     owner.metrics.side_effect = lambda: {
-        "owned_device_bytes": admitted["budget"],
+        "owned_device_bytes": admitted["budget"] + allocation_delta,
+        "center_geometry_bytes": cache_bytes,
         "h2d_bytes": 0,
         "d2h_bytes": 0,
         "launches": 1,
-        "primitive_records": owner.integral_page.call_count,
+        "primitive_records": owner.integral_page.call_count + 1,
         "xc_points": 0,
-        "grid_pair_visits": 0,
+        "grid_pair_visits": 9,
         "stream": 0,
         "task_descriptors": owner.integral_page.call_count,
         "task_batches": owner.integral_page.call_count,
@@ -293,16 +306,16 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     monkeypatch.setattr(runtime, "CudaGrid", lambda *_a, **_k: grid_owner)
     basis = SimpleNamespace(
         identity="basis",
-        natom=1,
+        natom=2,
         nao=1,
         nprimitive=1,
         charge=0,
-        atoms=[SimpleNamespace(atomic_number=1)],
+        atoms=[SimpleNamespace(atomic_number=1)] * 2,
     )
     grid = SimpleNamespace(
-        points=np.empty((0, 3)),
-        owners=np.empty(0, dtype=np.int64),
-        weights=np.empty(0),
+        points=np.zeros((4, 3)),
+        owners=np.array([0, 0, 1, 1], dtype=np.int64),
+        weights=np.ones(4),
     )
     from generativeqc_compiler.method import resolve_method
 
@@ -312,41 +325,80 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         functional=method_ir.primitives[0].functional,
         backend="cuda",
         metadata=(3,) + (0,) * 12,
-        grid_spec=SimpleNamespace(partition_iterations=3, coincident_tolerance=1.0e-12),
+        grid_spec=SimpleNamespace(
+            partition_iterations=3,
+            coincident_tolerance=1.0e-12,
+            radial_points=1,
+            angular_polar=1,
+            angular_azimuth=2,
+        ),
         hamiltonian="all-electron",
-        ecp_cores=(0,),
-        atomic_weights=np.empty(0),
+        ecp_cores=(0, 0),
+        atomic_weights=np.ones(4),
         values=np.zeros(1),
         export_work={"reads": 1},
     )
+    if resident_grid:
+        source.cuda_resident_grid = lambda: SimpleNamespace(
+            device=0, point_count=4, points=1024, weights=2048, atomic_weights=3072
+        )
     state = SimpleNamespace(
         identity=SimpleNamespace(
             basis_identity="basis", geometry_identity="geom", method="lda-rks"
         ),
-        occupations=np.array([1.0]),
+        occupations=np.array([2.0]),
         density=np.ones((1, 1, 1)),
         weighted_density=2 * np.ones((1, 1, 1)),
         grid=grid,
         _source=source,
     )
-    result = runtime.complete_rks_cuda_gradient_diagnostic(
-        state,
-        basis,
-        compiler=None if aot else FakeCompiler(),
-        target=FakeCompiler().target if aot else None,
-        aot_directory=tmp_path if aot else None,
-        native_grid_library=tmp_path / "native.so" if aot else None,
-        cache=tmp_path / "cache",
-        tile_points=4,
-        integral_terms=32,
-        primitive_tile=16,
-    )
+
+    def execute() -> object:
+        return runtime.complete_rks_cuda_gradient_diagnostic(
+            state,
+            basis,
+            compiler=None if aot else FakeCompiler(),
+            target=FakeCompiler().target if aot else None,
+            aot_directory=tmp_path if aot else None,
+            native_grid_library=tmp_path / "native.so" if aot else None,
+            cache=tmp_path / "cache",
+            tile_points=4,
+            integral_terms=32,
+            primitive_tile=16,
+        )
+
+    if rejected:
+        with pytest.raises(
+            RuntimeError, match="allocation disagrees with admitted bytes"
+        ):
+            execute()
+        return
+    result = execute()
+    assert result.work["owned_device_bytes"] == admitted["budget"] + allocation_delta
+    assert result.work["center_geometry_bytes"] == cache_bytes
+    if resident_grid:
+        grid_owner.feature_task.assert_not_called()
+        grid_owner.feature_task_device_points.assert_called_once_with(
+            1024, 4, None, method_ir.primitives[0].functional.ingredients
+        )
+        owner.geometry.assert_not_called()
+        owner.geometry_molecular_resident_weights.assert_called_once()
+        assert result.work["grid_point_h2d_bytes"] == 0
+        assert result.work["grid_weight_h2d_bytes"] == 0
+    else:
+        grid_owner.feature_task.assert_called_once()
+        grid_owner.feature_task_device_points.assert_not_called()
+        owner.geometry.assert_called_once()
+        owner.geometry_molecular_resident_weights.assert_not_called()
+        assert result.work["grid_point_h2d_bytes"] == 96
+        assert result.work["grid_weight_h2d_bytes"] == 32
 
     owner.reset.assert_called_once_with(1.0e-12, state.density, state.weighted_density)
     assert admitted["spin_blocks"] == 1
     assert owner.integral_page.call_args_list == [
         call(0, "kinetic", ((0, 0),)),
         call(0, "nuclear_attraction", ((0, 0),), 0, 1),
+        call(0, "nuclear_attraction", ((0, 0),), 1, 1),
         call(5, "overlap", ((0, 0),)),
         call(1, "four_center_eri", ((0, 0, 0, 0),)),
     ]
