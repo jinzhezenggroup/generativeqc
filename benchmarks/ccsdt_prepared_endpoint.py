@@ -15,6 +15,7 @@ from time import perf_counter
 
 from generativeqc import Calculator
 
+from benchmarks._retention import raw_output_path
 from benchmarks.readme_hf_scaling import scaling_cases
 
 
@@ -25,7 +26,7 @@ def main() -> None:
     parser.add_argument("--forces", action="store_true")
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--budget", type=int, default=8 << 30)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     atoms = scaling_cases()[f"water-{args.atoms}"].atoms
     moved = [
@@ -46,6 +47,11 @@ def main() -> None:
         "rows": [],
         "status": "running",
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "timing_boundary": (
+            "seconds measures prepared.execute through host-returned results; "
+            "endpoint_seconds additionally includes constructor and preparation "
+            "once, in the cold row. prepare_seconds is also retained separately."
+        ),
     }
     args.output.write_text(json.dumps(record, indent=2) + "\n")
     started = perf_counter()
@@ -79,6 +85,8 @@ def main() -> None:
             row = {
                 "label": label,
                 "seconds": elapsed,
+                "endpoint_seconds": elapsed
+                + (record["prepare_seconds"] if label == "cold" else 0.0),
                 "energy": result.energy,
                 "converged": result.converged,
                 "forces": None if result.forces is None else result.forces.tolist(),
