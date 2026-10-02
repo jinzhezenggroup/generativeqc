@@ -185,7 +185,9 @@ def test_complete_cuda_independent_analytic(
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=2e-10, rtol=0)
         assert result.work["launches"] > 0
         assert result.work["tensor_executions"] == 0
-        assert result.work["full_range_derivative_route"] == "prepared-direct-shell"
+        assert (
+            result.work["full_range_derivative_route"] == "prepared-native-stationary"
+        )
         assert result.work["full_range_ao_task_domain_elided"] is True
         assert all(
             item["source"] not in ("coulomb", "exact_exchange")
@@ -204,6 +206,14 @@ def test_complete_cuda_independent_analytic(
         )
         assert result.work["grid_density_source"] == "exact-final-scf-device-binding"
         assert result.work["grid_density_h2d_bytes"] == 0
+        assert result.work["grid_owner_source"] == "implicit-atom-major-index"
+        assert result.work["grid_owner_h2d_bytes"] == 0
+        assert result.work["grid_point_source"] == "exact-native-resident-grid"
+        assert result.work["grid_point_h2d_bytes"] == 0
+        assert result.work["grid_weight_source"] == "exact-native-resident-grid"
+        assert result.work["grid_weight_h2d_bytes"] == 0
+        assert result.work["grid_atomic_measure_source"] == "exact-native-resident-grid"
+        assert result.work["grid_atomic_measure_h2d_bytes"] == 0
         assert result.work["xc_points"] == len(state.grid.points)
         assert result.work["geometry_lane_capacity"] > 32
         assert (
@@ -525,7 +535,7 @@ def test_cuda_reconverged_finite_differences_and_replay(
         replay = _diagnostic(current, basis, compiler)
         np.testing.assert_allclose(replay.gradient, result.gradient, atol=1e-9, rtol=0)
         with pytest.raises(ValueError, match="work budget"):
-            _diagnostic(current, basis, compiler, max_primitive_records=1)
+            _diagnostic(current, basis, compiler, max_grid_pair_visits=1)
         with pytest.raises(ValueError, match="budget"):
             _diagnostic(current, basis, compiler, max_device_bytes=1)
         with pytest.raises(ValueError, match="current native.*snapshot"):
@@ -627,6 +637,8 @@ def test_cuda_source_failure_zero_tail_and_recovery(compiler: typing.Any) -> Non
                 pytest.raises(RuntimeError, match="invalid stationary CUDA"),
             ):
                 sources.geometry(task, bad, np.ones(3), np.ones(3), pbe=False)
+                # Drain the deferred failure before releasing its borrowed grid lease.
+                sources.finish()
             out = np.full((7, 3, 3), 42.0)
             with pytest.raises(RuntimeError, match="reset"):
                 sources._call("stationary_finish", sources.handle, _ptr(out), out.size)
@@ -678,7 +690,7 @@ def test_cuda_late_owner_replay_and_geometry_replacement(
 
         def replay(sources: typing.Any) -> typing.Any:
             result = finish(sources)
-            batch.execute(strict=True)
+            batch.execute(properties=("energy",), strict=True)
             return result
 
         with monkeypatch.context() as patch:

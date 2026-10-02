@@ -57,6 +57,32 @@ constexpr bool curated_cuda_ks_functional(std::uint32_t functional) noexcept {
 constexpr bool is_semilocal_family(std::uint32_t functional, SemilocalFamily family) noexcept {
   return functional == semilocal_family_code(family);
 }
+
+/** Per-component AUTO precision admission. Lowering one component never
+ * changes an unlisted component: exact K, SR/LR K, tau accumulation, XC point
+ * algebra/reductions, final audits and forces remain strict FP64. */
+struct CudaKsPrecisionSchedule {
+  bool mixed_coulomb{};
+  bool mixed_density_contraction{};
+  bool any_mixed() const noexcept { return mixed_coulomb || mixed_density_contraction; }
+};
+
+CudaKsPrecisionSchedule resolve_cuda_ks_precision_schedule(
+    std::optional<generativeqc_precision_mode> mode, std::uint32_t functional, bool fitted_coulomb,
+    bool nonlocal_correlation) {
+  if (!mode || *mode == GENERATIVEQC_PRECISION_FP64) return {};
+  if (*mode != GENERATIVEQC_PRECISION_AUTO)
+    throw std::invalid_argument("CUDA KS received an unknown precision mode");
+  if (fitted_coulomb) throw std::invalid_argument("CUDA fitted KS requires strict FP64");
+  if (nonlocal_correlation)
+    throw std::invalid_argument("CUDA KS nonlocal composition currently requires strict FP64");
+  CudaKsPrecisionSchedule schedule;
+  schedule.mixed_coulomb = true;
+  schedule.mixed_density_contraction = is_semilocal_family(functional, SemilocalFamily::Lda) ||
+                                       is_semilocal_family(functional, SemilocalFamily::Pbe) ||
+                                       is_semilocal_family(functional, SemilocalFamily::R2scan);
+  return schedule;
+}
 void check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
@@ -226,7 +252,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
   bool warm_updates{true}, device_chunk_mode{};
   bool stabilize_occupations{}, final_closure{}, has_exchange{}, has_range_correction{};
   bool fitted_coulomb{}, fitted_exchange{}, occupied_fitted_factor_ready{};
-  bool mixed_j{}, strict_refinement{}, pending_mixed_j{}, mixed_j_executed{}, device_nonlocal{};
+  CudaKsPrecisionSchedule precision_schedule{};
+  bool strict_refinement{}, pending_mixed_coulomb{}, pending_mixed_density{},
+      mixed_precision_executed{}, device_nonlocal{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
   nlc::Vv10Plan* nonlocal_correlation{};
@@ -291,52 +319,36 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   void record_fock_precision_work(std::uint64_t mixed_coulomb_recurrences) {
     auto& work = output.precision_work;
-    const bool mixed = pending_mixed_j;
+    const bool mixed = pending_mixed_coulomb || pending_mixed_density;
     const auto phase = mixed ? scf::PrecisionWorkPhase::Scf
-                             : (mixed_j_executed ? scf::PrecisionWorkPhase::Refinement
-                                                 : scf::PrecisionWorkPhase::Scf);
+                             : (mixed_precision_executed ? scf::PrecisionWorkPhase::Refinement
+                                                         : scf::PrecisionWorkPhase::Scf);
     work.events.push_back(
         {mixed ? scf::PrecisionWorkEventKind::MixedFock : scf::PrecisionWorkEventKind::StrictFock,
          phase, static_cast<std::uint64_t>(work.events.size()), output.iterations, owner,
          solve_epoch, generation});
 
     if (complete_precision_inventory_domain()) {
-      const auto mode =
-          mixed ? scf::PrecisionArithmeticMode::Mixed : scf::PrecisionArithmeticMode::Strict;
-      const auto compute = mixed ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
-
-      // One prepared Coulomb provider is invoked per physical Fock build. In
-      // AUTO its ERI recurrence computes in FP32 while density/storage and
-      // accumulation/reduction remain FP64.
-      record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, compute, mode);
-
-      // Exact/fitted full-range exchange and an optional range correction stay
-      // strict FP64 on every currently admitted CUDA-KS path.
+      const auto j_mode = pending_mixed_coulomb ? scf::PrecisionArithmeticMode::Mixed
+                                                : scf::PrecisionArithmeticMode::Strict;
+      const auto j_compute =
+          pending_mixed_coulomb ? scf::PrecisionDtype::Fp32 : scf::PrecisionDtype::Fp64;
+      record_precision_operator(scf::PrecisionOperatorKind::CoulombJ, j_compute, j_mode);
       const std::uint64_t exchange_builds = static_cast<std::uint64_t>(has_exchange) +
                                             static_cast<std::uint64_t>(has_range_correction);
       record_precision_operator(scf::PrecisionOperatorKind::ExchangeK, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict, exchange_builds);
-
-      // Pointwise XC, Vxc and scalar reductions remain FP64 even in AUTO.
-      // The reduced arithmetic is confined to the density-times-AO contraction,
-      // which is recorded separately as a MatrixProduct logical contraction.
       record_precision_operator(scf::PrecisionOperatorKind::Xc, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
                                 scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
-
-      // enqueue_legacy executes four explicit matrix products for FDS-SDF and
-      // three around the generalized eigensolve. UKS occupation stabilization
-      // adds two more. Strict XC internals stay represented by the XC owner
-      // above; only the independently instrumented AUTO density-times-AO
-      // contraction is split out here because its arithmetic mode differs.
       const std::uint64_t strict_matrix_products = stabilize_occupations ? 9U : 7U;
       record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
                                 scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict,
                                 strict_matrix_products);
-      if (mixed)
+      if (pending_mixed_density)
         record_precision_operator(scf::PrecisionOperatorKind::MatrixProduct,
                                   scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed);
       if (!final_closure)
@@ -352,11 +364,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       record_precision_operator(scf::PrecisionOperatorKind::Diagnostics, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
     }
-
-    // The provider-owned mixed recurrence counter is exact after screening and
-    // zero-density rejection. There is deliberately no inferred strict
-    // recurrence count; strict logical work is represented by CoulombJ above.
-    if (mixed && mixed_coulomb_recurrences)
+    if (pending_mixed_coulomb && mixed_coulomb_recurrences)
       record_precision_operator(scf::PrecisionOperatorKind::CoulombRecurrence,
                                 scf::PrecisionDtype::Fp32, scf::PrecisionArithmeticMode::Mixed,
                                 mixed_coulomb_recurrences);
@@ -580,20 +588,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (options.precision_mode && *options.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
          *options.precision_mode != GENERATIVEQC_PRECISION_AUTO))
       throw std::invalid_argument("CUDA KS received an unsupported execution policy");
-    mixed_j = options.precision_mode && *options.precision_mode == GENERATIVEQC_PRECISION_AUTO;
-    if (mixed_j && fitted_coulomb)
-      throw std::invalid_argument("CUDA fitted KS requires strict FP64");
-    if (mixed_j && (has_exchange || has_range_correction))
-      throw std::invalid_argument("CUDA exact-exchange KS currently requires strict FP64");
-    const auto* curated_metadata = semilocal_family_metadata_from_code(functional);
-    if (mixed_j && curated_metadata && curated_metadata->requires_tau)
-      throw std::invalid_argument("meta-GGA CUDA KS currently requires strict FP64");
+    precision_schedule = resolve_cuda_ks_precision_schedule(
+        options.precision_mode, functional, fitted_coulomb, nonlocal_correlation != nullptr);
     if (nonlocal_correlation) {
       if (!is_semilocal_family(functional, SemilocalFamily::Pbe) &&
           !is_semilocal_family(functional, SemilocalFamily::Wb97mv))
         throw std::invalid_argument("CUDA KS nonlocal composition requires a PBE-family graph");
-      if (mixed_j)
-        throw std::invalid_argument("CUDA KS nonlocal composition currently requires strict FP64");
       device_nonlocal =
           options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
       if (device_nonlocal &&
@@ -681,8 +681,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     resource.grid_device_bytes = borrow_resident_grid ? resident_grid.device_bytes : 0;
     resource.provider_device_bytes = provider.diagnostic().device_bytes;
     const auto diagnostic_iterations =
-        mixed_j ? sum(product(options.max_iterations, 2U), kMaximumFinalCorrections)
-                : options.max_iterations;
+        precision_schedule.any_mixed()
+            ? sum(product(options.max_iterations, 2U), kMaximumFinalCorrections)
+            : options.max_iterations;
     output.dft_diagnostic.history.reserve(diagnostic_iterations);
     resource.retained_host_numeric_bytes =
         (host_xc_density.capacity() + host_xc_alpha.capacity() + host_xc_beta.capacity() +
@@ -808,8 +809,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     stabilize_occupations = false;
     final_closure = false;
     strict_refinement = false;
-    pending_mixed_j = false;
-    mixed_j_executed = false;
+    pending_mixed_coulomb = false;
+    pending_mixed_density = false;
+    mixed_precision_executed = false;
     final_corrections = 0;
     refinement_iterations = 0;
     output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
@@ -832,8 +834,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
                             exchange_coefficient == -0.125;
     device_chunk_mode =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused &&
-        !fitted_coulomb && !has_range_correction && !nonlocal_correlation && !mixed_j &&
-        spins == 1 && !is_semilocal_family(functional, SemilocalFamily::Wb97mv) &&
+        !fitted_coulomb && !has_range_correction && !nonlocal_correlation &&
+        !precision_schedule.any_mixed() && spins == 1 &&
+        !is_semilocal_family(functional, SemilocalFamily::Wb97mv) &&
         (pure_semilocal_chunk || pbe0_chunk) && provider.system().ecp_terms.empty() &&
         configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
@@ -904,10 +907,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // CUDA-Graph replay remains limited to the semilocal body qualified by
     // #1437. Global-hybrid chunks may use the shared bounded SolverRegion
     // without capturing the exact-exchange provider.
-    const bool replay_semilocal_only = !has_exchange && !has_range_correction &&
-                                       !nonlocal_correlation && !fitted_coulomb && !mixed_j &&
-                                       options.semilocal_exchange_scale == 1.0 &&
-                                       options.semilocal_correlation_scale == 1.0;
+    const bool replay_semilocal_only =
+        !has_exchange && !has_range_correction && !nonlocal_correlation && !fitted_coulomb &&
+        !precision_schedule.any_mixed() && options.semilocal_exchange_scale == 1.0 &&
+        options.semilocal_correlation_scale == 1.0;
     const bool replay = configured_replay_enabled() && replay_semilocal_only && replay_functional &&
                         n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     auto graph = device_chunk_binding();
@@ -1239,7 +1242,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_pending = true;  // Any partial CUDA submission is drained on failure.
     try {
       std::string detail;
-      pending_mixed_j = mixed_j && !strict_refinement;
+      const bool mixed_stage = precision_schedule.any_mixed() && !strict_refinement;
+      pending_mixed_coulomb = mixed_stage && precision_schedule.mixed_coulomb;
+      pending_mixed_density = mixed_stage && precision_schedule.mixed_density_contraction;
       // Provider selection stays inside the prepared Fock facade. For a fitted
       // hybrid, the first cold/warm-seed build has no trusted canonical factor
       // and stays dense. After a successful proposal becomes the current density,
@@ -1258,8 +1263,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
       } else {
         jk_status = scf::enqueue_prepared_cuda_fock(
             provider, density, spins == 2 ? density + matrix : nullptr, matrix, j, exchange,
-            has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error, pending_mixed_j,
-            detail, pending_mixed_j ? mixed_coulomb_work_counter() : nullptr);
+            has_exchange && spins == 2 ? exchange + matrix : nullptr, jk_error,
+            pending_mixed_coulomb, detail,
+            pending_mixed_coulomb ? mixed_coulomb_work_counter() : nullptr);
       }
       check(jk_status, detail);
       if (fitted_exchange) {
@@ -1274,10 +1280,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
                   matrix, range_exchange, spins == 2 ? range_exchange + matrix : nullptr,
                   range_jk_error, detail),
               detail);
-      mixed_j_executed = mixed_j_executed || pending_mixed_j;
-      const auto potential =
-          stage_xc(++generation, pending_mixed_j ? CudaXcDensityPrecision::Fp32ComputeFp64Accumulate
-                                                 : CudaXcDensityPrecision::Fp64);
+      mixed_precision_executed =
+          mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
+      const auto potential = stage_xc(
+          ++generation, pending_mixed_density ? CudaXcDensityPrecision::Fp32ComputeFp64Accumulate
+                                              : CudaXcDensityPrecision::Fp64);
       pending_generations[0] = generation;
       ++movement.submitted_iterations;
       pending_iterations = 1;
@@ -1359,7 +1366,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       check(cudaMemcpyAsync(&physical, scalar_records, sizeof(physical), cudaMemcpyDeviceToHost,
                             stream));
-      if (pending_mixed_j)
+      if (pending_mixed_coulomb)
         check(cudaMemcpyAsync(&mixed_coulomb_recurrences, mixed_coulomb_work_counter(),
                               sizeof(mixed_coulomb_recurrences), cudaMemcpyDeviceToHost, stream));
       check(cudaStreamSynchronize(stream));
@@ -1371,7 +1378,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       throw;
     }
     movement.scalar_d2h_bytes +=
-        sizeof(physical) + (pending_mixed_j ? sizeof(mixed_coulomb_recurrences) : 0U);
+        sizeof(physical) + (pending_mixed_coulomb ? sizeof(mixed_coulomb_recurrences) : 0U);
     ++movement.synchronizations;
     ++movement.iteration_synchronizations;
     ++movement.iteration_chunks;
@@ -1380,15 +1387,17 @@ struct CudaKsPlan::Impl : KsStateStorage {
     pending_iterations = 0;
     ++output.iterations;
     ++output.fock_builds;
-    if (pending_mixed_j)
+    if (pending_mixed_coulomb || pending_mixed_density)
       ++output.precision.mixed_stage_fock_builds;
     else
       ++output.precision.strict_stage_fock_builds;
     record_fock_precision_work(mixed_coulomb_recurrences);
-    if (mixed_j_executed && !pending_mixed_j) ++refinement_iterations;
+    if (mixed_precision_executed && !pending_mixed_coulomb && !pending_mixed_density)
+      ++refinement_iterations;
     output.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
-    output.precision.effective_bits = mixed_j_executed ? 32U : 64U;
-    output.precision.strict_refinement_applied = mixed_j_executed && refinement_iterations > 0;
+    output.precision.effective_bits = mixed_precision_executed ? 32U : 64U;
+    output.precision.strict_refinement_applied =
+        mixed_precision_executed && refinement_iterations > 0;
     output.precision.refinement_iterations = refinement_iterations;
     auto& diagnostic = output.dft_diagnostic;
     diagnostic.components = {provider.one_electron().nuclear_repulsion, physical.one_electron,
@@ -1409,7 +1418,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     for (unsigned s = 0; s < 2; ++s)
       if (std::abs(physical.electrons[s] - occupations[s]) > 1e-8) is_failed = true;
     if (is_failed) {
-      if (pending_mixed_j) {
+      if (pending_mixed_coulomb || pending_mixed_density) {
         // Any failed low-precision attempt retries the same density with the
         // strict target operator. Do not publish or cache the failed proposal.
         ++output.precision.execution_retries;
@@ -1446,7 +1455,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
     const bool strict_final_closure = spins == 2 || !provider.system().ecp_terms.empty();
-    const bool mixed_stage = mixed_j && !strict_refinement;
+    const bool mixed_stage = precision_schedule.any_mixed() && !strict_refinement;
     const bool enter_strict_refinement =
         mixed_stage && (converged || output.iterations >= options.max_iterations);
     if (enter_strict_refinement) {
@@ -1476,7 +1485,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
       is_active = !output.converged && final_corrections < kMaximumFinalCorrections;
     } else {
       output.converged = converged;
-      const bool refinement_budget = strict_refinement && mixed_j
+      const bool refinement_budget = strict_refinement && precision_schedule.any_mixed()
                                          ? refinement_iterations < options.max_iterations
                                          : output.iterations < options.max_iterations;
       is_active = !output.converged && refinement_budget;

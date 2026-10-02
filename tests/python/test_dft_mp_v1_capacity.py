@@ -174,7 +174,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
         ),
         "global_hybrid_force_predicate_sha256": (
-            "dee0b5dfd30d6ddefcf12e7f62e0b6d570e111fb084e385f2ec00cfa200ca8fd"
+            "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
         ),
         "force_capability_promotion_sha256": (
             "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
@@ -315,7 +315,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "b600f2ccb9e5887e89174715139b4777ee850539317e71863031fc174a7a69eb"
+            "62d61c9ce7ad0b4f50a9bc02c636834aa2b816e44e326ada3e5b6facd83db7ca"
         ),
         "native_owner_sha256": (
             "7b41328a1daaf4dcd4b3884bc29d248c25b7294ad8e69e53eaa966096f3212d9"
@@ -1153,13 +1153,13 @@ def test_grid_pair_work_fails_closed_when_endpoint_tiling_moves(
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
     )
-    old = "for begin in range(0, len(grid.points), tile_points):"
+    old = "for begin in range(0, grid_points, tile_points):"
     assert source.count(old) == 1
     stationary_contract_tree(
         tmp_path,
         source.replace(
             old,
-            "for begin in range(0, len(grid.points), 2 * tile_points):",
+            "for begin in range(0, grid_points, 2 * tile_points):",
             1,
         ),
     )

@@ -88,9 +88,25 @@ Python frontend. The currently bundled names are reported by
 passing `--basis` or `--representation` with GFN2 is rejected instead of
 being silently ignored.
 
-This slice keeps density fitting and DFT method selection separate so their
-approximation/model controls can be reviewed independently in later native CLI
-layers.
+## Select HF density fitting
+
+RHF/UHF can select the same native density-fitting modes exposed by the public
+method descriptor:
+
+```bash
+generativeqc run molecule.xyz \
+  --method rhf \
+  --basis sto-3g \
+  --density-fitting cpu \
+  --auxiliary-basis def2-svp
+```
+
+`--density-fitting` accepts `none`, `cpu`, `cuda`, or `auto`. When no
+auxiliary basis is named, the native method contract reuses the orbital system
+as the auxiliary basis. An explicit `--auxiliary-basis` is expanded from the
+same generated bundled catalog and must accompany an enabled density-fitting
+mode. This CLI layer does not change the existing metric threshold or planner
+policy.
 
 ## Manage local profile activation
 
