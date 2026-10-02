@@ -183,8 +183,8 @@ def test_final_projection_charge_reuse_avoids_retained_fitted_charge_pass() -> N
     assert "df_rhf_charge_from_final_projection" in reuse
     assert "response_final_fitted_charge_reused" in reuse
     assert "launch_unpack_df_values" not in reuse
+    assert "gather_final_fitted_projection" in reuse
     assert "df_rhf_charge_contract" not in reuse
-    assert "gather_final_fitted_projection" not in source
     assert source.count("generated::df_occupied_finish_projection(") == 1
 
 
@@ -211,7 +211,7 @@ def test_production_native_lowering_is_bound_to_stationary_plan() -> None:
     assert "tensorir-charge-lowering: direct-NT" in cuda
     assert "df_rhf_charge_contract" in cuda
     assert "df_rhf_charge_from_final_projection" in cuda
-    assert "pair_major[i * (rank + 1) * auxiliary + q]" in cuda
+    assert "projected[q * rr + i * (rank + 1)]" in cuda
     assert "charges[q] = density_scale * value" in cuda
     assert "cublasDgemm" in cuda
     for kernel in (
