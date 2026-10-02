@@ -52,7 +52,8 @@ template <bool Unrestricted>
 __device__ inline __noinline__ void contract_fock_direct_order2_task(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* fock,
-    const std::uint64_t* generated_fock_shell_class_mask) {
+    const std::uint64_t* generated_fock_shell_class_mask, bool coulomb_only = false,
+    bool exchange_only = false) {
   if (task.tile != 0U) return;
   const std::size_t first_pair = task.first_pair;
   const std::size_t second_pair = task.second_pair;
@@ -133,9 +134,9 @@ __device__ inline __noinline__ void contract_fock_direct_order2_task(
     if ((active_component_mask & (1U << component)) == 0 || integral.component[component] == 0.0) {
       continue;
     }
-    accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density, fock,
-                                                  raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
-                                                  integral.component[component]);
+    accumulate_direct_fock_integral<Unrestricted>(
+        n, physical_offset, spin_offset, density, fock, raw_ao[0], raw_ao[1], raw_ao[2], raw_ao[3],
+        integral.component[component], coulomb_only, exchange_only);
   }
 }
 

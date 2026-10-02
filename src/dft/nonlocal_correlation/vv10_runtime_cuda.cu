@@ -264,13 +264,31 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
         vsigma, point_derivative, weight_derivative, failed);
 }
 
+constexpr unsigned kOrderedEnergyLoadThreads = 128U;
+
 __global__ void reduce_energy_ordered_kernel(std::size_t npoint, const double* energy_terms,
                                              double* energy, int* failed) {
-  if (blockIdx.x != 0 || threadIdx.x != 0) return;
+  if (blockIdx.x != 0) return;
+  __shared__ double staged[kOrderedEnergyLoadThreads];
   double sum = 0.0;
-  for (std::size_t i = 0; i < npoint; ++i) sum += energy_terms[i];
-  if (!isfinite(sum)) atomicExch(failed, 1);
-  *energy = sum;
+  for (std::size_t base = 0; base < npoint; base += kOrderedEnergyLoadThreads) {
+    const std::size_t index = base + threadIdx.x;
+    if (index < npoint) staged[threadIdx.x] = energy_terms[index];
+    __syncthreads();
+    if (threadIdx.x == 0) {
+      const std::size_t width =
+          npoint - base < kOrderedEnergyLoadThreads ? npoint - base : kOrderedEnergyLoadThreads;
+      // Preserve the historical left-to-right FP64 additions exactly. Only
+      // global-memory acquisition is cooperative; arithmetic association and
+      // one-rounding-per-add semantics are unchanged.
+      for (std::size_t i = 0; i < width; ++i) sum += staged[i];
+    }
+    __syncthreads();
+  }
+  if (threadIdx.x == 0) {
+    if (!isfinite(sum)) atomicExch(failed, 1);
+    *energy = sum;
+  }
 }
 
 __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, const double* weights,
@@ -588,7 +606,8 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
           energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
     }
   }
-  reduce_energy_ordered_kernel<<<1, 1, 0, stream>>>(npoint, energy_terms, energy, numerical_error);
+  reduce_energy_ordered_kernel<<<1, kOrderedEnergyLoadThreads, 0, stream>>>(
+      npoint, energy_terms, energy, numerical_error);
   runtime::cuda_resource_check(cudaGetLastError());
 }
 
