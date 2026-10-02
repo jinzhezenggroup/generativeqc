@@ -1,6 +1,6 @@
 # Proposal: share VV10 energy denominator with every pair derivative
 
-Status: experimental; independent and endpoint qualification pending
+Status: qualified candidate; merge pending
 Date: 2026-10-03
 
 The previous rational candidate uses two divisions for features and three with
@@ -60,3 +60,40 @@ This supersedes the four-division radial proposal in
 [the earlier note](2026-10-03-vv10-reciprocal-geometry.md). The two/three-division
 rational proposal was not promoted; its
 [rejection record](../rejected/2026-10-03-vv10-rational-derivatives.md) explains why.
+
+## Qualification after the shared native changes
+
+The post-#1716 one-division binary `b018e708c974597b27eaa94ccdd164c49e80d6ca3669c11a9f6e0b98974dec89`
+was subsequently exercised on full24, moved12 and default48. It predates #1732;
+these results do not establish the hash of the latest rebuilt binary.
+
+- Node1 job 5428, full24: warm median 51.180482 s versus GPU4PySCF
+  28.303359 s. All five pairs pass, max energy 2.763e-11 Eh and force
+  4.166e-10 Eh/Bohr.
+- The same job, water-12/def2-TZVP diagnostic moving-grid case: cold
+  168.781463 s, priming 23.813749 s, warm 23.893436 s and moved geometry
+  93.150251 s, with 22/1/1/11 iterations. Every sample passes the independent
+  CPU PySCF/Libcint oracle: max energy 1.535e-12 Eh and force 8.977e-10 Eh/Bohr.
+  Full oracle energy/force arrays are retained beside the comparison JSON.
+- Node2 PRO6000 job 2096, 48 atoms (16 waters), 384 spherical def2-SVP AOs,
+  1179648 unpruned points, public default resource budgets: native cold
+  1342.065715 s/21 iterations; warm repeats 179.647399, 179.583933 and
+  179.689908 s/one iteration each. GPU4PySCF cold is 482.004423 s and warm
+  median 161.845468 s. All five pairs pass, max energy 3.138e-11 Eh and force
+  5.877e-10 Eh/Bohr. This remains slower than GPU4PySCF.
+
+These complete endpoints have the same strict 1e-8 Eh / 1e-7 Eh/Bohr gates;
+none are isolated kernel measurements. The actual compacted molecular pair
+counts remain unexported. They are not replaced with dense grid capacity.
+
+A fresh CUDA build including #1732 has hash
+`adb4b086ca836a253eaa19a000d016e66f3584baff04380b3ceab0d1a93f4180`.
+Its production sources are identical across the final rebase onto master
+`9a5871dca` plus #1727. Source archives, empty production-source rebase diff,
+ccache receipts and the initial rejected CPU-only configuration are retained.
+Node1 job 5457 qualifies this library as `vvdenom3`: all six independent
+complete tests plus rebuild/stale-state isolation pass (7 total, 206.94 s).
+
+Partner shared-memory staging was separately rejected after a controlled
+complete comparison; see [the retained rejection](../rejected/2026-10-03-vv10-shared-partner-staging.md).
+It is absent from this candidate.
