@@ -16,6 +16,7 @@
 #include "integrals/ecp_cuda.hpp"
 #include "methods/dft_method.hpp"
 #if GENERATIVEQC_HAS_CUDA
+#include "dft/cuda_ks.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/grid_task_view.cuh"
 #include "runtime/cuda_resources.cuh"
@@ -577,6 +578,7 @@ generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   std::fill(values, values + count, 0.0);
   *present_mask = 0;
+#if GENERATIVEQC_HAS_CUDA
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     auto status = check_current(*batch, *snapshot);
@@ -597,6 +599,9 @@ generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
   } catch (...) {
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
+#else
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+#endif
 }
 
 generativeqc_status generativeqc_ks_snapshot_cuda_resident_density_v1(

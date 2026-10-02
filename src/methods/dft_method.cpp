@@ -887,7 +887,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
 #if GENERATIVEQC_HAS_CUDA
     if (cuda_) return cuda_->profile_fixed_density_components(expected, profile, detail);
 #endif
-    profile = {};
+    (void)profile;
     detail = "fixed-density CUDA component profiling requires a CUDA KS owner";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
@@ -1872,7 +1872,6 @@ class KsPreparedBatch final : public PreparedBatch {
       dft::CudaKsFixedDensityProfile& profile, std::string& detail) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->fixed_density_profile(expected, profile, detail);
-    profile = {};
     detail = "KS batch item has no prepared fixed-density profile owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -2147,7 +2146,7 @@ generativeqc_status dft_cuda_fixed_density_profile(
     dft::CudaKsFixedDensityProfile& profile, std::string& detail) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks) return ks->fixed_density_profile(index, expected, profile, detail);
-  profile = {};
+  (void)profile;
   detail = "fixed-density CUDA component profiling requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }

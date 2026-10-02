@@ -8,6 +8,10 @@
 #include "dft/cuda_ks_final_state.hpp"
 #include "methods/method.hpp"
 
+namespace generativeqc::dft {
+struct CudaKsFixedDensityProfile;
+}
+
 namespace generativeqc::methods::detail {
 
 /** Detached derivative inputs copied from the same owner as the #162 state.
