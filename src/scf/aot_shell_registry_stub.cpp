@@ -27,6 +27,9 @@ std::uint64_t enabled_fock_shell_class_mask() noexcept { return 0; }
 
 std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept { return 0; }
 
+// A generic-only build has no compiled shell class eligible for streaming.
+std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept { return 0; }
+
 cudaError_t launch_shell_class(unsigned, cudaStream_t, bool, unsigned, const void*,
                                const std::uint32_t*, const std::int64_t*, const void*,
                                const double*, const void*, double, const double*, const double*,

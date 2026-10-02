@@ -54,7 +54,7 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ("route", "failed_step"),
     [
         (route, step)
-        for route, count in (("full_range", 12), ("rsh", 8))
+        for route, count in (("full_range", 8), ("rsh", 8))
         for step in range(count)
     ],
 )
@@ -124,8 +124,8 @@ int cudaMemsetAsync(void* dst,int value,std::size_t n,cudaStream_t) {
 int cudaGetLastError() { return operation(); }
 int cudaMemcpyAsync(void* dst,const void* src,std::size_t n,int,cudaStream_t) {
   int error=operation(); if(error) return error;
-  const auto expected=(source_count==3 ? 9U : 3U)*sizeof(double);
-  if(n!=expected || copy_count>=(source_count==3 ? 1U : 2U))
+  const auto expected=3*source_count*sizeof(double);
+  if(n!=expected || copy_count>=1U)
     throw std::runtime_error("bad copy");
   copies[copy_count].dst=dst;
   copies[copy_count].bytes=n;

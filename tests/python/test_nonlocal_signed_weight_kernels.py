@@ -46,6 +46,11 @@ def signed_weight_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         _definition(source, "__global__ void molecular_domain_kernel("),
         _definition(source, "__global__ void pack_force_seeds_kernel("),
     ]
+    # Observe executed partner visits without changing the production arithmetic
+    # or inferring saved work from zeros in the final output.
+    marker = "const auto j = static_cast<std::size_t>(active_indices[slot]);"
+    assert pieces[2].count(marker) == 1
+    pieces[2] = pieces[2].replace(marker, "++pair_visits;\n" + marker)
     prefix = r"""
 #include <cmath>
 #include <cstddef>
@@ -61,6 +66,7 @@ enum class Vv10Variant { vv10, rvv10 };
 }
 using namespace generativeqc::dft::nlc;
 struct Index { std::size_t x{}; } blockIdx, threadIdx, blockDim{1}, gridDim{1};
+std::uint64_t pair_visits{};
 void atomicExch(int* out, int value) { *out = value; }
 double __longlong_as_double(unsigned long long value) {
   double result;
@@ -70,8 +76,9 @@ double __longlong_as_double(unsigned long long value) {
 }
 """
     wrapper = r"""
-template <Vv10Variant Variant, bool Mask>
+template <Vv10Variant Variant, bool Mask, bool Geometry = true>
 int evaluate(double first_weight, double first_density, double* out) {
+  pair_visits = 0;
   constexpr std::size_t n = 3;
   const double weights[n] = {first_weight, 0.7, 1.1};
   const double density[n] = {first_density, 0.9, 1.2};
@@ -94,7 +101,7 @@ int evaluate(double first_weight, double first_density, double* out) {
   const double beta = std::pow(3.0/36.0, 0.75)/32.0;
   for (std::size_t i = 0; i < n; ++i) {
     threadIdx.x = i;
-    pair_kernel_ordered<Variant, true, true, Mask>(0, n, 1.0, points, rho, omega, kappa,
+    pair_kernel_ordered<Variant, true, Geometry, Mask>(0, n, 1.0, points, rho, omega, kappa,
         wrho, wsigma, krho, weighted, active, &active_count, beta, energy, vrho, vsigma,
         point_derivative, weight_derivative, &pair_error);
   }
@@ -112,6 +119,7 @@ int evaluate(double first_weight, double first_density, double* out) {
   out[3] = point_derivative[0]; out[4] = weight_derivative[0];
   out[5] = std::signbit(ew[0]); out[6] = std::signbit(weighted[0]);
   for (std::size_t row = 0; row < 6; ++row) out[7+row] = seeds[row*n];
+  out[13] = static_cast<double>(pair_visits);
   return domain_error || pair_error || collect_error;
 }
 extern "C" int run(int variant, int mask, double weight, double density, double* out) {
@@ -120,6 +128,13 @@ extern "C" int run(int variant, int mask, double weight, double density, double*
                 : evaluate<Vv10Variant::rvv10, false>(weight, density, out);
   return mask ? evaluate<Vv10Variant::vv10, true>(weight, density, out)
               : evaluate<Vv10Variant::vv10, false>(weight, density, out);
+}
+extern "C" int run_scf(int variant, int mask, double weight, double density, double* out) {
+  if (variant)
+    return mask ? evaluate<Vv10Variant::rvv10, true, false>(weight, density, out)
+                : evaluate<Vv10Variant::rvv10, false, false>(weight, density, out);
+  return mask ? evaluate<Vv10Variant::vv10, true, false>(weight, density, out)
+              : evaluate<Vv10Variant::vv10, false, false>(weight, density, out);
 }
 """
     directory = tmp_path_factory.mktemp("vv10-signed-weights")
@@ -156,6 +171,8 @@ extern "C" int run(int variant, int mask, double weight, double density, double*
         ct.POINTER(ct.c_double),
     ]
     native.run.restype = ct.c_int
+    native.run_scf.argtypes = native.run.argtypes
+    native.run_scf.restype = ct.c_int
     return native
 
 
@@ -166,9 +183,11 @@ def _run(
     density: float = 0.4,
     *,
     mask: int = 1,
+    scf: bool = False,
 ) -> list[float]:
-    result = (ct.c_double * 13)()
-    assert probe.run(variant, mask, weight, density, result) == 0
+    result = (ct.c_double * 14)()
+    run = probe.run_scf if scf else probe.run
+    assert run(variant, mask, weight, density, result) == 0
     return list(result)
 
 
@@ -217,7 +236,30 @@ def test_density_screened_row_keeps_negative_zero_and_zero_seeds(
     actual = _run(signed_weight_probe, variant, -0.2, density=1e-15)
     assert actual[5:7] == [1.0, 1.0]
     assert actual[1:5] == [0.0] * 4
-    assert actual[7:] == [0.0] * 6
+    assert actual[7:13] == [0.0] * 6
+
+
+@pytest.mark.parametrize("variant", [0, 1], ids=["vv10", "rvv10"])
+def test_scf_screened_rows_reduce_executed_pair_work(
+    signed_weight_probe: ct.CDLL, variant: int
+) -> None:
+    actual = _run(signed_weight_probe, variant, -0.2, density=1e-15, scf=True)
+    unmasked = _run(signed_weight_probe, variant, -0.2, density=1e-15, mask=0, scf=True)
+    assert actual[0] == unmasked[0]
+    assert actual[1:3] == [0.0, 0.0]
+    assert actual[13] == 4  # Two active rows, two compacted partners.
+    assert unmasked[13] == 6  # Previously the screened row also traversed both.
+
+
+@pytest.mark.parametrize("variant", [0, 1], ids=["vv10", "rvv10"])
+@pytest.mark.parametrize("weight", [-0.2, -5e-324, -0.0, 0.0, 0.2])
+def test_scf_active_signed_rows_keep_energy_potential_and_work(
+    signed_weight_probe: ct.CDLL, variant: int, weight: float
+) -> None:
+    actual = _run(signed_weight_probe, variant, weight, scf=True)
+    unmasked = _run(signed_weight_probe, variant, weight, mask=0, scf=True)
+    assert actual == unmasked
+    assert actual[1] != 0.0
 
 
 def test_pair_kernel_consumes_stable_compacted_partner_domain() -> None:

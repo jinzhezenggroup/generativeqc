@@ -157,7 +157,9 @@ class KsOptions:
     tile_points: int = 256
     xc_schedule: str = "device_fused"
     scf_domain: str = SCF_DOMAIN
-    nonlocal_memory_budget_bytes: int = 256 << 20
+    # Finite capacity for the full-grid pair/force owners. Actual allocation is
+    # shape-sized; a caller-specified smaller cap remains a hard admission gate.
+    nonlocal_memory_budget_bytes: int = 1 << 30
     _method_ir: MethodIR | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:

@@ -54,12 +54,12 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
  public:
   Gfn2PreparedCalculation(const Capabilities& capabilities, const core::System& system,
                           const generativeqc_method_descriptor& descriptor,
-                          generativeqc_backend backend, int device_id)
+                          core::ContextState& context)
       : capabilities_(capabilities),
         atoms_(system.atoms),
         charge_(system.charge),
         multiplicity_(system.multiplicity),
-        backend_(backend),
+        backend_(context.requested_backend),
         maximum_iterations_(descriptor.max_iterations),
         mixer_history_(descriptor.diis_history),
         energy_tolerance_(descriptor.energy_tolerance),
@@ -74,7 +74,14 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
         !(charge_tolerance_ > 0.0) || !std::isfinite(charge_tolerance_))
       throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                         "GFN2-xTB SCC tolerances must be positive finite values");
-    runtime_ = std::make_unique<Gfn2RuntimeBridge>(runtime_backend(backend_), device_id);
+    // The context is locked by preparation's ABI boundary. Reuse only the
+    // backend owner: execute still submits the full request with FRESH SCC,
+    // and the bridge validates topology/options and refreshes coordinates.
+    runtime_ = std::dynamic_pointer_cast<Gfn2RuntimeBridge>(context.workspace);
+    if (!runtime_) {
+      runtime_ = std::make_shared<Gfn2RuntimeBridge>(runtime_backend(backend_), context.device_id);
+      context.workspace = runtime_;
+    }
   }
 
   [[nodiscard]] std::size_t atom_count() const noexcept override { return atoms_.size(); }
@@ -126,7 +133,7 @@ class Gfn2PreparedCalculation final : public PreparedCalculation {
   unsigned mixer_history_{};
   double energy_tolerance_{};
   double charge_tolerance_{};
-  std::unique_ptr<Gfn2RuntimeBridge> runtime_;
+  std::shared_ptr<Gfn2RuntimeBridge> runtime_;
 };
 
 }  // namespace
@@ -178,8 +185,7 @@ std::unique_ptr<PreparedCalculation> prepare_xtb_calculation(
   if (descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "GFN2-xTB currently exposes FP64 execution only");
-  return std::make_unique<Gfn2PreparedCalculation>(capabilities, system, descriptor,
-                                                   context.requested_backend, context.device_id);
+  return std::make_unique<Gfn2PreparedCalculation>(capabilities, system, descriptor, context);
 }
 
 }  // namespace generativeqc::methods::detail

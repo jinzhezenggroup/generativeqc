@@ -79,6 +79,42 @@ struct DirectJkDownloadFence {
     stream = nullptr;
   }
 };
+/** Roll back an optional allocation group without releasing an earlier owner.
+ * Preparation must fence its local upload/download staging before unwinding.
+ * The second fence here also checks asynchronous errors before any device free.
+ */
+template <class Prepare, class Restore>
+void direct_jk_optional_storage(CudaDirectJkPlan& plan, bool optional, std::string& detail,
+                                Prepare prepare, Restore restore,
+                                const int* numerical_failure = nullptr) {
+  const auto retained_allocations = plan.allocations.size();
+  const auto retained_bytes = plan.device_bytes;
+  try {
+    prepare();
+    return;
+  } catch (const DirectJkFailure& failure) {
+    if (!optional || failure.status != GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw;
+  } catch (const std::bad_alloc&) {
+    if (!optional) throw;
+  } catch (cudaError_t error) {
+    if (!optional || error != cudaErrorMemoryAllocation) throw;
+  }
+  direct_jk_check(cudaStreamSynchronize(plan.stream));
+  // A queued bound-status download can complete only while the failed
+  // preparation unwinds. Allocation fallback must not hide that earlier fault.
+  if (numerical_failure && *numerical_failure)
+    throw DirectJkFailure{GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
+                          "nonfinite canonical Cartesian Schwarz bound"};
+  while (plan.allocations.size() > retained_allocations) {
+    direct_jk_check(runtime::resource_cuda_free(plan.allocations.back()));
+    plan.allocations.pop_back();
+  }
+  plan.device_bytes = retained_bytes;
+  restore();
+  const auto error = cudaGetLastError();
+  if (error != cudaErrorMemoryAllocation) direct_jk_check(error);
+  detail.clear();
+}
 /** Always fence failed uploads too: caller-owned pageable buffers may die on return. */
 template <class Function>
 generativeqc_status direct_jk_guard(CudaDirectJkPlan* plan, std::string& detail,
@@ -377,12 +413,30 @@ generativeqc_status create_cuda_direct_jk_plan(
     // Derivative capability is orthogonal to the value schedule. When budgeted,
     // retain the same generated full-range exchange owner for stationary shell
     // derivatives; value-only plans keep its force scratch disabled.
-    // Preserve complete generated SPD coverage. Through-f plans automatically
-    // reuse canonical sources when their optional storage fits the same budget.
+    // Full-range SPD coverage does not cover SR/LR exchange. Reserve its
+    // existing generated owner first, then use only the remaining budget for
+    // canonical range sources. This keeps an optional range acceleration from
+    // displacing the established full-range value/force provider.
     const bool through_f = std::any_of(host.shell_angular.begin(), host.shell_angular.end(),
                                        [](auto angular) { return angular == 3; });
+    if (!through_f && budget > plan->device_bytes) {
+      const auto optional_budget = budget - plan->device_bytes;
+      plan->generated_exchange = prepare_generated_exchange(
+          host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget,
+          derivative_order != 0, false);
+      if (!plan->generated_exchange)
+        plan->generated_coulomb = prepare_generated_coulomb(
+            host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
+      // Generated owners account for their own allocations; diagnostic totals
+      // add them below. Reduce this local allowance without double charging.
+      if (plan->generated_exchange)
+        budget -= plan->generated_exchange->device_bytes;
+      else if (plan->generated_coulomb)
+        budget -= plan->generated_coulomb->device_bytes;
+    }
     std::size_t span_host_preparation_bytes = 0;
-    if (through_f) {
+    std::size_t canonical_host_preparation_bytes = 0;
+    const auto prepare_canonical = [&] {
       const auto cart_elements =
           direct_jk_product(systems.size(), direct_jk_product(host.direct_nbf, host.direct_nbf));
       const auto cart_matrix_bytes = direct_jk_product(cart_elements, sizeof(double));
@@ -430,6 +484,7 @@ generativeqc_status create_cuda_direct_jk_plan(
       if (optional_bytes <= budget - plan->device_bytes) {
         std::vector<std::int32_t> pairs;
         pairs.reserve(direct_jk_product(pairs_count, 2U));
+        canonical_host_preparation_bytes = sizeof(pairs) + runtime::vector_bytes(pairs);
         plan->canonical_pair_offsets.resize(systems.size());
         for (std::size_t item = 0; item < systems.size(); ++item) {
           auto& offsets = plan->canonical_pair_offsets[item];
@@ -472,6 +527,8 @@ generativeqc_status create_cuda_direct_jk_plan(
             plan->canonical_transform = static_cast<const double*>(
                 upload(host.ao_to_direct_transform.data(), rectangular_bytes));
             projection_spans.reserve(projection_span_bytes / sizeof(std::int32_t));
+            span_host_preparation_bytes +=
+                sizeof(projection_spans) + runtime::vector_bytes(projection_spans);
             for (bool public_rows : {true, false}) {
               const auto dimension = public_rows ? host.nbf : host.direct_nbf;
               const auto target_dimension = public_rows ? host.direct_nbf : host.nbf;
@@ -491,8 +548,6 @@ generativeqc_status create_cuda_direct_jk_plan(
             }
             plan->canonical_projection_spans = static_cast<const std::int32_t*>(
                 upload(projection_spans.data(), projection_span_bytes));
-            span_host_preparation_bytes +=
-                sizeof(projection_spans) + runtime::vector_bytes(projection_spans);
             plan->canonical_active = reinterpret_cast<std::uint8_t*>(scratch(systems.size()));
             plan->canonical_public_density = scratch(direct_jk_product(matrix_bytes, 2U));
             plan->canonical_public_output = scratch(direct_jk_product(matrix_bytes, 2U));
@@ -525,81 +580,122 @@ generativeqc_status create_cuda_direct_jk_plan(
         // Oversized CUB inventories and constrained budgets keep the dense path.
         if (pairs_count <= static_cast<std::size_t>(std::numeric_limits<int>::max()) &&
             systems.size() <= static_cast<std::size_t>(std::numeric_limits<int>::max() / 7)) {
-          std::vector<int> segment_offsets;
-          segment_offsets.reserve(systems.size() * 7U + 1U);
-          std::size_t largest_bucket = 0;
-          for (const auto& offsets : plan->canonical_pair_offsets)
-            for (unsigned order = 0; order < 7U; ++order) {
-              segment_offsets.push_back(static_cast<int>(offsets[order]));
-              largest_bucket = std::max(largest_bucket, offsets[order + 1U] - offsets[order]);
-            }
-          segment_offsets.push_back(static_cast<int>(pairs_count));
-          span_host_preparation_bytes +=
-              sizeof(segment_offsets) + runtime::vector_bytes(segment_offsets);
-          std::size_t workspace_bytes = 0;
-          direct_jk_check(canonical_pair_workspace(
-              static_cast<int>(pairs_count), static_cast<int>(systems.size() * 7U),
-              static_cast<int>(largest_bucket), workspace_bytes));
-          const auto row_bytes = direct_jk_product(pairs_count, 7U * sizeof(std::uint64_t));
-          const auto key_bytes = direct_jk_product(pairs_count, sizeof(double));
-          const auto order_bytes = direct_jk_product(pairs_count, sizeof(std::int32_t));
-          const auto offset_bytes = direct_jk_product(segment_offsets.size(), sizeof(int));
-          const auto span_bytes = runtime::size_add(
-              runtime::size_add(row_bytes, workspace_bytes),
-              runtime::size_add(offset_bytes,
-                                direct_jk_product(runtime::size_add(key_bytes, order_bytes), 2U)));
-          if (span_bytes <= budget - plan->device_bytes) {
-            DirectJkDownloadFence sort_fence{plan->stream};
-            const auto* offsets =
-                static_cast<const int*>(upload(segment_offsets.data(), offset_bytes));
-            auto* input_keys = scratch(key_bytes);
-            auto* sorted_keys = scratch(key_bytes);
-            auto* input_order = reinterpret_cast<std::int32_t*>(scratch(order_bytes));
-            auto* sorted_order = reinterpret_cast<std::int32_t*>(scratch(order_bytes));
-            auto* prefix = reinterpret_cast<std::uint64_t*>(scratch(row_bytes));
-            auto* workspace = scratch(workspace_bytes);
-            direct_jk_check(prepare_canonical_pair_order(
-                plan->stream, plan->canonical_batch, plan->canonical_pairs, plan->canonical_bounds,
-                static_cast<int>(pairs_count), static_cast<int>(systems.size() * 7U), offsets,
-                input_keys, input_order, sorted_keys, sorted_order, workspace, workspace_bytes));
-            for (const auto& item_offsets : plan->canonical_pair_offsets)
-              for (unsigned first = 0; first < 7U; ++first)
-                for (unsigned second = 0; second <= first; ++second)
-                  direct_jk_check(prepare_canonical_pair_rows(
-                      plan->stream, sorted_keys, item_offsets[first],
-                      item_offsets[first + 1U] - item_offsets[first], item_offsets[second],
-                      item_offsets[second + 1U] - item_offsets[second], first == second,
-                      screening_tolerance, prefix + second * pairs_count + item_offsets[first],
-                      workspace, workspace_bytes));
-            sort_fence.complete();
-            plan->canonical_pair_order = sorted_order;
-            plan->canonical_row_prefix = prefix;
-          }
+          direct_jk_optional_storage(
+              *plan, !through_f, detail,
+              [&] {
+                std::vector<int> segment_offsets;
+                segment_offsets.reserve(systems.size() * 7U + 1U);
+                std::size_t largest_bucket = 0;
+                for (const auto& offsets : plan->canonical_pair_offsets)
+                  for (unsigned order = 0; order < 7U; ++order) {
+                    segment_offsets.push_back(static_cast<int>(offsets[order]));
+                    largest_bucket = std::max(largest_bucket, offsets[order + 1U] - offsets[order]);
+                  }
+                segment_offsets.push_back(static_cast<int>(pairs_count));
+                span_host_preparation_bytes +=
+                    sizeof(segment_offsets) + runtime::vector_bytes(segment_offsets);
+                std::size_t workspace_bytes = 0;
+                direct_jk_check(canonical_pair_workspace(
+                    static_cast<int>(pairs_count), static_cast<int>(systems.size() * 7U),
+                    static_cast<int>(largest_bucket), workspace_bytes));
+                const auto row_bytes = direct_jk_product(pairs_count, 7U * sizeof(std::uint64_t));
+                const auto key_bytes = direct_jk_product(pairs_count, sizeof(double));
+                const auto order_bytes = direct_jk_product(pairs_count, sizeof(std::int32_t));
+                const auto offset_bytes = direct_jk_product(segment_offsets.size(), sizeof(int));
+                const auto span_bytes = runtime::size_add(
+                    runtime::size_add(row_bytes, workspace_bytes),
+                    runtime::size_add(
+                        offset_bytes,
+                        direct_jk_product(runtime::size_add(key_bytes, order_bytes), 2U)));
+                if (span_bytes <= budget - plan->device_bytes) {
+                  DirectJkDownloadFence sort_fence{plan->stream};
+                  const auto* offsets =
+                      static_cast<const int*>(upload(segment_offsets.data(), offset_bytes));
+                  auto* input_keys = scratch(key_bytes);
+                  auto* sorted_keys = scratch(key_bytes);
+                  auto* input_order = reinterpret_cast<std::int32_t*>(scratch(order_bytes));
+                  auto* sorted_order = reinterpret_cast<std::int32_t*>(scratch(order_bytes));
+                  auto* prefix = reinterpret_cast<std::uint64_t*>(scratch(row_bytes));
+                  auto* workspace = scratch(workspace_bytes);
+                  direct_jk_check(prepare_canonical_pair_order(
+                      plan->stream, plan->canonical_batch, plan->canonical_pairs,
+                      plan->canonical_bounds, static_cast<int>(pairs_count),
+                      static_cast<int>(systems.size() * 7U), offsets, input_keys, input_order,
+                      sorted_keys, sorted_order, workspace, workspace_bytes));
+                  for (const auto& item_offsets : plan->canonical_pair_offsets)
+                    for (unsigned first = 0; first < 7U; ++first)
+                      for (unsigned second = 0; second <= first; ++second)
+                        direct_jk_check(prepare_canonical_pair_rows(
+                            plan->stream, sorted_keys, item_offsets[first],
+                            item_offsets[first + 1U] - item_offsets[first], item_offsets[second],
+                            item_offsets[second + 1U] - item_offsets[second], first == second,
+                            screening_tolerance,
+                            prefix + second * pairs_count + item_offsets[first], workspace,
+                            workspace_bytes));
+                  sort_fence.complete();
+                  plan->canonical_pair_order = sorted_order;
+                  plan->canonical_row_prefix = prefix;
+                }
+              },
+              [&] {
+                plan->canonical_pair_order = nullptr;
+                plan->canonical_row_prefix = nullptr;
+              });
         }
       }
-    }
+    };
+    direct_jk_optional_storage(
+        *plan, !through_f, detail, prepare_canonical,
+        [&] {
+          plan->canonical_pairs = nullptr;
+          plan->canonical_cartesian = false;
+          plan->canonical_batch = {};
+          plan->canonical_bounds = nullptr;
+          plan->canonical_transform = nullptr;
+          plan->canonical_projection_spans = nullptr;
+          plan->canonical_active = nullptr;
+          plan->canonical_public_density = nullptr;
+          plan->canonical_public_output = nullptr;
+          plan->canonical_projection = nullptr;
+          plan->canonical_zero = nullptr;
+          plan->canonical_pair_offsets.clear();
+          plan->canonical_pair_order = nullptr;
+          plan->canonical_row_prefix = nullptr;
+          plan->canonical_density = nullptr;
+          plan->canonical_coulomb = nullptr;
+          plan->canonical_exchange = nullptr;
+        },
+        &numerical_failure);
     if (plan->canonical_pairs && derivative_order) {
-      // HF's shell-warp one-electron consumer needs only three topology arrays.
-      // Borrow the already packed public AO data and the retained force scratch,
-      // not a second generated exchange owner or per-call metadata upload.
-      const auto offsets_bytes =
-          direct_jk_product(host.shell_ao_offsets.size(), sizeof(std::int64_t));
-      const auto pair_bytes = direct_jk_product(host.shell_pair_first.size(), sizeof(std::int32_t));
-      const auto one_electron_bytes =
-          runtime::size_add(offsets_bytes, direct_jk_product(pair_bytes, 2U));
-      if (one_electron_bytes <= budget - plan->device_bytes) {
-        DirectJkDownloadFence metadata_fence{plan->stream};
-        plan->batch.shell_ao_offsets =
-            static_cast<const std::int64_t*>(upload(host.shell_ao_offsets.data(), offsets_bytes));
-        plan->batch.shell_pair_first =
-            static_cast<const std::int32_t*>(upload(host.shell_pair_first.data(), pair_bytes));
-        plan->batch.shell_pair_second =
-            static_cast<const std::int32_t*>(upload(host.shell_pair_second.data(), pair_bytes));
-        plan->batch.total_shell_pairs = static_cast<std::int64_t>(host.shell_pair_first.size());
-        metadata_fence.complete();
-      }
+      const auto retained_batch = plan->batch;
+      direct_jk_optional_storage(
+          *plan, !through_f, detail,
+          [&] {
+            // HF's shell-warp one-electron consumer needs only three topology arrays.
+            // Borrow the already packed public AO data and the retained force scratch,
+            // not a second generated exchange owner or per-call metadata upload.
+            const auto offsets_bytes =
+                direct_jk_product(host.shell_ao_offsets.size(), sizeof(std::int64_t));
+            const auto pair_bytes =
+                direct_jk_product(host.shell_pair_first.size(), sizeof(std::int32_t));
+            const auto one_electron_bytes =
+                runtime::size_add(offsets_bytes, direct_jk_product(pair_bytes, 2U));
+            if (one_electron_bytes <= budget - plan->device_bytes) {
+              DirectJkDownloadFence metadata_fence{plan->stream};
+              plan->batch.shell_ao_offsets = static_cast<const std::int64_t*>(
+                  upload(host.shell_ao_offsets.data(), offsets_bytes));
+              plan->batch.shell_pair_first = static_cast<const std::int32_t*>(
+                  upload(host.shell_pair_first.data(), pair_bytes));
+              plan->batch.shell_pair_second = static_cast<const std::int32_t*>(
+                  upload(host.shell_pair_second.data(), pair_bytes));
+              plan->batch.total_shell_pairs =
+                  static_cast<std::int64_t>(host.shell_pair_first.size());
+              metadata_fence.complete();
+            }
+          },
+          [&] { plan->batch = retained_batch; });
     }
-    if (budget > plan->device_bytes) {
+    if (through_f && budget > plan->device_bytes) {
       const auto optional_budget = budget - plan->device_bytes;
       // Generated/native streaming owns its qualified classes; through-f plans
       // retain HF's bounded shell dispatcher for the remaining higher-l value
@@ -623,14 +719,7 @@ generativeqc_status create_cuda_direct_jk_plan(
     // Include those temporary capacities even though this provider uploads only AO data.
     info.host_preparation_bytes =
         info.host_bytes + sizeof(host) + span_host_preparation_bytes +
-        (plan->canonical_pairs
-             ? direct_jk_product(
-                   direct_jk_product(
-                       systems.size(),
-                       plan->canonical_batch.nbf *
-                           (static_cast<std::size_t>(plan->canonical_batch.nbf) + 1U)),
-                   sizeof(std::int32_t))
-             : 0U) +
+        canonical_host_preparation_bytes +
         runtime::vector_capacities(
             host.atom_offsets, host.atom_systems, host.atomic_numbers, host.positions,
             host.system_shell_offsets, host.shell_atoms, host.shell_angular, host.shell_ao_offsets,
@@ -650,11 +739,13 @@ generativeqc_status create_cuda_direct_jk_plan(
                          sizeof(GeneratedCoulombPlan) +
                          runtime::vector_bytes(plan->generated_exchange->shared->allocations);
       info.host_preparation_bytes += plan->generated_exchange->host_preparation_bytes;
-      info.schedule = plan->generated_exchange->shared->value_capability
-                          ? "generated-shell-coulomb+exchange/generic-jk-fallback"
-                          : (direct_jk_bounded_value_enabled(*plan)
-                                 ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
-                                 : "retained-shell-owner/generic-jk-fallback");
+      info.schedule =
+          plan->generated_exchange->shared->value_capability
+              ? (plan->canonical_pairs ? "generated-shell-coulomb+exchange/canonical-range-fallback"
+                                       : "generated-shell-coulomb+exchange/generic-jk-fallback")
+              : (direct_jk_bounded_value_enabled(*plan)
+                     ? "generated-shell+bounded-through-f-jk/canonical-range-fallback"
+                     : "retained-shell-owner/generic-jk-fallback");
     } else if (plan->generated_coulomb) {
       info.device_bytes += plan->generated_coulomb->device_bytes;
       info.host_bytes += sizeof(GeneratedCoulombPlan) +

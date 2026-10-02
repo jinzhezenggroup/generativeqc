@@ -47,6 +47,11 @@ def main() -> None:
         "rows": [],
         "status": "running",
         "slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+        "timing_boundary": (
+            "seconds measures prepared.execute through host-returned results; "
+            "endpoint_seconds additionally includes constructor and preparation "
+            "once, in the cold row. prepare_seconds is also retained separately."
+        ),
     }
     args.output.write_text(json.dumps(record, indent=2) + "\n")
     started = perf_counter()
@@ -80,6 +85,8 @@ def main() -> None:
             row = {
                 "label": label,
                 "seconds": elapsed,
+                "endpoint_seconds": elapsed
+                + (record["prepare_seconds"] if label == "cold" else 0.0),
                 "energy": result.energy,
                 "converged": result.converged,
                 "forces": None if result.forces is None else result.forces.tolist(),

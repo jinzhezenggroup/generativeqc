@@ -1,0 +1,26 @@
+{
+  "schema": "generativeqc.cc-value-source-storage.v1",
+  "source_revision": "cacc6cf0f410bff187c6d064118e954614c99193",
+  "records": [
+    {
+      "original_path": "summary.json",
+      "stored_path": "summary.json.gz",
+      "original_bytes": 110258,
+      "original_sha256": "10ce42fd0e63518c9a326c0d87bce796bc039d8af5dfb34d2cb9f3edb097e5da",
+      "original_git_blob": "0a45bc1242705e9ca6d0faf8a6c0d4fd7ecc3c3f",
+      "stored_bytes": 16279,
+      "stored_sha256": "914714e6031e337536923f5893222a9aeecdc314d04403f931b84a3390f2097f",
+      "encoding": "gzip"
+    },
+    {
+      "original_path": "large-energy.json",
+      "stored_path": "large-energy.json.gz",
+      "original_bytes": 20529,
+      "original_sha256": "ead831bcc212d821ffca4d8a974cd2dc3db8222e25a6e4e8dcc913aca15f193f",
+      "original_git_blob": "93d9208e73c6d975494fe96561ce49a710888024",
+      "stored_bytes": 4409,
+      "stored_sha256": "741174b07f820df69b93bc112b5ad7f8c229411ebd3786a6af8d8b4742aa6377",
+      "encoding": "gzip"
+    }
+  ]
+}

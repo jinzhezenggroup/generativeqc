@@ -13,10 +13,35 @@ owners, standalone CUDA request/plan API, diagnostic snapshots, DLPack/result-ar
 worker/checkpoint infrastructure are removed. The internal SCC graph and its
 bounded fallback remain part of CUDA execution.
 
+## Runtime lifetime
+
+Each public GFN2 `Calculator` retains one native context until `clear_cache()`
+or calculator collection. The context owns a single method-neutral workspace
+slot; GFN2 prepared calculations share its bridge with strong references. The
+bridge retains one committed CPU/CUDA prepared cache, replacing incompatible
+topology or scientific-control identities and refreshing coordinates before
+execution. Transactional replacement may temporarily own one candidate alongside
+the committed cache. Every request still uses fresh SCC. Energy/force output selection,
+charges, multiplicities and geometry changes are validated on every call;
+retention never substitutes a previous result or converged density.
+
+Python serializes the whole prepare/execute/result-read transaction and cache
+cleanup per calculator. The native context mutex serializes preparation, and
+the bridge mutex covers execution and any orbital snapshot. Distinct calculators
+have independent contexts. Backend/device changes retire the old context before
+creating its replacement; failed creation leaves an empty owner for retry.
+Prepared calculations keep their own immutable molecule/controls and a strong
+bridge reference, so replacing the context slot cannot invalidate them.
+`clear_cache()` waits for in-flight singlepoint calls, frees resident storage,
+and leaves the calculator usable. This bounds the number of retained entries,
+not the memory required by the current molecule. Native SCC graph resource
+fallbacks remain unchanged.
+
 ## Scientific ownership
 
 The compiler emits the following production mathematics. Backend owners retain
-ragged storage traversal, validation, scheduling, accumulation and publication.
+ragged storage traversal, validation, accumulation and publication, and launch
+the compiler-selected schedules where available.
 
 | Science | Compiler owner | Production consumers |
 | --- | --- | --- |
@@ -39,6 +64,35 @@ SCC iteration/mixing/convergence, occupations, generalized eigensolver provider
 selection, workspace/cache lifetime, per-system errors and public method
 admission remain native runtime responsibilities. Generation needs no installed
 GenerativeQC runtime, GPU, or scientific oracle.
+
+CPU S/D/Q generation evaluates a complete Cartesian shell block per primitive
+pair, sharing the Gaussian prefactor and recurrence intermediates across its
+up to 36 outputs. Native contraction order, screening and spherical transforms
+remain unchanged. CUDA keeps one Cartesian pair per lane and hoists only DAG
+nodes common to every component alternative before the component switch.
+Both routes retain FP64 arithmetic and the checked primitive entry points.
+
+CUDA electronic Hamiltonian assembly and density contraction use the policy in
+`method/gfn2_electronic_schedule.py`: 256 threads per block and up to 128 tiles
+per system. Host-visible mean matrix size selects the tile count; each system
+strides over its actual device extent. Small matrices retain one tile. This
+requires no additional storage or device-to-host metadata transfer, including
+for imbalanced ragged batches. One triangular pair owns both matrix
+directions, preserving scalar arithmetic and spin packing. Density contraction
+retains the full orbital sum in each lane; orbital and trace reduction orders
+and finite-range checks are unchanged. Native validation
+and whole-system publication remain separate launches; an error in any tile
+suppresses the entire system's output.
+
+`benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
+matched fresh-SCC settings. It records cold, repeated and changed-geometry
+timings, every SCC iteration count, numerical outputs and loaded binary hashes.
+Run CUDA measurements inside Slurm as described below; compare the resulting
+JSON files using `--reference`, `--candidate` and `--output`. Both reports must
+use the same geometries and settings, and every sample participates in the
+energy/force gate regardless of its iteration count. xTBloom's high-level API
+also returns atomic charges; that additional output is retained in the
+comparator's endpoint contract.
 
 ## Remaining native scientific work
 
@@ -71,7 +125,8 @@ builds retain their pinned private OpenBLAS provider and native shim. The former
 
 Relevant gates are `test_gfn2_h0_force_codegen.py`,
 `test_gfn2_spin_native_codegen.py`, `test_gfn2_runtime_bridge_boundary.py`,
-`test_gfn2_xtb.py`, and `test_gfn2_xtb_force_qualification.py` under
+`test_gfn2_xtb.py`, `test_gfn2_runtime_retention.py`, and
+`test_gfn2_xtb_force_qualification.py` under
 `tests/python/`. GPU endpoint tests require `GENERATIVEQC_TEST_GFN2_CUDA=1` inside a
 Slurm allocation on `main` with `--gres=gpu:5090:1` and a finite time limit.
 The additional compiler graph CUDA gates use `GENERATIVEQC_GFN2_CUDA_TEST=1` in the
