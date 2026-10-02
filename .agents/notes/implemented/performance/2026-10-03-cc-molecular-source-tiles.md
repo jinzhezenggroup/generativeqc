@@ -63,6 +63,30 @@ inside the smaller bound. The native force allocation-intercept tests separately
 retain exact-cap success and one-byte-short refusal for the unavoidable force
 stage. This distinguishes schedule flexibility from weakening admission.
 
+The [retained complete-endpoint evidence](../../../../benchmarks/results/cc-mo-tiles-20261003/summary.json)
+compares baseline and candidate CPU libraries pinned to core 45. In the 28-AO
+case, the warm endpoint mean decreases from about 13.22 s to 5.64 s; MO preparation
+is about 0.082 s. Source reads decrease from 10,000 to 1, with the same 614,656 AO
+values, and CPU transform FMAs from 10,853,326,848 to 136,722,432. Candidate cold
+execution is 101.47 s; expensive preparation outside this provider remains.
+The 7-AO force endpoint remains about 2.5 s, so no force speedup is established.
+
+Node1 Slurm job 5337 (`main`, `gpu:5090:1`, 20-minute limit) passed all 37 public
+CPU/CUDA tests and complete-force memcheck with zero errors. Cold, twice-warm and
+changed-geometry 14/28-AO energies pass the independent PySCF 2.14.0 gates. Maximum
+CPU/GPU errors are 1.5e-12 Eh energy, 1.5e-14 Eh triples and 1.3e-8 Eh/bohr force.
+GPU 28-AO transform FMAs decrease to 52,426,752 and source batches to one, but the
+warm endpoint remains about 63 s because source generation takes about 51 s.
+These shared-node observations do not establish a substantial GPU speedup.
+
+A separate node5 Slurm probe found that a 28-AO prepared source fails with
+`std::bad_alloc` at the queried 40,328-byte value-only device allowance, while a
+direct value-only J/K source succeeds at exactly that allowance. The prepared
+Fock specification defaults to derivative order one. Its caller queries order
+zero, so the optional source falls back instead of serving device tiles. This
+request/admission mismatch requires a separate fix; widening tiles does not
+resolve it. CPU preparation also inherits the unnecessary derivative request.
+
 ## Rejected alternatives and consequences
 
 Increasing the default memory budget would not remove the shell-width cap.
