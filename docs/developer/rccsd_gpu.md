@@ -150,6 +150,17 @@ reads only scalar energy/residual/DIIS status. A convergence candidate must pass
 the separately generated expanded physical replay on GPU before success. CUDA
 provider or solver failure never falls back to CPU CC.
 
+Native CPU and CUDA generated graphs reuse scratch after each tensor's last
+reader. Slots are shared only by identical symbolic products of runtime extents,
+and returned output pointers stay live until the graph returns. CUDA execution
+and capture preserve these lifetimes through the owner's ordered stream. The
+generated admission functions reserve the same slots as execution; equations,
+contraction order, node count and independent physical replay are unchanged.
+This also applies to Lambda, Hamiltonian and CPU triples-response scratch. It
+reduces workspace capacity without expanding the public analytic-force domain.
+See the [arena lifetime decision](../../.agents/notes/implemented/performance/2026-10-02-cc-runtime-arena-reuse.md)
+for invariants and qualification evidence.
+
 Prepared RCCSD batches intentionally admit one homogeneous `(nocc,nvir)` shape.
 Each input owns an independent prepared calculation, amplitudes, DIIS and status;
 an invalid or failed item cannot corrupt its neighbours. Changed geometry is
