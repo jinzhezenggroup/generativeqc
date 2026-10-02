@@ -8,7 +8,7 @@ from benchmarks.readme_omol25 import EndpointSpec
 from benchmarks.readme_omol25 import main as run_endpoint
 
 SCHEMA = "generativeqc.readme-pbe0.v1"
-PBE0 = EndpointSpec("pbe0", "def2-SVP", SCHEMA)
+PBE0 = EndpointSpec("pbe0", "def2-SVP", SCHEMA, reference_full_fock=True)
 
 
 def main() -> None:

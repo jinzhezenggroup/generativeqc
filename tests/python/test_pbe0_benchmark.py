@@ -8,6 +8,7 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from generativeqc import GridSpec
@@ -15,6 +16,7 @@ from generativeqc._model_resolution import snapshot_basis
 
 from benchmarks.readme_omol25 import protocol
 from benchmarks.readme_pbe0 import PBE0, SCHEMA
+from benchmarks.readme_wb97mv import configure_reference_full_fock
 from tests.python.test_omol25_benchmark import run
 from tools.render_omol25_benchmarks import collect, figure, validate
 
@@ -35,7 +37,40 @@ def test_pbe0_protocol_reuses_full_svp_and_has_no_vv10() -> None:
         assert not scientific["density_fitting"]
         assert not any("nonlocal" in key for key in scientific)
         assert scientific["repeats"] == 5
+        assert scientific["reference_fock_policy"] == "full-density-rebuild"
         assert max(shell.angular_momentum for shell in basis.by_element[8].shells) == 2
+
+
+def test_reference_full_fock_discards_incremental_inputs_and_preserves_density() -> (
+    None
+):
+    """The RKS backend ignores direct_scf alone; no stale potential may leak in."""
+    calls = []
+    potential = object()
+
+    def original(
+        mol: object = None,
+        dm: object = None,
+        dm_last: object = None,
+        vhf_last: object = None,
+        hermi: int = 1,
+    ) -> object:
+        calls.append((mol, dm, dm_last, vhf_last, hermi))
+        return potential
+
+    engine = SimpleNamespace(get_veff=original, direct_scf=True)
+    configure_reference_full_fock(engine)
+    molecule, density, stale_density, stale_potential = (object() for _ in range(4))
+    assert (
+        engine.get_veff(molecule, density, stale_density, stale_potential, 2)
+        is potential
+    )
+    assert (
+        engine.get_veff(dm=density, dm_last=stale_density, vhf_last=stale_potential)
+        is potential
+    )
+    assert calls == [(molecule, density, None, None, 2), (None, density, None, None, 1)]
+    assert engine.direct_scf is False
 
 
 def test_pbe0_evidence_uses_own_schema_and_exact_oracle(tmp_path: Path) -> None:

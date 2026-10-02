@@ -54,6 +54,30 @@ def reference_vv10_domain(
             owner.NLC_REMOVE_ZERO_RHO_GRID_THRESHOLD = threshold
 
 
+def configure_reference_full_fock(engine: typing.Any) -> None:
+    """Rebuild the reference potential from the current density on every call.
+
+    GPU4PySCF 1.8 RKS reuses ``vhf_last`` even with ``direct_scf=False``.
+    Suppress both incremental inputs explicitly so strict SCF residuals and
+    energies describe the same full-density potential, without accumulated
+    delta-density screening or cancellation error. All integrals and XC remain
+    owned by GPU4PySCF, and each rebuild stays inside the endpoint timer.
+    """
+    original = engine.get_veff
+
+    def full_veff(
+        mol: typing.Any = None,
+        dm: typing.Any = None,
+        dm_last: typing.Any = None,
+        vhf_last: typing.Any = None,
+        hermi: int = 1,
+    ) -> typing.Any:
+        return original(mol=mol, dm=dm, hermi=hermi)
+
+    engine.direct_scf = False
+    engine.get_veff = full_veff
+
+
 def reference_engine(
     atoms: typing.Any,
     basis: typing.Any,
@@ -61,6 +85,7 @@ def reference_engine(
     *,
     spin: int = 0,
     xc: str = "WB97M_V",
+    full_fock: bool = False,
 ) -> typing.Any:
     """Build an independent GPU4PySCF engine on the same moving quadrature.
 
@@ -107,6 +132,8 @@ def reference_engine(
     engine.conv_tol_grad = 1e-8
     engine.direct_scf_tol = 1e-12
     engine.max_cycle = 180
+    if full_fock:
+        configure_reference_full_fock(engine)
     return engine
 
 
