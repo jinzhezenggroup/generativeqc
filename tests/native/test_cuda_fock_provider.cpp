@@ -544,13 +544,10 @@ void canonical_value_provider() {
                 const auto source_dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
                 const auto pairs = source_dimension * (source_dimension + 1U) / 2U;
                 const auto quartets = diagnostic.batch_size * pairs * (pairs + 1U) / 2U;
-                const bool canonical_range_exchange = want_k && op != FockOperator::FullRange;
-                const auto radial_passes = canonical_range_exchange ? (want_j ? 2U : 1U) : 0U;
-                require(work[0] == (canonical_range_exchange ? quartets : 0U) &&
-                            work[1] == radial_passes * quartets,
-                        "full-range shell ownership leaked work into the canonical source");
+                require(work[0] == 0U && work[1] == 0U,
+                        "bounded shell value ownership leaked work into the canonical source");
               }
-              if (want_j && want_k && op == FockOperator::FullRange && plan->canonical_transform) {
+              if (want_k && plan->canonical_transform) {
                 const auto* spans = plan->canonical_projection_spans;
                 require(spans, "shell-local projection inventory was not retained");
                 const bool bounded = plan->generated_exchange->bounded_value_capability;
