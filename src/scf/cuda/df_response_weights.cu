@@ -673,8 +673,11 @@ static cudaError_t contract_occupied_response(
         a, r, transformed_projected, projected);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
-    generated::df_rhf_charge_from_final_projection<<<blocks(a), threads, 0, stream>>>(
-        a, r, factor.density_scale, projected, charges);
+    checked(generated::df_occupied_apply_metric_root(
+        blas, ai, static_cast<int>(rr), metric.inverse_square_root, projected,
+        transformed_projected));
+    generated::df_rhf_potential_from_rooted_projection<<<blocks(a), threads, 0, stream>>>(
+        a, r, factor.density_scale, transformed_projected, potentials);
     error = cudaGetLastError();
     if (error != cudaSuccess) return error;
     runtime::cuda_trace::trace_counter("response_final_fitted_projection_reused", 1);
@@ -683,8 +686,12 @@ static cudaError_t contract_occupied_response(
     runtime::cuda_trace::trace_counter("response_occupied_projection_blas_calls", 1);
     runtime::cuda_trace::trace_counter("response_occupied_projection_products", a);
     runtime::cuda_trace::trace_counter("response_occupied_projection_flops", 2 * a * n * rr);
-    runtime::cuda_trace::trace_counter("response_final_fitted_charge_reused", 1);
-    runtime::cuda_trace::trace_counter("response_final_fitted_charge_trace_elements", a * r);
+    runtime::cuda_trace::trace_counter("response_final_fitted_potential_reused", 1);
+    runtime::cuda_trace::trace_counter("response_final_fitted_potential_trace_elements", a * r);
+    runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
+    runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
+    runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms_avoided", 2);
+    runtime::cuda_trace::trace_counter("response_occupied_charge_scale_elements_avoided", a);
     runtime::cuda_trace::trace_counter("response_retained_fitted_charge_source_elements_avoided",
                                        fitted_occupied->pair_count * a);
     runtime::cuda_trace::trace_counter("response_retained_fitted_charge_unpack_elements_avoided",
@@ -801,23 +808,25 @@ static cudaError_t contract_occupied_response(
                           &one, raw, mi, densities, mi, &zero, charges, ai));
     }
     if (metric.full_rank) {
-      // Preserve weak metric directions until after applying the charge
-      // projection. Forming X X^T first also destabilizes occupied response.
-      const auto ti = static_cast<int>(terms.size());
-      checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors, ai,
-                          charges, ai, &zero, potentials, ai));
-      if (fitted_occupied)
-        cuda_df::launch_scale_metric_projection(stream, a, terms.size(), metric.eigenvalues, true,
-                                                potentials);
-      else
-        divide_charge_eigenvalues<<<blocks(a * terms.size()), threads, 0, stream>>>(
-            a, terms.size(), metric.eigenvalues, potentials);
-      error = cudaGetLastError();
-      if (error != cudaSuccess) return error;
-      checked(cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ai, ti, ai, &one, metric.eigenvectors, ai,
-                          potentials, ai, &zero, charges, ai));
-      std::swap(charges, potentials);
-      runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms", 2);
+      if (!reuse_final_fitted_projection) {
+        // Preserve weak metric directions until after applying the charge
+        // projection. Forming X X^T first also destabilizes occupied response.
+        const auto ti = static_cast<int>(terms.size());
+        checked(cublasDgemm(blas, CUBLAS_OP_T, CUBLAS_OP_N, ai, ti, ai, &one,
+                            metric.eigenvectors, ai, charges, ai, &zero, potentials, ai));
+        if (fitted_occupied)
+          cuda_df::launch_scale_metric_projection(stream, a, terms.size(), metric.eigenvalues, true,
+                                                  potentials);
+        else
+          divide_charge_eigenvalues<<<blocks(a * terms.size()), threads, 0, stream>>>(
+              a, terms.size(), metric.eigenvalues, potentials);
+        error = cudaGetLastError();
+        if (error != cudaSuccess) return error;
+        checked(cublasDgemm(blas, CUBLAS_OP_N, CUBLAS_OP_N, ai, ti, ai, &one,
+                            metric.eigenvectors, ai, potentials, ai, &zero, charges, ai));
+        std::swap(charges, potentials);
+        runtime::cuda_trace::trace_counter("response_occupied_charge_inverse_gemms", 2);
+      }
     } else {
       potential_kernel<<<blocks(terms.size() * a), threads, 0, stream>>>(a, terms.size(), inverse,
                                                                          charges, potentials);
@@ -944,10 +953,15 @@ static cudaError_t contract_occupied_response(
       if (metric.full_rank) {
         auto* fitted = transformed_projected + retained;
         if (retained_root) {
-          checked(generated::df_occupied_apply_metric_root(
-              blas, ai, rri, metric.inverse_square_root, projected, fitted));
-          runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
-          runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
+          if (reuse_final_fitted_projection) {
+            // U=X*S was formed before the Coulomb trace and remains in this
+            // exact destination for the exchange metric/pseudo-density work.
+          } else {
+            checked(generated::df_occupied_apply_metric_root(
+                blas, ai, rri, metric.inverse_square_root, projected, fitted));
+            runtime::cuda_trace::trace_counter("response_fitted_occupied_metric_root_gemms", 1);
+            runtime::cuda_trace::trace_counter("response_retained_metric_root", 1);
+          }
         } else if (fitted_occupied) {
           checked(generated::df_occupied_to_metric_eigenbasis(blas, ai, rri, metric.eigenvectors,
                                                               projected, fitted));
