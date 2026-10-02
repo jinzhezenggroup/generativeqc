@@ -1,6 +1,6 @@
 # Proposal: skip MolecularV1 screened VV10 rows in resident CUDA SCF
 
-Status: proposed; larger and changed-geometry qualification in progress
+Status: proposed; complete24, changed-geometry and explicit-budget48 gates pass
 Date: 2026-10-03
 
 ## Problem and decision
@@ -81,6 +81,30 @@ installation lacks cc1plus. GCC 11 is complete and is selected through
 NVCC_CCBIN for reruns. Node5 job 1387 was stopped after diagnosing the
 predictable force-capacity failure. These are failed/cancelled records, not
 timing or accuracy evidence. Default resource planning still needs its own fix.
+
+## Changed geometry and larger complete endpoint
+
+Node1 job 5376 compares water12/def2-TZVP on grid24x8x16 with the same
+22/1/11 cold/warm/moved iterations. SPD takes 167.254/23.496/92.773 seconds;
+screened rows take 166.992/23.622/92.352 seconds. Every sample, including fixed
+force, passes independent CPU PySCF/Libcint (maximum energy error <3.76e-12 Eh,
+force error <9.08e-10 Eh/Bohr). This small-grid case has no meaningful warm gain.
+
+Node2 PRO 6000 job 2073 completes water48/384 spherical def2-SVP AOs and
+1179648 points using explicit 1 GiB nonlocal / 4 GiB total force host/device
+caps. All three reference pairs pass, maximum energy error 4.548e-11 Eh and
+force error 1.706e-10 Eh/Bohr. Native cold/warm are 1763.499/269.213 seconds
+with 27/1 iterations; matched GPU4PySCF are 481.848/161.427 seconds with 18/4
+iterations. One timed warm sample is completion/accuracy evidence, not a robust
+performance estimate. This separate device cannot be timed against node1, and
+the explicit budgets do not establish default scalability. The native library
+is the screened-row binary identified above. The capacity follow-up #1725
+separately passes a default48 complete endpoint on node1.
+
+The successful node2/n5 toolchain uses NVCC_CCBIN=/usr/bin/g++-11 plus explicit
+CUDA 12.9 cudart and cuSolver preloads. Selecting gcc-11 without C++ runtime
+linkage caused a subsequent JIT load failure; those earlier failed runs are not
+validation samples. Device visibility always remains assigned by Slurm.
 
 ## Revisit when
 
