@@ -6,14 +6,15 @@ Date: 2026-10-02
 ## Problem
 
 MP2 already retained validated HF warm densities for prepared replay, while RCCSD and RCCSD(T)
-either exposed an empty warm-state contract or carried local copies of the same coordinate and
-checkpoint logic. The CC paths also need the retained seed and candidate snapshot charged beside
-every correlation phase rather than treated as free external memory.
+exposed incomplete warm-state contracts and all three correlated methods carried overlapping
+geometry, checkpoint, capture, and reservation logic. The CC paths also need the retained seed and
+candidate snapshot charged beside every correlation phase rather than treated as free external memory.
 
 ## Decision
 
-Use one post-HF warm-reference helper for geometry snapshots, checkpoint validation, numeric
-reservation, and successful-reference capture. RCCSD and RCCSD(T) both seed the same strict RHF
+Use one method-layer correlated warm-reference helper for geometry snapshots, checkpoint validation,
+numeric reservation, and successful-reference capture. MP2, RCCSD, and RCCSD(T) use the same
+state-lifecycle primitives. RCCSD and RCCSD(T) both seed the same strict RHF
 reference owner, retry the unchanged cold reference after a failed warm proposal, and publish a new
 warm snapshot only after the complete requested correlated endpoint succeeds.
 
@@ -37,14 +38,15 @@ batch metadata was rejected because it would violate the method numeric-memory c
 
 ## Evidence
 
-Public RCCSD and RCCSD(T) batch tests cover cold-to-warm replay, geometry movement, clearing,
-checkpoint restore, and item-local failure behavior. Existing strict RHF and correlated numerical
-gates remain unchanged.
+Public MP2, RCCSD, and RCCSD(T) batch tests cover cold-to-warm replay, geometry movement, clearing,
+checkpoint restore, budget admission, and item-local failure behavior. Existing strict RHF and
+correlated numerical gates remain unchanged.
 
 ## Consequences
 
-RCCSD and RCCSD(T) now share the same HF warm-reference semantics and memory accounting. MP2 can
-adopt the helper mechanically in a follow-up without changing its already-qualified behavior.
+MP2, RCCSD, and RCCSD(T) now share the same HF warm-reference state primitives. MP2 retains its
+already-qualified endpoint semantics, while the CC paths add the same validated batch lifecycle and
+explicit reservation accounting.
 
 ## Revisit when
 
