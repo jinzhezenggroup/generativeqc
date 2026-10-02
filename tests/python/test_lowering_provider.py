@@ -336,6 +336,40 @@ def test_generated_and_cub_reduction_providers_share_one_request() -> None:
     ]
 
 
+def test_streamed_einsum_reuses_reduction_provider_contract() -> None:
+    q = Index("q_streamed_provider", IndexSpace("q_streamed_provider", "batch", 7))
+    k = Index("k_streamed_provider", IndexSpace("k_streamed_provider", "batch", 64))
+    a = input_tensor("a_streamed_provider", TensorSpec((q, k), role="input"))
+    b = input_tensor("b_streamed_provider", TensorSpec((q, k), role="input"))
+    virtual = add(a, b)
+    lane = einsum("qk,qk->q", virtual, b)
+    program = Program({"result": reduce_sum(lane, (0,))})
+    plan = plan_cuda(
+        program,
+        TARGET,
+        schedule=TensorSchedule(
+            stream_reductions=True,
+            streamed_gemm_reduction=True,
+        ),
+        reassociate_contractions=False,
+    )
+    index = next(i for i, step in enumerate(plan.steps) if step.node is lane)
+
+    candidates = reduction_provider_candidates(plan, index)
+    assert candidates[0].request.operation == "reduce"
+    assert candidates[0].request.shape == (7, 64)
+    assert candidates[0].implementation == "tensor-reduce-generated-cooperative"
+
+    report = tensor_lowering_diagnostics(plan)
+    selected = next(
+        row
+        for row in report["candidates"]
+        if row["implementation"] == "tensor-reduce-generated-cooperative"
+    )
+    assert selected["request"]["operation"] == "reduce"
+    assert selected["request"]["shape"] == [7, 64]
+
+
 def test_schedule_contract_carries_resolved_lowering_identity() -> None:
     plan = plan_cuda(_gemm_program(), TARGET)
     lowering = tensor_lowering_diagnostics(plan)
