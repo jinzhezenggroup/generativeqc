@@ -82,7 +82,18 @@ directions, preserving scalar arithmetic and spin packing. Density contraction
 retains the full orbital sum in each lane; orbital and trace reduction orders
 and finite-range checks are unchanged. Native validation
 and whole-system publication remain separate launches; an error in any tile
-suppresses the entire system's output.
+suppresses the entire system's output. Final Hamiltonian/density matrix copies
+reuse the same bounded tile count after all compute errors have settled.
+Only tile zero publishes scalar and channel diagnostics.
+
+The same compiler schedule selects one occupation solve when a restricted system
+has exactly equal alpha/beta populations. Both spins have already passed native
+admission and consume the same spectrum and temperature; the second output is a
+copy of the first solve's occupations, chemical potential, electron sum and
+entropy. Unequal populations and unrestricted spectra retain two independent
+solves. Root finding, finite-range/degenerate fallbacks and reduction order remain
+native policy and are unchanged. This removes repeated work within one SCC
+iteration and does not reuse occupation results from an earlier iteration.
 
 `benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
 matched fresh-SCC settings. It records cold, repeated and changed-geometry
