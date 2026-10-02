@@ -486,6 +486,7 @@ class _CudaSources:
         profile_device: bool = False,
         source_names: tuple[str, ...] = _SOURCE_NAMES,
         integral_derivatives: bool = True,
+        cooperative_becke: bool = False,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
@@ -548,6 +549,12 @@ class _CudaSources:
         lib.stationary_create.argtypes = (
             [ct.c_int] * 3 + [ct.c_size_t] * 10 + [ct.POINTER(ct.c_void_p), *tail]
         )
+        lib.stationary_configure_becke.argtypes = [
+            ct.c_void_p,
+            ct.c_size_t,
+            ct.c_size_t,
+            *tail,
+        ]
         lib.stationary_topology.argtypes = [
             ct.c_void_p,
             _DOUBLE,
@@ -690,6 +697,8 @@ class _CudaSources:
         ]
         lib.stationary_destroy.argtypes = [ct.c_void_p]
         lib.stationary_destroy.restype = None
+        # This is the admitted upper bound. Native metrics report actual retained
+        # geometry bytes if a typed device-allocation failure selects the fallback.
         self.resources = plan_stationary_cuda_resources(
             atoms=basis.natom,
             aos=basis.nao,
@@ -700,6 +709,7 @@ class _CudaSources:
             sources=len(source_names),
             target=compiler.target if target is None else target,
             budget_bytes=budget,
+            cooperative_becke=cooperative_becke,
         )
         self._call(
             "stationary_create",
@@ -716,6 +726,12 @@ class _CudaSources:
             self.resources.geometry_lanes,
             self.resources.geometry_threads,
             ct.byref(self.handle),
+        )
+        self._call(
+            "stationary_configure_becke",
+            self.handle,
+            self.resources.becke_threads_per_point,
+            self.resources.becke_shared_bytes,
         )
         if profile_device:
             self.enable_profile()
@@ -1495,8 +1511,8 @@ class _CudaSources:
         return out
 
     def metrics(self) -> typing.Any:
-        values = (ct.c_uint64 * 18)()
-        if self.library.stationary_metrics(self.handle, values, 18):
+        values = (ct.c_uint64 * 24)()
+        if self.library.stationary_metrics(self.handle, values, 24):
             raise RuntimeError("stationary metrics unavailable")
         metrics = dict(
             zip(
@@ -1519,6 +1535,12 @@ class _CudaSources:
                     "geometry_threads",
                     "geometry_scratch_bytes",
                     "geometry_peak_lanes",
+                    "center_geometry_bytes",
+                    "center_distance_evaluations",
+                    "center_geometry_preparations",
+                    "becke_threads_per_point",
+                    "becke_shared_bytes",
+                    "becke_pair_state_evaluations",
                 ),
                 values,
             )
@@ -2030,6 +2052,9 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "synchronizations",
         "primitive_batches",
         "geometry_batches",
+        "center_distance_evaluations",
+        "center_geometry_preparations",
+        "becke_pair_state_evaluations",
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]
@@ -2333,7 +2358,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         and callable(getattr(state._source, "cuda_integral_derivatives", None))
         else 0
     )
-    source_bytes = plan_stationary_cuda_resources(
+    source_resources = plan_stationary_cuda_resources(
         atoms=na,
         aos=n,
         primitives=basis.nprimitive,
@@ -2346,7 +2371,8 @@ def _complete_rks_cuda_gradient_diagnostic(
         - grid_plan.peak_bytes
         - sum(value.peak_bytes for value in tensor_plans.values())
         - native_geometry_reserve,
-    ).allocation_bytes
+    )
+    source_bytes = source_resources.allocation_bytes
     cache = Path(cache)
     spec = state._source.grid_spec
     if prepared is None:
@@ -2854,7 +2880,15 @@ def _complete_rks_cuda_gradient_diagnostic(
             work["bulk_pack_chunks"] = sources.bulk_pack_chunks
             work["bulk_packed_descriptors"] = sources.bulk_packed_descriptors
             work["scalar_packed_descriptors"] = sources.scalar_packed_descriptors
-        if work["owned_device_bytes"] != source_bytes:
+        # A typed cache-allocation failure may retain the exact direct arena.
+        # Keep admission/peak accounting conservative, but verify actual storage.
+        actual_center_bytes = work["center_geometry_bytes"]
+        planned_center_bytes = source_resources.center_geometry_bytes
+        if (
+            actual_center_bytes not in (0, planned_center_bytes)
+            or work["owned_device_bytes"]
+            != source_bytes - planned_center_bytes + actual_center_bytes
+        ):
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
     timeline.switch("publication_validation")

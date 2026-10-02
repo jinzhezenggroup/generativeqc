@@ -12,6 +12,10 @@ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 GEOMETRY_MAX_LANES = 2048
 GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
 GEOMETRY_THREADS = 32
+BECKE_COOPERATIVE_MAX_ATOMS = 32
+BECKE_COOPERATIVE_THREADS = 32
+BECKE_PAIR_STATE_BYTES = 64
+BECKE_COOPERATIVE_CONTROL_BYTES = 16
 _SIZE_MAX = (1 << 64) - 1
 
 
@@ -25,6 +29,7 @@ def stationary_cuda_allocation_bytes(
     spins: int,
     sources: int,
     geometry_lanes: int,
+    cache_center_geometry: bool = False,
 ) -> int:
     """Exact arena bytes, including both lane panels and the error reserve."""
     for name, value, cap in (
@@ -39,6 +44,8 @@ def stationary_cuda_allocation_bytes(
     ):
         if type(value) is not int or not 1 <= value <= cap:
             raise ValueError(f"stationary CUDA {name} exceeds resource caps")
+    if type(cache_center_geometry) is not bool:
+        raise ValueError("stationary center geometry cache flag must be boolean")
     scratch = 18 * geometry_lanes * atoms * 8
     if scratch > GEOMETRY_MAX_SCRATCH_BYTES:
         raise ValueError("stationary geometry scratch budget exceeded")
@@ -53,6 +60,7 @@ def stationary_cuda_allocation_bytes(
             + 2 * spins * aos * aos
         )
         + scratch
+        + (48 * (atoms * (atoms - 1) // 2) if cache_center_geometry else 0)
         + 256
     )
     if result > _SIZE_MAX:
@@ -66,6 +74,9 @@ class StationaryCudaResources:
     geometry_threads: int
     geometry_scratch_bytes: int
     allocation_bytes: int
+    center_geometry_bytes: int
+    becke_threads_per_point: int = 1
+    becke_shared_bytes: int = 0
 
 
 def plan_stationary_cuda_resources(
@@ -79,6 +90,7 @@ def plan_stationary_cuda_resources(
     sources: int,
     target: CudaTargetInfo,
     budget_bytes: int,
+    cooperative_becke: bool = False,
 ) -> StationaryCudaResources:
     """Choose up to one lane per point within the admitted owner's byte budget.
 
@@ -86,6 +98,8 @@ def plan_stationary_cuda_resources(
     A tail uses only min(planned lanes, tail points) of the retained panels.
     No device probe or allocation is part of this compiler planning function.
     """
+    if type(cooperative_becke) is not bool:
+        raise ValueError("cooperative Becke selection must be boolean")
     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:
         raise ValueError("stationary CUDA byte budget is not representable")
     minimum = stationary_cuda_allocation_bytes(
@@ -110,8 +124,32 @@ def plan_stationary_cuda_resources(
     threads = min(GEOMETRY_THREADS, target.maximum_threads_per_block, lanes)
     if threads < 1:
         raise ValueError("stationary CUDA target has no geometry threads")
+    allocation = fixed + per_lane * lanes
+    # Retain geometry only from spare budget after choosing point concurrency.
+    # A tight budget must not lose lanes or revoke the bounded direct route.
+    center_bytes = 48 * (atoms * (atoms - 1) // 2)
+    if center_bytes > budget_bytes - allocation:
+        center_bytes = 0
+    becke_threads, shared_bytes = 1, 0
+    required_shared = BECKE_COOPERATIVE_CONTROL_BYTES + BECKE_PAIR_STATE_BYTES * (
+        atoms * (atoms - 1) // 2
+    )
+    if (
+        cooperative_becke
+        and 1 < atoms <= BECKE_COOPERATIVE_MAX_ATOMS
+        and target.maximum_threads_per_block >= BECKE_COOPERATIVE_THREADS
+        and required_shared
+        <= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)
+    ):
+        becke_threads, shared_bytes = BECKE_COOPERATIVE_THREADS, required_shared
     return StationaryCudaResources(
-        lanes, threads, per_lane * lanes, fixed + per_lane * lanes
+        lanes,
+        threads,
+        per_lane * lanes,
+        allocation + center_bytes,
+        center_bytes,
+        becke_threads,
+        shared_bytes,
     )
 
 

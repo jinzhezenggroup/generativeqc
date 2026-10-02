@@ -39,6 +39,17 @@ void launch_bounded_direct_range_exchange_force_kernel(
     unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega,
     double exchange_coefficient);
 
+/** Range-separated positive K through the same bounded shell scheduler.
+ * Full-range Schwarz and density bounds remain conservative for SR/LR values. */
+void launch_bounded_direct_range_exchange_fock_kernel(
+    bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,
+    DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* bounded_generated_overflow, const double* schwarz_bounds,
+    const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega);
+
 /** Fused [J', SR-K', LR-K'] output over one bounded shell traversal. */
 void launch_bounded_direct_rsh_force_kernel(
     bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,

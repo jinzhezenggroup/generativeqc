@@ -26,6 +26,9 @@ from generativeqc_compiler.common.paths import asset_path, source_hashes
 from generativeqc_compiler.common.provenance import canonical_hash, file_hash
 from generativeqc_compiler.common.source_cache import cache_source
 from generativeqc_compiler.method.stationary_resources import (
+    BECKE_COOPERATIVE_CONTROL_BYTES,
+    BECKE_COOPERATIVE_MAX_ATOMS,
+    BECKE_COOPERATIVE_THREADS,
     GEOMETRY_MAX_LANES,
     GEOMETRY_MAX_SCRATCH_BYTES,
     GEOMETRY_THREADS,
@@ -99,6 +102,9 @@ def _runtime_layout_cuda(plan: StationaryGradientPlan) -> str:
         (
             "namespace generativeqc_stationary_cuda {",
             f"constexpr unsigned stationary_source_count = {len(sources)};",
+            f"constexpr size_t stationary_becke_max_atoms = {BECKE_COOPERATIVE_MAX_ATOMS};",
+            f"constexpr size_t stationary_becke_threads = {BECKE_COOPERATIVE_THREADS};",
+            f"constexpr size_t stationary_becke_control_bytes = {BECKE_COOPERATIVE_CONTROL_BYTES};",
             f"constexpr size_t stationary_geometry_max_lanes = {GEOMETRY_MAX_LANES};",
             f"constexpr size_t stationary_geometry_max_scratch_bytes = {GEOMETRY_MAX_SCRATCH_BYTES};",
             f"constexpr size_t stationary_geometry_max_threads = {GEOMETRY_THREADS};",
@@ -375,17 +381,151 @@ __global__ void nuclear_all_kernel(unsigned kind, const double* charges, const d
                         error))
         return;
 }
-__global__ void validate_centers(const double* centers, size_t na, double tolerance, int* error) {
-  bool valid = true;
-  for (size_t a = 0; a < na; ++a) {
+__global__ void validate_centers(const double* centers, size_t na, double tolerance,
+                                generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
+  if (!generativeqc_grid_adjoint::prepare_center_geometry(
+          centers, na, tolerance, center_pairs, local_norm, local_ratio_geometry))
+    atomicExch(error, 1);
+}
+__device__ bool geometry_point_ao(generativeqc::dft::GridTaskView view, const double* work,
+    const int64_t* ao_atoms, size_t p, size_t owner, size_t na, const double* weights,
+    const double* raw, const double* external, size_t external_stride, size_t external_offset,
+    double* grad, double& becke_seed, int* error) {
+  const size_t np = view.npoint, n = view.nactive, stride = np * n;
+  double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
+  if (stationary_functional != 0)
+    for (size_t s = 0; s < 2; ++s)
+      for (size_t k = 0; k < 3; ++k) g[s][k] = view.features[(5 * s + k + 1) * np + p];
+  if (stationary_coefficients == 5)
+    for (size_t s = 0; s < 2; ++s) tau[s] = view.features[(5 * s + 4) * np + p];
+  // The exact shared SCF point model, including vacuum/spin boundaries.
+  StationaryPointValue xc;
+  if (external) {
+    // Nonlocal E supplies partials in total rho/sigma, explicit pair
+    // coordinates and both weight legs. Device-resident callers may lend a
+    // full-grid [6,stride] seed owner and select one tile by offset, avoiding
+    // any host or device repack. Validate all six borrowed values before use.
+    if (external_stride < external_offset ||
+        np > external_stride - external_offset) {
+      atomicExch(error, 1);
+      return false;
+    }
+    const size_t ep = external_offset + p;
+    double seed[6];
+    for (size_t k = 0; k < 6; ++k) {
+      seed[k] = external[k * external_stride + ep];
+      if (!isfinite(seed[k])) {
+        atomicExch(error, 1);
+        return false;
+      }
+    }
+    xc.energy = seed[5];
+    for (size_t s = 0; s < 2; ++s) {
+      xc.rho[s] = seed[0];
+      for (size_t k = 0; k < 3; ++k)
+        xc.gradient[s][k] = 2.0 * seed[1] * (g[0][k] + g[1][k]);
+    }
     for (size_t k = 0; k < 3; ++k)
-      if (!isfinite(centers[3 * a + k])) valid = false;
-    for (size_t b = 0; b < a; ++b)
-      if (generativeqc_grid_adjoint::distance(centers + 3 * a, centers + 3 * b, local_norm, valid)[0] <=
-          tolerance)
-        valid = false;
+      grad[3 * na + 3 * owner + k] += seed[2 + k];
+  } else {
+    xc = stationary_evaluate_point(rho, g, tau);
   }
-  if (!valid) atomicExch(error, 1);
+  if (!xc.valid) {
+    atomicExch(error, 1);
+    return false;
+  }
+  for (size_t mu = 0; mu < n; ++mu) {
+    const size_t global_ao = view.ao_ids ? view.ao_ids[mu] : mu;
+    if (global_ao >= view.nao) {
+      atomicExch(error, 1);
+      return false;
+    }
+    const auto atom = ao_atoms[global_ao];
+    if (atom < 0 || atom >= int64_t(na)) {
+      atomicExch(error, 1);
+      return false;
+    }
+    double pullback[4]{};
+    for (size_t s = 0; s < 2; ++s) {
+      double c[5]{weights[p] * xc.rho[s]}, w[4]{};
+      for (size_t j = 0; j < stationary_jets; ++j) {
+        w[j] = work[(4 * s + j) * stride + p * n + mu];
+        if (j) c[j] = weights[p] * xc.gradient[s][j - 1];
+      }
+      if (stationary_coefficients == 5) c[4] = weights[p] * xc.kinetic[s];
+      double local[4]{};
+      ao_pullback(c, w, local);
+      for (size_t j = 0; j < stationary_jets; ++j) pullback[j] += local[j];
+    }
+    for (size_t k = 0; k < 3; ++k) {
+      double value = 0;
+      for (size_t j = 0; j < stationary_jets; ++j)
+        value += pullback[j] * view.ao[stationary_shift[j][k] * stride + p * n + mu];
+      grad[3 * atom + k] -= value;
+      grad[3 * na + 3 * owner + k] += value;
+    }
+  }
+  becke_seed = xc.energy * raw[p];
+  return true;
+}
+
+struct GeometryBlockControl {
+  double seed;
+  int valid;
+};
+static_assert(sizeof(GeometryBlockControl) == 16);
+struct GeometryBlockTeam {
+  __device__ size_t rank() const { return threadIdx.x; }
+  __device__ size_t size() const { return blockDim.x; }
+  __device__ void sync() const { __syncthreads(); }
+};
+__global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view, const double* work,
+                                const int64_t* ao_atoms, const int64_t* owners,
+                                size_t owner_offset, size_t points_per_atom,
+                                const double* centers, size_t na, const double* weights,
+                                const double* raw, const double* external,
+                                size_t external_stride, size_t external_offset,
+                                size_t geometry_lanes, double* partial, double* scratch,
+                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
+  // Lanes remain point workers. A whole block cooperates on one worker's panel.
+  const size_t lane = blockIdx.x;
+  if (lane >= geometry_lanes) return;
+  if (view.error && *view.error) {
+    if (threadIdx.x == 0) atomicExch(error, 1);
+    return;
+  }
+  extern __shared__ double geometry_pair_storage[];
+  auto* states = reinterpret_cast<generativeqc_grid_adjoint::PointPair*>(geometry_pair_storage);
+  __shared__ GeometryBlockControl control;
+  double* grad = partial + lane * 9 * na;
+  double* ws = scratch + lane * 9 * na;
+  auto* distances = reinterpret_cast<std::array<double, 4>*>(ws + 5 * na);
+  auto* zeros = reinterpret_cast<size_t*>(ws + 4 * na);
+  for (size_t k = threadIdx.x; k < 9 * na; k += blockDim.x) grad[k] = 0;
+  __syncthreads();
+  for (size_t p = lane; p < view.npoint; p += geometry_lanes) {
+    const int64_t owner = owners ? owners[p]
+        : (points_per_atom ? int64_t((owner_offset + p) / points_per_atom) : int64_t{-1});
+    if (threadIdx.x == 0) {
+      control.valid = owner >= 0 && owner < int64_t(na) && isfinite(weights[p]) && isfinite(raw[p]);
+      if (control.valid)
+        control.valid = geometry_point_ao(view, work, ao_atoms, p, owner, na, weights, raw, external,
+                                        external_stride, external_offset, grad, control.seed, error);
+    }
+    __syncthreads();
+    if (!control.valid) {
+      if (threadIdx.x == 0) atomicExch(error, 1);
+      return;
+    }
+    if (!generativeqc_grid_adjoint::contract_point_cooperative(
+            view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
+            ws + 2 * na, ws + 3 * na, zeros, distances, states, GeometryBlockTeam{},
+            local_norm, local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)) {
+      if (threadIdx.x == 0) atomicExch(error, 1);
+      return;
+    }
+  }
+  for (size_t k = threadIdx.x; k < 9 * na; k += blockDim.x) finite(grad[k], error, 0);
 }
 __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const double* work,
                                 const int64_t* ao_atoms, const int64_t* owners,
@@ -393,7 +533,8 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
                                 const double* centers, size_t na, const double* weights,
                                 const double* raw, const double* external,
                                 size_t external_stride, size_t external_offset,
-                                size_t geometry_lanes, double* partial, double* scratch, int* error) {
+                                size_t geometry_lanes, double* partial, double* scratch,
+                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
   const size_t lane = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= geometry_lanes) return;
   // Same-stream consumers may receive a resident grid tile before a host
@@ -404,7 +545,7 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
     if (lane == 0) atomicExch(error, 1);
     return;
   }
-  const size_t np = view.npoint, n = view.nactive, stride = np * n;
+  const size_t np = view.npoint;
   double* grad = partial + lane * 9 * na;
   for (size_t k = 0; k < 9 * na; ++k) grad[k] = 0;
   double* ws = scratch + lane * 9 * na;
@@ -418,83 +559,13 @@ __global__ void geometry_kernel(generativeqc::dft::GridTaskView view, const doub
       atomicExch(error, 1);
       return;
     }
-    double rho[2]{view.features[p], view.features[5 * np + p]}, g[2][3]{}, tau[2]{};
-    if (stationary_functional != 0)
-      for (size_t s = 0; s < 2; ++s)
-        for (size_t k = 0; k < 3; ++k) g[s][k] = view.features[(5 * s + k + 1) * np + p];
-    if (stationary_coefficients == 5)
-      for (size_t s = 0; s < 2; ++s) tau[s] = view.features[(5 * s + 4) * np + p];
-    // The exact shared SCF point model, including vacuum/spin boundaries.
-    StationaryPointValue xc;
-    if (external) {
-      // Nonlocal E supplies partials in total rho/sigma, explicit pair
-      // coordinates and both weight legs. Device-resident callers may lend a
-      // full-grid [6,stride] seed owner and select one tile by offset, avoiding
-      // any host or device repack. Validate all six borrowed values before use.
-      if (external_stride < external_offset ||
-          np > external_stride - external_offset) {
-        atomicExch(error, 1);
-        return;
-      }
-      const size_t ep = external_offset + p;
-      double seed[6];
-      for (size_t k = 0; k < 6; ++k) {
-        seed[k] = external[k * external_stride + ep];
-        if (!isfinite(seed[k])) {
-          atomicExch(error, 1);
-          return;
-        }
-      }
-      xc.energy = seed[5];
-      for (size_t s = 0; s < 2; ++s) {
-        xc.rho[s] = seed[0];
-        for (size_t k = 0; k < 3; ++k)
-          xc.gradient[s][k] = 2.0 * seed[1] * (g[0][k] + g[1][k]);
-      }
-      for (size_t k = 0; k < 3; ++k)
-        grad[3 * na + 3 * owner + k] += seed[2 + k];
-    } else {
-      xc = stationary_evaluate_point(rho, g, tau);
-    }
-    if (!xc.valid) {
-      atomicExch(error, 1);
-      return;
-    }
-    for (size_t mu = 0; mu < n; ++mu) {
-      const size_t global_ao = view.ao_ids ? view.ao_ids[mu] : mu;
-      if (global_ao >= view.nao) {
-        atomicExch(error, 1);
-        return;
-      }
-      const auto atom = ao_atoms[global_ao];
-      if (atom < 0 || atom >= int64_t(na)) {
-        atomicExch(error, 1);
-        return;
-      }
-      double pullback[4]{};
-      for (size_t s = 0; s < 2; ++s) {
-        double c[5]{weights[p] * xc.rho[s]}, w[4]{};
-        for (size_t j = 0; j < stationary_jets; ++j) {
-          w[j] = work[(4 * s + j) * stride + p * n + mu];
-          if (j) c[j] = weights[p] * xc.gradient[s][j - 1];
-        }
-        if (stationary_coefficients == 5) c[4] = weights[p] * xc.kinetic[s];
-        double local[4]{};
-        ao_pullback(c, w, local);
-        for (size_t j = 0; j < stationary_jets; ++j) pullback[j] += local[j];
-      }
-      for (size_t k = 0; k < 3; ++k) {
-        double value = 0;
-        for (size_t j = 0; j < stationary_jets; ++j)
-          value += pullback[j] * view.ao[stationary_shift[j][k] * stride + p * n + mu];
-        grad[3 * atom + k] -= value;
-        grad[3 * na + 3 * owner + k] += value;
-      }
-    }
-    if (!generativeqc_grid_adjoint::contract_point(view.points + 3 * p, centers, na, owner,
-                                             xc.energy * raw[p], grad + 6 * na, ws, ws + na,
+    double becke_seed = 0;
+    if (!geometry_point_ao(view, work, ao_atoms, p, owner, na, weights, raw, external,
+                           external_stride, external_offset, grad, becke_seed, error)) return;
+    if (!generativeqc_grid_adjoint::contract_point_prepared(view.points + 3 * p, centers, na, owner,
+                                             becke_seed, grad + 6 * na, ws, ws + na,
                                              ws + 2 * na, ws + 3 * na, zeros, distances, local_norm,
-                                             local_ratio, local_log, local_becke)) {
+                                             local_ratio, local_log, local_becke, center_pairs, local_ratio_prepared)) {
       atomicExch(error, 1);
       return;
     }

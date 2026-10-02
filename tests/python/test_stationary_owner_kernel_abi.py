@@ -32,7 +32,24 @@ class StationaryOwnerKernelTests(unittest.TestCase):
             return [" ".join(item.split()) for item in match.group(1).split(",")]
 
         self.assertEqual(arguments(prototype), arguments(definition))
-        self.assertEqual(len(arguments(definition)), 17)
+        self.assertEqual(len(arguments(definition)), 18)
+
+    def test_cooperative_kernel_declaration_matches_definition(self) -> None:
+        signatures = []
+        for source, ending in ((HEADER.read_text(), ";"), (COMPILER.read_text(), "{")):
+            match = re.search(
+                r"__global__ void geometry_cooperative_kernel\((.*?)\)\s*"
+                + re.escape(ending),
+                source,
+                re.DOTALL,
+            )
+            self.assertIsNotNone(match)
+            assert match is not None
+            signatures.append(
+                [" ".join(item.split()) for item in match.group(1).split(",")]
+            )
+        self.assertEqual(signatures[0], signatures[1])
+        self.assertEqual(len(signatures[0]), 18)
 
     def test_emitted_explicit_and_implicit_owner_expression(self) -> None:
         compiler = shutil.which("c++")

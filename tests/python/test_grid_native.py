@@ -211,3 +211,18 @@ def test_one_rounded_zero_factor_keeps_nonzero_product_derivative(
         expected = float(Decimal("1e12") * (plus[0][1] - minus[0][1]) / (2 * h))
     assert abs(expected) > 1e-3
     assert abs(np.sum(gradient * motion) - expected) < 2e-9
+
+
+def test_center_cache_tight_budget_fallback_and_geometry_replacement(
+    tmp_path: Path,
+) -> None:
+    # The old minimum is still admitted. One additional exact triangular table
+    # selects the retained route without changing output bits or input lifetime.
+    minimum = 8 * (10 * len(POINTS) + 30 * len(CENTERS))
+    pair_bytes = 48 * (len(CENTERS) * (len(CENTERS) - 1) // 2)
+    direct = native(tmp_path, max_bytes=minimum)
+    cached = native(tmp_path, max_bytes=minimum + pair_bytes)
+    for centers in (CENTERS, CENTERS + DC * 0.01, CENTERS):
+        expected = direct.contract(POINTS, centers, OWNERS, SEEDS)
+        actual = cached.contract(POINTS, centers, OWNERS, SEEDS)
+        np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
