@@ -35,6 +35,9 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 - For isolated worktree builds, prefer matching in-tree build directory layouts
   and set `CCACHE_BASEDIR` to each checkout root, not just its build directory,
   so equivalent compiler input paths can reuse cached objects across worktrees.
+  The automatic CMake ccache launcher overrides this environment value with
+  `CMAKE_BINARY_DIR`; use the explicit CXX and CUDA launcher settings above when
+  checkout-root normalization is required.
 - Retain `ccache --show-stats` before and after substantial compilation so cache
   use can be distinguished from cache hits. Compiler caching does not replace
   clean source provenance or real-device execution evidence.

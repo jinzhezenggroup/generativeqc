@@ -202,7 +202,7 @@ def test_complete_cuda_independent_analytic(
         assert result.work["stationary_state_dw_upload_bytes"] == 0
         assert (
             result.work["stationary_integral_derivative_route"]
-            == "prepared-native-stationary"
+            == "prepared-native-complete"
         )
         assert result.work["grid_density_source"] == "exact-final-scf-device-binding"
         assert result.work["grid_density_h2d_bytes"] == 0
@@ -304,7 +304,7 @@ def test_complete_cuda_open_shell_uks_independent_analytic(
         assert result.work["stationary_state_dw_upload_bytes"] == 0
         assert (
             result.work["stationary_integral_derivative_route"]
-            == "prepared-native-stationary"
+            == "prepared-native-complete"
         )
         assert result.work["grid_density_source"] == "exact-final-scf-device-binding"
         assert result.work["grid_density_h2d_bytes"] == 0
