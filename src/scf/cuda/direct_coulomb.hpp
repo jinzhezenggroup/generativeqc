@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 
@@ -53,8 +54,9 @@ cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& plan, const double* 
 /** Optional raw-K owner layered on the generated-J geometry/topology owner.
  * Value-only direct CUDA plans prefer this owner when the supported shell
  * classes and optional device budget admit it. Density screening uses the same
- * shell-pair reductions as Direct HF. Value K remains full-range; the optional
- * stationary-force lease may reuse this topology for explicit SR/LR operators.
+ * shell-pair reductions as Direct HF. Through-f plans may also reuse the
+ * bounded shell lease for strict-FP64 SR/LR value K; generated streaming
+ * classes remain full-range only.
  */
 struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
@@ -91,9 +93,10 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& plan, bool unrestri
 /** Enqueue positive raw K in public AO order. UHF returns independent alpha/beta
  * matrices. The caller owns output buffers on the same device/stream.
  */
-cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestricted,
-                                       const double* alpha, const double* beta,
-                                       double* alpha_exchange, double* beta_exchange);
+cudaError_t enqueue_generated_exchange(
+    GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
+    double* alpha_exchange, double* beta_exchange,
+    DirectCoulombRange range = DirectCoulombRange::Full, double omega = 0.0);
 
 /** Execute separate full-range J' and K' fixed-density energy derivatives
  * through the retained shell topology. Output is source-major [J,K], each
