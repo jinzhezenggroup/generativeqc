@@ -1,6 +1,7 @@
 # Proposal: share high-order LR moments across center derivatives
 
-Status: experimental; host numerical gates pass, GPU and endpoints pending
+Status: experimental; host and independent GPU numerical gates pass;
+controlled endpoint comparisons pending
 Date: 2026-10-03
 
 ## Problem and decision
@@ -66,3 +67,27 @@ controlled complete cold/priming/three-warm endpoints, moved geometry and a
 larger system. Retain and reject this direction if local storage or schedule
 cost eliminates the anticipated reuse benefit. Do not infer actual executed
 quartet counts from logical dense capacity.
+
+## Frozen candidate real-device qualification
+
+Candidate `d5ee2a85709e60d82f64a791f76b296899a56aa4` builds cleanly with all 442
+compiler commands using verified ccache launchers. Independently recomputed
+source identity `dcdbc29f79a2acee4d9f786077bd966898ea675716edc73641077d0550d8b5a0`
+matches the native library. The library SHA-256 is
+`795aaacff08f43b183d04646dddef12444fa71b8f825e4ed76ee36e689949449`, and the native
+qualification executable is
+`e8f51f3b81d7fd10c4c8a6ddcb6f94797490994c093aaa34d0f2dde31c36e056`.
+
+n1 Slurm 5513 (finite 45-minute RTX 5090 allocation, exit 0) passes the native
+independent CPU finite-difference gates, including new four-center order-4/5/6
+and repeated-center fixtures. Memcheck reports zero errors. All seven complete
+independent WB97M-V RKS/UKS force/rebuild/stale-state tests pass in 201.27 seconds.
+The exact library and test hashes, source archive and log hashes are retained.
+
+n1 Slurm 5519 now compares baseline and candidate at full-grid water24 in one
+allocation, and 5520 checks the displaced water12 CPU oracle. n2 Slurm 2150 runs
+both builds at full-grid water96 on RTX PRO 6000 with a finite seven-hour limit.
+The latter starts with the baseline; its candidate phase requires the verified
+5513 receipt matching the installed binary. Fresh full-Fock GPU4PySCF controls,
+three engine-local warm repeats and all observations are retained. No timing
+from these still-live jobs is promoted to an endpoint speedup yet.
