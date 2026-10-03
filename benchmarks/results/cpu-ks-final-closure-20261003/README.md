@@ -24,8 +24,9 @@ recording changes do not participate in convergence arithmetic or alter the ABI.
 Frozen measurement: b3c9f339de410c9c167d56a03fa7b5ed18cde825, tree
 25d0c2bbad37264b435fda787a960ae8a9ef73e2, native library SHA-256
 31d19e38ba3107685c704bc93997fb1599865bbabfd2956da953ff4a7128d002.
-The publication union has its own source/build identity in provenance.json; the
-large measurement is not relabeled as a measurement of that newer union.
+The historical public 1b115455 union has its own source/build identity in
+provenance.json; the large measurement is not relabeled as that union or the
+new UKS repair described in the addendum.
 
 ## Observations and limits
 
@@ -88,12 +89,17 @@ raw arrays that are not shipped here. Normal regression tests remain offline.
 ## Reconstruct exact measured source
 
 Use a full clone containing public base 9c54107caa03f20d05e756ca7e3cd66fb13dabcf
-and this publication's 13 exact correction postimages. The local measured b3 commit
-object itself is not required. The helper validates each postimage, creates a new
-worktree on public base, and checks the exact measured tree before committing:
+and a separate checkout of historical public
+1b115455f2d493fb287886730891b9d6c66175d4. Only that historical checkout retains all
+13 exact b3 correction postimages; the current UKS source has since been repaired.
+The local measured b3 commit object itself is not required. From the historical
+checkout, the unchanged helper validates each postimage, creates a new worktree
+on the public base, and checks the exact measured tree before committing:
 
-    python benchmarks/results/cpu-ks-final-closure-20261003/reconstruct_source.py \
-      --repository "$PWD" --destination /tmp/ks-corrected-source
+    git worktree add --detach /tmp/ks-historical-publication \
+      1b115455f2d493fb287886730891b9d6c66175d4
+    python /tmp/ks-historical-publication/benchmarks/results/cpu-ks-final-closure-20261003/reconstruct_source.py \
+      --repository /tmp/ks-historical-publication --destination /tmp/ks-corrected-source
 
 Add --baseline with a different destination to restore original public
 1a4acc519eb881cc19d418de65ecca72324359d4. No helper fetches automatically or overwrites
@@ -151,7 +157,7 @@ The full original focused command is retained in run_small_controls.sh.
 Its frozen result is 152 passes / 11 device skips plus 9 native suites.
 run_union_controls.sh retains the separate refreshed-union native/control command. The earlier 701 local
 union passed 398 controls / 9 device skips and 9 native suites; it remains a separately
-identified superseded integration. The refreshed 837 union additionally includes
+identified superseded integration. The historical refreshed 837 union additionally includes
 the VWN empty-spin repair and its focused host tests, existing VWN/provenance and
 hybrid/B3LYP consumers. Its exact totals, device-skip names/reasons and build identity
 are in provenance.json, along with 160 storage tests and 19 portable-harness controls.
@@ -164,3 +170,65 @@ Portable scripts retain the measured native capture, fixed-density numerical
 statements, same-coordinate weight helper and explicit-grid guard. Only invocation,
 path/provenance binding and a separate opt-in oracle generator are adapted. New
 scripts receive source-only/mock validation; no new full PBE96 execution is claimed.
+
+## Addendum: CPU UKS primary eligibility repair
+
+The original publication introduced an OH/PBE-UKS convergence regression in its
+new final maximum gate. `uks-primary-eligibility.json` records that failure and
+the separately qualified small-molecule repair. The original RKS histories,
+wrong-grid invalidation, scientific payloads and measured b3 source remain
+unchanged; none is relabeled as a measurement of this repair.
+
+CPU UKS now lets its existing primary DIIS iteration continue when energy,
+density-change and residual RMS pass but the CURRENT physical maximum does not.
+The optional method-owned driver predicate can only veto the original scalar
+conjunction. CPU UKS requires the same inclusive maximum <= min(1e-8, Dtol)
+used by final closure. Other direct callers keep the default true predicate;
+non-CPU UKS returns true. The original primary budget, CURRENT terminal state,
+occupation stabilization, RMS diagnostics and four final corrections remain.
+
+The unchanged OH/PBE-UKS/Cartesian def2-SVP tests cover a neutral doublet with
+O=(0,0,0), H=(0,0,1.8) Bohr and E=1e-12/D=1e-10, with the original 150/200 budgets.
+The former candidate fails both exact regression nodes; the repair passes.
+The separate budget-13 control is intentionally nonconverged: it makes 13 physical
+builds, retains no seed and rejects snapshot export. It does not replace the
+unchanged acceptance budgets. Local array-complete fixed-density PySCF evidence
+checks unshifted physical D/F/E, trace and idempotency on native snapshot grids,
+with grid rebuilding prohibited and actual NumInt input identity verified.
+
+### Reproduce the small regression
+
+In a full clone, use separate new worktrees and libraries for public parent
+`837c2a51c06c6d38a6edc4d41da3060573ca40ab`, failing public candidate
+`1b115455f2d493fb287886730891b9d6c66175d4`, and the repaired checkout containing
+this addendum. Do not reuse a different checkout's binary. Use the CPU-only,
+Release, no-PCH and both-ccache-launcher configuration shown above; qualify each
+provider separately with `-DGENERATIVEQC_CPU_LINALG_PROVIDER=openblas` or `scalar`.
+No helper fetches, installs, publishes, or runs larger chemistry automatically.
+Run the original nodes in each checkout with its own PYTHONPATH and library:
+
+    export GENERATIVEQC_LIBRARY="$PWD/build/cpu-revalidation/libgenerativeqc.so"
+    export PYTHONPATH="$PWD/python:$PWD"
+    export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+    export NUMEXPR_NUM_THREADS=1 BLIS_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+    taskset -c 2 python -m pytest -p no:cacheprovider -q \
+      'tests/python/test_dft_scf.py::test_native_matches_independent_scf[cpu-oh_large_solver-pbe]' \
+      'tests/python/test_dft_batch.py::test_open_shell_large_solver_ragged_replay_and_failure[cpu-pbe-uks]'
+
+For expanded controls, build the selected native test targets (or the normal
+CPU test build), then run `sh benchmarks/results/cpu-ks-final-closure-20261003/run_uks_primary_controls.sh`.
+These are correctness gates, not timings. Local GCC/Python versions differ from
+CI; CPU provider agreement is not a claim of identical CI binaries or CUDA proof.
+
+### Preserve historical reconstruction
+
+The historical `reconstruct_source.py` intentionally verifies its 13 exact b3
+postimages. The repaired `src/dft/uks.cpp` is a different postimage. To reproduce
+the historical b3 measurement, run the unchanged helper from a separate checkout
+of public `1b115455f2d493fb287886730891b9d6c66175d4`, and pass that historical
+checkout as `--repository`. For example, create that checkout with `git worktree
+add --detach /tmp/ks-historical-publication 1b115455f2d493fb287886730891b9d6c66175d4`
+(first explicitly fetch it if absent), then use its copy of the helper and a new
+destination. The historical source-map hashes still describe b3, never the new
+UKS repair. The addendum's separate source file hashes and binary/source identities
+identify the repair without inventing a future publication commit.

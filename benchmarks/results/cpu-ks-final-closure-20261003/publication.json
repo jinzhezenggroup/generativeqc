@@ -1,16 +1,16 @@
 {
   "archives": [],
   "decision": {
-    "reason": "Narrow CPU final-closure correction plus frozen original-geometry PBE96 same-coordinate fixed-density gates; original cross-node failure and wrong-grid invalidation retained. No performance/default/large-force or universal-export claim.",
+    "reason": "Narrow CPU final-closure correction plus frozen original-geometry PBE96 same-coordinate fixed-density gates; original cross-node failure and wrong-grid invalidation retained. No performance/default/large-force or universal-export claim. Additive small-OH CPU UKS primary-eligibility repair has separate source/binary/oracle qualification; frozen large-RKS evidence remains unchanged.",
     "scope": "numerical",
     "status": "accepted"
   },
   "files": [
     {
-      "bytes": 10414,
+      "bytes": 14819,
       "path": "README.md",
       "role": "summary",
-      "sha256": "3d9c701e2514021f88a5d76b4bc861d7ec226d02e4dfd703371f55be573d50e3"
+      "sha256": "f5a5d3d46db71c06ff505e90b10729da22abf544d903f6cb34e0a81f8a788523"
     },
     {
       "bytes": 9451,
@@ -85,6 +85,12 @@
       "sha256": "c835e9de5b219a505ae4f407a74182a187bb26ff579350fa6115a77615cef524"
     },
     {
+      "path": "run_uks_primary_controls.sh",
+      "role": "reproduction",
+      "bytes": 2087,
+      "sha256": "5a218b77dac229ee9f6dda34f25bb06a2c49caeb94dfdb93500659ce625fddc9"
+    },
+    {
       "bytes": 1428,
       "path": "run_union_controls.sh",
       "role": "reproduction",
@@ -107,6 +113,18 @@
       "path": "test_reproduction.py",
       "role": "reproduction",
       "sha256": "defaef16c28fa398c3576f267e0dbf65548af0bff72aeeceb60420a0d6dcf097"
+    },
+    {
+      "path": "test_uks_primary_evidence.py",
+      "role": "reproduction",
+      "bytes": 2528,
+      "sha256": "180bd608299003cfe22989368f634a4bb36a580c73371fd192d8b707d26bd179"
+    },
+    {
+      "path": "uks-primary-eligibility.json",
+      "role": "summary",
+      "bytes": 25249,
+      "sha256": "085909f022470e0879f3e4634d9fa6bdc9aef7d4a6c07715624fad6e7d99cfbe"
     }
   ],
   "reproduction": {
