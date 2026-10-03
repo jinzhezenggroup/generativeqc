@@ -16,8 +16,9 @@ and schedule-ON processes use the **same corrected source/binary and allocation*
 
 - Source: `ffc146230c1b44103fba01a8b14a061deadbb29d17e5160c79d198fca6e7b10b`
 - Library: `c43436f7e39901e01434e39d46e5a81e4d71ca3af3489c1d92a0791fe681d280`
-- Production source corresponds to repair commit `0b99c6ce`; later evidence
-  changes do not alter canonical production identity.
+- Measured production source corresponds to repair commit `0b99c6ce`.
+  Evidence-only changes preserve that identity; the later merge of master
+  `86c422bdc` does not relabel these observations as timings of the merged tree.
 
 Each variant retains cold, five warm, moved and five moved-warm calls. All144
 native calls pass **every same-geometry reference-repeat pair** under unchanged

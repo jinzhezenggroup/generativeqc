@@ -601,6 +601,7 @@ double primitive_range_eri_cartesian(double alpha, const Vec3& a,
 struct AoView {
   const core::Shell* shell{};
   molecule::CartesianComponent angular{};
+  unsigned eri_component_index{};
   double component_normalization{};
 };
 
@@ -610,7 +611,9 @@ std::vector<AoView> expand_cartesian_aos(const core::System& system) {
   for (const core::Shell& shell : system.shells) {
     for (const molecule::CartesianComponent& component :
          molecule::cartesian_components(shell.angular_momentum)) {
-      aos.push_back({&shell, component, molecule::cartesian_component_normalization(component)});
+      aos.push_back({&shell, component,
+                     generated_eri_cpu::component_index(component[0], component[1], component[2]),
+                     molecule::cartesian_component_normalization(component)});
     }
   }
   return aos;
@@ -623,9 +626,15 @@ struct GlobalExpansionTerm {
 
 using GlobalAoExpansion = std::vector<GlobalExpansionTerm>;
 
-std::vector<GlobalAoExpansion> spherical_expansions(const core::System& system) {
+std::vector<GlobalAoExpansion> spherical_expansions(
+    const core::System& system, std::vector<std::size_t>* shell_offsets = nullptr) {
   std::vector<GlobalAoExpansion> expansions;
   expansions.reserve(molecule::ao_count(system));
+  if (shell_offsets != nullptr) {
+    shell_offsets->clear();
+    shell_offsets->reserve(system.shells.size() + 1);
+    shell_offsets->push_back(0);
+  }
   std::size_t cartesian_offset = 0;
   for (const core::Shell& shell : system.shells) {
     const std::vector<molecule::CartesianComponent> components =
@@ -646,6 +655,7 @@ std::vector<GlobalAoExpansion> spherical_expansions(const core::System& system) 
       expansions.push_back(std::move(expansion));
     }
     cartesian_offset += components.size();
+    if (shell_offsets != nullptr) shell_offsets->push_back(expansions.size());
   }
   return expansions;
 }
@@ -674,18 +684,23 @@ std::size_t eri_index(std::size_t i, std::size_t j, std::size_t k, std::size_t l
   return ((i * n + j) * n + k) * n + l;
 }
 
+std::array<std::array<std::size_t, 4>, 8> eri_permutations(
+    const std::array<std::size_t, 4>& indices) {
+  const auto [i, j, k, l] = indices;
+  return {{{i, j, k, l},
+           {j, i, k, l},
+           {i, j, l, k},
+           {j, i, l, k},
+           {k, l, i, j},
+           {l, k, i, j},
+           {k, l, j, i},
+           {l, k, j, i}}};
+}
+
 template <typename Value>
 void store_eri_symmetry(std::vector<Value>& eri, std::size_t n,
                         const std::array<std::size_t, 4>& indices, const Value& value) {
-  const auto [i, j, k, l] = indices;
-  for (const auto& permutation : std::array<std::array<std::size_t, 4>, 8>{{{i, j, k, l},
-                                                                            {j, i, k, l},
-                                                                            {i, j, l, k},
-                                                                            {j, i, l, k},
-                                                                            {k, l, i, j},
-                                                                            {l, k, i, j},
-                                                                            {k, l, j, i},
-                                                                            {l, k, j, i}}})
+  for (const auto& permutation : eri_permutations(indices))
     eri[eri_index(permutation[0], permutation[1], permutation[2], permutation[3], n)] = value;
 }
 
@@ -718,9 +733,7 @@ std::size_t prepare_value_eri_components(const std::vector<AoView>& aos,
           const std::array<std::size_t, 4> indices{i, j, k, l};
           unsigned component_indices[4];
           for (unsigned slot = 0; slot < 4; ++slot) {
-            const auto& angular = aos[indices[slot]].angular;
-            component_indices[slot] =
-                generated_eri_cpu::component_index(angular[0], angular[1], angular[2]);
+            component_indices[slot] = aos[indices[slot]].eri_component_index;
           }
           const double normalization =
               aos[i].component_normalization * aos[j].component_normalization *
@@ -734,10 +747,11 @@ std::size_t prepare_value_eri_components(const std::vector<AoView>& aos,
   return count;
 }
 
-void build_value_eri_shell_quartet(const core::System& system, const std::vector<AoView>& aos,
-                                   const std::vector<std::size_t>& offsets,
-                                   const std::array<std::size_t, 4>& shell_indices,
-                                   ValueEriComponents& components, std::vector<double>& eri) {
+std::size_t build_value_eri_shell_quartet(const core::System& system,
+                                          const std::vector<AoView>& aos,
+                                          const std::vector<std::size_t>& offsets,
+                                          const std::array<std::size_t, 4>& shell_indices,
+                                          ValueEriComponents& components) {
   const std::size_t count = prepare_value_eri_components(aos, offsets, shell_indices, components);
   std::array<const core::Shell*, 4> shells;
   double centers[4][3];
@@ -767,26 +781,141 @@ void build_value_eri_shell_quartet(const core::System& system, const std::vector
       }
     }
   }
-  for (std::size_t item = 0; item < count; ++item)
-    store_eri_symmetry(eri, aos.size(), components[item].indices, components[item].value);
+  return count;
 }
 
-void build_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
-                                    std::vector<double>& eri) {
+std::vector<std::size_t> cartesian_shell_offsets(const core::System& system) {
   std::vector<std::size_t> offsets{0};
+  offsets.reserve(system.shells.size() + 1);
   for (const auto& shell : system.shells)
     offsets.push_back(offsets.back() + molecule::cartesian_count(shell.angular_momentum));
+  return offsets;
+}
+
+template <typename Consumer>
+void for_each_value_eri_shell_quartet(const core::System& system, const std::vector<AoView>& aos,
+                                      const std::vector<std::size_t>& offsets, Consumer&& consume) {
   ValueEriComponents components;
   for (std::size_t i = 0; i < system.shells.size(); ++i) {
     for (std::size_t j = 0; j <= i; ++j) {
       for (std::size_t k = 0; k <= i; ++k) {
         for (std::size_t l = 0; l <= k; ++l) {
           if (i == k && j < l) continue;
-          build_value_eri_shell_quartet(system, aos, offsets, {i, j, k, l}, components, eri);
+          const std::array<std::size_t, 4> shells{i, j, k, l};
+          const std::size_t count =
+              build_value_eri_shell_quartet(system, aos, offsets, shells, components);
+          consume(shells, components, count);
         }
       }
     }
   }
+}
+
+void build_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
+                                    std::vector<double>& eri) {
+  const auto offsets = cartesian_shell_offsets(system);
+  for_each_value_eri_shell_quartet(
+      system, aos, offsets,
+      [&](const auto&, const ValueEriComponents& components, std::size_t count) {
+        for (std::size_t item = 0; item < count; ++item)
+          store_eri_symmetry(eri, aos.size(), components[item].indices, components[item].value);
+      });
+}
+
+// Invocation-local scratch, independent of molecular size. The unchanged scalar
+// producer still evaluates each canonical Cartesian component exactly once.
+using ValueEriCartesianBlock = std::array<double, 6 * 6 * 6 * 6>;
+static_assert(sizeof(ValueEriCartesianBlock) == 10368);
+
+std::size_t eri_block_index(const std::array<std::size_t, 4>& indices,
+                            const std::array<std::size_t, 4>& begins,
+                            const std::array<std::size_t, 4>& extents) {
+  return (((indices[0] - begins[0]) * extents[1] + indices[1] - begins[1]) * extents[2] +
+          indices[2] - begins[2]) *
+             extents[3] +
+         indices[3] - begins[3];
+}
+
+void assemble_value_eri_cartesian_block(const ValueEriComponents& components, std::size_t count,
+                                        const std::array<std::size_t, 4>& begins,
+                                        const std::array<std::size_t, 4>& extents,
+                                        ValueEriCartesianBlock& block) {
+  const std::size_t size = extents[0] * extents[1] * extents[2] * extents[3];
+  std::fill_n(block.begin(), size, 0.0);
+  for (std::size_t item = 0; item < count; ++item) {
+    // Same-shell and identical-pair triangles omit components. Restore only
+    // orbit members belonging to THIS ordered shell block, not other blocks.
+    for (const auto& permutation : eri_permutations(components[item].indices)) {
+      bool belongs = true;
+      for (unsigned slot = 0; slot < 4; ++slot)
+        belongs = belongs && permutation[slot] >= begins[slot] &&
+                  permutation[slot] < begins[slot] + extents[slot];
+      if (belongs) block[eri_block_index(permutation, begins, extents)] = components[item].value;
+    }
+  }
+}
+
+void project_value_eri_shell_quartet(const std::array<std::size_t, 4>& shells,
+                                     const std::vector<std::size_t>& public_offsets,
+                                     const std::vector<GlobalAoExpansion>& target_aos,
+                                     const std::array<std::size_t, 4>& begins,
+                                     const std::array<std::size_t, 4>& extents,
+                                     const ValueEriCartesianBlock& block,
+                                     std::vector<double>& eri) {
+  const auto [si, sj, sk, sl] = shells;
+  const bool same_pair = si == sk && sj == sl;
+  for (std::size_t p = public_offsets[si]; p < public_offsets[si + 1]; ++p) {
+    for (std::size_t q = public_offsets[sj]; q < public_offsets[sj + 1]; ++q) {
+      if (si == sj && q > p) continue;
+      for (std::size_t r = public_offsets[sk]; r < public_offsets[sk + 1]; ++r) {
+        for (std::size_t s = public_offsets[sl]; s < public_offsets[sl + 1]; ++s) {
+          if (sk == sl && s > r) continue;
+          // Shell-pair order need not be global AO-pair order. Apply the AO
+          // triangle only to two IDENTICAL shell pairs, as the producer does.
+          if (same_pair && p * (p + 1) / 2 + q < r * (r + 1) / 2 + s) continue;
+          double value = 0.0;
+          // Preserve transform_eri's expansion order and coefficient-product
+          // association. Scattering one reduction can change the low bits of
+          // other orbit members versus eight independently reduced outputs.
+          for (const GlobalExpansionTerm& i : target_aos[p]) {
+            for (const GlobalExpansionTerm& j : target_aos[q]) {
+              for (const GlobalExpansionTerm& k : target_aos[r]) {
+                for (const GlobalExpansionTerm& l : target_aos[s]) {
+                  value += i.coefficient * j.coefficient * k.coefficient * l.coefficient *
+                           block[eri_block_index(
+                               {i.cartesian_ao, j.cartesian_ao, k.cartesian_ao, l.cartesian_ao},
+                               begins, extents)];
+                }
+              }
+            }
+          }
+          store_eri_symmetry(eri, target_aos.size(), {p, q, r, s}, value);
+        }
+      }
+    }
+  }
+}
+
+void build_spherical_value_eri_shell_quartets(const core::System& system,
+                                              const std::vector<AoView>& aos,
+                                              const std::vector<GlobalAoExpansion>& target_aos,
+                                              const std::vector<std::size_t>& public_offsets,
+                                              std::vector<double>& eri) {
+  const auto offsets = cartesian_shell_offsets(system);
+  ValueEriCartesianBlock block;
+  for_each_value_eri_shell_quartet(
+      system, aos, offsets,
+      [&](const std::array<std::size_t, 4>& shells, const ValueEriComponents& components,
+          std::size_t count) {
+        std::array<std::size_t, 4> begins, extents;
+        for (unsigned slot = 0; slot < 4; ++slot) {
+          begins[slot] = offsets[shells[slot]];
+          extents[slot] = offsets[shells[slot] + 1] - begins[slot];
+        }
+        assemble_value_eri_cartesian_block(components, count, begins, extents, block);
+        project_value_eri_shell_quartet(shells, public_offsets, target_aos, begins, extents, block,
+                                        eri);
+      });
 }
 
 void unpack_jets(const std::vector<Jet>& source, std::vector<double>& values,
@@ -1746,6 +1875,23 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
     checked_product(checked_product(n4, out.ncoord), sizeof(double));
   }
   const std::vector<AoView> aos = expand_cartesian_aos(system);
+  const bool shared_value_geometry =
+      !include_derivatives &&
+      std::all_of(system.shells.begin(), system.shells.end(),
+                  [](const core::Shell& shell) { return shell.angular_momentum <= 2; });
+  const bool spherical_output = system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL;
+  const bool shell_local_spherical = include_eri && shared_value_geometry && spherical_output;
+  std::vector<std::size_t> target_offsets;
+  const std::vector<GlobalAoExpansion> target_aos =
+      spherical_output ? spherical_expansions(system, &target_offsets)
+                       : std::vector<GlobalAoExpansion>{};
+  std::vector<double> spherical_eri;
+  if (shell_local_spherical) {
+    const std::size_t public_n2 = checked_product(target_aos.size(), target_aos.size());
+    const std::size_t public_n4 = checked_product(public_n2, public_n2);
+    checked_product(public_n4, sizeof(double));
+    spherical_eri.assign(public_n4, 0.0);
+  }
 
   std::vector<Vec3> atom_coordinates;
   atom_coordinates.reserve(system.atoms.size());
@@ -1765,7 +1911,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
   if (include_eri) {
     if (include_derivatives)
       eri.assign(n4, Jet(0.0, out.ncoord));
-    else
+    else if (!shell_local_spherical)
       // Values share the public tensor's scalar storage directly. The
       // independent Jet recurrence remains available for f/g values without
       // retaining an empty derivative-vector object for every tensor entry.
@@ -1800,11 +1946,10 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
     }
   }
 
-  const bool shared_value_geometry =
-      !include_derivatives &&
-      std::all_of(system.shells.begin(), system.shells.end(),
-                  [](const core::Shell& shell) { return shell.angular_momentum <= 2; });
-  if (include_eri && shared_value_geometry) {
+  if (shell_local_spherical) {
+    build_spherical_value_eri_shell_quartets(system, aos, target_aos, target_offsets,
+                                             spherical_eri);
+  } else if (include_eri && shared_value_geometry) {
     build_value_eri_shell_quartets(system, aos, out.eri);
   } else if (include_eri) {
     for (std::size_t i = 0; i < n; ++i) {
@@ -1870,14 +2015,16 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
     cartesian.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
     add_ecp(checked_ecp_integrals(cartesian, include_derivatives), out.hcore, out.hcore_derivative);
   }
-  if (system.basis_representation == GENERATIVEQC_BASIS_SPHERICAL) {
-    const std::vector<GlobalAoExpansion> target_aos = spherical_expansions(system);
+  if (spherical_output) {
     IntegralData spherical;
     spherical.nbf = target_aos.size();
     spherical.ncoord = out.ncoord;
     spherical.overlap = transform_matrix(out.overlap.data(), out.nbf, target_aos);
     spherical.hcore = transform_matrix(out.hcore.data(), out.nbf, target_aos);
-    if (include_eri) spherical.eri = transform_eri(out.eri.data(), out.nbf, target_aos);
+    if (shell_local_spherical)
+      spherical.eri = std::move(spherical_eri);
+    else if (include_eri)
+      spherical.eri = transform_eri(out.eri.data(), out.nbf, target_aos);
     const std::size_t cartesian_matrix_size = out.nbf * out.nbf;
     const std::size_t cartesian_eri_size =
         include_eri ? cartesian_matrix_size * cartesian_matrix_size : 0;

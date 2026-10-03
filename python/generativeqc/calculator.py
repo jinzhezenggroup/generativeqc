@@ -260,7 +260,6 @@ class Calculator:
             GeometricCounterpoisePrimitive,
             MethodIR,
             SemilocalXCPrimitive,
-            resolve_bulk_ks,
             resolve_method,
             validate_basis_snapshot,
         )
@@ -272,6 +271,10 @@ class Calculator:
             canonical_method = method.lower()
             automatic = parse_automatic_libxc_selector(method)
             if automatic is not None:
+                # Native selectors do not consume the bulk-XC resolver or its
+                # compiler evidence; load that path only for an automatic KS request.
+                from generativeqc_compiler.method import resolve_bulk_ks
+
                 name, spin = automatic
                 automatic_libxc_public_name = canonical_method
                 automatic_libxc_resolution = resolve_bulk_ks(

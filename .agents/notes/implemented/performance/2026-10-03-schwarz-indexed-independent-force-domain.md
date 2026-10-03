@@ -36,6 +36,15 @@ ignored local copies are also retained. No external publication or Release,
 aggregate-cap increase, unrelated-evidence deletion, or relabeling of old
 timings is used. The earlier source/endpoint sections below are historical.
 
+The later merge of master `86c422bdc` preserves both the indexed-budget fixture
+and master's new `eri_tiles_only` native-test argument. It is a new checkout
+identity, not a new measurement of the corrected campaign. Combined storage
+with the tile-planner PR then exceeded the unchanged 64 MiB cap by 23,981 bytes.
+Eleven earlier reports owned by this PBE0 task were therefore losslessly gzipped
+(725,408 to 110,869 payload bytes). Exact decompressed hashes, original Git
+revision and all complete/control/failed outcomes remain in the storage manifest
+and regression test; unrelated evidence and the main README are untouched.
+
 ## Problem
 
 The independent J/K fallback groups shell pairs into 32-entry blocks and uses

@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <utility>
 
+#include "tensor/cpu_compensated_sum.hpp"
 #include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::scf {
@@ -470,18 +471,22 @@ FockEnergyComponents contract_fock_energy_components(const ResolvedFockBuild& st
           jk.exchange_beta.size() == (strategy.spec.exchange.present && unrestricted ? count : 0),
       "raw J/K outputs do not match the resolved Fock energy terms");
   FockEnergyComponents result;
+  tensor::CpuCompensatedSum coulomb_energy;
+  tensor::CpuCompensatedSum exchange_energy;
   for (std::size_t ij = 0; ij < density.size(); ++ij) {
     const double total = density[ij] + (unrestricted ? beta[ij] : 0.0);
     if (strategy.spec.coulomb.present)
-      result.coulomb += 0.5 * total * strategy.spec.coulomb.coefficient * jk.coulomb[ij];
+      coulomb_energy.add(0.5 * total * strategy.spec.coulomb.coefficient * jk.coulomb[ij]);
     if (strategy.spec.exchange.present) {
-      result.exchange +=
-          0.5 * density[ij] * strategy.spec.exchange.coefficient * jk.exchange_alpha[ij];
+      exchange_energy.add(0.5 * density[ij] * strategy.spec.exchange.coefficient *
+                          jk.exchange_alpha[ij]);
       if (unrestricted)
-        result.exchange +=
-            0.5 * beta[ij] * strategy.spec.exchange.coefficient * jk.exchange_beta[ij];
+        exchange_energy.add(0.5 * beta[ij] * strategy.spec.exchange.coefficient *
+                            jk.exchange_beta[ij]);
     }
   }
+  result.coulomb = coulomb_energy.value();
+  result.exchange = exchange_energy.value();
   return result;
 }
 

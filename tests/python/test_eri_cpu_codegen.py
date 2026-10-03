@@ -6,6 +6,7 @@ import ctypes
 import shutil
 import subprocess
 from itertools import product
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -406,3 +407,240 @@ def test_all_ordered_spd_components_match_independent_libcint(
     np.testing.assert_allclose(
         prepared * normalization, expected, rtol=2e-11, atol=3e-12
     )
+
+
+def test_native_ao_component_indices_reuse_generated_authority(
+    generated_source: str, tmp_path: Path
+) -> None:
+    """Run the actual AO construction/preparation against generated metadata.
+
+    Instrument only classification calls; no recurrence is compiled or mocked.
+    Native basis.cpp owns component enumeration and normalization, including f/g.
+    """
+    compiler = shutil.which("c++")
+    launcher = shutil.which("ccache")
+    if compiler is None or launcher is None:
+        pytest.skip("native AO metadata gate requires a C++ compiler and ccache")
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "src/integrals/s_integrals.cpp").read_text()
+    ao_helpers = (
+        "struct AoView"
+        + source.split("struct AoView", 1)[1].split("struct GlobalExpansionTerm", 1)[0]
+    )
+    preparation = (
+        "struct ValueEriComponent"
+        + source.split("struct ValueEriComponent", 1)[1].split(
+            "std::size_t build_value_eri_shell_quartet(", 1
+        )[0]
+    )
+    classification = (
+        "constexpr unsigned component_index"
+        + generated_source.split("constexpr unsigned component_index", 1)[1].split(
+            "// Cartesian representative", 1
+        )[0]
+    )
+    records = (
+        "inline constexpr std::uint16_t component_map"
+        + generated_source.split("inline constexpr std::uint16_t component_map", 1)[
+            1
+        ].split("inline constexpr unsigned representative_orders", 1)[0]
+    )
+    lookup = (
+        "inline unsigned component_record"
+        + generated_source.split("inline unsigned component_record", 1)[1].split(
+            "/** Unnormalized, unscreened component", 1
+        )[0]
+    )
+    # Keep generated classification as the only mapping authority. This wrapper
+    # observes placement/count without changing the production implementation.
+    classification = classification.replace(
+        "component_index(", "classification_authority("
+    )
+    text = (
+        "#include <array>\n#include <bit>\n#include <cstddef>\n#include <cstdint>\n"
+        "#include <iostream>\n#include <limits>\n#include <stdexcept>\n#include <vector>\n"
+        '#include "molecule/basis.hpp"\n'
+        "namespace generativeqc::integrals::generated_eri_cpu {\n"
+        + classification
+        + "std::size_t classifications = 0;\n"
+        + "unsigned component_index(unsigned x, unsigned y, unsigned z) {\n"
+        + "  ++classifications; return classification_authority(x, y, z);\n}\n"
+        + records
+        + lookup
+        + "}\nnamespace generativeqc::integrals {\n"
+        + ao_helpers
+        + preparation
+        + "}\nusing namespace generativeqc;\nusing namespace generativeqc::integrals;\n"
+        + r"""
+void require(bool condition, const char* message) {
+  if (!condition) throw std::runtime_error(message);
+}
+struct PreviousAoView {
+  const core::Shell* shell{};
+  molecule::CartesianComponent angular{};
+  double component_normalization{};
+};
+void check_layout() {
+  const auto old_normalization = offsetof(PreviousAoView, component_normalization);
+  const auto angular_end = offsetof(PreviousAoView, angular) + sizeof(molecule::CartesianComponent);
+  const auto index_offset = offsetof(AoView, eri_component_index);
+  require(offsetof(AoView, shell) == offsetof(PreviousAoView, shell) &&
+          offsetof(AoView, angular) == offsetof(PreviousAoView, angular), "AO prefix changed");
+  // The optimization must use existing padding on ABIs where it fits. Other
+  // ABIs remain supported: their measured layout is reported, not assumed.
+  if (old_normalization - angular_end >= sizeof(unsigned) &&
+      angular_end % alignof(unsigned) == 0) {
+    require(sizeof(AoView) == sizeof(PreviousAoView) &&
+            offsetof(AoView, component_normalization) == old_normalization &&
+            index_offset == angular_end, "AO cache failed to reuse available padding");
+  }
+  std::cout << "old_size=" << sizeof(PreviousAoView) << " size=" << sizeof(AoView)
+            << " shell_offset=" << offsetof(AoView, shell)
+            << " angular_offset=" << offsetof(AoView, angular)
+            << " index_offset=" << index_offset
+            << " normalization_offset=" << offsetof(AoView, component_normalization) << '\n';
+}
+void check_expansion(const core::System& system, const std::vector<AoView>& aos) {
+  std::size_t offset = 0;
+  for (const auto& shell : system.shells) {
+    for (const auto& angular : molecule::cartesian_components(shell.angular_momentum)) {
+      const auto& ao = aos[offset++];
+      require(ao.shell == &shell && ao.angular == angular, "AO identity/order changed");
+      require(ao.eri_component_index == generated_eri_cpu::classification_authority(
+                  angular[0], angular[1], angular[2]), "AO cached index differs from authority");
+      require(std::bit_cast<std::uint64_t>(ao.component_normalization) ==
+                  std::bit_cast<std::uint64_t>(molecule::cartesian_component_normalization(angular)),
+              "AO normalization changed");
+    }
+  }
+  require(offset == aos.size(), "AO expansion count changed");
+}
+int main() {
+  check_layout();
+  require(expand_cartesian_aos(core::System{}).empty(), "empty expansion changed");
+  core::System all_angular;
+  for (unsigned l : {0U, 1U, 2U, 3U, 4U, 4U, 3U, 2U, 1U, 0U})
+    all_angular.shells.push_back({0, l, {{0.7, 1.0}}});
+  auto aos = expand_cartesian_aos(all_angular);
+  check_expansion(all_angular, aos);
+  require(generated_eri_cpu::classifications == aos.size(), "classification is not per AO");
+  // Unsupported cache entries must survive unchanged, and lookup must still
+  // reject them in every quartet position, rather than indexing out of range.
+  const unsigned valid = generated_eri_cpu::classification_authority(0, 0, 0);
+  for (unsigned l : {3U, 4U}) {
+    const unsigned unsupported = generated_eri_cpu::classification_authority(l, 0, 0);
+    for (unsigned slot = 0; slot < 4; ++slot) {
+      unsigned indices[4]{valid, valid, valid, valid};
+      indices[slot] = unsupported;
+      require(generated_eri_cpu::component_record(indices) == 0xffffffffU,
+              "unsupported generated index accepted");
+      indices[slot] = std::numeric_limits<unsigned>::max();
+      require(generated_eri_cpu::component_record(indices) == 0xffffffffU,
+              "out-of-range generated index accepted");
+    }
+  }
+  ValueEriComponents components;
+  for (const auto& ao : aos) {
+    if (ao.shell->angular_momentum < 3) continue;
+    const std::vector<AoView> unsupported_ao{ao};
+    const auto before = generated_eri_cpu::classifications;
+    require(prepare_value_eri_components(unsupported_ao, {0, 1}, {0, 0, 0, 0}, components) == 1 &&
+            components[0].record == 0xffffffffU, "cached unsupported sentinel was not validated");
+    require(generated_eri_cpu::classifications == before, "unsupported AO was reclassified");
+  }
+  std::size_t blocks = 0, prepared = 0, expanded = 0;
+  for (std::size_t nshell = 1; nshell <= 4; ++nshell) {
+    std::size_t layouts = 1;
+    for (std::size_t s = 0; s < nshell; ++s) layouts *= 3;
+    for (std::size_t layout = 0; layout < layouts; ++layout) {
+      core::System system;
+      std::vector<std::size_t> offsets{0};
+      auto code = layout;
+      for (std::size_t s = 0; s < nshell; ++s) {
+        const unsigned l = code % 3;
+        code /= 3;
+        system.shells.push_back({0, l, {{0.7, 1.0}}});
+        offsets.push_back(offsets.back() + molecule::cartesian_count(l));
+      }
+      const auto before = generated_eri_cpu::classifications;
+      aos = expand_cartesian_aos(system);
+      expanded += aos.size();
+      check_expansion(system, aos);
+      const auto after = generated_eri_cpu::classifications;
+      require(after - before == aos.size(), "classification count differs from AO count");
+      for (std::size_t si = 0; si < nshell; ++si)
+        for (std::size_t sj = 0; sj <= si; ++sj)
+          for (std::size_t sk = 0; sk <= si; ++sk)
+            for (std::size_t sl = 0; sl <= sk; ++sl) {
+              if (si == sk && sj < sl) continue;
+              const auto count = prepare_value_eri_components(aos, offsets, {si, sj, sk, sl}, components);
+              require(generated_eri_cpu::classifications == after, "quartet reclassified an AO");
+              std::size_t item = 0;
+              for (auto i = offsets[si]; i < offsets[si + 1]; ++i)
+                for (auto j = offsets[sj]; j < offsets[sj + 1]; ++j)
+                  for (auto k = offsets[sk]; k < offsets[sk + 1]; ++k)
+                    for (auto l = offsets[sl]; l < offsets[sl + 1]; ++l) {
+                      if (si == sj && j > i) continue;
+                      if (sk == sl && l > k) continue;
+                      if (si == sk && sj == sl && i*(i+1)/2+j < k*(k+1)/2+l) continue;
+                      const std::array<std::size_t, 4> indices{i, j, k, l};
+                      unsigned direct[4];
+                      for (unsigned slot = 0; slot < 4; ++slot) {
+                        const auto& a = aos[indices[slot]].angular;
+                        direct[slot] = generated_eri_cpu::classification_authority(a[0], a[1], a[2]);
+                      }
+                      const double normalization = aos[i].component_normalization *
+                          aos[j].component_normalization * aos[k].component_normalization *
+                          aos[l].component_normalization;
+                      require(item < count, "component missing");
+                      const auto& component = components[item++];
+                      require(component.indices == indices && component.record ==
+                                  generated_eri_cpu::component_record(direct), "component identity changed");
+                      require(std::bit_cast<std::uint64_t>(component.normalization) ==
+                                  std::bit_cast<std::uint64_t>(normalization), "normalization association changed");
+                      require(std::bit_cast<std::uint64_t>(component.value) == 0, "nonzero accumulator");
+                    }
+              require(item == count, "extra prepared component");
+              ++blocks; prepared += count;
+            }
+    }
+  }
+  require(blocks == 5079, "shell-layout coverage changed");
+  std::cout << "blocks=" << blocks << " prepared=" << prepared << " expanded=" << expanded << '\n';
+}
+"""
+    )
+    probe = tmp_path / "ao_component_indices.cpp"
+    probe.write_text(text)
+    objects = []
+    for path in (probe, root / "src/molecule/basis.cpp"):
+        output = tmp_path / (path.stem + ".o")
+        subprocess.run(
+            [
+                launcher,
+                compiler,
+                "-std=c++20",
+                "-O1",
+                "-ffp-contract=off",
+                "-I" + str(root / "src"),
+                "-I" + str(root / "include"),
+                "-c",
+                str(path),
+                "-o",
+                str(output),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        objects.append(str(output))
+    binary = tmp_path / "ao_component_indices"
+    subprocess.run(
+        [compiler, *objects, "-o", str(binary)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = subprocess.run([str(binary)], check=True, capture_output=True, text=True)
+    print(result.stdout, end="")
+    assert "blocks=5079" in result.stdout
