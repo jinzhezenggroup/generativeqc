@@ -1,5 +1,10 @@
 {
   "families": {
+    "pbe0-resident-tiles-20261003": {
+      "owner": "ordinary resident-grid tile qualification",
+      "reason": "Lossless consolidated 144 native and 72 independent reference endpoint records, including all cold/moved regressions, with exact source/binary/job and resource/work receipts. Consolidation avoids duplicate per-record metadata; no profiler trace, binary, or relaxed storage limit is included.",
+      "review_document": "benchmarks/results/pbe0-resident-tiles-20261003/README.md"
+    },
     "cg01": {
       "owner": "cg01",
       "reason": "Reviewed retained large evidence for CG01 protocol evidence. Large members are limited to the exact roles and hashes below; execution-flow journals belong in ignored/artifact storage or the #488 Git-history snapshot.",
@@ -182,6 +187,14 @@
     }
   },
   "files": [
+    {
+      "path": "benchmarks/results/pbe0-resident-tiles-20261003/campaign.json.xz",
+      "family": "pbe0-resident-tiles-20261003",
+      "bytes": 134300,
+      "sha256": "1d6dd690d29a8174c0eb0769c6f914b222dd7046e777a73e6ae3d4243b84bc48",
+      "classification": "required-compact-accepted-evidence",
+      "role": "Exact complete endpoint and reference UTF-8 records, unchanged error gates, work counts and budget regimes; includes 96-atom moved slowdown and shared-cache cold-timing limitation. Source predates the separate claim-race repair and is not relabeled as corrected-binary evidence."
+    },
     {
       "bytes": 145857,
       "classification": "required-compact-accepted-evidence",

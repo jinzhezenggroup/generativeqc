@@ -5,8 +5,9 @@ owns allocation/launches. This schedule changes floating-point grouping, never
 pointwise AO/Becke mathematics or the set of grid points visited.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from typing import TypeVar
 
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 
@@ -23,6 +24,50 @@ STATIONARY_MAX_ATOMS = 128
 STATIONARY_MAX_AOS = 1024
 STATIONARY_MAX_PRIMITIVES = 16384
 _SIZE_MAX = (1 << 64) - 1
+_TileLayout = TypeVar("_TileLayout")
+
+
+def plan_stationary_cuda_grid_schedule(
+    *,
+    grid_points: int,
+    tile_points: int | None,
+    admit: Callable[[int], _TileLayout],
+) -> _TileLayout:
+    """Select one complete, budget-admitted semilocal or composite grid tile.
+
+    The callback is a dry capacity/work query: it must account for every live
+    owner, raise ValueError on rejection, and never allocate or execute CUDA.
+    AO and method owners retain their own layout formulas. The shared schedule
+    prefers 1024 points, then the qualified 256-point fallback and smaller
+    tiles; it cannot shrink whole-grid storage or change the scientific grid.
+    Explicit requests are tried exactly once, including requests above the
+    point count. This preserves caller-controlled capacity and tail tests.
+    """
+    if type(grid_points) is not int or not 1 <= grid_points <= _SIZE_MAX:
+        raise ValueError("stationary CUDA grid_points must be a positive uint64")
+    if tile_points is not None and (
+        type(tile_points) is not int or not 1 <= tile_points <= 4096
+    ):
+        raise ValueError("stationary CUDA tile_points must be None or in [1,4096]")
+    candidates = (
+        (tile_points,)
+        if tile_points is not None
+        else tuple(
+            dict.fromkeys(
+                min(points, grid_points)
+                for points in (1024, 256, 128, 64, 32, 16, 8, 4, 2, 1)
+            )
+        )
+    )
+    failure = None
+    for points in candidates:
+        try:
+            return admit(points)
+        except ValueError as error:
+            failure = error
+    raise ValueError(
+        f"no admitted stationary CUDA grid schedule: {failure}"
+    ) from failure
 
 
 @dataclass(frozen=True, slots=True)
