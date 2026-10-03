@@ -29,6 +29,7 @@
 #include "scf/solver/diis.hpp"
 #include "scf/solver/proposal_control.hpp"
 #include "solver/self_consistent.hpp"
+#include "tensor/cpu_compensated_sum.hpp"
 #include "xc_cpu_generated.hpp"
 
 namespace generativeqc::scf {
@@ -521,7 +522,8 @@ RksEvaluation evaluate_rks(PrimaryPlan& plan, const PreparedFockPlan* long_range
     result.fock[i] += xc.potential[i];
     if (nonlocal_correlation) result.fock[i] += nonlocal.potential[i];
   }
-  result.components = {ints.nuclear_repulsion, dot(density, ints.hcore), primary_energy.coulomb,
+  result.components = {ints.nuclear_repulsion, tensor::cpu_compensated_dot(density, ints.hcore),
+                       primary_energy.coulomb,
                        xc.energy + (nonlocal_correlation ? nonlocal.energy : 0.0), exact_exchange};
   result.energy = result.components.total();
   if (!std::isfinite(result.energy))
