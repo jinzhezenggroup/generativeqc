@@ -28,6 +28,9 @@ __global__ void compact_bounded_generated_tasks_kernel(
   if (selected_any != nullptr && *selected_any == 0U) return;
   const std::size_t total = static_cast<std::size_t>(batch.total_shell_pair_block_quartets);
   while (true) {
+    // Complete every previous claim read, including inactive/screened skips,
+    // before the leader publishes another block quartet.
+    __syncthreads();
     if (threadIdx.x == 0) block_quartet = atomicAdd(global_cursor, 1ULL);
     __syncthreads();
     if (block_quartet >= total) return;

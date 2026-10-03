@@ -1,4 +1,9 @@
-"""Stress the production persistent claim protocol across every no-work route."""
+"""Stress persistent claims for triangular products and indexed empty pages.
+
+Preserve the master skip regression and PR #1767's indexed-page extension of
+njzjz-bot commit 0b99c6ce298f2726373f1909ad10a37b5acffc43. The host invariant
+checks control flow; optional CUDA stress does not replace integral oracles.
+"""
 
 import os
 import shutil
@@ -61,8 +66,8 @@ def claim_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 namespace detail = generativeqc::scf::detail;
 constexpr unsigned threads = 128;
 constexpr unsigned workers = 4;
-constexpr unsigned products_count = 6;
-constexpr unsigned counts[products_count] = {528, 1024, 1, 17, 0, 63};
+constexpr unsigned products_count = 7;
+constexpr unsigned counts[products_count] = {528, 1024, 1, 17, 0, 63, 256};
 struct Batch { std::size_t total_shell_pair_block_quartets; };
 __global__ void probe(Batch batch, detail::BoundedDirectBlockDomain block_domain,
                       const unsigned* candidate_counts, unsigned long long* global_cursor,
@@ -116,7 +121,7 @@ int main() {
       const auto pages = indexed ? detail::kBoundedDirectIndexedCandidatePages : 1U;
       const auto total = products_count * pages;
       for (unsigned skip_mode = 0; skip_mode < 4; ++skip_mode) {
-        for (unsigned long long initial : {0ULL, 15ULL}) {
+        for (unsigned long long initial : {0ULL, 1ULL, 15ULL}) {
           if (initial >= total) continue;
           checked(cudaMemset(visits, 0, maximum_claims * threads * sizeof(unsigned)));
           checked(cudaMemcpy(cursor, &initial, sizeof(initial), cudaMemcpyHostToDevice));
