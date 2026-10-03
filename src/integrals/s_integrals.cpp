@@ -674,8 +674,9 @@ std::size_t eri_index(std::size_t i, std::size_t j, std::size_t k, std::size_t l
   return ((i * n + j) * n + k) * n + l;
 }
 
-void store_eri_symmetry(std::vector<Jet>& eri, std::size_t n,
-                        const std::array<std::size_t, 4>& indices, const Jet& value) {
+template <typename Value>
+void store_eri_symmetry(std::vector<Value>& eri, std::size_t n,
+                        const std::array<std::size_t, 4>& indices, const Value& value) {
   const auto [i, j, k, l] = indices;
   for (const auto& permutation : std::array<std::array<std::size_t, 4>, 8>{{{i, j, k, l},
                                                                             {j, i, k, l},
@@ -736,7 +737,7 @@ std::size_t prepare_value_eri_components(const std::vector<AoView>& aos,
 void build_value_eri_shell_quartet(const core::System& system, const std::vector<AoView>& aos,
                                    const std::vector<std::size_t>& offsets,
                                    const std::array<std::size_t, 4>& shell_indices,
-                                   ValueEriComponents& components, std::vector<Jet>& eri) {
+                                   ValueEriComponents& components, std::vector<double>& eri) {
   const std::size_t count = prepare_value_eri_components(aos, offsets, shell_indices, components);
   std::array<const core::Shell*, 4> shells;
   double centers[4][3];
@@ -767,11 +768,11 @@ void build_value_eri_shell_quartet(const core::System& system, const std::vector
     }
   }
   for (std::size_t item = 0; item < count; ++item)
-    store_eri_symmetry(eri, aos.size(), components[item].indices, Jet(components[item].value, 0));
+    store_eri_symmetry(eri, aos.size(), components[item].indices, components[item].value);
 }
 
 void build_value_eri_shell_quartets(const core::System& system, const std::vector<AoView>& aos,
-                                    std::vector<Jet>& eri) {
+                                    std::vector<double>& eri) {
   std::vector<std::size_t> offsets{0};
   for (const auto& shell : system.shells)
     offsets.push_back(offsets.back() + molecule::cartesian_count(shell.angular_momentum));
@@ -1741,7 +1742,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
   const std::size_t n2 = checked_product(n, n);
   const std::size_t n4 = include_eri ? checked_product(n2, n2) : 0;
   if (include_eri) {
-    checked_product(n4, sizeof(Jet));
+    checked_product(n4, include_derivatives ? sizeof(Jet) : sizeof(double));
     checked_product(checked_product(n4, out.ncoord), sizeof(double));
   }
   const std::vector<AoView> aos = expand_cartesian_aos(system);
@@ -1761,7 +1762,15 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
   std::vector<Jet> overlap(n * n, Jet(0.0, out.ncoord));
   std::vector<Jet> hcore(n * n, Jet(0.0, out.ncoord));
   std::vector<Jet> eri;
-  if (include_eri) eri.assign(n4, Jet(0.0, out.ncoord));
+  if (include_eri) {
+    if (include_derivatives)
+      eri.assign(n4, Jet(0.0, out.ncoord));
+    else
+      // Values share the public tensor's scalar storage directly. The
+      // independent Jet recurrence remains available for f/g values without
+      // retaining an empty derivative-vector object for every tensor entry.
+      out.eri.assign(n4, 0.0);
+  }
 
   for (std::size_t i = 0; i < n; ++i) {
     const AoView& ao_i = aos[i];
@@ -1796,7 +1805,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
       std::all_of(system.shells.begin(), system.shells.end(),
                   [](const core::Shell& shell) { return shell.angular_momentum <= 2; });
   if (include_eri && shared_value_geometry) {
-    build_value_eri_shell_quartets(system, aos, eri);
+    build_value_eri_shell_quartets(system, aos, out.eri);
   } else if (include_eri) {
     for (std::size_t i = 0; i < n; ++i) {
       const AoView& ao_i = aos[i];
@@ -1831,7 +1840,10 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
             }
             // Eightfold ERI symmetry also holds for derivatives with respect
             // to physical atoms. Compute each expensive high-l recurrence once.
-            store_eri_symmetry(eri, n, {i, j, k, l}, value);
+            if (include_derivatives)
+              store_eri_symmetry(eri, n, {i, j, k, l}, value);
+            else
+              store_eri_symmetry(out.eri, n, {i, j, k, l}, value.value);
           }
         }
       }
@@ -1850,7 +1862,7 @@ IntegralData build_integrals(const core::System& system, bool include_derivative
 
   unpack_jets(overlap, out.overlap, out.overlap_derivative, out.ncoord);
   unpack_jets(hcore, out.hcore, out.hcore_derivative, out.ncoord);
-  if (include_eri) unpack_jets(eri, out.eri, out.eri_derivative, out.ncoord);
+  if (include_eri && include_derivatives) unpack_jets(eri, out.eri, out.eri_derivative, out.ncoord);
   out.nuclear_repulsion = nuclear_repulsion.value;
   out.nuclear_repulsion_derivative = std::move(nuclear_repulsion.derivative);
   if (!system.ecp_terms.empty()) {
@@ -1943,15 +1955,7 @@ std::vector<double> build_range_eri(const core::System& system, CoulombRange ran
                 }
           if (!std::isfinite(value))
             throw std::runtime_error("nonfinite range-separated ERI value");
-          for (const auto& indices : std::array<std::array<std::size_t, 4>, 8>{{{i, j, k, l},
-                                                                                {j, i, k, l},
-                                                                                {i, j, l, k},
-                                                                                {j, i, l, k},
-                                                                                {k, l, i, j},
-                                                                                {l, k, i, j},
-                                                                                {k, l, j, i},
-                                                                                {l, k, j, i}}})
-            eri[eri_index(indices[0], indices[1], indices[2], indices[3], cartesian_nbf)] = value;
+          store_eri_symmetry(eri, cartesian_nbf, {i, j, k, l}, value);
         }
       }
     }
