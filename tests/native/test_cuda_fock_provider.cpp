@@ -332,14 +332,24 @@ void prepared_interaction_source_device(const generativeqc::core::System& system
   auto spec = make_hf_fock_spec(FockSpin::Restricted, FockApproximation::Exact);
   spec.derivative_order = 0;
   const auto strategy = resolve_fock_build(spec, FockBackend::Cuda, 0.0);
-  PreparedFockPlan prepared(system, nullptr, strategy, 0, 64U * 1024U * 1024U);
+  // Exercise the same exact value-only allowance as the correlated source
+  // owner. A derivative request cannot fit and must not become a host fallback.
+  const auto n = generativeqc::molecule::ao_count(system);
+  std::size_t primitives = 0;
+  for (const auto& shell : system.shells) primitives += shell.primitives.size();
+  const auto allowance =
+      cuda_direct_jk_device_bytes(1, n, system.atoms.size(), system.shells.size(), primitives, 0);
+  PreparedFockPlan prepared(system, nullptr, strategy, 0, allowance);
+  require(prepared.diagnostic().direct.device_bytes == allowance &&
+              prepared.diagnostic().direct.derivative_order == 0,
+          "value-only prepared source exceeded its queried device allowance");
   PreparedFockInteractionSourceView source(prepared);
   const auto op = generativeqc::integrals::ElectronInteractionOperator::eri;
   require(
       source.supports(op) && !source.supports_host_read(op) && source.supports_device_read(op, 0),
       "prepared CUDA interaction source advertised the wrong ERI memory spaces");
 
-  const std::size_t n = source.nbf();
+  require(source.nbf() == n, "value-only source changed the public AO basis");
   const std::array<std::size_t, 4> begin{0, 1, 0, 0};
   const std::array<std::size_t, 4> count{2, 1, 2, 2};
   constexpr std::size_t elements = 8;
