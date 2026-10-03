@@ -1,11 +1,11 @@
 # Matched ωB97M-V energy and analytic-force endpoints
 
-The opt-in joint SCF/force active-AO integration has lower complete warm latency
-than its paired GPU4PySCF reference at 24, 48 and 96 atoms. This is a measured
-candidate snapshot, not a claim about the master default or either engine's
-default quadrature. The separate 96-atom dense control remains pending.
+The explicitly enabled joint SCF/force active-AO integration has lower complete
+warm latency than its paired GPU4PySCF reference at 24, 48 and 96 atoms. This is
+a measured candidate snapshot, not a claim about the master default or either
+engine's default quadrature. The separate 96-atom dense control remains pending.
 
-![Complete cold and warm WB97M-V energy and analytic-force latency](wb97mv.svg)
+![Warm WB97M-V energy and analytic-force latency](wb97mv.svg)
 
 | Atoms / spherical AOs | Native dense warm | Native joint warm | Joint-paired reference warm | Joint / reference |
 | --- | ---: | ---: | ---: | ---: |
@@ -115,9 +115,10 @@ python -m tools.render_wb97mv_active_ao_benchmarks
 ```
 
 The renderer verifies the retained endpoints and manifest hashes before drawing
-the joint candidate and its paired reference. Cold uses construction, preparation
-and first-execution totals (one observation per size); warm shows the median and
-min–max of all three samples. Dense controls stay in the detailed tables above.
+the joint candidate and its paired reference. The README figure shows only warm
+medians and min–max ranges on the same full AO axis and visual template as HF.
+Complete cold totals stay in the detailed table above. Dense controls stay in the
+detailed tables above.
 
 Build the measured checkout in Release/sm_120 with CUDA 12.9.1 and explicit
 CXX/CUDA `ccache` launchers after verifying `ccache --version`. Retain source
