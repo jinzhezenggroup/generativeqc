@@ -17,6 +17,8 @@ from pathlib import Path
 
 import numpy as np
 
+from benchmarks._retention import raw_output_path
+
 COUNTS = (
     "virtual_triples",
     "occupied_tiles",
@@ -51,7 +53,7 @@ def main() -> None:
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--probe", type=Path, required=True)
     parser.add_argument("--library", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--max-bytes", type=int, default=24 << 30)
     parser.add_argument("--panels", type=int, choices=(1, 2, 3), default=3)
     args = parser.parse_args()
