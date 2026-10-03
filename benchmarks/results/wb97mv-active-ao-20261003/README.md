@@ -19,9 +19,9 @@ There is no cross-engine density injection or iteration-normalized timing.
 
 ## Cold startup and work
 
-Cold includes synchronized preparation plus the first complete execution.
-Imports, library probes and calculator construction are outside this boundary;
-this does not assert an empty compiler/filesystem cache.
+Cold includes calculator/engine construction, synchronized preparation and the
+first complete execution. Imports and separate library probes are outside this
+boundary; this does not assert an empty compiler/filesystem cache.
 
 | Atoms | Native dense complete cold | Native joint complete cold | Joint-paired reference complete cold |
 | --- | ---: | ---: | ---: |
