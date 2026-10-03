@@ -337,3 +337,14 @@ copied toolchain directory lacked the ptxas link; preserve its unsuccessful
 attempt before copying the complete existing toolchain and rerunning. This is
 numerical composition qualification, not a fresh timing campaign. Current-head
 CI and an actual current-composition review remain merge gates.
+
+## Master 73755342d integration
+
+This union subsequently includes #1800's CPU KS final-maximum closure and the
+shared optional convergence-eligibility predicate from master 73755342d. The
+merge has no conflict in the AO/index or force consumers. A fresh source-bound
+build and qualification cover this composition; b909 and earlier numerical and
+timing receipts retain their original identities. The evidence-verifier review
+finding is fixed separately: all 33 acceptance predicates are unchanged but
+remain active under Python optimization, with coherent bad-hash, failed-native-
+qualification and inaccurate-energy controls rejecting under `python -O`.
