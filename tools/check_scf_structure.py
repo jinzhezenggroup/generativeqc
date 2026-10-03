@@ -62,7 +62,7 @@ CUDA_MODULES["cuda_df_source"] = (
     "df_integral_export",
     "df_integral_export_batch",
 )
-CUDA_ALLOWED = {
+CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
     "cuda_planning": (
         "runtime/bounded_workspace.hpp",
         "scf/cuda/arena.",
@@ -457,6 +457,9 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
     "scf/cuda/arena.",
     "scf/cuda/topology.",
     "scf/cuda/rhf_policy.",
+    # Pure reference cache/quartet admission policy, shared with device setup;
+    # the bucket still cannot include the physical export implementation.
+    "scf/cuda/reference_eri_policy.hpp",
     "scf/cuda/direct_constants.",
     "scf/cuda/checked_layout.",
     "scf/cuda/direct_tile_validation.",

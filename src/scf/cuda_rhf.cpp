@@ -565,17 +565,22 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   // keeping their handwritten force consumer would duplicate generated science.
   const bool requested_persistent_eri =
       !options.compute_forces && !options.export_physical_reference && nbf <= kPersistentEriAoLimit;
+  const bool reference_quartets =
+      options.export_physical_reference &&
+      reference_quartet_direct(
+          nbf, *std::max_element(host.shell_angular.begin(), host.shell_angular.end()));
   const bool requested_quartet_direct =
-      !options.export_physical_reference && !requested_persistent_eri &&
+      (!options.export_physical_reference || reference_quartets) && !requested_persistent_eri &&
       std::all_of(host.shell_angular.begin(), host.shell_angular.end(),
                   [](std::uint8_t angular) { return angular <= 3; });
   const bool requested_transformed_direct = requested_quartet_direct && direct_nbf != nbf;
-  // Reference export keeps a bounded matrix-direct fallback. Optional ERI
-  // residency is admitted after the actual solver workspaces are known below;
-  // optimized quartet dispatch retains its generated-class coverage gate.
+  // Large/d/f references share the bounded quartet owner; cache-eligible s/p
+  // references retain optional residency and its matrix-direct fallback. The
+  // actual solver workspace and every selected numeric arena remain budgeted.
   bool requested_bounded_direct_streaming =
       requested_quartet_direct &&
-      (detail::direct_topology_requires_bounded_streaming(total_shell_quartets) ||
+      (reference_quartets ||
+       detail::direct_topology_requires_bounded_streaming(total_shell_quartets) ||
        bounded_direct_streaming_override_requested());
   const bool requested_graph_native_eigensolver_override =
       !options.export_physical_reference && graph_native_eigensolver_override_requested();
@@ -1852,8 +1857,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   if (options.export_physical_reference) {
     // Account for the actual eigensolver workspace before considering optional
-    // residency. Keep the matrix-direct arena intact so a tight budget or an
-    // unavailable device allocation preserves the bounded numerical fallback.
+    // residency. Cache-eligible references keep their matrix-direct arena so
+    // budget/allocation pressure preserves that bounded numerical fallback.
+    // Larger/d/f references already admitted their bounded quartet arena.
     const auto required = reference_detail::check_capacity(
         reference_base_bytes,
         posthf::checked_add(resources.solver_workspace_bytes_,
@@ -3889,6 +3895,11 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           "resident_eri_contractions",
           persistent_eri && geometry_changed ? pair_count * (pair_count + 1) / 2 : 0);
       runtime::df_progress::Scope::number("reference_peak_bytes", resources.reference_peak_bytes_);
+      runtime::df_progress::Scope::number("quartet_direct", quartet_direct);
+      runtime::df_progress::Scope::number("bounded_quartet_streaming", bounded_direct_streaming);
+      runtime::df_progress::Scope::number("shell_pair_count", total_shell_pairs);
+      runtime::df_progress::Scope::number("shell_quartet_candidates_per_fock",
+                                          quartet_direct ? total_shell_quartets : 0);
     }
     return outputs;
   }
