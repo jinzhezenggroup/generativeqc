@@ -138,6 +138,46 @@ keep their frozen master-38 source/binaries; they are not relabeled to this
 subsequent composition. The code is ready for review as removal of unconsumed
 preparation work, with no claimed complete-endpoint timing improvement.
 
+## Completed endpoint and persistent-cache controls
+
+Finite n5 Slurm 1417 subsequently completes all twenty 3/24-atom
+baseline/candidate cold/priming/warm E/F pairs. Slurm 1418 then repeats them in
+fresh processes with reversed candidate-to-baseline order, after both persistent
+caches have been exercised; neither ccache nor JIT caches is cleared. The
+independent verifier uses explicit raising checks and passes all twenty pairs
+in each campaign under `PYTHONOPTIMIZE=1`. Both allocations exit successfully.
+
+The ordinary master path is used here, without the separate integration's
+active-AO/indexed/seed experiments. Baseline source is master 38fc52352,
+identity `11d7ee80dedea8b2a8a4f0010688d412d25017e87a74d59e3f02cdc749d7b3c3`,
+library `26f73730003d5f146b8154d1572670f266ba71076e4eb2af57e19ed23781f87f`.
+Candidate source is frozen 54a1d40e1/aeb864b8 with library 282889cd as recorded
+above; these timings are not relabeled to the subsequent master794 build.
+
+| Campaign | Atoms | Baseline complete cold (s) | Candidate complete cold (s) | Baseline warm median (s) | Candidate warm median (s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Initial order | 3 | 27.193990 | 11.758068 | 1.190615 | 1.190061 |
+| Initial order | 24 | 268.449402 | 268.497837 | 39.381974 | 39.748734 |
+| Exercised caches, reversed order | 3 | 10.333119 | 10.355456 | 1.192410 | 1.192648 |
+| Exercised caches, reversed order | 24 | 268.895760 | 267.954915 | 39.674858 | 39.378665 |
+
+The 3-atom first-use difference disappears with comparable persistent-cache
+state. At 24 atoms the two cold controls differ by only about 0.94 s out of
+269 s in the second campaign, with no benefit in the first; these single cold
+runs do not establish a repeatable endpoint speedup. Native cold takes 15 and
+18 iterations at 3 and 24 atoms in both variants, versus reference 11 and 14;
+every priming/warm call takes one iteration. Force work counts match between
+variants, all reference XC components stay on GPU, and unchanged E/F gates
+apply to every sample. The synthetic packing/allocation saving is real, but
+no complete-endpoint acceleration is claimed.
+
+The raw results, source receipts and independent summaries are retained in
+`.artifacts/cold-pack-20261004/benchmark-{results,receipts}/` and
+`cache-control-{results,receipts}/`, with summaries
+`benchmark-verified-3-24.json` and `cache-control-verified-3-24.json`. The
+cache-control launch script SHA-256 is
+`da14f7aec18543af928662fcaf5867d26dc374568c7b8645fc5562004c80344a`.
+
 ## Revisit when
 
 If Direct J/K gains a consumer of the legacy resident-PSSS catalog, that consumer
