@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-03
 
+The setup-work boundary in this note is superseded by
+[structural CUDA topology bootstrap](2026-10-03-xtb-topology-bootstrap.md), which
+removes artificial-geometry evaluation and the synthetic energy/force smoke.
+The scheduling decision and measured evidence below retain their original scope.
+
 ## Problem
 
 The generated S/D/Q improvement in [the preceding note](2026-10-02-xtb-shell-common-work.md)

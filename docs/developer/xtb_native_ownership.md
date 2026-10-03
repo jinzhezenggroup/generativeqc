@@ -37,6 +37,16 @@ and leaves the calculator usable. This bounds the number of retained entries,
 not the memory required by the current molecule. Native SCC graph resource
 fallbacks remain unchanged.
 
+CUDA topology preparation builds parameter plans, stable storage and descriptors
+without evaluating an artificial molecule on the CPU or executing a synthetic
+energy/force calculation. Numerical binding images are zero-filled except for an
+identity overlap. Setup retains the identity factorization and its asynchronous
+provider-error check, then invalidates that factor's geometry generation. The
+public numerical epoch starts at zero: the first admitted request must refresh
+all real geometry-dependent values on CUDA, refactor its overlap and commit
+epoch one before SCC and energy/force publication. Fresh SAD initialization,
+transactional failure behavior and the bounded SCC Graph fallback are unchanged.
+
 ## Scientific ownership
 
 The compiler emits the following production mathematics. Backend owners retain
@@ -165,7 +175,7 @@ builds retain their pinned private OpenBLAS provider and native shim. The former
 
 Relevant gates are `test_gfn2_h0_force_codegen.py`,
 `test_gfn2_spin_native_codegen.py`, `test_gfn2_runtime_bridge_boundary.py`,
-`test_gfn2_xtb.py`, `test_gfn2_runtime_retention.py`, and
+`test_gfn2_xtb.py`, `test_gfn2_runtime_retention.py`, `test_gfn2_cuda_bootstrap.py`, and
 `test_gfn2_xtb_force_qualification.py` under
 `tests/python/`. GPU endpoint tests require `GENERATIVEQC_TEST_GFN2_CUDA=1` inside a
 Slurm allocation on `main` with `--gres=gpu:5090:1` and a finite time limit.
