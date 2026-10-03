@@ -116,6 +116,33 @@ geometry/basis input SHA256:
 This complete energy endpoint excludes nuclear forces. No large DF force
 qualification or public capability expansion follows from it.
 
+The same frozen library/probe also completed cold benzene 264-AO / 666-auxiliary
+RHF/source/CCSD/(T) in n2 job 2178. This explicit three-hour allocation followed
+job 2177's one-hour timeout; preserve that timeout as an incomplete result.
+The completed chain took 4,224.5167 seconds internally and 4,225.19 seconds
+including process startup/state serialization. RHF/source/CCSD/(T) phases took
+407.8266 / 2.4246 / 3,737.3823 / 76.8831 seconds. Total energy was
+-231.9023206991408 Eh, 7.56e-12 Eh from the independent PySCF reference;
+CCSD correlation and triples errors were 4.91e-12 and 1.88e-12 Eh.
+
+Benzene required 26 RHF and 23 CC iterations, 44 primary evaluations and one
+expanded replay. RHF commutator residual was 1.966e-12; expanded singles/doubles
+maxima were 1.959e-13 / 6.216e-13. Source/retained-block and CC contraction counts
+were 109,079,980,830 and 570,074,868,504,288 summands. Triples covered 1,771
+occupied tiles, 1,746 panel and 21,252 moment GEMMs, with 56,937,897,866,700
+summands. The source/CC admission bound was 17,384,653,664 numeric bytes;
+charging that retained bound plus triples gave 19,299,636,576 bytes. The run
+used n2's Slurm-assigned PRO 6000 GPU and no oracle input state.
+
+The benzene geometry/basis input SHA256 is
+`891517d0eed3dff3dc81a1d8dcbdc10102c4ca823d02a08fdb81bf6555cf871a`.
+The copied final log/state and scalar comparison live in ignored
+`.artifacts/reference-quartets/benzene-final/`. Matching complete energies does
+not qualify the separately unresolved large direct-factor tolerance gates, or
+complete any nuclear-force test. CCSD dominates this measured endpoint; force
+response needs structural work reduction before claiming practical large-system
+performance. No speedup ratio is inferred from the timed-out molecular runs.
+
 ## Revisit when
 
 Complete RHF/source/CCSD(T)/force measurements show a remaining source or
