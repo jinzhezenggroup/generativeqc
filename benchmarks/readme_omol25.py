@@ -75,6 +75,7 @@ def source_hashes() -> dict[str, str]:
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/batch.py",
         "python/generativeqc_compiler/method/stationary_resources.py",
+        "python/generativeqc_compiler/method/stationary_composite_resources.py",
         "python/generativeqc/_stationary_composite_cuda.py",
         "benchmarks/readme_omol25.py",
         "benchmarks/readme_pbe0.py",
@@ -197,6 +198,44 @@ def require_force_endpoint(capabilities: dict[str, Any]) -> None:
             "the native Calculator does not advertise analytic forces for this basis; "
             "no HF-equivalent energy-plus-force endpoint is available"
         )
+
+
+def reference_xc_backend(engine: Any, *, spin: int = 0) -> dict[str, Any]:
+    """Read the same cached XCfun flags used by GPU4PySCF after the timer.
+
+    GPU4PySCF 1.8.1 falls back for the whole semilocal expression if any
+    component lacks CUDA LibXC support; a mixed list is not a mixed execution
+    backend. Missing flags remain unknown, never evidence of CPU fallback.
+    This describes semilocal evaluation, not exact exchange or VV10 kernels.
+    """
+    record = {
+        "xc_code": engine.xc,
+        "spin": spin,
+        "backend": "unknown",
+        "components": [],
+    }
+    try:
+        functions = engine._numint._init_xcfuns(engine.xc, spin)
+        for function, coefficient in functions:
+            on_gpu = getattr(function, "on_gpu", None)
+            record["components"].append(
+                {
+                    "functional_id": int(function.func_id),
+                    "coefficient": float(coefficient),
+                    "on_gpu": on_gpu if type(on_gpu) is bool else None,
+                }
+            )
+    except (AttributeError, TypeError, ValueError, NotImplementedError) as error:
+        record["unavailable_reason"] = f"{type(error).__name__}: {error}"
+        return record
+    flags = [component["on_gpu"] for component in record["components"]]
+    if not flags:
+        record["backend"] = "no-semilocal-xc"
+    elif any(flag is False for flag in flags):
+        record["backend"] = "pyscf-cpu-libxc"
+    elif all(flag is True for flag in flags):
+        record["backend"] = "cuda-libxc"
+    return record
 
 
 def main(benchmark: EndpointSpec = OMOL25) -> None:
@@ -365,6 +404,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         "scf_jk_builds": work["scf_jk_builds"],
                         "scf_final_residuals": convergence["final_residuals"],
                         "warm_start_used": seed is not None,
+                        "reference_xc_backend": reference_xc_backend(engine),
                         **({"reference_vv10_domain": domain} if domain else {}),
                         "seconds": seconds,
                         "prepare_seconds": prepare,
