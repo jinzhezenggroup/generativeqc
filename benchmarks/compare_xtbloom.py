@@ -27,7 +27,7 @@ except ModuleNotFoundError:
     from _retention import raw_output_path
 
 ROOT = Path(__file__).resolve().parents[1]
-TIMING_CONTRACT = "calculator-cold-v2-separate-cleanup"
+TIMING_CONTRACT = "calculator-cold-v3-lazy-library-load"
 
 
 def source_revision(directory: Path) -> str | None:
@@ -262,14 +262,6 @@ def main() -> None:
                 cpu_threads=1,
             )
         construction_seconds = time.perf_counter() - start
-        if args.engine == "generativeqc":
-            actual_library = Path(calc._library._name).resolve()
-        else:
-            from xtbloom.library import load_library
-
-            actual_library = Path(load_library()._name).resolve()
-        if actual_library != library:
-            raise RuntimeError(f"loaded {actual_library}, expected {library}")
         base_positions = np.asarray(case["positions"])
         # A non-rigid perturbation invalidates geometry caches without changing
         # topology. The same displacement sequence is used by both engines.
@@ -305,6 +297,20 @@ def main() -> None:
                 seconds = time.perf_counter() - start
                 if not converged:
                     raise RuntimeError(f"{args.engine} {case['name']} did not converge")
+                if mode == "cold":
+                    # Query identity after the timed first call. xTBloom loads
+                    # lazily, so querying beforehand would warm the library
+                    # outside either its constructor or calculation timer.
+                    if args.engine == "generativeqc":
+                        actual_library = Path(calc._library._name).resolve()
+                    else:
+                        from xtbloom.library import load_library
+
+                        actual_library = Path(load_library()._name).resolve()
+                    if actual_library != library:
+                        raise RuntimeError(
+                            f"loaded {actual_library}, expected {library}"
+                        )
                 row["samples"].append(
                     {
                         "mode": mode,
