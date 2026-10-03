@@ -72,6 +72,7 @@ from generativeqc_compiler.method.stationary_gradient import (
     StationaryMeanField,
 )
 from generativeqc_compiler.method.stationary_resources import (
+    plan_stationary_cuda_grid_schedule,
     plan_stationary_cuda_grid_work,
     plan_stationary_cuda_resources,
     stationary_cuda_allocation_bytes,
@@ -2082,175 +2083,43 @@ def _grid_metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
     return result
 
 
-def _complete_rks_cuda_gradient_diagnostic(
+@dataclass(frozen=True, slots=True)
+class _StationaryCudaTileLayout:
+    """One complete dry admission, before artifact lookup or native allocation."""
+
+    grid_plan: typing.Any
+    tensor_plans: dict[str, typing.Any]
+    host_bound: int
+    native_integral_host_reserve: int
+    ecp_workspace: int
+    ecp_pair_samples: int
+    native_geometry_reserve: int
+    source_resources: typing.Any
+
+
+def _plan_stationary_cuda_tile(
     state: typing.Any,
     basis: typing.Any,
     *,
-    compiler: typing.Any,
-    cache: typing.Any,
-    aot_directory: typing.Any = None,
-    native_grid_library: typing.Any = None,
-    target: CudaTargetInfo | None = None,
-    tile_points: typing.Any = 256,
-    integral_terms: typing.Any = 32,
-    primitive_tile: typing.Any = 4096,
-    max_device_bytes: typing.Any = 512 << 20,
-    max_host_bytes: typing.Any = 256 << 20,
-    max_grid_points: typing.Any = 1_000_000,
-    max_primitive_records: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
-    max_grid_pair_visits: typing.Any = 100_000_000,
-    max_pending_grid_tiles: typing.Any = 64,
-    max_pending_grid_pair_visits: typing.Any = 100_000_000,
-    max_ecp_pair_samples: int = 100_000_000,
-    prepared: PreparedStationaryCudaExecution | None = None,
-    profile_device: bool = False,
-) -> typing.Any:
-    """Consume a current native CUDA RKS/UKS snapshot with every plan source.
+    plan: typing.Any,
+    target: CudaTargetInfo,
+    needs_first: bool,
+    tile_points: int,
+    primitive_tile: int,
+    integral_terms: int,
+    source_names: tuple[str, ...],
+    ecp: bool,
+    max_device_bytes: int,
+    max_host_bytes: int,
+    max_ecp_pair_samples: int,
+) -> _StationaryCudaTileLayout:
+    """Retain the ordinary force owner inventory for each candidate tile.
 
-    Domain: qualified real FP64 RKS/UKS compositions, native unpruned grid and
-    distinct noncolliding centers. Enlarged domains require the shared native
-    stationary integral owner. No CPKS is required. None for either whole-grid
-    work guard admits the finite complete grid, retaining bounded submission
-    windows and the unchanged host/device byte budgets.
-    Device ordinal comes only from the opaque native snapshot. CUDA source
-    accumulators, grid owner and one TensorIR consumer coexist under the stated
-    additional-device budget; the pre-existing SCF owner/export and Python
-    objects are reported separately. No claim of full device residency is made.
-    Compilation and the selected GPU allocation are explicit.
-    Scalar-ECP v5 adds generated CUDA local/nonlocal derivatives and effective
-    charges (nine sources). Its small dense export is separately budgeted and
-    preserves the checked native two-grid gate. The public wrapper restricts ECP
-    force capability to Cartesian/real-spherical s/p records.
+    These are capacity queries, not native execution or allocations. In
+    particular, a larger AO tile cannot borrow the concurrently live integral
+    provider's allowance, hide host staging, or bypass the ECP work guard.
     """
-    timeline = _ExclusiveWallTimeline()
-    contract = StationaryDerivativeContract(state.identity)
-    contract.validate(state)
-    if state._source.backend != "cuda":
-        raise NotImplementedError("CUDA diagnostic requires a native CUDA KS state")
-    if state._source.metadata[0] not in (3, 5, 8) or state._source.grid_spec is None:
-        raise NotImplementedError(
-            "CUDA diagnostic requires supported raw-measure/composition snapshots"
-        )
-    if (
-        basis.identity != state.identity.basis_identity
-        or native_ao_geometry_identity(basis) != state.identity.geometry_identity
-    ):
-        raise ValueError("stationary CUDA basis/geometry mismatch")
-    ecp = state._source.hamiltonian == "scalar-semilocal-ecp"
-    # Legacy v3 has no Hamiltonian records. Core-adjusted v3 remains rejected.
-    if (
-        float(np.sum(state.occupations))
-        != sum(a.atomic_number for a in basis.atoms)
-        - sum(state._source.ecp_cores)
-        - basis.charge
-    ):
-        raise NotImplementedError("CUDA gradient diagnostic requires bound ECP states")
-    if compiler is None:
-        if ecp or aot_directory is None or native_grid_library is None:
-            raise TypeError(
-                "runtime compilation requires an explicit CUDA compiler adapter"
-            )
-        if not isinstance(target, CudaTargetInfo):
-            raise TypeError(
-                "packaged stationary CUDA requires an explicit execution target"
-            )
-    elif not isinstance(compiler, CudaCompilerAdapter):
-        raise TypeError("an explicit CUDA compiler adapter is required")
-    elif target is not None and target != compiler.target:
-        raise ValueError("stationary CUDA compiler/execution target mismatch")
-    else:
-        target = compiler.target
-    for value, name, cap in (
-        (tile_points, "tile_points", 4096),
-        (primitive_tile, "primitive_tile", 4096),
-        (integral_terms, "integral_terms", 128),
-        (max_device_bytes, "max_device_bytes", 1 << 40),
-        (max_host_bytes, "max_host_bytes", 1 << 40),
-        (max_primitive_records, "max_primitive_records", 1 << 40),
-        (max_ecp_pair_samples, "max_ecp_pair_samples", 1 << 40),
-    ):
-        if type(value) is not int or not 1 <= value <= cap:
-            raise ValueError(f"{name} must be an integer in [1,{cap}]")
     na, n = basis.natom, basis.nao
-    requires_native_integrals = stationary_cuda_requires_native_integrals(
-        atoms=na, aos=n, primitives=basis.nprimitive
-    )
-    grid_work = plan_stationary_cuda_grid_work(
-        atoms=na,
-        grid_points=len(state.grid.points),
-        tile_points=tile_points,
-        max_grid_points=max_grid_points,
-        max_grid_pair_visits=max_grid_pair_visits,
-        max_pending_tiles=max_pending_grid_tiles,
-        max_pending_pair_visits=max_pending_grid_pair_visits,
-    )
-    if requires_native_integrals and (
-        ecp
-        or not callable(
-            getattr(
-                state._source,
-                "density_fitted_integral_derivatives"
-                if bool(getattr(state._source, "density_fitted", False))
-                else "cuda_integral_derivatives",
-                None,
-            )
-        )
-    ):
-        raise NotImplementedError(
-            "enlarged stationary CUDA domains require prepared native integral derivatives"
-        )
-    _, aos, expansions, requests = _layout(basis)
-    component_mode = _component_mode(expansions)
-    primitive_sum = sum(
-        int(row[2]) * len(expansion)
-        for row, expansion in zip(aos, expansions, strict=True)
-    )
-    has_exchange = bool(state._source.method_ir.full_range_exact_exchange)
-    records = (
-        (1 + int(has_exchange)) * primitive_sum**4
-        + (na + 2) * primitive_sum**2
-        + na * (na - 1) // 2
-    )
-    # Keep the frozen whole-force capacity expression above intact for
-    # admission/evidence tooling. Production removes this AO^4 contribution
-    # from executed primitive work only after the prepared shell source succeeds.
-    ao_quartet_primitive_records = (1 + int(has_exchange)) * primitive_sum**4
-    ao_pair_primitive_records = (na + 2) * primitive_sum**2
-    ao_integral_primitive_records = (
-        ao_quartet_primitive_records + ao_pair_primitive_records
-    )
-    if records > np.iinfo(np.uint64).max:
-        raise ValueError("primitive work count exceeds uint64 metric range")
-    pair_visits = grid_work.grid_pair_visits
-    # Preserve the actual composition; the public selector is only a label.
-    method = state._source.method_ir
-    plan = StationaryGradientPlan(
-        method,
-        StationaryMeanField(
-            SCF_POINT_MODEL,
-            hamiltonian="scalar-semilocal-ecp" if ecp else "all-electron",
-        ),
-    )
-    source_names = stationary_runtime_sources(plan)
-    density = state.density if contract.spin == "polarized" else state.density[0]
-    if (
-        tuple(s for s in plan.source_names if s not in ("ecp_local", "ecp_nonlocal"))
-        != source_names
-    ):
-        raise ValueError(
-            "CUDA runtime source coverage differs from StationaryGradientPlan"
-        )
-    functional = int(state._source.metadata[6])
-    if functional not in _REGISTERED_STATIONARY_CODES:
-        raise ValueError("native snapshot reported an unknown semilocal functional")
-    record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
-    if ecp and record is not None and not record["stationary_ecp_gradient"]:
-        raise NotImplementedError(
-            f"{record['name']} CUDA stationary gradients do not inherit ECP support"
-        )
-    ingredients = state._source.functional.ingredients
-    needs_first = "sigma" in ingredients
-    device = int(state._source.metadata[12])
     grid_plan = plan_tiles(
         basis,
         backend="cuda",
@@ -2409,6 +2278,219 @@ def _complete_rks_cuda_gradient_diagnostic(
         - sum(value.peak_bytes for value in tensor_plans.values())
         - native_geometry_reserve,
     )
+    return _StationaryCudaTileLayout(
+        grid_plan,
+        tensor_plans,
+        host_bound,
+        native_integral_host_reserve,
+        ecp_workspace,
+        ecp_pair_samples,
+        native_geometry_reserve,
+        source_resources,
+    )
+
+
+def _complete_rks_cuda_gradient_diagnostic(
+    state: typing.Any,
+    basis: typing.Any,
+    *,
+    compiler: typing.Any,
+    cache: typing.Any,
+    aot_directory: typing.Any = None,
+    native_grid_library: typing.Any = None,
+    target: CudaTargetInfo | None = None,
+    tile_points: int | None = 256,
+    integral_terms: typing.Any = 32,
+    primitive_tile: typing.Any = 4096,
+    max_device_bytes: typing.Any = 512 << 20,
+    max_host_bytes: typing.Any = 256 << 20,
+    max_grid_points: typing.Any = 1_000_000,
+    max_primitive_records: typing.Any = _DEFAULT_MAX_PRIMITIVE_RECORDS,
+    max_grid_pair_visits: typing.Any = 100_000_000,
+    max_pending_grid_tiles: typing.Any = 64,
+    max_pending_grid_pair_visits: typing.Any = 100_000_000,
+    max_ecp_pair_samples: int = 100_000_000,
+    prepared: PreparedStationaryCudaExecution | None = None,
+    profile_device: bool = False,
+) -> typing.Any:
+    """Consume a current native CUDA RKS/UKS snapshot with every plan source.
+
+    Domain: qualified real FP64 RKS/UKS compositions, native unpruned grid and
+    distinct noncolliding centers. Enlarged domains require the shared native
+    stationary integral owner. No CPKS is required. None for either whole-grid
+    work guard admits the finite complete grid, retaining bounded submission
+    windows and the unchanged host/device byte budgets.
+    None for tile_points uses the shared budget-admitted composite/semilocal
+    schedule. An explicit tile is honored or rejected, never silently resized.
+    Device ordinal comes only from the opaque native snapshot. CUDA source
+    accumulators, grid owner and one TensorIR consumer coexist under the stated
+    additional-device budget; the pre-existing SCF owner/export and Python
+    objects are reported separately. No claim of full device residency is made.
+    Compilation and the selected GPU allocation are explicit.
+    Scalar-ECP v5 adds generated CUDA local/nonlocal derivatives and effective
+    charges (nine sources). Its small dense export is separately budgeted and
+    preserves the checked native two-grid gate. The public wrapper restricts ECP
+    force capability to Cartesian/real-spherical s/p records.
+    """
+    timeline = _ExclusiveWallTimeline()
+    contract = StationaryDerivativeContract(state.identity)
+    contract.validate(state)
+    if state._source.backend != "cuda":
+        raise NotImplementedError("CUDA diagnostic requires a native CUDA KS state")
+    if state._source.metadata[0] not in (3, 5, 8) or state._source.grid_spec is None:
+        raise NotImplementedError(
+            "CUDA diagnostic requires supported raw-measure/composition snapshots"
+        )
+    if (
+        basis.identity != state.identity.basis_identity
+        or native_ao_geometry_identity(basis) != state.identity.geometry_identity
+    ):
+        raise ValueError("stationary CUDA basis/geometry mismatch")
+    ecp = state._source.hamiltonian == "scalar-semilocal-ecp"
+    # Legacy v3 has no Hamiltonian records. Core-adjusted v3 remains rejected.
+    if (
+        float(np.sum(state.occupations))
+        != sum(a.atomic_number for a in basis.atoms)
+        - sum(state._source.ecp_cores)
+        - basis.charge
+    ):
+        raise NotImplementedError("CUDA gradient diagnostic requires bound ECP states")
+    if compiler is None:
+        if ecp or aot_directory is None or native_grid_library is None:
+            raise TypeError(
+                "runtime compilation requires an explicit CUDA compiler adapter"
+            )
+        if not isinstance(target, CudaTargetInfo):
+            raise TypeError(
+                "packaged stationary CUDA requires an explicit execution target"
+            )
+    elif not isinstance(compiler, CudaCompilerAdapter):
+        raise TypeError("an explicit CUDA compiler adapter is required")
+    elif target is not None and target != compiler.target:
+        raise ValueError("stationary CUDA compiler/execution target mismatch")
+    else:
+        target = compiler.target
+    for value, name, cap in (
+        (primitive_tile, "primitive_tile", 4096),
+        (integral_terms, "integral_terms", 128),
+        (max_device_bytes, "max_device_bytes", 1 << 40),
+        (max_host_bytes, "max_host_bytes", 1 << 40),
+        (max_primitive_records, "max_primitive_records", 1 << 40),
+        (max_ecp_pair_samples, "max_ecp_pair_samples", 1 << 40),
+    ):
+        if type(value) is not int or not 1 <= value <= cap:
+            raise ValueError(f"{name} must be an integer in [1,{cap}]")
+    na, n = basis.natom, basis.nao
+    requires_native_integrals = stationary_cuda_requires_native_integrals(
+        atoms=na, aos=n, primitives=basis.nprimitive
+    )
+    if requires_native_integrals and (
+        ecp
+        or not callable(
+            getattr(
+                state._source,
+                "density_fitted_integral_derivatives"
+                if bool(getattr(state._source, "density_fitted", False))
+                else "cuda_integral_derivatives",
+                None,
+            )
+        )
+    ):
+        raise NotImplementedError(
+            "enlarged stationary CUDA domains require prepared native integral derivatives"
+        )
+    _, aos, expansions, requests = _layout(basis)
+    component_mode = _component_mode(expansions)
+    primitive_sum = sum(
+        int(row[2]) * len(expansion)
+        for row, expansion in zip(aos, expansions, strict=True)
+    )
+    has_exchange = bool(state._source.method_ir.full_range_exact_exchange)
+    records = (
+        (1 + int(has_exchange)) * primitive_sum**4
+        + (na + 2) * primitive_sum**2
+        + na * (na - 1) // 2
+    )
+    # Keep the frozen whole-force capacity expression above intact for
+    # admission/evidence tooling. Production removes this AO^4 contribution
+    # from executed primitive work only after the prepared shell source succeeds.
+    ao_quartet_primitive_records = (1 + int(has_exchange)) * primitive_sum**4
+    ao_pair_primitive_records = (na + 2) * primitive_sum**2
+    ao_integral_primitive_records = (
+        ao_quartet_primitive_records + ao_pair_primitive_records
+    )
+    if records > np.iinfo(np.uint64).max:
+        raise ValueError("primitive work count exceeds uint64 metric range")
+    # Preserve the actual composition; the public selector is only a label.
+    method = state._source.method_ir
+    plan = StationaryGradientPlan(
+        method,
+        StationaryMeanField(
+            SCF_POINT_MODEL,
+            hamiltonian="scalar-semilocal-ecp" if ecp else "all-electron",
+        ),
+    )
+    source_names = stationary_runtime_sources(plan)
+    density = state.density if contract.spin == "polarized" else state.density[0]
+    if (
+        tuple(s for s in plan.source_names if s not in ("ecp_local", "ecp_nonlocal"))
+        != source_names
+    ):
+        raise ValueError(
+            "CUDA runtime source coverage differs from StationaryGradientPlan"
+        )
+    functional = int(state._source.metadata[6])
+    if functional not in _REGISTERED_STATIONARY_CODES:
+        raise ValueError("native snapshot reported an unknown semilocal functional")
+    record = SEMILOCAL_FAMILY_BY_CODE.get(functional)
+    if ecp and record is not None and not record["stationary_ecp_gradient"]:
+        raise NotImplementedError(
+            f"{record['name']} CUDA stationary gradients do not inherit ECP support"
+        )
+    ingredients = state._source.functional.ingredients
+    needs_first = "sigma" in ingredients
+    device = int(state._source.metadata[12])
+
+    def admit_tile(points: int) -> tuple[_StationaryCudaTileLayout, typing.Any]:
+        work = plan_stationary_cuda_grid_work(
+            atoms=na,
+            grid_points=len(state.grid.points),
+            tile_points=points,
+            max_grid_points=max_grid_points,
+            max_grid_pair_visits=max_grid_pair_visits,
+            max_pending_tiles=max_pending_grid_tiles,
+            max_pending_pair_visits=max_pending_grid_pair_visits,
+        )
+        layout = _plan_stationary_cuda_tile(
+            state,
+            basis,
+            plan=plan,
+            target=target,
+            needs_first=needs_first,
+            tile_points=points,
+            primitive_tile=primitive_tile,
+            integral_terms=integral_terms,
+            source_names=source_names,
+            ecp=ecp,
+            max_device_bytes=max_device_bytes,
+            max_host_bytes=max_host_bytes,
+            max_ecp_pair_samples=max_ecp_pair_samples,
+        )
+        return layout, work
+
+    requested_tile_points = tile_points
+    layout, grid_work = plan_stationary_cuda_grid_schedule(
+        grid_points=len(state.grid.points), tile_points=tile_points, admit=admit_tile
+    )
+    grid_plan = layout.grid_plan
+    tensor_plans = layout.tensor_plans
+    host_bound = layout.host_bound
+    native_integral_host_reserve = layout.native_integral_host_reserve
+    ecp_workspace = layout.ecp_workspace
+    ecp_pair_samples = layout.ecp_pair_samples
+    source_resources = layout.source_resources
+    tile_points = grid_plan.tile_points
+    pair_visits = grid_work.grid_pair_visits
     source_bytes = source_resources.allocation_bytes
     cache = Path(cache)
     spec = state._source.grid_spec
@@ -2979,6 +3061,10 @@ def _complete_rks_cuda_gradient_diagnostic(
             "schema": "generativeqc.stationary-grid-work.v1",
             **asdict(grid_work),
         },
+        grid_tile_schedule=(
+            "budget-auto" if requested_tile_points is None else "explicit"
+        ),
+        grid_tile_points_requested=requested_tile_points,
         native_integrals_required=requires_native_integrals,
         ordered_pairs=n * n,
         ordered_quartets=(1 + int(has_exchange)) * n**4,
@@ -3170,7 +3256,7 @@ def complete_rks_cuda_gradient_diagnostic(
     aot_directory: typing.Any = None,
     native_grid_library: typing.Any = None,
     target: CudaTargetInfo | None = None,
-    tile_points: typing.Any = 256,
+    tile_points: int | None = 256,
     integral_terms: typing.Any = 32,
     primitive_tile: typing.Any = 4096,
     max_device_bytes: typing.Any = 512 << 20,
