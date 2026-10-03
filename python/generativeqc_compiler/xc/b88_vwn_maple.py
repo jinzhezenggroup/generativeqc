@@ -95,11 +95,26 @@ def vwn_correlation(
 ) -> typing.Any:
     """Lower one pinned VWN correlation component into the caller Graph."""
 
-    _, _, _, _, _, density, zeta = _spin_channels(graph, spec, variables)
+    rho_a, rho_b, _, _, _, density, zeta = _spin_channels(graph, spec, variables)
     rs = graph.approximate_constant(
         (3.0 / (4.0 * math.pi)) ** (1.0 / 3.0)
     ) * density.pow(-1.0 / 3.0)
-    return density * _vwn_module(name).call(graph, "f", rs, zeta)
+    energy = density * _vwn_module(name).call(graph, "f", rs, zeta)
+    if spec.spin == "polarized":
+        # Form the fractional-power bases from the supplied spin densities.
+        # Near an empty channel, 1 +/- zeta can acquire a spurious minority
+        # fraction from rounding rho * (1/rho). Its cube root then amplifies
+        # a one-ulp density change into a discontinuous first derivative.
+        # Rewrite before differentiation: this preserves the positive-density
+        # VWN formula and its exact empty-spin limit without adding a cutoff.
+        plus, minus = 1 + zeta, 1 - zeta
+        dependencies = set(graph.topological_order((energy,)))
+        if not {plus.identifier, minus.identifier} <= dependencies:
+            raise ValueError("VWN spin interpolation changed in the pinned import")
+        energy = graph.replace_subexpressions(
+            (energy,), {plus: 2 * rho_a / density, minus: 2 * rho_b / density}
+        )[0]
+    return energy
 
 
 def b88_vwn_maple_provenance(

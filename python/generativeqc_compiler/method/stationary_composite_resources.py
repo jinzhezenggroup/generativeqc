@@ -12,6 +12,7 @@ from typing import Any
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 from generativeqc_compiler.method.stationary_resources import (
     StationaryCudaResources,
+    plan_stationary_cuda_grid_schedule,
     plan_stationary_cuda_resources,
 )
 
@@ -58,67 +59,51 @@ def plan_composite_stationary_cuda_resources(
     ):
         if type(value) is not int or not 0 < value < 2**64:
             raise ValueError(f"composite stationary {name} must be a positive uint64")
-    if tile_points is not None and (
-        type(tile_points) is not int or not 1 <= tile_points <= 4096
-    ):
-        raise ValueError("composite stationary tile_points must be None or in [1,4096]")
-    candidates = (
-        (tile_points,)
-        if tile_points is not None
-        else tuple(
-            dict.fromkeys(
-                min(points, grid_points)
-                for points in (1024, 256, 128, 64, 32, 16, 8, 4, 2, 1)
-            )
-        )
-    )
     n, na = basis.nao, basis.natom
     # The prepared Direct owner is already charged to SCF. This reserve covers
     # the existing one-electron/transient native route and final-state export.
     native_bytes = 256 * n * n + 1024 * (na + n + basis.nprimitive + len(basis.shells))
-    failure = None
-    for points in candidates:
-        try:
-            grid = grid_plan(points)
-            sources = plan_stationary_cuda_resources(
-                atoms=na,
-                aos=n,
-                primitives=basis.nprimitive,
-                points=points,
-                tasks=1,
-                spins=spins,
-                sources=source_count,
-                target=target,
-                budget_bytes=(
-                    max_device_bytes
-                    - grid.peak_bytes
-                    - 48 * points
-                    - nonlocal_bytes
-                    - native_bytes
-                )
-                // 2,
-                cooperative_becke=True,
+
+    def admit(points: int) -> CompositeStationaryCudaResources:
+        grid = grid_plan(points)
+        sources = plan_stationary_cuda_resources(
+            atoms=na,
+            aos=n,
+            primitives=basis.nprimitive,
+            points=points,
+            tasks=1,
+            spins=spins,
+            sources=source_count,
+            target=target,
+            budget_bytes=(
+                max_device_bytes
+                - grid.peak_bytes
+                - 48 * points
+                - nonlocal_bytes
+                - native_bytes
             )
-            device = (
-                grid.peak_bytes
-                + 2 * sources.allocation_bytes
-                + 48 * points
-                + nonlocal_bytes
-                + native_bytes
-            )
-            host = (
-                grid.host_bytes
-                + 8 * (64 * grid_points + 8 * n * n + 128 * na)
-                + nonlocal_bytes
-                + native_bytes
-            )
-            if device > max_device_bytes or host > max_host_bytes:
-                raise ValueError(
-                    "composite stationary numeric capacity budget exceeded"
-                )
-            return CompositeStationaryCudaResources(
-                grid, sources, native_bytes, device, host
-            )
-        except ValueError as error:
-            failure = error
-    raise ValueError("no admitted composite stationary grid schedule") from failure
+            // 2,
+            cooperative_becke=True,
+        )
+        device = (
+            grid.peak_bytes
+            + 2 * sources.allocation_bytes
+            + 48 * points
+            + nonlocal_bytes
+            + native_bytes
+        )
+        host = (
+            grid.host_bytes
+            + 8 * (64 * grid_points + 8 * n * n + 128 * na)
+            + nonlocal_bytes
+            + native_bytes
+        )
+        if device > max_device_bytes or host > max_host_bytes:
+            raise ValueError("composite stationary numeric capacity budget exceeded")
+        return CompositeStationaryCudaResources(
+            grid, sources, native_bytes, device, host
+        )
+
+    return plan_stationary_cuda_grid_schedule(
+        grid_points=grid_points, tile_points=tile_points, admit=admit
+    )

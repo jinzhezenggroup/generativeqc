@@ -364,7 +364,7 @@ def test_fitted_provider_retains_its_full_admitted_allowance(
         node
         for node in ast.parse(path.read_text()).body
         if isinstance(node, ast.FunctionDef)
-        and node.name == "_complete_rks_cuda_gradient_diagnostic"
+        and node.name == "_plan_stationary_cuda_tile"
     )
     reservation = next(
         node
