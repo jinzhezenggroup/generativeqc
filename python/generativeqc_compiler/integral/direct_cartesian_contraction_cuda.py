@@ -387,15 +387,16 @@ namespace generativeqc::scf::cuda_execution {
  * such thread, including coincident indices; repeated stores within that
  * thread are identical and need no atomic operation. Orbit mates share the
  * representative FP64 evaluation; independently reduced mates may differ by
- * roundoff. No derivative or
- * screened integral inherits this value-only permutation schedule.
+ * roundoff. No derivative or screened integral inherits this value-only
+ * permutation schedule. The selected system uses the original packed batch
+ * metadata, while the caller supplies exactly one system's dense output.
  */
-__device__ inline void materialize_eri_orbit(DeviceBatch batch, std::size_t element, double* eri) {
+__device__ inline void materialize_eri_system_orbit(
+    DeviceBatch batch, std::int32_t system, std::size_t element, double* eri) {
   const std::size_t n = static_cast<std::size_t>(batch.nbf);
   const std::size_t count = n * n * n * n;
-  if (element >= static_cast<std::size_t>(batch.batch_size) * count) return;
-  const auto system = static_cast<std::int32_t>(element / count);
-  std::size_t local = element % count;
+  if (element >= count) return;
+  std::size_t local = element;
   const auto l = static_cast<std::int32_t>(local % n); local /= n;
   const auto k = static_cast<std::int32_t>(local % n); local /= n;
   const auto j = static_cast<std::int32_t>(local % n);
@@ -403,12 +404,21 @@ __device__ inline void materialize_eri_orbit(DeviceBatch batch, std::size_t elem
   if (i < j || k < l || static_cast<std::size_t>(i) * n + j < static_cast<std::size_t>(k) * n + l)
     return;
   const double value = contracted_eri<double>(batch, system, i, j, k, l, -1);
-  const auto offset = static_cast<std::size_t>(system) * count;
   const auto store = [&](std::size_t a, std::size_t b, std::size_t c, std::size_t d) {
-    eri[offset + ((a * n + b) * n + c) * n + d] = value;
+    eri[((a * n + b) * n + c) * n + d] = value;
   };
   store(i, j, k, l); store(j, i, k, l); store(i, j, l, k); store(j, i, l, k);
   store(k, l, i, j); store(l, k, i, j); store(k, l, j, i); store(l, k, j, i);
+}
+
+/** Apply the same single-system schedule to a batch-major resident tensor. */
+__device__ inline void materialize_eri_orbit(DeviceBatch batch, std::size_t element, double* eri) {
+  const std::size_t n = static_cast<std::size_t>(batch.nbf);
+  const std::size_t count = n * n * n * n;
+  if (element >= static_cast<std::size_t>(batch.batch_size) * count) return;
+  const auto system = static_cast<std::int32_t>(element / count);
+  materialize_eri_system_orbit(batch, system, element % count,
+                               eri + static_cast<std::size_t>(system) * count);
 }
 
 }  // namespace generativeqc::scf::cuda_execution

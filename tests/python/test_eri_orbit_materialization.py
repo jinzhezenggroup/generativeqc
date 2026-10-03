@@ -23,7 +23,9 @@ def test_dense_orbit_coverage_and_unique_contracted_work(tmp_path: Path) -> None
     header = emit_direct_cartesian_contraction_headers()[
         "generated_direct_eri_materialization.cuh"
     ]
-    body = header[header.index("__device__ inline void materialize_eri_orbit(") :]
+    body = header[
+        header.index("__device__ inline void materialize_eri_system_orbit(") :
+    ]
     body = body.split("\n}  // namespace generativeqc::scf::cuda_execution", 1)[0]
     source, executable = tmp_path / "probe.cpp", tmp_path / "probe"
     source.write_text(PREFIX + body + MAIN)
@@ -160,6 +162,20 @@ int main() {
           const auto index=system*count+((static_cast<std::size_t>(i)*n+j)*n+k)*n+l;
           if(eri[index]!=expected(system,i,j,k,l)) return 2;
         }
+    // Selecting item 2 must read that item's metadata, but write only the
+    // single-system destination rather than a batch-offset output slot.
+    std::vector<double> selected(count+32,-123.0);
+    calls=0;
+    for(std::size_t element=0;element<count+255;++element)
+      materialize_eri_system_orbit({n,3},2,element,selected.data()+16);
+    if(calls!=unique) return 3;
+    for(std::size_t i=0;i<16;++i)
+      if(selected[i]!=-123.0 || selected[count+16+i]!=-123.0) return 4;
+    for(int i=0;i<n;++i) for(int j=0;j<n;++j)
+      for(int k=0;k<n;++k) for(int l=0;l<n;++l) {
+        const auto index=((static_cast<std::size_t>(i)*n+j)*n+k)*n+l;
+        if(selected[16+index]!=expected(2,i,j,k,l)) return 5;
+      }
     std::cout<<n<<' '<<count<<' '<<unique<<'\n';
   }
 }
