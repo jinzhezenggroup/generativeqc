@@ -109,6 +109,8 @@ macro(generativeqc_add_native_tests)
   generativeqc_native_test(generativeqc_runtime_workspace_tests tests/native/test_runtime_workspace.cpp NO_GENERATIVEQC)
   generativeqc_native_test(generativeqc_execution_context_tests tests/native/test_execution_context.cpp)
   generativeqc_native_test(generativeqc_cpu_linalg_tests tests/native/test_cpu_linalg.cpp)
+  generativeqc_native_test(generativeqc_cpu_compensated_sum_tests
+                     tests/native/test_cpu_compensated_sum.cpp NO_GENERATIVEQC)
   add_executable(generativeqc_cpu_linalg_probe benchmarks/cpu_linalg_probe.cpp)
   target_link_libraries(generativeqc_cpu_linalg_probe PRIVATE generativeqc)
   target_include_directories(generativeqc_cpu_linalg_probe PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
