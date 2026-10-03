@@ -308,3 +308,15 @@ of the completed unindexed joint comparison and its HF-style warm figure;
 complete cold results remain explicit in the detailed evidence. The new
 `.artifacts/vwn-spin-boundary-20261004/` retains the master-9c build and full
 regression receipts.
+
+## Master b909e14c1 follow-up
+
+Master subsequently merges reviewed #1801, which skips unconsumed resident
+PSSS packing only for Direct J/K and repairs standalone native DFT test linkage.
+The integration takes that exact packing policy. The only merge conflict is two
+wordings of the same XC-versus-grid ownership comment; retain master's wording
+and the identical four-double expectation. The existing native-input identity
+is now superseded for this union, so earlier endpoint records retain their
+frozen inputs. A new ccache build and finite full-native/independent fallback
+qualification are required before this newer composition is merged. The earlier
+large endpoint remains evidence for its original source, not a new timing claim.
