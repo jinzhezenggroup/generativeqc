@@ -374,6 +374,45 @@ __device__ inline Scalar contracted_eri(
 
 }  // namespace generativeqc::scf::cuda_execution
 """,
+    "generated_direct_eri_materialization.cuh": r"""#pragma once
+
+#include "generated_direct_contraction.cuh"
+
+// Compiler-owned dense value schedule; native launch and allocation stay with SCF.
+namespace generativeqc::scf::cuda_execution {
+
+/** Produce one exact Coulomb orbit in the dense public-AO tensor.
+ * The caller's flat grid is retained, but only i>=j, k>=l and (ij)>=(kl)
+ * evaluate the shared contracted ERI. Each dense slot belongs to exactly one
+ * such thread, including coincident indices; repeated stores within that
+ * thread are identical and need no atomic operation. Orbit mates share the
+ * representative FP64 evaluation; independently reduced mates may differ by
+ * roundoff. No derivative or
+ * screened integral inherits this value-only permutation schedule.
+ */
+__device__ inline void materialize_eri_orbit(DeviceBatch batch, std::size_t element, double* eri) {
+  const std::size_t n = static_cast<std::size_t>(batch.nbf);
+  const std::size_t count = n * n * n * n;
+  if (element >= static_cast<std::size_t>(batch.batch_size) * count) return;
+  const auto system = static_cast<std::int32_t>(element / count);
+  std::size_t local = element % count;
+  const auto l = static_cast<std::int32_t>(local % n); local /= n;
+  const auto k = static_cast<std::int32_t>(local % n); local /= n;
+  const auto j = static_cast<std::int32_t>(local % n);
+  const auto i = static_cast<std::int32_t>(local / n);
+  if (i < j || k < l || static_cast<std::size_t>(i) * n + j < static_cast<std::size_t>(k) * n + l)
+    return;
+  const double value = contracted_eri<double>(batch, system, i, j, k, l, -1);
+  const auto offset = static_cast<std::size_t>(system) * count;
+  const auto store = [&](std::size_t a, std::size_t b, std::size_t c, std::size_t d) {
+    eri[offset + ((a * n + b) * n + c) * n + d] = value;
+  };
+  store(i, j, k, l); store(j, i, k, l); store(i, j, l, k); store(j, i, l, k);
+  store(k, l, i, j); store(l, k, i, j); store(k, l, j, i); store(l, k, j, i);
+}
+
+}  // namespace generativeqc::scf::cuda_execution
+""",
 }
 
 
