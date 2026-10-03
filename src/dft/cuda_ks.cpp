@@ -1606,8 +1606,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
                            physical.maximum_residual < std::min(1e-9, options.density_tolerance);
     // Keep the existing RMS diagnostic, but do not publish an energy-only state
     // that the shared final-state validator will reject on the AO maximum norm.
-    const bool strict_final_closure =
-        incremental_jk || spins == 2 || !provider.system().ecp_terms.empty();
+    // A converged full-density RKS build already supplies physical F[D] at the
+    // accepted density. Its residual gates and unshifted final-state validator
+    // are identical to ordinary RKS; another full build would repeat that work.
+    // A delta-built state still needs full-density closure. Keep the independent
+    // UKS/ECP proposal-correction requirement even when their last build is full.
+    const bool strict_final_closure = (incremental_jk && !pending_incremental_full) || spins == 2 ||
+                                      !provider.system().ecp_terms.empty();
     const bool mixed_stage = precision_schedule.any_mixed() && !strict_refinement;
     const bool enter_strict_refinement =
         mixed_stage && (converged || output.iterations >= options.max_iterations);

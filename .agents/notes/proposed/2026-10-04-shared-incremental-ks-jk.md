@@ -143,3 +143,8 @@ ordered first campaign, not matched/interleaved speedup evidence.
 - Existing HF foundation: #990 and #1579.
 - Separate derivative AO-screen experiment: draft #1798. Its performance
   observations are not evidence for this incremental-SCF source.
+
+The unconditional RKS closure policy is superseded experimentally by
+`2026-10-04-reuse-full-rks-audit.md`. It preserves these frozen-source observations
+and separately documents the negative large-system warm results; neither is
+relabeled as follow-up-source evidence.

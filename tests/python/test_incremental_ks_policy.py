@@ -92,3 +92,38 @@ def test_shared_selector(
     assert result.returncode == (0 if expected is not None else 2)
     if expected is not None:
         assert result.stdout == expected
+
+
+def test_final_closure_reuses_only_full_rks_builds(tmp_path: Path) -> None:
+    """Execute the production decision, retaining delta/UKS/ECP corrections."""
+    from test_component_precision_master_integration import _run
+
+    source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    start = source.index("    const bool strict_final_closure =")
+    decision = source[start : source.index(";", start) + 1]
+    _run(
+        tmp_path,
+        r"""
+#include <cassert>
+#include <vector>
+bool needs_closure(bool incremental_jk, bool pending_incremental_full,
+                   unsigned spins, bool ecp) {
+  struct Provider {
+    struct System { std::vector<int> ecp_terms; } value;
+    const System& system() const { return value; }
+  } provider;
+  if (ecp) provider.value.ecp_terms.push_back(1);
+"""
+        + decision
+        + r"""
+  return strict_final_closure;
+}
+int main() {
+  for (bool incremental : {false, true}) for (bool full : {false, true}) {
+    assert(needs_closure(incremental, full, 2, false));
+    assert(needs_closure(incremental, full, 1, true));
+    assert(needs_closure(incremental, full, 1, false) == (incremental && !full));
+  }
+}
+""",
+    )

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
 #include <string>
@@ -43,9 +44,11 @@ struct ManagedArray {
   ManagedArray& operator=(const ManagedArray&) = delete;
 };
 
-void verify_linear_channels(unsigned spins, unsigned channels, bool with_hcore) {
+void verify_linear_channels(unsigned spins, unsigned channels, bool with_hcore,
+                            unsigned basis_size = 2) {
   using namespace generativeqc::scf::cuda_execution;
-  constexpr unsigned batch = 3, basis_size = 2, matrix = basis_size * basis_size;
+  constexpr unsigned batch = 3;
+  const unsigned matrix = basis_size * basis_size;
   const auto density_elements = batch * spins * matrix;
   const auto channel_elements = batch * channels * matrix;
   ManagedArray<double> density(density_elements), anchor_density(density_elements),
@@ -263,12 +266,18 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
 
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
+  const bool linear_only = argc == 2 && std::string(argv[1]) == "--linear-kernels-only";
+  if (argc != 1 && !linear_only) return EXIT_FAILURE;
   if (!cuda_device_available()) return 77;
   try {
     verify_linear_channels(1, 2, false);
     verify_linear_channels(2, 3, false);
     verify_linear_channels(2, 1, false);
+    verify_linear_channels(2, 3, false, 7);
+    verify_linear_channels(2, 1, false, 7);
+    verify_linear_channels(2, 2, true, 7);
+    if (linear_only) return EXIT_SUCCESS;
     verify_linear_channels(1, 1, true);
     verify_linear_channels(2, 2, true);
     verify_case(false, 0.0, 0U);
@@ -276,7 +285,8 @@ int main() {
     verify_case(false, 1.0e-12, 8U);
     verify_case(true, 1.0e-12, 8U);
     return EXIT_SUCCESS;
-  } catch (const std::exception&) {
+  } catch (const std::exception& error) {
+    std::fprintf(stderr, "%s\n", error.what());
     return EXIT_FAILURE;
   }
 }

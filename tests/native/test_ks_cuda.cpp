@@ -296,7 +296,7 @@ void run_exact_exchange_case(bool restricted, bool incremental = false,
   if (incremental) {
     const auto& census = result.incremental_direct_jk;
     require(census.requested && census.active && census.anchor_full_builds > 0 &&
-                census.delta_builds > 0 && census.post_scf_full_builds > 0 &&
+                census.delta_builds > 0 && (restricted || census.post_scf_full_builds > 0) &&
                 census.anchor_updates == census.delta_builds &&
                 census.anchor_full_builds + census.delta_builds + census.post_scf_full_builds ==
                     result.fock_builds &&
@@ -350,8 +350,13 @@ void run_exact_exchange_case(bool restricted, bool incremental = false,
     const auto warm_result = plan.run(nullptr, true);
     const auto& census = warm_result.incremental_direct_jk;
     require(warm_result.converged && std::abs(warm_result.energy - reference.energy) < 1e-10 &&
-                census.anchor_full_builds > 0 && census.post_scf_full_builds > 0,
+                census.anchor_full_builds > 0 && warm_result.precision.final_residual_audits == 1 &&
+                (restricted || census.post_scf_full_builds > 0),
             "warm KS reused an earlier solve's incremental anchor or omitted its final audit");
+    if (restricted)
+      require(warm_result.fock_builds == 1 && census.anchor_full_builds == 1 &&
+                  census.delta_builds == 0 && census.post_scf_full_builds == 0,
+              "stationary RKS warm replay repeated an already audited full-density build");
     require(plan.read_final_state(token, false, snapshot, detail) ==
                 GENERATIVEQC_STATUS_INVALID_ARGUMENT,
             "incremental KS retained a previous solve's final-state token");

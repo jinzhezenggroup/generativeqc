@@ -98,7 +98,9 @@ def test_incremental_ks_independent_endpoint_and_fd(
             assert census["active"] == (enabled == "1")
             if enabled == "1":
                 assert census["anchor_full_builds"] > 0
-                assert census["post_scf_full_builds"] > 0
+                assert result.precision["final_residual_audits"] == 1
+                if spin == "uks":
+                    assert census["post_scf_full_builds"] > 0
                 assert not census["quartet_work_counters_valid"]
                 assert (
                     sum(
@@ -113,6 +115,11 @@ def test_incremental_ks_independent_endpoint_and_fd(
                 )
         if enabled == "1":
             assert point.incremental_direct_jk["delta_builds"] > 0
+            if spin == "rks":
+                assert not warm.warm_start_fallback
+                assert warm.ks_diagnostic.fock_builds == 1
+                assert warm.incremental_direct_jk["delta_builds"] == 0
+                assert warm.incremental_direct_jk["post_scf_full_builds"] == 0
         with NativeAO(
             atoms,
             basis=basis,
