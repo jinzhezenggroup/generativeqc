@@ -54,6 +54,12 @@
       "decoded_sha256": "e2d91d8b1e3480c6320d3071e71d6be859610cbb44c086224107a2b74d7b1bfc",
       "decoded_bytes": 76965
     },
+    "matched96-dense.json.xz": {
+      "sha256": "62aa98a3aef4032003373ce9c264e1e26e89f7c5fbb76a5effd13dd3b508c9e3",
+      "bytes": 22968,
+      "decoded_sha256": "49e54fab605c9c43fc5b47b427e6dbe19f548f3c0f694879403906faff71542c",
+      "decoded_bytes": 212383
+    },
     "matched96-sparse.json.xz": {
       "sha256": "330df9491d70aade7f4f3d92362d99ef2088195b4d4e7cbff51d6efbc5220784",
       "bytes": 23276,
@@ -97,10 +103,9 @@
       "sparse"
     ],
     "96": [
+      "dense",
       "sparse"
     ]
   },
-  "pending_controls": [
-    "matched96-dense"
-  ]
+  "pending_controls": []
 }
