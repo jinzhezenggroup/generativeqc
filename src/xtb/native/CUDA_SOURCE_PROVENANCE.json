@@ -10,7 +10,7 @@
     "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science and radial Cartesian projection; retain native element-pair parameter composition, CUDA reduction, and error ownership.",
     "src/backends/cuda/gfn2_repulsion.cuh": "Add explicit generated-pair nonfinite arithmetic status.",
     "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, diagnostic snapshots, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback.",
-    "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, and AO contraction arithmetic while retaining CUDA topology, validation, reductions, atomics, thresholds, and failure semantics.",
+    "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, AO contraction arithmetic and bounded shell-pair schedules; retain native ragged traversal, once-per-system validation/seeding, FP64 atomics, thresholds and whole-system failure publication.",
     "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces.",
     "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
     "src/backends/cuda/gfn2_spin.cu": "Consume shared compiler TensorIR FMA potential/energy updates and symmetric-energy AD identity; retain ragged admission, restricted zero branch and scratch publication.",
@@ -233,7 +233,7 @@
     "src/backends/cuda/gfn2_h0_force.cu": {
       "adapted": true,
       "upstream_sha256": "ffccf6543aefc02feba9c23913bff8c544f6389a67956535d9e2372f1b50176a",
-      "vendored_sha256": "7a9958244f22aee8e0c26a04c2e4e5a5ea7be4b3333be23b8b20b695a7e5f5e3"
+      "vendored_sha256": "c971c8d3c64aad76eff73c8a688bb159d304a44edeb66bdca8f2ade69bdcc3d5"
     },
     "src/backends/cuda/gfn2_h0_force.cuh": {
       "adapted": true,
