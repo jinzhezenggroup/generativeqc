@@ -7,11 +7,11 @@
   },
   "files": [
     {
-      "bytes": 162740,
-      "path": "verification.json",
+      "bytes": 9331,
+      "path": "verification.json.gz",
       "reason": "Complete raw interleaved D/C timings, numerical gates, per-case source identities and composed resource capacities; no transient logs or build products.",
       "role": "evidence",
-      "sha256": "ab6f3595c9c053d173404bf2725fa14d08ea288a1042c1f870a8e722d37c4c7c"
+      "sha256": "ec397beb854611c0ac7c3ec2834f52cb3143c39d31be12361ec9fe875e46192c"
     },
     {
       "bytes": 6176,

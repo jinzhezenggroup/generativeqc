@@ -14,6 +14,7 @@ def test_direct_cartesian_contraction_is_compiler_owned() -> None:
     assert set(headers) == {
         "generated_direct_cartesian.cuh",
         "generated_direct_contraction.cuh",
+        "generated_direct_eri_materialization.cuh",
     }
     cartesian = headers["generated_direct_cartesian.cuh"]
     contraction = headers["generated_direct_contraction.cuh"]

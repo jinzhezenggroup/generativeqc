@@ -41,13 +41,39 @@ path when submitting from another directory. Slurm executes a spool copy of
 the script, so the runner uses `SLURM_SUBMIT_DIR` instead of that copy's location. The
 archived manifest retains the absolute paths and environment used for job 1097.
 
-The archive contains the exact manifest, four endpoint JSON files, and their
-stdout/stderr logs. The manifest records the Slurm job, CUDA visibility, source
-identity, command lines, and return codes. SHA-256 and member digests are in
-`raw-evidence.manifest.json`.
+The historical archive contains the exact run manifest, four endpoint JSON
+files, and their stdout/stderr logs, including command lines and return codes.
+No current performance promotion or live statistic is computed from that
+historical matrix; new qualifications use the runner and its current gates.
 
-Verify and restore the original measurements without running GPU work:
+## Archived raw records
+
+This is a historical acceptance/diagnostic report, not an active numerical
+fixture. Its conclusions, failures, source identities and limits remain below;
+current independent fixtures remain under `tests/reference_data/`. The raw ZIP
+is no longer required in the normal checkout. Its exact bytes are pinned to
+commit `1a4acc519eb881cc19d418de65ecca72324359d4` by the
+[shared recovery manifest](../retention-reports-20261003/snapshot.manifest.json).
+The original [member manifest](raw-evidence.manifest.json) still verifies every
+extracted member and preserves the earlier storage/source provenance.
+
+Restore the ZIP from locally available Git history, then verify or unpack it
+into a new directory (Python standard library only):
 
 ```bash
-python -m tools.unpack_evidence benchmarks/results/issue206-df-a --output /tmp/issue206-df-a
+python tools/restore_retained_evidence.py \
+  benchmarks/results/issue206-df-a/raw-evidence.zip \
+  --manifest benchmarks/results/retention-reports-20261003/snapshot.manifest.json \
+  --output .artifacts/issue206-df-a/raw-evidence.zip
+python -m tools.unpack_evidence benchmarks/results/issue206-df-a \
+  --archive .artifacts/issue206-df-a/raw-evidence.zip \
+  --output .artifacts/issue206-df-a/unpacked
 ```
+
+Both operations refuse an existing destination. Omit `--output` from the
+unpack command to verify without extracting. Names of archived members below
+refer to the unpacked directory; scripts there are records, not commands to
+execute. No implicit network fetch occurs. For source archives or shallow
+clones missing the recorded objects, see the
+[history availability instructions](../retention-reports-20261003/README.md#recovery).
+Restoration proves storage integrity, not a fresh scientific acceptance run.

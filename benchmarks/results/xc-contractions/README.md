@@ -119,7 +119,7 @@ process trials. Full native-library build time is not included in the generated
 point compilation total. Complete program construction, basis/spatial/prepared
 construction and execution times remain separate in the samples.
 
-`samples.json`, `summary.json`, `evidence.json` and `publication.json` form the
+`samples.json.gz`, `summary.json`, `evidence.json.gz` and `publication.json` form the
 shared-policy publication. The sample case list is grouped by fixture under
 `samples-cases/`; `tools.vibeqc_validation.record.load_record` checks the part
 hashes and reconstructs all 128 cases and 640 samples without changing values.
@@ -135,3 +135,10 @@ native cache as instrumented. To rerun:
 ```bash
 python tools/check_xc_native_sanitizer.py --output .artifacts/xc-sanitizer
 ```
+
+### Stored JSON records
+
+Large retained JSON members use deterministic gzip. The publication manifest
+pins their stored paths and hashes; the shared record reader restores every
+original numerical value and sample order. This storage change adds no new
+measurement, acceptance decision or performance claim.
