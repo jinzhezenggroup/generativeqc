@@ -1,6 +1,7 @@
 # Proposal: share low-order long-range force roots across components and centers
 
-Status: proposed; independent device and complete endpoint qualification pending
+Status: proposed; independent device and complete numerical gates pass;
+controlled full-grid endpoint measurements pending
 Date: 2026-10-03
 
 ## Measured problem
@@ -78,3 +79,39 @@ Promote only after controlled complete endpoint improvement, larger-system
 qualification and independent numerical gates. Reconsider the scalar shell
 schedule if its register pressure or serialization regresses the endpoint;
 the generic higher-order recurrence remains the explicit bounded fallback.
+
+## Final portable candidate qualification
+
+The frozen production candidate is `ac8e14728e389d4a8791da9a603260455feccb81`.
+Its clean-source content identity is
+`d67decd856253688d79dd6e5b330678a10bb5d087a80771ea7cd85743e464c64`, independently
+recomputed and matched against the rebuilt library. Library SHA-256 is
+`e51239008c378cf61e4703abd5e287825beb131bb192f1aea7a444a7a449f5bd`; source archive
+SHA-256 is `dfd3c6b4fd4dbad0ee153d402a1baf931802b992d22e83a8a13bdfb4ad1f269d`.
+
+n1 Slurm 5510 (finite 45-minute RTX 5090 allocation, exit 0) passes native
+s/p/d/f SR/LR and Cartesian order-two independent CPU finite-difference gates,
+including the actual bounded route, four-center and repeated-center bindings.
+The native executable passes compute-sanitizer memcheck with zero errors.
+All seven complete independent WB97M-V RKS/UKS and force-rebuild/stale-state
+tests pass in 199.40 seconds. CuMetal CI run 37101509535 also passes after the
+invalid-input marker was changed to a namespace compile-time NaN constant.
+
+The previous `e08112c` library (`dc835e13...`) passed the same numerical gates
+but failed CuMetal compilation because its `nan()` call was host-only. That
+prototype and all receipts are retained under `attempts/e08112c/`. Its
+reduced-grid water12 diagnostic passes the independent CPU original/moved
+oracles: single warm endpoint 22.580341 -> 20.892754 seconds, moved endpoint
+90.994328 -> 89.742201 seconds, maximum energy/force errors 1.43e-12 Eh /
+8.97e-10 Eh/Bohr. These single observations are neither full-grid speedup
+claims nor timings of the final portable binary.
+
+The final binary's same-allocation full-grid 24-atom comparison runs in n1
+Slurm 5511; its moved12 requalification runs in 5512. The controlled full-grid
+96-atom base/candidate comparison runs in n5 Slurm 1410. Its candidate phase
+is gated by a successful numerical receipt carrying the actual library hash;
+the final 5510 receipt has been verified and installed. Each full-grid engine
+has a fresh full-density Fock reference and three engine-local warm repeats.
+No controlled final-candidate speedup is established yet. Master advanced to
+`59eee77f4` through Python loader work while these frozen measurements ran;
+no old result is relabeled as that newer source.
