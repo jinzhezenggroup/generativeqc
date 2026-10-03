@@ -739,6 +739,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         bool host_oom = false;
         auto status = runtime::resource_cuda_malloc(&xc_arena, resource.xc_device_bytes, &host_oom);
         if (admit_ao && status == cudaErrorMemoryAllocation && !host_oom) {
+          const auto pending = cudaGetLastError();
+          if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
           admit_ao = false;
           resource.retained_host_numeric_bytes -= ao_selection_bound.host_peak_bytes;
           resource.xc_device_bytes = xc_layout.device_bytes;

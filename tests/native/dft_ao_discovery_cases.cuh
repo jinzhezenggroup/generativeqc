@@ -62,5 +62,24 @@ void ao_discovery_cases() {
             "AO discovery exceeded its device admission");
     local_ao_reference(dense, basis, grid, local_maps(grid.point_count(), 129, basis.nao, 0),
                        density(basis.nao, 1));
+    // A physical replay body touches scratch before its generation is
+    // published. Zero submitted/evaluation counters must not admit discovery
+    // into a previously captured or outstanding body.
+    Fixture replay(basis, grid, 4U, false, 129, CudaXcAoPrecision::Fp64, false, 1, 1, nullptr,
+                   true);
+    const auto d = density(basis.nao, 1);
+    check(cudaMemcpyAsync(replay.density, d.data(), d.size() * sizeof(double),
+                          cudaMemcpyHostToDevice, replay.stream));
+    replay.plan->enqueue_replay_body(replay.density, d.size());
+    require(replay.plan->transfers().evaluations == 0, "replay probe unexpectedly published work");
+    bool rejected = false;
+    try {
+      replay.plan->select_local_ao(1e-16, std::numeric_limits<std::size_t>::max());
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "discovery was allowed after an unpublished replay body");
+    check(cudaStreamSynchronize(replay.stream));
+    replay.canary();
   }
 }
