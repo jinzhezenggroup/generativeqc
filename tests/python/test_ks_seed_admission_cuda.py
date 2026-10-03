@@ -56,6 +56,7 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
     calc = Calculator(
         method=method,
         basis=basis,
+        basis_representation="spherical",
         device="cuda",
         max_iterations=150,
         ks_options=KsOptions(grid=GridSpec(16, 8, 16)),
