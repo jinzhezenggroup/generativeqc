@@ -75,3 +75,16 @@ geometry, grid order and derivative domain, retain a dense fallback for budget
 or capability misses, and independently qualify complete energy/forces and moved
 geometries before any automatic screening policy is admitted. The SCF grid
 consumer requires its own local potential/scatter integration.
+
+Review follow-up: the initial fixture loop prepared capacity 129 but its actual
+stored grids were smaller than 128 points. Job 5563 adds twelve independent
+cases with actual 129/257-point inputs and >32, nonmultiple-of-32 AO columns.
+Three copies of the stored Cartesian/spherical f-shell fixtures repeat their
+independently recorded columns exactly. The first 128/256 points are a quiet
+fixture row; only the final point exceeds the chosen column's threshold. The
+third AO copy crosses the AO-block boundary, so both the late point block and
+AO tail must contribute. Removing that final point removes the designated AO.
+Orders 0, 2 and 3 pass exact ID comparisons with the stored oracle. All 33
+producer tests pass normally (7.73 s) and under memcheck (8.70 s, zero errors).
+This repairs the independent cross-block/tail coverage claim without changing
+producer code, cutoffs or endpoint policy.

@@ -127,3 +127,63 @@ def test_discovery_invalidates_views_and_rejects_bad_inputs(
         ids = grid.select_ao_device_points(points.data.ptr, 7, cutoff=1e-16)
         with grid.feature_task_device_points(points.data.ptr, 7, ids, ("rho",)) as task:
             assert task.view.nactive == len(ids)
+
+
+@pytest.mark.parametrize("name", ("f_cartesian", "f_spherical"))
+@pytest.mark.parametrize("order", (0, 2, 3))
+@pytest.mark.parametrize("count", (129, 257))
+def test_independent_point_blocks_and_nonmultiple_ao_tails(
+    artifact: typing.Any, name: str, order: int, count: int
+) -> None:
+    """A stored-oracle value only in the last point block must retain its AO.
+
+    Repeating independent fixture shells repeats their already recorded AO
+    columns exactly; it supplies a >32, nonmultiple-of-32 AO domain without
+    using the GPU or the current native evaluator to construct the oracle.
+    """
+    import cupy as cp
+    from generativeqc_compiler.dft import NativeAO
+    from generativeqc_compiler.dft.ao import jet_indices
+    from generativeqc_compiler.dft.cuda import CudaGrid
+    from generativeqc_compiler.dft.fixtures import basis_arguments, load_fixture
+
+    meta, arrays = load_fixture(name)
+    arguments = basis_arguments(meta)
+    arguments["basis"] *= 3
+    per_point = np.max(np.abs(arrays["ao_jets"][: len(jet_indices(order))]), axis=0)
+    column = int(np.argmax(np.max(per_point, axis=0) - np.min(per_point, axis=0)))
+    quiet, loud = (
+        int(np.argmin(per_point[:, column])),
+        int(np.argmax(per_point[:, column])),
+    )
+    cutoff = float(0.55 * per_point[quiet, column] + 0.45 * per_point[loud, column])
+    assert 0 <= per_point[quiet, column] < cutoff < per_point[loud, column]
+    rows = np.full(count, quiet, dtype=int)
+    rows[-1] = loud
+    maxima = np.max(per_point[rows], axis=0)
+    assert np.all(np.abs(maxima - cutoff) > 1e-11 * np.maximum(maxima, cutoff))
+    expected = np.flatnonzero(np.tile(maxima > cutoff, 3))
+    with (
+        NativeAO(**arguments) as basis,
+        CudaGrid(
+            basis,
+            artifact,
+            order=order,
+            tile_points=count,
+            active_ao_capacity=basis.nao,
+            ingredients=("rho",),
+        ) as grid,
+    ):
+        assert basis.nao > 32 and basis.nao % 32 != 0
+        points = cp.asarray(arrays["points"][rows])
+        cp.cuda.Stream.null.synchronize()
+        selected = grid.select_ao_device_points(points.data.ptr, count, cutoff=cutoff)
+        np.testing.assert_array_equal(selected, expected)
+        # The third copy crosses the AO-block boundary, and its decisive
+        # contribution is solely in point block 1 or 2 (a one-point tail).
+        late_column = 2 * per_point.shape[1] + column
+        assert late_column >= 32 and late_column in selected
+        quiet_selected = grid.select_ao_device_points(
+            points.data.ptr, count - 1, cutoff=cutoff
+        )
+        assert late_column not in quiet_selected
