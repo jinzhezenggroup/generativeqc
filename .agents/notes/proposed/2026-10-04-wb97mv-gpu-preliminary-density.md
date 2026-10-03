@@ -167,6 +167,43 @@ Slurm/source/library receipts remain in ignored
 `.artifacts/semilocal-seed-displaced-20261004/`. They do not replace any of the
 frozen README timing reports.
 
+## Completed 48-atom LDA/control subset and 96-atom expansion
+
+Slurm 5645 completes the unseeded and LDA variants at 48 atoms. A separate
+read-only subset verifier checks all ten cold/priming/warm E/F pairs, source
+costs, actual SCF/force AO selection and reference XC on GPU. Maximum errors
+are below 1.251e-11 Eh / 6.305e-10 Eh/Bohr; every priming/warm call takes one
+iteration. PBE remains in progress and is not represented as completed.
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 960.174251 s | 475.260614 s | 21 | none |
+| LDA | 752.846451 s | 475.987336 s | 15 | 25 / 49.247219 s |
+
+The full 49.247219 s source cost includes 36.502280 s preparation/solve and
+12.739289 s export/import, plus the remaining measured source lifecycle work.
+All 25 source XC evaluations are recorded. The 21.59% complete-cold reduction
+survives charging that whole cost; native cold remains about 1.58 times its
+reference. Warm medians are 93.390685 / 93.425450 s for none/LDA, versus paired
+reference 103.141942 / 103.421357 s. The source performs no work in warm calls.
+
+`verify-completed-modes.py` preserves the original verifier's scientific gates
+while explicitly selecting the two completed variants and writing a separate
+`matched48-completed-subset-verified.json`; it does not alter the original
+three-variant runner/verifier or any raw record. No pending PBE sample is
+included or dropped from a completed comparison.
+
+The next 96-atom unseeded/LDA comparison uses newly qualified integration
+678f7eb88/master 837c2a51c, source identity d198acd7 and library fe826ad7 as
+fully recorded in the resident integration note. It runs on n1 RTX 5090 with
+a finite six-hour allocation and fresh identical source/target coordinates.
+Startup requires the ten-pair 48-atom receipt, at least 5% complete-cold benefit,
+and both seven-case numerical/fallback qualifications of the new composition.
+All source costs remain charged and all endpoint gates remain unchanged.
+This larger comparison is pending; the private source bridge is still not a
+public CUDA preliminary-SCF or public resource-budget contract. Receipts remain
+under ignored `.artifacts/seed96-master837-20261004/`.
+
 ## Promotion gates
 
 Require larger and displaced-system complete endpoints before claiming a
