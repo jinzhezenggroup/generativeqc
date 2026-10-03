@@ -57,7 +57,7 @@ to 8,961,320 bytes because the final derivative stage remains dominant. Cold,
 warm and changed-geometry times were approximately 2.5-3.0 s for both schedules;
 no complete-endpoint speedup is established by that result.
 
-The [retained CPU summary](../../../../benchmarks/results/ccsdt-arena-20261002/cpu-summary.json)
+The [retained CPU summary](../../../../benchmarks/results/ccsdt-arena-20261002/cpu-summary.json.gz)
 binds binary hashes, exact basis/geometry/settings, complete endpoint timings,
 per-phase work counts and all-repeat oracle errors. It covers 7-AO forces and
 14/28-AO energies, each cold, twice warm and at changed geometry. Baseline and
@@ -88,7 +88,7 @@ Real-device CUDA qualification passed on node1's RTX 5090 through Slurm job
 tests passed. The 7-AO complete force endpoint passed compute-sanitizer memcheck
 with zero errors; 14/28-AO energy endpoints completed cold, twice warm and after
 geometry change. All runs meet the matched PySCF energy/triples/force gates. The
-[retained CUDA summary](../../../../benchmarks/results/ccsdt-arena-20261002/cuda-summary.json)
+[retained CUDA summary](../../../../benchmarks/results/ccsdt-arena-20261002/cuda-summary.json.gz)
 binds the binary/source hashes, Slurm visibility, work counts and oracle errors.
 The remote node was shared and force timing was instrumented: no GPU speedup
 claim follows from this qualification. Node4 could not run qualification because
@@ -105,3 +105,7 @@ buffers. More aggressive packing across symbolic sizes, graph reordering and
 fused reductions may improve the remaining peak, but require separate work and
 complete-endpoint evidence. The retained expanded replay reduces less than the
 iteration graph because its original topological order keeps more terms live.
+
+## Lossless storage (2026-10-03)
+
+The retained records now use deterministic gzip without changing their original bytes, scientific values, failures or measured identities. [ccsdt-arena-20261002/storage.json](../../../../benchmarks/results/ccsdt-arena-20261002/storage.json) pins the original Git blob, original/stored SHA-256 and byte counts. The storage revision identifies the accepted source of these bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json`, or decode with `gzip -cd FILE.json.gz`. Decode any `experimental-comparator.patch.gz` before applying the original patch. Historical Git objects remain available; no new experiment or performance claim is added.
