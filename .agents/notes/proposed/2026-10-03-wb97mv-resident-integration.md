@@ -1,6 +1,6 @@
 # Qualification: resident AO maps and indexed WB97M-V forces
 
-Status: opt-in integration; current-master complete endpoint qualification passed, timings pending
+Status: opt-in integration; complete endpoint qualification passed, latest-master 96-atom timing pending
 Date: 2026-10-03
 
 ## Composition and ownership
@@ -25,9 +25,17 @@ host budget, and this composition does not promote automatic screening.
 The jointly mapped, unindexed integration 0132d7584 is retained in README PR
 #1786 with every cold/priming/warm pair, source/binary hashes and replay scripts.
 Its 24/48/96-atom complete warm medians are 26.330918/97.112717/387.179006 s,
-versus paired reference 27.397887/103.042334/403.542077 s. All 25 pairs across
-its five completed dense/joint variants pass the original 1e-8 Eh / 1e-7
-Eh/Bohr gates. The 96-atom dense control remains pending. Cold remains slower.
+versus paired reference 27.397887/103.042334/403.542077 s. Fresh same-source
+3/6/12-atom points complete the HF-style six-point curve. All 45 pairs across
+nine dense/joint variants pass the original 1e-8 Eh / 1e-7 Eh/Bohr gates.
+Finite n5 Slurm 1412 now completes its 96-atom dense control: warm median
+457.225580 s versus its own paired reference 404.221890 s. Joint-map warm
+latency is 15.32% below this same-binary dense control, with one SCF iteration
+in every warm/priming call. Dense complete cold is 5016.225258 s, versus joint
+4092.520636 s and their respective references 1849.279613 / 1851.051863 s.
+Native dense/joint cold trajectories take 23/25 iterations, so their cold
+difference is not an isolated contraction-work comparison. Both remain slower
+than the reference. This source is still the frozen 0132/b82 composition.
 
 The indexed composition 9ad97c2c4 is separately published as
 `benchmark/wb97m-indexed-20261003`. Its 1353-input source identity is
@@ -47,8 +55,17 @@ includes construction and preparation: 3707.315601 versus 1815.398540 s, with
 23 versus 16 SCF iterations. No iteration normalization or sample omission is
 used. Grid, method, basis and full energy/analytic-force semantics match #1786.
 
-The same-binary 96-atom unindexed control is still running. Its absence prevents
-attributing the full reference advantage to indexed scheduling. At 24 atoms,
+The same-binary 96-atom unindexed control also completes in Slurm 5585. All ten
+OFF/ON cold/priming/warm pairs pass the independent verifier, with maximum
+errors below 1.174e-10 Eh / 4.853e-10 Eh/Bohr. Unindexed warm samples are
+380.325073, 380.922667 and 383.214918 s (median 380.922667 s); the paired
+reference median is 399.923344 s. Indexed scheduling therefore reduces native
+warm latency by 4.24%, separately from the complete 8.79% reference advantage.
+Every priming/warm call takes one iteration and reference XC remains on GPU.
+Unindexed complete cold is 3875.281943 s with 24 iterations, versus indexed
+3707.315601 s with 23; their respective references are 1813.225496 /
+1815.398540 s with 16 iterations. Do not attribute the cold difference entirely
+to force scheduling or normalize away the trajectory difference. At 24 atoms,
 the prior 26.662892/26.547909 s OFF/ON medians do not establish a robust gain
 against the observed scatter. Actual indexed-claim counts are not exposed by
 this runner; requested policy is not relabeled as a measured claim count.
@@ -126,6 +143,29 @@ library SHA-256 is
 `5a1b86cef1c0e978118d3024dc36861ebe8cd326dee8a6fe944a6b34000a5461`.
 All 451 compiler commands use verified ccache launchers. The qualification
 receipt binds source, binary, logs, successful job outcome and actual work.
+
+## Master dc6ea9940: fresh larger comparison
+
+Merge 49f0f9bc0 incorporates master dc6ea9940's evidence-consumer changes.
+All 1355 native build inputs remain byte-identical to the qualified master-9c
+plus VWN repair above. All hooks and 54 evidence-consumer/source-registry
+host tests pass. This establishes source equivalence for the existing library;
+it does not relabel any earlier performance measurement.
+
+Finite n1 Slurm 5640 completes a fresh 24-atom unseeded indexed endpoint with
+this binary: warm 26.122775 s versus reference 27.374984 s, complete cold
+240.379900 s versus 116.000208 s. All five independent pairs pass, every
+warm/priming call takes one iteration and reference XC reports GPU execution.
+The separate GPU preliminary-density controls and their complete cost are
+recorded in the [cold experiment](2026-10-04-wb97mv-gpu-preliminary-density.md).
+
+Finite n1 Slurm 5648 now runs the 96-atom unseeded counterpart from the same
+frozen source/library and byte-identical measurement driver. It checks source,
+binary and script hashes before device work, records construction/preparation
+plus first execution, and retains all cold/priming/three warm pairs with the
+unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates. This comparison remains in progress.
+Its receipts are under ignored `.artifacts/latest-master96-20261004/`; the
+older master-1a OFF/ON campaign continues separately without being restarted.
 
 ## Readiness boundaries
 
