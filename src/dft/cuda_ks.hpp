@@ -177,6 +177,10 @@ class CudaKsPlan {
   void enqueue_iteration();
   /** Resolve a submitted iteration or bounded chunk; returns true while another is needed. */
   bool finish_iteration();
+  /** Drained-iteration metadata for intrusive work observers; no CUDA calls.
+   * This is not final-state eligibility, and a warm retry starts a new solve.
+   * Refuses reads before begin() or while an iteration is pending. */
+  scf::IncrementalDirectJkDiagnostic incremental_diagnostic() const;
   /** Terminal result; density export is optional and never used in an iteration. */
   scf::ScfResult result(bool export_density = true);
   /** Energy-only adapters leave the final density resident by disabling export. */

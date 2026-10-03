@@ -291,7 +291,34 @@ void run_exact_exchange_case(bool restricted, bool incremental = false,
           "CUDA KS linear anchors are missing from state admission");
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
-  const auto result = plan.run(nullptr, false);
+  bool observation_refused = false;
+  try {
+    (void)plan.incremental_diagnostic();
+  } catch (const std::logic_error&) {
+    observation_refused = true;
+  }
+  require(observation_refused, "KS admitted an observation before the first solve");
+  plan.begin(nullptr, false);
+  std::uint64_t observed_builds = 0;
+  while (plan.active()) {
+    plan.enqueue_iteration();
+    observation_refused = false;
+    try {
+      (void)plan.incremental_diagnostic();
+    } catch (const std::logic_error&) {
+      observation_refused = true;
+    }
+    require(observation_refused, "KS exposed counters while device work was pending");
+    plan.finish_iteration();
+    const auto observation = plan.incremental_diagnostic();
+    require(observation.active == incremental, "drained KS observation lost its selected route");
+    if (incremental)
+      require(observation.anchor_full_builds + observation.delta_builds +
+                      observation.post_scf_full_builds ==
+                  ++observed_builds,
+              "drained incremental observation omitted an executed provider build");
+  }
+  const auto result = plan.result();
   require(result.converged && !plan.failed(), "CUDA exact-exchange KS did not converge");
   if (incremental) {
     const auto& census = result.incremental_direct_jk;

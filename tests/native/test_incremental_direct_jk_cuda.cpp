@@ -4,14 +4,17 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
+#include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda/scf_matrix_kernels.hpp"
 #include "scf/cuda_batch.hpp"
+#include "scf/cuda_direct_jk_device.hpp"
 #include "scf/mean_field.hpp"
 
 namespace {
@@ -168,6 +171,87 @@ void compare_final_state(const generativeqc::scf::ScfResult& baseline,
   }
 }
 
+/** Resident provider arguments deliberately reject managed memory. */
+struct DeviceStatus {
+  int* data{};
+  DeviceStatus() {
+    require(cudaMalloc(&data, sizeof(int)) == cudaSuccess, "device status allocation failed");
+  }
+  ~DeviceStatus() { cudaFree(data); }
+};
+
+void verify_generated_work_observer() {
+  using namespace generativeqc;
+  constexpr std::size_t classes = scf::detail::kDirectQuartetShellClassCount;
+  ManagedArray<unsigned long long> coulomb_counts(classes), exchange_counts(classes);
+  DeviceStatus error;
+  scf::CudaDirectJkPlan* raw{};
+  scf::CudaDirectJkDiagnostic diagnostic;
+  std::string detail;
+  require(scf::create_cuda_direct_jk_plan(0, {asymmetric_two_center(false)}, 0, 1e-12,
+                                          64U * 1024U * 1024U, &raw, diagnostic,
+                                          detail) == GENERATIVEQC_STATUS_SUCCESS,
+          "could not prepare generated-work observer control");
+  std::unique_ptr<scf::CudaDirectJkPlan, decltype(&scf::destroy_cuda_direct_jk_plan)> plan(
+      raw, scf::destroy_cuda_direct_jk_plan);
+  require(raw->generated_exchange && raw->generated_exchange->shared->value_capability,
+          "observer control lacks complete generated streaming sources");
+  scf::FockBuildSpec spec;
+  spec.derivative_order = 0;
+  std::vector<double> density{0.6, 0.1, 0.1, 0.4}, coulomb, exchange, beta;
+  require(scf::execute_cuda_direct_jk(raw, spec, density, {}, coulomb, exchange, beta, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          "unobserved direct provider control failed");
+  const auto expected_coulomb = coulomb;
+  const auto expected_exchange = exchange;
+  require(cudaMemcpy(raw->density, density.data(), density.size() * sizeof(double),
+                     cudaMemcpyHostToDevice) == cudaSuccess,
+          "resident observer input upload failed");
+  const auto execute_resident = [&] {
+    if (scf::enqueue_cuda_direct_jk_device(raw, spec, raw->density, nullptr, density.size(),
+                                           raw->coulomb, raw->alpha_exchange, nullptr, error.data,
+                                           detail) != GENERATIVEQC_STATUS_SUCCESS)
+      throw std::runtime_error(detail);
+    require(cudaDeviceSynchronize() == cudaSuccess, "observed resident provider execution failed");
+    int numerical_error = 1;
+    require(cudaMemcpy(&numerical_error, error.data, sizeof(int), cudaMemcpyDeviceToHost) ==
+                    cudaSuccess &&
+                numerical_error == 0,
+            "observed resident provider reported a numerical failure");
+    require(cudaMemcpy(coulomb.data(), raw->coulomb, coulomb.size() * sizeof(double),
+                       cudaMemcpyDeviceToHost) == cudaSuccess &&
+                cudaMemcpy(exchange.data(), raw->alpha_exchange, exchange.size() * sizeof(double),
+                           cudaMemcpyDeviceToHost) == cudaSuccess,
+            "observed resident provider output download failed");
+  };
+  auto& generated = *raw->generated_exchange;
+  generated.shared->admitted_shell_counts = coulomb_counts.data;
+  generated.admitted_shell_counts = exchange_counts.data;
+  std::fill_n(coulomb_counts.data, classes, 0ULL);
+  std::fill_n(exchange_counts.data, classes, 0ULL);
+  execute_resident();
+  require(coulomb_counts.data[0] > 0 && exchange_counts.data[0] > 0,
+          "separate J/K observers did not count actual admitted tasks");
+  for (std::size_t element = 0; element < density.size(); ++element)
+    require(std::abs(coulomb[element] - expected_coulomb[element]) < 1e-13 &&
+                std::abs(exchange[element] - expected_exchange[element]) < 1e-13,
+            "intrusive admission counters changed raw J/K values");
+  std::fill_n(coulomb_counts.data, classes, 0ULL);
+  std::fill_n(exchange_counts.data, classes, 0ULL);
+  require(cudaMemset(raw->density, 0, density.size() * sizeof(double)) == cudaSuccess,
+          "zero-density observer input reset failed");
+  execute_resident();
+  require(exchange_counts.data[0] == 0, "zero-density K was counted before its screening gate");
+  for (std::size_t element = 0; element < density.size(); ++element)
+    require(coulomb[element] == 0.0 && exchange[element] == 0.0,
+            "zero-density observed provider retained a previous raw matrix");
+  for (std::size_t shell_class = 1; shell_class < classes; ++shell_class)
+    require(coulomb_counts.data[shell_class] == 0 && exchange_counts.data[shell_class] == 0,
+            "observer wrote a shell class absent from the control basis");
+  generated.shared->admitted_shell_counts = nullptr;
+  generated.admitted_shell_counts = nullptr;
+}
+
 void verify_case(bool unrestricted, double screening_tolerance, unsigned requested_interval) {
   const auto system = asymmetric_two_center(unrestricted);
   generativeqc::scf::ScfOptions baseline_options;
@@ -278,6 +362,7 @@ int main(int argc, char** argv) {
     verify_linear_channels(2, 1, false, 7);
     verify_linear_channels(2, 2, true, 7);
     if (linear_only) return EXIT_SUCCESS;
+    verify_generated_work_observer();
     verify_linear_channels(1, 1, true);
     verify_linear_channels(2, 2, true);
     verify_case(false, 0.0, 0U);

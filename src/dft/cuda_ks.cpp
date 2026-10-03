@@ -1927,6 +1927,12 @@ bool CudaKsPlan::pending() const noexcept { return impl_->is_pending; }
 bool CudaKsPlan::failed() const noexcept { return impl_->is_failed; }
 void CudaKsPlan::enqueue_iteration() { impl_->enqueue(); }
 bool CudaKsPlan::finish_iteration() { return impl_->finish(); }
+scf::IncrementalDirectJkDiagnostic CudaKsPlan::incremental_diagnostic() const {
+  if (!impl_->started || impl_->is_pending)
+    throw std::logic_error("CUDA KS incremental observation requires a drained iteration");
+  return impl_->output.incremental_direct_jk;
+}
+
 scf::ScfResult CudaKsPlan::result(bool export_density) {
   if (!impl_->started || impl_->is_active || impl_->is_pending)
     throw std::logic_error("CUDA KS result is not terminal");
