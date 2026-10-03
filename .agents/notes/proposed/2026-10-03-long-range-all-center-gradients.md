@@ -124,4 +124,34 @@ n1 Slurm 5520 also completes the reduced-grid water12/def2-TZVP original/moved
 independent CPU gate. All five observations per build pass; maximum errors are
 1.48e-12 Eh and 8.97e-10 Eh/Bohr. Single warm endpoints are 21.113944/20.208059
 seconds, moved 91.407646/89.841197 seconds, with unchanged 22/1/1/11 iterations.
-The full-grid 96-atom same-allocation comparison remains live in n2 Slurm 2150.
+The full-grid 96-atom same-allocation comparison was restarted as n2 Slurm 2158
+after the environment failure described below.
+
+## Node2 JIT environment recovery
+
+Original job 2150 failed after 1:17:01 during the first cold force generation:
+the node's default GCC cannot execute `cc1plus`. No complete native cold,
+warm or reference observation was produced. The original session exits 1 and
+Slurm reports FAILED / NonZeroExitCode; raw JSON, log, runtime record and terminal
+hashes are retained under `attempts/job2150-jit-host-compiler/`.
+
+Use the existing complete `/usr/bin/g++-11` through `NVCC_CCBIN` for this task.
+The explicit NVCC wrapper invokes the existing ccache, and its directory must
+contain both the canonical `nvcc` entry and an adjacent matching `ptxas`:
+compiler provenance queries these sibling tool names. Initial wrapper-layout
+preflight 2155 failed before force qualification; its evidence is retained
+separately and was not counted as a successful test.
+
+Corrected job 2157 passes all seven complete independent force/rebuild tests
+for each frozen build: 213.87 seconds for parent `e5123900...`, 195.44 seconds
+for candidate `795aaacf...`. There are no skips. After copying the evidence,
+both native-library hashes and both log hashes were independently checked
+against the successful toolchain receipt. Compiler versions, wrapper/real-tool
+hashes and before/after ccache statistics are retained. Slurm device visibility,
+native binaries and scientific settings are preserved.
+
+Only after these gates passed was the controlled full96 comparison restarted
+as job 2158 with a finite eight-hour limit. Both variants use the corrected
+environment; candidate eligibility still requires its original numerical
+qualification receipt as well as the new environment gate. The failed job is
+not a timing sample, and the retry remains pending performance evidence.
