@@ -24,6 +24,8 @@ launchers and checkout-root `CCACHE_BASEDIR`. AOT shell and stationary-force
 artifacts are disabled; the generic source and reference routes are exercised.
 The missing generic registry query found by library loading is fixed in this
 change. Source-file, generated build-identity and binary hashes bind the run.
+The measured scientific snapshot is `6855da896`; the subsequent integer-type
+portability fix preserves these historical source/binary hashes.
 
 After building `generativeqc` in `build-cuda`, reproduce from this checkout:
 

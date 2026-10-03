@@ -163,7 +163,8 @@ void attach_df_source(cc::Problem& problem, cc::DFSourceResult&& fitted, posthf:
   problem.oooo = std::move(fitted.oooo);
   problem.provider_peak_bytes = fitted.numeric_capacity_bytes;
   problem.provider_host_bytes = fitted.host_output_bytes;
-  metrics.owned_device_bytes = std::max(metrics.owned_device_bytes, fitted.device_capacity_bytes);
+  metrics.owned_device_bytes =
+      std::max<std::uint64_t>(metrics.owned_device_bytes, fitted.device_capacity_bytes);
   ++work.source_scans;
   work.source_reads += fitted.source_rows;
   work.source_values += fitted.source_values;
