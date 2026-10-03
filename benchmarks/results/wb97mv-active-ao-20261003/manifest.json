@@ -1,0 +1,53 @@
+{
+  "schema": "generativeqc.wb97mv-readme-evidence.v1",
+  "source": {
+    "source_identity": "de8a1684f0afbb4ec8545022c46d24c1e6c85c3c7851df237af436897bf1d862",
+    "manifest_inputs": 1351,
+    "library_sha256": "b82e468613c5c90e076aa10082b2389c8dda74335f625a7b77641c1c085ef3f9",
+    "test_executable_sha256": "5956bd132175d701358722b8b7a204431a94962c84aec0011917af6a7f948c0e",
+    "built_source_commit": "c06859af9e03b869d5336e633778b3b0d8da7825",
+    "source_commit": "0132d75844c13d90bd04cb250e3aafae12d2a3dd",
+    "master_commit": "d442177a6b1ea151de4b66694749ec7e3e889dae",
+    "integration": "actual master merge changes only documentation/evidence/tests; all manifest inputs byte-equivalent to built source"
+  },
+  "scope": "opt-in integrated candidate; warm complete energy plus analytic forces; not a master default claim",
+  "files": {
+    "matched24-dense.json.gz": {
+      "sha256": "47975aaebb3ee13c0cced140be09b98df9294c2945e62b1772d85fd80c5b4c57",
+      "bytes": 14333,
+      "decoded_sha256": "286642e07a06a05f5f874e1fab20ee7815c905fbfabaa7e39ff3a1600dda4f1b",
+      "decoded_bytes": 100425
+    },
+    "matched24-sparse.json.gz": {
+      "sha256": "f679215dd6d77999696e85969ad50b6426be29ac0f9c061058acef3a0d63c299",
+      "bytes": 14801,
+      "decoded_sha256": "26a60fe617cfd36117fea054057df6b1c5c24a618cd2a667ae4499671fdefdd1",
+      "decoded_bytes": 105206
+    },
+    "matched48-dense.json.gz": {
+      "sha256": "e39cb07ba0b0cbb0d66983aefa2a7d0deab112155a5a516cc60c0190f5a6a111",
+      "bytes": 22313,
+      "decoded_sha256": "fe4e7385e20b5a7847ce741059c1aad18568296e3c98be20969128e10f37b7d5",
+      "decoded_bytes": 137911
+    },
+    "matched48-sparse.json.gz": {
+      "sha256": "d310b03dd354a69fac8f2e8432fc41f79dd386c69e68eb75cfd99f0a98dbf422",
+      "bytes": 22887,
+      "decoded_sha256": "b07e03ccb45eae9baea758deb8978b1e763fc08ed3ddd804d22461e878cb4795",
+      "decoded_bytes": 142653
+    }
+  },
+  "reproduction": {
+    "base_comparator_sha256": "c3160265baf9fa4b5baa9de155ceac045d629fc187e6c198397bcda5e3c16c63",
+    "patch_sha256": "8833024f1b9d0e4bf0036ab5bb6408302a3c6d9a4b960fe5fc485c96af68cc7b",
+    "result_sha256": {
+      "complete-cold-benchmark.py": "e91b1d52b77faa7e21c2f2b8d4177d917bead542a375a34dbfd29eda81793761",
+      "matched-probe.py": "175130388a59a3fe0c99981affa51742e61867167ef9f7431b5c8bf71ab4bd44",
+      "ao-work.py": "d339758940a82237cc97a69c0e9f84fe81a42885d0787833b6bf75ababe80fe2"
+    }
+  },
+  "slurm_jobs": {
+    "24": 5577,
+    "48": 5576
+  }
+}

@@ -204,6 +204,20 @@ Restore these rows to the table above only after approval to publish the results
 RTX 5090, spherical def2-SVP: complete warm RHF energy + forces, five repeats.
 [Protocol and results](benchmarks/results/df-one-step-warm-20260926/README.md).
 
+**ωB97M-V / spherical def2-SVP — opt-in candidate.** Complete warm energy +
+analytic forces on an RTX 5090; median of three fixed-density replays per engine.
+
+| Atoms / AOs | GenerativeQC | GPU4PySCF 1.8.1 | Less time |
+| --- | ---: | ---: | ---: |
+| 24 / 192 | 26.331 s | 27.398 s | 3.9% |
+| 48 / 384 | 97.113 s | 103.042 s | 5.8% |
+
+These results use a measured integration candidate with explicit SCF/force AO
+selection and matched unpruned grids. Cold startup remains slower; 96 atoms is
+still under measurement. [Source, controls, cold timings and all-sample accuracy
+gates](benchmarks/results/wb97mv-active-ao-20261003/README.md) identify the candidate
+separately from the master default.
+
 <!-- DFT benchmark discussion is temporarily withheld with the rows above.
 PBE0 uses the same 3–96-atom water clusters, full spherical def2-SVP,
 five fixed engine-local warm replays, and independent energy/force gates at
