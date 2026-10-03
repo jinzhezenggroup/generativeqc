@@ -87,9 +87,59 @@ to hashes of all five logs. These hashes and the acceptance assertions were
 independently checked after copying the evidence from n1. This qualification
 releases the candidate phase of the separately running 96-atom job 5521.
 Same-allocation full-grid 24-atom job 5528 and changed-geometry job 5527 are
-additional pending controls, not completed performance evidence.
+additional controls; their completed results are recorded below. The large
+96-atom comparison remains pending.
 
 Master subsequently advanced to `5d68bcc07` through #1742, changing xTBloom
 cold-timer accounting and related documentation/tests. It does not change the
 WB97M-V production path or the comparator used here. The retained baseline
 remains exactly `a20b8801f`; it is not relabeled as the newer master.
+
+## Completed full24 and changed-geometry controls
+
+Job 5528 compares the untouched baseline and frozen composition sequentially in
+one RTX 5090 allocation, with 24 atoms / 192 spherical def2-SVP AOs and the full
+48 x 16 x 32 grid. Each variant has its own fresh full-Fock reference control.
+
+| Complete endpoint, seconds | Baseline a20 | Composition cac |
+| --- | ---: | ---: |
+| Native cold | 266.481280 | 256.094901 |
+| Native priming | 39.316285 | 27.608468 |
+| Native three-repeat warm median | 39.755570 | 27.628118 |
+| Reference three-repeat warm median | 27.965236 | 27.953379 |
+
+The composition improves the native warm median by 30.505%. Native cold calls
+both take 18 SCF iterations; every native warm call takes one. Reference cold
+calls take 14 iterations / 15 J/K builds and every reference warm call takes
+one iteration / two J/K builds. All five pairs per variant and all reference
+replay consistency gates pass independently: maximum energy error is
+2.85e-12 Eh and maximum force error is 4.96e-10 Eh/Bohr, below the unchanged
+1e-8 / 1e-7 gates.
+
+Candidate warm samples are 28.678636, 27.628118 and 27.592642 seconds; reference
+samples are 27.967601, 27.875132 and 27.953379 seconds. Although the candidate
+median is 0.325 seconds lower, one candidate repeat is slower and cold remains
+substantially slower. Treat this as small-case parity, not a robust reference
+advantage or completion of the large-system objective. No sample is discarded.
+
+The first warm integral-derivative phase falls from 14.987791 to 3.274979
+seconds. The combined grid/pair drain remains around 11 seconds. Both variants
+visit 589824 AO points and 1179648 geometry points, using 576 tiles of 1024
+points and 651165696 partition-pair visits. Warm preparation is reused. The
+additional device/host bounds fall by 33030144 bytes each through storage reuse;
+executed screened integral and compacted nonlocal pair counts remain unavailable.
+
+Job 5527 separately checks water12/def2-TZVP on the diagnostic 24 x 8 x 16
+grid against retained independent CPU energy/force arrays. Every cold, priming,
+warm, changed-geometry and fixed-state observation passes for both builds.
+Single warm calls are 22.801920 -> 19.034839 seconds and moved-geometry calls
+91.506313 -> 88.213000 seconds, with matching 22/1/1/11 SCF iteration counts.
+Maximum energy/force errors are 1.48e-12 Eh / 8.97e-10 Eh/Bohr. This is a
+changed-geometry accuracy gate, not a full-grid timing claim.
+
+Raw reports, all-repeat verification and Slurm completion records are retained
+under `.artifacts/wb97m-large-stack/`. Job 5534 additionally compares the exact
+qualified composition against its fresh full-Fock control at 48 atoms; it does
+not supply a same-allocation master delta. Jobs 5521 (matched 96) and 5531
+(instrumented exact-candidate 96 endpoint) remain active. Profile timings are
+diagnostic only and cannot replace clean endpoint observations.
