@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions, _native
+from generativeqc._ks_snapshot import NativeKsSnapshot
 from test_dft_batch import restore_snapshots, warm_snapshot
 
 pytestmark = pytest.mark.skipif(
@@ -64,6 +65,15 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
     with calc.prepare_batch([atoms, atoms], warm_start=True) as batch:
         original = batch.execute(properties=("energy",), strict=True)
         saved = [warm_snapshot(batch, i) for i in range(2)]
+        snapshot = NativeKsSnapshot(batch, 0)
+        try:
+            before_integrals = snapshot.cuda_integral_derivatives(
+                len(atoms), 256 << 20, range_exchange=False
+            )
+            assert before_integrals is not None
+        except Exception:
+            snapshot.close()
+            raise
         trace = tmp_path / "admission.jsonl"
         monkeypatch.setenv("GENERATIVEQC_DF_HOST_TRACE", str(trace))
         proposal = (good, saved[0][1], saved[0][2])
@@ -77,6 +87,19 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
             assert np.array_equal(after[0], saved[i][0])
             assert np.array_equal(after[1], saved[i][1])
             assert after[2] == saved[i][2]
+        try:
+            snapshot.check_current()
+            after_integrals = snapshot.cuda_integral_derivatives(
+                len(atoms), 256 << 20, range_exchange=False
+            )
+            assert after_integrals is not None
+            # The rejected admission must preserve the already staged resident
+            # stationary weights, including the UKS total density in tmp2.
+            np.testing.assert_allclose(
+                after_integrals[0], before_integrals[0], atol=1e-11, rtol=0
+            )
+        finally:
+            snapshot.close()
         # A rejected import must leave the live last-good resident density
         # usable even though the validator borrowed abandoned DIIS history.
         replay = batch.execute(properties=("energy",), strict=True)

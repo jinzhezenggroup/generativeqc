@@ -489,6 +489,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       (void)cudaStreamSynchronize(stream);
       throw;
     }
+    movement.setup_h2d_bytes += matrix * sizeof(double);
+    movement.matrix_d2h_bytes += matrix * sizeof(double);
+    movement.scalar_d2h_bytes += n * sizeof(double) + sizeof(info);
+    ++movement.synchronizations;
     if (info) throw std::runtime_error("CUDA KS seed eigensolver did not converge");
     // The solver emits column-major orbitals; the common admission algebra
     // uses row-major C[ao, orbital]. Symmetric input needs no packing copy.
