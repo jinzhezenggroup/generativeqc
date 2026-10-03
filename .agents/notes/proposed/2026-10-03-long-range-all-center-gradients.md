@@ -1,7 +1,7 @@
 # Proposal: share high-order LR moments across center derivatives
 
 Status: experimental; host and independent GPU numerical gates pass;
-controlled endpoint comparisons pending
+controlled full24 and moved12 pass; full96 comparison pending
 Date: 2026-10-03
 
 ## Problem and decision
@@ -91,3 +91,37 @@ The latter starts with the baseline; its candidate phase requires the verified
 5513 receipt matching the installed binary. Fresh full-Fock GPU4PySCF controls,
 three engine-local warm repeats and all observations are retained. No timing
 from these still-live jobs is promoted to an endpoint speedup yet.
+
+## Completed isolated full24 and moved12 qualification
+
+n1 Slurm 5519 completed (exit 0), comparing both frozen binaries sequentially
+on one RTX 5090, full 48 x 16 x 32 grid, water24/192 spherical def2-SVP AOs.
+Every one of five native/reference pairs per build and every fresh full-Fock
+reference consistency gate passes. Maximum errors across both builds are
+2.51e-12 Eh and 4.96e-10 Eh/Bohr.
+
+| Complete endpoint | Base / s | Candidate / s |
+| --- | --- | --- |
+| Native cold | 255.054784309 | 252.644154511 |
+| Native priming | 30.636664566 | 27.510406151 |
+| Native warm median | 30.587367237 | 27.547977414 |
+| Fresh reference warm median | 27.654653151 | 27.655192662 |
+
+Native cold uses 18 iterations for both builds; all native warm/priming calls
+use one. Reference cold uses 14 iterations and all warm calls one/two J-K
+builds. The isolated native warm improvement is 9.937%. Candidate warm samples
+are 27.529672, 27.547977 and 27.850305 seconds. Its median is only 0.107215 s
+below the reference, and one candidate repeat is slower; this small margin
+is treated as parity rather than a robust reference advantage. It does not
+satisfy the large-system objective.
+
+The first warm integral-derivative component falls from 6.300818 to 3.379603
+seconds, while grid/pair drain stays 10.966036 versus 10.961820 seconds.
+Grid, geometry, collocation and allocation work fields remain unchanged;
+actual executed bounded shell-quartet counts are still not exported.
+
+n1 Slurm 5520 also completes the reduced-grid water12/def2-TZVP original/moved
+independent CPU gate. All five observations per build pass; maximum errors are
+1.48e-12 Eh and 8.97e-10 Eh/Bohr. Single warm endpoints are 21.113944/20.208059
+seconds, moved 91.407646/89.841197 seconds, with unchanged 22/1/1/11 iterations.
+The full-grid 96-atom same-allocation comparison remains live in n2 Slurm 2150.
