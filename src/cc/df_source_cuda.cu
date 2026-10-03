@@ -64,8 +64,7 @@ std::size_t metric_setup_bound(std::size_t n, std::size_t q, std::size_t source_
 
 DFSourceResult build_df_source_cuda(const core::System& orbital, const core::System& auxiliary,
                                     const hf::PhysicalReference& ref, std::size_t budget,
-                                    double relative_threshold, int device,
-                                    std::size_t caller_bytes,
+                                    double relative_threshold, int device, std::size_t caller_bytes,
                                     const scf::cuda_execution::CudaDfSourcePolicy* policy) {
   const auto started = Clock::now();
   const auto n = ref.nbf, o = ref.nocc, q = molecule::ao_count(auxiliary);
