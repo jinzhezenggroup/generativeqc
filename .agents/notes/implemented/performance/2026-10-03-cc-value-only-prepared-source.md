@@ -49,7 +49,7 @@ CUDA Fock provider suite (including the exact source allowance), and full 7-AO
 force memcheck with zero errors. This source fix does not expand the public
 12-AO force qualification boundary.
 
-The [retained complete-endpoint evidence](../../../../benchmarks/results/cc-value-source-20261003/summary.json)
+The [retained complete-endpoint evidence](../../../../benchmarks/results/cc-value-source-20261003/summary.json.gz)
 compares all cold, twice-warm and changed-geometry outputs with matched PySCF
 2.14.0 references. Maximum errors are 1.5e-12 Eh for total energy, 1.5e-14 Eh
 for triples and 1.3e-8 Eh/bohr for forces. Semantic CC work counters are unchanged.
@@ -61,9 +61,27 @@ to 13.61 seconds. Cold/changed GPU times decrease from 110.57/104.71 to
 and GPU comparisons used separate Slurm allocations. Source timing alone
 measures CUDA submission, so use complete provider/endpoint time to assess work.
 
+The [56-AO energy qualification](../../../../benchmarks/results/cc-value-source-20261003/large-energy.json.gz)
+retains all four calls from node2 Slurm job 2058 (45-minute limit). Cold, two
+warm and changed-geometry endpoints take 812.58, 173.83, 174.02 and 902.89 seconds;
+RHF alone takes 775.08, 136.42, 136.58 and 865.50 seconds. All energies and triples
+pass the same independent oracle gates. No matched complete baseline exists, so
+this is candidate qualification without a 56-AO speedup claim. The earlier node1
+job timed out during changed geometry and is excluded from the complete record.
+
 ## Revisit when
 
 Revisit the explicit value-only request only if a new consumer actually borrows
 prepared derivatives. Its required capabilities must then be reflected in the
 complete resource admission and validated on real hardware at the exact queried
 allowance. A roomy standalone source test cannot catch this mismatch.
+
+## Storage-only current-master integration
+
+The two retained JSON receipts are losslessly gzip-compressed to keep the
+unchanged aggregate evidence budget. Their 130,787 original bytes become 20,688
+stored bytes. `storage.json` records original/stored byte counts, SHA-256 and
+original Git blob identities at `cacc6cf0f`; decompression reproduces every byte,
+including all unsuccessful or limited observations. No equation, sample,
+precision, scope or acceptance gate changes. Existing Git history retains the
+original plain files. No external archive or storage-limit increase is introduced.

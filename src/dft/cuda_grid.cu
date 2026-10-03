@@ -20,6 +20,9 @@ thread_local bool fail_next_grid_runtime = false;
 struct GridPlan {
   Context context;
   bool density_ready = false, density_jets_ready = false;
+  // Only split_restricted_density establishes this witness for the owned copy.
+  // Equal dimensions, aliased source pointers, and host values prove nothing.
+  bool identical_spin_density = false;
   size_t natom{}, nprimitive{}, nao{}, capacity{}, jets{}, packed_size{};
   size_t active_capacity{}, last_points{}, last_active{};
   std::uint64_t generation{};
@@ -255,10 +258,12 @@ void grid_cuda_destroy_v1(void* pointer) { delete static_cast<GridPlan*>(pointer
 int grid_cuda_centers_v1(void* pointer, const double* centers, size_t elements, char* error,
                          size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !centers) throw std::invalid_argument("null CUDA grid centers");
+    if (!pointer) throw std::invalid_argument("null CUDA grid centers");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    p.identical_spin_density = false;
+    if (!centers) throw std::invalid_argument("null CUDA grid centers");
     ctx.check_device();
     if (elements != 3 * p.natom) throw std::invalid_argument("CUDA grid center size mismatch");
     for (size_t i = 0; i < elements; ++i)
@@ -276,10 +281,12 @@ int grid_cuda_centers_v1(void* pointer, const double* centers, size_t elements, 
 int grid_cuda_density_v1(void* pointer, const double* density, size_t elements, char* error,
                          size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !density) throw std::invalid_argument("null CUDA grid density");
+    if (!pointer) throw std::invalid_argument("null CUDA grid density");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    p.identical_spin_density = false;
+    if (!density) throw std::invalid_argument("null CUDA grid density");
     ctx.check_device();
 #if GENERATIVEQC_TEST_HOOKS
     if (fail_next_grid_runtime) {
@@ -313,11 +320,14 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
                                 size_t matrix_elements, unsigned spins, void* source_stream,
                                 char* error, size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !alpha || !source_stream || (spins != 1 && spins != 2) || (spins == 2 && !beta))
-      throw std::invalid_argument("invalid CUDA grid resident density binding");
+    if (!pointer) throw std::invalid_argument("invalid CUDA grid resident density binding");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    // Rejected and partially submitted replacements must not retain a witness.
+    p.identical_spin_density = false;
+    if (!alpha || !source_stream || (spins != 1 && spins != 2) || (spins == 2 && !beta))
+      throw std::invalid_argument("invalid CUDA grid resident density binding");
     ctx.check_device();
     if (matrix_elements != p.nao * p.nao)
       throw std::invalid_argument("CUDA grid resident density shape mismatch");
@@ -372,6 +382,7 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
     if (p.local)
       cuda_check(cudaMemsetAsync(p.potential, 0, 2 * matrix_elements * sizeof(double), ctx.stream));
     p.density_ready = true;
+    p.identical_spin_density = spins == 1;
   });
 }
 
@@ -379,11 +390,13 @@ int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, c
                         const double* beta, const size_t* counts, int use_orbitals, char* error,
                         size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !density || !counts || (use_orbitals != 0 && use_orbitals != 1))
-      throw std::invalid_argument("invalid CUDA density source");
+    if (!pointer) throw std::invalid_argument("invalid CUDA density source");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    p.identical_spin_density = false;
+    if (!density || !counts || (use_orbitals != 0 && use_orbitals != 1))
+      throw std::invalid_argument("invalid CUDA density source");
     ctx.check_device();
     if (elements != 2 * p.nao * p.nao) throw std::invalid_argument("density size mismatch");
     const double* factors[2] = {alpha, beta};
@@ -540,14 +553,21 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           const double* density = p.local && !identity_map ? p.local_density : p.density;
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 8) ? 4 - first : 1;
-          for (int spin = 0; spin < 2; ++spin)
+          for (int spin = 0; spin < (p.identical_spin_density ? 1 : 2); ++spin)
             gemm(ctx, 'N', 'N', static_cast<int>(npoint), static_cast<int>(active),
                  static_cast<int>(active), p.ao + first * stride, density + spin * active * active,
                  p.work + (spin * 4 + first) * stride, stride, 0, stride, count, 0);
+          // Publish both ordered panels without repeating the identical GEMM.
+          // The copy uses existing charged storage on the same owner stream;
+          // first/count exclude unrequested jets, including the tau-only case.
+          if (p.identical_spin_density)
+            cuda_check(cudaMemcpyAsync(p.work + (4 + first) * stride, p.work + first * stride,
+                                       count * stride * sizeof(double), cudaMemcpyDeviceToDevice,
+                                       ctx.stream));
         });
       ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
-        feature_kernel<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(
-            p.ao, p.work, npoint, active, p.features, ctx.error, p.feature_mask);
+        scheduled_grid_features(ctx.stream, p.ao, p.work, npoint, active, p.features, ctx.error,
+                                p.feature_mask);
         cuda_check(cudaGetLastError());
       });
     }

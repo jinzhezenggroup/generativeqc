@@ -111,6 +111,10 @@ generativeqc_status generativeqc_calculation_execute(generativeqc_calculation* c
     output->executed_backend = native.executed_backend;
     if (!native.convergence.converged) {
       calculation->precision_work = std::move(native.precision_work);
+      // A retained context may still hold an earlier, unrelated failure.
+      // This completed nonconverged run is a new failure and replaces it;
+      // successful calls continue to preserve borrowed diagnostic strings.
+      calculation->context->last_detail = "SCF did not converge";
       return GENERATIVEQC_STATUS_NOT_CONVERGED;
     }
     if (!omit_forces) {

@@ -3,7 +3,7 @@
     "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 energy/potential/coordinate and CN reverse response; preserve runtime validation, topology, and publication ownership.",
     "src/backends/cuda/gfn2_es3.cu": "Consume compiler-generated TensorIR/AD ES3 energy/potential and finite-range recovery; preserve runtime validation, topology, and publication ownership.",
     "src/backends/cuda/gfn2_geometry.cu": "Consume compiler-generated TensorIR/AD coordination pair science; retain CUDA geometry/topology ownership.",
-    "src/backends/cuda/gfn2_hamiltonian.cu": "Consume compiler-generated fixed-state TensorIR S/D/Q pair Hamiltonian for both spin layouts.",
+    "src/backends/cuda/gfn2_hamiltonian.cu": "Consume compiler-generated fixed-state TensorIR S/D/Q pair Hamiltonian for both spin layouts. Consume compiler-owned bounded matrix tiling while preserving scalar order, ragged/spin ownership and per-system atomic publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile.",
     "src/backends/cuda/gfn2_hamiltonian_force.cu": "Consume the matching compiler-generated S/D/Q reverse-mode pair adjoints, including spin overlap.",
     "src/backends/cuda/gfn2_pairlist.cu": "Backport xTBloom #487: pass pair-list CUDA kernel descriptors by value so device code never dereferences launcher-stack host references. Consume the same compiler-generated TensorIR/AD coordination pair helper as dense geometry, preserving bitwise CN admission and canonical neighbor accumulation.",
     "src/backends/cuda/gfn2_preprocessing.cu": "Backport xTBloom #487: pass committed pair-list CUDA kernel descriptors by value for GPUs without pageable host-memory access.",
@@ -17,7 +17,9 @@
     "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy.",
     "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership.",
     "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
-    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership."
+    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership.",
+    "src/backends/cuda/gfn2_density.cu": "Consume compiler-owned bounded matrix tiling; preserve complete ordered orbital sums, finite-range checks, trace reductions, ragged spin packing and atomic per-system publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile.",
+    "src/backends/cuda/gfn2_occupations.cu": "Consume compiler-owned exact restricted-spin task sharing after full native admission; copy identical occupation and diagnostic outputs while preserving independent open-shell/unrestricted solves and all binary64 root, reduction, degeneracy and publication policies."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -121,7 +123,7 @@
     "src/backends/cuda/gfn2_density.cu": {
       "adapted": true,
       "upstream_sha256": "22e2f182a418ddf43834578605ba913c9e9e043f491e0f95f2f7ec6f16735a34",
-      "vendored_sha256": "89588e47750add95e713a82843a7bb038945cfb2cef7a959f37aab28ac0ddd4b"
+      "vendored_sha256": "9e7f41984ba90bc3fb4940244bc45fbdd7094e268f6f863669799df9c5e4aa24"
     },
     "src/backends/cuda/gfn2_density.cuh": {
       "adapted": true,
@@ -241,7 +243,7 @@
     "src/backends/cuda/gfn2_hamiltonian.cu": {
       "adapted": true,
       "upstream_sha256": "3c3be624100613cef64a01b2d3bc78756f59f0847e832472678b9018bc11729b",
-      "vendored_sha256": "a310fe87dc7e72fadd6098e0689d471464c76512d141b605331d2d08f42850c5"
+      "vendored_sha256": "48c63cbd351f23e82010d4d4408496540f206d95265159c6b5e3b51b330555f8"
     },
     "src/backends/cuda/gfn2_hamiltonian.cuh": {
       "adapted": true,
@@ -296,7 +298,7 @@
     "src/backends/cuda/gfn2_occupations.cu": {
       "adapted": true,
       "upstream_sha256": "565d3a11f08d7061ddd83858f3575938c24fd8b0542c0bd8177354e2acac5570",
-      "vendored_sha256": "8297547862142c02ec6c254b2ff49cb00e96516b1bf61c675db7bd23671d7a9d"
+      "vendored_sha256": "37e5838630d0da1bc81c4c1cf502e93ea1257bd814fdc978560e8eac5cdc4c12"
     },
     "src/backends/cuda/gfn2_occupations.cuh": {
       "adapted": true,

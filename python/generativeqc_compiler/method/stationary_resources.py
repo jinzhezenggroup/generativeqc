@@ -190,14 +190,24 @@ def plan_stationary_cuda_resources(
     sources: int,
     target: CudaTargetInfo,
     budget_bytes: int,
-    cooperative_becke: bool = False,
+    cooperative_becke: bool | None = None,
 ) -> StationaryCudaResources:
     """Choose up to one lane per point within the admitted owner's byte budget.
 
     Small tiles and tight budgets naturally retain a single-block schedule.
     A tail uses only min(planned lanes, tail points) of the retained panels.
     No device probe or allocation is part of this compiler planning function.
+    Automatic cooperation is restricted to the measured sm_120 large-point
+    domain. Explicit False retains the generic schedule; unqualified targets
+    and small systems retain it automatically. Shared-memory admission below
+    is mandatory even when cooperation is requested.
     """
+    if cooperative_becke is None:
+        cooperative_becke = (
+            target.compute_capability == (12, 0)
+            and type(atoms) is int
+            and 12 <= atoms <= BECKE_COOPERATIVE_MAX_ATOMS
+        )
     if type(cooperative_becke) is not bool:
         raise ValueError("cooperative Becke selection must be boolean")
     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:

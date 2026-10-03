@@ -83,8 +83,18 @@ energy finite-difference gates cover the complete path. The allocation-intercept
 force test retains exact-budget success and one-byte-short refusal; its allocation
 observation uses the current triples arena rather than a historical byte floor.
 
-Real-device CUDA qualification is required before this change is ready to merge.
-Compilation or agreement of generated plans alone does not qualify CUDA execution.
+Real-device CUDA qualification passed on node1's RTX 5090 through Slurm job
+5313 (`main`, `gpu:5090:1`, finite 20-minute allocation). All 37 public CPU/CUDA
+tests passed. The 7-AO complete force endpoint passed compute-sanitizer memcheck
+with zero errors; 14/28-AO energy endpoints completed cold, twice warm and after
+geometry change. All runs meet the matched PySCF energy/triples/force gates. The
+[retained CUDA summary](../../../../benchmarks/results/ccsdt-arena-20261002/cuda-summary.json)
+binds the binary/source hashes, Slurm visibility, work counts and oracle errors.
+The remote node was shared and force timing was instrumented: no GPU speedup
+claim follows from this qualification. Node4 could not run qualification because
+its driver and NVML library versions did not match; its failed probe is excluded
+from successful evidence. The duplicate local Slurm job 12077 was cancelled once
+remote execution was established.
 
 ## Rejected alternatives and revisit conditions
 
