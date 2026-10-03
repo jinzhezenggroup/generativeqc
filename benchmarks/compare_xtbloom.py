@@ -5,6 +5,7 @@ measurements reuse the public calculator but never reuse a converged SCC state.
 Every sample retains energy, forces and iteration counts for subsequent gates;
 construction and host-visible calculation times are recorded separately. The
 comparison also reports cold_total: construction plus the first calculation.
+Cleanup after all samples is recorded separately from the next case's constructor.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ except ModuleNotFoundError:
     from _retention import raw_output_path
 
 ROOT = Path(__file__).resolve().parents[1]
+TIMING_CONTRACT = "calculator-cold-v2-separate-cleanup"
 
 
 def source_revision(directory: Path) -> str | None:
@@ -57,6 +59,11 @@ def compare_reports(reference: dict, candidate: dict) -> dict:
         raise ValueError("scientific settings differ")
     if reference["device"] != candidate["device"]:
         raise ValueError("execution devices differ")
+    # Keep old/old receipts usable as historical evidence, but never silently
+    # compare their preceding-calculator cleanup with an isolated constructor.
+    timing_contract = reference.get("timing_contract", "legacy-mixed-cleanup")
+    if timing_contract != candidate.get("timing_contract", "legacy-mixed-cleanup"):
+        raise ValueError("calculator timing contracts differ; remeasure both engines")
     if [row["case"] for row in reference["rows"]] != [
         row["case"] for row in candidate["rows"]
     ]:
@@ -139,6 +146,7 @@ def compare_reports(reference: dict, candidate: dict) -> dict:
                 }
             )
     return {
+        "timing_contract": timing_contract,
         "reference_library_sha256": reference["library_sha256"],
         "candidate_library_sha256": candidate["library_sha256"],
         "rows": rows,
@@ -204,6 +212,7 @@ def main() -> None:
 
     library = Path(os.environ[f"{args.engine.upper()}_LIBRARY"]).resolve()
     report = {
+        "timing_contract": TIMING_CONTRACT,
         "engine": args.engine,
         "device": args.device,
         "library": str(library),
@@ -311,6 +320,12 @@ def main() -> None:
                     f"{args.engine} {case['name']} {mode} {seconds * 1000:.3f} ms {iterations} iterations",
                     flush=True,
                 )
+        # Assignment to `calc` on the next iteration would otherwise destroy
+        # this calculator inside the next case's constructor timer. Release its
+        # last result too, and expose cleanup cost separately after all samples.
+        start = time.perf_counter()
+        del result, calc
+        row["cleanup_seconds"] = time.perf_counter() - start
         report["rows"].append(row)
         args.output.write_text(json.dumps(report, indent=2) + "\n")
 

@@ -61,6 +61,13 @@ Python tests on n2. There are 22 passing host provenance/boundary/bootstrap test
 and one expected opt-in skip (exercised separately above); all pre-commit checks
 pass. CMake and standalone harness compilation use ccache.
 
+Compute Sanitizer memcheck and initcheck pass on n1 with zero errors. The first
+full racecheck exceeded its 20-minute Slurm limit; that interrupted log is
+retained and is not a pass. The complete harness was rerun on n2 under a finite
+60-minute allocation with the final binary and diagnostic-only progress prints.
+It passes with zero race errors and zero warnings, recorded in
+`.artifacts/bootstrap-qualification/n2-final-race.log`.
+
 Both n1 RTX 5090 and n2 RTX PRO 6000 pass 41 public lifecycle/oracle/force tests and
 all 110 comparator samples: seven fixtures plus water8/32/64 (24/96/192 atoms),
 one cold, five repeated and five changed-geometry requests per case. Settings are
@@ -70,6 +77,14 @@ gates. Energy is identical to the parent; maximum force change is 4.163e-17
 Eh/bohr. Against xTBloom, maximum errors are 5.684e-14 Eh and 5.17e-15 Eh/bohr.
 
 ## Complete endpoint evidence and limits
+
+Timing correction: the later
+[loader-discovery note](2026-10-03-xtb-loader-discovery.md) found that assignment
+inside the old constructor timer also destroyed the preceding calculator.
+The historical multi-case cold totals below include that preceding cleanup;
+they are not isolated constructor plus first-call measurements. The linked
+note records corrected measurements with cleanup timed separately. Scientific
+gates and first-singlepoint/warm/changed timings below retain their scope.
 
 Construction plus first call, milliseconds (one cold sample per case):
 
