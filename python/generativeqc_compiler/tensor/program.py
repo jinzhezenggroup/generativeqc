@@ -168,6 +168,18 @@ class Program:
         live = set(analysis.live_node_keys)
         return tuple(node for node in nodes if node in live)
 
+    @property
+    def dependency_order(self) -> tuple[Node, ...]:
+        """Visit each live definition once, depth-first from the ordered outputs.
+
+        This execution order produces a consumer's dependencies together instead
+        of materializing an entire dependency level. It changes neither the
+        serialized logical order nor any primitive's operand/reduction order.
+        Shared definitions remain single evaluations, and dead definitions are
+        excluded just as they are from ``live_nodes``.
+        """
+        return _topological(self.outputs.values())
+
     @cached_property
     def logical_hash(self) -> str:
         """Identify output equations, excluding dead nodes and provenance."""

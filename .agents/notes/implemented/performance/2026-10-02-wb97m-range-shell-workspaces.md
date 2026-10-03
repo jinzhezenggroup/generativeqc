@@ -1,6 +1,6 @@
-# Proposal: reuse shell-bounded Hermite storage for exact range exchange
+# Decision: reuse shell-bounded Hermite storage for exact range exchange
 
-Status: proposed; device and complete-endpoint qualification pending
+Status: implemented by PR #1711; large-system performance qualification continues
 Date: 2026-10-02
 
 ## Problem and evidence
@@ -77,6 +77,52 @@ a larger system, semantic quartet/radial counts and the bounded fallback gates.
 Use the existing 1e-8 Eh / 1e-7 Eh/Bohr endpoint gates. The current six-atom
 profile alone proves neither a candidate speedup nor the requested large-system
 advantage.
+
+## Subsequent device evidence
+
+Slurm 12072 on node3 / RTX 5090 passed canonical full/SR/LR matrices, all-center
+range derivatives, and three independent complete RKS TZVP/TZVPD and UKS NH2
+WB97M-V tests, including reconverged directional energies. At six atoms the
+candidate warm SCF plus analytic-force endpoint is 6.814 s versus baseline
+10.097 s (one warm repeat each). GPU4PySCF is 6.798 s. All original/moved/fixed
+force samples pass independent gates, with maximum energy/force errors
+3.38e-12 Eh and 1.34e-9 Eh/Bohr. This is a 1.48x baseline improvement on the
+diagnostic grid, not a large-system or GPU4PySCF advantage. Cold process clocks
+share persistent compiler caches and do not compare clean-cache compilation.
+
+The twelve-atom comparison initially found a 4.47635e-5 Eh/Bohr force discrepancy
+from GPU4PySCF 1.8.1. Unmodified baseline and candidate agree within 1.17e-12.
+Independent reconverged GPU4PySCF directional energies converge to the native
+analytic result, while GPU4PySCF's analytic direction remains off by 6.32e-5.
+CPU PySCF/Libcint independently reconverges both geometries and validates every
+candidate sample to 4.78e-12 Eh / 9.08e-10 Eh/Bohr. The discrepancy belongs to
+the original reference analytic path; its exact component is not isolated yet.
+Do not weaken the acceptance gate or silently accept that reference force.
+Raw inputs, node3 component reports and binary identities remain in the ignored
+`.artifacts/wb97m-large/` checkout artifacts; the CPU/reference diagnosis is
+retained under `.artifacts/lr-moments/` in the separate radial candidate checkout.
+
+On 2026-10-03, node1 Slurm 5300 completed a same-device twelve-atom comparison,
+using spherical def2-TZVP, the diagnostic 24 x 8 x 16 moving grid and the same
+1e-11/1e-9/1e-12 energy/density/screening controls. Three warm repeats retain each
+engine's fixed post-cold density; both use one SCF iteration every time.
+
+| Complete SCF + analytic forces | Baseline (s) | Hermite candidate (s) |
+| --- | ---: | ---: |
+| Cold process, 22 iterations | 562.022 | 243.096 |
+| Warm median, 3 repeats | 93.588 | 28.723 |
+| Changed geometry, 11 iterations | 312.576 | 125.791 |
+
+Warm improvement is 3.258x. Every cold/priming/warm/fixed-force/moved sample passes
+the independent CPU oracle; maximum energy/force errors over both variants are
+5.46e-12 Eh / 9.08e-10 Eh/Bohr. These twelve-atom diagnostic measurements still
+do not establish the requested large-system advantage over GPU4PySCF. The
+default-grid 24-atom cases remain pending. The baseline and candidate libraries
+have SHA-256 `a42867f83c4391d4f764cf661d26edf026648adf79708a33569e65c0341a2b8b`
+and `ccdd1a26743b65db07ed0956efe7ae4907dee6fc005867dd4acbcf5455619e9a`.
+Reproduce the scientific case with `benchmarks.dft_force_matrix --method wb97m-v
+--system water-12 --basis def2-tzvp --repeats 3`; phase journals and the compact
+all-sample receipt are in the radial checkout's `.artifacts/lr-moments/`.
 
 ## Rejected alternatives and next decision
 

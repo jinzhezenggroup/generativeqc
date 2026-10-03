@@ -1,0 +1,56 @@
+{
+  "baseline": {
+    "job": 12097,
+    "node": "node3",
+    "native_library_sha256": "a69b6a4aef8703ca1dcd35c3d61192658c4410c02f6dd321c88b37423a67c858",
+    "stats_sha256": "89cebc798f5cd21411a11f361d42ca9ef484db43eba769f796e2a9f39181eba0",
+    "groups": {
+      "bounded_shell_derivative": {
+        "instances": 1,
+        "total_nanoseconds": 29237758900
+      },
+      "cooperative_geometry": {
+        "instances": 9216,
+        "total_nanoseconds": 28424542602
+      },
+      "density_products_gemm_family": {
+        "instances": 18496,
+        "total_nanoseconds": 17298339010
+      },
+      "grid_features": {
+        "instances": 9216,
+        "total_nanoseconds": 9516826521
+      }
+    }
+  },
+  "master52_candidate": {
+    "job": 12100,
+    "node": "node3",
+    "native_library_sha256": "6cdc4519bc5eb577850bb6d4e73cc5d5d4865401c182e18eade07eeb60ef5464",
+    "stats_sha256": "9394516da569dda3474de52e51585ed88a560d67f0e467b057062bc819a9af16",
+    "groups": {
+      "bounded_shell_derivative": {
+        "instances": 1,
+        "total_nanoseconds": 29183896644
+      },
+      "cooperative_geometry": {
+        "instances": 9216,
+        "total_nanoseconds": 18814593191
+      },
+      "density_products_gemm_family": {
+        "instances": 9280,
+        "total_nanoseconds": 8655410383
+      },
+      "grid_features": {
+        "instances": 9216,
+        "total_nanoseconds": 342265348
+      }
+    },
+    "grid_panel_device_copies": {
+      "instances": 9216,
+      "bytes": 57982058496,
+      "total_nanoseconds": 27548867
+    }
+  },
+  "scope": "Instrumented warmed replays, not publication wall times. Final-master endpoints use a different recorded binary."
+}

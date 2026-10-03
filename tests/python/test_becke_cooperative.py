@@ -230,7 +230,7 @@ def test_cooperative_edge_semantics(helper: ct.CDLL, case: str) -> None:
             np.testing.assert_array_equal(actual[1], 12345.0)
 
 
-def test_cooperative_resource_plan_is_opt_in_and_keeps_point_lanes() -> None:
+def test_explicit_cooperative_selection_keeps_point_lanes() -> None:
     shape = {
         "atoms": 12,
         "aos": 96,
@@ -242,7 +242,7 @@ def test_cooperative_resource_plan_is_opt_in_and_keeps_point_lanes() -> None:
     }
     target = cuda_target_info("sm_120")
     generic = plan_stationary_cuda_resources(
-        **shape, target=target, budget_bytes=1 << 30
+        **shape, target=target, budget_bytes=1 << 30, cooperative_becke=False
     )
     cooperative = plan_stationary_cuda_resources(
         **shape, target=target, budget_bytes=1 << 30, cooperative_becke=True
@@ -263,7 +263,7 @@ def test_cooperative_resource_plan_is_opt_in_and_keeps_point_lanes() -> None:
     for atoms in (33, 96, 128):
         common = dict(shape, atoms=atoms)
         generic = plan_stationary_cuda_resources(
-            **common, target=target, budget_bytes=1 << 30
+            **common, target=target, budget_bytes=1 << 30, cooperative_becke=False
         )
         plan = plan_stationary_cuda_resources(
             **common, target=target, budget_bytes=1 << 30, cooperative_becke=True

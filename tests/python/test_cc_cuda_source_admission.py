@@ -158,8 +158,13 @@ namespace generativeqc::cc { struct SolverOptions {std::size_t max_bytes=1<<20;}
 namespace generativeqc::scf {
 namespace cuda_execution { constexpr std::size_t kResidentPsssThreads=128; }
 enum class FockSpin { Restricted }; enum class FockBackend { Cuda };
-int make_hf_fock_spec(FockSpin) {return 0;}
-int resolve_fock_build(int,FockBackend,double) {return 0;}
+// Match the real FockBuildSpec default: value-only consumers must opt out.
+struct FockSpec {unsigned derivative_order=1;};
+FockSpec make_hf_fock_spec(FockSpin) {return {};}
+int resolve_fock_build(FockSpec spec,FockBackend,double) {
+  if (spec.derivative_order) throw std::runtime_error("unadmitted source derivatives");
+  return 0;
+}
 struct ScfOptions {int resolved_fock_build=0;};
 struct PreparedFockPlan {
   PreparedFockPlan() {++live;}
