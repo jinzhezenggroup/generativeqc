@@ -170,6 +170,9 @@ generativeqc_status generativeqc_batch_get_ks_ao_selection_diagnostic_v1(
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   if (!batch->ks_diagnostics[index]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   const auto& work = batch->ks_diagnostics[index]->cuda_ao_selection;
+  // CPU/host-unfused owners have no device XC submission evidence. Preserve
+  // unavailable rather than publishing their default-initialized zero counts.
+  if (!work.xc_evaluations) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   *out = {sizeof(*out),
           GENERATIVEQC_ABI_VERSION,
           work.requested,
