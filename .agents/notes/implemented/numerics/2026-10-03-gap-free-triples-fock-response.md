@@ -115,7 +115,9 @@ research evidence, not retained production acceptance or benchmark publications.
   generated CPU/CC/triples-response source bytes remain unchanged.
 - Native CPU/CUDA rational fixtures have maximum error 1.04e-17, including
   capacities 1/2/3, exact budgets, automatic page shrinking, undersized refusal,
-  invalid denominators and nonfinite inputs. CUDA memcheck reports zero errors.
+  invalid denominators and nonfinite inputs. Unfiltered CUDA memcheck reports
+  zero errors for the native fixture, complete methane force/finite-difference
+  tests, and the complete 56-AO force (Slurm n2 job2137).
 - Four complete 56-AO GPU calls (cold, warm, repeat, changed geometry) satisfy
   independent pinned PySCF energy (3e-9), triples (2e-9), force (1e-6) and
   response-residual (1e-9) gates. Maximum observed force error is 1.12e-7.

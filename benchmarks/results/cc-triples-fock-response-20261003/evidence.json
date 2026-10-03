@@ -3,17 +3,17 @@
     {
       "kind": "endpoint-review",
       "path": "summary.json",
-      "sha256": "3509d495b0ae3953fc22eaaa63b4368ae0a2eca0525732aed6617d3283939654"
+      "sha256": "b8c041ab0d7f22c4d07842b3a7384c84aab501f49cf8a976c6f9b2cfe80b38e8"
     },
     {
       "kind": "endpoint-review",
       "path": "records.json.gz",
-      "sha256": "1550bfe36ef3b7590832b27fa923c021938d1475dbfd7be5388d3aab1be809cf"
+      "sha256": "4e85d5104722f3a8effbafcfbd494058defd4fc84aa411822dbce680e2e76241"
     },
     {
       "kind": "endpoint-review",
       "path": "work.json.gz",
-      "sha256": "596461de44e80a99dc67091cd16721630261e0ad82abcee4074b85837da1dbf1"
+      "sha256": "78f87ac3114cb88be9095075f508d92fcfff2110e7576a60f791c5b79660a15d"
     }
   ],
   "backend_selected": "cuda",
@@ -34,10 +34,10 @@
       "max_absolute_error": 1.1254996934439987e-11,
       "max_scaled_error": 0.003751665644813329,
       "passed": true,
-      "rms_error": 1.7689696999815566e-12,
+      "rms_error": 1.7569343027443293e-12,
       "rtol": 0,
       "shape": [
-        70
+        71
       ]
     },
     "forces": {
@@ -45,10 +45,10 @@
       "max_absolute_error": 1.1150206369325844e-07,
       "max_scaled_error": 0.11150206369325844,
       "passed": true,
-      "rms_error": 2.6138772288928656e-08,
+      "rms_error": 2.691141803391574e-08,
       "rtol": 0,
       "shape": [
-        2160
+        2232
       ]
     },
     "triples": {
@@ -56,10 +56,10 @@
       "max_absolute_error": 1.5158360677780536e-13,
       "max_scaled_error": 7.579180338890268e-05,
       "passed": true,
-      "rms_error": 4.123795804724397e-14,
+      "rms_error": 4.462506029988067e-14,
       "rtol": 0,
       "shape": [
-        70
+        71
       ]
     }
   },
