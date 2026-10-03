@@ -53,6 +53,20 @@ class ScalarCEmitter:
         self._materialized: set[int] = set()
         self._fma_by_add: dict[int, int] = {}
 
+    def fork(self) -> ScalarCEmitter:
+        """Start a lexical child scope reusing already emitted definitions.
+
+        A switch/branch emitter can hoist shared pure expressions in its parent
+        and lower each alternative independently. Keep temporary numbering above
+        the parent's definitions so child declarations cannot shadow their own
+        operands. Child emission never changes the parent or sibling CSE state.
+        """
+
+        child = ScalarCEmitter(self.graph, self.variables, scalar_type=self.scalar_type)
+        child.names = self.names.copy()
+        child._temporary = self._temporary
+        return child
+
     def emit(self, roots: Sequence[Expr]) -> None:
         normalized_roots = tuple(roots)
         topological_order = tuple(self.graph.topological_order(normalized_roots))

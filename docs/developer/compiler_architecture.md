@@ -59,7 +59,26 @@ the separately qualified CPU/CUDA FP64 local-scale operation orders. Requested
 output roots determine the generated arithmetic; their explicit dependency-first
 emission schedule keeps the energy producer ahead of derivative consumers.
 Runtime policy determines which roots must remain observable for numerical-failure
-compatibility.
+compatibility. CUDA VV10 feature consumers retain a bounded rational derivative
+closure that reuses the ordered energy denominator, reducing feature and radial
+closures to one FP64 division. Its general admission is nonnegative squared
+distance at most 2^32 and positive omega/kappa in [2^-32, 2^32]. Outside that
+domain, the original ordered closure preserves exceptional behavior.
+
+Molecular VV10 feature consumers can prevalidate the complete observable grid
+with one device scan. Bounds on coordinates, local scales, row derivatives,
+weights, point count and coefficient imply the scalar and row-contraction
+domains for every pair. A successful predicate selects a separately versioned
+unit-reciprocal energy closure plus ordered omega/kappa partial sums; generated
+row-feature TensorIR applies the local-scale chain once per row. Both energy
+and feature summation rounding are independently qualified. Unsupported grids
+retain the existing energy root and one-pass per-pair chain without replay.
+
+The preflight borrows dead compaction-offset storage after scatter on the same
+stream. Two specialized row launches read its predicate and exactly one
+traverses pairs. There is no new retained allocation or host synchronization.
+Negative weights and positive-zero active rows remain live. CPU, unmasked
+primitive and rVV10 consumers keep their original arithmetic. WB97M-V uses VV10.
 
 The CPU raw rVV10 and CUDA preconditioned rVV10 representations remain explicit
 lowering choices. They retain their established ordered FP64 arithmetic rather
@@ -109,7 +128,12 @@ metrics and preparation synchronization are owned by `common`. Static
 device topology such as SM count is unknown until a runtime probe enriches the
 target. Generic scheduling APIs require an explicit target or architecture
 instead of silently selecting `sm_120`. Measured production and local profiles
-may still record device topology as qualification provenance. The rationale is
+may still record device topology as qualification provenance. Native context
+and tuning probes share `runtime/cuda_device_facts`: each call reads current
+device resource attributes. NVIDIA/Linux may use metadata functions from the
+already loaded driver for the name and memory size; missing interfaces and
+other providers retain the complete property-query fallback. Device ordinals
+and resource facts are never cached across owners. The rationale is
 retained in
 `.agents/notes/implemented/compatibility/2026-09-20-explicit-cuda-target-topology.md`.
 

@@ -20,6 +20,9 @@ thread_local bool fail_next_grid_runtime = false;
 struct GridPlan {
   Context context;
   bool density_ready = false, density_jets_ready = false;
+  // Only split_restricted_density establishes this witness for the owned copy.
+  // Equal dimensions, aliased source pointers, and host values prove nothing.
+  bool identical_spin_density = false;
   size_t natom{}, nprimitive{}, nao{}, capacity{}, jets{}, packed_size{};
   size_t active_capacity{}, last_points{}, last_active{};
   std::uint64_t generation{};
@@ -94,6 +97,41 @@ __global__ void split_restricted_density(const double* total, size_t count, doub
     const double value = 0.5 * total[i];
     spin_density[i] = value;
     spin_density[count + i] = value;
+  }
+}
+
+// Compare every configured spatial jet on the actual immutable point tile.
+// Adjacent lanes read adjacent AO columns; four warps split 128 point rows.
+// Integer OR is deterministic and each block publishes at most once per AO.
+// This bounds omitted sampled jets individually, not energy or force error.
+__global__ void active_ao_columns(const double* ao, size_t npoint, size_t nao, size_t jets,
+                                  double cutoff, unsigned* selected, int* error) {
+  constexpr unsigned width = 32, warps = 4, point_tile = 128;
+  const unsigned lane = threadIdx.x % width, warp = threadIdx.x / width;
+  const size_t column = size_t(blockIdx.x) * width + lane;
+  __shared__ unsigned flags[warps][width];
+  unsigned keep = 0;
+  if (column < nao) {
+    for (size_t first = size_t(blockIdx.y) * point_tile; first < npoint;
+         first += size_t(gridDim.y) * point_tile) {
+      for (size_t point = first + warp; point < npoint && point < first + point_tile;
+           point += warps) {
+        for (size_t jet = 0; jet < jets; ++jet) {
+          const double value = ao[(jet * npoint + point) * nao + column];
+          if (!isfinite(value)) {
+            atomicExch(error, 1);
+            keep = 1;  // A bad value may never be hidden by a zero mask.
+          }
+          keep |= fabs(value) > cutoff;
+        }
+      }
+    }
+  }
+  flags[warp][lane] = keep;
+  __syncthreads();
+  if (warp == 0 && column < nao) {
+    for (unsigned w = 1; w < warps; ++w) keep |= flags[w][lane];
+    if (keep) atomicOr(selected + column, keep);
   }
 }
 
@@ -255,10 +293,12 @@ void grid_cuda_destroy_v1(void* pointer) { delete static_cast<GridPlan*>(pointer
 int grid_cuda_centers_v1(void* pointer, const double* centers, size_t elements, char* error,
                          size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !centers) throw std::invalid_argument("null CUDA grid centers");
+    if (!pointer) throw std::invalid_argument("null CUDA grid centers");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    p.identical_spin_density = false;
+    if (!centers) throw std::invalid_argument("null CUDA grid centers");
     ctx.check_device();
     if (elements != 3 * p.natom) throw std::invalid_argument("CUDA grid center size mismatch");
     for (size_t i = 0; i < elements; ++i)
@@ -276,10 +316,12 @@ int grid_cuda_centers_v1(void* pointer, const double* centers, size_t elements, 
 int grid_cuda_density_v1(void* pointer, const double* density, size_t elements, char* error,
                          size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !density) throw std::invalid_argument("null CUDA grid density");
+    if (!pointer) throw std::invalid_argument("null CUDA grid density");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    p.identical_spin_density = false;
+    if (!density) throw std::invalid_argument("null CUDA grid density");
     ctx.check_device();
 #if GENERATIVEQC_TEST_HOOKS
     if (fail_next_grid_runtime) {
@@ -313,11 +355,14 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
                                 size_t matrix_elements, unsigned spins, void* source_stream,
                                 char* error, size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !alpha || !source_stream || (spins != 1 && spins != 2) || (spins == 2 && !beta))
-      throw std::invalid_argument("invalid CUDA grid resident density binding");
+    if (!pointer) throw std::invalid_argument("invalid CUDA grid resident density binding");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    // Rejected and partially submitted replacements must not retain a witness.
+    p.identical_spin_density = false;
+    if (!alpha || !source_stream || (spins != 1 && spins != 2) || (spins == 2 && !beta))
+      throw std::invalid_argument("invalid CUDA grid resident density binding");
     ctx.check_device();
     if (matrix_elements != p.nao * p.nao)
       throw std::invalid_argument("CUDA grid resident density shape mismatch");
@@ -372,6 +417,7 @@ int grid_cuda_density_device_v1(void* pointer, const double* alpha, const double
     if (p.local)
       cuda_check(cudaMemsetAsync(p.potential, 0, 2 * matrix_elements * sizeof(double), ctx.stream));
     p.density_ready = true;
+    p.identical_spin_density = spins == 1;
   });
 }
 
@@ -379,11 +425,13 @@ int grid_cuda_source_v1(void* pointer, const double* density, size_t elements, c
                         const double* beta, const size_t* counts, int use_orbitals, char* error,
                         size_t size) {
   return guarded(error, size, [&] {
-    if (!pointer || !density || !counts || (use_orbitals != 0 && use_orbitals != 1))
-      throw std::invalid_argument("invalid CUDA density source");
+    if (!pointer) throw std::invalid_argument("invalid CUDA density source");
     auto& p = *static_cast<GridPlan*>(pointer);
     auto& ctx = p.context;
     std::lock_guard<std::mutex> lock(ctx.mutex);
+    p.identical_spin_density = false;
+    if (!density || !counts || (use_orbitals != 0 && use_orbitals != 1))
+      throw std::invalid_argument("invalid CUDA density source");
     ctx.check_device();
     if (elements != 2 * p.nao * p.nao) throw std::invalid_argument("density size mismatch");
     const double* factors[2] = {alpha, beta};
@@ -540,14 +588,21 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           const double* density = p.local && !identity_map ? p.local_density : p.density;
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 8) ? 4 - first : 1;
-          for (int spin = 0; spin < 2; ++spin)
+          for (int spin = 0; spin < (p.identical_spin_density ? 1 : 2); ++spin)
             gemm(ctx, 'N', 'N', static_cast<int>(npoint), static_cast<int>(active),
                  static_cast<int>(active), p.ao + first * stride, density + spin * active * active,
                  p.work + (spin * 4 + first) * stride, stride, 0, stride, count, 0);
+          // Publish both ordered panels without repeating the identical GEMM.
+          // The copy uses existing charged storage on the same owner stream;
+          // first/count exclude unrequested jets, including the tau-only case.
+          if (p.identical_spin_density)
+            cuda_check(cudaMemcpyAsync(p.work + (4 + first) * stride, p.work + first * stride,
+                                       count * stride * sizeof(double), cudaMemcpyDeviceToDevice,
+                                       ctx.stream));
         });
       ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
-        feature_kernel<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(
-            p.ao, p.work, npoint, active, p.features, ctx.error, p.feature_mask);
+        scheduled_grid_features(ctx.stream, p.ao, p.work, npoint, active, p.features, ctx.error,
+                                p.feature_mask);
         cuda_check(cudaGetLastError());
       });
     }
@@ -596,6 +651,51 @@ int grid_cuda_run_selected_device_deferred_v1(void* pointer, const double* point
                                               char* error, size_t size) {
   return grid_cuda_run_selected_impl(pointer, points, npoint, features, ao_ids, active,
                                      feature_output, jet_output, 1, 1, error, size);
+}
+
+// Explicit, synchronous discovery for a caller-owned fixed-geometry mask.
+// Borrow the existing identity-map storage only after invalidating its task
+// generation. No density contraction, grid-coordinate copy, or new device
+// allocation is needed. The next grid run uploads its own selected map.
+int grid_cuda_select_ao_device_v1(void* pointer, const double* points, size_t npoint, double cutoff,
+                                  unsigned* selected, char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !selected || !npoint || !std::isfinite(cutoff) || cutoff <= 0)
+      throw std::invalid_argument("invalid resident AO selection input");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    auto& ctx = p.context;
+    std::lock_guard<std::mutex> lock(ctx.mutex);
+    ctx.check_device();
+    if (!p.local || p.active_capacity != p.nao || npoint > p.capacity)
+      throw std::invalid_argument("AO selection requires a full-capacity local grid plan");
+    require_device_pointer(points, ctx.device);
+    p.view_ready = p.features_ready = p.density_jets_ready = false;
+    p.current_points = nullptr;
+    ++p.generation;
+    static_assert(sizeof(size_t) >= sizeof(unsigned));
+    auto* flags = reinterpret_cast<unsigned*>(p.ao_ids);
+    ctx.section(false, ctx.metrics.input_ms, [&] {
+      cuda_check(cudaMemsetAsync(ctx.error, 0, sizeof(int), ctx.stream));
+      cuda_check(cudaMemsetAsync(flags, 0, p.nao * sizeof(unsigned), ctx.stream));
+    });
+    ctx.section(false, ctx.metrics.kernel_ms, [&] {
+      scheduled_ao(ctx.stream, p.basis, p.natom, p.nprimitive, p.nao, points, npoint, p.jets, p.ao,
+                   ctx.error, nullptr);
+      cuda_check(cudaGetLastError());
+      const auto point_blocks = std::min(size_t{65535}, (npoint + 127) / 128);
+      active_ao_columns<<<dim3((p.nao + 31) / 32, point_blocks), 128, 0, ctx.stream>>>(
+          p.ao, npoint, p.nao, p.jets, cutoff, flags, ctx.error);
+      cuda_check(cudaGetLastError());
+    });
+    int failure = 0;
+    ctx.section(true, ctx.metrics.output_ms, [&] {
+      cuda_check(cudaMemcpyAsync(selected, flags, p.nao * sizeof(unsigned), cudaMemcpyDeviceToHost,
+                                 ctx.stream));
+      cuda_check(
+          cudaMemcpyAsync(&failure, ctx.error, sizeof(int), cudaMemcpyDeviceToHost, ctx.stream));
+    });
+    if (failure) throw std::runtime_error("nonfinite resident AO selection output");
+  });
 }
 int grid_cuda_run_v1(void* pointer, const double* points, size_t npoint, int features,
                      double* feature_output, double* jet_output, char* error, size_t size) {

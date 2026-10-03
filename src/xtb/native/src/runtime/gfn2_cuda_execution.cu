@@ -1384,27 +1384,13 @@ struct HostPlans {
   std::vector<double> dipole_integrals;
   std::vector<double> quadrupole_integrals;
   std::vector<double> core_hamiltonian;
-  std::vector<double> integral_workspace;
 
   std::vector<double> geometry_pair_data;
   std::vector<std::uint64_t> geometry_generations;
 
   std::vector<double> es2_matrix;
-  std::vector<double> es2_matrix_scratch;
-  std::vector<double> es2_shell_scratch;
-  std::vector<double> es2_batch_scratch;
-  std::vector<double> es2_gradient_scratch;
-  ES2Workspace es2_workspace{};
-  ES2GeometryCache es2_cache{};
 
   std::vector<double> aes2_pairs;
-  std::vector<double> aes2_pair_scratch;
-  std::vector<double> aes2_potential_scratch;
-  std::vector<double> aes2_batch_scratch;
-  std::vector<double> aes2_gradient_scratch;
-  std::vector<double> aes2_coordination_scratch;
-  AES2Workspace aes2_workspace{};
-  AES2GeometryCache aes2_cache{};
 
   std::vector<Gfn2D4DeviceElementData> d4_elements;
   std::vector<Gfn2D4DeviceReferenceData> d4_references;
@@ -1496,64 +1482,30 @@ struct HostPlans {
     const std::size_t atom_count = static_cast<std::size_t>(atoms);
     const std::size_t shells = static_cast<std::size_t>(basis.total_shells);
     const std::size_t matrices = static_cast<std::size_t>(integrals.total_matrix_elements);
-    const std::size_t integral_doubles =
-        (integrals.workspace_size_bytes + sizeof(double) - 1u) / sizeof(double);
-    coordination_numbers.resize(atom_count);
-    overlap.resize(matrices);
-    dipole_integrals.resize(3u * matrices);
-    quadrupole_integrals.resize(6u * matrices);
-    core_hamiltonian.resize(matrices);
-    integral_workspace.resize(std::max<std::size_t>(integral_doubles, 1u));
-
-    status = evaluate_coordination_cpu(coordination, positions.data(), coordination_numbers.data(),
-                                       error);
-    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
-    status = evaluate_overlap_cpu(basis, integrals, positions.data(), overlap.data(),
-                                  integral_workspace.data(),
-                                  integral_workspace.size() * sizeof(double), error);
-    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
-    status = evaluate_multipole_cpu(basis, integrals, positions.data(), dipole_integrals.data(),
-                                    quadrupole_integrals.data(), integral_workspace.data(),
-                                    integral_workspace.size() * sizeof(double), error);
-    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
-    status = evaluate_h0_cpu(basis, integrals, h0, positions.data(), coordination_numbers.data(),
-                             overlap.data(), core_hamiltonian.data(), error);
-    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
-
+    // These address-stable images exist only to bind the topology and query
+    // provider storage. No scientific consumer is admitted until the first
+    // device numerical refresh commits its real geometry epoch. Use neutral
+    // values, with identity overlap for the existing setup factorization;
+    // evaluating an artificial molecule on the CPU would be dead source work.
+    coordination_numbers.assign(atom_count, 0.0);
+    overlap.assign(matrices, 0.0);
+    dipole_integrals.assign(3u * matrices, 0.0);
+    quadrupole_integrals.assign(6u * matrices, 0.0);
+    core_hamiltonian.assign(matrices, 0.0);
+    for (std::int64_t system = 0; system < batch; ++system) {
+      const auto index = static_cast<std::size_t>(system);
+      const auto orbitals = basis.batch_orbital_offsets[index + 1] -
+                            basis.batch_orbital_offsets[index];
+      const auto matrix_begin = integrals.matrix_offsets[index];
+      for (std::int64_t orbital = 0; orbital < orbitals; ++orbital)
+        overlap[static_cast<std::size_t>(matrix_begin + orbital * orbitals + orbital)] = 1.0;
+    }
     geometry_pair_data.assign(static_cast<std::size_t>(aes2.total_pairs()) *
                                   static_cast<std::size_t>(kGfn2GeometryPairDataElements),
                               0.0);
     geometry_generations.assign(static_cast<std::size_t>(batch), geometry_generation);
-
-    es2_matrix.resize(static_cast<std::size_t>(es2.total_matrix_elements()));
-    es2_matrix_scratch.resize(es2_matrix.size());
-    es2_shell_scratch.resize(shells);
-    es2_batch_scratch.resize(static_cast<std::size_t>(batch));
-    es2_gradient_scratch.resize(3u * atom_count);
-    es2_workspace = {es2_matrix_scratch.data(),   es2.total_matrix_elements(),
-                     es2_shell_scratch.data(),    es2.total_shells(),
-                     es2_batch_scratch.data(),    batch,
-                     es2_gradient_scratch.data(), atoms * 3};
-    status =
-        update_es2_geometry_cache_cpu(es2, positions.data(), geometry_generation, es2_matrix.data(),
-                                      es2_matrix.size(), es2_workspace, es2_cache, error);
-    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
-
-    aes2_pairs.resize(static_cast<std::size_t>(aes2.pair_data_elements()));
-    aes2_pair_scratch.resize(aes2_pairs.size());
-    aes2_potential_scratch.resize(static_cast<std::size_t>(aes2.potential_scratch_elements()));
-    aes2_batch_scratch.resize(static_cast<std::size_t>(batch));
-    aes2_gradient_scratch.resize(3u * atom_count);
-    aes2_coordination_scratch.resize(atom_count);
-    aes2_workspace = {aes2_pair_scratch.data(),         aes2.pair_data_elements(),
-                      aes2_potential_scratch.data(),    aes2.potential_scratch_elements(),
-                      aes2_batch_scratch.data(),        batch,
-                      aes2_gradient_scratch.data(),     atoms * 3,
-                      aes2_coordination_scratch.data(), atoms};
-    status = update_aes2_geometry_cache_cpu(aes2, positions.data(), coordination_numbers.data(),
-                                            geometry_generation, aes2_pairs.data(),
-                                            aes2_pairs.size(), aes2_workspace, aes2_cache, error);
-    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
+    es2_matrix.assign(static_cast<std::size_t>(es2.total_matrix_elements()), 0.0);
+    aes2_pairs.assign(static_cast<std::size_t>(aes2.pair_data_elements()), 0.0);
 
     if (d4_enabled) {
       /* The setup owner needs only a stable initial CN image. The first CUDA
@@ -1585,13 +1537,7 @@ struct HostPlans {
       }
     }
 
-    explicit_point_shell_potential.resize(shells);
-    status = evaluate_external_point_charge_potential_cpu(
-        external, positions.data(), point_positions.empty() ? nullptr : point_positions.data(),
-        point_values.empty() ? nullptr : point_values.data(),
-        point_gammas.empty() ? nullptr : point_gammas.data(), explicit_point_shell_potential.data(),
-        error);
-    if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) return status;
+    explicit_point_shell_potential.assign(shells, 0.0);
 
     if (wavefunction_storage.allocate(wavefunction_layout.workspace_size_bytes) != cudaSuccess) {
       error = "failed to allocate pinned host wavefunction initialization storage";
@@ -1925,7 +1871,6 @@ struct Gfn2CudaExecutionCache::Impl {
     NumericalRefreshState numerical{};
     InferenceState inference{};
     PublicResultState public_result{};
-    bool energy_force_smoke_ready = false;
   };
 
   static generativeqc_xtb_status_t validate_prepared_admission_aliases(const Prepared& candidate,
@@ -4430,142 +4375,12 @@ struct Gfn2CudaExecutionCache::Impl {
       binding.diagnostics.force_composition_system_errors = system_errors(kCompositionSystemError);
       binding.diagnostics.force_composition_plan_error = device_error(kCompositionPlanError);
 
-      /* The setup owner uploads host-generated geometry values, but the force
-       * reverse passes compare their compact caches against CUDA arithmetic.
-       * Build the geometry and CN-dependent AES2 caches once on the setup
-       * stream; the numerical refresh transaction reuses these fixed public
-       * addresses after geometry changes. */
-      cuda_status = reset_gfn2_geometry_device_errors_cuda(
-          batch, binding.diagnostics.coordination_system_errors,
-          binding.diagnostics.coordination_device_error, stream);
-      if (cuda_status != cudaSuccess) {
-        error = cuda_error_message("CUDA initial geometry diagnostic reset", cuda_status);
-        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-      }
-      cuda_status = update_gfn2_geometry_cache_cuda(
-          binding.plan.coordination_batch, positions, candidate.host.geometry_generation,
-          binding.plan.coordination_cache, candidate.workspace_seed.geometry_workspace,
-          binding.diagnostics.coordination_system_errors,
-          binding.diagnostics.coordination_device_error, stream);
-      if (cuda_status != cudaSuccess) {
-        error = cuda_error_message("CUDA initial geometry-cache construction", cuda_status);
-        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-      }
-      cuda_status =
-          reset_gfn2_aes2_device_errors_cuda(batch, binding.diagnostics.coordination_system_errors,
-                                             binding.diagnostics.coordination_device_error, stream);
-      if (cuda_status != cudaSuccess) {
-        error = cuda_error_message("CUDA initial AES2 diagnostic reset", cuda_status);
-        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-      }
-      cuda_status = update_gfn2_aes2_geometry_cache_cuda(
-          candidate.plan_seed.aes2_batch, positions,
-          binding.plan.coordination_cache.coordination_numbers, candidate.plan_seed.aes2_cache,
-          candidate.workspace_seed.aes2_workspace, binding.diagnostics.coordination_system_errors,
-          binding.diagnostics.coordination_device_error, stream);
-      if (cuda_status != cudaSuccess) {
-        error = cuda_error_message("CUDA initial AES2-cache construction", cuda_status);
-        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-      }
     }
 
-    /* Exercise the published descriptors, not merely their host validation.
-     * All-bits-one is a NaN for the CUDA-supported IEEE-754 double format, so
-     * a finite download proves that terminal publication actually ran. */
-    std::size_t output_bytes = 0u;
-    if (!checked_bytes(batch, sizeof(double), output_bytes)) {
-      error = "energy smoke output extent overflows size_t";
-      return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
-    }
-    cuda_status = cudaMemsetAsync(binding.results.energy.total_energy, 0xff, output_bytes, stream);
-    if (cuda_status == cudaSuccess && force_mode) {
-      if (!checked_bytes(binding.results.forces.qm_force_elements, sizeof(double), output_bytes)) {
-        error = "QM-force smoke output extent overflows size_t";
-        return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
-      }
-      cuda_status = cudaMemsetAsync(binding.results.forces.qm_forces, 0xff, output_bytes, stream);
-      if (cuda_status == cudaSuccess && binding.results.forces.point_force_elements != 0) {
-        if (!checked_bytes(binding.results.forces.point_force_elements, sizeof(double),
-                           output_bytes)) {
-          error = "point-force smoke output extent overflows size_t";
-          return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
-        }
-        cuda_status =
-            cudaMemsetAsync(binding.results.forces.point_forces, 0xff, output_bytes, stream);
-      }
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status = cudaMemsetAsync(candidate.state_seed.scc.free_energies, 0,
-                                    static_cast<std::size_t>(batch) * sizeof(double), stream);
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status =
-          cudaMemsetAsync(candidate.state_seed.scc.system_statuses, 0,
-                          static_cast<std::size_t>(batch) * sizeof(generativeqc_xtb_status_t), stream);
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status = cudaMemsetAsync(candidate.state_seed.scc.converged, 1,
-                                    static_cast<std::size_t>(batch) * sizeof(std::uint8_t), stream);
-    }
-    if (cuda_status != cudaSuccess) {
-      error = cuda_error_message("CUDA energy/force smoke initialization", cuda_status);
-      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-    }
-    if (binding.stationary_projection.enabled == 1u) {
-      cuda_status = project_gfn2_stationary_force_state_cuda(binding.stationary_projection, stream);
-      if (cuda_status != cudaSuccess) {
-        error = cuda_error_message("CUDA stationary force projection smoke", cuda_status);
-        return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-      }
-    }
-    /* The binding is constructed before the first device numerical refresh, so
-     * neither the general committed pair list nor the D4 committed pair-list/CN
-     * bundle is eligible yet. Run the validation smoke on a plan copy with those
-     * refresh-owned consumers disabled. The dense coordination VJP and non-D4
-     * leaves still exercise the complete publication chain; the production plan
-     * retains every D4 component and exercises it after the first real refresh
-     * has atomically published the pair lists, CN, generation, and eligibility. */
-    Gfn2EnergyForceExecutionDevicePlan validation_plan = binding.plan;
-    validation_plan.pairlist_committed.plan_token = 0u;
-    validation_plan.pairlist_batch.plan_token = 0u;
-    constexpr std::uint32_t kD4SccPotential =
-        static_cast<std::uint32_t>(Gfn2SccPotentialComponent::kD4TwoBody);
-    constexpr std::uint32_t kD4SccEnergy =
-        static_cast<std::uint32_t>(Gfn2SccClassicalEnergyComponent::kD4TwoBody);
-    constexpr std::uint32_t kD4AtmEnergy =
-        static_cast<std::uint32_t>(Gfn2TotalEnergyComponent::kD4Atm);
-    constexpr std::uint32_t kD4ClassicalForces =
-        static_cast<std::uint32_t>(Gfn2ClassicalForceComponent::kD4TwoBody) |
-        static_cast<std::uint32_t>(Gfn2ClassicalForceComponent::kD4ATM);
-    validation_plan.scc_potential_components &= ~kD4SccPotential;
-    validation_plan.scc_energy_components &= ~kD4SccEnergy;
-    validation_plan.post_scc_potential_plan.enabled_components &= ~kD4SccPotential;
-    validation_plan.total_energy_batch.enabled_components &= ~kD4AtmEnergy;
-    validation_plan.classical_plan.enabled_components &= ~kD4ClassicalForces;
-    Gfn2EnergyForceExecutionDeviceInput validation_input = binding.input;
-    validation_input.total_energy.d4_atm = nullptr;
-    validation_input.total_energy.d4_atm_elements = 0;
-    cuda_status = execute_gfn2_energy_force_cuda(validation_plan, validation_input, binding.results,
-                                                 binding.intermediates, binding.workspace,
-                                                 binding.diagnostics, stream);
-    if (cuda_status != cudaSuccess) {
-      error = cuda_error_message("CUDA energy/force composed smoke", cuda_status);
-      return GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT;
-    }
-
-    /* The smoke borrows the initialized SCC storage only long enough to drive
-     * the terminal chain. Restore the immutable device checkpoint so the
-     * published runtime still starts at iteration zero. */
-    const auto restore_diagnostic = candidate.initializer.upload_async(
-        candidate.iteration_arena.get(), candidate.iteration_arena.bytes(), candidate.ready,
-        stream);
-    if (!restore_diagnostic.success()) {
-      error = setup_error_message("CUDA SCC fresh-state restoration", restore_diagnostic.status,
-                                  static_cast<std::uint32_t>(restore_diagnostic.error),
-                                  static_cast<std::uint32_t>(restore_diagnostic.field),
-                                  restore_diagnostic.index);
-      return restore_diagnostic.status;
-    }
+    // Descriptor construction is structural. The first admitted numerical
+    // refresh and terminal execution perform the real device validation;
+    // running a synthetic energy/force calculation here repeats source work
+    // and cannot certify the caller's as-yet unconsumed numerical inputs.
     candidate.submitted = true;
     return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
@@ -5090,37 +4905,15 @@ struct Gfn2CudaExecutionCache::Impl {
   }
 
   generativeqc_xtb_status_t validate_candidate_setup(Prepared& candidate, std::string& error) {
-    const auto& binding = candidate.energy_force;
-    const std::int64_t batch = candidate.host.basis.batch_size;
+    // The retained setup factorization still needs an asynchronous provider
+    // gate. Energy/force execution is checked by the real first transaction,
+    // whose publication remains conditional on the numerical epoch and status.
     const std::int64_t setup_systems = candidate.eigensolver_binding.setup_system_error_elements;
     const std::int64_t factor_statuses = candidate.eigensolver_binding.cache.status_elements;
-    const std::int64_t qm_force_elements =
-        binding.plan.compute_forces == 1u ? binding.results.forces.qm_force_elements : 0;
-    const std::int64_t point_force_elements =
-        binding.plan.compute_forces == 1u ? binding.results.forces.point_force_elements : 0;
-    struct Offsets {
-      std::size_t setup_device_error = 0u;
-      std::size_t setup_system_errors = 0u;
-      std::size_t factor_statuses = 0u;
-      std::size_t execution_system_errors = 0u;
-      std::size_t execution_device_error = 0u;
-      std::size_t plan_failure = 0u;
-      std::size_t energies = 0u;
-      std::size_t qm_forces = 0u;
-      std::size_t point_forces = 0u;
-      std::size_t converged = 0u;
-    } offset;
     ArenaLayout layout;
-    offset.setup_device_error = layout.append<std::uint32_t>(1);
-    offset.setup_system_errors = layout.append<std::uint32_t>(setup_systems);
-    offset.factor_statuses = layout.append<std::uint32_t>(factor_statuses);
-    offset.execution_system_errors = layout.append<std::uint32_t>(batch);
-    offset.execution_device_error = layout.append<std::uint32_t>(1);
-    offset.plan_failure = layout.append<std::uint32_t>(1);
-    offset.energies = layout.append<double>(batch);
-    offset.qm_forces = layout.append<double>(qm_force_elements);
-    offset.point_forces = layout.append<double>(point_force_elements);
-    offset.converged = layout.append<std::uint8_t>(batch);
+    const auto device_offset = layout.append<std::uint32_t>(1);
+    const auto systems_offset = layout.append<std::uint32_t>(setup_systems);
+    const auto factors_offset = layout.append<std::uint32_t>(factor_statuses);
     if (!layout.valid()) {
       error = "CUDA candidate validation staging layout overflows size_t";
       return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
@@ -5131,64 +4924,23 @@ struct Gfn2CudaExecutionCache::Impl {
       return GENERATIVEQC_XTB_STATUS_ALLOCATION_FAILED;
     }
     void* const arena = candidate.candidate_validation_arena.get();
-    auto* const setup_device_error = arena_pointer<std::uint32_t>(arena, offset.setup_device_error);
-    auto* const setup_system_errors =
-        arena_pointer_if<std::uint32_t>(arena, offset.setup_system_errors, setup_systems);
-    auto* const factor_status_values =
-        arena_pointer_if<std::uint32_t>(arena, offset.factor_statuses, factor_statuses);
-    auto* const execution_system_errors =
-        arena_pointer<std::uint32_t>(arena, offset.execution_system_errors);
-    auto* const execution_device_error =
-        arena_pointer<std::uint32_t>(arena, offset.execution_device_error);
-    auto* const plan_failure = arena_pointer<std::uint32_t>(arena, offset.plan_failure);
-    auto* const energies = arena_pointer<double>(arena, offset.energies);
-    auto* const qm_forces = arena_pointer_if<double>(arena, offset.qm_forces, qm_force_elements);
-    auto* const point_forces =
-        arena_pointer_if<double>(arena, offset.point_forces, point_force_elements);
-    auto* const converged = arena_pointer<std::uint8_t>(arena, offset.converged);
-    const auto enqueue = [&](void* destination, const void* source, std::int64_t elements,
-                             std::size_t element_size) {
+    auto* const device_error = arena_pointer<std::uint32_t>(arena, device_offset);
+    auto* const system_errors = arena_pointer_if<std::uint32_t>(arena, systems_offset, setup_systems);
+    auto* const factors = arena_pointer_if<std::uint32_t>(arena, factors_offset, factor_statuses);
+    const auto enqueue = [&](void* destination, const void* source, std::int64_t elements) {
       return elements == 0 ? cudaSuccess
                            : cudaMemcpyAsync(destination, source,
-                                             static_cast<std::size_t>(elements) * element_size,
+                                             static_cast<std::size_t>(elements) * sizeof(std::uint32_t),
                                              cudaMemcpyDeviceToHost, stream);
     };
-    cuda_status = enqueue(setup_device_error, candidate.eigensolver_binding.setup_device_error, 1,
-                          sizeof(std::uint32_t));
+    cuda_status = enqueue(device_error, candidate.eigensolver_binding.setup_device_error, 1);
     if (cuda_status == cudaSuccess) {
-      cuda_status = enqueue(setup_system_errors, candidate.eigensolver_binding.setup_system_errors,
-                            setup_systems, sizeof(std::uint32_t));
+      cuda_status = enqueue(system_errors, candidate.eigensolver_binding.setup_system_errors,
+                            setup_systems);
     }
     if (cuda_status == cudaSuccess) {
-      cuda_status =
-          enqueue(factor_status_values, candidate.eigensolver_binding.cache.factor_statuses,
-                  factor_statuses, sizeof(std::uint32_t));
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status = enqueue(execution_system_errors, binding.diagnostics.execution_system_errors,
-                            batch, sizeof(std::uint32_t));
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status = enqueue(execution_device_error, binding.diagnostics.execution_device_error, 1,
-                            sizeof(std::uint32_t));
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status = enqueue(plan_failure, binding.workspace.plan_failure, 1, sizeof(std::uint32_t));
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status = enqueue(energies, binding.results.energy.total_energy, batch, sizeof(double));
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status =
-          enqueue(qm_forces, binding.results.forces.qm_forces, qm_force_elements, sizeof(double));
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status = enqueue(point_forces, binding.results.forces.point_forces, point_force_elements,
-                            sizeof(double));
-    }
-    if (cuda_status == cudaSuccess) {
-      cuda_status =
-          enqueue(converged, candidate.state_seed.scc.converged, batch, sizeof(std::uint8_t));
+      cuda_status = enqueue(factors, candidate.eigensolver_binding.cache.factor_statuses,
+                            factor_statuses);
     }
     if (cuda_status == cudaSuccess) {
       cuda_status = cudaEventRecord(candidate.public_result_completion_event.get(), stream);
@@ -5201,48 +4953,15 @@ struct Gfn2CudaExecutionCache::Impl {
       return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
     candidate.submitted = false;
-
     const auto any_nonzero = [](const std::uint32_t* values, std::int64_t elements) {
       return elements != 0 && std::any_of(values, values + elements,
                                           [](std::uint32_t value) { return value != 0u; });
     };
-    if (*setup_device_error != 0u || any_nonzero(setup_system_errors, setup_systems) ||
-        any_nonzero(factor_status_values, factor_statuses)) {
+    if (*device_error != 0u || any_nonzero(system_errors, setup_systems) ||
+        any_nonzero(factors, factor_statuses)) {
       error = "CUDA eigensolver setup reported an asynchronous factorization failure";
       return GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
     }
-
-    const auto first_system_error =
-        std::find_if(execution_system_errors, execution_system_errors + batch,
-                     [](std::uint32_t value) { return value != 0u; });
-    if (*execution_device_error != 0u || *plan_failure != 0u ||
-        first_system_error != execution_system_errors + batch) {
-      std::ostringstream message;
-      message << "CUDA energy/force smoke reported device_error=" << *execution_device_error
-              << " plan_failure=" << *plan_failure;
-      if (first_system_error != execution_system_errors + batch) {
-        message << " system=" << std::distance(execution_system_errors, first_system_error)
-                << " system_error=" << *first_system_error;
-      }
-      error = message.str();
-      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-    }
-    const auto all_finite = [](const double* values, std::int64_t elements) {
-      return elements == 0 || std::all_of(values, values + elements,
-                                          [](double value) { return std::isfinite(value); });
-    };
-    if (!all_finite(energies, batch) || !all_finite(qm_forces, qm_force_elements) ||
-        !all_finite(point_forces, point_force_elements)) {
-      error = "CUDA energy/force smoke did not publish every requested output";
-      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-    }
-
-    if (std::any_of(converged, converged + batch, [](std::uint8_t value) { return value != 0u; })) {
-      error = "CUDA energy/force smoke failed to restore the fresh SCC state";
-      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-    }
-
-    candidate.energy_force_smoke_ready = true;
     return GENERATIVEQC_XTB_STATUS_SUCCESS;
   }
 
@@ -5513,10 +5232,9 @@ struct Gfn2CudaExecutionCache::Impl {
                  ? GENERATIVEQC_XTB_STATUS_INVALID_ARGUMENT
                  : GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
-    /* The setup owner factors its deterministic topology-only seed at
-     * generation 1 so setup and graph validation can exercise a usable
-     * overlap cache.  The externally visible numerical runtime, however,
-     * starts unpublished at epoch 0.  Invalidate only the seed provenance
+    /* The setup owner factors its identity placeholder at generation 1 to
+     * initialize and validate the provider binding. The externally visible
+     * numerical runtime starts unpublished at epoch 0. Invalidate the seed provenance
      * before publishing the candidate so the first real epoch-1 refresh must
      * refactor the caller geometry instead of mistaking the seed factor for a
      * cache hit. */

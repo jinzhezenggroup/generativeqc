@@ -13,7 +13,7 @@
 namespace generativeqc::xtb::detail::cuda {
 namespace {
 
-constexpr int kThreadsPerBlock = 128;
+constexpr int kThreadsPerBlock = generativeqc::xtb::generated::gfn2_h0_force_threads;
 constexpr std::int64_t kMaximumInt64 = 9223372036854775807LL;
 constexpr double kMinimumDistanceSquared = 1.0e-24;
 
@@ -298,7 +298,12 @@ __global__ void contract_h0_pulay_kernel(Gfn2IntegralDeviceBatch batch, Gfn2H0De
   const std::int64_t pair_begin = batch.shell_pair_offsets[system];
   const std::int64_t pair_count = shell_count * shell_count;
 
-  for (std::int64_t local_pair = threadIdx.x; local_pair < pair_count; local_pair += blockDim.x) {
+  // The compiler distributes disjoint AO blocks. Keep each pair's AO reduction
+  // ordered and retain the existing atomic atom adjoints; validation and final
+  // publication still run once per system, outside this tiled contraction.
+  const std::int64_t first_pair = static_cast<std::int64_t>(blockIdx.y) * blockDim.x + threadIdx.x;
+  const std::int64_t pair_stride = static_cast<std::int64_t>(gridDim.y) * blockDim.x;
+  for (std::int64_t local_pair = first_pair; local_pair < pair_count; local_pair += pair_stride) {
     const std::int64_t first_shell = shell_begin + local_pair / shell_count;
     const std::int64_t second_shell = shell_begin + local_pair % shell_count;
     const std::int64_t first_atom = batch.shell_to_atom[first_shell];
@@ -698,7 +703,9 @@ cudaError_t add_gfn2_h0_pulay_gradient_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  contract_h0_pulay_kernel<<<blocks, kThreadsPerBlock, 0, stream>>>(
+  const unsigned pair_tiles = generativeqc::xtb::generated::gfn2_h0_force_pair_tiles(
+      batch.total_shell_pair_elements, batch.batch_size);
+  contract_h0_pulay_kernel<<<dim3(blocks, pair_tiles), kThreadsPerBlock, 0, stream>>>(
       batch, h0_plan, activity, input, workspace, system_errors, device_error);
   status = check_launch();
   if (status != cudaSuccess) {

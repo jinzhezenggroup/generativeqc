@@ -86,7 +86,8 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
           if (range != generativeqc::integrals::CoulombRange::Full) {
             result =
                 result +
-                weight * primitive_eri_cartesian<MaximumAngular>(
+                weight * primitive_eri_cartesian_shell_pairs<FirstShellAngular, SecondShellAngular,
+                                                          ThirdShellAngular, FourthShellAngular>(
                              batch.primitive_exponents[a], first, angular_first,
                              batch.primitive_exponents[b], second, angular_second,
                              batch.primitive_exponents[c], third, angular_third,

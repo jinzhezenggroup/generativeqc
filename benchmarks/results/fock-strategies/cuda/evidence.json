@@ -1,8 +1,8 @@
 {
   "attachments": [
     {
-      "path": "samples.json",
-      "sha256": "7ea10df0b8c9616ede66380bcb010af55b4bc40f30152561ab15142cccfc8d56"
+      "path": "samples.json.gz",
+      "sha256": "9f68e0bde3921afe884802cc67f9aced691c2b9675612264d29e59ddb61ca2ce"
     },
     {
       "path": "provenance.json",

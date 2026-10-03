@@ -37,6 +37,13 @@ automatically. An installed wheel loads its bundled library first;
 `GENERATIVEQC_LIBRARY` remains the explicit override for a different
 development or benchmark build.
 
+Library discovery follows that precedence lazily on every load; an existing
+explicit override avoids scanning lower-priority wheel and build locations.
+Linux CUDA provider discovery skips directory scans only when every curated
+SONAME group has a retained successful handle. Missing or unloadable groups
+are retried on later calls. Native ABI binding, CUDA device facts and local
+profile selection are still evaluated per load.
+
 Linux CUDA wheels keep NVIDIA user-space provider DSOs outside
 `libgenerativeqc.so`, but declare the reviewed CUDA 12 `nvidia-*` packages as
 runtime dependencies because NVCC registration runs when the CUDA-bearing native

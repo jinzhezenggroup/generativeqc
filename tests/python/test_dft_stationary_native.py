@@ -64,7 +64,13 @@ def test_native_snapshot_rejects_relabeling_and_replay(
             with pytest.raises(RuntimeError, match="invalid argument"):
                 StationaryKsState.from_native(batch, basis)
             batch.execute(strict=True)
+            from generativeqc._snapshot_grid_cache import SnapshotGridCache
+
+            # Exercise the public-force cache on CPU too, without requiring a
+            # GPU to test that content reuse never grants a stale native lease.
+            batch._snapshot_grid_cache = SnapshotGridCache()
             state = StationaryKsState.from_native(batch, basis)
+            assert not state._source.grid_cache_work["exact_grid_reused"]
             assert state.identity.spin == (
                 "polarized" if unrestricted else "unpolarized"
             )
@@ -178,6 +184,8 @@ def test_native_snapshot_rejects_relabeling_and_replay(
             with pytest.raises(ValueError, match="stale"):
                 contract.validate(state)
             current = StationaryKsState.from_native(batch, basis)
+            assert current.grid is state.grid
+            assert current._source.grid_cache_work["exact_grid_reused"]
             assert current.identity.solve_epoch > state.identity.solve_epoch
             stale_handle = state._source._handle
             assert type(stale_handle) is int  # No mutable ctypes .value alias.
@@ -211,3 +219,33 @@ def test_native_snapshot_rejects_relabeling_and_replay(
             StationaryDerivativeContract(final.identity).validate(final)
     with pytest.raises(RuntimeError, match="closed"):
         StationaryDerivativeContract(final.identity).validate(final)
+    assert batch._snapshot_grid_cache is None
+
+
+def test_snapshot_cache_replaces_moved_geometry_without_reusing_the_lease() -> None:
+    """A cached exact grid is not permission to relabel a changed native model."""
+    from generativeqc._snapshot_grid_cache import SnapshotGridCache
+
+    calculator = Calculator(method="pbe-rks", ks_options=KsOptions(grid=GRID))
+    moved = [("H", (0.0, 0.0, -0.8)), ("H", (0.0, 0.0, 0.8))]
+    with calculator.prepare_batch([ATOMS]) as batch:
+        batch._snapshot_grid_cache = SnapshotGridCache()
+        batch.execute(strict=True)
+        with NativeAO(ATOMS) as basis:
+            original = StationaryKsState.from_native(batch, basis)
+        batch.execute([[position for _, position in moved]], strict=True)
+        with NativeAO(moved) as basis:
+            current = StationaryKsState.from_native(batch, basis)
+            assert current.grid is not original.grid
+            assert not current._source.grid_cache_work["exact_grid_reused"]
+            assert batch._snapshot_grid_cache.grid is current.grid
+            with pytest.raises(ValueError, match="grid source"):
+                StationaryKsState.from_native(batch, basis, original.grid)
+            with pytest.raises(ValueError, match="stale"):
+                StationaryDerivativeContract(original.identity).validate(original)
+            batch._snapshot_grid_cache.max_bytes = 0
+            batch._snapshot_grid_cache.clear()
+            uncached = StationaryKsState.from_native(batch, basis)
+            assert uncached.grid.identity == current.grid.identity
+            assert uncached._source.grid_cache_work["retained_bytes"] == 0
+            assert uncached.grid is not current.grid

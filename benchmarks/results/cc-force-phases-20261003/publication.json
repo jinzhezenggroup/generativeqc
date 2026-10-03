@@ -7,28 +7,40 @@
   },
   "files": [
     {
-      "bytes": 16892,
-      "path": "evidence.json",
+      "bytes": 2887,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "bbe118d276ee1e6123610d453e6dc661526da28448b7a89f2aef16e3125236c5"
+      "sha256": "1fd1676707fcf1b84be18e682538c3d4f1c7a3e5b5f9d03ba276d6b584a6add3"
     },
     {
-      "bytes": 43808,
-      "path": "summary.json",
+      "bytes": 8274,
+      "path": "summary.json.gz",
       "role": "summary",
-      "sha256": "4514270397287374b83daeb9db9a0d6b3ed99c8e5eb4d882950871fb8ca4910e"
+      "sha256": "63bcbc51ae6837aa86be28d09c4a9772e2d469ed88e6a7ef9f4e12a98474d37f"
     },
     {
-      "bytes": 44803,
-      "path": "records.json",
+      "bytes": 7598,
+      "path": "records.json.gz",
       "role": "samples",
-      "sha256": "ebc57d7fcc2c83f1bade524a3f6df1146910caf8dc99e783ab45e0bddd2e3aee"
+      "sha256": "a18bfc7affe91efa4c04c136a72682accd6aa71e278d81712d2c773df6a8fe41"
     },
     {
-      "bytes": 13013,
-      "path": "source.patch",
+      "bytes": 3447,
+      "path": "source.patch.gz",
       "role": "source-patch",
-      "sha256": "d256616ea67d057b84bffa451c799020bdb0a9b85a353a704e78c4cbd28bc91a"
+      "sha256": "727eb10b5271ad6a4aa2da390a48ebeaee160373bcf6610f58e38ef8e4d8031e"
+    },
+    {
+      "bytes": 3017,
+      "path": "evidence.original.json.gz",
+      "role": "reproduction",
+      "sha256": "04fe8b6cfaccb9f465b2fa86fd9dad249bae691a44641dc854474698b6de0232"
+    },
+    {
+      "bytes": 1881,
+      "path": "storage.json",
+      "role": "reproduction",
+      "sha256": "c5213df1d38890c4c67ba50ae9c73c5fbf0024684381eac91689b21dc62d8f53"
     }
   ],
   "reproduction": {
@@ -43,7 +55,7 @@
       "--output",
       ".artifacts/cc-force-phases-reproduction.json"
     ],
-    "instructions": "Apply source.patch to revision; compile CUDA 12.9 sm_120 Release with explicit CXX/CUDA ccache launchers and checkout-root CCACHE_BASEDIR. Run via finite Slurm main allocation --gres=gpu:5090:1, preserve CUDA_VISIBLE_DEVICES, set GENERATIVEQC_LIBRARY/PYTHONPATH=python:., CPU thread limits=1, and GENERATIVEQC_DF_PROGRESS_TRACE to a fresh path. Also run --atoms 6 on CPU/CUDA. Traces are nested; use phase_interpretation from summary.json."
+    "instructions": "Decode source.patch.gz byte-for-byte before applying the unchanged patch. Apply source.patch to revision; compile CUDA 12.9 sm_120 Release with explicit CXX/CUDA ccache launchers and checkout-root CCACHE_BASEDIR. Run via finite Slurm main allocation --gres=gpu:5090:1, preserve CUDA_VISIBLE_DEVICES, set GENERATIVEQC_LIBRARY/PYTHONPATH=python:., CPU thread limits=1, and GENERATIVEQC_DF_PROGRESS_TRACE to a fresh path. Also run --atoms 6 on CPU/CUDA. Traces are nested; use phase_interpretation from summary.json."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

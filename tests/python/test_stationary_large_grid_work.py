@@ -290,63 +290,33 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
 
 
 def _resource_preflight(basis: typing.Any, host_budget: int = 256 << 20) -> dict:
-    """Execute production resource admission without compiling or allocating CUDA."""
+    """Execute the complete dry production admission without CUDA setup."""
     from generativeqc import _stationary_cuda as runtime
     from generativeqc_compiler.common.cuda_target import cuda_target_info
 
-    path = ROOT / "python/generativeqc/_stationary_cuda.py"
-    module = ast.parse(path.read_text())
-    function = next(
-        node
-        for node in module.body
-        if isinstance(node, ast.FunctionDef)
-        and node.name == "_complete_rks_cuda_gradient_diagnostic"
-    )
-
-    def assigns(node: ast.stmt, name: str) -> bool:
-        return isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == name
-            for target in node.targets
-        )
-
-    start = next(
-        index for index, node in enumerate(function.body) if assigns(node, "grid_plan")
-    )
-    stop = next(
-        index for index, node in enumerate(function.body) if assigns(node, "cache")
-    )
-    wrapper = ast.parse("def preflight():\n    pass").body[0]
-    wrapper.body = (
-        function.body[start:stop]
-        + ast.parse(
-            "return dict(grid=grid_plan, host=host_bound, source=source_resources, reserve=native_geometry_reserve)"
-        ).body
-    )
-    code = compile(
-        ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[])),
-        str(path),
-        "exec",
-    )
-    compiled = next(value for value in code.co_consts if isinstance(value, CodeType))
-    scope = vars(runtime) | {
-        "basis": basis,
-        "na": basis.natom,
-        "n": basis.nao,
-        "tile_points": 256,
-        "primitive_tile": 4096,
-        "integral_terms": 32,
-        "needs_first": True,
-        "max_device_bytes": 512 << 20,
-        "max_host_bytes": host_budget,
-        "ecp": False,
-        "plan": SimpleNamespace(spin_blocks=1),
-        "source_names": tuple(range(8)),
-        "state": SimpleNamespace(
+    layout = runtime._plan_stationary_cuda_tile(
+        SimpleNamespace(
             _source=SimpleNamespace(cuda_integral_derivatives=lambda *_: None)
         ),
-        "target": cuda_target_info("sm_120"),
+        basis,
+        plan=SimpleNamespace(spin_blocks=1),
+        target=cuda_target_info("sm_120"),
+        needs_first=True,
+        tile_points=256,
+        primitive_tile=4096,
+        integral_terms=32,
+        source_names=tuple(range(8)),
+        ecp=False,
+        max_device_bytes=512 << 20,
+        max_host_bytes=host_budget,
+        max_ecp_pair_samples=100_000_000,
+    )
+    return {
+        "grid": layout.grid_plan,
+        "host": layout.host_bound,
+        "source": layout.source_resources,
+        "reserve": layout.native_geometry_reserve,
     }
-    return FunctionType(compiled, scope)()
 
 
 @pytest.mark.parametrize(
@@ -378,7 +348,7 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
     assert plan["source"].allocation_bytes == source
     assert plan["reserve"] == reserve
     assert plan["grid"].peak_bytes + source + reserve < 512 << 20
-    assert plan["source"].becke_threads_per_point == 1
+    assert plan["source"].becke_threads_per_point == 32
     assert _resource_preflight(basis, host)["host"] == host
     with pytest.raises(ValueError, match="additional-host byte budget"):
         _resource_preflight(basis, host - 1)

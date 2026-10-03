@@ -2,6 +2,7 @@
 #define GENERATIVEQC_SCF_SOLVER_MEAN_FIELD_DRIVER_HPP
 #include "core/types.hpp"
 #include "integrals/s_integrals.hpp"
+#include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/types.hpp"
 namespace generativeqc::scf {
 class PreparedFockPlan;
@@ -17,12 +18,14 @@ namespace solver {
 ScfResult run_rhf_host_plan(const core::System& system, const ScfOptions& options,
                             const integrals::IntegralData& ints, const PreparedFockPlan& plan,
                             const std::vector<double>* initial_density,
-                            initial_guess::OverlapOrthogonalizer* overlap_cache = nullptr);
+                            initial_guess::OverlapOrthogonalizer* overlap_cache = nullptr,
+                            const initial_guess::EigenOperation& target_eigen = {});
 /** Unrestricted counterpart; joined DIIS/proposals retain the alpha/beta order. */
 ScfResult run_uhf_host_plan(const core::System& system, const ScfOptions& options,
                             const integrals::IntegralData& ints, const PreparedFockPlan& plan,
                             const std::vector<double>* initial_density,
-                            initial_guess::OverlapOrthogonalizer* overlap_cache = nullptr);
+                            initial_guess::OverlapOrthogonalizer* overlap_cache = nullptr,
+                            const initial_guess::EigenOperation& target_eigen = {});
 }  // namespace solver
 }  // namespace generativeqc::scf
 #endif

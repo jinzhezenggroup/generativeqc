@@ -10,7 +10,7 @@ import pytest
 
 from tools.density_workload_matrix import validate_matrix_errors
 from tools.generativeqc_validation.publication import validate_publication
-from tools.generativeqc_validation.record import decode_record, load_record
+from tools.generativeqc_validation.record import decode_record, load_publication_record
 from tools.summarize_density_candidates import summarize
 
 ROOT = Path(__file__).resolve().parents[2] / "benchmarks/results/density-candidates"
@@ -98,7 +98,7 @@ def test_summary_rejects_incomparable_or_incomplete_pairs(
 def test_matrix_gate_inventory_rejects_missing_or_reused_keys(
     rename: typing.Any,
 ) -> None:
-    report = load_record(ROOT / "gpu/evidence.json")
+    report = load_publication_record(ROOT / "gpu")
     key = next(iter(report["block_errors"]))
     record = report["block_errors"].pop(key)
     if rename:

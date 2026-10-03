@@ -1632,7 +1632,11 @@ cudaError_t add_gfn2_integral_gradient_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  integral_force_preflight_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock,
+  // Only admission is widened. The scientific shell-pair kernel keeps its
+  // fixed 64-lane reduction, and each input/seed is still visited once.
+  const unsigned preflight_threads = generated::gfn2_force_preflight_threads(
+      batch.total_matrix_elements, batch.batch_size);
+  integral_force_preflight_kernel<<<static_cast<unsigned int>(batch.batch_size), preflight_threads,
                                     0, stream>>>(batch, activity, input, output, workspace,
                                                  system_errors, device_error);
   status = check_launch();
