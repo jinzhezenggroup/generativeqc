@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -196,6 +198,103 @@ void fixed_density() {
             "retained incremental PBE feature cache changed the potential difference");
 }
 
+template <unsigned Mask>
+dft::SemilocalPointValue mask_test_point(const double rho[2], const double (&gradient)[2][3],
+                                         const double tau[2]) {
+  // Synthetic linear point program checks ingredient plumbing and derivative
+  // factors only. Existing independent physics point/integration tests remain
+  // the scientific oracles; this callback does not replace them.
+  dft::SemilocalPointValue out;
+  for (unsigned spin = 0; spin < 2; ++spin) {
+    out.rho[spin] = 0.3 + 0.2 * spin;
+    out.energy += out.rho[spin] * rho[spin];
+    if constexpr ((Mask & 6U) != 0)
+      for (unsigned axis = 0; axis < 3; ++axis) {
+        out.gradient[spin][axis] = 0.1 * (axis + 1) * (spin + 1);
+        out.energy += out.gradient[spin][axis] * gradient[spin][axis];
+      }
+    if constexpr ((Mask & 8U) != 0) {
+      const double tau_coefficient = 0.2 + 0.1 * spin;
+      out.kinetic[spin] = 0.5 * tau_coefficient;
+      out.energy += tau_coefficient * tau[spin];
+    }
+  }
+  return out;
+}
+
+void generic_feature_masks() {
+  const auto system = hydrogens(2);
+  const dft::AoBasis basis(system);
+  const dft::MolecularGrid grid(system, {1, 2, 2, 4, 3, 1e-12});
+  const DensityFactorIdentity identity{23, 29, 5, 7};
+  const Matrix coefficients{0.6, -0.2, 0.3, 0.7}, occupations{2, 2};
+  const OccupiedDensityFactor factor(identity, DensityFactorSpin::Restricted, 2, coefficients,
+                                     occupations);
+  const Matrix density(factor.density().begin(), factor.density().end());
+  const XcDensitySource source{XcDensityRoute::OccupiedOrbitals, &factor, identity};
+  const std::array<dft::SemilocalPointProgram, 3> programs{{
+      {"mask-1 traversal test", "test://mask-1", 1U, 1U, mask_test_point<1>},
+      {"mask-7 traversal test", "test://mask-7", 7U, 1U, mask_test_point<7>},
+      {"mask-15 traversal test", "test://mask-15", 15U, 1U, mask_test_point<15>},
+  }};
+  for (const auto& program : programs) {
+    const auto expected = dft::integrate_semilocal_rks(basis, grid, density, program, 7);
+    for (std::size_t tile : {1U, 7U, 113U}) {
+      const auto actual = dft::integrate_semilocal_rks(basis, grid, density, program, tile, source);
+      same_xc(actual, expected);
+      require(actual.density_diagnostic.executed == XcDensityRoute::OccupiedOrbitals &&
+                  actual.density_diagnostic.ingredient_mask == program.ingredient_mask,
+              "generic mask lost its occupied-factor route or ingredient diagnostic");
+    }
+
+    auto near_symmetric = density;
+    near_symmetric[1] += 5.0e-13;
+    near_symmetric[2] -= 5.0e-13;
+    same_xc(dft::integrate_semilocal_rks(basis, grid, near_symmetric, program, 3), expected);
+    auto near_alpha = near_symmetric, alpha = density, beta = density;
+    for (std::size_t i = 0; i < density.size(); ++i) {
+      near_alpha[i] *= 0.7;
+      alpha[i] *= 0.7;
+      beta[i] *= 0.3;
+    }
+    const auto spin_reference = dft::integrate_semilocal_uks(basis, grid, alpha, beta, program, 7);
+    const auto spin_near = dft::integrate_semilocal_uks(basis, grid, near_alpha, beta, program, 3);
+    require(std::abs(spin_near.energy - spin_reference.energy) < 3e-11 &&
+                std::abs(spin_near.electrons[0] - spin_reference.electrons[0]) < 3e-11 &&
+                std::abs(spin_near.electrons[1] - spin_reference.electrons[1]) < 3e-11,
+            "generic UKS mask changed near-symmetric spin features");
+    for (unsigned spin = 0; spin < 2; ++spin)
+      for (std::size_t i = 0; i < density.size(); ++i)
+        require(std::abs(spin_near.potential[spin][i] - spin_reference.potential[spin][i]) < 3e-11,
+                "generic UKS mask changed the spin potential");
+
+    const Matrix response_density{0.2, -0.375 + 5.0e-13, -0.375 - 5.0e-13, -0.1};
+    const auto dense_response =
+        dft::integrate_semilocal_rks(basis, grid, response_density, program, 7);
+    const auto response = dft::integrate_semilocal_rks(
+        basis, grid, response_density, program, 7,
+        {XcDensityRoute::OccupiedOrbitals, &factor, identity, dft::XcDensityRole::Response});
+    require(response.energy == dense_response.energy &&
+                response.electrons == dense_response.electrons &&
+                response.potential == dense_response.potential &&
+                response.density_diagnostic.executed == XcDensityRoute::DensityMatrix &&
+                response.density_diagnostic.fallback == XcDensityFallback::Response,
+            "generic mask replaced signed response features with occupied-state features");
+  }
+  for (unsigned mask :
+       {0U, 2U, 3U, 4U, 6U, 8U, 9U, 14U, 16U, std::numeric_limits<unsigned>::max()}) {
+    auto invalid = programs[0];
+    invalid.ingredient_mask = mask;
+    bool rejected = false;
+    try {
+      dft::validate_semilocal_point_program(invalid);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "generic semilocal program accepted an unsupported ingredient mask");
+  }
+}
+
 void native_scf() {
   bool saw_periodic_rebuild = false;
   bool saw_drift_rebuild = false;
@@ -352,6 +451,7 @@ void native_scf() {
 int main() {
   try {
     fixed_density();
+    generic_feature_masks();
     native_scf();
     std::cout << "native D/C source, fallback, directional and SCF gates passed\n";
   } catch (const std::exception& error) {

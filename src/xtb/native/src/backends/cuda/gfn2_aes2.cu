@@ -300,22 +300,12 @@ __global__ void publish_pair_cache_kernel(Gfn2AES2DeviceBatch batch, const doubl
   }
 }
 
-__global__ void potential_preflight_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
-                                           const double* atomic_charges,
-                                           const double* atomic_dipoles,
-                                           const double* atomic_quadrupoles,
-                                           double* potential_scratch, std::uint32_t* system_errors,
-                                           std::uint32_t* device_error) {
-  const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
-  __shared__ SystemRanges ranges;
-  __shared__ int valid;
-  if (!load_and_validate_system(batch, system, &ranges, &valid, system_errors, device_error) ||
-      !validate_multipoles_and_cache(batch, ranges, cache, atomic_charges, atomic_dipoles,
-                                     atomic_quadrupoles, system, &valid, system_errors,
-                                     device_error)) {
-    return;
-  }
-
+__device__ void evaluate_potential_atoms(Gfn2AES2DeviceBatch batch, const SystemRanges& ranges,
+                                         std::int64_t system, Gfn2AES2DeviceCache cache,
+                                         const double* atomic_charges, const double* atomic_dipoles,
+                                         const double* atomic_quadrupoles,
+                                         double* potential_scratch, std::uint32_t* system_errors,
+                                         std::uint32_t* device_error) {
   const std::int64_t total_atoms = batch.total_atoms;
   double* const charge_scratch = potential_scratch;
   double* const dipole_scratch = potential_scratch + total_atoms;
@@ -381,6 +371,153 @@ __global__ void potential_preflight_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2De
       quadrupole_scratch[atom * 6 + component] = quadrupole_potential[component];
     }
   }
+}
+
+template <bool Evaluate>
+__global__ void potential_preflight_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
+                                           const double* atomic_charges,
+                                           const double* atomic_dipoles,
+                                           const double* atomic_quadrupoles,
+                                           double* potential_scratch, std::uint32_t* system_errors,
+                                           std::uint32_t* device_error) {
+  const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
+  __shared__ SystemRanges ranges;
+  __shared__ int valid;
+  if (!load_and_validate_system(batch, system, &ranges, &valid, system_errors, device_error) ||
+      !validate_multipoles_and_cache(batch, ranges, cache, atomic_charges, atomic_dipoles,
+                                     atomic_quadrupoles, system, &valid, system_errors,
+                                     device_error)) {
+    return;
+  }
+
+  if constexpr (Evaluate) {
+    evaluate_potential_atoms(batch, ranges, system, cache, atomic_charges, atomic_dipoles,
+                             atomic_quadrupoles, potential_scratch, system_errors, device_error);
+  }
+}
+
+__global__ void potential_atoms_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
+                                       const double* atomic_charges, const double* atomic_dipoles,
+                                       const double* atomic_quadrupoles, double* potential_scratch,
+                                       std::uint32_t* system_errors, std::uint32_t* device_error) {
+  constexpr unsigned width = generativeqc::xtb::generated::gfn2_aes2_peer_threads;
+  __shared__ double contributions[10][width];
+  __shared__ bool lane_valid[width];
+  __shared__ bool component_valid[10];
+  __shared__ double sums[10];
+  __shared__ bool valid;
+  const unsigned lane = threadIdx.x;
+  const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
+  // Error admission must be uniform around barriers: another block can record
+  // a failure while this block starts. Only its owner samples the status.
+  if (lane == 0) valid = system_is_valid(system_errors, system);
+  __syncthreads();
+  if (!valid) return;
+  // Close the shared admission read before reusing valid for the onsite result.
+  __syncthreads();
+  // The preceding validation launch scans every input/cache entry only once.
+  const SystemRanges ranges{batch.atom_offsets[system], batch.atom_offsets[system + 1],
+                            batch.pair_offsets[system], batch.pair_offsets[system + 1]};
+  for (std::int64_t atom = ranges.atom_begin + blockIdx.y; atom < ranges.atom_end;
+       atom += gridDim.y) {
+    if (lane == 0) {
+      generativeqc::xtb::generated::Gfn2AES2OnsitePotentialResult onsite{};
+      valid = generativeqc::xtb::generated::evaluate_gfn2_aes2_onsite_potential(
+          batch.dipole_kernel[atom], batch.quadrupole_kernel[atom], atomic_dipoles + atom * 3,
+          atomic_quadrupoles + atom * 6, onsite);
+      sums[0] = 0.0;
+      for (int component = 0; component < 3; ++component)
+        sums[1 + component] = onsite.dipole[component];
+      for (int component = 0; component < 6; ++component)
+        sums[4 + component] = onsite.quadrupole[component];
+    }
+    __syncthreads();
+    for (std::int64_t begin = ranges.atom_begin; valid && begin < ranges.atom_end; begin += width) {
+      const std::int64_t peer = begin + lane;
+      lane_valid[lane] = true;
+      if (peer < ranges.atom_end && peer != atom) {
+        const bool target_is_first = atom < peer;
+        const std::int64_t first = target_is_first ? atom : peer;
+        const std::int64_t second = target_is_first ? peer : atom;
+        const std::int64_t pair = pair_index(ranges, first, second);
+        const double* pair_data = cache.pair_data + pair * kGfn2AES2PairDataElements;
+        generativeqc::xtb::generated::Gfn2AES2PairPotentialResult result{};
+        lane_valid[lane] = generativeqc::xtb::generated::evaluate_gfn2_aes2_pair_potential(
+            pair_data[0], pair_data[1], pair_data[2], pair_data[3], pair_data[4],
+            atomic_charges[first], atomic_charges[second], atomic_dipoles + first * 3,
+            atomic_dipoles + second * 3, atomic_quadrupoles + first * 6,
+            atomic_quadrupoles + second * 6, result);
+        contributions[0][lane] = target_is_first ? result.first_charge : result.second_charge;
+        for (int component = 0; component < 3; ++component)
+          contributions[1 + component][lane] =
+              target_is_first ? result.first_dipole[component] : result.second_dipole[component];
+        for (int component = 0; component < 6; ++component)
+          contributions[4 + component][lane] = target_is_first
+                                                   ? result.first_quadrupole[component]
+                                                   : result.second_quadrupole[component];
+      }
+      __syncthreads();
+      if (lane < 10) {
+        // Each component has its original ordered sum. Components are
+        // independent and share one failure code; all must pass publication.
+        bool finite = true;
+        for (unsigned source = 0; finite && source < width && begin + source < ranges.atom_end;
+             ++source) {
+          if (begin + source == atom) continue;
+          finite = lane_valid[source] && finite_add(contributions[lane][source], &sums[lane]);
+        }
+        component_valid[lane] = finite;
+      }
+      __syncthreads();
+      if (lane == 0) {
+        bool all_components = true;
+        for (int component = 0; component < 10; ++component)
+          all_components = component_valid[component] && all_components;
+        valid = all_components;
+      }
+      __syncthreads();
+    }
+    if (lane == 0) {
+      if (!valid) {
+        record_system_error(system_errors, system, device_error,
+                            Gfn2AES2DeviceError::kNonfinitePotentialArithmetic);
+      } else {
+        potential_scratch[atom] = sums[0];
+        for (int component = 0; component < 3; ++component)
+          potential_scratch[batch.total_atoms + atom * 3 + component] = sums[1 + component];
+        for (int component = 0; component < 6; ++component)
+          potential_scratch[batch.total_atoms * 4 + atom * 6 + component] = sums[4 + component];
+      }
+    }
+    __syncthreads();
+  }
+}
+
+cudaError_t launch_potential_work(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
+                                  const double* atomic_charges, const double* atomic_dipoles,
+                                  const double* atomic_quadrupoles, double* potential_scratch,
+                                  std::uint32_t* system_errors, std::uint32_t* device_error,
+                                  cudaStream_t stream) {
+  const unsigned tiles =
+      generativeqc::xtb::generated::gfn2_aes2_atom_tiles(batch.total_atoms, batch.batch_size);
+  if (tiles == 1U) {
+    potential_preflight_kernel<true>
+        <<<static_cast<unsigned>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
+            batch, cache, atomic_charges, atomic_dipoles, atomic_quadrupoles, potential_scratch,
+            system_errors, device_error);
+    return cudaGetLastError();
+  }
+  potential_preflight_kernel<false>
+      <<<static_cast<unsigned>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
+          batch, cache, atomic_charges, atomic_dipoles, atomic_quadrupoles, potential_scratch,
+          system_errors, device_error);
+  const cudaError_t status = cudaGetLastError();
+  if (status != cudaSuccess) return status;
+  const dim3 grid(static_cast<unsigned>(batch.batch_size), tiles);
+  potential_atoms_kernel<<<grid, generativeqc::xtb::generated::gfn2_aes2_peer_threads, 0, stream>>>(
+      batch, cache, atomic_charges, atomic_dipoles, atomic_quadrupoles, potential_scratch,
+      system_errors, device_error);
+  return cudaGetLastError();
 }
 
 __global__ void publish_potential_kernel(Gfn2AES2DeviceBatch batch, const double* potential_scratch,
@@ -609,6 +746,110 @@ __device__ bool pair_vjp(const double* pair_data, double average_radius,
   return true;
 }
 
+// Evaluate independent peer science once, leaving ordered accumulation and
+// first failing peer selection to the target-atom owner.
+__device__ Gfn2AES2DeviceError evaluate_vjp_peer(
+    Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache, const SystemRanges& ranges,
+    std::int64_t atom, std::int64_t peer, const double* positions,
+    const double* coordination_numbers, const double* atomic_charges, const double* atomic_dipoles,
+    const double* atomic_quadrupoles, double* contribution) {
+  const bool target_is_first = atom < peer;
+  const std::int64_t first = target_is_first ? atom : peer;
+  const std::int64_t second = target_is_first ? peer : atom;
+  const std::int64_t pair = pair_index(ranges, first, second);
+  const double* const pair_data = cache.pair_data + pair * kGfn2AES2PairDataElements;
+  const double dx = positions[first * 3] - positions[second * 3];
+  const double dy = positions[first * 3 + 1] - positions[second * 3 + 1];
+  const double dz = positions[first * 3 + 2] - positions[second * 3 + 2];
+  const double distance = hypot(hypot(dx, dy), dz);
+  const double distance_squared = distance * distance;
+  const double first_radius = multipole_radius(batch, first, coordination_numbers[first]);
+  const double second_radius = multipole_radius(batch, second, coordination_numbers[second]);
+  const double average_radius = 0.5 * (first_radius + second_radius);
+  double expected_kernel3 = 0.0;
+  double expected_kernel5 = 0.0;
+  if (!isfinite(dx) || !isfinite(dy) || !isfinite(dz) || !(distance > 0.0) || !isfinite(distance) ||
+      distance_squared < kMinimumDistanceSquared || !(first_radius > 0.0) ||
+      !isfinite(first_radius) || !(second_radius > 0.0) || !isfinite(second_radius) ||
+      !(average_radius > 0.0) || !isfinite(average_radius) ||
+      !pair_kernels(distance, average_radius, &expected_kernel3, &expected_kernel5)) {
+    return Gfn2AES2DeviceError::kNonfiniteVjpArithmetic;
+  }
+  if (pair_data[0] != dx || pair_data[1] != dy || pair_data[2] != dz ||
+      pair_data[3] != expected_kernel3 || pair_data[4] != expected_kernel5) {
+    return Gfn2AES2DeviceError::kCacheMismatch;
+  }
+  const double first_cn_derivative =
+      multipole_radius_cn_derivative(batch, first, coordination_numbers[first]);
+  const double second_cn_derivative =
+      multipole_radius_cn_derivative(batch, second, coordination_numbers[second]);
+  double pair_gradient[3];
+  double first_cn_adjoint = 0.0;
+  double second_cn_adjoint = 0.0;
+  if (!pair_vjp(pair_data, average_radius, first_cn_derivative, second_cn_derivative, first, second,
+                atomic_charges, atomic_dipoles, atomic_quadrupoles, pair_gradient,
+                &first_cn_adjoint, &second_cn_adjoint)) {
+    return Gfn2AES2DeviceError::kNonfiniteVjpArithmetic;
+  }
+  for (int axis = 0; axis < 3; ++axis)
+    contribution[axis] = (target_is_first ? 1.0 : -1.0) * pair_gradient[axis];
+  contribution[3] = target_is_first ? first_cn_adjoint : second_cn_adjoint;
+  return Gfn2AES2DeviceError::kSuccess;
+}
+
+__device__ void evaluate_vjp_atoms(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
+                                   const SystemRanges& ranges, std::int64_t system,
+                                   const double* positions, const double* coordination_numbers,
+                                   const double* atomic_charges, const double* atomic_dipoles,
+                                   const double* atomic_quadrupoles, const double* gradients,
+                                   const double* coordination_adjoints, double* gradient_scratch,
+                                   double* coordination_scratch, std::uint32_t* system_errors,
+                                   std::uint32_t* device_error) {
+  for (std::int64_t atom = ranges.atom_begin + threadIdx.x; atom < ranges.atom_end;
+       atom += blockDim.x) {
+    double gradient_contribution[3] = {0.0, 0.0, 0.0};
+    double coordination_contribution = 0.0;
+    bool finite_result = true;
+    for (std::int64_t peer = ranges.atom_begin; finite_result && peer < ranges.atom_end; ++peer) {
+      if (peer == atom) {
+        continue;
+      }
+      double contribution[4];
+      const auto failure =
+          evaluate_vjp_peer(batch, cache, ranges, atom, peer, positions, coordination_numbers,
+                            atomic_charges, atomic_dipoles, atomic_quadrupoles, contribution);
+      if (failure != Gfn2AES2DeviceError::kSuccess) {
+        record_system_error(system_errors, system, device_error, failure);
+        finite_result = false;
+        break;
+      }
+      for (int axis = 0; axis < 3; ++axis)
+        finite_result =
+            finite_add(contribution[axis], &gradient_contribution[axis]) && finite_result;
+      finite_result = finite_add(contribution[3], &coordination_contribution) && finite_result;
+    }
+    for (int axis = 0; finite_result && axis < 3; ++axis) {
+      const double updated = gradients[atom * 3 + axis] + gradient_contribution[axis];
+      if (!isfinite(updated)) {
+        finite_result = false;
+      } else {
+        gradient_scratch[atom * 3 + axis] = updated;
+      }
+    }
+    const double updated_coordination = coordination_adjoints[atom] + coordination_contribution;
+    if (!isfinite(updated_coordination)) {
+      finite_result = false;
+    } else {
+      coordination_scratch[atom] = updated_coordination;
+    }
+    if (!finite_result) {
+      record_system_error(system_errors, system, device_error,
+                          Gfn2AES2DeviceError::kNonfiniteVjpArithmetic);
+    }
+  }
+}
+
+template <bool Evaluate>
 __global__ void vjp_preflight_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
                                      const double* positions, const double* coordination_numbers,
                                      const double* atomic_charges, const double* atomic_dipoles,
@@ -652,90 +893,129 @@ __global__ void vjp_preflight_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCa
     return;
   }
 
-  for (std::int64_t atom = ranges.atom_begin + threadIdx.x; atom < ranges.atom_end;
-       atom += blockDim.x) {
-    double gradient_contribution[3] = {0.0, 0.0, 0.0};
-    double coordination_contribution = 0.0;
-    bool finite_result = true;
-    for (std::int64_t peer = ranges.atom_begin; finite_result && peer < ranges.atom_end; ++peer) {
-      if (peer == atom) {
-        continue;
-      }
-      const bool target_is_first = atom < peer;
-      const std::int64_t first = target_is_first ? atom : peer;
-      const std::int64_t second = target_is_first ? peer : atom;
-      const std::int64_t pair = pair_index(ranges, first, second);
-      const double* const pair_data = cache.pair_data + pair * kGfn2AES2PairDataElements;
-      const double dx = positions[first * 3] - positions[second * 3];
-      const double dy = positions[first * 3 + 1] - positions[second * 3 + 1];
-      const double dz = positions[first * 3 + 2] - positions[second * 3 + 2];
-      const double distance = hypot(hypot(dx, dy), dz);
-      const double distance_squared = distance * distance;
-      const double first_radius = multipole_radius(batch, first, coordination_numbers[first]);
-      const double second_radius = multipole_radius(batch, second, coordination_numbers[second]);
-      const double average_radius = 0.5 * (first_radius + second_radius);
-      double expected_kernel3 = 0.0;
-      double expected_kernel5 = 0.0;
-      if (!isfinite(dx) || !isfinite(dy) || !isfinite(dz) || !(distance > 0.0) ||
-          !isfinite(distance) || distance_squared < kMinimumDistanceSquared ||
-          !(first_radius > 0.0) || !isfinite(first_radius) || !(second_radius > 0.0) ||
-          !isfinite(second_radius) || !(average_radius > 0.0) || !isfinite(average_radius) ||
-          !pair_kernels(distance, average_radius, &expected_kernel3, &expected_kernel5)) {
-        record_system_error(system_errors, system, device_error,
-                            Gfn2AES2DeviceError::kNonfiniteVjpArithmetic);
-        finite_result = false;
-        break;
-      }
-      if (pair_data[0] != dx || pair_data[1] != dy || pair_data[2] != dz ||
-          pair_data[3] != expected_kernel3 || pair_data[4] != expected_kernel5) {
-        record_system_error(system_errors, system, device_error,
-                            Gfn2AES2DeviceError::kCacheMismatch);
-        finite_result = false;
-        break;
-      }
-      const double first_cn_derivative =
-          multipole_radius_cn_derivative(batch, first, coordination_numbers[first]);
-      const double second_cn_derivative =
-          multipole_radius_cn_derivative(batch, second, coordination_numbers[second]);
-      double pair_gradient[3];
-      double first_cn_adjoint = 0.0;
-      double second_cn_adjoint = 0.0;
-      if (!pair_vjp(pair_data, average_radius, first_cn_derivative, second_cn_derivative, first,
-                    second, atomic_charges, atomic_dipoles, atomic_quadrupoles, pair_gradient,
-                    &first_cn_adjoint, &second_cn_adjoint)) {
-        record_system_error(system_errors, system, device_error,
-                            Gfn2AES2DeviceError::kNonfiniteVjpArithmetic);
-        finite_result = false;
-        break;
-      }
-      for (int axis = 0; axis < 3; ++axis) {
-        finite_result = finite_add((target_is_first ? 1.0 : -1.0) * pair_gradient[axis],
-                                   &gradient_contribution[axis]) &&
-                        finite_result;
-      }
-      finite_result = finite_add(target_is_first ? first_cn_adjoint : second_cn_adjoint,
-                                 &coordination_contribution) &&
-                      finite_result;
-    }
-    for (int axis = 0; finite_result && axis < 3; ++axis) {
-      const double updated = gradients[atom * 3 + axis] + gradient_contribution[axis];
-      if (!isfinite(updated)) {
-        finite_result = false;
-      } else {
-        gradient_scratch[atom * 3 + axis] = updated;
-      }
-    }
-    const double updated_coordination = coordination_adjoints[atom] + coordination_contribution;
-    if (!isfinite(updated_coordination)) {
-      finite_result = false;
-    } else {
-      coordination_scratch[atom] = updated_coordination;
-    }
-    if (!finite_result) {
-      record_system_error(system_errors, system, device_error,
-                          Gfn2AES2DeviceError::kNonfiniteVjpArithmetic);
-    }
+  if constexpr (Evaluate) {
+    evaluate_vjp_atoms(batch, cache, ranges, system, positions, coordination_numbers,
+                       atomic_charges, atomic_dipoles, atomic_quadrupoles, gradients,
+                       coordination_adjoints, gradient_scratch, coordination_scratch, system_errors,
+                       device_error);
   }
+}
+
+__global__ void vjp_atoms_kernel(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
+                                 const double* positions, const double* coordination_numbers,
+                                 const double* atomic_charges, const double* atomic_dipoles,
+                                 const double* atomic_quadrupoles, const double* gradients,
+                                 const double* coordination_adjoints, double* gradient_scratch,
+                                 double* coordination_scratch, std::uint32_t* system_errors,
+                                 std::uint32_t* device_error) {
+  constexpr unsigned width = generativeqc::xtb::generated::gfn2_aes2_peer_threads;
+  __shared__ double contributions[4][width];
+  __shared__ Gfn2AES2DeviceError failures[width];
+  __shared__ double sums[4];
+  __shared__ Gfn2AES2DeviceError failure;
+  __shared__ bool admitted;
+  const unsigned lane = threadIdx.x;
+  const std::int64_t system = static_cast<std::int64_t>(blockIdx.x);
+  if (lane == 0) admitted = system_is_valid(system_errors, system);
+  __syncthreads();
+  if (!admitted) return;
+  const SystemRanges ranges{batch.atom_offsets[system], batch.atom_offsets[system + 1],
+                            batch.pair_offsets[system], batch.pair_offsets[system + 1]};
+  for (std::int64_t atom = ranges.atom_begin + blockIdx.y; atom < ranges.atom_end;
+       atom += gridDim.y) {
+    if (lane == 0) {
+      failure = Gfn2AES2DeviceError::kSuccess;
+      for (int component = 0; component < 4; ++component) sums[component] = 0.0;
+    }
+    __syncthreads();
+    for (std::int64_t begin = ranges.atom_begin;
+         failure == Gfn2AES2DeviceError::kSuccess && begin < ranges.atom_end; begin += width) {
+      const std::int64_t peer = begin + lane;
+      failures[lane] = Gfn2AES2DeviceError::kSuccess;
+      if (peer < ranges.atom_end && peer != atom) {
+        double contribution[4];
+        failures[lane] =
+            evaluate_vjp_peer(batch, cache, ranges, atom, peer, positions, coordination_numbers,
+                              atomic_charges, atomic_dipoles, atomic_quadrupoles, contribution);
+        if (failures[lane] == Gfn2AES2DeviceError::kSuccess)
+          for (int component = 0; component < 4; ++component)
+            contributions[component][lane] = contribution[component];
+      }
+      __syncthreads();
+      if (lane == 0) {
+        auto owner_failure = Gfn2AES2DeviceError::kSuccess;
+        // Speculative peer evaluation never records errors out of order.
+        // The owner selects the first failure in its original peer traversal.
+        // Keep its evolving status private: compiler predication may otherwise
+        // let inactive lanes read a shared status while lane zero rewrites it.
+        for (unsigned source = 0; owner_failure == Gfn2AES2DeviceError::kSuccess && source < width &&
+                                  begin + source < ranges.atom_end;
+             ++source) {
+          if (begin + source == atom) continue;
+          owner_failure = failures[source];
+          if (owner_failure != Gfn2AES2DeviceError::kSuccess) break;
+          bool finite = true;
+          for (int component = 0; component < 4; ++component)
+            finite = finite_add(contributions[component][source], &sums[component]) && finite;
+          if (!finite) owner_failure = Gfn2AES2DeviceError::kNonfiniteVjpArithmetic;
+        }
+        failure = owner_failure;
+      }
+      __syncthreads();
+    }
+    if (lane == 0) {
+      auto owner_failure = failure;
+      if (owner_failure == Gfn2AES2DeviceError::kSuccess) {
+        for (int axis = 0; owner_failure == Gfn2AES2DeviceError::kSuccess && axis < 3; ++axis) {
+          const double updated = gradients[atom * 3 + axis] + sums[axis];
+          if (isfinite(updated))
+            gradient_scratch[atom * 3 + axis] = updated;
+          else
+            owner_failure = Gfn2AES2DeviceError::kNonfiniteVjpArithmetic;
+        }
+        const double updated_cn = coordination_adjoints[atom] + sums[3];
+        if (isfinite(updated_cn))
+          coordination_scratch[atom] = updated_cn;
+        else
+          owner_failure = Gfn2AES2DeviceError::kNonfiniteVjpArithmetic;
+      }
+      if (owner_failure != Gfn2AES2DeviceError::kSuccess)
+        record_system_error(system_errors, system, device_error, owner_failure);
+    }
+    __syncthreads();
+  }
+}
+
+cudaError_t launch_vjp_work(Gfn2AES2DeviceBatch batch, Gfn2AES2DeviceCache cache,
+                            const double* positions, const double* coordination_numbers,
+                            const double* atomic_charges, const double* atomic_dipoles,
+                            const double* atomic_quadrupoles, const double* gradients,
+                            const double* coordination_adjoints, double* gradient_scratch,
+                            double* coordination_scratch, std::uint32_t* system_errors,
+                            std::uint32_t* device_error, cudaStream_t stream) {
+  const unsigned tiles =
+      generativeqc::xtb::generated::gfn2_aes2_atom_tiles(batch.total_atoms, batch.batch_size);
+  if (tiles == 1U) {
+    vjp_preflight_kernel<true>
+        <<<static_cast<unsigned>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
+            batch, cache, positions, coordination_numbers, atomic_charges, atomic_dipoles,
+            atomic_quadrupoles, gradients, coordination_adjoints, gradient_scratch,
+            coordination_scratch, system_errors, device_error);
+    return cudaGetLastError();
+  }
+  vjp_preflight_kernel<false>
+      <<<static_cast<unsigned>(batch.batch_size), kThreadsPerBlock, 0, stream>>>(
+          batch, cache, positions, coordination_numbers, atomic_charges, atomic_dipoles,
+          atomic_quadrupoles, gradients, coordination_adjoints, gradient_scratch,
+          coordination_scratch, system_errors, device_error);
+  const auto status = cudaGetLastError();
+  if (status != cudaSuccess) return status;
+  const dim3 grid(static_cast<unsigned>(batch.batch_size), tiles);
+  vjp_atoms_kernel<<<grid, generativeqc::xtb::generated::gfn2_aes2_peer_threads, 0, stream>>>(
+      batch, cache, positions, coordination_numbers, atomic_charges, atomic_dipoles,
+      atomic_quadrupoles, gradients, coordination_adjoints, gradient_scratch, coordination_scratch,
+      system_errors, device_error);
+  return cudaGetLastError();
 }
 
 __global__ void publish_vjp_kernel(Gfn2AES2DeviceBatch batch, const double* gradient_scratch,
@@ -1012,11 +1292,9 @@ cudaError_t evaluate_gfn2_aes2_potential_cuda(
   if (!pairwise_disjoint(ranges)) {
     return cudaErrorInvalidValue;
   }
-  potential_preflight_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
-                               stream>>>(batch, cache, atomic_charges, atomic_dipoles,
+  status = launch_potential_work(batch, cache, atomic_charges, atomic_dipoles,
                                          atomic_quadrupoles, workspace.potential_scratch,
-                                         system_errors, device_error);
-  status = check_launch();
+                                         system_errors, device_error, stream);
   if (status != cudaSuccess) {
     return status;
   }
@@ -1129,12 +1407,10 @@ cudaError_t add_gfn2_aes2_vjp_cuda(
   if (!pairwise_disjoint(ranges)) {
     return cudaErrorInvalidValue;
   }
-  vjp_preflight_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
-                         stream>>>(batch, cache, positions, coordination_numbers, atomic_charges,
+  status = launch_vjp_work(batch, cache, positions, coordination_numbers, atomic_charges,
                                    atomic_dipoles, atomic_quadrupoles, gradients,
                                    coordination_adjoints, workspace.gradient_scratch,
-                                   workspace.coordination_scratch, system_errors, device_error);
-  status = check_launch();
+                                   workspace.coordination_scratch, system_errors, device_error, stream);
   if (status != cudaSuccess) {
     return status;
   }
@@ -1213,11 +1489,9 @@ cudaError_t evaluate_gfn2_aes2_scc_potential_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  potential_preflight_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
-                               stream>>>(batch, cache, atomic_charges, atomic_dipoles,
+  status = launch_potential_work(batch, cache, atomic_charges, atomic_dipoles,
                                          atomic_quadrupoles, workspace.potential_scratch,
-                                         system_errors, workspace.scc_peer_error_scratch);
-  status = check_launch();
+                                         system_errors, workspace.scc_peer_error_scratch, stream);
   if (status != cudaSuccess) {
     return status;
   }

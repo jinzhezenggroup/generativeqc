@@ -380,6 +380,7 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_density",
     "direct_force_scatter",
     "direct_force_low_order",
+    "direct_force_low_order_sources",
     "direct_force_order2",
     "direct_force_order3",
     "direct_force_quartet",

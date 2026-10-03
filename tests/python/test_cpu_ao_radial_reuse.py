@@ -56,9 +56,10 @@ def test_cpu_ao_axis_derivatives_are_reused_before_the_jet_loop() -> None:
 
 def test_zero_derivative_keeps_horner_without_coefficient_storage() -> None:
     source = SOURCE.read_text()
-    fast_path = source.split("if (derivative == 0) {", 1)[1].split(
-        "std::array<double, 7> coefficients{};", 1
-    )[0]
+    # Bound the branch by its own return, not by the coefficient declaration:
+    # nonzero recurrence storage can live in a separate specialized helper.
+    branch = source.split("if (derivative == 0) {", 1)[1]
+    fast_path = branch[: branch.index("return result;") + len("return result;")]
     assert "double result = 1;" in fast_path
     assert "result = result * x + 0.0;" in fast_path
     assert "return result;" in fast_path

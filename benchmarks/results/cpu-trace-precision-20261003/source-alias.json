@@ -1,0 +1,9 @@
+{
+  "identical_tree": "df629edabf7ee4f33f442508940c001cb03dafba",
+  "measured_library_sha256": "970c29b8d90129a4f0b00e29f8896d7e3b05574a18ae658de75c7092b942a03c",
+  "measured_revision": "7cef255edc89ff6903694b3b760d0fef1fb58b81",
+  "public_branch": "evidence/cpu-trace-source-20261003",
+  "public_revision": "e4cc2787c02959ea287eb81e4541d009fe860f8c",
+  "schema": "source-equivalent-alias-v1",
+  "verification": "Fetched the public branch and verified exact complete tree equality. Alias changes commit metadata/parent identity, not source bytes; it was not separately measured."
+}

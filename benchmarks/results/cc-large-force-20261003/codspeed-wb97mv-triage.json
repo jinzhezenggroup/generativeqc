@@ -1,0 +1,220 @@
+{
+  "baseline_median_seconds": 0.2455379639286548,
+  "baseline_scientific_commit": "9636f32dd",
+  "candidate_median_seconds": 0.2459545750170946,
+  "candidate_over_baseline": 1.0016967277962803,
+  "candidate_scientific_commit": "2e0cd3809",
+  "case": "water-wb97mv-smallgrid-sto3g",
+  "driver": "benchmarks/test_cpu_codspeed.py::_calculator",
+  "execution": {
+    "MKL_NUM_THREADS": 1,
+    "OMP_NUM_THREADS": 1,
+    "OPENBLAS_NUM_THREADS": 1,
+    "cpu_affinity": [
+      45
+    ],
+    "order": [
+      "baseline",
+      "candidate",
+      "candidate",
+      "baseline"
+    ],
+    "shared_node": true
+  },
+  "limitation": "Local wall-clock evidence does not reproduce the reported regression; it does not invalidate the separate CodSpeed simulation metric. That CI job was rerun once for diagnosis.",
+  "records": [
+    {
+      "affinity": [
+        45
+      ],
+      "library": "/home/jzzeng/codes/qc-cc-value-source-20261003/build/cpu-release/libgenerativeqc.so",
+      "median": 0.246565124951303,
+      "rows": [
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24533778196200728
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24574745586141944
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24633702030405402
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24683642014861107
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2466468750499189
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24649517005309463
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2467117770574987
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.246565124951303
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24778678314760327
+        }
+      ],
+      "sha256": "7ac4db6b4482b4d2b68a1f08c24920c980738f74418a0e837ce2c04cf2a14d7c"
+    },
+    {
+      "affinity": [
+        45
+      ],
+      "library": "/home/jzzeng/codes/qc-cc-large-force-20261003/build/cpu-release/libgenerativeqc.so",
+      "median": 0.24578323494642973,
+      "rows": [
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2460629171691835
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24537405977025628
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24545595608651638
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24609887087717652
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24578323494642973
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24559382814913988
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24584623286500573
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24515688698738813
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24632785888388753
+        }
+      ],
+      "sha256": "6e733420cdb838f3e30b6bba9cdd04e3c5cf8fa873f3e85418eb98625718faf6"
+    },
+    {
+      "affinity": [
+        45
+      ],
+      "library": "/home/jzzeng/codes/qc-cc-large-force-20261003/build/cpu-release/libgenerativeqc.so",
+      "median": 0.2461971379816532,
+      "rows": [
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24615323962643743
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24582039937376976
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24570767860859632
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24514741310849786
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2462703320197761
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24644782207906246
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2461971379816532
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2462661201134324
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24626345513388515
+        }
+      ],
+      "sha256": "6e733420cdb838f3e30b6bba9cdd04e3c5cf8fa873f3e85418eb98625718faf6"
+    },
+    {
+      "affinity": [
+        45
+      ],
+      "library": "/home/jzzeng/codes/qc-cc-value-source-20261003/build/cpu-release/libgenerativeqc.so",
+      "median": 0.24509465182200074,
+      "rows": [
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24553495086729527
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24508579773828387
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24509465182200074
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24519705772399902
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.244848167989403
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2449098159559071
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.2449198430404067
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24554097699001431
+        },
+        {
+          "energy": -75.30142812827069,
+          "seconds": 0.24537851382046938
+        }
+      ],
+      "sha256": "7ac4db6b4482b4d2b68a1f08c24920c980738f74418a0e837ce2c04cf2a14d7c"
+    }
+  ],
+  "reported_ci_regression": {
+    "baseline_commit": "cacc6cf0f",
+    "benchmark_mode": "CodSpeed simulation",
+    "candidate_commit": "115e623b0",
+    "check_run_id": 110975412189,
+    "efficiency_change_percent": -9.86
+  },
+  "schema": "generativeqc.codspeed-local-triage.v1",
+  "source_note": "Use the unchanged CodSpeed case and calculator; singlepoint energy warmup followed by nine complete calls per process."
+}

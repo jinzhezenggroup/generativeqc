@@ -54,7 +54,7 @@ case has 9,834,496 values and 1,274,406 contractions.
 GPU qualification covers complete cold, twice-warm and changed-geometry
 CCSD(T) energy/force calls, physical RHF/UHF batch parity against independent
 CPU execution, spherical d/f inputs, allocation fallback/teardown, and complete
-force memcheck. The [reviewed evidence](../../../../benchmarks/results/cc-eri-orbits-20261003/summary.json)
+force memcheck. The [reviewed evidence](../../../../benchmarks/results/cc-eri-orbits-20261003/summary.json.gz)
 retains source/binary identities, every output and public CC work counter, and
 completed reference work. Relative to the resident-reference parent, complete
 28-AO energy cold/warm/changed time is 4.795/4.251/4.282 ->
@@ -100,3 +100,7 @@ stream handoff; permutation symmetry alone does not establish those contracts.
 - [RHF reference residency decision](2026-10-03-cuda-rhf-reference-residency.md)
 - `tests/python/test_eri_orbit_materialization.py`
 - `benchmarks/ccsdt_prepared_endpoint.py`
+
+## Lossless storage (2026-10-03)
+
+The retained records use deterministic gzip of the exact public originals, preserving every original byte, scientific value, failure and measured identity. [storage.json](../../../../benchmarks/results/cc-eri-orbits-20261003/storage.json) pins original Git blobs, original/stored SHA-256 and byte counts. The complete original validation envelope is retained as `evidence.original.json.gz`; the active `evidence.json.gz` changes only attachment paths and checksums to bind the stored members. The storage revision is provenance for these retained bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json` or `gzip -cd FILE.json.gz`, and decode `source.patch.gz` before applying it. No new experiment or performance claim is added.

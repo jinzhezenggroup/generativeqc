@@ -8,6 +8,7 @@
 
 #include "backends/cuda/gfn2_occupations.cuh"
 #include "model/gfn2/occupation_binary64_policy.hpp"
+#include "generated_gfn2_electronic_native.cuh"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace {
@@ -564,7 +565,9 @@ __global__ void evaluate_kernel(Gfn2OccupationsDeviceBatch batch, Gfn2Wavefuncti
   }
 
   const std::int64_t occupation_base = state.begin * 2;
-  for (int spin = 0; spin < 2; ++spin) {
+  const unsigned solve_count = generativeqc::xtb::generated::gfn2_occupation_solve_count(
+      state.spin_channels, batch.electron_counts[system * 2], batch.electron_counts[system * 2 + 1]);
+  for (unsigned spin = 0; spin < solve_count; ++spin) {
     const std::int64_t spectrum_begin =
         state.spin_orbital_begin +
         (state.spin_channels == 2u ? static_cast<std::int64_t>(spin) * state.count : 0);
@@ -579,6 +582,17 @@ __global__ void evaluate_kernel(Gfn2OccupationsDeviceBatch batch, Gfn2Wavefuncti
       }
       return;
     }
+  }
+  if (solve_count == 1U) {
+    // Both spin requests passed admission before sharing was considered. Only
+    // the identical solved task is reused: no root policy, reduction, or
+    // degenerate/finite-range fallback changes, and no SCC state is retained.
+    for (std::int64_t orbital = tid; orbital < state.count; orbital += kOccupationsThreads) {
+      workspace.occupation_scratch[occupation_base + state.count + orbital] =
+          workspace.occupation_scratch[occupation_base + orbital];
+    }
+    if (tid == 0) state.spin_results[1] = state.spin_results[0];
+    __syncthreads();
   }
   if (tid == 0) {
     const double total_entropy = state.spin_results[0].entropy + state.spin_results[1].entropy;

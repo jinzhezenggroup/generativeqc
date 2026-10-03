@@ -1,0 +1,16 @@
+{
+  "records": [
+    {
+      "encoding": "gzip",
+      "original_bytes": 101547,
+      "original_git_blob": "30244a6501e0bfb6bd0a18eb4ea3c415d1bde0b0",
+      "original_path": "summary.json",
+      "original_sha256": "1ad653d52cfb7e2c5c6bc772524da8ec24bea71c41e7bda6e98c7709a859cb05",
+      "stored_bytes": 14036,
+      "stored_path": "summary.json.gz",
+      "stored_sha256": "ed1d3aa32eebe5be7930410ac63d2e7dca3bc6042aa78c7581fb185fefa2a42b"
+    }
+  ],
+  "schema": "generativeqc.cc-evidence-storage.v1",
+  "storage_source_revision": "9e9b938239d31564d6f92e9b99b922aee0dbb1cc"
+}

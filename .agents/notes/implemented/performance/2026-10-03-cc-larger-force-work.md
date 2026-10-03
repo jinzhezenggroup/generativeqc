@@ -77,7 +77,7 @@ another phase's larger peak.
   memcheck use finite Slurm allocations. Unfinished or failed 56-AO experiments
   are not evidence for the public 28-AO boundary.
 
-The [retained complete-endpoint comparison](../../../../benchmarks/results/cc-large-force-20261003/summary.json)
+The [retained complete-endpoint comparison](../../../../benchmarks/results/cc-large-force-20261003/summary.json.gz)
 contains all cold, twice-warm and changed-geometry outputs. The experimental
 comparator raises the old AO guard and allows raw tile widening only under its
 prior peak; it retains ordered derivatives. It is not an old supported public
@@ -111,6 +111,18 @@ was `degenerate RCCSD(T) canonical occupied/virtual subspace`; the batch wrapper
 only reported numerical failure. Keep the 1e-10 same-space gap gate and the public
 28-AO boundary until degenerate-subspace response is independently qualified.
 
+The [follow-up diagnostic](../../../../benchmarks/results/cc-large-force-20261003/degenerate-frontier.json)
+uses the faster reference owner from #1728 but preserves the numerical gate.
+Independent exact-basis PySCF RHF and native response find the same 14 occupied
+or virtual degenerate pairs, with gaps around 1e-13 to 1e-15 Eh. Native null-space
+stationarity is at most 7.42e-13, yet dividing it by these gaps would create a
+spurious Fock cotangent up to 190.94. Pairwise diagonal denominator cotangents
+agree within 2.6e-16, but this does not establish the full block adjoint or make
+zeroing off-diagonal response a generally valid fix. A future extension needs
+a gauge-invariant triples-denominator response, with independent gradient and
+orbital-rotation checks. Do not weaken the gate or perturb away this fixture's
+symmetry merely to declare larger force support.
+
 Increasing a memory limit without changing source/derivative traversal does not
 reduce repeated work. Applying a constant factor of eight is incorrect when
 shells repeat. Symmetrizing only two MO indices is insufficient for arbitrary
@@ -124,3 +136,7 @@ qualification only with independent forces, finite differences, resource tests
 and complete endpoints. Further CUDA speedups should measure the retained MO
 provider and primitive submission/response work instead of assuming that fewer
 derivative quartets dominate every backend.
+
+## Lossless storage (2026-10-03)
+
+The retained records now use deterministic gzip without changing their original bytes, scientific values, failures or measured identities. [cc-large-force-20261003/storage.json](../../../../benchmarks/results/cc-large-force-20261003/storage.json) pins the original Git blob, original/stored SHA-256 and byte counts. The storage revision identifies the accepted source of these bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json`, or decode with `gzip -cd FILE.json.gz`. Decode any `experimental-comparator.patch.gz` before applying the original patch. Historical Git objects remain available; no new experiment or performance claim is added.

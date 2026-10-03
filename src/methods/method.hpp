@@ -206,7 +206,9 @@ using Coordinates = std::vector<std::optional<std::vector<double>>>;
 /** Prepared single-system method execution, independent of the public C ABI.
  * Instances own mutable execution/cache state and are not concurrently
  * reentrant. The caller must serialize execution and destruction per instance.
- * Immutable scientific controls do not make the execution workspace shared.
+ * A method may share a context-owned workspace only with an explicit execution
+ * lock covering its full execute/snapshot transaction. Immutable scientific
+ * controls alone do not make mutable execution state safe to share.
  */
 class PreparedCalculation {
  public:

@@ -1,0 +1,7 @@
+{
+  "path": "src/runtime/cuda_device_facts.hpp",
+  "reason": "Fresh device resource facts for context and compiler-profile admission, with provider fallback and no device ordinal cache; no scientific arithmetic.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
