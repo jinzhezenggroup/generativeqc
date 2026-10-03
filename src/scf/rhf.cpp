@@ -40,6 +40,7 @@
 #include "scf/mean_field.hpp"
 #include "scf/preliminary_guess.hpp"
 #include "scf/reference/mean_field.hpp"
+#include "scf/solver/cpu_target_eigen.hpp"
 #include "scf/solver/diis.hpp"
 #include "scf/solver/mean_field_driver.hpp"
 #include "scf/solver/proposal_control.hpp"
@@ -1116,7 +1117,8 @@ void validate_hf_warm_density(const core::System& source, generativeqc_method me
 
 ScfResult run_prepared_fock_strategy(const PreparedFockPlan& plan, const ScfOptions& options,
                                      const std::vector<double>* initial_density,
-                                     initial_guess::OverlapOrthogonalizer* overlap_cache) {
+                                     initial_guess::OverlapOrthogonalizer* overlap_cache,
+                                     const initial_guess::EigenOperation& target_eigen) {
   host_trace::Region endpoint_trace("run_prepared_fock_strategy");
   const auto strategy = fock_strategy_for_execution(options);
   // A source prepared with first derivatives also owns all value data. An
@@ -1139,14 +1141,15 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan& plan, const ScfOpti
     return initial_guess::run_with_preliminary_guess(
         plan, options, initial_density, plan.cpu_observation_capacity(),
         [&](const std::vector<double>* seed) {
-          return run_prepared_fock_strategy(plan, target_options, seed, overlap_cache);
+          return run_prepared_fock_strategy(plan, target_options, seed, overlap_cache,
+                                            target_eigen);
         });
   }
   ScfResult result = strategy.spec.spin == FockSpin::Unrestricted
                          ? run_uhf_host_plan(system, options, plan.one_electron(), plan,
-                                             initial_density, overlap_cache)
+                                             initial_density, overlap_cache, target_eigen)
                          : run_rhf_host_plan(system, options, plan.one_electron(), plan,
-                                             initial_density, overlap_cache);
+                                             initial_density, overlap_cache, target_eigen);
   // The host (value) Fock build is always FP64; report the requested policy so
   // provenance distinguishes "asked fp64" from "asked auto, collapsed to FP64".
   result.precision.requested_mode = options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
@@ -1195,9 +1198,11 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan& plan, const ScfOpti
   return result;
 }
 
-ScfResult run_cpu_fock_strategy(const core::System& system, const core::System* auxiliary,
-                                const ScfOptions& options,
-                                const std::vector<double>* initial_density) {
+static ScfResult run_cpu_fock_strategy_impl(const core::System& system,
+                                            const core::System* auxiliary,
+                                            const ScfOptions& options,
+                                            const std::vector<double>* initial_density,
+                                            bool primary_target) {
   const auto strategy = fock_strategy_for_execution(options);
   if (strategy.backend != FockBackend::Cpu)
     throw std::invalid_argument("CPU Fock entry requires a CPU strategy");
@@ -1210,7 +1215,31 @@ ScfResult run_cpu_fock_strategy(const core::System& system, const core::System* 
       throw std::length_error("bounded RHF reference exceeds numeric memory budget");
   }
   const PreparedFockPlan plan(system, auxiliary, strategy);
-  return run_prepared_fock_strategy(plan, options, initial_density);
+  // Physical-reference generation, including post-HF consumers, preserves its
+  // independent reference state. Ordinary primary HF getters retain this solve.
+  auto hf_spec = make_hf_fock_spec(strategy.spec.spin);
+  hf_spec.coulomb.approximation = hf_spec.exchange.approximation =
+      strategy.spec.coulomb.approximation;
+  hf_spec.derivative_order = strategy.spec.derivative_order;
+  const bool scalar_target = primary_target && !options.export_physical_reference &&
+                             strategy.spec == hf_spec &&
+                             (hf_spec.coulomb.approximation == FockApproximation::Exact ||
+                              hf_spec.coulomb.approximation == FockApproximation::DensityFitted);
+  const initial_guess::EigenOperation target_eigen =
+      scalar_target ? solver::cpu_target_eigen : initial_guess::EigenOperation{};
+  return run_prepared_fock_strategy(plan, options, initial_density, nullptr, target_eigen);
+}
+
+ScfResult run_cpu_fock_strategy(const core::System& system, const core::System* auxiliary,
+                                const ScfOptions& options,
+                                const std::vector<double>* initial_density) {
+  return run_cpu_fock_strategy_impl(system, auxiliary, options, initial_density, true);
+}
+
+ScfResult run_cpu_reference_fock_strategy(const core::System& system, const core::System* auxiliary,
+                                          const ScfOptions& options,
+                                          const std::vector<double>* initial_density) {
+  return run_cpu_fock_strategy_impl(system, auxiliary, options, initial_density, false);
 }
 
 ScfResult run_rhf(const core::System& system, const ScfOptions& options,

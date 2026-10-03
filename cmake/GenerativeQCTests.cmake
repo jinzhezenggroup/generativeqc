@@ -69,6 +69,9 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_final_state_tests tests/native/test_final_state.cpp)
     generativeqc_native_test(generativeqc_ks_final_state_tests tests/native/test_ks_final_state.cpp)
     generativeqc_native_test(generativeqc_eigen_frame_tests tests/native/test_eigen_frame.cpp)
+    generativeqc_native_test(generativeqc_cpu_target_eigen_tests tests/native/test_cpu_target_eigen.cpp)
+    generativeqc_native_test(generativeqc_cpu_oracle_bridge_tests tests/native/test_cpu_oracle_bridge.cpp)
+    target_link_libraries(generativeqc_cpu_oracle_bridge_tests PRIVATE ${CMAKE_DL_LIBS})
     generativeqc_native_test(generativeqc_warm_subspace_tests tests/native/test_warm_subspace.cpp)
     generativeqc_native_test(generativeqc_initial_density_tests tests/native/test_initial_density.cpp)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
@@ -272,6 +275,8 @@ macro(generativeqc_add_native_tests)
       GENERATIVEQC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     set_target_properties(generativeqc_xc_point_cuda_tests PROPERTIES CUDA_STANDARD 20)
 
+    # The resident-grid regression and XC borrowed-grid validation use the
+    # CUDA quadrature owner; the host grid objects do not define those symbols.
     add_executable(generativeqc_dft_cuda_tests tests/native/test_dft_cuda.cu
       src/dft/cuda_xc.cpp src/dft/cuda_quadrature.cu "${GENERATIVEQC_GRID_SOURCE}"
       $<TARGET_OBJECTS:generativeqc_dft_grid_test_objects>

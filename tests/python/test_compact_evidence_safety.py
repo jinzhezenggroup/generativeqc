@@ -67,7 +67,9 @@ def publication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     )
     monkeypatch.setattr(compact, "ROOT", tmp_path)
     monkeypatch.setattr(compact, "REVIEW", review)
-    monkeypatch.setattr(compact, "TARGETS", ("campaign/publication.json",))
+    monkeypatch.setattr(
+        compact, "publication_paths", lambda: ("campaign/publication.json",)
+    )
     monkeypatch.setattr(compact, "THRESHOLD", 1)
     return tmp_path
 

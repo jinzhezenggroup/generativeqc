@@ -1,0 +1,87 @@
+{
+  "schema": "generativeqc.git-snapshot.v1",
+  "source_revision": "1a4acc519eb881cc19d418de65ecca72324359d4",
+  "history_rewritten": false,
+  "scope": "Historical reports only. Current independent numerical fixtures, active publication inputs, scientific gates and timing samples for live recomputation are unchanged. Original source identities and limitations remain in family READMEs and recovered payloads.",
+  "file_count": 8,
+  "total_bytes": 1669507,
+  "files": [
+    {
+      "path": "benchmarks/results/rccsd-148-a/raw-evidence.zip",
+      "bytes": 12789,
+      "sha256": "f4c11760dd15afa092fec00baf577b8b38de646399b4ff1570820d041b1f2311",
+      "owner": "rccsd-148-a",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/rccsd-148-a/README.md",
+      "consumer_review": "Archive unpack/hash/count tests only; replaced with synthetic format/recovery coverage."
+    },
+    {
+      "path": "benchmarks/results/rccsd-148-b/raw-evidence.zip",
+      "bytes": 31311,
+      "sha256": "c6fd591623424312bb80a880eb3a70c34021b4a6ac38f0451622fa525f5f74b5",
+      "owner": "rccsd-148-b",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/rccsd-148-b/README.md",
+      "consumer_review": "Archive unpack/hash/count tests only; replaced with synthetic format/recovery coverage."
+    },
+    {
+      "path": "benchmarks/results/rccsd-148-c/raw-evidence.zip",
+      "bytes": 217567,
+      "sha256": "bd6879e101dc3a47e6ec4bd517014859a95f13033d85a4a01447fc91da6007f4",
+      "owner": "rccsd-148-c",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/rccsd-148-c/README.md",
+      "consumer_review": "Archive unpack/hash/count tests only; replaced with synthetic format/recovery coverage."
+    },
+    {
+      "path": "benchmarks/results/rccsd-149-a/raw-evidence.zip",
+      "bytes": 373652,
+      "sha256": "dee1ead19fb45abeb7f07934c9b642dd9dbd8716a9634469285a2cadd56e0a72",
+      "owner": "rccsd-149-a",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/rccsd-149-a/README.md",
+      "consumer_review": "Archive unpack/hash/count tests only; replaced with synthetic format/recovery coverage."
+    },
+    {
+      "path": "benchmarks/results/xc-integration-162/raw-evidence.zip",
+      "bytes": 9126,
+      "sha256": "d8b21b9660bab21a13a1a9f4014f5468c5aa4811cf632167988c7f08ff8b8a0f",
+      "owner": "xc-integration-162",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/xc-integration-162/README.md",
+      "consumer_review": "Archive unpack/hash/count tests only; replaced with synthetic format/recovery coverage."
+    },
+    {
+      "path": "benchmarks/results/issue206-df-a/raw-evidence.zip",
+      "bytes": 91451,
+      "sha256": "e4cda40de612613950d441a33a70b4b7f88ddaa0ea88d08ada3356437ba5cc89",
+      "owner": "issue206-df-a",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/issue206-df-a/README.md",
+      "consumer_review": "Archive unpack/hash/count tests only; replaced with synthetic format/recovery coverage."
+    },
+    {
+      "path": "benchmarks/results/scf-proposals-186/report.json",
+      "bytes": 513581,
+      "sha256": "e67a2b0115276bb00bc4d9d9c537a13f420af0c9ad82088ee3fbf8a14c286f87",
+      "owner": "scf-proposals-186",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/scf-proposals-186/README.md",
+      "consumer_review": "No current scientific reader; frozen historical campaign report. Exact samples remain available for historical audit."
+    },
+    {
+      "path": "benchmarks/results/tensor-cuda-146/evidence.json",
+      "bytes": 420030,
+      "sha256": "11b24caedec603ff7f91e3aa5df6dc54b068c61b145cfbb5e5821849589c5964",
+      "owner": "tensor-cuda-146",
+      "disposition": "historical-summary",
+      "summary": "benchmarks/results/tensor-cuda-146/README.md",
+      "consumer_review": "No current scientific reader; frozen historical campaign report. Exact samples remain available for historical audit."
+    }
+  ],
+  "provenance": {
+    "source": "Published master verified through GitHub commit lookup on 2026-10-03 at 15:24 UTC.",
+    "source_url": "https://github.com/jinzhezenggroup/generativeqc/commit/1a4acc519eb881cc19d418de65ecca72324359d4",
+    "verification": "Every stored member matched the pinned Git blob and was restored offline before removal; all ZIP member manifests were also verified."
+  }
+}
