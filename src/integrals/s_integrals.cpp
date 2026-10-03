@@ -601,6 +601,7 @@ double primitive_range_eri_cartesian(double alpha, const Vec3& a,
 struct AoView {
   const core::Shell* shell{};
   molecule::CartesianComponent angular{};
+  unsigned eri_component_index{};
   double component_normalization{};
 };
 
@@ -610,7 +611,9 @@ std::vector<AoView> expand_cartesian_aos(const core::System& system) {
   for (const core::Shell& shell : system.shells) {
     for (const molecule::CartesianComponent& component :
          molecule::cartesian_components(shell.angular_momentum)) {
-      aos.push_back({&shell, component, molecule::cartesian_component_normalization(component)});
+      aos.push_back({&shell, component,
+                     generated_eri_cpu::component_index(component[0], component[1], component[2]),
+                     molecule::cartesian_component_normalization(component)});
     }
   }
   return aos;
@@ -730,9 +733,7 @@ std::size_t prepare_value_eri_components(const std::vector<AoView>& aos,
           const std::array<std::size_t, 4> indices{i, j, k, l};
           unsigned component_indices[4];
           for (unsigned slot = 0; slot < 4; ++slot) {
-            const auto& angular = aos[indices[slot]].angular;
-            component_indices[slot] =
-                generated_eri_cpu::component_index(angular[0], angular[1], angular[2]);
+            component_indices[slot] = aos[indices[slot]].eri_component_index;
           }
           const double normalization =
               aos[i].component_normalization * aos[j].component_normalization *
