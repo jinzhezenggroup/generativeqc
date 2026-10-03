@@ -1,0 +1,142 @@
+{
+  "attachments": [
+    {
+      "kind": "endpoint-review",
+      "path": "summary.json",
+      "sha256": "3509d495b0ae3953fc22eaaa63b4368ae0a2eca0525732aed6617d3283939654"
+    },
+    {
+      "kind": "endpoint-review",
+      "path": "records.json.gz",
+      "sha256": "1550bfe36ef3b7590832b27fa923c021938d1475dbfd7be5388d3aab1be809cf"
+    },
+    {
+      "kind": "endpoint-review",
+      "path": "work.json.gz",
+      "sha256": "596461de44e80a99dc67091cd16721630261e0ad82abcee4074b85837da1dbf1"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "directional": {
+      "atol": 2e-06,
+      "max_absolute_error": 1.3391304801158022e-09,
+      "max_scaled_error": 0.0006695652400579011,
+      "passed": true,
+      "rms_error": 9.440119969899883e-10,
+      "rtol": 0,
+      "shape": [
+        3
+      ]
+    },
+    "energy": {
+      "atol": 3e-09,
+      "max_absolute_error": 1.1254996934439987e-11,
+      "max_scaled_error": 0.003751665644813329,
+      "passed": true,
+      "rms_error": 1.7689696999815566e-12,
+      "rtol": 0,
+      "shape": [
+        70
+      ]
+    },
+    "forces": {
+      "atol": 1e-06,
+      "max_absolute_error": 1.1150206369325844e-07,
+      "max_scaled_error": 0.11150206369325844,
+      "passed": true,
+      "rms_error": 2.6138772288928656e-08,
+      "rtol": 0,
+      "shape": [
+        2160
+      ]
+    },
+    "triples": {
+      "atol": 2e-09,
+      "max_absolute_error": 1.5158360677780536e-13,
+      "max_scaled_error": 7.579180338890268e-05,
+      "passed": true,
+      "rms_error": 4.123795804724397e-14,
+      "rtol": 0,
+      "shape": [
+        70
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "n2": "RTX PRO 6000 Blackwell"
+  },
+  "hardware": {
+    "reason": null,
+    "slurm": true,
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "6331c34584d94bf5fb5c98da5819dddeb29571961534c98d0a1f2a468ae326bb",
+    "ir": "6331c34584d94bf5fb5c98da5819dddeb29571961534c98d0a1f2a468ae326bb",
+    "schedule": "d0eaca78705570dc8ed5fa4c510bd5f6fab4a6472bc03015edd28254b2fcc83f",
+    "source": "9bf016dba6612c3ad94258f7307c1e1489cdcc926a32f3ad654eb8010541fe45"
+  },
+  "inputs_hash": "d18034b772d93e6034d9f591d770d538a674aef9746da2c9500091cb731f3beb",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "Availability extension; paired supported-domain non-regression observations retained separately, no automatic performance promotion.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "bda12d40d2e579bdfb9d4469f3baf652344ac233",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "budget_bytes": 8589934592,
+    "fast_compile": false,
+    "minimum_same_space_gap": 1e-10,
+    "page_capacity": 16
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "not exposed by executor",
+  "stages": {
+    "compilation": {
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": null,
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": null,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": null,
+      "status": "pass"
+    },
+    "source": {
+      "reason": null,
+      "status": "pass"
+    }
+  },
+  "subject": "Complete triples Fock resolvent and internally degenerate conventional CCSD(T) forces through 56 AOs",
+  "tier": "endpoint",
+  "timings": [],
+  "toolchain": {
+    "architecture": "sm_120",
+    "build": "Release",
+    "ccache": true,
+    "cuda": "12.9.1"
+  }
+}

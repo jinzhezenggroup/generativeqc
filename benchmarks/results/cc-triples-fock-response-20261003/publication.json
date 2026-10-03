@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All retained complete force calls and directional differences pass independent numerical/residual gates; native CPU/CUDA, exact-budget/fallback/refusal, 44 public regressions and sanitizer receipts are retained. No 56-AO historical speedup claimed.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 3678,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "7f143196309942981ae17ea05c6d803f9daf9619bbf07dcda037dc6c8ed174df"
+    },
+    {
+      "bytes": 16447,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "3509d495b0ae3953fc22eaaa63b4368ae0a2eca0525732aed6617d3283939654"
+    },
+    {
+      "bytes": 31016,
+      "path": "records.json.gz",
+      "role": "samples",
+      "sha256": "1550bfe36ef3b7590832b27fa923c021938d1475dbfd7be5388d3aab1be809cf"
+    },
+    {
+      "bytes": 7896,
+      "path": "work.json.gz",
+      "role": "summary",
+      "sha256": "596461de44e80a99dc67091cd16721630261e0ad82abcee4074b85837da1dbf1"
+    },
+    {
+      "bytes": 21240,
+      "path": "source.patch.gz",
+      "role": "source-patch",
+      "sha256": "5bad69c402e9f73733171e89067d96719e62b1a109534a753ef42e826c8ab794"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/ccsdt_prepared_endpoint.py",
+      "--device",
+      "cuda",
+      "--atoms",
+      "24",
+      "--forces",
+      "--output",
+      ".artifacts/force56.json"
+    ],
+    "instructions": "gzip -dc source.patch.gz | git apply in an isolated checkout of the exact parent. Build Release CUDA12.9.1 sm_120 with fast_compile=false and explicit CXX/CUDA ccache launchers plus checkout-root CCACHE_BASEDIR. Use Slurm main gpu:pro6000:1 on n2, finite time limits, preserve CUDA_VISIBLE_DEVICES; set CPU library threads=1, GENERATIVEQC_LIBRARY, PYTHONPATH=python:. and a unique GENERATIVEQC_DF_PROGRESS_TRACE. Every cold/warm/repeat/changed row must pass pinned energy 3e-9, triples 2e-9, force 1e-6 and response 1e-9 gates. Direction uses RNG155214, mean-free normalized shape(24,3), steps4e-4/2e-4/1e-4; near geometry adds1e-9 bohr to atom1 z. Run generativeqc_triples_fock_response_tests with/without --cuda, host resources and public CC suites with CUDA opt-in. Unfiltered memcheck for native and methane; focused56 uses kernel-name kns=triples_resolvent/triples_oo_moment/triples_vv_moment/add_occupied/add_virtual, repeated options. Four AB/BA paired processes for atoms6/12 compare #1748. Regenerate methane independently with benchmarks/ccsdt_degenerate_oracle.py, PySCF2.14.0. Gzip members decode as UTF-8 JSON or unified patch; no numerical rounding."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "bda12d40d2e579bdfb9d4469f3baf652344ac233"
+  }
+}
