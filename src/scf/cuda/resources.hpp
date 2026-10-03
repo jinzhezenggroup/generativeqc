@@ -40,6 +40,9 @@ class CudaResources {
   std::size_t solver_workspace_bytes_{};
   void* solver_host_workspace_{};
   std::size_t solver_host_workspace_bytes_{};
+  /** Optional unscreened reference ERIs; fallback arena remains available. */
+  double* reference_eri_{};
+  std::size_t reference_eri_bytes_{};
   /** Numeric reference peak includes the observed provider allocations. */
   std::size_t reference_peak_bytes_{};
   std::size_t provider_retained_bytes_{};

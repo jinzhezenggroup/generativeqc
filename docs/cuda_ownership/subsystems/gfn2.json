@@ -7,6 +7,7 @@
     "src/xtb/native/CUDA_SOURCE_PROVENANCE.json",
     "tests/python/test_gfn2_es3_native_codegen.py",
     "tests/python/test_gfn2_h0_force_codegen.py",
+    "tests/python/test_gfn2_h0_force_schedule.py",
     "tests/python/test_gfn2_spin_native_codegen.py",
     "tests/python/test_gfn2_scc_free_energy_native_codegen.py"
   ],

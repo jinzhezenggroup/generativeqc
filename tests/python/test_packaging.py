@@ -34,7 +34,56 @@ def test_native_candidates_prefer_override_then_bundled(
     monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(explicit))
     monkeypatch.setattr(_native, "PACKAGE_DIR", package)
 
-    assert _native._candidate_paths()[:2] == [explicit, bundled]
+    assert list(_native._candidate_paths())[:2] == [explicit, bundled]
+
+
+def test_native_explicit_library_skips_discovery_and_preserves_live_selection(
+    tmp_path: Path, monkeypatch: typing.Any
+) -> None:
+    """Avoid unused scans without caching paths, handles or device profiles."""
+    from unittest.mock import Mock
+
+    from generativeqc import profiles
+
+    explicit = tmp_path / "explicit.so"
+    replacement = tmp_path / "replacement.so"
+    bundled = tmp_path / "bundled.so"
+    for path in (explicit, replacement, bundled):
+        path.touch()
+    loaded: list[Path] = []
+    selections: list[int] = []
+
+    def fake_cdll(path: str) -> Mock:
+        loaded.append(Path(path))
+        library = Mock()
+        library.generativeqc_get_abi_version.return_value = _native.ABI_VERSION
+        return library
+
+    def select(library: Mock, device_id: int) -> tuple[Mock, dict]:
+        selections.append(device_id)
+        return library, {"device_id": device_id}
+
+    def unexpected_discovery() -> Path:
+        raise AssertionError("a usable explicit library must not scan the wheel")
+
+    monkeypatch.setattr(_cuda_runtime, "preload_cuda_runtime_libraries", lambda: ())
+    monkeypatch.setattr(_native.ctypes, "CDLL", fake_cdll)
+    monkeypatch.setattr(profiles, "select_library", select)
+    monkeypatch.setattr(_native, "_installed_package_library", unexpected_discovery)
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(explicit))
+    first = _native.load_library(device="cuda", device_id=0)
+    second = _native.load_library(device="cuda", device_id=1)
+    assert first is not second
+    assert first._generativeqc_profile_diagnostics == {"device_id": 0}
+    assert second._generativeqc_profile_diagnostics == {"device_id": 1}
+    monkeypatch.setenv("GENERATIVEQC_LIBRARY", str(replacement))
+    _native.load_library()
+    # A missing override must still discover the current installed fallback.
+    replacement.unlink()
+    monkeypatch.setattr(_native, "_installed_package_library", lambda: bundled)
+    _native.load_library()
+    assert loaded == [explicit, explicit, replacement, bundled]
+    assert selections == [0, 1]
 
 
 def test_cuda_runtime_search_finds_pypi_provider_dirs(
@@ -78,6 +127,49 @@ def test_cuda_runtime_preload_uses_curated_sonames_not_driver(
     assert _cuda_runtime.preload_cuda_runtime_libraries() == tuple(sonames)
     assert [name for name, _ in loaded] == sonames
     assert "libcuda.so.1" not in sonames
+
+    def unexpected_discovery() -> list[Path]:
+        raise AssertionError("retained providers must not trigger another scan")
+
+    monkeypatch.setattr(_cuda_runtime, "_runtime_search_dirs", unexpected_discovery)
+    assert _cuda_runtime.preload_cuda_runtime_libraries() == ()
+    assert [name for name, _ in loaded] == sonames
+
+
+def test_cuda_runtime_preload_retries_missing_groups(
+    tmp_path: Path, monkeypatch: typing.Any
+) -> None:
+    """A failed or unavailable group must not turn into a cached discovery miss."""
+    first, second = "libfirst.so", "libsecond.so"
+    groups = ((first, "libfirst-alternative.so"), (second,))
+    (tmp_path / first).touch()
+    attempts = []
+    scans = []
+    broken = True
+
+    def discover() -> list[Path]:
+        scans.append(True)
+        return [tmp_path]
+
+    def fake_cdll(path: str, *, mode: int) -> object:
+        attempts.append(Path(path).name)
+        if Path(path).name == second and broken:
+            raise OSError("provider cannot be loaded yet")
+        return object()
+
+    monkeypatch.setattr(_cuda_runtime, "_CUDA_RUNTIME_LIBRARY_GROUPS", groups)
+    monkeypatch.setattr(_cuda_runtime, "_cuda_runtime_handles", {})
+    monkeypatch.setattr(_cuda_runtime, "_runtime_search_dirs", discover)
+    monkeypatch.setattr(_cuda_runtime.ctypes, "CDLL", fake_cdll)
+    assert _cuda_runtime.preload_cuda_runtime_libraries() == (first,)
+    assert _cuda_runtime.preload_cuda_runtime_libraries() == ()
+    (tmp_path / second).touch()
+    assert _cuda_runtime.preload_cuda_runtime_libraries() == ()
+    broken = False
+    assert _cuda_runtime.preload_cuda_runtime_libraries() == (second,)
+    assert _cuda_runtime.preload_cuda_runtime_libraries() == ()
+    assert len(scans) == 4
+    assert attempts == [first, second, second]
 
 
 def test_cuda_runtime_preload_is_noop_off_linux(monkeypatch: typing.Any) -> None:

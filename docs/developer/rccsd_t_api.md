@@ -193,7 +193,7 @@ the RCCSD correlation diagnostics.
 The current public boundary remains deliberately bounded:
 
 ```text
-CPU energy + force:          yes (qualified conventional <=12-AO force domain)
+CPU energy + force:          yes (qualified conventional <=28-AO force domain)
 CPU homogeneous batch:      yes
 CUDA energy + force:         yes (same force domain)
 CUDA homogeneous batch:     yes
@@ -204,8 +204,9 @@ DF/frozen-core/open-shell:   no
 CUDA force publication never substitutes RCCSD/HF derivatives. The force owner
 builds the complete CCSD(T) relaxed response before publication. Generated
 corrected-Lambda RHS/J^T actions and fixed-orbital parameter VJPs execute on one
-shared CUDA state, their packed Lambda GMRES control is still host-owned, later
-Hamiltonian/Z stages remain on host, and the final
+shared CUDA state. Generated Hamiltonian/orbital actions also execute on CUDA;
+packed Lambda/Z GMRES control, triples response and the MO-to-AO weight pullback
+remain on host. The final
 conventional nuclear derivative is executed by the CUDA consumer.
 
 The internal #746 CPU force chain now executes its generated Lambda, parameter-

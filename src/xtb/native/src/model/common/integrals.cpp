@@ -421,6 +421,9 @@ void compute_shell_pair(const BasisPlan& basis, std::size_t bra_shell, std::size
   const double distance_squared =
       vector[0] * vector[0] + vector[1] * vector[1] + vector[2] * vector[2];
 
+  // Public s/p/d shells have at most 6 x 6 Cartesian pairs. Reuse this
+  // bounded scratch across primitive pairs rather than clearing it per AO.
+  generativeqc::xtb::generated::Gfn2SdqPrimitive primitive_block[36];
   for (std::int64_t ket_primitive = ket_primitive_begin; ket_primitive < ket_primitive_end;
        ++ket_primitive) {
     const std::size_t ket_primitive_index = static_cast<std::size_t>(ket_primitive);
@@ -440,36 +443,28 @@ void compute_shell_pair(const BasisPlan& basis, std::size_t bra_shell, std::size
           basis.primitive_coefficients[ket_primitive_index] *
           basis.primitive_coefficients[bra_primitive_index];
 
+      // Every Cartesian consumer shares this primitive pair's Gaussian and
+      // recurrence DAG. Generate the bounded block once; retain the existing
+      // primitive contraction order and native representation transforms.
+      bool generated = false;
+      if (with_multipoles) {
+        generated = with_gradient
+                        ? generativeqc::xtb::generated::evaluate_gfn2_sdq_shell_block(
+                              bra_l, ket_l, bra_alpha, ket_alpha, vector, primitive_block)
+                        : generativeqc::xtb::generated::evaluate_gfn2_sdq_values_shell_block(
+                              bra_l, ket_l, bra_alpha, ket_alpha, vector, primitive_block);
+      } else {
+        generated = with_gradient
+                        ? generativeqc::xtb::generated::evaluate_gfn2_overlap_gradient_shell_block(
+                              bra_l, ket_l, bra_alpha, ket_alpha, vector, primitive_block)
+                        : generativeqc::xtb::generated::evaluate_gfn2_overlap_shell_block(
+                              bra_l, ket_l, bra_alpha, ket_alpha, vector, primitive_block);
+      }
+      if (!generated) continue;
       for (std::size_t bra_cartesian = 0; bra_cartesian < bra_cartesian_count; ++bra_cartesian) {
         for (std::size_t ket_cartesian = 0; ket_cartesian < ket_cartesian_count; ++ket_cartesian) {
-          generativeqc::xtb::generated::Gfn2SdqPrimitive primitive{};
-          bool generated = false;
-          if (with_multipoles) {
-            generated = with_gradient
-                            ? generativeqc::xtb::generated::evaluate_gfn2_sdq_primitive(
-                                  bra_l, ket_l, static_cast<unsigned>(bra_cartesian),
-                                  static_cast<unsigned>(ket_cartesian), bra_alpha, ket_alpha, vector,
-                                  primitive)
-                            : generativeqc::xtb::generated::evaluate_gfn2_sdq_values_primitive(
-                                  bra_l, ket_l, static_cast<unsigned>(bra_cartesian),
-                                  static_cast<unsigned>(ket_cartesian), bra_alpha, ket_alpha, vector,
-                                  primitive);
-          } else {
-            generated = with_gradient
-                            ? generativeqc::xtb::generated::evaluate_gfn2_overlap_gradient_primitive(
-                                  bra_l, ket_l, static_cast<unsigned>(bra_cartesian),
-                                  static_cast<unsigned>(ket_cartesian), bra_alpha, ket_alpha, vector,
-                                  primitive)
-                            : generativeqc::xtb::generated::evaluate_gfn2_overlap_primitive(
-                                  bra_l, ket_l, static_cast<unsigned>(bra_cartesian),
-                                  static_cast<unsigned>(ket_cartesian), bra_alpha, ket_alpha, vector,
-                                  primitive);
-          }
-          if (!generated) {
-            continue;
-          }
-
           const std::size_t cartesian_index = bra_cartesian * ket_cartesian_count + ket_cartesian;
+          const auto& primitive = primitive_block[cartesian_index];
           workspace.cartesian[cartesian_index] += primitive_weight * primitive.values[0];
           if (with_multipoles) {
             for (std::size_t component = 0; component < kMultipoleComponents; ++component) {

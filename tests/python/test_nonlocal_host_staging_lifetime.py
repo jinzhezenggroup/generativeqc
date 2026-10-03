@@ -182,6 +182,7 @@ template<Vv10Variant, bool, bool, class... T> void launch_pair_rows(T&&...) {}
 template<class... T> void count_active_partner_blocks_kernel(T&&...) {}
 template<class... T> void prefix_active_partner_blocks_kernel(T&&...) {}
 template<class... T> void scatter_active_partners_ordered_kernel(T&&...) {}
+template<class... T> void admit_molecular_pair_domain_kernel(T&&...) {}
 template<class... T> void reduce_energy_ordered_kernel(T&&...) {}
 """
 

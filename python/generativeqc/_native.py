@@ -1000,20 +1000,19 @@ def _installed_package_library() -> Path | None:
     return candidates[0] if candidates else None
 
 
-def _candidate_paths() -> list[Path]:
-    candidates: list[Path] = []
+def _candidate_paths() -> typing.Iterator[Path]:
+    """Discover lower-priority locations only when earlier candidates are absent.
+
+    Recreate this iterator for each load so overrides and installed libraries
+    remain live inputs. A usable explicit path needs no wheel-directory scan.
+    """
     if configured := os.environ.get("GENERATIVEQC_LIBRARY"):
-        candidates.append(Path(configured))
+        yield Path(configured)
     if bundled := _installed_package_library():
-        candidates.append(bundled)
+        yield bundled
     root = Path(__file__).resolve().parents[2]
-    candidates.extend(
-        [
-            root / "build" / "libgenerativeqc.so",
-            root / "build" / "libgenerativeqc.dylib",
-        ]
-    )
-    return candidates
+    yield root / "build" / "libgenerativeqc.so"
+    yield root / "build" / "libgenerativeqc.dylib"
 
 
 def load_library(*, device: str | None = None, device_id: int = 0) -> ctypes.CDLL:

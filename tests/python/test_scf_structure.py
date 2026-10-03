@@ -282,6 +282,7 @@ def test_direct_numerical_families_cannot_acquire_policy_or_consumers(
     [
         "direct_fock_order2.cuh",
         "direct_force_low_order.cuh",
+        "direct_force_low_order_sources.cuh",
         "direct_bounded_fallback.cu",
     ],
 )
@@ -305,6 +306,7 @@ def test_direct_low_order_quartet_indexing_is_shared() -> None:
 
     for owner in (
         "direct_fock_order2.cuh",
+        "direct_force_low_order_sources.cuh",
         "direct_force_order2.cuh",
         "direct_force_order3.cuh",
     ):
@@ -403,3 +405,22 @@ def test_bucket_routes_overflow_checked_basis_counts_through_topology() -> None:
     assert '"runtime/bounded_workspace.hpp"' not in bucket
     assert "checked_expanded_primitive_references(systems)" in bucket
     assert "checked_multiply" in topology and "checked_add" in topology
+
+
+@pytest.mark.parametrize("owner", ["reference", "initial_guess", "gradient", "solver"])
+@pytest.mark.parametrize("header", ["cpu_linalg.hpp", "program.hpp"])
+def test_shared_cpu_target_algebra_boundary(
+    tmp_path: typing.Any, owner: str, header: str
+) -> None:
+    source = tmp_path / "src"
+    (source / "scf" / owner).mkdir(parents=True)
+    (source / "tensor").mkdir()
+    (source / "tensor" / header).write_text(
+        "// Shared CPU algebra or unrelated tensor API\n"
+    )
+    (source / "scf" / owner / "implementation.cpp").write_text(
+        f'#include "tensor/{header}"\n'
+    )
+    report = audit_scf_structure(tmp_path)
+    allowed = owner == "solver" and header == "cpu_linalg.hpp"
+    assert bool(report["errors"]) != allowed

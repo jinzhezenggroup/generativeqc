@@ -54,7 +54,7 @@ __device__ inline __noinline__ void contract_bounded_direct_fock_subtile(
 #undef GENERATIVEQC_BOUNDED_FOCK_CASE
 }
 
-template <bool Unrestricted>
+template <bool Unrestricted, bool SeparateSources = false>
 __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled(
     DeviceBatch batch, unsigned angular_order, const std::uint32_t* queue_count,
     const ActiveShellQuartetTile* task, double screening_tolerance, const double* schwarz_bounds,
@@ -62,7 +62,7 @@ __device__ inline __noinline__ void contract_bounded_direct_force_subtile_scaled
     double exchange_coefficient, std::size_t subtile, unsigned lane) {
 #define GENERATIVEQC_BOUNDED_FORCE_CASE(order)                                                  \
   case order:                                                                                   \
-    contract_two_electron_force_quartet_subtile_scaled<Unrestricted, order>(                    \
+    contract_two_electron_force_quartet_subtile_scaled<Unrestricted, order, SeparateSources>(   \
         batch, queue_count, task, screening_tolerance, schwarz_bounds, density, active, forces, \
         0U, coulomb_coefficient, exchange_coefficient, subtile, lane);                          \
     break

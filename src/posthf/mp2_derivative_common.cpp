@@ -41,14 +41,28 @@ std::vector<double> pullback_matrix(std::span<const double> coefficients,
   return ao;
 }
 
+double symmetric_eri_weight(std::span<const double> weights, std::size_t n, std::size_t p,
+                            std::size_t q, std::size_t r, std::size_t s) {
+  const auto at = [&](std::size_t a, std::size_t b, std::size_t c, std::size_t d) {
+    return weights[((a * n + b) * n + c) * n + d];
+  };
+  // Project arbitrary adjoint weights onto the eight exact ERI permutations.
+  // The same coefficient matrix acts on all four slots, so this projection
+  // commutes with the MO-to-AO pullback. No additional rank-four buffer is live.
+  return 0.125 * at(p, q, r, s) + 0.125 * at(q, p, r, s) + 0.125 * at(p, q, s, r) +
+         0.125 * at(q, p, s, r) + 0.125 * at(r, s, p, q) + 0.125 * at(s, r, p, q) +
+         0.125 * at(r, s, q, p) + 0.125 * at(s, r, q, p);
+}
+
 void transform_remaining_shells(const core::System& system, const hf::PhysicalReference& reference,
                                 const std::vector<std::size_t>& offsets, std::size_t si,
                                 std::span<const double> first,
                                 const EriShellDerivativeContract& eri_shell,
-                                std::vector<double>& derivative) {
+                                std::vector<double>& derivative, bool canonical_shells) {
   const auto n = reference.nbf;
   const auto di = offsets[si + 1] - offsets[si];
   for (std::size_t sj = 0; sj < system.shells.size(); ++sj) {
+    if (canonical_shells && sj > si) continue;
     const auto dj = offsets[sj + 1] - offsets[sj];
     std::vector<double> second(posthf::checked_mul(posthf::checked_mul(di, dj), square(n)), 0.0);
     for (std::size_t iu = 0; iu < di; ++iu)
@@ -60,6 +74,7 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
                   reference.coefficients[(offsets[sj] + jv) * n + q] *
                   first[((iu * n + q) * n + r) * n + s];
     for (std::size_t sk = 0; sk < system.shells.size(); ++sk) {
+      if (canonical_shells && sk > si) continue;
       const auto dk = offsets[sk + 1] - offsets[sk];
       std::vector<double> third(
           posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), n), 0.0);
@@ -72,6 +87,7 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
                     reference.coefficients[(offsets[sk] + kw) * n + r] *
                     second[((iu * dj + jv) * n + r) * n + s];
       for (std::size_t sl = 0; sl < system.shells.size(); ++sl) {
+        if (canonical_shells && (sl > sk || (si == sk && sl > sj))) continue;
         const auto dl = offsets[sl + 1] - offsets[sl];
         std::vector<double> local(
             posthf::checked_mul(posthf::checked_mul(posthf::checked_mul(di, dj), dk), dl), 0.0);
@@ -83,6 +99,15 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
                   local[((iu * dj + jv) * dk + kw) * dl + lx] +=
                       reference.coefficients[(offsets[sl] + lx) * n + s] *
                       third[((iu * dj + jv) * dk + kw) * n + s];
+        if (canonical_shells) {
+          // All components within repeated shells remain present. Multiply by
+          // the distinct shell-quartet orbit, not a fixed factor of eight;
+          // center derivatives are still differentiated separately and then
+          // scattered to atoms, including when several slots share an atom.
+          const auto orbit =
+              (si == sj ? 1 : 2) * (sk == sl ? 1 : 2) * (si == sk && sj == sl ? 1 : 2);
+          for (double& value : local) value *= orbit;
+        }
         const std::array<std::size_t, 4> shells{si, sj, sk, sl};
         const auto center = eri_shell(shells, local);
         for (std::size_t slot = 0; slot < 4; ++slot) {
@@ -137,7 +162,7 @@ std::vector<double> conventional_derivative(const core::System& system,
               for (std::size_t p = 0; p < n; ++p)
                 first[((iu * n + q) * n + r) * n + s] +=
                     reference.coefficients[(offsets[si] + iu) * n + p] *
-                    weights.two_electron[((p * n + q) * n + r) * n + s];
+                    symmetric_eri_weight(weights.two_electron, n, p, q, r, s);
     } else {
       const auto& factors = weights.two_electron_factors;
       const auto occupied = factors.occupied, virtuals = n - occupied;
@@ -170,7 +195,8 @@ std::vector<double> conventional_derivative(const core::System& system,
         }
       }
     }
-    transform_remaining_shells(system, reference, offsets, si, first, eri_shell, derivative);
+    transform_remaining_shells(system, reference, offsets, si, first, eri_shell, derivative,
+                               dense_two);
   }
   if (!finite(derivative)) throw std::runtime_error("conventional derivative is nonfinite");
   return derivative;

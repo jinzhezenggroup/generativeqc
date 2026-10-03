@@ -286,7 +286,9 @@ def test_cc_force_hamiltonian_uses_prepared_cuda_source() -> None:
     rccsdt = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
 
     assert "raw_hamiltonian(source, reference, max_bytes, cuda_derivative" in force
-    assert "provider.get({all, all, all, all}, cuda, device_id)" in force
+    assert (
+        "provider.get({all, all, all, all}, cuda, device_id, nullptr, &work)" in force
+    )
     assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsd
     assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsdt
     assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsd

@@ -1,0 +1,79 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Scoped unchanged-gate original/moved PBE96 energy/final-state qualification, with independent shared-consumer and derivative controls. Complete local raw files were independently reviewed; this public package is summary/checksums/replay only, not lossless raw evidence. All failed attempts and large-force/oracle limits remain explicit; no performance claim.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 4160,
+      "path": "README.txt",
+      "role": "reproduction",
+      "sha256": "29670dc42dcfc062556911548a8c22fcb162c7f8c96869cd38f20833b674c618"
+    },
+    {
+      "bytes": 814,
+      "path": "capsule.json",
+      "role": "summary",
+      "sha256": "600e7ab4c8502dc7622fd360c023cb48a675457aef3e3954af0ab74204c9f884"
+    },
+    {
+      "bytes": 3760,
+      "path": "decode_trace_evidence.py",
+      "role": "reproduction",
+      "sha256": "fa059a5850057b36592b680a842b46f9850119a62115c38c08e24a01e2feedb0"
+    },
+    {
+      "bytes": 2915,
+      "path": "integration.json",
+      "role": "reproduction",
+      "sha256": "ab14b59b27d7083c84f7880105854de265382eeb25c0c2406c2fe1e87a9c7f21"
+    },
+    {
+      "bytes": 4674,
+      "path": "prepare_trace_replay.py",
+      "role": "reproduction",
+      "sha256": "d1a16efe0627eb5027078d39e60256dfcbb5db9401b96433e45e5d5c824bf3b5"
+    },
+    {
+      "bytes": 18785,
+      "path": "scientific-records.json.gz",
+      "role": "samples",
+      "sha256": "e498bcb8535d0357670a1988b2be1d55cf0cb0e5d862583dda9455b6633e69a0"
+    },
+    {
+      "bytes": 582,
+      "path": "source-alias.json",
+      "role": "input",
+      "sha256": "fce4e047d375175b88df9d031d6f809d38fff3869ec69d4fd60b165269c848bb"
+    },
+    {
+      "bytes": 2276,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "54cbe194796640f11fc95a2aa5cdff716618ece9586d9ce6ca286ad768f6c9dc"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "prepare_trace_replay.py",
+      "--expanded-trace",
+      "TRACE_EXPANDED",
+      "--expanded-cpu",
+      "CPU1750_EXPANDED",
+      "--source",
+      "FRESH_SOURCE",
+      "--library",
+      "FRESH_SOURCE/build/cpu-revalidation/libgenerativeqc.so",
+      "--output",
+      "NEW_REPLAY_ROOT"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "7cef255edc89ff6903694b3b760d0fef1fb58b81"
+  }
+}

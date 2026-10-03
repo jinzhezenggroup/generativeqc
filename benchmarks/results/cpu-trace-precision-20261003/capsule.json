@@ -1,0 +1,22 @@
+{
+  "codec": "json",
+  "contract": "summary/checksums/replay only; NOT lossless receipt publication",
+  "expanded_payload_sha256": "a70d5d9e07a714859dc70fc41ca8d154a46c94d6c65a08b6a432d16c92dcfec5",
+  "files": {
+    "README.txt": {
+      "bytes": 4160,
+      "sha256": "29670dc42dcfc062556911548a8c22fcb162c7f8c96869cd38f20833b674c618"
+    },
+    "decode_trace_evidence.py": {
+      "bytes": 3760,
+      "sha256": "fa059a5850057b36592b680a842b46f9850119a62115c38c08e24a01e2feedb0"
+    },
+    "scientific-records.json.gz": {
+      "bytes": 18785,
+      "sha256": "e498bcb8535d0357670a1988b2be1d55cf0cb0e5d862583dda9455b6633e69a0"
+    }
+  },
+  "schema": "local-trace-evidence-capsule-v1",
+  "source_revision": "7cef255edc89ff6903694b3b760d0fef1fb58b81",
+  "source_tree": "df629edabf7ee4f33f442508940c001cb03dafba"
+}

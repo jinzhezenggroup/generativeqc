@@ -35,7 +35,8 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     rsh_end = source.index("cudaError_t enqueue_generated_coulomb(", rsh_begin)
     rsh_body = source[rsh_begin:rsh_end]
     assert rsh_body.count("launch_bounded_shell_rsh_derivatives(") == 1
-    assert "launch_bounded_shell_range_exchange_derivative(" not in rsh_body
+    assert rsh_body.count("launch_bounded_shell_range_exchange_derivative(") == 1
+    assert "if (omega == 0.3)" in rsh_body
     assert "for (unsigned source" not in rsh_body
     assert "direct_bounded_fallback.hpp" not in source
     assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer
@@ -48,6 +49,26 @@ def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
     assert "charge(product(atoms, 9), sizeof(double))" in owner
     assert "plan->force = doubles(product(atoms, 9))" in owner
     assert "add(atoms, 9 * sizeof(double))" in capacity
+
+
+def test_full_range_derivative_shares_one_queue_and_download() -> None:
+    """Work reduction is source reuse, not removal of an observable component."""
+    source = _source("src/scf/cuda/direct_coulomb.cpp")
+    body = source.split(
+        "cudaError_t execute_generated_full_range_energy_derivatives(", 1
+    )[1].split("cudaError_t execute_generated_rsh_energy_derivatives(", 1)[0]
+    assert "std::vector<double> result(2U * coordinates)" in body
+    assert body.count("launch_bounded_shell_energy_derivative(") == 1
+    assert body.count("cudaMemcpyAsync(") == 1
+    assert "for (unsigned source" not in body
+    dispatcher = _source("src/scf/cuda/direct_bounded_fallback.cu")
+    assert "DirectRangeOperator::FullSources" in dispatcher
+    assert (
+        "contract_bounded_direct_force_subtile_scaled<Unrestricted, true>" in dispatcher
+    )
+    contraction = _source("src/scf/cuda/direct_force_quartet.cuh")
+    assert "if (coefficient == 0.0 && exchange_weight == 0.0) return;" in contraction
+    assert "SeparateSources ? 2U : 1U" in contraction
 
 
 def test_retained_direct_plan_prepares_shell_derivative_lease() -> None:
@@ -183,7 +204,12 @@ def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     assert "launch_bounded_shell_range_exchange_source(" in owner
     assert "p.force_cursor, range," in owner
     assert "p.force_cursor, false, true" in owner
-    schedule = direct[direct.index("info.schedule = plan->generated_exchange") :]
+    # The diagnostic expression can wrap after '=' when another fallback label
+    # is added. Check its policy independently of clang-format's line wrapping.
+    normalized = " ".join(direct.split())
+    schedule = normalized[
+        normalized.index("info.schedule = plan->generated_exchange") :
+    ]
     schedule = schedule[: schedule.index("} else if (plan->generated_coulomb)")]
     assert "direct_jk_bounded_value_enabled(*plan)" in schedule
     assert "bounded_value_capability" not in schedule

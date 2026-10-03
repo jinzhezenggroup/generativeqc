@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import os
 import typing
+from contextlib import nullcontext
 from dataclasses import replace
 from functools import cache
 from typing import TYPE_CHECKING
@@ -259,7 +260,6 @@ class Calculator:
             GeometricCounterpoisePrimitive,
             MethodIR,
             SemilocalXCPrimitive,
-            resolve_bulk_ks,
             resolve_method,
             validate_basis_snapshot,
         )
@@ -271,6 +271,10 @@ class Calculator:
             canonical_method = method.lower()
             automatic = parse_automatic_libxc_selector(method)
             if automatic is not None:
+                # Native selectors do not consume the bulk-XC resolver or its
+                # compiler evidence; load that path only for an automatic KS request.
+                from generativeqc_compiler.method import resolve_bulk_ks
+
                 name, spin = automatic
                 automatic_libxc_public_name = canonical_method
                 automatic_libxc_resolution = resolve_bulk_ks(
@@ -792,6 +796,13 @@ class Calculator:
         ):
             raise ValueError("canonical correlated methods require precision='fp64'")
         self._library = _native.load_library(device=device, device_id=self._device_id)
+        from ._context_owner import ContextOwner
+
+        self._singlepoint_context = (
+            ContextOwner(self._library)
+            if self._method == _native.METHOD_GFN2_XTB
+            else None
+        )
         self._ks_options_version = 0
         if self._ks_options is not None:
             query = self._library.generativeqc_ks_options_version
@@ -2130,7 +2141,35 @@ class Calculator:
         default; request ``properties=("energy", "forces")`` explicitly for the
         qualified force domain. Other methods request their supported properties,
         except density-fitted MP2, which also defaults to energy only.
+
+        GFN2 retains one native runtime per calculator while starting fresh SCC
+        for every call, including changed geometries. Use ``clear_cache()`` to
+        release its resident storage; later calls rebuild it automatically.
         """
+        owner = self._singlepoint_context
+        with owner.lock if owner is not None else nullcontext():
+            return self._singlepoint(
+                atoms, charge=charge, multiplicity=multiplicity, properties=properties
+            )
+
+    def clear_cache(self) -> None:
+        """Release retained singlepoint workspaces after in-flight calls finish.
+
+        The calculator remains usable. This is also done when the calculator is
+        collected. Prepared batches returned separately retain their own owners.
+        """
+        if self._singlepoint_context is not None:
+            self._singlepoint_context.clear()
+
+    def _singlepoint(
+        self,
+        atoms: Iterable[Atom | tuple[str | int, Sequence[float]]],
+        *,
+        charge: int = 0,
+        multiplicity: int = 1,
+        properties: Iterable[str] | None = None,
+    ) -> Result:
+        """Execute under the retained context's transaction lock, when present."""
         if properties is None:
             properties = (
                 frozenset({"energy"})
@@ -2213,13 +2252,16 @@ class Calculator:
                     ks_transport_diagnostic=batch.ks_transport_diagnostics[0],
                     dispersion=item.dispersion,
                 )
-        context = ctypes.c_void_p()
-        _native.check(
-            self._library,
-            self._library.generativeqc_context_create(
-                ctypes.byref(self._context_descriptor()), ctypes.byref(context)
-            ),
-        )
+        if self._singlepoint_context is not None:
+            context = self._singlepoint_context.get(self._context_descriptor())
+        else:
+            context = ctypes.c_void_p()
+            _native.check(
+                self._library,
+                self._library.generativeqc_context_create(
+                    ctypes.byref(self._context_descriptor()), ctypes.byref(context)
+                ),
+            )
         system = ctypes.c_void_p()
         auxiliary_system = ctypes.c_void_p()
         calculation = ctypes.c_void_p()
@@ -2403,6 +2445,7 @@ class Calculator:
                 self._library.generativeqc_system_destroy(system)
             if auxiliary_system.value:
                 self._library.generativeqc_system_destroy(auxiliary_system)
-            self._library.generativeqc_context_destroy(context)
+            if self._singlepoint_context is None:
+                self._library.generativeqc_context_destroy(context)
             if ledger is not None:
                 ledger.close()
