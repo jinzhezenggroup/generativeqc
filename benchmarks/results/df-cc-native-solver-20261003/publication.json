@@ -1,0 +1,62 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All 12 retained native supplied-Hamiltonian DF solves pass dense/oracle gates, complete auxiliary counts, admission checks and unfiltered small-solve memcheck. No complete native molecular DF CCSD(T) endpoint is claimed.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 4769,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "63ef3ae28d03ed0b06771d4a3e64adea8092cb0d677bb2698f2d22f54abd3146"
+    },
+    {
+      "bytes": 3766,
+      "path": "qualification.json.gz",
+      "role": "summary",
+      "sha256": "e45ba3e3702beb5aac50fd107944ea9046ea38199f4f2e7a22628b324959b4b0"
+    },
+    {
+      "bytes": 19267,
+      "path": "records.json.gz",
+      "role": "samples",
+      "sha256": "9dbb9172da0750bc182978636a875134915fe20dac8bb83891fc4e316fe7b5bd"
+    },
+    {
+      "bytes": 5565,
+      "path": "sanitizer.json.gz",
+      "role": "summary",
+      "sha256": "85a74e60fbbd0e90663adfc737d60cf7d7b47b85ada98b29047c3c97902b4857"
+    },
+    {
+      "bytes": 15346,
+      "path": "source.patch.gz",
+      "role": "source-patch",
+      "sha256": "1a8839ed7c7bfe6c1a17a13bc436ca386bd0af757e012bd469ea90a7385d8cce"
+    },
+    {
+      "bytes": 1097,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "b825f1d08990d33db8669a5875a15e0b9420ec258aac0d51b2e6daf817f1ca50"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/python/test_df_cc_native_solver.py",
+      "tests/python/test_df_cc_native_codegen.py"
+    ],
+    "instructions": "Apply gzip -dc source.patch.gz | git apply to the exact parent. Set PYTHONPATH=python:., CUDA12.9.86 on PATH and checkout-root CCACHE_BASEDIR; use ccache for the separate objects. Run CUDA tests only with GENERATIVEQC_DF_CC_CUDA_TEST=1 inside finite Slurm main gpu:5090:1 allocation, preserving CUDA_VISIBLE_DEVICES. qualification.json.gz contains exact record-generation source and complete test logs; point its final host/GPU binary paths to the pytest outputs. sanitizer.json.gz includes complete unfiltered logs and base64-encoded binary stdin. The probe input header is seven uint64 values followed by FP64 arrays as documented in tests; no reference library is imported by a native solver. Molecular exact-pair factorizations are solver oracles, not DF fitting accuracy claims. Hundreds-AO experiments are excluded from this acceptance."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "2ccb2a437bb1e850acc858c660082f468b895cfa"
+  }
+}

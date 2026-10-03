@@ -1,0 +1,35 @@
+{
+  "binaries": {
+    "cpu": "68ab6fe0a5b45f139398e69ab81d2c35f1dfb2804074b6ab47f7a995a4892c83",
+    "cuda": "c351254ea868d0aa29762ca4ccc59861ecfab1e112497ae98009d9aee3a8bcb8"
+  },
+  "cases": 12,
+  "excluded": "The n2 hundreds-AO experiments are ongoing and are not included in this acceptance decision.",
+  "gates": {
+    "dense_amplitudes_absolute": 2e-11,
+    "dense_energy_absolute": 2e-12,
+    "oracle_energy_absolute": 3e-10,
+    "physical_residual_maximum": 1e-10
+  },
+  "hardware": {
+    "cuda_visible_devices": "0",
+    "gpu": "NVIDIA GeForce RTX 5090, GPU-8e9c9e1a-e183-258c-0b3a-03a5ddebb2f8, 580.95.05",
+    "host": "node3",
+    "slurm_job_id": "12120"
+  },
+  "sanitizer": {
+    "complete_small_solves": 2,
+    "errors": 0,
+    "filters": null,
+    "slurm_job_id": "12120"
+  },
+  "scope": "Native supplied-Hamiltonian RCCSD solver only; no native molecular DF CCSD(T) source/triples/force or performance qualification",
+  "tests": {
+    "cuda_deselected": 29,
+    "cuda_passed": 25,
+    "cuda_skipped": 5,
+    "evidence_passed": 61,
+    "host_passed": 43,
+    "host_skipped": 30
+  }
+}
