@@ -14,8 +14,11 @@ import pytest
 
 
 @pytest.mark.parametrize("spin", ("unpolarized", "polarized"))
+@pytest.mark.parametrize(
+    "ao_route", ("host-full", "resident-full", "resident-subset", "resident-empty")
+)
 def test_cuda_b97m_geometry_matches_independent_energy_differences(
-    tmp_path: Path, spin: str
+    tmp_path: Path, spin: str, ao_route: str
 ) -> None:
     """Exercise actual tau/gradient pullbacks for fixed positive density matrices.
 
@@ -33,6 +36,7 @@ def test_cuda_b97m_geometry_matches_independent_energy_differences(
     libxc = pytest.importorskip("pyscf.dft.libxc")
     if libxc.__version__ != "7.0.0":
         pytest.skip("independent oracle is pinned to Libxc 7.0.0")
+    import cupy as cp
     from generativeqc._stationary_cuda import _CudaSources
     from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
     from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -90,6 +94,23 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         density = np.ascontiguousarray(
             0.15 * matrices @ matrices.transpose(0, 2, 1) + 0.1 * np.eye(basis.nao)
         )
+        # A noncontiguous map spans both centers and retains cross-center D[I,I]
+        # entries. The independent oracle zeros omitted rows/columns, while the
+        # CUDA owner receives the original dense matrix and must gather itself.
+        selected = (
+            np.array((0, 2, basis.nao - 1), dtype=np.uintp)
+            if ao_route == "resident-subset"
+            else np.empty(0, dtype=np.uintp)
+            if ao_route == "resident-empty"
+            else None
+        )
+        oracle_density = density.copy()
+        if selected is not None:
+            omitted = np.ones(basis.nao, dtype=bool)
+            omitted[selected] = False
+            oracle_density[:, omitted, :] = 0
+            oracle_density[:, :, omitted] = 0
+        device_points = cp.asarray(points) if ao_route.startswith("resident") else None
         with (
             _CudaSources(
                 basis,
@@ -106,13 +127,25 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 compile_grid(compiler, tmp_path),
                 order=2,
                 tile_points=len(points),
-                active_ao_capacity=basis.nao,
+                active_ao_capacity=basis.nao
+                if selected is None
+                else max(1, len(selected)),
                 ingredients=("rho", "gradient", "tau"),
             ) as grid,
         ):
             grid.set_density(density[0] if plan.spin_blocks == 1 else density)
             sources.reset(1e-12, density, np.zeros_like(density))
-            with grid.xc_task(points, np.arange(basis.nao), "WB97M-V") as task:
+            lease = (
+                grid.feature_task_device_points(
+                    device_points.data.ptr,
+                    len(points),
+                    selected,
+                    ("rho", "gradient", "tau"),
+                )
+                if device_points is not None
+                else grid.xc_task(points, None, "WB97M-V")
+            )
+            with lease as task:
                 sources.geometry(
                     task, owners, weights, np.zeros_like(weights), functional=4
                 )
@@ -130,7 +163,7 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
         rho = np.array(
             [
                 numint.eval_rho(mol, ao, dm, xctype="MGGA", with_lapl=False)
-                for dm in density
+                for dm in oracle_density
             ]
         )
         exc = libxc.eval_xc(

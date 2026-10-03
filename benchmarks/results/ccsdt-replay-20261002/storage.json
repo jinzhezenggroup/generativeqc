@@ -1,0 +1,26 @@
+{
+  "records": [
+    {
+      "encoding": "gzip",
+      "original_bytes": 116960,
+      "original_git_blob": "9dfa3f7751996f548eb76966c5c376a775131e74",
+      "original_path": "cpu-summary.json",
+      "original_sha256": "63d3cfd81f3f2d8000cbe09b0ae2ad1b287cd50b8cd6f7ab0142b838149f7671",
+      "stored_bytes": 9490,
+      "stored_path": "cpu-summary.json.gz",
+      "stored_sha256": "b81c0848b05a531edbf3ffa2de49491e87c0ec51163ac2bdfb08cf37567a3219"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 52624,
+      "original_git_blob": "b946fb71b505be061afa328b84d0fc0b512718f5",
+      "original_path": "cuda-summary.json",
+      "original_sha256": "dfd56ed298447e0724e977a87cabd1ebb6cd5c5598f9c37de1f1f1a4f7172b30",
+      "stored_bytes": 7038,
+      "stored_path": "cuda-summary.json.gz",
+      "stored_sha256": "73d12e39757ed957e2447e52960588234c8dd08c46912b158b07bf1b388f89ca"
+    }
+  ],
+  "schema": "generativeqc.cc-evidence-storage.v1",
+  "storage_source_revision": "9e9b938239d31564d6f92e9b99b922aee0dbb1cc"
+}

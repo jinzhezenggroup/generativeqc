@@ -57,6 +57,14 @@ void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::in
                                  const std::array<std::size_t, 4>& count, std::size_t elements,
                                  double* eri);
 
+/** Materialize one validated system's complete public-AO ERI tensor.
+ * The caller owns an nbf^4 output and its stream. No cache is retained here;
+ * partial AO tiles must use the independent rectangular tile producer.
+ * The implementation shares the resident producer's compiler-owned schedule.
+ */
+void launch_build_eri_system_orbits(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
+                                    std::size_t elements, double* eri);
+
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, DeviceBatch batch, double* bounds,
@@ -113,7 +121,8 @@ void launch_canonical_rsh_derivative_kernel(cudaStream_t stream, DeviceBatch bat
                                             std::uint64_t* work_count);
 
 /** Provider-facing shell derivative seam. Queue/numerical ownership remains in
- * the Direct consumer layer; host source owners borrow only this launch ABI. */
+ * the Direct consumer layer; host source owners borrow only this launch ABI.
+ * Output owns two total_atoms*3 channels, weighted Coulomb then exchange. */
 void launch_bounded_shell_energy_derivative(
     bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell_pair_bounds,

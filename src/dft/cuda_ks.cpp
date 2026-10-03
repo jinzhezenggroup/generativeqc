@@ -695,8 +695,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
       }
     }
     if (device_nonlocal) {
+      // Both ordinary and graph replays apply MolecularV1's domain first.
+      // Its negative-zero weight marks a screened row whose energy and AO
+      // potential are discarded. Preserve active positive-zero/signed weights
+      // while avoiding that row's otherwise unnecessary partner traversal.
       nonlocal_layout =
-          nlc::vv10_cuda_device_layout(xc_layout.npoint, xc_layout.tile_points, true, false);
+          nlc::vv10_cuda_device_layout(xc_layout.npoint, xc_layout.tile_points, true, false, true);
       nonlocal_arena_bytes = partition_nonlocal(nullptr);
       if (nonlocal_arena_bytes > nonlocal_correlation->resources().device_workspace_bytes)
         throw std::invalid_argument(

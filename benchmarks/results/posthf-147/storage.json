@@ -1,0 +1,21 @@
+{
+  "schema": "generativeqc.posthf-147-storage.v1",
+  "source_revision": "9041026afcc60209e26f8cd4fce1cb02c0c55cfb",
+  "scope": "Exact original evidence bytes; storage changes do not requalify measurements. Historical manifest hashes continue to identify original decompressed members.",
+  "original_manifest": {
+    "path": "manifest.json",
+    "bytes": 1981,
+    "sha256": "b128bc93cf41c179aa8c8a285b51be5bb87a6bd9788e5033446c177de9aee0d4"
+  },
+  "records": [
+    {
+      "original_path": "evidence.json",
+      "stored_path": "evidence.json.gz",
+      "encoding": "gzip",
+      "original_bytes": 291958,
+      "original_sha256": "6f7ad361e827ce83df319a0a21f957dd7d9d277571e4d5212b90af466a37591f",
+      "stored_bytes": 24556,
+      "stored_sha256": "dcd4d68e4b5989ffc31177e2de8eefb3c909903cc5cebbd12da96cf0634eb2a8"
+    }
+  ]
+}
