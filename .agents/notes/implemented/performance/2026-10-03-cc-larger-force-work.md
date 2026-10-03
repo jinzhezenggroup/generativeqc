@@ -77,7 +77,7 @@ another phase's larger peak.
   memcheck use finite Slurm allocations. Unfinished or failed 56-AO experiments
   are not evidence for the public 28-AO boundary.
 
-The [retained complete-endpoint comparison](../../../../benchmarks/results/cc-large-force-20261003/summary.json)
+The [retained complete-endpoint comparison](../../../../benchmarks/results/cc-large-force-20261003/summary.json.gz)
 contains all cold, twice-warm and changed-geometry outputs. The experimental
 comparator raises the old AO guard and allows raw tile widening only under its
 prior peak; it retains ordered derivatives. It is not an old supported public
@@ -136,3 +136,7 @@ qualification only with independent forces, finite differences, resource tests
 and complete endpoints. Further CUDA speedups should measure the retained MO
 provider and primitive submission/response work instead of assuming that fewer
 derivative quartets dominate every backend.
+
+## Lossless storage (2026-10-03)
+
+The retained records now use deterministic gzip without changing their original bytes, scientific values, failures or measured identities. [cc-large-force-20261003/storage.json](../../../../benchmarks/results/cc-large-force-20261003/storage.json) pins the original Git blob, original/stored SHA-256 and byte counts. The storage revision identifies the accepted source of these bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json`, or decode with `gzip -cd FILE.json.gz`. Decode any `experimental-comparator.patch.gz` before applying the original patch. Historical Git objects remain available; no new experiment or performance claim is added.
