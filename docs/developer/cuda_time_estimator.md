@@ -3,7 +3,9 @@
 `generativeqc_compiler.common.cuda_time_estimator` turns compiler-visible work
 counts into an engineering time estimate using **caller-supplied measured rates**.
 It is an offline tool: it does not import the runtime, compile code, or probe CUDA.
-It does not select production defaults. No validated GPU calibration is shipped.
+It does not select production defaults. A measured
+[RTX 5090 FP64/streaming profile](../../benchmarks/results/cuda-timing-rtx5090-20261003/calibration.json)
+is available for explicit use within its recorded workload and launch regime.
 
 The existing `common.cuda_cost_model` and `tools/analyze_cuda_cost.py` screening
 reports keep their relative, non-timing contract. Timing is an optional layer.
@@ -97,6 +99,62 @@ parallelism basis/scale, component times, engineering band, and diagnostics.
 A timing report rejects multi-kernel PTXAS logs: resource maxima across different
 kernels are only useful for screening. Headerless single-kernel logs retain an
 explicit unverified-architecture diagnostic.
+
+## Collect and reproduce calibration
+
+`tools/calibrate_cuda_time.py` builds a standalone CUDA probe with `ccache` and
+fits achieved rates from actual synchronized batch wall time. On the local RTX
+5090 host, run collection through Slurm, preserving its device visibility:
+
+```bash
+srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
+  --time=00:10:00 bash -lc 'PYTHONPATH=python python tools/calibrate_cuda_time.py \
+    --nvcc /group/software/cuda-12.9.1/bin/nvcc --arch sm_120 --samples 9 \
+    --output .artifacts/cuda-timing-calibration'
+```
+
+The probe measures empty launches, eight independent FP64 FMA chains, and
+streaming copies with input/output arrays each at least four times L2 capacity.
+It varies grid size from a quarter of the SM count to eight blocks per SM.
+Separate held-out grid sizes, iteration counts, array sizes, launch counts, and
+a mixed FMA/streaming kernel never participate in fitting. A host `std::fma`
+oracle checks 17 spread indices per case with a `2e-12` absolute-error gate.
+Calibration requires complete, spill-free PTXAS evidence.
+
+All raw samples are retained. The model uses median synchronized batch wall
+time; CUDA event samples are retained separately and are not substituted for
+wall time. The timed interval includes host submission, event recording, and
+final event synchronization, and excludes allocation, initialization, transfers,
+warmup, and numerical validation. This is a warm kernel-batch calibration, not
+an isolated CUDA-event latency or a chemical endpoint measurement.
+
+Training empty-launch batches determine launch overhead. A fixed 0.001 grid
+search chooses a common occupancy saturation threshold and geometric-mean
+compute/memory rates by minimizing equal-weight family log error. The engineering
+band is the maximum training residual relative to the prediction, rounded up to
+0.05 with a minimum of 0.10. Held-out data do not change these parameters.
+
+Qualification requires median/P95/maximum absolute relative prediction error
+at most 20%/35%/50%, both overall and for each held-out family. Band coverage is
+reported separately, without a confidence claim. Failed gates retain their
+reports and cause a nonzero process exit. These gates qualify this probe domain;
+they do not qualify register-pressure, spill-heavy, cache-resident, tensor-core,
+other-precision, concurrent-stream, or complete chemistry workloads.
+
+The retained [measurement and qualification bundle](../../benchmarks/results/cuda-timing-rtx5090-20261003/README.md)
+contains source/compiler/binary hashes, PTXAS resources, Slurm allocation identity,
+device clock/power snapshots, all work counts, raw wall/event samples, and scored
+holdouts. It can be refitted on a CPU without CUDA or Slurm:
+
+```bash
+PYTHONPATH=python python tools/calibrate_cuda_time.py \
+  --measurement benchmarks/results/cuda-timing-rtx5090-20261003/measurement.json \
+  --output .artifacts/cuda-timing-replay
+```
+
+Use the retained `calibration.json` with the offline CLI's `--calibration`
+option. Selection remains explicit; architecture and SM count alone do not
+establish that a different workload or software/clock regime is compatible.
 
 ## Endpoint boundary and qualification
 

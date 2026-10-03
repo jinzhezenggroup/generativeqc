@@ -131,10 +131,11 @@ history.
 ## Performance qualification checklist
 
 The [experimental CUDA kernel timing tool](../developer/cuda_time_estimator.md)
-accepts explicit achieved-rate calibration for offline estimates. It ships no
-validated device calibration, and its engineering uncertainty band is not a
-statistical confidence interval. Kernel estimates do not replace the complete
-endpoint and numerical acceptance gates below.
+accepts explicit achieved-rate calibration for offline estimates. Its retained
+RTX 5090 calibration is qualified only for the recorded FP64/streaming probe
+domain, and its engineering uncertainty band is not a statistical confidence
+interval. Kernel estimates do not replace the complete endpoint and numerical
+acceptance gates below.
 
 The [RCCSD(T) CPU response bundle qualification](ccsdt_cpu_bundle_qualification.md)
 records the complete force-endpoint comparator and its cold/warm artifact and

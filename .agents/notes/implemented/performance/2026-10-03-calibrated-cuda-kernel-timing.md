@@ -92,3 +92,11 @@ This narrows the earlier rejection of any absolute timing layer in the
 caller-calibrated experiments are now supported; unvalidated production timing
 claims and promotion remain rejected. Current usage is documented in
 [Experimental CUDA kernel timing](../../../../docs/developer/cuda_time_estimator.md).
+
+## Follow-up: measured RTX 5090 profile
+
+The [RTX 5090 calibration decision](2026-10-03-rtx5090-cuda-timing-calibration.md)
+adds actual Slurm-scheduled measurements, isolated training/holdout qualification,
+and an explicitly selectable FP64/streaming profile. The original absence of
+measured calibration above describes this decision's initial implementation;
+the kernel/endpoint and production-promotion boundaries remain unchanged.
