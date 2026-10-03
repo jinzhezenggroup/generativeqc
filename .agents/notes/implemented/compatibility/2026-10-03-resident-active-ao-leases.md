@@ -85,3 +85,39 @@ diagnostic budget) remain separate from successful interface-test evidence.
 Use actual per-tile maps in complete WB97M calls, charge discovery and retained
 maps, verify empty-panel geometry and independent total forces, then extend the
 shared SCF grid path. Avoid adding another native AO or density-gather algebra.
+
+## Fresh composition qualification
+
+Slurm job 5541 completed successfully on the fresh `fb53bb548` + WB97M stack +
+interface composition. Eleven interface/independent geometry tests passed in
+158.36 s, including both spin modes with empty selected geometry panels. Seven
+complete independent energy/force and geometry-rebuild/stale-state isolation
+checks passed in 204.78 s, with no skips. The library SHA-256 is
+`0c5b5f67d14c77352c903e8e0b037790ed2561165b96e10a94505c3d490d8f3b`.
+Its source identity
+`b359f13e392da960b1d456d6b7a269f5f4ee9fb256cf82638b7425d8737c6f2b`
+was independently recomputed from all 1,349 manifest inputs at the committed
+composition and matches the actually loaded library. All 442 compiler commands
+were verified to invoke ccache; before/after statistics are retained.
+
+This additional evidence qualifies the explicit-map interface and unchanged
+complete endpoint composition. The separate fixed-geometry threshold experiment
+is not part of this implementation and remains unpromoted.
+
+## Capacity-report source binding review
+
+Review identified that the legacy capacity report still fingerprinted the old
+full-AO admission expressions in `stationary_geometry_external` and
+`stationary_geometry_enqueue`. Re-auditing both complete bodies confirmed that
+only AO-map admission changed: allocation, geometry lane count, reductions,
+stream lifetime, complete point count and `G*A*(A-1)` pair counters are unchanged.
+The public caller still plans `active_ao_capacity=n`; the census continues to
+charge full global AO capacity and makes no screening or empty-tile work claim.
+
+The report now binds `valid_geometry_ao_map` itself, in addition to the two
+reviewed caller bodies. This prevents later weakening of the out-of-line
+predicate from bypassing an unchanged caller fingerprint. New fail-closed
+controls mutate global AO equality, active capacity and the required local map;
+all are rejected before a report is issued. Existing allocation, execution,
+Becke work, tile and counter negative controls remain intact. All 130 capacity
+report tests pass locally; no numerical threshold or resource limit changed.
