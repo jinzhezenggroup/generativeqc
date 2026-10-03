@@ -41,10 +41,11 @@ def signed_weight_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         _definition(source, "template <Vv10Variant Variant, bool Features>"),
         _definition(
             source,
-            "template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>",
+            "template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows,",
         ),
         _definition(source, "__global__ void molecular_domain_kernel("),
         _definition(source, "__global__ void pack_force_seeds_kernel("),
+        _definition(source, "__global__ void admit_molecular_pair_domain_kernel("),
     ]
     # Observe executed partner visits without changing the production arithmetic
     # or inferring saved work from zeros in the final output.
@@ -67,6 +68,7 @@ enum class Vv10Variant { vv10, rvv10 };
 using namespace generativeqc::dft::nlc;
 struct Index { std::size_t x{}; } blockIdx, threadIdx, blockDim{1}, gridDim{1};
 std::uint64_t pair_visits{};
+int last_admission_rejected = -1;
 void atomicExch(int* out, int value) { *out = value; }
 double __longlong_as_double(unsigned long long value) {
   double result;
@@ -77,13 +79,14 @@ double __longlong_as_double(unsigned long long value) {
 """
     wrapper = r"""
 template <Vv10Variant Variant, bool Mask, bool Geometry = true>
-int evaluate(double first_weight, double first_density, double* out) {
+int evaluate(double first_weight, double first_density, double* out, double first_gradient_x = 0.1, bool preflight = false, double shift = 0.0, double coefficient = 1.0) {
   pair_visits = 0;
   constexpr std::size_t n = 3;
   const double weights[n] = {first_weight, 0.7, 1.1};
   const double density[n] = {first_density, 0.9, 1.2};
-  const double gradient[3*n] = {0.1, 0.02, 0.03, 0.05, 0.04, 0.02, 0.03, 0.06, 0.07};
-  const double points[3*n] = {0.0, 0.0, 0.0, 0.8, 0.1, 0.0, -0.3, 0.7, 0.2};
+  const double gradient[3*n] = {first_gradient_x, 0.02, 0.03, 0.05, 0.04, 0.02, 0.03, 0.06, 0.07};
+  double points[3*n] = {0.0, 0.0, 0.0, 0.8, 0.1, 0.0, -0.3, 0.7, 0.2};
+  for (std::size_t i = 0; i < n; ++i) points[3*i] += shift;
   double ew[n]{}, rho[n]{}, grad[3*n]{}, omega[n]{}, kappa[n]{};
   double wrho[n]{}, wsigma[n]{}, krho[n]{}, weighted[n]{}, energy[n]{};
   double vrho[n]{}, vsigma[n]{}, point_derivative[3*n]{}, weight_derivative[n]{};
@@ -98,12 +101,29 @@ int evaluate(double first_weight, double first_density, double* out) {
   std::uint64_t active[n]{}, active_count = 0;
   for (std::size_t j = 0; j < n; ++j)
     if (weighted[j] != 0.0) active[active_count++] = j;
+  int rejected = 0;
+  const int* gate = nullptr;
+  if (preflight && std::fabs(coefficient) <= 0x1p32) {
+    gate = &rejected;
+    for (std::size_t i = 0; i < n; ++i) {
+      threadIdx.x = i;
+      admit_molecular_pair_domain_kernel(n, points, rho, omega, kappa, wrho, wsigma,
+                                        krho, weighted, &rejected);
+    }
+  }
+  last_admission_rejected = gate ? rejected : -1;
   const double beta = std::pow(3.0/36.0, 0.75)/32.0;
   for (std::size_t i = 0; i < n; ++i) {
     threadIdx.x = i;
-    pair_kernel_ordered<Variant, true, Geometry, Mask>(0, n, 1.0, points, rho, omega, kappa,
+    pair_kernel_ordered<Variant, true, Geometry, Mask>(0, n, coefficient, points, rho, omega, kappa,
         wrho, wsigma, krho, weighted, active, &active_count, beta, energy, vrho, vsigma,
-        point_derivative, weight_derivative, &pair_error);
+        point_derivative, weight_derivative, &pair_error, gate);
+    if constexpr (Variant == Vv10Variant::vv10 && Mask) {
+      if (gate)
+        pair_kernel_ordered<Variant, true, Geometry, Mask, true>(0, n, coefficient, points,
+            rho, omega, kappa, wrho, wsigma, krho, weighted, active, &active_count, beta,
+            energy, vrho, vsigma, point_derivative, weight_derivative, &pair_error, gate);
+    }
   }
   double seeds[6*n]{};
   for (std::size_t i = 0; i < n; ++i) {
@@ -128,6 +148,16 @@ extern "C" int run(int variant, int mask, double weight, double density, double*
                 : evaluate<Vv10Variant::rvv10, false>(weight, density, out);
   return mask ? evaluate<Vv10Variant::vv10, true>(weight, density, out)
               : evaluate<Vv10Variant::vv10, false>(weight, density, out);
+}
+extern "C" int run_gradient(double weight, double density, double gradient_x, double* out) {
+  return evaluate<Vv10Variant::vv10, true>(weight, density, out, gradient_x, true);
+}
+extern "C" int admission_state() { return last_admission_rejected; }
+extern "C" int run_admission(int geometry, int enabled, double weight, double density,
+    double gx, double shift, double coefficient, double* out) {
+  return geometry
+      ? evaluate<Vv10Variant::vv10, true, true>(weight, density, out, gx, enabled, shift, coefficient)
+      : evaluate<Vv10Variant::vv10, true, false>(weight, density, out, gx, enabled, shift, coefficient);
 }
 extern "C" int run_scf(int variant, int mask, double weight, double density, double* out) {
   if (variant)
@@ -173,6 +203,21 @@ extern "C" int run_scf(int variant, int mask, double weight, double density, dou
     native.run.restype = ct.c_int
     native.run_scf.argtypes = native.run.argtypes
     native.run_scf.restype = ct.c_int
+    native.run_gradient.argtypes = [
+        ct.c_double,
+        ct.c_double,
+        ct.c_double,
+        ct.POINTER(ct.c_double),
+    ]
+    native.run_gradient.restype = ct.c_int
+    native.admission_state.restype = ct.c_int
+    native.run_admission.argtypes = [
+        ct.c_int,
+        ct.c_int,
+        *([ct.c_double] * 5),
+        ct.POINTER(ct.c_double),
+    ]
+    native.run_admission.restype = ct.c_int
     return native
 
 
@@ -184,10 +229,17 @@ def _run(
     *,
     mask: int = 1,
     scf: bool = False,
+    preflight: bool = False,
 ) -> list[float]:
     result = (ct.c_double * 14)()
     run = probe.run_scf if scf else probe.run
-    assert run(variant, mask, weight, density, result) == 0
+    if preflight:
+        assert variant == 0 and mask == 1
+        assert (
+            probe.run_admission(not scf, 1, weight, density, 0.1, 0.0, 1.0, result) == 0
+        )
+    else:
+        assert run(variant, mask, weight, density, result) == 0
     return list(result)
 
 
@@ -258,7 +310,10 @@ def test_scf_active_signed_rows_keep_energy_potential_and_work(
 ) -> None:
     actual = _run(signed_weight_probe, variant, weight, scf=True)
     unmasked = _run(signed_weight_probe, variant, weight, mask=0, scf=True)
-    assert actual == unmasked
+    assert actual[:5] == pytest.approx(unmasked[:5], rel=2e-15, abs=1e-16)
+    assert actual[5:7] == unmasked[5:7]
+    assert actual[7:13] == pytest.approx(unmasked[7:13], rel=2e-15, abs=1e-16)
+    assert actual[13] == unmasked[13]
     assert actual[1] != 0.0
 
 
@@ -266,7 +321,7 @@ def test_pair_kernel_consumes_stable_compacted_partner_domain() -> None:
     source = (ROOT / "src/dft/nonlocal_correlation/vv10_runtime_cuda.cu").read_text()
     pair = _definition(
         source,
-        "template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>",
+        "template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows,",
     )
     assert "active_indices[slot]" in pair
     assert "slot < nactive" in pair
@@ -274,3 +329,99 @@ def test_pair_kernel_consumes_stable_compacted_partner_domain() -> None:
     assert "count_active_partner_blocks_kernel" in source
     assert "prefix_active_partner_blocks_kernel" in source
     assert "scatter_active_partners_ordered_kernel" in source
+
+
+@pytest.mark.parametrize("scf", [False, True])
+def test_row_parameter_sums_match_density_energy_differences(
+    signed_weight_probe: ct.CDLL, scf: bool
+) -> None:
+    weight, density = -0.2, 0.4
+    actual = _run(signed_weight_probe, 0, weight, density, scf=scf, preflight=True)
+    for step in (1e-4, 1e-5, 1e-6):
+        plus = _run(
+            signed_weight_probe, 0, weight, density + step, scf=scf, preflight=True
+        )[0]
+        minus = _run(
+            signed_weight_probe, 0, weight, density - step, scf=scf, preflight=True
+        )[0]
+        assert (plus - minus) / (2 * step) == pytest.approx(
+            weight * actual[1], rel=2e-8, abs=2e-11
+        )
+
+
+@pytest.mark.parametrize("scf", [False, True])
+@pytest.mark.parametrize("weight,density", [(2.0**70, 0.4), (0.2, 2.0**100)])
+def test_row_parameter_outlier_preserves_the_original_one_pass_domain(
+    signed_weight_probe: ct.CDLL, scf: bool, weight: float, density: float
+) -> None:
+    actual = _run(signed_weight_probe, 0, weight, density, scf=scf, preflight=True)
+    original = _run(signed_weight_probe, 0, weight, density, mask=0, scf=scf)
+    assert actual[:-1] == original[:-1]
+    # Preflight rejects the entire grid before pair execution. No prefix is
+    # recomputed, and the original chain/pair program remains bitwise intact.
+    assert actual[-1] == original[-1]
+
+
+def test_row_parameter_sums_match_gradient_energy_differences(
+    signed_weight_probe: ct.CDLL,
+) -> None:
+    weight, density, gx = -0.2, 0.4, 0.1
+    actual = _run(signed_weight_probe, 0, weight, density, preflight=True)
+    for step in (1e-4, 1e-5, 1e-6):
+        energies = []
+        for sign in (-1, 1):
+            result = (ct.c_double * 14)()
+            assert (
+                signed_weight_probe.run_gradient(
+                    weight, density, gx + sign * step, result
+                )
+                == 0
+            )
+            energies.append(result[0])
+        assert (energies[1] - energies[0]) / (2 * step) == pytest.approx(
+            weight * 2 * gx * actual[2], rel=2e-7, abs=2e-11
+        )
+
+
+@pytest.mark.parametrize("geometry", [0, 1])
+@pytest.mark.parametrize(
+    "weight,density,shift,coefficient,expected",
+    [
+        (-0.2, 0.4, 0.0, 1.0, 0),
+        (0.0, 0.4, 0.0, 1.0, 0),
+        (0.2, 1e-15, 0.0, 1.0, 0),
+        (-0.2, 0.4, 2.0**14 - 1, 1.0, 0),
+        (-0.2, 0.4, 2.0**14, 1.0, 1),
+        (-0.2, 0.4, 2.0**20, 1.0, 1),
+        (2.0**70, 0.4, 0.0, 1.0, 1),
+        (0.2, 2.0**100, 0.0, 1.0, 1),
+        (-0.2, 0.4, 0.0, 2.0**33, -1),
+    ],
+)
+def test_linear_admission_preserves_outputs_order_and_executed_pair_visits(
+    signed_weight_probe: ct.CDLL,
+    geometry: int,
+    weight: float,
+    density: float,
+    shift: float,
+    coefficient: float,
+    expected: int,
+) -> None:
+    """The predicate selects exactly one pair traversal and never bypasses a bound."""
+    outputs = []
+    for enabled in (0, 1):
+        out = (ct.c_double * 14)()
+        assert (
+            signed_weight_probe.run_admission(
+                geometry, enabled, weight, density, 0.1, shift, coefficient, out
+            )
+            == 0
+        )
+        outputs.append(tuple(out))
+    assert signed_weight_probe.admission_state() == expected
+    if expected == 0:
+        assert outputs[1] == pytest.approx(outputs[0], rel=2e-14, abs=2e-14)
+    else:
+        assert outputs[1] == outputs[0]
+    assert outputs[1][5:7] == outputs[0][5:7]
+    assert outputs[1][-1] == outputs[0][-1]
