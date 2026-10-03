@@ -1,8 +1,8 @@
-"""Draw the README's cold/warm WB97M-V comparison from retained endpoint reports.
+"""Draw the README's warm WB97M-V comparison from retained endpoint reports.
 
-The figure describes the measured opt-in integration, not the master default.
-Reuse the evidence verifier before plotting so incomplete or inaccurate pairs
-cannot silently become benchmark points. No GPU or native library is needed.
+The figure describes the measured explicitly enabled integration, not the master
+default. Reuse the evidence verifier before plotting so incomplete or inaccurate
+pairs cannot silently become benchmark points. No GPU or native library is needed.
 """
 
 from __future__ import annotations
@@ -48,8 +48,8 @@ def checked_reports(directory: Path) -> tuple[dict, list[dict]]:
 
 
 def draw(directory: Path) -> None:
-    """Keep one-shot cold totals separate from warm medians and observed ranges."""
-    manifest, reports = checked_reports(directory)
+    """Match the HF README figure: warm medians/ranges on the full AO axis."""
+    _, reports = checked_reports(directory)
     plt.rcParams.update(
         {
             "font.family": "DejaVu Sans",
@@ -58,24 +58,18 @@ def draw(directory: Path) -> None:
             "svg.hashsalt": "generativeqc-wb97mv-active-ao",
         }
     )
-    fig, axes = plt.subplots(1, 2, figsize=(10.8, 4.8))
+    fig, ax = plt.subplots(figsize=(8.2, 4.1))
     aos = [row["aos"] for row in reports]
     for key, engine, label, style in (
-        ("native", "GenerativeQC", "GenerativeQC (opt-in candidate)", "o-"),
+        ("native", "GenerativeQC", "GenerativeQC", "o-"),
         ("reference", "GPU4PySCF", "GPU4PySCF 1.8.1", "s--"),
     ):
-        axes[0].plot(
-            aos,
-            [row[f"{key}_complete_cold"]["seconds"] for row in reports],
-            style,
-            color=COLORS[engine],
-            label=label,
-            linewidth=1.8,
-            markersize=4,
-        )
-        values = [[s["seconds"] for s in row[f"{key}_samples"]] for row in reports]
+        values = [
+            [1000 * sample["seconds"] for sample in row[f"{key}_samples"]]
+            for row in reports
+        ]
         medians = [statistics.median(samples) for samples in values]
-        axes[1].errorbar(
+        ax.errorbar(
             aos,
             medians,
             yerr=[
@@ -89,45 +83,21 @@ def draw(directory: Path) -> None:
             linewidth=1.8,
             markersize=4,
         )
-    for ax, title in zip(
-        axes,
-        ("Cold · prepare + first energy / forces", "Warm · energy + analytic forces"),
-        strict=True,
-    ):
-        style_axes(ax, title, aos)
-        ax.set_ylabel("Complete endpoint / s")
-        ax.margins(x=0.10, y=0.15)
-    fig.suptitle("ωB97M-V · spherical def2-SVP · RTX 5090", weight="bold", y=0.98)
+    style_axes(
+        ax,
+        "ωB97M-V · spherical def2-SVP · RTX 5090",
+        [24, 48, 96, 192, 384, 768],
+    )
+    ax.legend(frameon=False, loc="upper left", fontsize=9)
     fig.text(
         0.5,
-        0.91,
-        f"Candidate {manifest['source']['source_commit'][:9]} · matched unpruned grids · lower is better",
+        0.01,
+        "Warm energy + analytic forces · median and min–max of 3 fixed-density "
+        "runs · one SCF iteration each",
         ha="center",
         fontsize=9,
     )
-    fig.legend(
-        *axes[0].get_legend_handles_labels(),
-        loc="upper center",
-        bbox_to_anchor=(0.5, 0.89),
-        ncol=2,
-        frameon=False,
-        fontsize=9,
-    )
-    fig.text(
-        0.5,
-        0.065,
-        "Cold: one run / size, including engine construction and preparation",
-        ha="center",
-        fontsize=9,
-    )
-    fig.text(
-        0.5,
-        0.025,
-        "Warm: median and min–max of 3 fixed-density runs / engine · one SCF iteration each",
-        ha="center",
-        fontsize=9,
-    )
-    fig.tight_layout(rect=(0, 0.11, 1, 0.82))
+    fig.tight_layout(rect=(0, 0.045, 1, 1))
     save_svg(fig, directory / "wb97mv.svg")
     plt.close(fig)
 
