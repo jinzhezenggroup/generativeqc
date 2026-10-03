@@ -2,9 +2,9 @@
 
 #include <cuda_runtime.h>
 
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <weighted_eri.cuh>
 
 #include "integrals/range_moments.hpp"
@@ -18,6 +18,10 @@
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+// A constant keeps the failure marker usable by both NVCC and CuMetal without
+// invoking a host-only nan()/numeric_limits function from a device function.
+inline constexpr double kInvalidDirectForceMoment = std::numeric_limits<double>::quiet_NaN();
 
 /** Bind one low-order class to radial-moment-parametric compiler force roots. */
 template <unsigned ShellClass>
@@ -208,7 +212,7 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
         // ladder must not leave uninitialized moments or silently omit work.
         if (!valid) {
           for (unsigned order = 0; order <= Roots::angular_order + 1U; ++order)
-            geometry.boys[order] = nan("");
+            geometry.boys[order] = kInvalidDirectForceMoment;
         }
       } else {
         boys_values<Roots::angular_order + 1U>(boys_argument, geometry.boys);
