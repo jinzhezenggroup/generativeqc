@@ -80,7 +80,7 @@ struct Owner {
   scf::ScfOptions options;
   CudaKsPrecisionSchedule precision_schedule;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
-  bool device_nonlocal{};
+  bool device_nonlocal{}, incremental_jk{};
   void* nonlocal_correlation{};
   std::optional<scf::ResolvedFockBuild> range_correction;
   unsigned spins{1}, functional{semilocal_family_code(SemilocalFamily::Pbe)}, width{2};
@@ -114,7 +114,7 @@ int main() {
       p.options.semilocal_exchange_scale = 0.73;
       assert(!p.chunk() && !p.replay());
     }
-  for (int excluded = 0; excluded != 7; ++excluded) {
+  for (int excluded = 0; excluded != 8; ++excluded) {
     Owner p;
     if (excluded == 0) p.fitted_coulomb = true;
     if (excluded == 1) {
@@ -133,6 +133,7 @@ int main() {
     if (excluded == 5) p.width = 1;
     if (excluded == 6)
       p.options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::HostUnfused;
+    if (excluded == 7) p.incremental_jk = true;
     assert(!p.chunk());
     if (excluded < 3) assert(!p.replay());
   }
