@@ -80,7 +80,7 @@ Candidate compiled source identity:
 The later ownership/test-only additions do not change that source identity.
 Newer master `cd08953d5` is explicitly **not** the measured build.
 
-[qualification.json](qualification.json) retains all scalar repeats, raw hashes,
+[qualification.json.gz](qualification.json.gz) retains all scalar repeats, raw hashes,
 source/build identities and the matched work/resource controls. Full force
 arrays, outcomes, reference bytes, scripts, build logs, ccache receipts and
 profiler data remain in ignored `.artifacts/` under
@@ -88,6 +88,15 @@ profiler data remain in ignored `.artifacts/` under
 Native libraries remain on node5; no Release, tag or new external archive is
 created. The stale incremental build rejected before measurement and node4
 driver-mismatch attempts remain separately labeled and excluded.
+
+The scalar JSON is gzip-compressed without changing any decompressed bytes.
+This also respects the combined checkout budget after newer master added other
+evidence; it does not remove measurements or alter their acceptance. Inspect it
+with `gzip -cd qualification.json.gz`.
+Decompressed SHA-256:
+`88dc3e898092b85be028c2aa6ab4311c3f2d785e0e07d61a2be5ba3ef0ff134c`.
+Gzip SHA-256:
+`23c3a9dd1b59ffe7c002ea4fe1e3ae7ab32e626ddc6e0c795f9e9a4439b87dda`.
 
 All GPU commands use finite Slurm `main`, `--gres=gpu:5090:1`, preserving
 assigned visibility. Builds use verified ccache, explicit CXX/CUDA launchers,
