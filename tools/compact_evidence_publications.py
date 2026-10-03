@@ -7,6 +7,7 @@ import gzip
 import hashlib
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -20,18 +21,15 @@ ROOT = Path(__file__).resolve().parents[1]
 REVIEW = ROOT / "benchmarks/legacy-evidence-review.json"
 THRESHOLD = 128 << 10
 ROLES = {"evidence", "samples"}
-TARGETS = (
-    "benchmarks/results/density-candidates/gpu/publication.json",
-    "benchmarks/results/xc-contractions/publication.json",
-    "benchmarks/results/spatial-density-sources/publication.json",
-    "benchmarks/results/spatial-tasks/cpu/publication.json",
-    "benchmarks/results/spatial-tasks/cuda/publication.json",
-    "benchmarks/results/density-sources-gpu/publication.json",
-    "benchmarks/results/fock-strategies/cpu/publication.json",
-    "benchmarks/results/fock-strategies/cuda/publication.json",
-    "benchmarks/results/cuda-ownership/one-electron/publication.json",
-    "benchmarks/results/cuda-ownership/df/publication.json",
-)
+
+
+def publication_paths() -> tuple[str, ...]:
+    """Discover only tracked publications, never transient run directories."""
+    output = subprocess.check_output(
+        ["git", "ls-files", "-z", "--", "benchmarks/results/**/publication.json"],
+        cwd=ROOT,
+    )
+    return tuple(sorted(path.decode() for path in output.split(b"\0") if path))
 
 
 def digest(data: bytes) -> str:
@@ -175,68 +173,74 @@ def compact_publication(
     if not candidates:
         return []
 
-    evidence_entry = next(entry for entry in entries if entry["role"] == "evidence")
-    evidence_name = evidence_entry["path"]
-    replacements: dict[str, tuple[str, bytes]] = {}
+    # Resolve all JSON reference dependencies before committing. Sample records
+    # can themselves contain record_parts; updating only the evidence envelope
+    # would leave them pointing at removed plain companions. Resolve leaves
+    # first so every parent binds the final stored child bytes.
+    decoded = {}
+    for name, raw in contents.items():
+        if name.endswith((".json", ".json.gz")):
+            value = json.loads(gzip.decompress(raw) if name.endswith(".gz") else raw)
+            if isinstance(value, dict):
+                decoded[name] = value
+    roles = {entry["path"]: entry["role"] for entry in entries}
+    rewritten: dict[str, tuple[str, bytes]] = {}
+    visiting: set[str] = set()
+
+    def rewrite(old: str) -> tuple[str, bytes]:
+        if old in rewritten:
+            return rewritten[old]
+        if old in visiting:
+            raise ValueError("cyclic publication storage references")
+        visiting.add(old)
+        raw = contents[old]
+        value = decoded.get(old)
+        changed = False
+        if value is not None:
+            references = [entry["path"] for entry in value.get("attachments", [])]
+            references.extend(
+                entry["path"]
+                for part in value.get("record_parts", {}).values()
+                for entry in part
+            )
+            parent = Path(old).parent
+            replacements = {}
+            for raw_reference in references:
+                reference = safe_relative(raw_reference)
+                child = (parent / reference).as_posix()
+                if child not in contents:
+                    continue
+                new_child, data = rewrite(child)
+                if new_child != child or data != contents[child]:
+                    replacements[reference] = (
+                        Path(new_child).relative_to(parent).as_posix(),
+                        data,
+                    )
+            changed = _update_storage_references(value, replacements)
+        data = json_bytes(value) if changed else raw
+        pack_plain = (
+            old.endswith(".json") and roles[old] in ROLES and len(data) >= THRESHOLD
+        )
+        new = old + ".gz" if pack_plain else old
+        if pack_plain or (changed and old.endswith(".json.gz")):
+            data = compressed(data)
+        rewritten[old] = (new, data)
+        visiting.remove(old)
+        return new, data
+
     changes: list[tuple[str, str, bytes]] = []
-
-    # Compress non-evidence members first so evidence storage references can
-    # point at the final compressed identities.
-    for old in candidates:
-        if old == evidence_name:
-            continue
-        source = directory / old
-        data = compressed(contents[old])
-        new = old + ".gz"
-        replacements[old] = (new, data)
-        changes.append(
-            (
-                source.relative_to(ROOT).as_posix(),
-                (directory / new).relative_to(ROOT).as_posix(),
-                data,
-            )
-        )
-
-    evidence_path = directory / evidence_name
-    evidence_is_packed = evidence_name.endswith(".json.gz")
-    evidence_raw = contents[evidence_name]
-    if evidence_is_packed:
-        evidence_raw = gzip.decompress(evidence_raw)
-    evidence = json.loads(evidence_raw)
-    evidence_changed = _update_storage_references(evidence, replacements)
-    evidence_data = json_bytes(evidence) if evidence_changed else evidence_raw
-
-    if evidence_name in candidates or (
-        not evidence_is_packed and len(evidence_data) >= THRESHOLD
-    ):
-        new = evidence_name + ".gz"
-        packed = compressed(evidence_data)
-        replacements[evidence_name] = (new, packed)
-        changes.append(
-            (
-                evidence_path.relative_to(ROOT).as_posix(),
-                (directory / new).relative_to(ROOT).as_posix(),
-                packed,
-            )
-        )
-    elif evidence_changed:
-        if evidence_is_packed:
-            evidence_data = compressed(evidence_data)
-        changes.append(
-            (
-                evidence_path.relative_to(ROOT).as_posix(),
-                evidence_path.relative_to(ROOT).as_posix(),
-                evidence_data,
-            )
-        )
-
     for entry in entries:
         old = entry["path"]
-        if old in replacements:
-            new, data = replacements[old]
+        new, data = rewrite(old)
+        if new != old or data != contents[old]:
+            changes.append(
+                (
+                    (directory / old).relative_to(ROOT).as_posix(),
+                    (directory / new).relative_to(ROOT).as_posix(),
+                    data,
+                )
+            )
             entry.update(path=new, bytes=len(data), sha256=digest(data))
-        elif old == evidence_name and evidence_changed:
-            entry.update(bytes=len(evidence_data), sha256=digest(evidence_data))
 
     # A pre-existing companion is not ours to overwrite, even in check mode.
     for old, new, _data in changes:
@@ -273,9 +277,14 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="fail if the compaction would modify the checkout",
     )
+    parser.add_argument(
+        "--publication",
+        action="append",
+        help="explicit reviewed publication path (repeatable; default: tracked publications)",
+    )
     args = parser.parse_args(argv)
     changes: list[tuple[str, str, bytes]] = []
-    for target in TARGETS:
+    for target in args.publication or publication_paths():
         changes.extend(compact_publication(target, check=args.check))
     if args.check and changes:
         raise SystemExit("retained evidence JSON is not compacted")

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import gzip
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .retention import digest, safe_relative
@@ -75,3 +75,47 @@ def load_record(path: Path) -> dict:
                 raise ValueError("record part escapes the publication directory")
             files[name] = target.read_bytes()
     return decode_record(data, files, path=path)
+
+
+def load_publication_record(
+    directory: Path, *, role: str = "evidence", name: str | None = None
+) -> dict:
+    """Read a hash-bound record using its declared storage path, not a suffix.
+
+    ``name`` optionally names one logical plain JSON member; its gzip companion
+    is accepted only when declared by the publication. Ambiguous roles, duplicate
+    paths, escaping links and stale stored identities fail before decoding.
+    This verifies storage, not the publication's scientific acceptance decision.
+    """
+    directory = Path(directory)
+    inventory = directory / "publication.json"
+    if not inventory.resolve().is_relative_to(directory.resolve()):
+        raise ValueError("publication inventory escapes its directory")
+    manifest = json.loads(inventory.read_bytes())
+    if name is not None:
+        name = safe_relative(name)
+    files: dict[str, bytes] = {}
+    selected = []
+    for entry in manifest["files"]:
+        path = safe_relative(entry["path"])
+        if path in files:
+            raise ValueError("duplicate publication member path")
+        target = directory / path
+        if not target.resolve().is_relative_to(directory.resolve()):
+            raise ValueError("publication member escapes its directory")
+        data = target.read_bytes()
+        if len(data) != entry["bytes"] or digest(data) != entry["sha256"]:
+            raise ValueError("publication member checksum/size mismatch")
+        files[path] = data
+        if entry["role"] == role and (name is None or path in {name, name + ".gz"}):
+            selected.append(path)
+    if len(selected) != 1:
+        raise ValueError("publication record selection must be unique")
+    path = selected[0]
+    prefix = PurePosixPath(path).parent
+    companions = {
+        PurePosixPath(member).relative_to(prefix).as_posix(): data
+        for member, data in files.items()
+        if PurePosixPath(member).is_relative_to(prefix)
+    }
+    return decode_record(files[path], companions, path=path)
