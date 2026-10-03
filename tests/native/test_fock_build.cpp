@@ -1,5 +1,7 @@
 #include <array>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -12,6 +14,7 @@
 #include "scf/fleet.hpp"
 #include "scf/fock_build.hpp"
 #include "scf/mean_field.hpp"
+#include "tensor/cpu_linalg.hpp"
 
 namespace {
 using namespace generativeqc::scf;
@@ -126,6 +129,133 @@ void verify_unrestricted_and_closed_shell_limit() {
   const auto polarized = build_exact_direct_jk(strategy, 2, eri, alpha_density, zero_density);
   require_matrix(polarized.coulomb, std::array{1.03, 0.37, 0.37, 0.33}, "polarized J");
   require_matrix(polarized.exchange_beta, zero_density, "empty beta occupation produced exchange");
+}
+
+// Freeze the output-major scalar reduction that preceded source-major reuse.
+// This is an arithmetic-order regression oracle, not a second mathematical
+// oracle: the independent pinned hand contractions above remain mandatory.
+DirectJkMatrices legacy_output_major_jk(const ResolvedFockBuild& strategy, std::size_t nbf,
+                                        std::span<const double> eri,
+                                        std::span<const double> density,
+                                        std::span<const double> beta) {
+  DirectJkMatrices result;
+  result.nbf = nbf;
+  const std::size_t count = nbf * nbf;
+  const bool unrestricted = strategy.spec.spin == FockSpin::Unrestricted;
+  if (strategy.spec.coulomb.present) result.coulomb.resize(count);
+  if (strategy.spec.exchange.present) {
+    result.exchange_alpha.resize(count);
+    if (unrestricted) result.exchange_beta.resize(count);
+  }
+  if (!strategy.spec.coulomb.present && !strategy.spec.exchange.present) return result;
+  if (strategy.spec.coulomb.present && !strategy.spec.exchange.present && !unrestricted) {
+    generativeqc::tensor::cpu_gemv('N', count, count, eri.data(), density.data(),
+                                   result.coulomb.data());
+    return result;
+  }
+  for (std::size_t i = 0; i < nbf; ++i) {
+    for (std::size_t j = 0; j < nbf; ++j) {
+      double coulomb = 0.0, exchange_alpha = 0.0, exchange_beta = 0.0;
+      for (std::size_t k = 0; k < nbf; ++k) {
+        for (std::size_t l = 0; l < nbf; ++l) {
+          const std::size_t kl = k * nbf + l;
+          const double alpha = density[kl];
+          const double beta_value = unrestricted ? beta[kl] : 0.0;
+          if (strategy.spec.coulomb.present)
+            coulomb += (unrestricted ? alpha + beta_value : alpha) *
+                       eri[((i * nbf + j) * nbf + k) * nbf + l];
+          if (strategy.spec.exchange.present) {
+            const double value = eri[((i * nbf + k) * nbf + j) * nbf + l];
+            exchange_alpha += alpha * value;
+            if (unrestricted) exchange_beta += beta_value * value;
+          }
+        }
+      }
+      const std::size_t ij = i * nbf + j;
+      if (strategy.spec.coulomb.present) result.coulomb[ij] = coulomb;
+      if (strategy.spec.exchange.present) {
+        result.exchange_alpha[ij] = exchange_alpha;
+        if (unrestricted) result.exchange_beta[ij] = exchange_beta;
+      }
+    }
+  }
+  return result;
+}
+
+void require_identical(double actual, double expected, const std::string& message) {
+  require(std::isfinite(actual) &&
+              std::bit_cast<std::uint64_t>(actual) == std::bit_cast<std::uint64_t>(expected),
+          message);
+}
+
+void require_identical_jk(const DirectJkMatrices& actual, const DirectJkMatrices& expected,
+                          const std::string& message) {
+  require(actual.nbf == expected.nbf, message + ": wrong AO dimension");
+  const std::array actual_terms{std::span(actual.coulomb), std::span(actual.exchange_alpha),
+                                std::span(actual.exchange_beta)};
+  const std::array expected_terms{std::span(expected.coulomb), std::span(expected.exchange_alpha),
+                                  std::span(expected.exchange_beta)};
+  for (std::size_t term = 0; term < actual_terms.size(); ++term) {
+    require(actual_terms[term].size() == expected_terms[term].size(),
+            message + ": wrong term shape");
+    for (std::size_t index = 0; index < actual_terms[term].size(); ++index)
+      require_identical(
+          actual_terms[term][index], expected_terms[term][index],
+          message + ": term " + std::to_string(term) + " element " + std::to_string(index));
+  }
+}
+
+void verify_source_major_arithmetic_order() {
+  for (const std::size_t nbf : {1U, 2U, 3U, 5U, 7U, 17U}) {
+    const std::size_t count = nbf * nbf;
+    // Deliberately nonsymmetric ERIs and densities expose index permutations
+    // hidden by physical eightfold symmetry. Wide signed scales test that no
+    // partial sums, reassociation, screening, or density-zero skips were added.
+    auto values = [](std::size_t size, std::size_t phase, int exponent_step) {
+      std::vector<double> result(size);
+      for (std::size_t i = 0; i < size; ++i) {
+        const int numerator = static_cast<int>((37 * i + 13 * phase) % 97) - 48;
+        const int exponent = (static_cast<int>((i + phase) % 9) - 4) * exponent_step;
+        result[i] = std::ldexp(static_cast<double>(numerator) / 49.0, exponent);
+        if ((i + phase) % 19 == 0) result[i] = (i % 2 == 0) ? 0.0 : -0.0;
+      }
+      return result;
+    };
+    for (const int exponent_step : {1, 10}) {
+      const auto eri = values(count * count, 1, exponent_step);
+      const auto derivative = values(count * count, 7, exponent_step);
+      const auto alpha = values(count, 3, exponent_step);
+      const auto beta = values(count, 5, exponent_step);
+      for (const auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
+        const std::span<const double> second =
+            spin == FockSpin::Unrestricted ? std::span(beta) : std::span<const double>();
+        for (const unsigned requested : {0U, 1U, 2U, 3U}) {
+          auto spec = make_hf_fock_spec(spin);
+          spec.coulomb.present = (requested & 1U) != 0;
+          spec.exchange.present = (requested & 2U) != 0;
+          spec.coulomb.coefficient = 0.7;
+          spec.exchange.coefficient = -0.3;
+          const auto strategy = resolve_fock_build(spec, FockBackend::Cpu);
+          const auto expected = legacy_output_major_jk(strategy, nbf, eri, alpha, second);
+          const auto actual = build_exact_direct_jk(strategy, nbf, eri, alpha, second);
+          const std::string label = "source-major n=" + std::to_string(nbf) +
+                                    " spin=" + std::to_string(static_cast<int>(spin)) +
+                                    " terms=" + std::to_string(requested) +
+                                    " scale=" + std::to_string(exponent_step);
+          require_identical_jk(actual, expected, label);
+
+          const auto expected_derivative =
+              legacy_output_major_jk(strategy, nbf, derivative, alpha, second);
+          require_identical_jk(build_exact_direct_jk(strategy, nbf, derivative, alpha, second),
+                               expected_derivative, label + " materialized derivative");
+          require_identical(
+              contract_exact_direct_energy_derivative(strategy, nbf, derivative, alpha, second),
+              contract_fock_energy(strategy, expected_derivative, alpha, second),
+              label + " materialized derivative energy");
+        }
+      }
+    }
+  }
 }
 
 void verify_independent_terms_and_coefficients() {
@@ -644,6 +774,7 @@ int main() {
   try {
     verify_restricted_raw_and_assembly();
     verify_unrestricted_and_closed_shell_limit();
+    verify_source_major_arithmetic_order();
     verify_independent_terms_and_coefficients();
     verify_unrestricted_coefficients_and_capabilities();
     verify_preflight_and_approximation_identity();
