@@ -86,6 +86,18 @@ standalone DFT executable is
 Independent GPU qualification and complete endpoint comparisons are still
 pending at this checkpoint.
 
+The first real-device full DFT run (n2 Slurm 2183) exposed a pre-existing test
+expectation: it subtracted all five doubles per resident grid point from an XC
+arena that owned only four (xyz and partitioned weight). The molecular grid's
+fifth value is the atomic weight, never owned by XC. Correct the exact resource
+expectation without changing the allocation. The same test review also found
+that the mixed-density acceptance loop included B3LYP despite the production
+contract rejecting every functional ID above two. Exercise the existing
+rejection/state-preservation test for both B3LYP and WB97M-V. These two test
+corrections already existed in the larger integration branch; no production
+precision gate is widened here. Keep the failed device receipt and rerun the
+complete standalone test before claiming qualification.
+
 ## Revisit when
 
 If Direct J/K gains a consumer of the legacy resident-PSSS catalog, that consumer
