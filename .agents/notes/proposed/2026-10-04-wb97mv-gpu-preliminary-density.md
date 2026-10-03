@@ -204,6 +204,30 @@ This larger comparison is pending; the private source bridge is still not a
 public CUDA preliminary-SCF or public resource-budget contract. Receipts remain
 under ignored `.artifacts/seed96-master837-20261004/`.
 
+## Completed 48-atom three-way comparison
+
+Slurm 5645 subsequently completes PBE as well. The original full verifier now
+passes all 15 cold/priming/warm pairs, including every source-cost, actual-work,
+convergence and on-GPU reference-XC check. The maximum errors across all three
+variants remain below 1.251e-11 Eh / 6.305e-10 Eh/Bohr. The completed report is
+`matched48-verified.json` in the same ignored evidence directory; it supersedes
+the pending status at the earlier subset checkpoint without changing those
+raw measurements.
+
+PBE complete cold is 750.753985 s against its paired reference's 475.129622 s,
+a 21.81% reduction from the same-allocation unseeded 960.174251 s. Its source
+converges in 25 iterations/25 XC submissions, costing 50.303670 s in full:
+37.426212 s preparation/solve and 12.866928 s export/import, with the remaining
+measured source lifecycle work included. The target takes 15 iterations, as
+with LDA. PBE warm median is 93.186442 s versus reference 103.198634 s.
+
+The roughly two-second PBE/LDA cold difference is small relative to this
+single-run endpoint and does not establish a repeatable provider ranking.
+Continue the already launched 96-atom LDA/control experiment rather than
+expanding both providers based on that difference. Both seeded 48-atom cold
+endpoints remain about 1.58 times the reference; neither establishes cold
+superiority or a public preliminary-density/resource contract.
+
 ## Promotion gates
 
 Require larger and displaced-system complete endpoints before claiming a
