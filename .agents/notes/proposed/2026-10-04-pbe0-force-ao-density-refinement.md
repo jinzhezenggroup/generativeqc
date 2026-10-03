@@ -271,3 +271,31 @@ source integration or from the 93 passing/3 skipped host controls.
 
 - [Shared priority and acceptance contract](https://github.com/jinzhezenggroup/generativeqc/issues/1423#issuecomment-5968957958).
 - [Fresh master results and census](https://github.com/jinzhezenggroup/generativeqc/issues/1423#issuecomment-5971121015).
+
+### Completed follow-up qualification
+
+The b319 and 1db campaigns subsequently complete separately: each retains 168
+native plus 84 fresh-reference endpoints, including H2CO and every repeat in
+both geometries. Each passes all 1008 native/matching-geometry reference pairs.
+The compact follow-up lives in
+`benchmarks/results/pbe0-ao-density-integration-20261004/`; the original
+prototype/master publication remains unchanged. Real KS Fock observations are
+retained only in the new records, never backfilled into older null records.
+
+Integrated 48/96 warm OFF/ON medians are 17.891551/17.078026 s and
+76.512178/73.203162 s. The 96 moved regression, 255.914455 s /12 iterations to
+267.583077 s /13 iterations, remains in the same publication. This ordered
+shared-cache campaign is not an interleaved endpoint-causality experiment.
+Maximum integrated E/F errors are 1.0686563e-10 Eh /8.3142854e-11 Eh/Bohr.
+
+The source-specific n5 job 1414 producer census reproduces the admitted counts
+above. Separately interleaved clean integral-source medians are
+26.676547/23.494703 s. These neither imply a 35% endpoint reduction nor observe
+the missing low-order primitive/root work. The fixed-density input remains a
+local-only limitation; its gzip/xz encodings are about 6.02/3.21 MB, still above
+the existing review budget. No retention cap or release-hosting policy changes.
+
+Master has since advanced to 38fc52352 (#1770). These records are not relabelled
+as that source. The later shared incremental-KS experiment in #1803 is also a
+different source and optimization; its correctness/work/timing gates remain
+independent. Both PRs remain draft without review approval or default promotion.
