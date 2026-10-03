@@ -59,6 +59,7 @@ def test_emitted_cooperative_kernel_routes_tails_and_sticky_failure(
 #include <atomic>
 #include <barrier>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <thread>
 struct Dimension { size_t x{}; };
@@ -72,9 +73,14 @@ int atomicAnd(int* pointer, int value) {
   return std::atomic_ref(*pointer).fetch_and(value);
 }
 std::atomic<size_t> owner_probes{0};
+size_t owner_capacity=0;
+int64_t checked_owner(const int64_t* owners, size_t index) {
+  if(index>=owner_capacity) std::abort();
+  return owners[index];
+}
 int64_t read_owner(const int64_t* owners, size_t index) {
   ++owner_probes;
-  return owners[index];
+  return checked_owner(owners,index);
 }
 """,
     )
@@ -109,6 +115,11 @@ int64_t read_owner(const int64_t* owners, size_t index) {
         )
         + kernels[reduction_end:]
     )
+    kernels = kernels.replace(
+        "ao_atoms[global_ao]", "checked_owner(ao_atoms, global_ao)"
+    ).replace(
+        "ao_atoms[previous_global_ao]", "checked_owner(ao_atoms, previous_global_ao)"
+    )
     source = tmp_path / "kernel.cpp"
     source.write_text(
         prefix
@@ -121,6 +132,7 @@ int main() {
   constexpr size_t na=ATOMS,n=AOS,np=(na>32?5:17),pairs=na*(na-1)/2;
   const std::string layout="LAYOUT";
   const size_t full_aos=layout=="subset"?2*n+3:n;
+  owner_capacity=full_aos;
   constexpr size_t state_count=na<=32?pairs:4*(2*na-5)/2;
   double centers[3*na];
   for(size_t a=0;a<na;++a) {
@@ -222,11 +234,11 @@ int main() {
        scratch.back()!=987654 || storage.front()!=987654 || storage.back()!=987654) return 4;
     if(!points) continue;
     // Invalid input late in a worker never publishes any partial output.
-    for(int invalid=0;invalid<7;++invalid) {
+    for(int invalid=0;invalid<8;++invalid) {
       const auto old_xyz=xyz,old_raw=raw,old_seeds=seeds;
       const auto old_atoms=ao_atoms;
       const auto old_ids=active_ids;
-      if(!n && (invalid==3 || invalid==5 || invalid==6)) continue;
+      if(!n && (invalid==3 || invalid==5 || invalid==6 || invalid==7)) continue;
       if(invalid==0) std::copy(centers,centers+3,xyz.end()-3);
       if(invalid==1) raw.back()=std::numeric_limits<double>::quiet_NaN();
       if(invalid==2) producer_error=1;
@@ -234,6 +246,7 @@ int main() {
       if(invalid==4) { if(!external) continue; seeds[5*(np+7)+points+1]=std::numeric_limits<double>::infinity(); }
       if(invalid==5) ao_atoms[implicit?active_ids.back():n-1]=-1;
       if(invalid==6) { active_ids.back()=full_aos; view.ao_ids=active_ids.data(); }
+      if(invalid==7) { active_ids[n-2]=full_aos; view.ao_ids=active_ids.data(); }
       error=0; execute();
       const auto failed=reduce();
       if(!error) return 5;

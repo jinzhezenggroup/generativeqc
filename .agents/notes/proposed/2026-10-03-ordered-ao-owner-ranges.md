@@ -1,6 +1,6 @@
 # Proposal: bound cooperative geometry's AO-owner reduction searches
 
-Status: implemented prototype; complete-device and endpoint qualification pending
+Status: qualified prototype; small warm-only gain, dependency/review pending
 Date: 2026-10-03
 
 ## Problem
@@ -118,6 +118,31 @@ the 96-atom paired campaign remains running in job 5582. Receipts are in
 - An atom/AO CSR cache: adds storage and lifetime/budget obligations for a
   range query that can be proved directly from the current validated map.
 - Larger tiles alone: does not remove the repeated atom/AO scan.
+
+## Final qualification and priority
+
+The pending work described above completes in jobs 5588/5582. All four sanitizer
+modes pass six routing checks each with zero errors/hazards. The strengthened
+host harness checks every owner read and includes an invalid predecessor ID;
+removing that bounds guard is rejected by an abort, not just a source-string
+check. The 18 host kernel cases pass again.
+
+Both sizes now have complete paired endpoint evidence: 48 native calls pass
+every same-geometry reference-repeat comparison. At 96 atoms warm median is
+64.503557→63.449513 seconds (1.63%), but moved grows 253.660078→268.924869
+seconds with 12→13 SCF iterations. Cold changes 750.176532→584.307066 seconds
+with 29→27 iterations and shared compiler caches; no causal cold win follows.
+All phase arrays, bounds, work counts, source/library identities and original
+qualification failures are losslessly retained with a standalone verifier in
+`benchmarks/results/pbe0-ordered-ao-owners-20261003/`.
+
+The user asks to prioritize large hotspots. Stop extending this metadata-search
+slice: its measured gain is only 1–1.6%. Reprofile the current complete 96-atom
+endpoint before pursuing more full-range derivative or Becke work. An earlier
+real-grid stratified sample in the separate Becke-zero investigation found
+only 2.21% of reverse pairs removable by the conservative two-zero rule at
+96 atoms (0.041% at 24 atoms). That is not a promising large-hotspot fix;
+do not repeat the prototype merely because the local zero-JVP proof is simple.
 
 ## Revisit when
 
