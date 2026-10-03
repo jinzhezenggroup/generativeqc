@@ -71,8 +71,12 @@ def test_estimate_requires_work_counts_instead_of_inventing_them() -> None:
     estimate = estimate_cuda_time(cost, _calibration())
 
     assert estimate.estimated_seconds is None
-    assert any("arithmetic operation count is unavailable" in d for d in estimate.diagnostics)
-    assert any("semantic traffic bytes is unavailable" in d for d in estimate.diagnostics)
+    assert any(
+        "arithmetic operation count is unavailable" in d for d in estimate.diagnostics
+    )
+    assert any(
+        "semantic traffic bytes is unavailable" in d for d in estimate.diagnostics
+    )
     assert any("launch count is unavailable" in d for d in estimate.diagnostics)
 
 
@@ -93,7 +97,9 @@ def test_per_sm_occupancy_fallback_is_disclosed() -> None:
 
     assert estimate.estimated_seconds is not None
     assert estimate.parallelism_fraction == pytest.approx(0.5)
-    assert any("without a global underfill correction" in d for d in estimate.diagnostics)
+    assert any(
+        "without a global underfill correction" in d for d in estimate.diagnostics
+    )
 
 
 def test_compiled_spills_are_counted_as_memory_traffic() -> None:

@@ -213,9 +213,7 @@ def estimate_cuda_time(
         / parallel_scale
     )
     memory_seconds = (
-        traffic_bytes
-        / calibration.effective_memory_bytes_per_second
-        / parallel_scale
+        traffic_bytes / calibration.effective_memory_bytes_per_second / parallel_scale
     )
     launch_seconds = cost.launch_count * calibration.launch_seconds
     body_seconds = max(compute_seconds, memory_seconds)
