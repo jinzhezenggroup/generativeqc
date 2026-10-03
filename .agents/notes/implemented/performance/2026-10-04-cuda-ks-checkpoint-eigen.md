@@ -138,3 +138,39 @@ and qualification. The b909 complete cold controls keep their original archives
 and binaries; source convergence changes are never retroactively substituted
 into their timings. The inherited GPU PBE-UKS changed-geometry discrepancy is
 not assumed fixed by a CPU-only change.
+
+## Complete candidate endpoint checkpoint
+
+Slurm 1430 subsequently completes both 3-atom variants and the 48-atom
+candidate, each passing all five independent cold/priming/warm energy/force
+pairs. The 48-atom baseline is still running at this checkpoint. These records
+retain the b909/622af6871 source and library identities above. The allocation
+actually provides one CPU and 5 GB host memory, with eight configured BLAS/OMP
+threads for both variants; keep these results separate from earlier eight-CPU
+campaigns and do not infer a differential speedup before the baseline completes.
+
+The candidate's 48-atom complete cold is 897.029193 s versus its paired
+GPU4PySCF 494.848258 s, with 15/16 SCF iterations. Warm medians are
+151.512390 / 103.706417 s, each using one iteration. This ordinary-master
+checkpoint branch does not contain the composed WB97M-V integral/AO/index
+optimization; these timings are not points on the published integration curve.
+Maximum errors are 1.1824e-11 Eh / 6.211e-10 Eh/Bohr, within the unchanged
+1e-8 / 1e-7 gates, and every reference XC component reports on-GPU execution.
+
+The LDA source converges in 25 iterations. Its entire lifecycle costs
+36.728837 s, including 36.362070 s preparation/solve, 0.001107 s density export
+and 0.362802 s checkpoint import; all source costs are charged to complete cold.
+The target uses the imported density without fallback. These completed candidate
+measurements establish scientific endpoint behavior and the actual import cost;
+they do not establish a controlled baseline-versus-candidate endpoint benefit.
+The locally rerun independent verifier, raw samples and hashes remain in
+`.artifacts/cold-admission-20261004/results/matched48-candidate-verified.json`.
+
+## Composite-force caller master update
+
+The branch also takes master f88f42b4f, which adds #1778's opt-in local-AO
+consumer to composite forces. The checkpoint provider and its admission gates
+remain unchanged, but the runtime Python inputs change, so the completed
+master-737 library is retained as an intermediate build and is not relabeled.
+A new source-bound ccache build and native/admission qualification cover this
+union. The running b909 baseline/candidate endpoint comparison remains frozen.
