@@ -275,11 +275,13 @@ macro(generativeqc_add_native_tests)
       GENERATIVEQC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     set_target_properties(generativeqc_xc_point_cuda_tests PROPERTIES CUDA_STANDARD 20)
 
+    # The resident-grid regression and XC borrowed-grid validation use the
+    # CUDA quadrature owner; the host grid objects do not define those symbols.
     add_executable(generativeqc_dft_cuda_tests tests/native/test_dft_cuda.cu
-      src/dft/cuda_xc.cpp "${GENERATIVEQC_GRID_SOURCE}"
+      src/dft/cuda_xc.cpp src/dft/cuda_quadrature.cu "${GENERATIVEQC_GRID_SOURCE}"
       $<TARGET_OBJECTS:generativeqc_dft_grid_test_objects>
       $<TARGET_OBJECTS:generativeqc_dft_xc_test_objects>)
-    add_dependencies(generativeqc_dft_cuda_tests generativeqc_xc_cpu_codegen generativeqc_scf_array_cpu_codegen)
+    add_dependencies(generativeqc_dft_cuda_tests generativeqc_xc_cpu_codegen generativeqc_scf_array_cpu_codegen generativeqc_quadrature_codegen)
     target_include_directories(generativeqc_dft_cuda_tests PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft" "${CMAKE_CURRENT_BINARY_DIR}/generated")
