@@ -101,6 +101,19 @@ combined cold totals beat xTBloom. This is not evidence of universal startup
 superiority. Cold denotes a new calculator within the measurement process,
 not a new process for each molecule.
 
+Historical cold-timing qualification from the subsequent #1739 comparator audit:
+the multi-case protocol used here included destruction of the preceding
+calculator inside the next construction timer. The n1 96-atom
+239.718 -> 247.102 ms observation (+3.08%) is therefore inconclusive as an
+isolated current-molecule cold regression. It is not established as noise or a
+repeatable regression, and #1739 does not show that it was fixed or disproved:
+its corrected comparison starts at #1735, which already contains this H0-force
+change. The historical rows above retain their original protocol; no estimated
+cleanup is subtracted and they are not corrected measurements. First-process
+and first-singlepoint evidence, warm/changed timings, numerical accuracy, SCC
+counts and work counts retain their original scope. See the
+[PR #1733 review](https://github.com/jinzhezenggroup/generativeqc/pull/1733#pullrequestreview-5396967265).
+
 Preserved ignored receipts in the task checkout:
 
 - `.artifacts/{n1,n2}/h0-force-tiles/`: raw parent/candidate/xTBloom JSON and

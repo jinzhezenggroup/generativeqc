@@ -120,3 +120,14 @@ Ignored receipts:
 Revisit multi-block admission if further endpoint measurements justify its extra
 launch and failure boundary. Preserve single-pass validation, disjoint seed
 initialization, bounded ragged traversal and the unchanged scientific reduction.
+
+## Historical first-process timing qualification
+
+The later [PR #1742 comparator correction](https://github.com/jinzhezenggroup/generativeqc/pull/1742)
+found that identity verification triggered xTBloom's lazy native/provider load
+outside both timed phases. The first-process comparisons above omit that
+reference loading cost. The corrected v3 comparator includes lazy loading and
+keeps cleanup separate. Warm/changed timing and scientific gates retain their
+original scope, and the historical rows above are unchanged. The corrected
+endpoint begins after Python package import, not OS process launch; no universal
+startup superiority is established.

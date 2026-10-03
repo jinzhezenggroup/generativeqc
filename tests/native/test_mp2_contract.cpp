@@ -12,6 +12,7 @@
 #include "posthf/cuda_derivative.hpp"
 #include "posthf/mp2_cpu_generated.hpp"
 #include "posthf/mp2_derivative.hpp"
+#include "posthf/mp2_derivative_common.hpp"
 #include "posthf/mp2_energy.hpp"
 #include "posthf/mp2_force.hpp"
 #include "posthf/native_provider.hpp"
@@ -383,6 +384,73 @@ void conventional_energy_batch_fallback_matches() {
   require(rejected, "one-byte-below the minimum source-tile budget was accepted");
 }
 
+void provider_cross_shell_tiles() {
+  // A five-AO s/p basis distinguishes shell width (3) from the molecular AO
+  // domain (5), and tile width 4 exercises a tail crossing shell boundaries.
+  auto system = h2();
+  system.shells.push_back({0, 1, {{0.7, 1.0}}});
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      "cross-shell provider fixture normalization");
+  generativeqc::posthf::RawSource source(system);
+  generativeqc::hf::PhysicalReference ref;
+  const auto n = source.nbf();
+  ref.nbf = n;
+  ref.nocc = 2;
+  ref.coefficients.resize(n * n);
+  for (std::size_t i = 0; i < n * n; ++i)
+    ref.coefficients[i] = std::sin(static_cast<double>(i + 1)) / 3.0;
+  const generativeqc::posthf::MOSlots slots{{{0, 2}, {4, 1, 3}, {2, 0}, {3, 1}}};
+  const std::array<std::size_t, 4> shape{2, 3, 2, 2};
+  std::vector<double> ao(n * n * n * n), expected(24);
+  source.read(generativeqc::integrals::ElectronInteractionOperator::eri, {0, 0, 0, 0}, {n, n, n, n},
+              ao.data(), ao.size());
+  // Independent full-coordinate contraction, without cyclic staged GEMMs.
+  for (std::size_t a = 0; a < shape[0]; ++a)
+    for (std::size_t b = 0; b < shape[1]; ++b)
+      for (std::size_t c = 0; c < shape[2]; ++c)
+        for (std::size_t d = 0; d < shape[3]; ++d)
+          for (std::size_t i = 0; i < n; ++i)
+            for (std::size_t j = 0; j < n; ++j)
+              for (std::size_t k = 0; k < n; ++k)
+                for (std::size_t l = 0; l < n; ++l)
+                  expected[((a * shape[1] + b) * shape[2] + c) * shape[3] + d] +=
+                      ao[((i * n + j) * n + k) * n + l] * ref.coefficients[i * n + slots[0][a]] *
+                      ref.coefficients[j * n + slots[1][b]] *
+                      ref.coefficients[k * n + slots[2][c]] * ref.coefficients[l * n + slots[3][d]];
+  using generativeqc::posthf::AOTileDomain;
+  using generativeqc::posthf::NativeBlockProvider;
+  NativeBlockProvider legacy(source, ref, 256ULL << 20, 5);
+  require(legacy.tile_shape()[0] == 3, "existing shell-bounded admission changed");
+  for (unsigned tile : {1, 2, 3, 4, 5}) {
+    NativeBlockProvider provider(source, ref, 256ULL << 20, tile, AOTileDomain::Basis);
+    require(provider.tile_shape()[0] == tile, "molecular tile was clipped to a shell");
+    const auto admitted = provider.batch_bytes(shape, 1);
+    NativeBlockProvider exact(source, ref, admitted, tile, AOTileDomain::Basis);
+    generativeqc::posthf::ProviderWork work{};
+    const auto values = exact.get(slots, false, 0, nullptr, &work);
+    for (std::size_t i = 0; i < expected.size(); ++i)
+      require(std::abs(values[i] - expected[i]) < 1e-11,
+              "cross-shell transform differs from independent dense contraction");
+    const auto axis_reads = (n + tile - 1) / tile;
+    require(work.source_scans == 1 &&
+                work.source_reads == axis_reads * axis_reads * axis_reads * axis_reads &&
+                work.source_values == ao.size(),
+            "cross-shell transform source census disagrees with its tile domain");
+    bool rejected = false;
+    generativeqc::posthf::ProviderWork rejected_work{};
+    try {
+      NativeBlockProvider short_plan(source, ref, admitted - 1, tile, AOTileDomain::Basis);
+      (void)short_plan.get(slots, false, 0, nullptr, &rejected_work);
+    } catch (const std::length_error&) {
+      rejected = true;
+    }
+    require(rejected && rejected_work.source_reads == 0,
+            "short cross-shell budget performed numerical source work");
+  }
+}
+
 void conventional_energy_reuses_ao_scans() {
   const auto system = h2();
   generativeqc::scf::ScfOptions options;
@@ -466,8 +534,15 @@ void streamed_one_electron_derivative() {
   }
 }
 
-void conventional_derivative_from_mo_weights() {
-  const auto system = h2();
+void conventional_derivative_from_mo_weights(bool with_p_shell) {
+  auto system = h2();
+  if (with_p_shell) {
+    system.shells.push_back({0, 1, {{0.7, 1.0}}});
+    std::string detail;
+    require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            "s/p derivative fixture normalization");
+  }
   generativeqc::scf::ScfOptions options;
   options.export_physical_reference = true;
   options.compute_forces = false;
@@ -477,50 +552,73 @@ void conventional_derivative_from_mo_weights() {
   const auto hf = generativeqc::scf::run_rhf(system, options);
   require(hf.converged && hf.reference, "MO derivative reference");
   const auto& ref = *hf.reference;
+  const auto n = ref.nbf, n2 = n * n, n4 = n2 * n2;
   generativeqc::mp2::LagrangianWeights weights;
-  weights.orbitals = 2;
-  weights.occupied = 1;
-  weights.one_electron = {0.2, -0.3, 0.4, 0.1};
-  weights.overlap = {-0.1, 0.5, 0.6, -0.2};
-  weights.two_electron.resize(16);
-  for (std::size_t i = 0; i < weights.two_electron.size(); ++i)
-    weights.two_electron[i] = 0.01 * static_cast<double>(i + 1);
-  const auto derivative = generativeqc::mp2::conventional_derivative_cpu(system, ref, weights);
+  weights.orbitals = n;
+  weights.occupied = ref.nocc;
+  weights.one_electron.resize(n2);
+  weights.overlap.resize(n2);
+  weights.two_electron.resize(n4);
+  for (std::size_t i = 0; i < n2; ++i) {
+    weights.one_electron[i] = std::sin(static_cast<double>(i + 1));
+    weights.overlap[i] = std::cos(static_cast<double>(2 * i + 1));
+  }
+  // Deliberately asymmetric weights require all eight permutations, including
+  // repeated p shells and different shells centered on the same atom.
+  for (std::size_t i = 0; i < n4; ++i)
+    weights.two_electron[i] = 0.01 * std::sin(static_cast<double>(3 * i + 1));
+  std::size_t shell_calls = 0;
+  const auto derivative = generativeqc::mp2::detail::conventional_derivative(
+      system, ref, weights,
+      [&](auto overlap, auto hcore) {
+        return generativeqc::integrals::contract_weighted_one_electron_derivative(system, overlap,
+                                                                                  hcore, true);
+      },
+      [&](const auto& shells, auto local) {
+        ++shell_calls;
+        require(shells[0] >= shells[1] && shells[2] >= shells[3] &&
+                    (shells[0] > shells[2] || (shells[0] == shells[2] && shells[1] >= shells[3])),
+                "dense derivative revisited a noncanonical shell quartet");
+        return generativeqc::integrals::contract_weighted_eri_shell_derivative(system, shells,
+                                                                               local);
+      });
+  const auto pairs = system.shells.size() * (system.shells.size() + 1) / 2;
+  require(shell_calls == pairs * (pairs + 1) / 2, "dense derivative canonical work count");
 
   const auto oracle = generativeqc::integrals::build_integrals(system);
-  std::array<double, 4> one_ao{}, overlap_ao{};
-  std::array<double, 16> two_ao{};
-  auto eri = [](std::size_t p, std::size_t q, std::size_t r, std::size_t s) {
-    return ((p * 2 + q) * 2 + r) * 2 + s;
+  std::vector<double> one_ao(n2), overlap_ao(n2), two_ao(n4);
+  auto eri = [n](std::size_t p, std::size_t q, std::size_t r, std::size_t s) {
+    return ((p * n + q) * n + r) * n + s;
   };
-  for (std::size_t u = 0; u < 2; ++u)
-    for (std::size_t v = 0; v < 2; ++v)
-      for (std::size_t p = 0; p < 2; ++p)
-        for (std::size_t q = 0; q < 2; ++q) {
-          const double pullback = ref.coefficients[2 * u + p] * ref.coefficients[2 * v + q];
-          one_ao[2 * u + v] += pullback * weights.one_electron[2 * p + q];
-          overlap_ao[2 * u + v] += pullback * weights.overlap[2 * p + q];
+
+  for (std::size_t u = 0; u < n; ++u)
+    for (std::size_t v = 0; v < n; ++v)
+      for (std::size_t p = 0; p < n; ++p)
+        for (std::size_t q = 0; q < n; ++q) {
+          const double pullback = ref.coefficients[n * u + p] * ref.coefficients[n * v + q];
+          one_ao[n * u + v] += pullback * weights.one_electron[n * p + q];
+          overlap_ao[n * u + v] += pullback * weights.overlap[n * p + q];
         }
-  for (std::size_t u = 0; u < 2; ++u)
-    for (std::size_t v = 0; v < 2; ++v)
-      for (std::size_t w = 0; w < 2; ++w)
-        for (std::size_t x = 0; x < 2; ++x)
-          for (std::size_t p = 0; p < 2; ++p)
-            for (std::size_t q = 0; q < 2; ++q)
-              for (std::size_t r = 0; r < 2; ++r)
-                for (std::size_t s = 0; s < 2; ++s)
+  for (std::size_t u = 0; u < n; ++u)
+    for (std::size_t v = 0; v < n; ++v)
+      for (std::size_t w = 0; w < n; ++w)
+        for (std::size_t x = 0; x < n; ++x)
+          for (std::size_t p = 0; p < n; ++p)
+            for (std::size_t q = 0; q < n; ++q)
+              for (std::size_t r = 0; r < n; ++r)
+                for (std::size_t s = 0; s < n; ++s)
                   two_ao[eri(u, v, w, x)] +=
-                      ref.coefficients[2 * u + p] * ref.coefficients[2 * v + q] *
-                      ref.coefficients[2 * w + r] * ref.coefficients[2 * x + s] *
+                      ref.coefficients[n * u + p] * ref.coefficients[n * v + q] *
+                      ref.coefficients[n * w + r] * ref.coefficients[n * x + s] *
                       weights.two_electron[eri(p, q, r, s)];
   require(derivative.size() == 6, "conventional derivative shape");
   for (std::size_t coordinate = 0; coordinate < derivative.size(); ++coordinate) {
     double expected = oracle.nuclear_repulsion_derivative[coordinate];
-    for (std::size_t element = 0; element < 4; ++element)
-      expected += one_ao[element] * oracle.hcore_derivative[coordinate * 4 + element] +
-                  overlap_ao[element] * oracle.overlap_derivative[coordinate * 4 + element];
-    for (std::size_t element = 0; element < 16; ++element)
-      expected += two_ao[element] * oracle.eri_derivative[coordinate * 16 + element];
+    for (std::size_t element = 0; element < n2; ++element)
+      expected += one_ao[element] * oracle.hcore_derivative[coordinate * n2 + element] +
+                  overlap_ao[element] * oracle.overlap_derivative[coordinate * n2 + element];
+    for (std::size_t element = 0; element < n4; ++element)
+      expected += two_ao[element] * oracle.eri_derivative[coordinate * n4 + element];
     require(std::abs(derivative[coordinate] - expected) < 1e-10,
             "conventional MO-weight derivative differs from dense oracle");
   }
@@ -597,12 +695,14 @@ int main() {
   try {
     generated_equations();
     provider_and_reference();
+    provider_cross_shell_tiles();
     conventional_energy_reuses_ao_scans();
     conventional_energy_batch_fallback_matches();
     shell_local_weighted_eri_derivative();
     cuda_shell_derivative_budget_failure_is_transactional();
     streamed_one_electron_derivative();
-    conventional_derivative_from_mo_weights();
+    conventional_derivative_from_mo_weights(false);
+    conventional_derivative_from_mo_weights(true);
     complete_conventional_force_matches_resolved_energy();
     std::cout << "MP2 native contracts passed\n";
     return 0;

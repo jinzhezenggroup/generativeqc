@@ -171,7 +171,7 @@ def _kernel_source() -> str:
     source = ast.literal_eval(assignment.value)
     begin = source.index("__global__ void geometry_kernel(")
     end = source.index("}  // namespace generativeqc_stationary_cuda", begin)
-    ao_begin = source.index("__device__ bool geometry_point_ao(")
+    ao_begin = source.index("__device__ bool geometry_point_setup(")
     ao_end = source.index("struct GeometryBlockControl", ao_begin)
     return source[ao_begin:ao_end] + source[begin:end]
 

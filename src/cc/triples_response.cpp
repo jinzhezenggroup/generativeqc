@@ -108,7 +108,6 @@ TriplesResponseResult triples_response_cpu(const Problem& p, const SolverResult&
 
   TriplesResponseResult result;
   result.minimum_absolute_denominator = minimum_denominator;
-  result.program_hash = generated::triples_response_program_hash;
   const std::array<std::size_t, 8> output_sizes{
       checked_mul(checked_mul(p.nocc, p.nvir), checked_mul(p.nvir, p.nvir)),
       checked_mul(checked_mul(p.nocc, p.nvir), checked_mul(p.nocc, p.nocc)),
@@ -199,6 +198,11 @@ TriplesResponseResult triples_response_cpu(const Problem& p, const SolverResult&
     }
   }
   run_page(lane);
+  // The generated arena is dead before diagnostic strings are published.
+  // Release it first so metadata cannot extend the exact numeric peak when
+  // the triples phase becomes the largest force phase at larger dimensions.
+  std::vector<double>().swap(arena);
+  result.program_hash = generated::triples_response_program_hash;
   result.reason =
       "runtime-indexed generated standard-(T) response completed with fused parameter-source "
       "projection";
