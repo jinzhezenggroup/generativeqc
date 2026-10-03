@@ -26,6 +26,9 @@ ALLOWED = {
         "scf/fock_prepared.hpp",
         "scf/fock_build.hpp",
         "scf/density_factor.hpp",
+        # The checked CPU target adapter owns only shared dense algebra. The
+        # independent reference/initial-guess layers retain their old boundary.
+        "tensor/cpu_linalg.hpp",
         "core/",
         "integrals/",
         "runtime/",

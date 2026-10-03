@@ -113,6 +113,39 @@ Descriptors are versioned and caller-owned output buffers must be disjoint.
 Publication is transactional, including SCF nonconvergence. C callers must
 serialize calls and destruction; Python serializes them with a per-plan lock.
 
+## Primary CPU HF eigen routing and failures
+
+Ordinary primary CPU RHF/UHF with standard complete exact J/K or complete
+DF J/K automatically uses the shared scalar cyclic-Jacobi adapter for iterative
+and final physical-Fock eigensolves. This is the route selected by
+`run_cpu_fock_strategy`, including the primary NUM01 accuracy and SOL01 proposal
+bridges; it is not an opt-in mode or a public/environment provider selector.
+Primary density and state getters return this solve's actual state.
+
+Overlap orthogonalization, core guesses, seed checks, preliminary-HF generation,
+DFT, custom/mixed/range-separated Fock specifications, and detached physical-HF
+reference generation retain their existing eigen routes. The independent
+prepared `FockPlan.solve()` entry does not install the primary scalar callback.
+Fresh CPU RHF/UHF density-oracle exports use the named internal
+`run_cpu_reference_fock_strategy` entry, preserving reference iteration and
+finalization without requesting a physical-reference export. CUDA provider
+callbacks are unchanged.
+
+The target adapter explicitly selects the scalar, one-thread shared tensor
+provider. Its absolute off-diagonal stopping cap is `1e-14` with at most 100
+cyclic sweeps. This stopping rule is not an error certificate: the original
+F/S eigenframe must also pass the existing `1e-8` absolute residual and metric
+checks and `1e-12` scaled residual check. Sweep exhaustion or frame rejection
+raises a numerical failure; the adapter does not switch to the independent
+reference solver. Invalid dimensions/nonfinite inputs and size overflow retain
+explicit exceptions. Allocation failures propagate from the adapter.
+
+This local failure contract does not disable the existing ordinary Fleet
+warm-to-cold retry, which can retry an allocation failure as well as a numerical
+failure. Every retry retains the selected primary eigen route. Existing resource
+admission and caps are unchanged; bounded numeric workspace is not a complete
+process-memory or endpoint-wide no-retry guarantee.
+
 ## Fixed-density semilocal consumer
 
 `FixedDensityMeanField` combines a native unit-Coulomb, absent-exchange request

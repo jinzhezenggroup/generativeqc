@@ -31,6 +31,21 @@
 
 using generativeqc::posthf::RawSource;
 namespace {
+/** These fresh density exports are independent dense CPU oracles, not getters
+ * of an already computed primary state. Keep the common CPU admission/plan and
+ * force controls while selecting reference iteration/finalization explicitly;
+ * never request an expensive physical-reference object just to choose a solver. */
+generativeqc::scf::ScfResult run_density_oracle_cpu(const RawSource& raw,
+                                                    generativeqc::scf::FockSpin spin, bool fitted,
+                                                    generativeqc::scf::ScfOptions controls) {
+  using namespace generativeqc::scf;
+  controls.resolved_fock_build = resolve_fock_build(
+      make_hf_fock_spec(spin, fitted ? FockApproximation::DensityFitted : FockApproximation::Exact),
+      FockBackend::Cpu, controls.screening_tolerance, controls.density_fitting_relative_threshold);
+  return run_cpu_reference_fock_strategy(raw.orbital(), fitted ? &raw.auxiliary() : nullptr,
+                                         controls);
+}
+
 /**
  * Own one bounded CUDA DF source and its streamed RHF J/K plan.
  *
@@ -163,11 +178,12 @@ GENERATIVEQC_API int generativeqc_posthf_rhf_density_v1(void* source, int backen
     if (df) {
       result = backend ? generativeqc::scf::run_rhf_density_fitting_cuda(
                              raw.orbital(), raw.auxiliary(), options, device)
-                       : generativeqc::scf::run_rhf_density_fitting(raw.orbital(), raw.auxiliary(),
-                                                                    options);
+                       : run_density_oracle_cpu(raw, generativeqc::scf::FockSpin::Restricted, true,
+                                                options);
     } else {
       result = backend ? generativeqc::scf::run_rhf_cuda(raw.orbital(), options, device)
-                       : generativeqc::scf::run_rhf(raw.orbital(), options);
+                       : run_density_oracle_cpu(raw, generativeqc::scf::FockSpin::Restricted, false,
+                                                options);
     }
     if (!result.converged || result.density.size() != elements)
       throw std::runtime_error("HF failed or did not converge; no reference exported");
@@ -204,11 +220,12 @@ GENERATIVEQC_API int generativeqc_posthf_uhf_density_v1(void* source, int backen
     if (df) {
       result = backend ? generativeqc::scf::run_uhf_density_fitting_cuda(
                              raw.orbital(), raw.auxiliary(), options, device)
-                       : generativeqc::scf::run_uhf_density_fitting(raw.orbital(), raw.auxiliary(),
-                                                                    options);
+                       : run_density_oracle_cpu(raw, generativeqc::scf::FockSpin::Unrestricted,
+                                                true, options);
     } else {
       result = backend ? generativeqc::scf::run_uhf_cuda(raw.orbital(), options, device)
-                       : generativeqc::scf::run_uhf(raw.orbital(), options);
+                       : run_density_oracle_cpu(raw, generativeqc::scf::FockSpin::Unrestricted,
+                                                false, options);
     }
     if (!result.converged || result.density.size() != elements)
       throw std::runtime_error("UHF failed or did not converge; no reference exported");
@@ -294,7 +311,7 @@ int generativeqc_accuracy_hf_probe_v1(void* source, int method, int backend, int
   });
 }
 
-/** Complete CPU reference solve with per-call hooks. The explicit small-system
+/** Complete primary CPU HF solve with per-call hooks. The explicit small-system
  * boundary matches NUM01's diagnostic bridge. Production device-resident loops
  * cannot silently enter this callback path. Scalars preserve nonconvergence;
  * final densities are reusable only after the caller checks convergence and
