@@ -6,6 +6,58 @@ energy-plus-analytic-force endpoints retain the original 256-point tiles and
 512 MiB device / 256 MiB host caps, including at 96 atoms. Local AO maps use an
 optional 16 MiB reserve **inside**, not on top of, the total host allowance.
 
+## Integrated-source rerun
+
+The new campaign is measured from clean published `a718695de66d04af272addb61b2b28ebd6700eb4`:
+source `46852852006dc81b164796e994bc335c4f336da3f03e38ba76bec3c3e0269111`,
+library `c2f7c6e192a83ff09816af2e0834c3a22fb0190009e7592a9f2e5c3025b04254`.
+Finite n1 jobs 5573 (3–48 atoms), 5574 (96 atoms), and 5578 (fresh zero-budget
+control) retain the same protocol, optional cutoff, 256-point tiles and default
+memory caps. Each pair uses the same binary and GPU allocation. The later merge
+of actual master `d442177a6` leaves this production source identity unchanged;
+the running measured checkout was not mutated.
+
+All **156 new complete native calls** pass comparison against every
+same-geometry reference repeat: maximum errors `1.042e-10 Eh` and
+`3.336e-11 Eh/Bohr`. Reference arrays remain reused numerical oracles, not fresh
+reference timings. These results do not replace or relabel the frozen campaign
+below.
+
+| Atoms | Dense warm (s) | Local warm (s) | Reduction |
+|---:|---:|---:|---:|
+| 3 | 0.344318 | 0.335861 | 2.46% |
+| 6 | 0.741613 | 0.715882 | 3.47% |
+| 12 | 1.659641 | 1.606517 | 3.20% |
+| 24 | 4.996515 | 4.765913 | 4.62% |
+| 48 | 17.857474 | 15.478295 | 13.32% |
+| 96 | 77.158586 | 62.791596 | 18.62% |
+
+All warm and moved-warm calls still take one SCF iteration. At 96 atoms,
+moved-warm is 77.476661→63.082426 s; moved is 258.088302→248.678081 s at
+12 iterations in both modes. Cold is 706.651282→512.251532 s with 26→25
+iterations and shared compiler caches, so it does not isolate the force-path
+gain. **Negative observations remain:** 24-atom cold is
+106.795475→107.085434 s (21 iterations), moved 27.083108→27.358444 s
+(12 iterations); moved also increases at 3/6/12 atoms. At 48 atoms cold
+increases 185.115208→187.124945 s with 23→24 iterations. No sample is dropped.
+
+The structural counts and cache behavior match the original campaign: at
+96 atoms force contraction work is 5.8249% of dense GM², active AO mean/max is
+164.516/553 of 768, and every warm map lookup hits. Initial discovery takes
+21.609049 s for the same 18,119,393,280 order-two AO-jet values. All 9,216
+tiles, 768 empty maps, and 21,516,784,080 partition-pair visits remain included;
+the total numeric map bound stays 12,144,768 bytes inside the admitted reserve.
+
+Run `python benchmarks/results/pbe0-resident-active-ao-20261003/verify.py --campaign current`.
+The separately pinned `current-campaign.json.xz` / `current-storage.json` retain
+56 exact UTF-8 members, including every force array, all force-call work, the
+fresh zero-budget control and reproduction receipts. The source patch is empty
+because this measured checkout is clean at its published commit. The original
+bundle's bytes and hashes are unchanged. Both campaigns use the same verifier
+with separate hardcoded source/library/job identities, and both receive the
+semantic-corruption regression tests. This is not default promotion or evidence
+that the overall GPU4PySCF gap is closed.
+
 ## Frozen measured identity
 
 - Base: `b2ee9dd7fc6f82427ab56218d7b9d803687259be`, plus retained source patch.
@@ -107,4 +159,5 @@ Finite n1 job 5572 verifies matching compiled/deployed identity, passes 89
 host/GPU/caller tests, 34 memcheck tests with zero errors, and four triangular
 claim host/plain/synccheck/racecheck tests. The exact log and script are retained
 separately in `current-qualification.json` / `current-qualification.log.gz`.
-This is current device correctness evidence, not fresh complete endpoint timing.
+That qualification receipt is device correctness evidence. The separate new
+complete-endpoint campaign is described in **Integrated-source rerun** above.

@@ -78,6 +78,31 @@ before artifact lookup, current geometry/token binding, and prepared request
 policy. New mutation controls ensure that moving these checks into helpers
 does not escape the fail-closed audit.
 
+## Integrated-source requalification
+
+Jobs 5573/5574/5578 complete 156 new native calls on published `a718695de`,
+source `46852852006dc81b164796e994bc335c4f336da3f03e38ba76bec3c3e0269111`,
+library `c2f7c6e192a83ff09816af2e0834c3a22fb0190009e7592a9f2e5c3025b04254`.
+Every same-geometry reference-repeat gate passes; maximum errors are
+`1.042e-10 Eh` / `3.336e-11 Eh/Bohr`. At unchanged default caps and 256-point
+tiles, 24/48/96 warm is 4.996515→4.765913, 17.857474→15.478295 and
+77.158586→62.791596 seconds. The 96-atom contraction work and map lifetime
+counts exactly match the original campaign. Independent references are reused
+numerical oracles, not new reference timing measurements.
+
+Cold/changed-geometry regressions remain in the complete records. In particular,
+24-atom moved increases 27.083108→27.358444 seconds at equal 12 iterations;
+48-atom cold increases with 23→24 iterations. Warm improvement is not a blanket
+all-phase claim or a reason to relax the sampled-jet cutoff's default-off policy.
+New `current-campaign.json.xz` and `--campaign current` verification coexist with
+the unchanged frozen bundle. Both campaigns have separately pinned source,
+library and job identities and the same semantic corruption tests.
+
+The later merge of actual master `d442177a6` changes no production source
+identity. Earlier storage-only compression likewise leaves it unchanged.
+This avoids conflating changed Git/documentation identity with changed measured
+production code. No running measurement checkout was modified for either step.
+
 ## Revisit when
 
 Promote no default until same-binary complete endpoints validate numerical gates,

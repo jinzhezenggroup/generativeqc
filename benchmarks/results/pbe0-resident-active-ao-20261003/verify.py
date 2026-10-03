@@ -1,5 +1,6 @@
 """Independently verify complete matched AO endpoints and semantic work counts."""
 
+import argparse
 import hashlib
 import json
 import lzma
@@ -13,6 +14,17 @@ SOURCE = "edb9bf98d454f356ef3dea4488a6a763343510bad25efb4d67f96dc877c27421"
 LIBRARY = "473f05abacad690caa7a3e149aa309d723d021e1ca4fd4ec91b78512e16268f2"
 HARNESS = "7af86061955304c6e7dbf1b834043309364591520ea99c982f535f09707b1ce9"
 BASE = "b2ee9dd7fc6f82427ab56218d7b9d803687259be"
+JOBS = ("5565", "5566", "5567")
+CAMPAIGNS = {
+    "frozen": (SOURCE, LIBRARY, BASE, JOBS, ""),
+    "current": (
+        "46852852006dc81b164796e994bc335c4f336da3f03e38ba76bec3c3e0269111",
+        "c2f7c6e192a83ff09816af2e0834c3a22fb0190009e7592a9f2e5c3025b04254",
+        "a718695de66d04af272addb61b2b28ebd6700eb4",
+        ("5573", "5574", "5578"),
+        "current-",
+    ),
+}
 PHASES = ("cold", "warm", "moved", "moved-warm")
 ROWS = [("cold", 0, 0)] + [("warm", 0, repeat) for repeat in range(5)]
 ROWS += [("moved", 1, 0)] + [("moved-warm", 1, repeat) for repeat in range(5)]
@@ -76,7 +88,7 @@ def verify_variant(
     assert campaign["library_sha256"] == LIBRARY
     assert campaign["harness_sha256"] == HARNESS
     assert campaign["base_commit"] == BASE and campaign["mode"] == mode
-    job = "5567" if mode == "zero-budget" else "5566" if atoms == 96 else "5565"
+    job = JOBS[2] if mode == "zero-budget" else JOBS[1] if atoms == 96 else JOBS[0]
     assert campaign["job"] == job
     assert campaign["cuda_visible_devices"] is not None
     assert record["scheduler"]["SLURM_JOB_ID"] == job
@@ -203,16 +215,17 @@ def verify_variant(
     }
 
 
-def load_bundle() -> dict[str, str]:
-    """Authenticate exact bytes without extracting or executing stored scripts."""
-    global _MEMBERS
+def load_bundle(campaign: str = "frozen") -> dict[str, str]:
+    """Use separately pinned identities; never infer them from retained claims."""
+    global _MEMBERS, SOURCE, LIBRARY, BASE, JOBS
+    SOURCE, LIBRARY, BASE, JOBS, prefix = CAMPAIGNS[campaign]
     directory = Path(__file__).resolve().parent
-    storage = json.loads((directory / "storage.json").read_text())
+    storage = json.loads((directory / f"{prefix}storage.json").read_text())
     assert storage["schema"] == "generativeqc.lossless-utf8-evidence.v1"
     assert storage["source_identity"] == SOURCE
     assert storage["library_sha256"] == LIBRARY
     assert storage["base_commit"] == BASE
-    packed = (directory / "campaign.json.xz").read_bytes()
+    packed = (directory / f"{prefix}campaign.json.xz").read_bytes()
     assert hashlib.sha256(packed).hexdigest() == storage["sha256"]
     raw = lzma.decompress(packed)
     assert hashlib.sha256(raw).hexdigest() == storage["uncompressed_sha256"]
@@ -296,7 +309,10 @@ def verify_all() -> dict:
 
 def main() -> None:
     """Recompute the retained summary instead of trusting its accepted flags."""
-    load_bundle()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--campaign", choices=CAMPAIGNS, default="frozen")
+    args = parser.parse_args()
+    load_bundle(args.campaign)
     summary = verify_all()
     assert summary == load(Path("receipts/ao-summary.json"))
     print(

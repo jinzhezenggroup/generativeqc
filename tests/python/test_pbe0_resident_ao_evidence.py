@@ -12,14 +12,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
-@pytest.fixture
-def verifier() -> ModuleType:
+@pytest.fixture(params=["frozen", "current"])
+def verifier(request: pytest.FixtureRequest) -> ModuleType:
     path = ROOT / "benchmarks/results/pbe0-resident-active-ao-20261003/verify.py"
     spec = importlib.util.spec_from_file_location("resident_ao_evidence", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.load_bundle()
+    module.load_bundle(request.param)
     return module
 
 
