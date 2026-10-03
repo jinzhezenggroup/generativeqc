@@ -85,3 +85,21 @@ diagnostic budget) remain separate from successful interface-test evidence.
 Use actual per-tile maps in complete WB97M calls, charge discovery and retained
 maps, verify empty-panel geometry and independent total forces, then extend the
 shared SCF grid path. Avoid adding another native AO or density-gather algebra.
+
+## Fresh composition qualification
+
+Slurm job 5541 completed successfully on the fresh `fb53bb548` + WB97M stack +
+interface composition. Eleven interface/independent geometry tests passed in
+158.36 s, including both spin modes with empty selected geometry panels. Seven
+complete independent energy/force and geometry-rebuild/stale-state isolation
+checks passed in 204.78 s, with no skips. The library SHA-256 is
+`0c5b5f67d14c77352c903e8e0b037790ed2561165b96e10a94505c3d490d8f3b`.
+Its source identity
+`b359f13e392da960b1d456d6b7a269f5f4ee9fb256cf82638b7425d8737c6f2b`
+was independently recomputed from all 1,349 manifest inputs at the committed
+composition and matches the actually loaded library. All 442 compiler commands
+were verified to invoke ccache; before/after statistics are retained.
+
+This additional evidence qualifies the explicit-map interface and unchanged
+complete endpoint composition. The separate fixed-geometry threshold experiment
+is not part of this implementation and remains unpromoted.
