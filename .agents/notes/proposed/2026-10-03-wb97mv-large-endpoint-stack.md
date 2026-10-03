@@ -140,6 +140,39 @@ changed-geometry accuracy gate, not a full-grid timing claim.
 Raw reports, all-repeat verification and Slurm completion records are retained
 under `.artifacts/wb97m-large-stack/`. Job 5534 additionally compares the exact
 qualified composition against its fresh full-Fock control at 48 atoms; it does
-not supply a same-allocation master delta. Jobs 5521 (matched 96) and 5531
+not supply a same-allocation master delta. Its completed result follows.
+Jobs 5521 (matched 96) and 5531
 (instrumented exact-candidate 96 endpoint) remain active. Profile timings are
 diagnostic only and cannot replace clean endpoint observations.
+
+## Completed full48: still slower than the independent reference
+
+Job 5534 completed with the same frozen `cac0727f3` / `08b276c3...` identity:
+48 atoms, 384 spherical def2-SVP AOs, 1179648 full-grid points and the same
+strict settings. Native cold/priming take 1104.589977 / 106.587691 seconds;
+reference cold/priming take 472.016100 / 102.481265 seconds.
+
+Native warm samples are 105.794696, 104.917879 and 105.548083 seconds, with
+median 105.548083. Reference samples are 102.501968, 102.451156 and
+102.444625 seconds, with median 102.451156. The composition is still about
+3.02% slower at this complete warm endpoint. Native cold uses 21 SCF iterations,
+reference cold 16 iterations / 17 J/K builds; every warm call uses one iteration
+(two J/K builds for the reference).
+
+All five energy/force pairs and reference replay-consistency gates pass on
+independent re-evaluation of the retained arrays. Maximum energy/force errors
+are 1.10e-11 Eh / 6.31e-10 Eh/Bohr. No sample or gate is removed because of
+the unfavorable performance result.
+
+The first warm integral-derivative phase takes 10.366680 seconds, while the
+combined grid/pair drain takes 44.966724 seconds. Execution uses 1152 tiles of
+1024 points, 1179648 AO-point visits, 2359296 geometry-point visits and
+5322571776 partition-pair visits. Additional device/host bounds are
+592013172 / 1015234836 bytes. Screened integral and compacted nonlocal pair
+counts remain unavailable. This is a candidate/reference comparison, not a
+controlled master-to-candidate delta.
+
+The separate [partner-lane reduction experiment](../rejected/2026-10-03-vv10-partner-lane-reduction.md)
+did not establish enough larger-kernel benefit to promote a new reduction order.
+The exact-candidate 96-atom profile is retained as the next bottleneck control;
+there is still no large-system reference advantage and no merge recommendation.
