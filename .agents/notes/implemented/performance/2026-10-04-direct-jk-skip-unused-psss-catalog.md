@@ -123,6 +123,21 @@ after both caches have been exercised. Neither ccache nor JIT caches are
 cleared. The 24-atom and reversed-order cache controls are pending at this
 checkpoint; no complete-cold acceleration is claimed.
 
+After merging the subsequent master `79418329e`, source `3a6ee7aea` is rebuilt
+and separately qualified in n2 Slurm 2186. Full native DFT and all seven
+independent endpoint cases pass again (194.84 seconds); the new AO-component
+host suite reports 20 passes, with 34 device cases explicitly skipped by that
+host-only command. The 1352-input identity is
+`4eab0c4fa2bd533a216349604959dcbb334cfa57de014e2b914369c93b7605b3` and library
+SHA-256 is `dc3fca86b9c44013268e6883f521b515a4a2afcf53ec8ea675d7825a0d2a62c1`.
+The standalone native test hash is unchanged. All 452 compiler commands still
+use ccache; the incremental build compiles one identity-bearing C++ object,
+recorded as one miss, and reuses the remaining existing objects. These receipts
+live separately in `.artifacts/master794-20261004/`. The ongoing n5 measurements
+keep their frozen master-38 source/binaries; they are not relabeled to this
+subsequent composition. The code is ready for review as removal of unconsumed
+preparation work, with no claimed complete-endpoint timing improvement.
+
 ## Revisit when
 
 If Direct J/K gains a consumer of the legacy resident-PSSS catalog, that consumer
