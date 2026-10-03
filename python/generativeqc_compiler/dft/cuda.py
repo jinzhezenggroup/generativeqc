@@ -387,6 +387,18 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        # Older artifact libraries retain the identity/explicit-map routes.
+        # Discovery is an optional capability, checked only when requested.
+        if hasattr(lib, "grid_cuda_select_ao_device_v1"):
+            lib.grid_cuda_select_ao_device_v1.argtypes = [
+                ct.c_void_p,
+                ct.c_void_p,
+                ct.c_size_t,
+                ct.c_double,
+                ct.POINTER(ct.c_uint),
+                ct.c_char_p,
+                ct.c_size_t,
+            ]
         lib.grid_cuda_view_v1.argtypes = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -930,6 +942,54 @@ class CudaGrid:
             )
             with self._borrow_current_task() as lease:
                 yield lease
+
+    def select_ao_device_points(
+        self, device_points: int, point_count: int, *, cutoff: float
+    ) -> np.ndarray:
+        """Discover a sorted AO map from all configured jets on a resident tile.
+
+        An AO is retained if any sampled jet has magnitude greater than cutoff.
+        This explicit threshold is not a bound on density, energy, or forces.
+        Callers own numerical qualification, geometry identity, mask storage,
+        and its budget; no map is cached or automatically used by this owner.
+        Discovery uses the existing full AO arena without density work and
+        invalidates the previous tile. Resident points must remain immutable
+        until this synchronous call returns. Capability misses stay explicit.
+        """
+        with self._lock:
+            self._check_open()
+            if not hasattr(self._library, "grid_cuda_select_ao_device_v1"):
+                raise NotImplementedError(
+                    "CUDA grid artifact lacks resident AO selection"
+                )
+            if self.plan.active_ao_capacity != self.plan.nao:
+                raise ValueError(
+                    "AO selection requires a full-capacity local grid plan"
+                )
+            count = checked_int(point_count, "resident grid point count", low=1)
+            if count > self.plan.tile_points:
+                raise ValueError("resident grid points exceed the prepared tile shape")
+            if type(device_points) is not int or device_points <= 0:
+                raise ValueError("invalid resident CUDA point binding")
+            if (
+                type(cutoff) not in (int, float)
+                or not np.isfinite(cutoff)
+                or cutoff <= 0
+            ):
+                raise ValueError("resident AO cutoff must be finite and positive")
+            selected = np.empty(self.plan.nao, dtype=np.uint32)
+            self._call(
+                "grid_cuda_select_ao_device_v1",
+                self._handle,
+                ct.c_void_p(device_points),
+                count,
+                float(cutoff),
+                selected.ctypes.data_as(ct.POINTER(ct.c_uint)),
+            )
+            # Irreversibly immutable numeric ownership; the caller may retain
+            # these indices after the discovery arena is reused by a grid run.
+            ids = np.flatnonzero(selected).astype(np.uintp)
+            return np.frombuffer(ids.tobytes(), dtype=np.uintp)
 
     @contextmanager
     def feature_task(
