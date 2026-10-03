@@ -228,6 +228,53 @@ expanding both providers based on that difference. Both seeded 48-atom cold
 endpoints remain about 1.58 times the reference; neither establishes cold
 superiority or a public preliminary-density/resource contract.
 
+## Energy-only source budget audit
+
+Finite n2 Slurm 2188 completes a dry capacity audit of the existing public KS
+planner at 3/24/48/96 atoms, using GPU LDA, spherical def2-SVP, the same coarse
+16×8×16 grid, DIIS 8 and at most 64 iterations. Preparation/context entry
+points are guarded to reject execution: this audit performs no SCF and does
+not measure allocated memory. It uses frozen 678f7eb88/master837 inputs,
+identity d198acd7 and library fe826ad7, byte-identical to the subsequent
+master794 composition. The first attempt (2187) passed one request instead of
+a request tuple to `plan_resources` and failed before producing a plan; its
+driver failure is retained separately.
+
+The existing planner contracts for complete energy plus forces, not an
+energy-only preliminary owner. It reserves a 128 MiB snapshot-grid cache and
+256 MiB force-host staging cap, so even the 3-atom request cannot fit a
+256 MiB source allowance. Removing only the conservative Cartesian quartic
+setup term would not fix that mismatch. Its generic CUDA matrix workspace is
+also a broad bound: 688,915,728 bytes at 96 atoms. The reported dry bounds are:
+
+| Atoms | Host peak bound (bytes) | Setup workspace bound (bytes) | SCF workspace bound (bytes) |
+| --- | ---: | ---: | ---: |
+| 3 | 417,044,648 | 12,929,504 | 674,064 |
+| 24 | 44,829,143,232 | 44,415,597,184 | 43,058,448 |
+| 48 | 703,560,378,368 | 703,121,677,184 | 172,229,904 |
+| 96 | 11,191,422,989,952 | 11,190,887,972,224 | 688,915,728 |
+
+These are conservative planner outputs, not observed allocations or claims
+that the GPU source needs terabytes. The CPU preliminary numeric query also
+contains a `24*c^4` term; it cannot be reused as a CUDA capacity contract.
+The separate #1801 patch removes an actual unused Direct-HF task catalog from
+Direct J/K preparation, but does not itself provide this missing contract.
+
+A production source needs an explicit energy-only native CUDA capacity model
+covering its J provider, grid, KS/eigensolver state, density transfer and its
+lifetime overlap with the target. Do not lower the existing full-force public
+planner's bounds merely to admit the private experiment. Both single and batch
+CUDA entry paths currently bypass the CPU preliminary wrapper; a public
+extension must handle warm-state precedence, at most one core-guess retry and
+per-item failure isolation in both. LDA also needs a per-owner dense AO policy,
+rather than the private driver's process-global environment mutation. No public
+planner/API or allocation policy is changed by this audit.
+
+Scripts, dry plans, frozen identity and Slurm receipts are retained in ignored
+`.artifacts/preliminary-budget-audit-20261004/completed/`, with the failed first
+attempt under `failed-attempt1/`. The continuing 96-atom private endpoint
+experiment cannot by itself qualify any of these public resource contracts.
+
 ## Promotion gates
 
 Require larger and displaced-system complete endpoints before claiming a

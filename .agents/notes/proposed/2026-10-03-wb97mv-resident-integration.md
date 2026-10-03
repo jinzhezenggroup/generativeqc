@@ -177,6 +177,27 @@ unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates. This comparison remains in progress.
 Its receipts are under ignored `.artifacts/latest-master96-20261004/`; the
 older master-1a OFF/ON campaign continues separately without being restarted.
 
+Slurm 5648 subsequently completes successfully. The independent verifier checks
+all five cold/priming/three-warm pairs against the unchanged numerical, shape,
+convergence, reference-XC and complete-cold gates. Maximum errors are
+1.178e-10 Eh / 4.850e-10 Eh/Bohr; every priming/warm endpoint takes one
+iteration and every reference XC component reports GPU execution. Native warm
+samples are 362.318830 / 362.283309 / 362.391458 s, versus reference
+395.467209 / 395.366895 / 395.434545 s. Their medians are 362.318830 and
+395.434545 s: the whole indexed composition uses 8.37% less warm time.
+This is not an isolated indexed-scheduling speedup.
+
+Complete cold is 3691.344927 / 1792.691183 s, with 23/16 native/reference
+iterations. All construction/preparation and first execution costs remain
+included; native cold is still about 2.06 times the reference. Actual force
+and SCF point-AO-square work are 0.058249 and 0.054380 of their dense counts.
+The force traversal covers 2,359,296 points in 9,216 tiles, including 768
+empty tiles, and still performs both geometry consumers. The verifier receipt
+binds raw report SHA-256
+`3ac5483e156672ee490315d1928ba4bdb8dad4e02fafb5a49ad9b870bcdf0cae`
+to frozen source 49f0f9bc0, identity ebdf0792 and library 5a1b86ce above.
+These completed results do not replace the distinct six-point README source.
+
 ## Master 837c2a51c: shared planner integration
 
 Merge 678f7eb88 incorporates actual master 837c2a51c, including #1773's shared
@@ -228,6 +249,15 @@ device test is represented as necessary or performed for this history-only
 merge. The ignored `.artifacts/master794-20261004/input-identity.json` records
 the full hashes and this scope. All running benchmark snapshots retain their
 original commits and timings.
+
+Merge `227f76fdd` then incorporates actual master `d9431c913`, the reviewed
+README publication from #1786. Recomputing all 1355 native inputs again gives
+the same d198acd7 identity; the changes are benchmark evidence and its consumers,
+not native inputs. The existing build/qualification retains its original source
+commit. The README now contains the six-point HF-style warm figure after
+current-head publication LGTM and successful CI. Its explicitly identified
+0132d758/b82e4686 candidate remains distinct from these newer measurements.
+The merge identity receipt is in ignored `.artifacts/masterd943-20261004/`.
 
 ## Readiness boundaries
 
