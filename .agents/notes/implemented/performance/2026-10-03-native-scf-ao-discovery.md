@@ -1,6 +1,6 @@
 # Decision: explicit native SCF sampled-AO discovery
 
-Status: implemented, experimental; numerical and endpoint qualification pending
+Status: implemented, experimental; integration qualified, endpoint timing pending
 Date: 2026-10-03
 
 ## Problem
@@ -60,6 +60,26 @@ native discovery target, memcheck and synccheck (zero reported errors), and the
 WB97M-V native target in n1 Slurm job 5571. That executable qualification does
 not establish this standalone branch's complete SCF/force caller or a speedup.
 Complete endpoint qualification remains pending.
+
+The complete integration composition `0132d7584` subsequently passed seven
+independent WB97M-V energy/force, changed-geometry and stale-snapshot cases with
+both native SCF and force maps enabled, and the same seven with force-cache
+allowance zero (n1 RTX 5090, finite Slurm 5575; 182.27/182.45 s, no skips).
+Each group reported 66 successful native calls and 467 actual XC submissions;
+every successful native call selected its geometry-owned SCF map. The zero
+allowance group asserts no force discovery and dense force contraction work.
+Native discovery, memcheck, synccheck and the native WB97M target also passed.
+Host resource/compiler checks with the completed library passed 180 cases
+(seven device cases skipped in that separate host-only command).
+
+The loaded library SHA-256 is
+`b82e468613c5c90e076aa10082b2389c8dda74335f625a7b77641c1c085ef3f9`;
+all 1351 manifest inputs independently reproduce source identity
+`de8a1684f0afbb4ec8545022c46d24c1e6c85c3c7851df237af436897bf1d862`.
+The actual master `d442177a6` integration changes no build-manifest inputs from
+the built source `c06859af9`. This is composition evidence, not an exact-head
+standalone library qualification. Complete matched 24/48/96 timings are pending;
+the numerical tests do not establish a speedup or public host-budget support.
 
 SCF discovery runs in prepared-owner construction. A complete cold comparison
 must include synchronized preparation plus the first energy/force execution
