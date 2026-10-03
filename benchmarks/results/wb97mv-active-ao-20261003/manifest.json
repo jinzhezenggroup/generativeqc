@@ -12,6 +12,12 @@
   },
   "scope": "opt-in integrated candidate; warm complete energy plus analytic forces; not a master default claim",
   "files": {
+    "matched12-sparse.json.xz": {
+      "sha256": "3d6edf958329ac869d91d55afc854e474bc69488ad8045eb616168f19f1d1568",
+      "bytes": 9996,
+      "decoded_sha256": "39eafcc269ab21b520553f668bbd325f2435c795731479480c051be8f9ef48a0",
+      "decoded_bytes": 86407
+    },
     "matched24-dense.json.xz": {
       "sha256": "d6cb681628917905c38220e9200c64673143267e6e7cb4e07ad52ed77bb36320",
       "bytes": 11428,
@@ -24,6 +30,12 @@
       "decoded_sha256": "26a60fe617cfd36117fea054057df6b1c5c24a618cd2a667ae4499671fdefdd1",
       "decoded_bytes": 105206
     },
+    "matched3-sparse.json.xz": {
+      "sha256": "9ccf4809ef2c586ea688ee807050d816a33b07e427b847e02aeac9dd23230e38",
+      "bytes": 8340,
+      "decoded_sha256": "d90495078684154f16192dfeca83098e1e8c1eab0086c77cda42e8feacf536d6",
+      "decoded_bytes": 72123
+    },
     "matched48-dense.json.xz": {
       "sha256": "47546b5a6f9f7360ec07290cd6a68f1f58d22a8b1238086db98c2422f72a166f",
       "bytes": 15476,
@@ -35,6 +47,12 @@
       "bytes": 15760,
       "decoded_sha256": "b07e03ccb45eae9baea758deb8978b1e763fc08ed3ddd804d22461e878cb4795",
       "decoded_bytes": 142653
+    },
+    "matched6-sparse.json.xz": {
+      "sha256": "920e6dbdb20d1d164635a7d655ab1a5e719c7eb7427af195189e4555226cc488",
+      "bytes": 8872,
+      "decoded_sha256": "e2d91d8b1e3480c6320d3071e71d6be859610cbb44c086224107a2b74d7b1bfc",
+      "decoded_bytes": 76965
     },
     "matched96-sparse.json.xz": {
       "sha256": "330df9491d70aade7f4f3d92362d99ef2088195b4d4e7cbff51d6efbc5220784",
@@ -53,11 +71,23 @@
     }
   },
   "slurm_jobs": {
+    "3": 5631,
+    "6": 5631,
+    "12": 5631,
     "24": 5577,
     "48": 5576,
     "96": 1412
   },
   "comparison_modes": {
+    "3": [
+      "sparse"
+    ],
+    "6": [
+      "sparse"
+    ],
+    "12": [
+      "sparse"
+    ],
     "24": [
       "dense",
       "sparse"

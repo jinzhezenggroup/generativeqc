@@ -58,8 +58,11 @@ def draw(directory: Path) -> None:
             "svg.hashsalt": "generativeqc-wb97mv-active-ao",
         }
     )
-    fig, ax = plt.subplots(figsize=(8.2, 4.1))
     aos = [row["aos"] for row in reports]
+    ao_ticks = [24, 48, 96, 192, 384, 768]
+    if aos != ao_ticks:
+        raise ValueError("the HF-matched WB97M-V curve requires all six AO sizes")
+    fig, ax = plt.subplots(figsize=(8.2, 4.1))
     for key, engine, label, style in (
         ("native", "GenerativeQC", "GenerativeQC", "o-"),
         ("reference", "GPU4PySCF", "GPU4PySCF 1.8.1", "s--"),
@@ -86,7 +89,7 @@ def draw(directory: Path) -> None:
     style_axes(
         ax,
         "ωB97M-V · spherical def2-SVP · RTX 5090",
-        [24, 48, 96, 192, 384, 768],
+        ao_ticks,
     )
     ax.legend(frameon=False, loc="upper left", fontsize=9)
     fig.text(
