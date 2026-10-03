@@ -18,7 +18,7 @@ PREFIX = r"""
 #include <vector>
 int allocations=0, executions=0;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3;
-namespace core { struct System {}; }
+namespace core { struct System { bool df_supported=true; }; }
 namespace runtime {
 struct ExecutionContext {
   bool cuda=false;
@@ -29,10 +29,16 @@ struct ExecutionContext {
 }
 struct generativeqc_method_descriptor { std::size_t budget=100; bool valid=true; };
 struct MethodError : std::runtime_error {
-  MethodError(int,const char* msg) : std::runtime_error(msg) {}
+  MethodError(int,const std::string& msg) : std::runtime_error(msg) {}
 };
 struct Reference { std::size_t reference_memory_budget_bytes=100; int diis_history=8; double screening_tolerance=0; };
 namespace scf {
+namespace cuda_execution {
+bool cuda_df_shell_domain(const core::System& system,const char*,std::string& detail) {
+  detail="unsupported DF source basis";
+  return system.df_supported;
+}
+}
 enum class FockSpin { Restricted };
 enum class FockBackend { Cpu, Cuda };
 // Match the real derivative default so value-only admission is tested.
@@ -83,6 +89,16 @@ int main(int argc,char** argv) {
   if (mode == 0) descriptor.budget=79;
   if (mode == 1) descriptor.valid=false;
   if (mode == 2) execution.cuda=true;
+  if (mode == 5) {
+    execution.cuda=true;
+    core::System auxiliary; auxiliary.df_supported=false;
+    try {
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary);
+      return 9;
+    } catch (const MethodError&) {
+      return executions || allocations ? 10 : 0;
+    }
+  }
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
                                         nullptr,nullptr,0,nullptr);
@@ -118,14 +134,22 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
     path, executable = tmp_path / "probe.cpp", tmp_path / "probe"
     path.write_text(program)
     compiled = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
+        [
+            compiler,
+            "-std=c++20",
+            "-O0",
+            "-DGENERATIVEQC_HAS_CUDA=1",
+            str(path),
+            "-o",
+            str(executable),
+        ],
         capture_output=True,
         text=True,
         timeout=30,
         check=False,
     )
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
-    for mode in range(5):
+    for mode in range(6):
         result = subprocess.run(
             [str(executable), str(mode)],
             capture_output=True,

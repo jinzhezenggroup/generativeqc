@@ -208,6 +208,9 @@ internal `run_rccsd_native_state` entry accepts an optional correlation auxiliar
 system to compose native CUDA RHF, this source, and the native DF CCSD solver.
 Public descriptors still reject DF; native DF triples, Lambda and forces are
 not registered by this entry.
+The current CUDA source accepts orbital and auxiliary shells through f. Its
+shared capability check runs before RHF; g-shell RI auxiliary bases require a
+separately qualified source extension.
 
 The source reuses the generated CUDA three-center/metric evaluator and the
 shared cuSOLVER symmetric inverse-root owner, with an explicit relative cutoff.

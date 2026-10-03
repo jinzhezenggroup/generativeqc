@@ -33,6 +33,7 @@
 #include "scf/mean_field.hpp"
 #if GENERATIVEQC_HAS_CUDA
 #include "generated_direct_resident_psss_schedule.cuh"
+#include "scf/cuda/df_source_domain.hpp"
 #endif
 
 namespace generativeqc::methods::detail {
@@ -968,6 +969,14 @@ RccsdNativeState run_rccsd_native_state(
   if (correlation_auxiliary && !execution.cuda_requested())
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native molecular DF-CC source requires CUDA");
+#if GENERATIVEQC_HAS_CUDA
+  if (correlation_auxiliary) {
+    std::string detail;
+    if (!scf::cuda_execution::cuda_df_shell_domain(*correlation_auxiliary, "auxiliary", detail) ||
+        !scf::cuda_execution::cuda_df_shell_domain(system, "orbital", detail))
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, detail);
+  }
+#endif
   const auto budget = correlation_budget(descriptor);
   if (external_reservation_bytes >= budget)
     throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
