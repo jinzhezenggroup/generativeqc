@@ -41,11 +41,23 @@ struct SelfConsistentOutcome {
   bool converged{};
 };
 
+/** Default eligibility leaves the method-neutral scalar policy unchanged. */
+struct AllowSelfConsistentConvergence {
+  template <class Evaluation>
+  constexpr bool operator()(const SelfConsistentProgress&, const Evaluation&) const noexcept {
+    return true;
+  }
+};
+
 /** Run a generic self-consistent fixed-point iteration.
  *
  * evaluate(state, iteration) must return an object exposing:
  *   energy, state_rms, residual_rms
  * and any method-owned proposal payload required by accept().
+ *
+ * eligible(progress, evaluation) may veto convergence after the scalar gates
+ * pass. Both arguments are const and describe the current evaluation. It cannot
+ * override a failed scalar gate and does not run on the first iteration.
  *
  * record(progress, evaluation) runs before accept(), matching existing
  * mean-field diagnostic ordering: proposal hooks may inspect the current
@@ -56,11 +68,12 @@ struct SelfConsistentOutcome {
  * other method-specific update rules. Convergence is evaluated from the
  * physical proposal metrics before that acceptance step.
  */
-template <class State, class Evaluate, class Accept, class Record>
+template <class State, class Evaluate, class Accept, class Record,
+          class Eligible = AllowSelfConsistentConvergence>
 SelfConsistentOutcome<State> run_self_consistent(State initial_state,
                                                  const SelfConsistentPolicy& policy,
                                                  Evaluate&& evaluate, Accept&& accept,
-                                                 Record&& record) {
+                                                 Record&& record, Eligible&& eligible = {}) {
   State state = std::move(initial_state);
   SelfConsistentProgress latest;
   double previous_energy = std::numeric_limits<double>::infinity();
@@ -80,6 +93,9 @@ SelfConsistentOutcome<State> run_self_consistent(State initial_state,
         iteration > 1 && latest.energy_change < policy.energy_tolerance &&
         latest.state_rms < policy.state_tolerance &&
         (!policy.require_residual || latest.residual_rms < policy.residual_tolerance);
+
+    if (latest.converged)
+      latest.converged = eligible(std::as_const(latest), std::as_const(evaluation));
 
     record(latest, evaluation);
     state = accept(state, std::move(evaluation), latest);
