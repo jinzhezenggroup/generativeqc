@@ -53,7 +53,7 @@ the prior 26.662892/26.547909 s OFF/ON medians do not establish a robust gain
 against the observed scatter. Actual indexed-claim counts are not exposed by
 this runner; requested policy is not relabeled as a measured claim count.
 
-## Current-master qualification
+## Master 1a4acc519 qualification and frozen timings
 
 Frozen source 4079d30b4873ac41307f4105c0f778feeb9db83c includes actual master
 1a4acc519 and both claim-reader barriers. The add/add regression-test conflict
@@ -94,11 +94,43 @@ passes and one C++ compile failure because `/tmp` was full; the unchanged suite
 passes using `/data` temporary storage and the ccache compiler wrapper. The
 environment failure and its original log are retained.
 
+All ten 24-atom OFF/ON cold/priming/warm pairs subsequently pass the independent
+verifier, with errors below 2.388e-12 Eh / 4.920e-10 Eh/Bohr, one-iteration warm
+results and reference XC on GPU. Unindexed/indexed native warm medians are
+27.385214 / 26.819840 s versus their paired reference 28.489713 / 28.446338 s.
+Complete cold is 249.422527 / 249.021745 s versus reference
+120.385531 / 120.059483 s; both native cold solves take 18 iterations. These
+results belong to frozen 4079/6dba, not the newer qualification below. The
+96-atom sequence continues without restarting or changing that source.
+
+## Master 9c54107ca and spin-boundary regression repair
+
+The integration advances to actual master 9c54107ca via merge 5ac08497e.
+Its new scalar eigensolver selection is explicitly CPU primary-HF only;
+the prior CUDA timing campaign remains frozen and is not relabeled.
+Independent diagnosis of the parent B3LYP regression identifies cancellation
+in the shared VWN spin interpolation, rather than an AO-map indexing defect.
+The exact fix from #1794 forms spin fractions from the supplied densities
+before differentiation, without changing the formula or error gates. See the
+[numerical decision](../implemented/numerics/2026-10-04-vwn-spin-fractions.md).
+
+With this patch, the complete original native DFT CUDA regression now passes.
+Finite n1 Slurm 5625 also passes 168 independent point/VWN cases, including
+52 real-device boundary cases, and seven complete independent WB97M-V
+energy/force/displaced-energy/stale-state tests with joint maps plus indexed
+forces (66 successful native calls, 467 actual XC submissions). This is fresh
+qualification of the new composition, not a cold/warm timing result.
+The 1355-input source identity is
+`ebdf07921464440e085b2925a1bd061ba9090788485d1cab01e3cada7122814c`;
+library SHA-256 is
+`5a1b86cef1c0e978118d3024dc36861ebe8cd326dee8a6fe944a6b34000a5461`.
+All 451 compiler commands use verified ccache launchers. The qualification
+receipt binds source, binary, logs, successful job outcome and actual work.
+
 ## Readiness boundaries
 
-The parent local-AO component retains its reproduced pre-existing B3LYP
-empty-spin full-regression failure; no tolerance is relaxed and full regression
-is not claimed green. Component reviews, current-head CI, current-master device
+The earlier parent B3LYP failure is superseded by the full-regression result
+above after the independent #1794 fix. Component reviews, current-head CI, current-master device
 qualification and combined storage admission remain separate merge gates.
 The earlier scoped force-composition LGTM does not cover these new consumers.
 
@@ -106,4 +138,7 @@ Ignored `.artifacts/scf-ao-pages/` retains every indexed/unindexed attempt and
 the independent per-variant verifier. `.artifacts/indexed-latest-20261003/`
 retains frozen source, build/cache receipts, transfer hashes, scripts, Slurm
 records and new qualification. README #1786 remains the reviewable publication
-of the completed unindexed joint comparison and its cold/warm figure.
+of the completed unindexed joint comparison and its HF-style warm figure;
+complete cold results remain explicit in the detailed evidence. The new
+`.artifacts/vwn-spin-boundary-20261004/` retains the master-9c build and full
+regression receipts.

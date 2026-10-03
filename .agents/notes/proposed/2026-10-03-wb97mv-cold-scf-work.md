@@ -181,7 +181,27 @@ original 1e-6/1e-4. Every preliminary solve must converge under its recorded
 controls before installing the density; the final full-grid target remains
 1e-11/1e-9 with DIIS history 8. The same frozen ebb/fc614 source and library
 are verified inside Slurm. All source work remains in complete-cold preparation.
-These stopping-control results are pending.
+All four controls complete and pass the independent 20-pair E/F verifier;
+maximum errors are 3.866e-12 Eh / 5.805e-10 Eh/Bohr, reference XC remains on
+GPU and every warm/priming call takes one iteration. Complete cold is
+244.881151 s without a seed, then 238.627422 / 238.556393 / 238.649670 s for
+loose / medium / tight source controls. Paired reference cold is
+118.438526 / 118.489155 / 118.328431 / 118.224691 s. All three source solves
+still take 19 iterations and cost 69.060948 / 69.157789 / 69.145649 s; their
+full-grid targets each take 12 iterations rather than 18.
+
+The unchanged iteration count has a specific source explanation:
+`CudaKsPlan::Impl` requires both physical residual norms below
+`min(1e-9, options.density_tolerance)` in addition to energy and density
+change. Loosening the latter controls does not loosen those residual gates.
+This is therefore a negative result for the proposed stopping-only shortcut,
+not evidence that a genuinely bounded preliminary solve is unprofitable.
+Do not weaken the final-state validator or label an unfinished source as
+converged to obtain a cheaper seed. The existing warm-state contract only
+publishes converged states; accepting an unfinished preliminary density
+would need an explicit separate initial-guess contract. No source-control
+default is promoted and this ineffective knob sweep is not expanded to 96
+atoms without a distinct, justified intervention.
 
 Ignored artifacts in the SCF composition worktree retain:
 - `.artifacts/scf-active-ao/profiles/cold24-complete.*` and the independent
