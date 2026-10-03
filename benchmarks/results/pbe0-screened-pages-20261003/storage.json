@@ -1,0 +1,297 @@
+{
+  "scope": "Experimental Schwarz-indexed paged full-range independent force schedule; default unchanged.",
+  "files": [
+    {
+      "path": "baseline-water3.json.gz",
+      "sha256": "5f9a19c4efb577126e188d0d9758f75f049e893c8a2bd54cccdb97da4b744e6b",
+      "uncompressed_sha256": "22a0466a99b5f6817aab1d129ac3c9916ab54a46b252d4e2a219cd85a61ad2b2",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "0",
+        "source_identity": "f46f35ea7d273ffe1b534e3e93082c28c6ef6508a0a89e6702575f9c75fb4046",
+        "library_sha256": "bd00a793de8809a136d1f15e692db029308dc25bcd5c8a0d0e1a76a241caa4fb",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-baseline-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 3,
+      "variant": "baseline"
+    },
+    {
+      "path": "candidate-water3.json.gz",
+      "sha256": "f638785fbaf1a1cf852fc7c82c02847aea63f713ea01ffa30efee05d845d33d7",
+      "uncompressed_sha256": "8a8705d0d07a8eb8d52a166ba4cc5c3966da3fae7aa1da4759eed72947e4f2af",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "1",
+        "source_identity": "d062e73d8595e1f753e16d543c8fe951fa7d38fed7c883c47978eb2ec7c2dfbb",
+        "library_sha256": "ae00a76b40a2a19e72b4f3bc7d2da63c1b8fc65f400a9ea97ad0f0f2ac8c70c2",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 3,
+      "variant": "candidate"
+    },
+    {
+      "path": "baseline-water6.json.gz",
+      "sha256": "6d11290c125802d18548bfe5ae7343999c2400c34eb4a955f0b1acfc23e5f071",
+      "uncompressed_sha256": "78f1d000c3b0b853203895ea5722920dabdac7363d82be3d8406e60a61125c60",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "0",
+        "source_identity": "f46f35ea7d273ffe1b534e3e93082c28c6ef6508a0a89e6702575f9c75fb4046",
+        "library_sha256": "bd00a793de8809a136d1f15e692db029308dc25bcd5c8a0d0e1a76a241caa4fb",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-baseline-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 6,
+      "variant": "baseline"
+    },
+    {
+      "path": "candidate-water6.json.gz",
+      "sha256": "f67eb6b8cf941b7d36d527412eade719ba92342ef8b0df76f329f14871ef1b88",
+      "uncompressed_sha256": "4cfb7b0427c81964b9cb90535c855285f1a40857979db6f0828b6648028bca05",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "1",
+        "source_identity": "d062e73d8595e1f753e16d543c8fe951fa7d38fed7c883c47978eb2ec7c2dfbb",
+        "library_sha256": "ae00a76b40a2a19e72b4f3bc7d2da63c1b8fc65f400a9ea97ad0f0f2ac8c70c2",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 6,
+      "variant": "candidate"
+    },
+    {
+      "path": "baseline-water12.json.gz",
+      "sha256": "0881cfad336e60182894342a5bb37e1a374e3b156f0748e44e18d8ca4cf1c868",
+      "uncompressed_sha256": "a782f0d524acefb2b36a04f850a65eb8ac47c7489ec4b6914c3224ae0fba7715",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "0",
+        "source_identity": "f46f35ea7d273ffe1b534e3e93082c28c6ef6508a0a89e6702575f9c75fb4046",
+        "library_sha256": "bd00a793de8809a136d1f15e692db029308dc25bcd5c8a0d0e1a76a241caa4fb",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-baseline-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 12,
+      "variant": "baseline"
+    },
+    {
+      "path": "candidate-water12.json.gz",
+      "sha256": "47ee8c150ae3d6b72583f3be1326eb0bef31ea280a845c3127f73f741bda1285",
+      "uncompressed_sha256": "cfdbb8e05343381bff84af5c3ff25320b6d0b67b1ae0ba4c5d917547e779bbc5",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "1",
+        "source_identity": "d062e73d8595e1f753e16d543c8fe951fa7d38fed7c883c47978eb2ec7c2dfbb",
+        "library_sha256": "ae00a76b40a2a19e72b4f3bc7d2da63c1b8fc65f400a9ea97ad0f0f2ac8c70c2",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 12,
+      "variant": "candidate"
+    },
+    {
+      "path": "baseline-water24.json.gz",
+      "sha256": "a8fd00e6198790c5dd90436f4bcb75a25fb3b43a52bdaf1bd2ebf5736aa75a8f",
+      "uncompressed_sha256": "e5017f4b5bb10ca11a4821ead64a8649e279fd53379a442ab72277dd8b766846",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "0",
+        "source_identity": "f46f35ea7d273ffe1b534e3e93082c28c6ef6508a0a89e6702575f9c75fb4046",
+        "library_sha256": "bd00a793de8809a136d1f15e692db029308dc25bcd5c8a0d0e1a76a241caa4fb",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-baseline-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 24,
+      "variant": "baseline"
+    },
+    {
+      "path": "candidate-water24.json.gz",
+      "sha256": "b3e7d3ad0e4aed98fb929234acfcc3284caaa82d385e0bad4ac91242ab2d4405",
+      "uncompressed_sha256": "232a85a3d11bf980130e5bf3246f7d185ef28e181d8a38de152bbb4fa2dcfffa",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "1",
+        "source_identity": "d062e73d8595e1f753e16d543c8fe951fa7d38fed7c883c47978eb2ec7c2dfbb",
+        "library_sha256": "ae00a76b40a2a19e72b4f3bc7d2da63c1b8fc65f400a9ea97ad0f0f2ac8c70c2",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 24,
+      "variant": "candidate"
+    },
+    {
+      "path": "baseline-water48.json.gz",
+      "sha256": "cd8d744464ee7c95628275497dbca9921c4f3638fe236f5f0a1f4aceceafd187",
+      "uncompressed_sha256": "0d709d1c8a76fb253249e93800f7448f80e27529a12369a4e71395316b69a380",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "0",
+        "source_identity": "f46f35ea7d273ffe1b534e3e93082c28c6ef6508a0a89e6702575f9c75fb4046",
+        "library_sha256": "bd00a793de8809a136d1f15e692db029308dc25bcd5c8a0d0e1a76a241caa4fb",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-baseline-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 48,
+      "variant": "baseline"
+    },
+    {
+      "path": "candidate-water48.json.gz",
+      "sha256": "3aae6d32fe19457c1794a6dc21f5841862f4ac1c7bb4b90c8d2d123e4b674b18",
+      "uncompressed_sha256": "5c9078ef68c0bced1e75797fe99281438b49583704de555c04893bd6889e3b9f",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5533",
+        "cuda_visible_devices": "7",
+        "bounded_schwarz_schedule": "1",
+        "source_identity": "d062e73d8595e1f753e16d543c8fe951fa7d38fed7c883c47978eb2ec7c2dfbb",
+        "library_sha256": "ae00a76b40a2a19e72b4f3bc7d2da63c1b8fc65f400a9ea97ad0f0f2ac8c70c2",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 48,
+      "variant": "candidate"
+    },
+    {
+      "path": "baseline-water96.json.gz",
+      "sha256": "cb43416f4e4af81797558656744bf0960525bc37f932cb9f7f959b204ffec980",
+      "uncompressed_sha256": "83af3fc2c78ca5507d1360d007e2f21c862a29d7a273071376d4abb5bdc27a91",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5532",
+        "cuda_visible_devices": "4",
+        "bounded_schwarz_schedule": "0",
+        "source_identity": "f46f35ea7d273ffe1b534e3e93082c28c6ef6508a0a89e6702575f9c75fb4046",
+        "library_sha256": "bd00a793de8809a136d1f15e692db029308dc25bcd5c8a0d0e1a76a241caa4fb",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-baseline-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 96,
+      "variant": "baseline"
+    },
+    {
+      "path": "candidate-water96.json.gz",
+      "sha256": "31caacbbdc61cff7a4e614fde6ae15c313162e2daa7804202519477ce531e9bb",
+      "uncompressed_sha256": "f6699f8a3d089d5ed2c87b49c4dc2f2b0d89677eb267ac0b24e9e0e3da9bacbe",
+      "campaign": {
+        "base_commit": "a20b8801f7f43b83cd7da8001db180716d8df302",
+        "host": "node1",
+        "job": "5532",
+        "cuda_visible_devices": "4",
+        "bounded_schwarz_schedule": "1",
+        "source_identity": "d062e73d8595e1f753e16d543c8fe951fa7d38fed7c883c47978eb2ec7c2dfbb",
+        "library_sha256": "ae00a76b40a2a19e72b4f3bc7d2da63c1b8fc65f400a9ea97ad0f0f2ac8c70c2",
+        "root": "/home/jzzeng/codes/qc-pbe0-screened-pages-20261003"
+      },
+      "outcome": {
+        "exit_code": 0,
+        "time_limit_seconds": 2400
+      },
+      "atoms": 96,
+      "variant": "candidate"
+    },
+    {
+      "path": "endpoints-summary.json.gz",
+      "sha256": "f47bf7cf2417246f002187e6e12e538fd007c377347bd913f0de1f8f897c0106",
+      "uncompressed_sha256": "b225880fb9ade06774e1fe893ff3db1562046316b1b5a2b7b2b41b1711864884"
+    },
+    {
+      "path": "force-summary.json.gz",
+      "sha256": "8a96bbc2ac61792e3d3705dfa1db32d1c8b8bb170bd0f42883e84ef3f2a2798d",
+      "uncompressed_sha256": "dcadd7a5a5fc5334694a4ec6a86757a5a3ef0bc6f19063f8982759412d48ebec"
+    },
+    {
+      "path": "measured-source.patch.gz",
+      "sha256": "a0368e17463494aebedcedfb65dab74ba86010144e009ca6389961f3d5603cd2",
+      "uncompressed_sha256": "9f94ea6581e2a482e35e3d9be9ac5e2a7be40b0cd24a365d5421d5022cb4197c"
+    },
+    {
+      "path": "format-identity-proof.json.gz",
+      "sha256": "09fd4785b3e200161589f286ae6815b0c774e8e561c742e53ec8eb3f3c4bb89e",
+      "uncompressed_sha256": "e33b5ebfe87440fc60636b29065ec3aa44020b69e561ab2ab9beee23723b012c"
+    },
+    {
+      "path": "qualification.json.gz",
+      "sha256": "0523ee4f3c138c3e9e93318236666c929d628927f4b826886d0af5b70e170f10",
+      "uncompressed_sha256": "ddffb748a987900339e7dec081d6958a0e327773522be25d4edca87a1c846848"
+    },
+    {
+      "path": "coarse-endpoints-summary.json.gz",
+      "sha256": "9a90e2de7ff1b72d71c43942a472dd13890410a38df27a1d0bac645cf6e64368",
+      "uncompressed_sha256": "f57ce046d30ef51b818fa0014cda849651ef8f56662841b1e93e64464a8d5300"
+    },
+    {
+      "path": "coarse-load-summary.json.gz",
+      "sha256": "beb0ebdeb52613153253ac5f308a38e5c6748d10f510294406eeee9b46b49f8d",
+      "uncompressed_sha256": "3b69153ff39701dd582fa6ee3efa280655102203b85f6ebc8af46c027d981e22"
+    }
+  ],
+  "source_patch_base": "a20b8801f7f43b83cd7da8001db180716d8df302",
+  "source_patch_scope": "Exact n5 measured-candidate build patch, including untracked files; not the later formatted PR tree.",
+  "reference_root": "../pbe0-def2-svp-20261003",
+  "cold_caveat": "Includes required JIT/cache preparation; caches are not purged, not an isolated schedule speedup.",
+  "raw_receipts": "Ignored .artifacts in qc-pbe0-screened-{blocks,pages}-20261003; no external archive required for the retained endpoint gates."
+}
