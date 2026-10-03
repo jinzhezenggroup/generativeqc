@@ -345,11 +345,14 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_nuclear_sha256": (
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
+        "native_geometry_ao_map_sha256": (
+            "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
+        ),
         "native_geometry_external_sha256": (
-            "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
+            "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
         ),
         "native_geometry_enqueue_sha256": (
-            "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
+            "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -2511,3 +2514,52 @@ def test_empty_grid_rejected_but_one_atom_zero_pair_work_is_valid(
     assert [failure["gate"] for failure in failures] == (
         ["grid_work_capacity"] if blocked else []
     )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("view.nao == aos", "view.nao <= aos"),
+        ("view.nactive <= aos", "view.nactive <= aos + 1"),
+        ("view.ao_ids != nullptr", "true"),
+    ],
+)
+def test_local_ao_admission_helper_remains_bound_to_full_capacity_report(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Out-of-line admission drift must not silently reuse the old census."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text()
+    start = native.index("bool valid_geometry_ao_map(")
+    end = native.index("\n}", start)
+    original = native[start:end]
+    assert original.count(before) == 1
+    target.write_text(native[:start] + original.replace(before, after) + native[end:])
+    with pytest.raises(
+        RuntimeError, match="native_geometry_ao_map_sha256 contract changed"
+    ):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_local_ao_capacity_stays_global_and_pair_work_stays_complete() -> None:
+    """Admitting local panels is not authority to shrink the fixed upper bound."""
+    limits = qualify_capacity._source_limits(ROOT)
+    assert "active_ao_capacity=n" in limits["grid_plan_definition"]
+    assert "grid_plan.host_bytes" in limits["host_bound_definition"]
+    assert limits["grid_pair_visits_definition"] == "grid_work.grid_pair_visits"
+    # The existing exact source bindings additionally cover allocations, launch
+    # scratch, the deferred route, and every counter in the geometry body.
+    native = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    for marker in (
+        "int stationary_geometry_external(",
+        "int stationary_geometry_enqueue(",
+    ):
+        start = native.index(marker)
+        end = native.index("\n}\n", start)
+        body = native[start:end]
+        assert "p->point_count += view->npoint;" in body
+        assert "p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);" in body
+        assert "std::min(p->geometry_lanes, view->npoint)" in body
+        assert "if (!view->nactive)" not in body
