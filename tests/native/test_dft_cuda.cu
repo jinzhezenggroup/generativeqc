@@ -825,16 +825,20 @@ void matrix_schedule_cases() {
         variational_and_state(large_basis, large_grid, functional, 17);
     }
 }
-#include "dft_ao_discovery_cases.cuh"
+// Discovery tests reuse the independent bilinear oracle defined by local-map
+// tests; these in-namespace test fragments must retain dependency order.
+// clang-format off
 #include "dft_local_ao_cases.cuh"
+#include "dft_ao_discovery_cases.cuh"
+// clang-format on
 }  // namespace
 
 int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    ao_discovery_cases();
     if (argc == 2 && std::string(argv[1]) == "--ao-discovery") {
-      ao_discovery_cases();
       std::cout << "CUDA XC AO discovery, independent CPU E/V and bounded fallback gates passed\n";
       return 0;
     }

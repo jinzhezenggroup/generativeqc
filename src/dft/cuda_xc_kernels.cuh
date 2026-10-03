@@ -43,7 +43,8 @@ void select_ao(const CudaXcLayout& l, cudaStream_t stream, const double* basis,
   try {
     cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
     cuda_check(cudaMemsetAsync(flags, 0, l.nao * sizeof(unsigned), stream));
-    scheduled_ao(stream, basis, l.natom, l.nprimitive, l.nao, points, count, l.jets, ao, error);
+    scheduled_ao(stream, basis, l.natom, l.nprimitive, l.nao, points, count, l.jets, ao, error,
+                 nullptr);
     cuda_check(cudaGetLastError());
     const auto point_blocks = std::min(std::size_t{65535}, (count + 127) / 128);
     active_ao_columns<<<dim3((l.nao + 31) / 32, point_blocks), 128, 0, stream>>>(
