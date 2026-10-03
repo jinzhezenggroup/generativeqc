@@ -478,7 +478,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
 
   // A force attempt consumes the exclusive scratch lease. Repeated forces
   // without another final K, errors, and incompatible consumers all fall back.
-  plan->final_projection_token.reset();
+  plan->revoke_projection_leases();
   if (plan->integral_source || !host_weights) {
     if (!plan->metric_response_valid[system]) {
       detail = "DF metric rank crossing: retained/discarded subspaces are unresolved";
