@@ -47,8 +47,11 @@ previous qualification. Both use 20 iterations, 38 primary evaluations and one
 expanded replay. The independent PySCF energy error is 1.45e-12 Eh; maximum
 T1/T2 errors are 8.20e-11/5.61e-12. Admitted numeric capacity increases from
 2,730,069,584 to 2,920,354,384 bytes, with a tested tight-budget fallback.
-This is a solver observation on RTX PRO 6000, not a complete molecular
-CCSD(T)/force endpoint speedup or a repeated timing distribution.
+The solver timer includes iterations, replay and final amplitude copy but starts
+after initial owner allocation/upload. Full process wall time, including those,
+binary input and amplitude output, is 690.17 s before and 264.29 s after. These
+are observations on RTX PRO 6000, not a complete molecular CCSD(T)/force endpoint
+speedup or a repeated timing distribution.
 
 The [retained qualification](../../../../benchmarks/results/df-cc-auxiliary-reduction-20261003/publication.json)
 contains the frozen patch, complete small-case arrays, unfiltered sanitizer logs,

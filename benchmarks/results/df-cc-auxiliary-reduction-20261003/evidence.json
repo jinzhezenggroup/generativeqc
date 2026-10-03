@@ -3,7 +3,7 @@
     {
       "kind": "numerical-qualification",
       "path": "qualification.json.gz",
-      "sha256": "01f43ed5341bea87189dc57f6ce9825eb635020a6031a2efab236a3509df3251"
+      "sha256": "776569026ccfa8ef55554e7017b409344403958a5a93e3c0b112f8c8e245f517"
     }
   ],
   "backend_selected": "cuda",
