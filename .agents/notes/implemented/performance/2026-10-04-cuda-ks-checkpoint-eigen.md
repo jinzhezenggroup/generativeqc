@@ -68,3 +68,36 @@ live stationary-weight lifetime checks, existing checkpoint/resource regressions
 and complete source-plus-WB97M-V E/F comparisons are still required. This slice
 does not expose a public CUDA preliminary-SCF API, lower resource bounds or
 claim that the remaining source/target capacity contract is solved.
+
+## Initial device qualification and retained baseline failure
+
+Release/sm_120 build source 8829743e1 has 444 verified ccache compiler
+commands, native identity
+`bf918c0f028de30a00ffec7223f39b91f688ec476027e73c8797a862423bd168`
+and library
+`5b216500f300c5251bebb006bccb3bd05323c4365d2cf46054c2a6b2cad3d907`.
+Finite n5 Slurm 1422 passes both standalone ordinary-eigen and shared seed-gate
+executables. The initial Python run exposes fixture errors: the named PySCF
+STO-3G table differs from the pinned BSE data at the unchanged electron-count
+gate; a neighbor comparison incorrectly crosses a warm SCF step; and older
+SCF/snapshot tests rely on a now-obsolete energy-only CUDA default. The tests
+now use exact bundled coefficients with independent PySCF integrals, compare
+preservation to the immediate pre-import neighbor, and explicitly request the
+energy-only behavior they test. No scientific gate is relaxed.
+
+Slurm 1425 reruns both native executables and reports 29 Python passes,
+including all four new independent ensemble/live-stationary-lease cases, with
+one existing PBE-UKS OH changed-geometry discrepancy. A separate finite n5
+baseline run reproduces the same discrepancy with reviewed #1801 library
+`dc3fca86b9c44013268e6883f521b515a4a2afcf53ec8ea675d7825a0d2a62c1`
+(native identity `4eab0c4fa2bd533a216349604959dcbb334cfa57de014e2b914369c93b7605b3`):
+changed/fresh energies are -75.58331065095038 / -75.58331066533137 Eh,
+versus candidate -75.58331065095040 / -75.58331066533140 Eh. The 1e-9 gate
+remains failing; this is not reported as a full passing regression. That case
+does not import a checkpoint and never invokes the new admission provider.
+The failure and initial attempts remain under ignored
+`.artifacts/qualification-20261004/`, including the test patch and hashes.
+
+The four new tests are scientific admission/lifetime qualification, not a
+complete WB97M-V cold speed measurement. Latest-master composition and complete
+preliminary-source plus target E/F controls remain separate required evidence.

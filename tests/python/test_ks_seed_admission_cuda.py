@@ -2,6 +2,7 @@
 
 import json
 import os
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,29 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
     """
     gto = pytest.importorskip("pyscf.gto")
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 1.4, 1.0)), ("H", (0.0, -1.4, 1.0))]
-    mol = gto.M(atom=atoms, basis=basis, unit="Bohr", verbose=0)
+    # Use the exact bundled exponents/contractions with independent PySCF
+    # integrals. PySCF's rounded STO-3G table differs enough to fail the
+    # unchanged 1e-7 electron-count gate for the RKS ensemble.
+    pack = json.loads(
+        files("generativeqc").joinpath("data/basis_pack.json").read_text()
+    )
+    elements = pack["bases"][basis]["elements"]
+    oracle_basis = {
+        symbol: [
+            [
+                shell["angular_momentum"],
+                *[
+                    [float(exponent), float(coefficient)]
+                    for exponent, coefficient in zip(
+                        shell["exponents"], shell["coefficients"], strict=True
+                    )
+                ],
+            ]
+            for shell in elements[number]
+        ]
+        for symbol, number in (("O", "8"), ("H", "1"))
+    }
+    mol = gto.M(atom=atoms, basis=oracle_basis, unit="Bohr", verbose=0)
     overlap = mol.intor("int1e_ovlp")
     values, vectors = np.linalg.eigh(overlap)
     x = (vectors / np.sqrt(values)) @ vectors.T
@@ -109,10 +132,17 @@ def test_idle_gpu_admission_preserves_ensemble_gates_and_atomicity(
             item.warm_start_used and not item.warm_start_fallback
             for item in replay.items
         )
+        # Replay performs a fresh SCF step, so preservation is relative to its
+        # output, not the density saved before that step.
+        neighbor = warm_snapshot(batch, 1)
         trace.unlink()
-        assert restore_snapshots(batch, [proposal, None]) == _native.STATUS_SUCCESS
+        _native.check(
+            batch._library,
+            restore_snapshots(batch, [proposal, None]),
+            context=batch._context,
+        )
         assert np.array_equal(warm_snapshot(batch, 0)[0], good)
-        assert np.array_equal(warm_snapshot(batch, 1)[0], saved[1][0])
+        assert np.array_equal(warm_snapshot(batch, 1)[0], neighbor[0])
         records = [json.loads(line) for line in trace.read_text().splitlines()]
         regions = [region for record in records for region in record["regions"]]
         assert all(record["valid"] for record in records)

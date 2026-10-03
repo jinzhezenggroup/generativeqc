@@ -63,7 +63,7 @@ def test_native_snapshot_rejects_relabeling_and_replay(
         with NativeAO(ATOMS, charge=charge, multiplicity=multiplicity) as basis:
             with pytest.raises(RuntimeError, match="invalid argument"):
                 StationaryKsState.from_native(batch, basis)
-            batch.execute(strict=True)
+            batch.execute(strict=True, properties=("energy",))
             from generativeqc._snapshot_grid_cache import SnapshotGridCache
 
             # Exercise the public-force cache on CPU too, without requiring a
@@ -173,14 +173,14 @@ def test_native_snapshot_rejects_relabeling_and_replay(
             with calculator.prepare_batch(
                 [ATOMS], charges=[charge], multiplicities=[multiplicity]
             ) as other_batch:
-                other_batch.execute(strict=True)
+                other_batch.execute(strict=True, properties=("energy",))
                 other = StationaryKsState.from_native(other_batch, basis)
                 with pytest.raises(
                     ValueError, match="native stationary state identity"
                 ):
                     contract.validate(replace(state, _source=other._source))
 
-            batch.execute(strict=True)
+            batch.execute(strict=True, properties=("energy",))
             with pytest.raises(ValueError, match="stale"):
                 contract.validate(state)
             current = StationaryKsState.from_native(batch, basis)
@@ -203,12 +203,14 @@ def test_native_snapshot_rejects_relabeling_and_replay(
 
             # A rejected geometry update revokes the next proof too, before a
             # new successful solve. This calls the actual native invalidation.
-            result = batch.execute(coordinates=[[0.0]], strict=False)
+            result = batch.execute(
+                coordinates=[[0.0]], strict=False, properties=("energy",)
+            )
             assert not result.items[0].succeeded
             with pytest.raises(ValueError, match="stale"):
                 StationaryDerivativeContract(current.identity).validate(current)
 
-            batch.execute(strict=True)
+            batch.execute(strict=True, properties=("energy",))
             final = StationaryKsState.from_native(batch, basis)
         # Source AO lifetime does not own the native snapshot; batch lifetime does.
         assert StationaryDerivativeContract(final.identity).validate(final) is final
@@ -230,10 +232,12 @@ def test_snapshot_cache_replaces_moved_geometry_without_reusing_the_lease() -> N
     moved = [("H", (0.0, 0.0, -0.8)), ("H", (0.0, 0.0, 0.8))]
     with calculator.prepare_batch([ATOMS]) as batch:
         batch._snapshot_grid_cache = SnapshotGridCache()
-        batch.execute(strict=True)
+        batch.execute(strict=True, properties=("energy",))
         with NativeAO(ATOMS) as basis:
             original = StationaryKsState.from_native(batch, basis)
-        batch.execute([[position for _, position in moved]], strict=True)
+        batch.execute(
+            [[position for _, position in moved]], strict=True, properties=("energy",)
+        )
         with NativeAO(moved) as basis:
             current = StationaryKsState.from_native(batch, basis)
             assert current.grid is not original.grid
