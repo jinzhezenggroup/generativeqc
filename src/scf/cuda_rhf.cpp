@@ -65,6 +65,7 @@
 #include "scf/cuda/one_electron_view.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/queue_plan.hpp"
+#include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda/reference_export.cuh"
 #include "scf/cuda/resources.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
@@ -569,8 +570,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       std::all_of(host.shell_angular.begin(), host.shell_angular.end(),
                   [](std::uint8_t angular) { return angular <= 3; });
   const bool requested_transformed_direct = requested_quartet_direct && direct_nbf != nbf;
-  // Reference export selects the bounded matrix-direct evaluator; optimized
-  // quartet dispatch retains its generated-class coverage gate.
+  // Reference export keeps a bounded matrix-direct fallback. Optional ERI
+  // residency is admitted after the actual solver workspaces are known below;
+  // optimized quartet dispatch retains its generated-class coverage gate.
   bool requested_bounded_direct_streaming =
       requested_quartet_direct &&
       (detail::direct_topology_requires_bounded_streaming(total_shell_quartets) ||
@@ -948,7 +950,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   ArenaLayout& layout = plan.layout;
   CudaResources& resources = plan.resources;
-  const bool persistent_eri = plan.persistent_eri;
+  bool persistent_eri = plan.persistent_eri;
   const bool quartet_direct = plan.quartet_direct;
   const bool transformed_direct = plan.transformed_direct;
   if (transformed_direct != !host.ao_to_direct_transform.empty()) {
@@ -1847,6 +1849,43 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
   } else if (first_setup) {
     plan.lwork = 0;
+  }
+  if (options.export_physical_reference) {
+    // Account for the actual eigensolver workspace before considering optional
+    // residency. Keep the matrix-direct arena intact so a tight budget or an
+    // unavailable device allocation preserves the bounded numerical fallback.
+    const auto required = reference_detail::check_capacity(
+        reference_base_bytes,
+        posthf::checked_add(resources.solver_workspace_bytes_,
+                            resources.solver_host_workspace_bytes_),
+        options.reference_memory_budget_bytes);
+    const auto max_angular =
+        *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
+    const auto resident_bytes =
+        reference_eri_cache_bytes(eri_elements, max_angular, options.compute_forces, required,
+                                  options.reference_memory_budget_bytes);
+    if (first_setup && resident_bytes != 0) {
+      cuda_error = runtime::resource_cuda_malloc_async(&resources.reference_eri_, resident_bytes,
+                                                       resources.stream_);
+      if (cuda_error == cudaErrorMemoryAllocation) {
+        // This cache is optional. Clear only its allocation error; propagate
+        // other CUDA failures instead of disguising them as storage pressure.
+        (void)cudaGetLastError();
+        resources.reference_eri_ = nullptr;
+        cuda_error = cudaSuccess;
+      } else if (cuda_error != cudaSuccess) {
+        fill_global_failure(outputs, cuda_status(cuda_error));
+        return outputs;
+      } else {
+        resources.reference_eri_bytes_ = resident_bytes;
+      }
+    }
+    resources.reference_peak_bytes_ = reference_detail::check_capacity(
+        required, resources.reference_eri_bytes_, options.reference_memory_budget_bytes);
+    if (resources.reference_eri_ != nullptr) {
+      eri = resources.reference_eri_;
+      persistent_eri = true;
+    }
   }
   const int lwork = plan.lwork;
 
@@ -3833,6 +3872,19 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         resources.stream_, nbf, host.occupied[0], resources.reference_peak_bytes_,
         {overlap, hcore, fock, coefficients, density}, eigenvalues,
         {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
+    if (outputs[0].status == GENERATIVEQC_STATUS_SUCCESS) {
+      // Download has synchronized the stream. Report semantic completed work,
+      // not the one-time host graph-capture calls or allocator pool rounding.
+      runtime::df_progress::Scope trace("cuda_rhf_reference_completed", "cuda_completed");
+      runtime::df_progress::Scope::number("ao_functions", nbf);
+      runtime::df_progress::Scope::number("scf_iterations", outputs[0].scf.iterations);
+      runtime::df_progress::Scope::number(
+          "physical_fock_builds", outputs[0].scf.iterations + post_scf_physical_fock_builds);
+      runtime::df_progress::Scope::number("resident_eri_bytes", resources.reference_eri_bytes_);
+      runtime::df_progress::Scope::number("resident_eri_values_built",
+                                          persistent_eri && geometry_changed ? eri_elements : 0);
+      runtime::df_progress::Scope::number("reference_peak_bytes", resources.reference_peak_bytes_);
+    }
     return outputs;
   }
   if (options.compute_forces) {

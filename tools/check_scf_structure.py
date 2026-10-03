@@ -543,10 +543,11 @@ CUDA_ALLOWED["cuda_hf_driver"] += (
     "posthf/capacity.hpp",
     "runtime/allocation_measurement.hpp",
     "scf/cuda/reference_export.cuh",
+    "scf/cuda/reference_eri_policy.hpp",
     "scf/mean_field.hpp",
     "tensor/metrics.hpp",
 )
-CUDA_MODULES["cuda_reference_export"] = ("reference_export",)
+CUDA_MODULES["cuda_reference_export"] = ("reference_export", "reference_eri_policy")
 CUDA_ALLOWED["cuda_reference_export"] = (
     "posthf/capacity.hpp",
     "scf/mean_field.hpp",

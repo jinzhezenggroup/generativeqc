@@ -234,6 +234,14 @@ requests in the qualified <=28-AO conventional all-electron domain reuse the
 same native CCSD(T) response mathematics as CPU and send the final one-/two-
 electron nuclear derivative contractions to the existing CUDA consumers.
 
+The shared CUDA RHF reference owner may retain unscreened s/p ERIs in device
+memory for its Fock iterations. It admits this optional cache after querying
+mandatory solver workspaces, charges its complete numeric peak and device
+ownership, and limits the cache to 256 MiB. Tight budgets, device allocation
+pressure and higher angular momentum retain the bounded matrix-direct route.
+Geometry changes rebuild the cache, and its lifetime ends with the RHF bucket.
+The existing physical-reference validation gates apply to both schedules.
+
 The MO provider borrows admitted prepared CPU/CUDA value sources, with an
 explicit bounded host-source fallback when optional CUDA source storage is
 unavailable. Source requests and their memory queries both use derivative order
