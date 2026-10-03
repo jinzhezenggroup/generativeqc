@@ -130,6 +130,19 @@ unindexed 96-atom control is still running, so no isolated indexed percentage
 is inferred from this pair. The independent one-variant receipt is retained as
 `results/matched96-indexed-verified.json` in that campaign's ignored directory.
 
+Slurm 5618 subsequently completes the same-binary unindexed control. All ten
+96-atom OFF/ON cold/priming/warm pairs pass independent verification. Unindexed
+native warm samples are 392.764871 / 393.840803 / 393.344613 s; its median is
+393.344613 s versus reference 411.146876 s. The indexed 375.332872 s median
+therefore uses 4.58% less warm time than its unindexed control, with equal
+one-iteration replay work. Maximum errors across both variants are below
+1.151e-10 Eh / 3.245e-10 Eh/Bohr, and reference XC remains on GPU. Unindexed
+complete cold is 4004.997612 s versus indexed 3989.496849 s; both native solves
+take 24 iterations, while their references take 16 and cost about 1865–1866 s.
+The single cold samples do not establish a robust cold benefit. The completed
+two-variant receipt is `results/matched96-verified.json`; all measurements keep
+the frozen 4079/6dba source and library identities above.
+
 ## Master 9c54107ca and spin-boundary regression repair
 
 The integration advances to actual master 9c54107ca via merge 5ac08497e.
@@ -232,6 +245,17 @@ source/library/hardware receipts and orchestration differ. This RTX PRO 6000
 measurement remains pending and cannot be mixed into the RTX 5090 README curve.
 The n1 master-dc and master-1a jobs continue under their own frozen identities.
 
+Slurm 2182 subsequently completes successfully on RTX PRO 6000. All five
+96-atom cold/priming/three-warm pairs pass the independent unchanged E/F,
+convergence, on-GPU XC and complete-cold gates. Maximum errors are below
+1.169e-10 Eh / 3.198e-10 Eh/Bohr. Native warm samples are
+342.975112 / 342.057653 / 342.122510 s, versus reference
+368.990720 / 368.969166 / 369.130887 s. The 342.122510 / 368.990720 s medians
+give 7.28% less native warm time on this GPU. Complete cold remains slower:
+3620.209206 / 1679.026175 s with 24/16 iterations. Every priming/warm endpoint
+takes one iteration. This qualifies the frozen d198acd7/fe826ad7 composition's
+large complete endpoint; it does not add a PRO 6000 point to the 5090 figure.
+
 Ignored `.artifacts/master837-20261004/` retains build, cache, source archive and
 all qualification receipts; `.artifacts/master837-pro6000-96-20261004/` retains
 the new complete timing campaign. No existing endpoint is relabeled.
@@ -262,9 +286,19 @@ The merge identity receipt is in ignored `.artifacts/masterd943-20261004/`.
 ## Readiness boundaries
 
 The earlier parent B3LYP failure is superseded by the full-regression result
-above after the independent #1794 fix. Component reviews, current-head CI, current-master device
-qualification and combined storage admission remain separate merge gates.
-The earlier scoped force-composition LGTM does not cover these new consumers.
+above after the independent #1794 fix. The latest native-input composition now
+has full regression, both independent fallback qualifications and a completed
+96-atom endpoint comparison. Against master d9431c913, the combined retention
+check passes the unchanged 64 MiB limit; the explicit change review contains
+17 evidence files / 240,651 bytes, below the unchanged 2 MiB limit. The
+source-bound checker receipt is retained in `.artifacts/masterd943-20261004/`.
+
+These author-side gates allow final integration review. Component/overlap
+disposition, current-head CI and a real current-composition LGTM remain required
+before merge; the earlier scoped force-composition LGTM does not cover the new
+consumers. The separate 96-atom preliminary-source experiment remains private
+and pending. Neither a public CUDA preliminary API nor unsupported public
+WB97M-V resource admission is promoted by this integration.
 
 Ignored `.artifacts/scf-ao-pages/` retains every indexed/unindexed attempt and
 the independent per-variant verifier. `.artifacts/indexed-latest-20261003/`

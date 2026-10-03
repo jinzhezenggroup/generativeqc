@@ -275,6 +275,25 @@ Scripts, dry plans, frozen identity and Slurm receipts are retained in ignored
 attempt under `failed-attempt1/`. The continuing 96-atom private endpoint
 experiment cannot by itself qualify any of these public resource contracts.
 
+## Measured density-import bottleneck
+
+Finite n5 Slurm 1420 separates the existing source export from checkpoint
+admission, using qualified d198acd7/fe826ad7 inputs. At 48 atoms, export
+query/copy together cost 0.000895 s, while three imports cost
+15.684234 / 15.631609 / 15.632248 s. All imported density/coordinate values
+remain bitwise identical. Slurm 1421 observes the unchanged import with the
+shared host trace: two actual reference eigensolves consume about 15.35 of
+15.63 seconds, covering source-metric and occupation validation. These are
+component diagnostics without a target SCF or complete E/F speed claim.
+
+The follow-up #1807 starts from master d9431c913 and reuses the idle CUDA KS
+eigensolver for the existing shared admission guard. Its independently tracked
+build and device qualification do not alter this frozen experiment or promote
+the public preliminary API. Source coordinates and all ensemble gates remain
+required; live final-state/weight buffers must survive failed imports. Detailed
+scripts, the unsuccessful initial library-load attempt, ccache receipts and
+actual call traces remain in ignored `.artifacts/seed-transfer-audit-20261004/`.
+
 ## Promotion gates
 
 Require larger and displaced-system complete endpoints before claiming a
