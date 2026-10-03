@@ -1,7 +1,11 @@
 """One dry tile search serves ordinary and composite stationary consumers."""
 
-from types import SimpleNamespace
+import ast
+import inspect
+import typing
+from types import CodeType, FunctionType, SimpleNamespace
 
+import numpy as np
 import pytest
 from generativeqc import _stationary_cuda as runtime
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -162,4 +166,139 @@ def test_unexpected_owner_error_is_not_hidden_as_another_tile_rejection() -> Non
     with pytest.raises(RuntimeError, match="not a capacity"):
         plan_stationary_cuda_grid_schedule(
             grid_points=4096, tile_points=None, admit=failed_owner
+        )
+
+
+def _ecp_admission(prepared: bool, host_budget: int) -> tuple[typing.Any, dict]:
+    """Execute the real nested candidate callback with full ECP tensor plans."""
+    from generativeqc.ks import resolve_ks_method
+    from generativeqc_compiler.method.stationary_gradient import (
+        SCF_POINT_MODEL,
+        StationaryGradientPlan,
+        StationaryMeanField,
+    )
+
+    plan = StationaryGradientPlan(
+        resolve_ks_method("pbe-rks")[0],
+        StationaryMeanField(SCF_POINT_MODEL, hamiltonian="scalar-semilocal-ecp"),
+    )
+    basis = SimpleNamespace(
+        natom=2,
+        nao=12,
+        nprimitive=12,
+        numeric_bytes=1776,
+        packed=SimpleNamespace(size=222),
+    )
+    state = SimpleNamespace(
+        grid=SimpleNamespace(points=np.empty((4096, 3))),
+        _source=SimpleNamespace(
+            ecp_cores=(2, 0), ecp_terms=(object(),), values=np.empty(8)
+        ),
+    )
+    scope = vars(runtime) | {
+        "state": state,
+        "basis": basis,
+        "na": 2,
+        "n": 12,
+        "plan": plan,
+        "target": cuda_target_info("sm_120"),
+        "needs_first": True,
+        "primitive_tile": 4096,
+        "integral_terms": 32,
+        "source_names": runtime.stationary_runtime_sources(plan),
+        "ecp": True,
+        "max_device_bytes": 512 << 20,
+        "max_host_bytes": host_budget,
+        "max_ecp_pair_samples": 100_000_000,
+        "max_grid_points": None,
+        "max_grid_pair_visits": None,
+        "max_pending_grid_tiles": 64,
+        "max_pending_grid_pair_visits": 100_000_000,
+        "prepared": object() if prepared else None,
+    }
+    function = next(
+        node
+        for node in ast.walk(
+            ast.parse(inspect.getsource(runtime._complete_rks_cuda_gradient_diagnostic))
+        )
+        if isinstance(node, ast.FunctionDef) and node.name == "admit_tile"
+    )
+    compiled = compile(
+        ast.Module(body=[function], type_ignores=[]),
+        "<actual dry tile admission>",
+        "exec",
+    )
+    function_code = next(
+        value for value in compiled.co_consts if isinstance(value, CodeType)
+    )
+    return FunctionType(function_code, scope), scope
+
+
+@pytest.mark.parametrize("prepared", [False, True])
+def test_tight_ecp_candidate_includes_prepared_tensor_host_storage(
+    monkeypatch: pytest.MonkeyPatch, prepared: bool
+) -> None:
+    admit, _ = _ecp_admission(False, 256 << 20)
+    large, _ = admit(1024)
+    assert large.ecp_pair_samples == 93_210_624
+    tensor_host = sum(value.host_bytes for value in large.tensor_plans.values())
+    assert tensor_host > 0
+    admit, scope = _ecp_admission(prepared, large.host_bound)
+    selected, _ = plan_stationary_cuda_grid_schedule(
+        grid_points=4096, tile_points=None, admit=admit
+    )
+    assert selected.grid_plan.tile_points == (256 if prepared else 1024)
+    if not prepared:
+        assert admit(1024)[0].host_bound == large.host_bound
+        return
+    with pytest.raises(ValueError, match="prepared.*host budget"):
+        plan_stationary_cuda_grid_schedule(
+            grid_points=4096, tile_points=1024, admit=admit
+        )
+
+    class AdmittedBeforeCompilation(Exception):
+        pass
+
+    def stop_after_admission(*args: typing.Any) -> typing.NoReturn:
+        raise AdmittedBeforeCompilation
+
+    owner = runtime.PreparedStationaryCudaExecution()
+    monkeypatch.setattr(owner, "_request", lambda **kwargs: None)
+    monkeypatch.setattr(runtime, "_layout", stop_after_admission)
+    with pytest.raises(AdmittedBeforeCompilation):
+        owner.ensure(
+            state=scope["state"],
+            basis=scope["basis"],
+            contract=None,
+            plan=scope["plan"],
+            tensor_plans=selected.tensor_plans,
+            compiler=SimpleNamespace(target=scope["target"]),
+            cache="unused",
+            requests=(),
+            functional=1,
+            ecp=True,
+            device=0,
+            spec=None,
+            grid_plan=selected.grid_plan,
+            source_bytes=selected.source_resources.allocation_bytes,
+            tile_points=selected.grid_plan.tile_points,
+            primitive_tile=4096,
+            integral_terms=32,
+            page_work_budget=16_000_000,
+            max_device_bytes=512 << 20,
+            max_host_bytes=large.host_bound,
+            host_bound=selected.host_bound,
+        )
+
+    complete_small_host = selected.host_bound + sum(
+        value.host_bytes for value in selected.tensor_plans.values()
+    )
+    tight, _ = _ecp_admission(True, complete_small_host - 1)
+    smaller, _ = plan_stationary_cuda_grid_schedule(
+        grid_points=4096, tile_points=None, admit=tight
+    )
+    assert smaller.grid_plan.tile_points < 256
+    with pytest.raises(ValueError, match="host budget"):
+        plan_stationary_cuda_grid_schedule(
+            grid_points=4096, tile_points=256, admit=tight
         )

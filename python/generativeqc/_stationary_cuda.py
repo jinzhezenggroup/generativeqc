@@ -2476,6 +2476,16 @@ def _complete_rks_cuda_gradient_diagnostic(
             max_host_bytes=max_host_bytes,
             max_ecp_pair_samples=max_ecp_pair_samples,
         )
+        # Prepared ECP retains all tensor owners simultaneously. Its later lease
+        # admission charges their host storage in addition to the ordinary bound;
+        # include that same charge while a smaller candidate can still be tried.
+        if (
+            prepared is not None
+            and layout.host_bound
+            + sum(value.host_bytes for value in layout.tensor_plans.values())
+            > max_host_bytes
+        ):
+            raise ValueError("prepared stationary CUDA host budget exceeded")
         return layout, work
 
     requested_tile_points = tile_points

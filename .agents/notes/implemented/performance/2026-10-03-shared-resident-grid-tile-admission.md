@@ -76,6 +76,25 @@ The source snapshot precedes the separate #1767 claim synchronization repair;
 these observations are not relabeled as measurements of that corrected binary.
 No default promotion is claimed.
 
+Review found one additional prepared-only admission charge: ECP tensor owners
+retain the sum of their host storage on top of the ordinary host bound.
+Candidate admission now includes that existing prepared-owner charge, so an
+automatic 1024-point rejection can still try 256 before artifact lookup. A real
+two-atom/12-AO ECP plan reproduces the former mismatch: at a 13,387,008-byte
+host cap, 1024 requires 13,809,216 bytes and 256 requires 10,251,840 bytes.
+Tests cover automatic fallback, explicit refusal, unprepared behavior, a
+tighter cap, and the actual prepared admission boundary. This post-measurement
+repair does not change the empty tensor inventory of the PBE0 campaign, but
+the retained measurements still identify the exact earlier source and binary.
+
+The capacity qualifier now follows the extracted resource helper and nested
+candidate callback, rather than merely accepting a new endpoint hash. It
+retains the original resource equations, native reserve and work checks, binds
+the complete helper/layout/endpoint, and checks selection before page execution.
+Negative controls also cover helper capacity, layout, selected owners and the
+prepared tensor charge. Moving resource logic out of the endpoint must not
+remove it from fail-closed qualification.
+
 The lossless complete campaign and executable verifier are retained under
 `benchmarks/results/pbe0-resident-tiles-20261003/`. Stored members include the
 exact numerical records, source patch, harness, work/budget and build receipts.
