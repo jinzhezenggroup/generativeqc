@@ -356,3 +356,25 @@ retain master's expanded qualification and endpoint record. No native/compiler/
 Python build input changes from frozen 44b9606c4, whose ccache build is already
 running. This history/documentation merge does not relabel any measured endpoint
 or independently authorize the remaining SCF-map/indexed-force composition.
+
+The frozen 44b9606c4 build subsequently completes with all 451 compiler
+commands using verified ccache. All 1,355 inputs are also byte-identical in
+master-f88 merge e70de4e71. Source identity is
+`763c25742a9899df2abc8ce7e5b9f1dbe9be48a9cc9daa20f087660b0d044f18`;
+library SHA-256 is
+`38f725ef773d39311e8150cae4a545ec497755b7417964c16cba5adcd2321452`.
+Finite n2 RTX PRO 6000 Slurm 2193 exits zero after the complete native CUDA DFT
+regression and all seven independent E/F, displaced-energy and stale-state
+cases in each of sparse and zero-force-cache modes. Each mode records 66
+successful native calls and 467 actual XC submissions, with no qualified cases
+skipped. The source archive, every deployed source/test file, library, native
+test executable and qualification scripts are checked before execution.
+
+The bound receipt is retained in ignored
+`.artifacts/master737-20261004/qualification-verified.json`. The merge also
+passes 52 host closure/eligibility/stage/verifier cases and applicable hooks.
+Against master f88f42b4f, evidence retention passes the unchanged 64 MiB cap;
+the change review contains 17 evidence files / 243,328 bytes, below the unchanged
+2 MiB cap. These are current-composition numerical gates, not new performance
+measurements. Current-head CI and genuine current-composition LGTM remain
+required before merge; older timed endpoints retain their frozen inputs.
