@@ -194,6 +194,7 @@ print(first.energies)
 | Method | Performance |
 | --- | --- |
 | HF (direct / DF) | <a href="benchmarks/results/df-one-step-warm-20260926/hf.svg"><img src="benchmarks/results/df-one-step-warm-20260926/hf.svg" width="900" alt="GenerativeQC versus GPU4PySCF: direct and DF RHF energy-plus-force latency"></a> |
+| ωB97M-V / def2-SVP (opt-in candidate) | <a href="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg"><img src="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg" width="900" alt="GenerativeQC opt-in candidate versus GPU4PySCF: complete cold and warm WB97M-V energy-plus-analytic-force latency at 24, 48 and 96 atoms; warm medians and min–max ranges"></a> |
 
 <!-- DFT benchmark rows are temporarily withheld from the rendered README.
 Restore these rows to the table above only after approval to publish the results.
@@ -204,17 +205,10 @@ Restore these rows to the table above only after approval to publish the results
 RTX 5090, spherical def2-SVP: complete warm RHF energy + forces, five repeats.
 [Protocol and results](benchmarks/results/df-one-step-warm-20260926/README.md).
 
-**ωB97M-V / spherical def2-SVP — opt-in candidate.** Complete warm energy +
-analytic forces on an RTX 5090; median of three fixed-density replays per engine.
-
-| Atoms / AOs | GenerativeQC | GPU4PySCF 1.8.1 | Less time |
-| --- | ---: | ---: | ---: |
-| 24 / 192 | 26.331 s | 27.398 s | 3.9% |
-| 48 / 384 | 97.113 s | 103.042 s | 5.8% |
-| 96 / 768 | 387.179 s | 403.542 s | 4.1% |
-
-These results use a measured integration candidate with explicit SCF/force AO
-selection and matched unpruned grids. Cold startup remains slower.
+ωB97M-V uses a measured opt-in integration candidate with explicit SCF/force AO
+selection and matched unpruned grids on an RTX 5090. The figure separates complete
+cold startup from warm medians and min–max ranges over three fixed-density
+replays per engine. Warm takes 3.9–5.8% less time; cold startup remains slower.
 [Source, controls, cold timings and all-sample accuracy
 gates](benchmarks/results/wb97mv-active-ao-20261003/README.md) identify the candidate
 separately from the master default.

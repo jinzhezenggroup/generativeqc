@@ -5,6 +5,8 @@ than its paired GPU4PySCF reference at 24, 48 and 96 atoms. This is a measured
 candidate snapshot, not a claim about the master default or either engine's
 default quadrature. The separate 96-atom dense control remains pending.
 
+![Complete cold and warm WB97M-V energy and analytic-force latency](wb97mv.svg)
+
 | Atoms / spherical AOs | Native dense warm | Native joint warm | Joint-paired reference warm | Joint / reference |
 | --- | ---: | ---: | ---: | ---: |
 | 24 / 192 | 27.110692 s | 26.330918 s | 27.397887 s | 0.961057 |
@@ -106,6 +108,17 @@ python benchmarks/results/wb97mv-active-ao-20261003/verify.py 48
 python benchmarks/results/wb97mv-active-ao-20261003/verify.py 96
 ```
 
+Regenerate the README figure using the same plotting style as HF:
+
+```bash
+python -m tools.render_wb97mv_active_ao_benchmarks
+```
+
+The renderer verifies the retained endpoints and manifest hashes before drawing
+the joint candidate and its paired reference. Cold uses construction, preparation
+and first-execution totals (one observation per size); warm shows the median and
+min–max of all three samples. Dense controls stay in the detailed tables above.
+
 Build the measured checkout in Release/sm_120 with CUDA 12.9.1 and explicit
 CXX/CUDA `ccache` launchers after verifying `ccache --version`. Retain source
 identity, compiler commands and pre/post cache statistics. No binary is hosted
@@ -135,4 +148,5 @@ Preserve Slurm's device visibility. The replay patch's source and reconstructed
 script digests are retained; cold preparation is timed explicitly, and all
 diagnostic hooks run after endpoint timers stop. Full build/scheduler/profiler
 debug material stays under ignored `.artifacts/scf-active-ao/` in the measured
-worktree; these retained reports and scripts are sufficient to audit the table.
+worktree; these retained reports and scripts are sufficient to audit the figure
+and tables.
