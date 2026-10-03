@@ -33,7 +33,8 @@ present and fails explicitly if the pinned import changes that structure.
 
 Only polarized VWN lowering changes. Unpolarized lowering, source Maple bytes,
 density-domain admission and numerical tolerances remain unchanged. The
-existing adapter SHA-256 provenance deliberately changes with this lowering.
+existing adapter SHA-256 provenance deliberately changes with this lowering;
+its canonical-input digest in `upstream/manifest.json` is refreshed as well.
 The second derivative at an exactly empty spin channel need not be finite;
 this change does not broaden the public interior-domain derivative contract.
 

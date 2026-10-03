@@ -158,7 +158,7 @@
     "libxc-xc-admission": {
       "canonical_inputs": {
         "python/generativeqc_compiler/xc/b3lyp_production_policy.py": "a79041cce5d94fdac6b990dae93390791830642caf959399fbe44f8966aa33bb",
-        "python/generativeqc_compiler/xc/b88_vwn_maple.py": "a94aba9b30f7262d57c81c01e0867a30304868ce17ed5dc365e72f1a8716d6b9",
+        "python/generativeqc_compiler/xc/b88_vwn_maple.py": "3e187356356ed11d0b08754a4309fb2d7e8baf6dc0c3a2d13014b874f49bf8e4",
         "python/generativeqc_compiler/xc/expression_dispatch.py": "ff8e9794642809abf7f5ad0d02efba31ac68cbd1561c419071880aee846c74de",
         "python/generativeqc_compiler/xc/ityh_maple.py": "57e3adb4054244f3d502c131767849ed07f00915a45c41dc6a32201b14e42fb8",
         "python/generativeqc_compiler/xc/p86_pz_maple.py": "78158203828b796c8fd05efe27a3252b21ebd9f324ae6eabe74742286ea146f8",
