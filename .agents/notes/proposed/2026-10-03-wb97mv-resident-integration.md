@@ -120,6 +120,16 @@ Complete cold is 249.422527 / 249.021745 s versus reference
 results belong to frozen 4079/6dba, not the newer qualification below. The
 96-atom sequence continues without restarting or changing that source.
 
+The frozen 4079/6dba 96-atom indexed variant subsequently completes in Slurm
+5618. Its five independent E/F pairs pass, with maximum errors below
+1.151e-10 Eh / 3.205e-10 Eh/Bohr, one-iteration priming/warm calls and GPU
+reference XC. Native/reference warm medians are 375.332872 / 411.107088 s;
+complete cold is 3989.496849 / 1866.058777 s with 24/16 iterations. The 8.70%
+warm time reduction belongs to this whole frozen composition. Its same-binary
+unindexed 96-atom control is still running, so no isolated indexed percentage
+is inferred from this pair. The independent one-variant receipt is retained as
+`results/matched96-indexed-verified.json` in that campaign's ignored directory.
+
 ## Master 9c54107ca and spin-boundary regression repair
 
 The integration advances to actual master 9c54107ca via merge 5ac08497e.
@@ -166,6 +176,44 @@ plus first execution, and retains all cold/priming/three warm pairs with the
 unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates. This comparison remains in progress.
 Its receipts are under ignored `.artifacts/latest-master96-20261004/`; the
 older master-1a OFF/ON campaign continues separately without being restarted.
+
+## Master 837c2a51c: shared planner integration
+
+Merge 678f7eb88 incorporates actual master 837c2a51c, including #1773's shared
+budget-aware tile search and the now-merged #1794 VWN repair. Only three native
+inventory paths differ from the previous composition: the ordinary stationary
+runtime and the stationary/composite resource-planner modules. The new identity
+is therefore distinct, even though the composite candidate order and mathematical
+sources are retained. All 350 relevant host planner/resource/merge tests pass.
+
+The new 1355-input identity is
+`d198acd713d7c4218bb4cacd9acbd7eb646d5fc2b89c77d04bdb47901c74ad36`;
+library SHA-256 is
+`fe826ad7eb9293686d5bb3b5e97456f3a9c884a13256603e7573ea3a1703f25b`.
+Verified ccache 4.5.1 launchers appear in all 451 compiler commands; retained
+before/after statistics show six hits and one miss during this incremental build.
+The native DFT test executable remains byte-identical to the master-9c/VWN
+qualification, while the rebuilt library advertises the new source identity.
+
+Finite n2 Slurm 2181 on RTX PRO 6000 passes the full native DFT regression and
+seven independent complete WB97M-V E/F/displaced-energy/stale-state cases in
+each of joint-map and zero-force-cache modes. Each mode verifies 66 successful
+native calls and 467 actual XC submissions, with SCF maps selected on every
+successful call. The independent post-run receipt binds source/library/script
+hashes, actual work, device receipt, raw logs and successful Slurm completion.
+These are numerical qualification results, not RTX 5090 timing claims.
+
+Finite n2 Slurm 2182 now runs a complete unseeded 96-atom cold/priming/three-warm
+comparison using this exact source/library. It depends on successful 2181 and
+also checks both completed endpoint/work receipts before starting. Measurement
+drivers are byte-identical to the frozen master-dc 96-atom campaign; only the
+source/library/hardware receipts and orchestration differ. This RTX PRO 6000
+measurement remains pending and cannot be mixed into the RTX 5090 README curve.
+The n1 master-dc and master-1a jobs continue under their own frozen identities.
+
+Ignored `.artifacts/master837-20261004/` retains build, cache, source archive and
+all qualification receipts; `.artifacts/master837-pro6000-96-20261004/` retains
+the new complete timing campaign. No existing endpoint is relabeled.
 
 ## Readiness boundaries
 
