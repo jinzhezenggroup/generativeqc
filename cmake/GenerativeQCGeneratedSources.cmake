@@ -603,6 +603,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_rys_policy.hpp"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_production.hpp"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_screening.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_pair_screening.cuh"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_rys_shell.cuh")
   generativeqc_register_generated_sources(
     TARGET ${target}
