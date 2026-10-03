@@ -282,6 +282,7 @@ def test_direct_numerical_families_cannot_acquire_policy_or_consumers(
     [
         "direct_fock_order2.cuh",
         "direct_force_low_order.cuh",
+        "direct_force_low_order_sources.cuh",
         "direct_bounded_fallback.cu",
     ],
 )
@@ -305,6 +306,7 @@ def test_direct_low_order_quartet_indexing_is_shared() -> None:
 
     for owner in (
         "direct_fock_order2.cuh",
+        "direct_force_low_order_sources.cuh",
         "direct_force_order2.cuh",
         "direct_force_order3.cuh",
     ):

@@ -168,6 +168,7 @@ class NativeKsSnapshot:
         "functional",
         "functional_code",
         "grid",
+        "grid_cache_work",
         "grid_provenance",
         "grid_spec",
         "hamiltonian",
@@ -913,13 +914,18 @@ class NativeKsSnapshot:
             or (basis.representation == "real_spherical") != bool(representation)
         ):
             raise ValueError("native stationary basis/overlap source mismatch")
+        cache = self._batch._snapshot_grid_cache
+        reused = False
         if grid is None:
-            grid = ExplicitGrid(
-                points,
-                weights,
-                tuple(map(int, owners)),
-                {"source": "native-ks-snapshot-v1", "owner": owner},
-            )
+            if cache is None:
+                grid = ExplicitGrid(
+                    points,
+                    weights,
+                    tuple(map(int, owners)),
+                    {"source": "native-ks-snapshot-v1", "owner": owner},
+                )
+            else:
+                grid, reused = cache.resolve(points, weights, owners, owner=owner)
         if not all(
             np.array_equal(a, b)
             for a, b in (
@@ -930,6 +936,14 @@ class NativeKsSnapshot:
         ):
             raise ValueError("native stationary grid source mismatch")
         self.grid = grid
+        self.grid_cache_work = MappingProxyType(
+            {
+                "exact_grid_reused": reused,
+                "retained_bytes": 0 if cache is None else cache.retained_bytes,
+                "budget_bytes": 0 if cache is None else cache.max_bytes,
+                "source_points_checked": npoint,
+            }
+        )
         spec = self.functional
         composition_identity = (
             {
