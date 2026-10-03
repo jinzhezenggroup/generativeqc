@@ -378,6 +378,15 @@ ScfResult run_uks_impl(
         diagnostic.history.push_back(
             {progress.iteration, evaluation.components, progress.energy_change, progress.state_rms,
              progress.residual_rms, diagnostic.electrons, evaluation.stabilized});
+      },
+      [&](const ::generativeqc::solver::SelfConsistentProgress&,
+          const UksLoopEvaluation& evaluation) {
+        // Keep DIIS active until the CURRENT physical state also meets the
+        // maximum-entry gate required by the bounded final closure.
+        return strategy.backend != FockBackend::Cpu ||
+               std::max(residual_max_abs(evaluation.alpha_residual),
+                        residual_max_abs(evaluation.beta_residual)) <=
+                   std::min(1.0e-8, options.density_tolerance);
       });
   alpha = std::move(outcome.state.alpha);
   beta = std::move(outcome.state.beta);
@@ -431,7 +440,10 @@ ScfResult run_uks_impl(
     final = std::move(next);
     if (result.energy_change < options.energy_tolerance &&
         density_change < options.density_tolerance &&
-        diagnostic.physical_residual < residual_gate) {
+        diagnostic.physical_residual < residual_gate &&
+        (strategy.backend != FockBackend::Cpu ||
+         std::max(residual_max_abs(ra), residual_max_abs(rb)) <=
+             std::min(1.0e-8, options.density_tolerance))) {
       result.converged = true;
       break;
     }

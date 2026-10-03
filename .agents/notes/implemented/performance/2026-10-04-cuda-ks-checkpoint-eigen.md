@@ -127,3 +127,14 @@ endpoint speed claim is inferred from submission. Source archives, binary and
 driver hashes, the exact retained baseline failure and all raw outputs remain
 in ignored `.artifacts/masterb909-20261004/` and
 `.artifacts/cold-admission-20261004/`.
+
+## Master 73755342d integration
+
+The next union takes #1800's CPU KS final-maximum closure from master
+73755342d. It adds a shared optional convergence-eligibility predicate and
+changes CPU KS closure; it does not change the CUDA checkpoint callback or its
+source-metric/occupation contracts. This union receives a new source-bound build
+and qualification. The b909 complete cold controls keep their original archives
+and binaries; source convergence changes are never retroactively substituted
+into their timings. The inherited GPU PBE-UKS changed-geometry discrepancy is
+not assumed fixed by a CPU-only change.
