@@ -15,6 +15,10 @@ bounded fallback remain part of CUDA execution.
 
 ## Runtime lifetime
 
+Native method selectors, including GFN2, do not initialize the bulk-XC resolver
+or its compiler evidence during construction. Automatic Libxc selectors load
+that resolver when resolving their KS request.
+
 Each public GFN2 `Calculator` retains one native context until `clear_cache()`
 or calculator collection. The context owns a single method-neutral workspace
 slot; GFN2 prepared calculations share its bridge with strong references. The
