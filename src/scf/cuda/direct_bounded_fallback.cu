@@ -152,6 +152,15 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
             batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
         if constexpr (Force) {
+          if (radial_operator == DirectRangeOperator::Long && angular_order <= 3U) {
+            const unsigned shell_class = direct_quartet_shell_class_device(
+                batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+                batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+            contract_two_electron_force_low_order_sources<Unrestricted, true>(
+                shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
+                output, 0.0, exchange_coefficient, omega);
+            continue;
+          }
           if (radial_operator != DirectRangeOperator::Full &&
               radial_operator != DirectRangeOperator::FullSources) {
             continue;
@@ -228,11 +237,12 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             batch.shell_angular[first_shell], batch.shell_angular[second_shell],
             batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
         if constexpr (Force) {
-          // Full-range order 0--3 is already consumed by exact shell workers.
-          // Range-separated exchange deliberately falls through to the generic
-          // Cartesian source evaluator for every angular order.
+          // Full/LR order 0--3 was consumed once by the scalar shell workers.
+          // Short range, fused RSH and higher orders retain their qualified
+          // Cartesian/AOT recurrence and bounded queue traversal.
           if ((radial_operator == DirectRangeOperator::Full ||
-               radial_operator == DirectRangeOperator::FullSources) &&
+               radial_operator == DirectRangeOperator::FullSources ||
+               radial_operator == DirectRangeOperator::Long) &&
               angular_order <= 3U)
             continue;
         } else {
@@ -380,20 +390,23 @@ void launch_bounded_direct_range_exchange_force_kernel(
     unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega,
     double exchange_coefficient) {
   if (radial_operator == DirectRangeOperator::Full) return;
+  // This consumer publishes only range-separated K derivatives. Select its
+  // raw-K linear bound and same-spin force-product bounds; the mixed J/K
+  // defaults would retain distant Coulomb-only shell quartets unnecessarily.
   if (unrestricted) {
     bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
         <<<grid, block, shared_bytes, stream>>>(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, false);
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
         <<<grid, block, shared_bytes, stream>>>(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, false);
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true);
   }
 }
 
