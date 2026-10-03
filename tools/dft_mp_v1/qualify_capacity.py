@@ -284,7 +284,7 @@ NATIVE_CUDA_GRID_CONTRACT_SHA256 = (
     "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
 )
 NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
-    "98b6763435fcd84c6306ea034c330a9864ecf4d33d0009031230f7b64e77b71e"
+    "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
 )
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
@@ -1883,11 +1883,10 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_source = (repository / "src/methods/dft_method.cpp").read_text(
         encoding="utf-8"
     )
-    route_digest = _source_span_sha256(
-        route_source,
-        begin="dft::MolecularGrid ks_molecular_grid(",
-        end="class KsPreparedCalculation",
-        label="native CUDA grid route",
+    # Bind the complete routing function, not unrelated helpers inserted before
+    # the following class. Actual grid-route mutations still fail the digest.
+    route_digest = _cpp_block_sha256(
+        route_source, "dft::MolecularGrid ks_molecular_grid("
     )
     native_abi_digest = _source_span_sha256(
         route_source,
