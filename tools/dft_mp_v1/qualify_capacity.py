@@ -367,11 +367,18 @@ NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256 = (
     "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
 )
+# Local AO admission changes only collocation/contraction domain. The census
+# still charges global n AO capacity and every molecular-grid/Becke point pair.
+# Bind the out-of-line predicate itself so later weakening cannot hide behind
+# unchanged callers and stale favorable memory/work bounds.
+NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256 = (
+    "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
+)
 NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
-    "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
+    "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
 )
 NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
-    "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
+    "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
 )
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -787,6 +794,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_nuclear_sha256": (
             "int stationary_nuclear(",
             NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256,
+        ),
+        "native_geometry_ao_map_sha256": (
+            "bool valid_geometry_ao_map(",
+            NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256,
         ),
         "native_geometry_external_sha256": (
             "int stationary_geometry_external(",

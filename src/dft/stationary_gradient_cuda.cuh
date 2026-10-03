@@ -78,6 +78,13 @@ int guarded(Owner* owner, char* error, size_t size, F f) noexcept {
     return 1;
   }
 }
+// A local collocation panel retains the global density and atom domains.
+// Null IDs denote identity only for a full panel; an empty explicit selection
+// needs no map dereference. GridPlan validates/uploads nonempty map contents.
+bool valid_geometry_ao_map(const generativeqc::dft::GridTaskView& view, size_t aos) {
+  return view.nao == aos && view.nactive <= aos &&
+         (view.nactive == 0 || view.ao_ids != nullptr || view.nactive == aos);
+}
 void check(Owner& p) {
   if (p.failed) throw std::runtime_error("failed stationary owner; reset before reuse");
   if (!p.topology_ready) throw std::runtime_error("stationary topology is not prepared");
@@ -517,7 +524,7 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points)
       throw std::invalid_argument("invalid geometry task lease");
@@ -591,7 +598,7 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !external_device || external_stride < external_offset ||
         view->npoint > external_stride - external_offset)
@@ -655,7 +662,7 @@ int stationary_geometry_external_device_enqueue(
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !external_device || external_stride < external_offset ||
         view->npoint > external_stride - external_offset)
@@ -703,7 +710,7 @@ int stationary_geometry_external_device_molecular_enqueue(
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !external_device || !points_per_atom ||
         points_per_atom > SIZE_MAX / p->atoms || owner_offset > p->atoms * points_per_atom ||
@@ -751,7 +758,7 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !device_weights || !device_raw || !external_device ||
         !points_per_atom || points_per_atom > SIZE_MAX / p->atoms ||
@@ -797,7 +804,7 @@ int stationary_geometry_molecular_resident_weights_enqueue(
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !device_weights || !device_raw || !points_per_atom ||
         points_per_atom > SIZE_MAX / p->atoms || owner_offset > p->atoms * points_per_atom ||
@@ -841,7 +848,7 @@ int stationary_geometry_molecular_enqueue(void* pointer,
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points || !points_per_atom || points_per_atom > SIZE_MAX / p->atoms ||
         owner_offset > p->atoms * points_per_atom ||
@@ -885,7 +892,7 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
   using namespace generativeqc_stationary_cuda;
   auto* p = static_cast<Owner*>(pointer);
   return guarded(p, error, size, [&] {
-    if (!p || !view || view->version != 1 || view->nao != p->aos || view->nactive != p->aos ||
+    if (!p || !view || view->version != 1 || !valid_geometry_ao_map(*view, p->aos) ||
         view->npoint > p->points || view->jets < stationary_ao_jets || !view->features || !work ||
         !view->ao || !view->points)
       throw std::invalid_argument("invalid deferred geometry task lease");
