@@ -12,29 +12,35 @@
   },
   "scope": "opt-in integrated candidate; warm complete energy plus analytic forces; not a master default claim",
   "files": {
-    "matched24-dense.json.gz": {
-      "sha256": "47975aaebb3ee13c0cced140be09b98df9294c2945e62b1772d85fd80c5b4c57",
-      "bytes": 14333,
+    "matched24-dense.json.xz": {
+      "sha256": "d6cb681628917905c38220e9200c64673143267e6e7cb4e07ad52ed77bb36320",
+      "bytes": 11428,
       "decoded_sha256": "286642e07a06a05f5f874e1fab20ee7815c905fbfabaa7e39ff3a1600dda4f1b",
       "decoded_bytes": 100425
     },
-    "matched24-sparse.json.gz": {
-      "sha256": "f679215dd6d77999696e85969ad50b6426be29ac0f9c061058acef3a0d63c299",
-      "bytes": 14801,
+    "matched24-sparse.json.xz": {
+      "sha256": "f7bee52eb6ef7edb3d07eeb0d646b2530474d23d6122b49ead7eff2051108c5a",
+      "bytes": 11896,
       "decoded_sha256": "26a60fe617cfd36117fea054057df6b1c5c24a618cd2a667ae4499671fdefdd1",
       "decoded_bytes": 105206
     },
-    "matched48-dense.json.gz": {
-      "sha256": "e39cb07ba0b0cbb0d66983aefa2a7d0deab112155a5a516cc60c0190f5a6a111",
-      "bytes": 22313,
+    "matched48-dense.json.xz": {
+      "sha256": "47546b5a6f9f7360ec07290cd6a68f1f58d22a8b1238086db98c2422f72a166f",
+      "bytes": 15476,
       "decoded_sha256": "fe4e7385e20b5a7847ce741059c1aad18568296e3c98be20969128e10f37b7d5",
       "decoded_bytes": 137911
     },
-    "matched48-sparse.json.gz": {
-      "sha256": "d310b03dd354a69fac8f2e8432fc41f79dd386c69e68eb75cfd99f0a98dbf422",
-      "bytes": 22887,
+    "matched48-sparse.json.xz": {
+      "sha256": "a3bba2c59be991fe59f808297e2831eeaf11f8e0328e8fec6815d4b9487131ae",
+      "bytes": 15760,
       "decoded_sha256": "b07e03ccb45eae9baea758deb8978b1e763fc08ed3ddd804d22461e878cb4795",
       "decoded_bytes": 142653
+    },
+    "matched96-sparse.json.xz": {
+      "sha256": "330df9491d70aade7f4f3d92362d99ef2088195b4d4e7cbff51d6efbc5220784",
+      "bytes": 23276,
+      "decoded_sha256": "0f70cf776b6ca2a764efe7ffe963848fd73e4bb9ee2d0118b3fa10025c00c330",
+      "decoded_bytes": 217295
     }
   },
   "reproduction": {
@@ -48,6 +54,23 @@
   },
   "slurm_jobs": {
     "24": 5577,
-    "48": 5576
-  }
+    "48": 5576,
+    "96": 1412
+  },
+  "comparison_modes": {
+    "24": [
+      "dense",
+      "sparse"
+    ],
+    "48": [
+      "dense",
+      "sparse"
+    ],
+    "96": [
+      "sparse"
+    ]
+  },
+  "pending_controls": [
+    "matched96-dense"
+  ]
 }

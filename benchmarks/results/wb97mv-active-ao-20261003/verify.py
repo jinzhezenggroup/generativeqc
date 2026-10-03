@@ -1,5 +1,5 @@
 """Verify every complete endpoint pair before summarizing a frozen AO experiment."""
-import gzip
+import lzma
 import hashlib
 import json
 import sys
@@ -12,12 +12,12 @@ atoms = int(sys.argv[1])
 manifest = json.loads((root/'manifest.json').read_text())
 expected = manifest['source']
 summary = {'atoms': atoms, 'variants': {}, 'input_identity': expected}
-for mode in ('dense', 'sparse'):
-    path = root / f'matched{atoms}-{mode}.json.gz'
+for mode in manifest['comparison_modes'][str(atoms)]:
+    path = root / f'matched{atoms}-{mode}.json.xz'
     stored = path.read_bytes()
     entry = manifest['files'][path.name]
     assert len(stored) == entry['bytes'] and hashlib.sha256(stored).hexdigest() == entry['sha256']
-    payload = gzip.decompress(stored)
+    payload = lzma.decompress(stored)
     assert len(payload) == entry['decoded_bytes'] and hashlib.sha256(payload).hexdigest() == entry['decoded_sha256']
     d = json.loads(payload)
     assert d['status'] == 'measured' and d['stage'] == 'complete' and d['accepted']

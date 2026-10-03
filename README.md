@@ -211,10 +211,11 @@ analytic forces on an RTX 5090; median of three fixed-density replays per engine
 | --- | ---: | ---: | ---: |
 | 24 / 192 | 26.331 s | 27.398 s | 3.9% |
 | 48 / 384 | 97.113 s | 103.042 s | 5.8% |
+| 96 / 768 | 387.179 s | 403.542 s | 4.1% |
 
 These results use a measured integration candidate with explicit SCF/force AO
-selection and matched unpruned grids. Cold startup remains slower; 96 atoms is
-still under measurement. [Source, controls, cold timings and all-sample accuracy
+selection and matched unpruned grids. Cold startup remains slower.
+[Source, controls, cold timings and all-sample accuracy
 gates](benchmarks/results/wb97mv-active-ao-20261003/README.md) identify the candidate
 separately from the master default.
 

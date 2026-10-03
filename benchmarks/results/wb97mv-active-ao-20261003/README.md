@@ -1,14 +1,15 @@
 # Matched ωB97M-V energy and analytic-force endpoints
 
 The opt-in joint SCF/force active-AO integration has lower complete warm latency
-than its paired GPU4PySCF reference at 24 and 48 atoms. This is a measured
+than its paired GPU4PySCF reference at 24, 48 and 96 atoms. This is a measured
 candidate snapshot, not a claim about the master default or either engine's
-default quadrature. The 96-atom comparison remains pending.
+default quadrature. The separate 96-atom dense control remains pending.
 
 | Atoms / spherical AOs | Native dense warm | Native joint warm | Joint-paired reference warm | Joint / reference |
 | --- | ---: | ---: | ---: | ---: |
 | 24 / 192 | 27.110692 s | 26.330918 s | 27.397887 s | 0.961057 |
 | 48 / 384 | 106.139498 s | 97.112717 s | 103.042334 s | 0.942455 |
+| 96 / 768 | pending | 387.179006 s | 403.542077 s | 0.959451 |
 
 All three warm samples enter each median. The dense variants have their own
 interleaved reference samples; those medians are 27.402939 and 103.253732 s.
@@ -16,6 +17,8 @@ Native joint 48-atom samples are 97.129844, 97.112717 and 97.014143 s; reference
 samples are 103.055296, 103.042334 and 103.035995 s. Every warm/priming result
 converges in one iteration, using its own engine's frozen post-cold density.
 There is no cross-engine density injection or iteration-normalized timing.
+The 96-atom native samples are 384.612767, 387.179006 and 387.251892 s;
+paired reference samples are 403.542077, 403.323987 and 405.490350 s.
 
 ## Cold startup and work
 
@@ -27,9 +30,11 @@ boundary; this does not assert an empty compiler/filesystem cache.
 | --- | ---: | ---: | ---: |
 | 24 | 249.833558 s | 240.398506 s | 116.268821 s |
 | 48 | 1113.882289 s | 962.211204 s | 474.695895 s |
+| 96 | pending | 4092.520636 s | 1851.051863 s |
 
-Cold remains substantially slower than reference. Native cold submits 18/21 XC
-evaluations at 24/48 atoms; warm submits one. SCF discovery is preparation work,
+Cold remains substantially slower than reference. Native cold submits 18/21/25 XC
+evaluations at 24/48/96 atoms; warm submits one. The 96-atom reference cold takes
+16 iterations. SCF discovery is preparation work,
 not a cost added again to warm calls. At 48 atoms it takes 0.649430 s, retains
 4608 tiles (436 empty), has an active-AO sum of 621388 and reports 14194184
 numeric peak host bytes. SCF point/AO-square work is 14.5202% of dense; force
@@ -37,11 +42,18 @@ work is 18.7396%. These counters describe contraction work, not a speedup model.
 The force map has no warm rediscovery. Dense-disabled force cache counters
 are absent in the original report and are not replaced with invented zeros.
 
+At 96 atoms, discovery takes 1.984494 s and reports 56699912 numeric peak host
+bytes; 9216 SCF tiles retain 1460424 AO columns in total, with 768 empty tiles.
+SCF/force point-AO-square fractions are 5.43804% / 5.82487%. The force planner
+selects 256-point tiles at this size (9216 tiles), compared with 1024 at 24/48.
+Warm force discovery remains zero. Native complete-cold preparation takes
+5.781870 s; the first execution alone takes 4086.738766 s.
+
 ## Protocol and numerical gates
 
 - Water-cluster prefixes from `benchmarks.readme_hf_scaling.scaling_cases`,
   WB97M-V/RKS, complete spherical def2-SVP. Both engines use the same unpruned
-  48 radial × 16 polar × 32 azimuthal grid per atom: 589824/1179648 points.
+  48 radial × 16 polar × 32 azimuthal grid per atom: 589824/1179648/2359296 points.
   Semilocal and VV10 grids are the same full grid, with equal-radius Becke
   partitioning and analytic grid/weight response. Shared VV10 density threshold
   is 1e-8. This is not a comparison of the engines' respective default grids.
@@ -55,13 +67,15 @@ are absent in the original report and are not replaced with invented zeros.
   its budgeted tiles. The fixed 64 MiB SCF host-map cap is experimental and
   does not establish public constrained-host-budget support.
 - Slurm n1 jobs 5577/5576 run each dense/joint comparison sequentially in one
-  RTX 5090 allocation, preserving scheduler visibility. CUDA 12.9.1, CuPy
+  RTX 5090 allocation. n5 job 1412 completes the 96-atom joint/reference pairs
+  before starting its still-pending dense control. Each comparison preserves
+  scheduler visibility. CUDA 12.9.1, CuPy
   13.6.0, NumPy 2.4.6, PySCF 2.14.0 and GPU4PySCF 1.8.1; eight OpenMP,
   OpenBLAS and MKL threads. Raw reports retain device and toolchain metadata.
 - Cold, priming and all three warm pairs must each pass 1e-8 Eh / 1e-7
-  Eh/Bohr, finite-value, shape and convergence checks. All 20 native/reference
-  pairs across both sizes and controls pass. Maximum joint errors are below
-  1.001e-11 Eh / 6.307e-10 Eh/Bohr. Every reference XC component reports
+  Eh/Bohr, finite-value, shape and convergence checks. All 25 native/reference
+  pairs across the five completed variants pass. Maximum joint errors are below
+  1.192e-10 Eh / 6.307e-10 Eh/Bohr. Every reference XC component reports
   `on_gpu=true`. No CPU XC fallback is used to explain the comparison.
 - Independent complete WB97M-V qualification includes changed geometry,
   reconverged displaced energies and stale-snapshot isolation. Slurm 5575
@@ -81,7 +95,7 @@ Git probe. Library SHA-256 is
 `b82e468613c5c90e076aa10082b2389c8dda74335f625a7b77641c1c085ef3f9`.
 Default screening is not promoted by this documentation.
 
-The four `.json.gz` files preserve every original report byte, including all
+The five `.json.xz` files preserve every original report byte, including all
 energy/force arrays, timings, convergence, preparation, XC backend and AO work.
 The manifest records stored and decoded SHA-256 digests and sizes. Verify them
 without a GPU:
@@ -89,6 +103,7 @@ without a GPU:
 ```bash
 python benchmarks/results/wb97mv-active-ao-20261003/verify.py 24
 python benchmarks/results/wb97mv-active-ao-20261003/verify.py 48
+python benchmarks/results/wb97mv-active-ao-20261003/verify.py 96
 ```
 
 Build the measured checkout in Release/sm_120 with CUDA 12.9.1 and explicit
@@ -113,7 +128,8 @@ srun --partition=main --gres=gpu:5090:1 --nodes=1 --ntasks=1 \
 ```
 
 Use `ACTIVE_AO_MODE=dense GENERATIVEQC_CUDA_KS_ACTIVE_AO=0` for the dense
-control, and 24 for the smaller case. Supply the recorded CUDA runtime and
+control, and 24 for the smaller case. For 96 atoms, allow `--time=04:00:00`
+for each variant. Supply the recorded CUDA runtime and
 GPU4PySCF environment through the cluster's normal module/library setup.
 Preserve Slurm's device visibility. The replay patch's source and reconstructed
 script digests are retained; cold preparation is timed explicitly, and all
