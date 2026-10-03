@@ -74,7 +74,7 @@ search path. These are driver/setup failures, not numerical method rejections;
 their outputs are preserved separately and do not qualify the full campaign.
 The corrected finite n1 allocation is Slurm 5640. It restores the source map
 policy explicitly, validates provider names before deployment and propagates
-unexpected source failure statuses. Full comparison results remain pending.
+unexpected source failure statuses. The completed comparisons are below.
 
 ## Completed small pilot
 
@@ -94,8 +94,63 @@ Both sources actually converge and are imported. Their XC submission counts
 are 15 each, their Fock-build counters remain unavailable, and the complete
 source cost is included in the respective cold preparation totals. The small
 pilot supports testing the mechanism at 24 atoms; it does not establish a
-large-system benefit or justify a default/API promotion. The 24-atom sequence
-continues in the same allocation and will retain all three controls.
+large-system benefit or justify a default/API promotion.
+
+## Completed 24-atom control
+
+Slurm 5640 finishes successfully, including all three 24-atom controls and
+their independent 15-pair E/F verifier. Maximum errors are below 3.070e-12 Eh /
+7.540e-10 Eh/Bohr. Every priming/warm replay takes one iteration, every
+reference XC component reports GPU execution, and source/target work remains
+explicit. Complete cold includes all source preparation and transfer:
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations / XC submissions | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 240.379900 s | 116.000208 s | 18 / 18 | none |
+| LDA | 191.435694 s | 115.936782 s | 13 / 13 | 18 / 13.088323 s |
+| PBE | 192.097899 s | 116.104328 s | 13 / 13 | 18 / 13.345290 s |
+
+The sources each converge with 18 actual XC submissions. Source Fock-build
+counts remain unavailable, not inferred. Both native seeded targets use their
+imported density without a cold retry. LDA/PBE reduce complete cold by
+20.36% / 20.09% relative to the same-allocation unseeded control. Unlike the
+same-functional coarse-grid source, these inexpensive operators leave a
+material net gain after charging their whole cost. Native cold still takes
+about 1.65 times the paired reference; this is not cold superiority. The
+subsecond LDA/PBE difference is not established beyond single-run variability.
+
+Warm medians are 26.122775 / 25.843800 / 25.843492 s for none/LDA/PBE, with
+paired references 27.374984 / 27.372269 / 27.381791 s. All warm calls replay
+their own frozen final density. Do not attribute their small differences to
+the preliminary operator, which performs no work in those calls.
+
+## Larger and displaced qualification
+
+Finite n1 Slurm 5645 starts the 48-atom three-way comparison only after 5640
+finishes, its complete verifier passes and at least one source reduces
+24-atom complete cold by 5%. This guard prevents expanding a failed or
+unprofitable small control. The larger run retains both source choices and
+the unseeded control, with the same native inputs, binary, target controls and
+measurement scripts. It remains in progress; no 48-atom seed benefit is claimed.
+The first launcher used an unsupported Slurm command-line option and created
+no job; that failure is retained separately. The corrected finite allocation
+uses `afterany:5640` plus explicit success/scientific checks inside the job.
+
+Slurm 5644 separately moves hydrogen 1 by (0.02, -0.01, 0.015) Bohr and creates
+both source and target at those identical displaced coordinates. This tests a
+fresh displaced endpoint, not an in-place warm geometry update. All 15 3-atom
+pairs pass independent E/F and coordinate checks (maximum errors below
+1.024e-12 Eh / 1.065e-9 Eh/Bohr), with on-GPU reference XC and one-iteration
+priming/warm calls. Complete cold is 10.336747 / 8.675310 / 8.130738 s for
+none/LDA/PBE; target iterations are 15/12/11. Each source takes 15 iterations
+and costs 0.654103 / 0.673232 s in full. The 24-atom displaced comparison
+continues in the same allocation.
+
+The separate scripts, geometry records, raw pairs, independent verifiers and
+Slurm/source/library receipts remain in ignored
+`.artifacts/semilocal-seed48-20261004/` and
+`.artifacts/semilocal-seed-displaced-20261004/`. They do not replace any of the
+frozen README timing reports.
 
 ## Promotion gates
 
