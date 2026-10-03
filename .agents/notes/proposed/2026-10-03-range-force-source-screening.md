@@ -1,6 +1,7 @@
 # Proposal: screen range-exchange force tasks by their requested source
 
-Status: proposed; numerical and complete endpoint qualification pending
+Status: proposed; independent numerical gates and full-grid 24-atom comparison pass;
+48/96-atom qualification remains pending
 Date: 2026-10-03
 
 ## Problem
@@ -49,3 +50,46 @@ baseline/candidate complete 24/48-atom timings followed by a 96-atom check.
 Retain every sample, convergence/work metadata and 1e-8 Eh / 1e-7 Eh/Bohr gates.
 Do not infer the number of executed shell quartets from logical capacity or
 from canonical-source counters, which do not observe this bounded route.
+
+## Completed numerical qualification and 24-atom endpoint
+
+Candidate `63e762b46130a0d52202f513d4a06293191ee7b8`, library
+`0340ce35e4253ed8dfd5b10a9b8ef1b123506acf88284967e9c658555561dc4f`, passes
+native s/p/d/f SR/LR derivatives and Cartesian order-two CPU finite-difference
+checks in n1 Slurm 5497. All seven independent complete WB97M-V force/rebuild
+tests pass, including RKS/UKS and stale-state/failure isolation. Generic provider
+tests complement the molecular tests: production omega=0.3 uses the modified
+bounded LR route after its separate full-range J/K traversal.
+
+n5 Slurm 1408 runs both builds sequentially on one RTX 5090, water24/192
+spherical def2-SVP AOs, full 48 x 16 x 32 grid and three fixed-density warm
+repeats. Each build has a fresh GPU4PySCF full-density Fock control; all five
+complete energy-plus-host-force pairs per build pass 1e-8 Eh / 1e-7 Eh/Bohr,
+and all five reference endpoints pass internal consistency gates.
+
+| Complete endpoint | Base / s | Candidate / s |
+| --- | --- | --- |
+| Native warm median | 39.517558426 | 38.686160628 |
+| Fresh reference warm median | 28.173318023 | 28.192626931 |
+| Native cold | 284.732771 | 283.218920 |
+| Native priming | 39.505115 | 38.695058 |
+
+The native warm improvement is 2.104%; native remains slower than the independent
+reference. This modest result does not close the large-system performance gap.
+The initial n5 attempt (1407) failed at library load and supplies no accepted
+timings. Its separate receipt records an older preloaded CUDART. The completed
+run verifies CUDA 12.9 runtime identity before either engine executes.
+
+n1 Slurm 5498 additionally checks water12/def2-TZVP on the diagnostic 24 x 8 x
+16 grid against retained independent CPU original/moved geometry oracles. All
+five observations per build pass, with maximum energy error 1.60e-12 Eh and
+force error 8.97e-10 Eh/Bohr. Changed-geometry endpoints are 92.708560 and
+91.329185 seconds (11 iterations each). Its single warm sample and reduced
+grid are correctness evidence, not the full-grid performance comparison.
+
+Raw journals, exact library hashes, terminal receipts and the all-observation
+verifier remain in `.artifacts/exchange-force-screen/`. The verifier checks
+the molecular grid, convergence, all force entries, comparator policy and
+reported medians. n1 Slurm 5499 retains the ongoing full-grid 48-atom run.
+Later master `d35ae539f` contains separate low-order full-range force reuse;
+these frozen measurements remain attributed to base `cd08953d5`.
