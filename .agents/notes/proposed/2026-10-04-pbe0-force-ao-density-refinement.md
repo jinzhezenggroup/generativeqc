@@ -248,5 +248,26 @@ do not raise the cap or use Releases to bypass it.
 
 ## References
 
+### Integration checkpoint
+
+Draft PR #1798 initially published head 81392aaca with source
+`b319ecfb7c5437621d1b9fc3bb13f51dc99c5411ccc38dc1a6803b3dac7aea45` and
+library `e0eb6d2fccb8eb173a6b676e4f4ecbb1941fd4bcca815431728295395417cfc5`.
+Job 5653 reproduces every actual-work count above on this source. Its clean,
+same-GPU interleaved source medians are 26.532184 s OFF /23.363008 s ON (11.9446%
+decrease), again not complete endpoint timing; all source errors are <=5.96e-11.
+Its complete endpoint/FD campaigns remain separate from the original prototype.
+The first small-campaign launcher, job 5649, exited 127 before any endpoint due
+to SSH flattening the multi-size environment argument. Its log is retained; job
+5652 uses a quoted export in a remote script and is not labelled the first run.
+
+Master subsequently merged the shared grid planner #1773 at 701e00db7. The
+integration preserves both its actual reference-XC backend observer and this
+PR's native Fock-count observer; the conflict was only adjacent helper insertion.
+The planner's runtime changes require a new source identity and qualification.
+Do not mutate or relabel the in-flight b319 campaign to claim integrated timing.
+No default promotion, convergence closure or merge approval follows from this
+source integration or from the 93 passing/3 skipped host controls.
+
 - [Shared priority and acceptance contract](https://github.com/jinzhezenggroup/generativeqc/issues/1423#issuecomment-5968957958).
 - [Fresh master results and census](https://github.com/jinzhezenggroup/generativeqc/issues/1423#issuecomment-5971121015).
