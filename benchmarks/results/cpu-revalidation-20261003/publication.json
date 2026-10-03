@@ -1,0 +1,53 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Descriptive complete endpoints and passing clean independent energy gates; no formal performance/default promotion. Full scalar evidence and failed/invalid cohorts are retained.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 2780,
+      "path": "README.txt",
+      "role": "reproduction",
+      "sha256": "df0cd07950a5377a8a326dab365e19f6855531ae1dc2cfa2259ce22a5925b8eb"
+    },
+    {
+      "bytes": 5230,
+      "path": "decode_cpu_evidence.py",
+      "role": "reproduction",
+      "sha256": "c2949af0710d13e54706a42a25d8abd33aeeb3527213f61f48ae2cadfcc2c514"
+    },
+    {
+      "bytes": 64876,
+      "path": "scientific-records.json.gz",
+      "role": "samples",
+      "sha256": "7841a3690aa2fad9290b0646678c13405460bab7f52156c03be76fdfe73084c8"
+    },
+    {
+      "bytes": 3029,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "90dcc7cee00fdbca0fe10735ec697267f54e1b0f21210a0dcdebb45b32e24c7e"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "qualification-harness/balanced_endpoints.py",
+      "--cases",
+      "hf24,hf96,pbe24,pbe024,lda7,r2scan7",
+      "--pairs",
+      "6",
+      "--cpu",
+      "0",
+      "--output",
+      "<NEW_RUN_DIRECTORY>"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "a7c118aa3076dbfdc13e47ed2d1056c3b0fe6e80"
+  }
+}
