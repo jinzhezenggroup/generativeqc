@@ -337,6 +337,12 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         atomic_weights=np.ones(4),
         values=np.zeros(1),
         export_work={"reads": 1},
+        grid_cache_work={
+            "exact_grid_reused": False,
+            "retained_bytes": 0,
+            "budget_bytes": 0,
+            "source_points_checked": 4,
+        },
     )
     if resident_grid:
         source.cuda_resident_grid = lambda: SimpleNamespace(

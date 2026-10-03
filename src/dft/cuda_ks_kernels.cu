@@ -43,6 +43,12 @@ __global__ void stabilize_uks_kernel(std::size_t matrix, const double* overlap,
     proposal_fock[i] += 0.1 * (overlap[i % matrix] - occupied_projector[i]);
 }
 
+__device__ void accumulate_diagnostic_trace(double value, double& sum, double& correction) {
+  const double next = __dadd_rn(sum, value);
+  correction += fabs(sum) >= fabs(value) ? (sum - next) + value : (value - next) + sum;
+  sum = next;
+}
+
 __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const double* density,
                                   const double* proposal, const double* residual,
                                   const double* hcore, const double* overlap, const double* coulomb,
@@ -61,6 +67,10 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
   result.xc = xc_totals[0];
   result.grid_electrons[0] = xc_totals[1];
   result.grid_electrons[1] = xc_totals[2];
+  // Long AO traces can lose more than the strict SCF energy threshold to
+  // rounding alone. Compensate signed energy sums without changing the gates.
+  // Explicit rounded addition prevents FMA from invalidating the correction.
+  double one_correction = 0.0, hartree_correction = 0.0, exchange_correction = 0.0;
   for (unsigned spin = 0; spin < spins; ++spin) {
     const auto offset = spin * matrix;
     double error2 = 0.0, change2 = 0.0, electrons = 0.0;
@@ -68,12 +78,15 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
     for (std::size_t i = 0; i < matrix; ++i) {
       const double d = density[offset + i];
       const double change = proposal[offset + i] - d;
-      result.one_electron += d * hcore[i];
-      result.hartree += 0.5 * d * coulomb[i];
+      accumulate_diagnostic_trace(d * hcore[i], result.one_electron, one_correction);
+      accumulate_diagnostic_trace(0.5 * d * coulomb[i], result.hartree, hartree_correction);
       if (exchange != nullptr)
-        result.exact_exchange += 0.5 * d * exchange_coefficient * exchange[offset + i];
+        accumulate_diagnostic_trace(0.5 * d * exchange_coefficient * exchange[offset + i],
+                                    result.exact_exchange, exchange_correction);
       if (range_exchange != nullptr)
-        result.exact_exchange += 0.5 * d * range_exchange_coefficient * range_exchange[offset + i];
+        accumulate_diagnostic_trace(
+            0.5 * d * range_exchange_coefficient * range_exchange[offset + i],
+            result.exact_exchange, exchange_correction);
       electrons += d * overlap[i];
       error2 += residual[offset + i] * residual[offset + i];
       result.maximum_residual = fmax(result.maximum_residual, fabs(residual[offset + i]));
@@ -91,6 +104,9 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
   }
   result.residual_rms = sqrt(result.residual_rms);
   result.density_rms = sqrt(result.density_rms);
+  result.one_electron += one_correction;
+  result.hartree += hartree_correction;
+  result.exact_exchange += exchange_correction;
   if (!isfinite(result.one_electron) || !isfinite(result.hartree) ||
       !isfinite(result.exact_exchange) || !isfinite(result.xc))
     result.failure |= 8;

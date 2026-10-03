@@ -39,6 +39,10 @@ const DriverMetadata& driver_metadata() noexcept {
 
 cudaError_t selected_facts(int device, CudaTargetInfo& target, char (&name)[256],
                            bool& qualified) noexcept {
+  // A fallback may consume only its own unsupported-attribute diagnostic.
+  // Preserve an earlier runtime/launch failure before issuing a new probe.
+  const auto pending = cudaPeekAtLastError();
+  if (pending != cudaSuccess) return pending;
   const cudaDeviceAttr attributes[] = {cudaDevAttrComputeCapabilityMajor,
                                        cudaDevAttrComputeCapabilityMinor,
                                        cudaDevAttrWarpSize,
@@ -53,7 +57,13 @@ cudaError_t selected_facts(int device, CudaTargetInfo& target, char (&name)[256]
   int values[11]{};
   for (unsigned i = 0; i < 11; ++i) {
     const auto error = cudaDeviceGetAttribute(&values[i], attributes[i], device);
-    if (error == cudaErrorInvalidValue || error == cudaErrorNotSupported) return cudaSuccess;
+    if (error == cudaErrorInvalidValue || error == cudaErrorNotSupported) {
+      // Successful property queries do not reset the runtime's last-error slot.
+      // Clear the handled probe error so it cannot poison a later launch check,
+      // but propagate any different asynchronous failure observed during cleanup.
+      const auto cleared = cudaGetLastError();
+      return cleared == cudaSuccess || cleared == error ? cudaSuccess : cleared;
+    }
     if (error != cudaSuccess) return error;
   }
   const auto& driver = driver_metadata();

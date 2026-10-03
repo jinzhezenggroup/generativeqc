@@ -66,6 +66,7 @@ def stationary_contract_tree(tmp_path: Path, source: str) -> None:
         (
             "src/dft/stationary_gradient_cuda.cuh",
             "python/generativeqc/_ks_snapshot.py",
+            "python/generativeqc/_snapshot_grid_cache.py",
             "python/generativeqc_compiler/method/stationary_resources.py",
         ),
     )
@@ -181,7 +182,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
         ),
         "cuda_force_method_sha256": (
-            "b0f74c3900d7754fc9a2b4c25878c4e82ea2586aaa4578d3559f22a67c083cde"
+            "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
         ),
         "prepared_aot_selection_sha256": (
             "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
@@ -283,12 +284,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "681474a5c9456a76db9059e48fcfd1447289b455d9291a6df80951789a231589",
+        "geometry_resources_sha256": "51730953ed9a62807442f672013fcc40787ed3c0b0cca838d6c492c8b1c080b1",
         "public_wrapper_sha256": (
             "ded1b7e2cc0a93881cc17b4da32a3695bdbaf05421535ac3dcc4efb646da003b"
         ),
         "initializer_sha256": (
-            "c29ed5e27de74d03e92e035fdba81f745e1f4f608fa6b175cdf9ca315402a5b5"
+            "7bb03b7286a5868527104420a74f4749c8af92360f17ad12ced31051a7ae9d75"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -324,7 +325,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "1b4e6a5979f74cfe8afd8e4df20c4be3614bdc7bf80fe683c64aa57db953e389"
+            "d10b448db22bdd46fac91e189303e54a694998e87e77c6ec6395bfaa713ec3fe"
         ),
         "native_owner_sha256": (
             "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -390,7 +391,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
         "decode_sha256": (
-            "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
+            "5bd874ce5ba8d4d5d78eb282244144052822bb2f0266d40d33361735302b1a97"
+        ),
+        "grid_cache_sha256": (
+            "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
         ),
     }
     assert result["admission_limits"]["grid_plan_definition"] == (
@@ -2160,6 +2164,27 @@ def test_logical_primitive_metric_retains_uint64_range_gate() -> None:
     )
 
     assert [item["gate"] for item in failures] == ["primitive_logical_metric_range"]
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [
+        ("and self.owner == owner", "and True"),
+        ("np.array_equal", "np.allclose"),
+        ("128 << 20", "256 << 20"),
+    ],
+)
+def test_snapshot_grid_cache_identity_and_cap_changes_fail_closed(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    path = tmp_path / "python/generativeqc/_snapshot_grid_cache.py"
+    original = path.read_text()
+    assert before in original
+    path.write_text(original.replace(before, after))
+    with pytest.raises(RuntimeError, match="grid-cache contract changed"):
+        qualify_capacity._source_limits(tmp_path)
 
 
 def test_geometry_resource_budget_changes_fail_closed(tmp_path: Path) -> None:

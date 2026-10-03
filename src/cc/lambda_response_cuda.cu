@@ -525,7 +525,8 @@ LambdaResult solve_impl(const Problem& p, const SolverResult& cc, std::span<cons
   result.diagnostic.synchronizations = owner.synchronizations();
   result.diagnostic.cuda_actions = true;
   result.diagnostic.shared_program_hash = generated::lambda_transpose_program_hash;
-  result.diagnostic.independent_program_hash = generated::lambda_independent_transpose_program_hash;
+  result.diagnostic.independent_program_hash =
+      generated::lambda_independent_transpose_selected_program_hash(p.nocc, p.nvir);
   return result;
 }
 
