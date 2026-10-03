@@ -1,5 +1,13 @@
 # Experimental PBE0 Schwarz-indexed force pages
 
+**Review qualification hold:** the records below predate the shared-claim
+consumption barrier requested in PR #1767. An empty page or skipped claim could
+let the leader overwrite shared state before another warp had read it. Keep
+these bytes as historical observations, not acceptance/performance evidence
+for the synchronization-corrected binary. Fresh native and endpoint
+qualification is required before approval; passing the old energy/force gates
+or memcheck/initcheck does not prove shared-memory race freedom.
+
 This is an **opt-in scheduling experiment**, not a new default or a claim that
 the large-system GPU4PySCF performance gap is solved. The main README is not
 updated. All timings below include complete public energy **and analytic-force**

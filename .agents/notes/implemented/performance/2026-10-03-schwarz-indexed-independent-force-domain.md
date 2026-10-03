@@ -231,3 +231,23 @@ The [retained endpoint records](../../../../benchmarks/results/pbe0-screened-pag
 include exact force arrays, all phase timings, source/library identities,
 reconstruction patch and a no-GPU independent rechecker. Full endpoint records
 are losslessly compressed; coarse and paged evidence remain separate.
+
+## Review correction: shared claim consumption
+
+PR #1767 review identified a real race not covered by the earlier scalar page
+arithmetic, memcheck or initcheck gates. The publication barrier did not prevent
+the next leader write while a delayed warp still read the previous shared
+`block_quartet`. Empty diagonal/tail pages have no candidate-loop barrier;
+inactive-system and block-screen continues also bypass it. Caching the claim
+in a register alone would not protect its first read.
+
+An unconditional CTA barrier now precedes the leader's atomic claim on every
+loop iteration. All prior readers must finish before overwrite, regardless of
+which no-work path they took. The publication barrier still precedes new reads.
+The regression extracts the actual preparation, claim and page fragments,
+delays a nonleader warp before its first read, and checks every lane's work and
+termination claims over indexed/triangular, empty diagonal/tail and two skip
+routes. Real-GPU plain, synccheck and racecheck variants pass, alongside the host
+barrier invariant. Full native-oracle and complete-endpoint requalification is
+pending. Earlier measured records and their identities are retained as
+historical, not silently relabeled as corrected-binary evidence.
