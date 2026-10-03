@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-pbe0-incremental-work-20261004
+environment=/home/jzzeng/codes/wb97m-20261002
+export CUDA_PATH=/group/software/cuda-12.9.1
+export PATH="$environment/ccache/usr/bin:$PATH"
+export LD_LIBRARY_PATH="$environment/ccache/usr/lib/x86_64-linux-gnu:$CUDA_PATH/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export CCACHE_DIR=/home/jzzeng/.cache/ccache-pbe0-20261003
+export CCACHE_BASEDIR="$PWD"
+ccache --version
+ccache --show-stats
+trap 'ccache --show-stats' EXIT
+ccache /usr/bin/c++ -std=c++20 -O2 -DGENERATIVEQC_ENABLE_CUDA=1 \
+  -Iinclude -Isrc -I"$CUDA_PATH/include" \
+  -c .artifacts/ks-work-probe.cpp -o .artifacts/candidate/ks-work-probe.o
+/usr/bin/c++ .artifacts/candidate/ks-work-probe.o \
+  -L.artifacts/candidate -lgenerativeqc -L"$CUDA_PATH/lib64" -lcudart \
+  '-Wl,-rpath,$ORIGIN' -o .artifacts/candidate/ks-work-probe
+sha256sum .artifacts/candidate/ks-work-probe
+rsync -a .artifacts/candidate/ks-work-probe n1:/data/jzzeng/qc-pbe0-incremental-work-20261004/.artifacts/candidate/

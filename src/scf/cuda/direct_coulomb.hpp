@@ -35,6 +35,12 @@ struct GeneratedCoulombPlan {
   const std::uint32_t* pair_order{};
   const std::uint32_t* pair_class_offsets{};
   GeneratedShellPairStream* topology{};
+  /** Optional borrowed profiler array, one entry per direct shell class.
+   * Counts admitted streaming J task dispatches, not primitive recurrences or
+   * rejected candidates. Bounded fallback classes are unobserved. The caller
+   * owns zeroing, charged storage and stream-ordered lifetime; null in normal
+   * execution. These intrusive observations must not supply clean timing. */
+  unsigned long long* admitted_shell_counts{};
   ~GeneratedCoulombPlan();
 };
 
@@ -75,6 +81,9 @@ struct GeneratedExchangePlan {
   std::uint32_t* bounded_value_overflow{};
   double *shell_pair_block_bounds{}, *force{};
   unsigned long long* force_cursor{};
+  /** Same borrowed streaming-task census as the J owner, but for raw K.
+   * The separate array prevents a J traversal being mislabeled as K work. */
+  unsigned long long* admitted_shell_counts{};
   ~GeneratedExchangePlan();
 };
 

@@ -1,0 +1,88 @@
+"""Observe exact binary identity and actual reference XC routing without tuning."""
+
+import ctypes
+import hashlib
+import json
+import os
+import sys
+from pathlib import Path
+
+from generativeqc.autotune import source_identity
+from benchmarks.readme_pbe0 import main
+
+
+def run():
+    assert os.environ.get("SLURM_JOB_ID")
+    output = Path(sys.argv[sys.argv.index("--output") + 1])
+    engine = sys.argv[1]
+    backend_calls = []
+    receipt = {
+        "base_commit": Path(".artifacts/candidate/base.txt").read_text().strip(),
+        "source_patch_sha256": hashlib.sha256(Path(".artifacts/candidate/source.patch").read_bytes()).hexdigest(),
+        "source_identity": source_identity(Path.cwd()),
+        "job": os.environ["SLURM_JOB_ID"],
+        "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+        "arguments": sys.argv[1:],
+        "requested_indexed_schedule": os.environ["GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE"],
+        "requested_incremental_jk": os.environ["GENERATIVEQC_INCREMENTAL_DIRECT_JK"],
+        "native_build_observations": [],
+        "harness_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "reference_xc_objects": backend_calls,
+        "missing_semantic_counters": {
+            "candidate_quartets": None, "early_rejections": None,
+            "admitted_force_tasks_by_class": None, "executed_force_roots": None,
+        },
+    }
+    if engine == "native":
+        library_path = Path(os.environ["GENERATIVEQC_LIBRARY"])
+        library = ctypes.CDLL(str(library_path))
+        library.generativeqc_get_source_identity.restype = ctypes.c_char_p
+        assert library.generativeqc_get_source_identity().decode() == receipt["source_identity"]
+        receipt["library_sha256"] = hashlib.sha256(library_path.read_bytes()).hexdigest()
+        from generativeqc.batch import PreparedBatch
+        original_execute = PreparedBatch.execute
+
+        def observe_execute(self, *args, **kwargs):
+            transport_before = self.ks_transport_diagnostics
+            result = original_execute(self, *args, **kwargs)
+            transport_after = self.ks_transport_diagnostics
+            for index, item in enumerate(result.items):
+                diagnostic = item.ks_diagnostic
+                receipt["native_build_observations"].append({
+                    "status": item.status,
+                    "converged": item.converged,
+                    "iterations": item.iterations,
+                    "fock_builds": diagnostic.fock_builds if diagnostic is not None else None,
+                    "fock_builds_origin": "ks_diagnostic" if diagnostic is not None else None,
+                    "incremental": item.incremental_direct_jk,
+                    "physical_residual_rms": item.physical_residual_rms,
+                    "warm_start_fallback": item.warm_start_fallback,
+                    "counter_scope": "returned attempt; not complete endpoint work after retry",
+                    "returned_ks_diagnostic": diagnostic.to_payload() if diagnostic else None,
+                    "transport_before": transport_before[index].to_payload() if transport_before[index] else None,
+                    "transport_after": transport_after[index].to_payload() if transport_after[index] else None,
+                })
+            return result
+
+        PreparedBatch.execute = observe_execute
+    else:
+        from gpu4pyscf.dft import libxc
+        original = libxc.XCfun.__init__
+
+        def observed(self, xc, spin):
+            original(self, xc, spin)
+            backend_calls.append({"xc": str(xc), "spin": str(spin), "on_gpu": bool(self.on_gpu)})
+
+        libxc.XCfun.__init__ = observed
+    try:
+        main()
+    finally:
+        if engine == "reference":
+            libxc.XCfun.__init__ = original
+        else:
+            PreparedBatch.execute = original_execute
+        output.with_suffix(".campaign.json").write_text(json.dumps(receipt, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    run()

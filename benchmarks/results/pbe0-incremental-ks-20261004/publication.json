@@ -1,0 +1,159 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "No default-promotion gate: initial warm regression, later warm parity and moved regressions; ordered shared-cache runs are not causal speedup evidence.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 3303,
+      "path": "initial-summary.json.gz",
+      "role": "summary",
+      "sha256": "411bd6beef30171690958144e336d0c53bae99ae1dc6f03fe17ed0c53d1f8907"
+    },
+    {
+      "bytes": 57269,
+      "path": "initial-48.json.gz",
+      "role": "samples",
+      "sha256": "573609280a43bf073235827f106139cd6b06e5a7aec19b12b140847e54fa1465"
+    },
+    {
+      "bytes": 94199,
+      "path": "initial-96.json.gz",
+      "role": "samples",
+      "sha256": "ce443972d0853bdeb7edf395f45de289e867ad3be1343db21001896e7d03483c"
+    },
+    {
+      "bytes": 17875,
+      "path": "audit-summary.json.gz",
+      "role": "summary",
+      "sha256": "7c9a6d2f093cf1e20fad5612828f02b41ae82d2be2432d4adfd7d766b792bee8"
+    },
+    {
+      "bytes": 65140,
+      "path": "audit-48.json.gz",
+      "role": "samples",
+      "sha256": "0ad4f9dc46181618fd9f2a73b90ffc359ada411a02e9dbf734702e8b5cf9e603"
+    },
+    {
+      "bytes": 101183,
+      "path": "audit-96.json.gz",
+      "role": "samples",
+      "sha256": "71cf2e9dcab1551b79f8f97d9e357480b0a76b3ac4e1f4d6bae38f23ef5d8850"
+    },
+    {
+      "bytes": 29870,
+      "path": "audit-4.json.gz",
+      "role": "samples",
+      "sha256": "10f59e1b0d4374000e6d18b91de03d8fa9ad60501c82e104efa4b049af8e0f58"
+    },
+    {
+      "bytes": 4505,
+      "path": "observer-work.json.gz",
+      "role": "samples",
+      "sha256": "ed3955735a25f70b793ad3f0d032ae343eeacbecfbd9e77b590162c756077065"
+    },
+    {
+      "bytes": 45348,
+      "path": "controls-and-failures.json.gz",
+      "role": "samples",
+      "sha256": "ad469aceacc948a734024e800d1292bf8e84f3f397d5428bc97f8732293886ce"
+    },
+    {
+      "bytes": 1283,
+      "path": "source-receipts.json.gz",
+      "role": "summary",
+      "sha256": "f9f8b8b20efc4f7dce669cd07fe67388b2679130f1b87b0bccfded8ecde99c5d"
+    },
+    {
+      "bytes": 3972,
+      "path": "endpoint-runner.py.txt",
+      "role": "reproduction",
+      "sha256": "51fdeb90fcd42381e0c3a918c985c231cd5501538b8ff5d731cc354f1a60d022"
+    },
+    {
+      "bytes": 1537,
+      "path": "holdout-runner.py.txt",
+      "role": "reproduction",
+      "sha256": "5f13ba888c41f0bedcf5d3661cc501e57a2cbbf0331b0ca241b45299b1fb10cc"
+    },
+    {
+      "bytes": 6662,
+      "path": "endpoint-check.py.txt",
+      "role": "reproduction",
+      "sha256": "6c0f501cd20bfd8869698e43d5911545758a319ffebe949da12e88174735e068"
+    },
+    {
+      "bytes": 8296,
+      "path": "ks-work-probe.cpp.txt",
+      "role": "reproduction",
+      "sha256": "a8272b0661fca45ce558e3ee1d103abe0d70f49fb1dfdf54bb121f23fb9182db"
+    },
+    {
+      "bytes": 8184,
+      "path": "ks-work-probe-eager.cpp.txt",
+      "role": "reproduction",
+      "sha256": "cf9a8cd002a4794c05fa8dc3401ebd7515b997b971fabd54f5c53189b5ace679"
+    },
+    {
+      "bytes": 1037,
+      "path": "work-build.sh.txt",
+      "role": "reproduction",
+      "sha256": "56aa866e518789ad580284c390add657fea3d67c53ffbcb4e89a534aa1cc4a52"
+    },
+    {
+      "bytes": 1036,
+      "path": "work-run.sh.txt",
+      "role": "reproduction",
+      "sha256": "b74309f13fffdd7001ae1487251f324fc96c6baa9a59b04c1d4db9ca11dce178"
+    },
+    {
+      "bytes": 29997,
+      "path": "input-96-basis.txt",
+      "role": "input",
+      "sha256": "618ef36be3450cd4882713608b2794da03a0f83bcfb1d5b356b22058777ea300"
+    },
+    {
+      "bytes": 575,
+      "path": "input-96-basis.json",
+      "role": "input",
+      "sha256": "504f179c22761b24363f7ee1fad22386bed442d67200f508ece5ab047bed847a"
+    },
+    {
+      "bytes": 5519,
+      "path": "def2-svp-hco.json",
+      "role": "input",
+      "sha256": "cc9e90f780e739bc67ff608ff42b1c1114ccba4409e7ce6cc6281aa9a9719d0d"
+    },
+    {
+      "bytes": 5444,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "13854af018809e1338f74b3045471f38f3772094ae6391ad095053997fe04e6a"
+    },
+    {
+      "bytes": 6076,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "1d5adcc6edf83071b4e89d162483e59a1293fe8582d77b526ecf82f888ed488a"
+    },
+    {
+      "bytes": 4068,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "83f21e3245ebd47824524093ebf3c90a9c5b6a342ec935dae22cc961e9fb8100"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-incremental-ks-20261004/verify.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "80fa2844c7c8d62dd2d9a96c1531d98835c3562d"
+  }
+}

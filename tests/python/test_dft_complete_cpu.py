@@ -829,7 +829,12 @@ def test_complete_open_shell_uks_analytic_and_reconverged_fd(
 
 
 def independent_global_hybrid_gradient(
-    basis: typing.Any, state: typing.Any, method: typing.Any, xc: typing.Any = "PBE0"
+    basis: typing.Any,
+    state: typing.Any,
+    method: typing.Any,
+    xc: typing.Any = "PBE0",
+    *,
+    cart: bool = True,
 ) -> typing.Any:
     """Independent PySCF global-hybrid SCF plus full moving-grid analytic gradient."""
     from pyscf import dft, gto, lib
@@ -850,7 +855,7 @@ def independent_global_hybrid_gradient(
         atom=[(label, a.position) for label, a in zip(labels, basis.atoms)],
         basis=shells,
         unit="Bohr",
-        cart=True,
+        cart=cart,
         charge=basis.charge,
         spin=basis.multiplicity - 1,
         verbose=0,

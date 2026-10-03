@@ -64,6 +64,8 @@ struct Owner {
   bool device_chunk_mode{}, has_exchange{true}, has_range_correction{true};
   bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{};
   bool final_state_ready{true}, occupied_fitted_factor_ready{};
+  bool incremental_jk{}, pending_incremental_full{};
+  double observed_max_delta{};
   void* nonlocal_correlation{};
   unsigned refinement_iterations{};
   std::uint64_t owner{17}, solve_epoch{3}, generation{5}, final_generation{5};
@@ -165,6 +167,26 @@ int main() {
   assert(work.events.back().state_generation == p.final_generation);
   assert(p.output.precision.final_residual_audits == 1 && p.output.precision.operator_work_counters_valid == 1);
   assert(p.output.fock_builds == 5); // FinalAudit must not invent a Fock build.
+  Owner incremental;
+  incremental.incremental_jk = true;
+  incremental.pending_incremental_full = true;
+  incremental.complete(false, false, 0);
+  incremental.pending_incremental_full = false;
+  incremental.complete(false, false, 0);
+  incremental.final_closure = true;
+  incremental.complete(false, false, 0);
+  incremental.output.converged = true;
+  incremental.publish();
+  assert(incremental.output.incremental_direct_jk.anchor_full_builds == 1);
+  assert(incremental.output.incremental_direct_jk.delta_builds == 1);
+  assert(incremental.output.incremental_direct_jk.post_scf_full_builds == 1);
+  assert(incremental.output.fock_builds == 3);
+  assert(incremental.output.precision.final_residual_audits == 1);
+  assert(incremental.output.precision_work.events.size() == 4);
+  assert(!incremental.output.precision_work.complete);
+  assert(!incremental.output.precision_work.operator_inventory_complete);
+  assert(!incremental.output.precision.operator_work_counters_valid);
+  assert(!incremental.output.incremental_direct_jk.quartet_work_counters_valid);
   Owner screened;
   screened.complete(true, false, 0);
   assert(count(screened, Kind::CoulombJ, Mode::Mixed) == 1);

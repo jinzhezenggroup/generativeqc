@@ -20,6 +20,7 @@
 #include "generated_method_parameters.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
+#include "methods/incremental_direct_jk.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/fock_prepared.hpp"
@@ -473,6 +474,18 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     scf::require_wb97mv_composition(*options.resolved_fock_build, correction,
                                     execution_plan.nonlocal_parameters);
   }
+  if (incremental_direct_jk_benchmark_requested()) {
+    if (backend != GENERATIVEQC_BACKEND_CUDA ||
+        options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE ||
+        options.precision_mode != GENERATIVEQC_PRECISION_FP64 || execution_plan.range_exchange ||
+        execution_plan.nonlocal_correlation)
+      throw MethodError(
+          GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "incremental Direct-J/K benchmark mode requires strict full-range exact CUDA KS");
+    options.incremental_direct_jk = true;
+    if (const auto interval = incremental_direct_jk_benchmark_rebuild_interval())
+      options.incremental_direct_jk_rebuild_interval = *interval;
+  }
   options.compute_forces = false;
   return options;
 }
@@ -539,6 +552,7 @@ Result adapt_result(scf::ScfResult native, generativeqc_backend backend) {
   result.convergence.converged = native.converged;
   result.executed_backend = backend;
   result.fock_builds = native.fock_builds;
+  result.incremental_direct_jk = native.incremental_direct_jk;
   result.precision = native.precision;
   result.precision_work = std::move(native.precision_work);
   native.dft_diagnostic.fock_builds = native.fock_builds;

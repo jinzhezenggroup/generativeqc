@@ -258,30 +258,93 @@ void registered_functional_code_seam() {
   require(rejected, "unregistered split-hybrid CUDA code was admitted by KS");
 }
 
-void run_exact_exchange_case(bool restricted) {
+void run_exact_exchange_case(bool restricted, bool incremental = false,
+                             double screening_tolerance = 1e-12) {
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
   const dft::MolecularGrid grid(system, grid_spec);
-  const scf::PreparedFockPlan cpu(system, nullptr,
-                                  exact_exchange_strategy(restricted, scf::FockBackend::Cpu));
-  const scf::PreparedFockPlan gpu(system, nullptr,
-                                  exact_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
+  auto cpu_strategy = exact_exchange_strategy(restricted, scf::FockBackend::Cpu);
+  auto gpu_strategy = exact_exchange_strategy(restricted, scf::FockBackend::Cuda);
+  cpu_strategy.screening_tolerance = gpu_strategy.screening_tolerance = screening_tolerance;
+  const scf::PreparedFockPlan cpu(system, nullptr, cpu_strategy);
+  const scf::PreparedFockPlan gpu(system, nullptr, gpu_strategy, 0);
   scf::ScfOptions options;
   options.compute_forces = false;
   options.energy_tolerance = 1e-12;
   options.density_tolerance = 1e-10;
   options.max_iterations = 200;
+  options.incremental_direct_jk = incremental;
+  options.incremental_direct_jk_rebuild_interval = screening_tolerance == 0.0 ? 0U : 8U;
+  options.screening_tolerance = screening_tolerance;
 
   const unsigned spins = restricted ? 1U : 2U;
   const auto plain_bytes = dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history);
   const auto hybrid_bytes = dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history, true);
   require(hybrid_bytes == plain_bytes + spins * basis.nao * basis.nao * sizeof(double),
           "CUDA KS exact-exchange buffer is missing from state admission");
+  const auto incremental_bytes =
+      dft::cuda_ks_state_bytes(basis.nao, spins, options.diis_history, true, false, true);
+  require(incremental_bytes >= hybrid_bytes +
+                                   (1U + 2U * spins) * basis.nao * basis.nao * sizeof(double) +
+                                   sizeof(double) + sizeof(std::uint32_t) + sizeof(std::uint8_t),
+          "CUDA KS linear anchors are missing from state admission");
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
-  const auto result = plan.run(nullptr, false);
+  bool observation_refused = false;
+  try {
+    (void)plan.incremental_diagnostic();
+  } catch (const std::logic_error&) {
+    observation_refused = true;
+  }
+  require(observation_refused, "KS admitted an observation before the first solve");
+  plan.begin(nullptr, false);
+  std::uint64_t observed_builds = 0;
+  while (plan.active()) {
+    plan.enqueue_iteration();
+    observation_refused = false;
+    try {
+      (void)plan.incremental_diagnostic();
+    } catch (const std::logic_error&) {
+      observation_refused = true;
+    }
+    require(observation_refused, "KS exposed counters while device work was pending");
+    plan.finish_iteration();
+    const auto observation = plan.incremental_diagnostic();
+    require(observation.active == incremental, "drained KS observation lost its selected route");
+    if (incremental)
+      require(observation.anchor_full_builds + observation.delta_builds +
+                      observation.post_scf_full_builds ==
+                  ++observed_builds,
+              "drained incremental observation omitted an executed provider build");
+  }
+  const auto result = plan.result();
   require(result.converged && !plan.failed(), "CUDA exact-exchange KS did not converge");
+  if (incremental) {
+    const auto& census = result.incremental_direct_jk;
+    require(census.requested && census.active && census.anchor_full_builds > 0 &&
+                census.delta_builds > 0 && (restricted || census.post_scf_full_builds > 0) &&
+                census.anchor_updates == census.delta_builds &&
+                census.anchor_full_builds + census.delta_builds + census.post_scf_full_builds ==
+                    result.fock_builds &&
+                census.periodic_rebuilds + 1 == census.anchor_full_builds,
+            "incremental KS omitted anchors, delta builds or strict final full-density audit");
+    if (screening_tolerance == 0.0)
+      require(census.anchor_full_builds == 1 && census.periodic_rebuilds == 0,
+              "unscreened KS did not retain its exact-linear anchor");
+    else
+      require(
+          census.anchor_full_builds == (census.delta_builds + census.anchor_full_builds + 1) / 2,
+          "screened KS accumulated multiple delta updates between full refreshes");
+    require(!census.quartet_work_counters_valid,
+            "KS invented complete work counters from provider-build counts");
+    require(!result.precision_work.complete && !result.precision_work.operator_inventory_complete &&
+                !result.precision.operator_work_counters_valid &&
+                result.precision.final_residual_audits > 0,
+            "incremental KS certified an incomplete arithmetic inventory or omitted its audit");
+    require(plan.resources().state_device_bytes >= incremental_bytes,
+            "incremental KS allocation does not match its shape admission");
+  }
   const auto reference = restricted ? scf::run_pbe_rks(cpu, basis, grid, options)
                                     : scf::run_uks(cpu, basis, grid, options, true);
   require(reference.converged && std::abs(reference.energy - result.energy) < 1e-10,
@@ -310,6 +373,25 @@ void run_exact_exchange_case(bool restricted) {
               std::abs(snapshot.components.exact_exchange -
                        result.dft_diagnostic.components.exact_exchange) < 1e-10,
           "CUDA exact-exchange final state lost the converged model or energy");
+  if (incremental) {
+    const auto warm_result = plan.run(nullptr, true);
+    const auto& census = warm_result.incremental_direct_jk;
+    require(warm_result.converged && std::abs(warm_result.energy - reference.energy) < 1e-10 &&
+                census.anchor_full_builds > 0 && warm_result.precision.final_residual_audits == 1 &&
+                (restricted || census.post_scf_full_builds > 0),
+            "warm KS reused an earlier solve's incremental anchor or omitted its final audit");
+    if (restricted)
+      require(warm_result.fock_builds == 1 && census.anchor_full_builds == 1 &&
+                  census.delta_builds == 0 && census.post_scf_full_builds == 0,
+              "stationary RKS warm replay repeated an already audited full-density build");
+    require(plan.read_final_state(token, false, snapshot, detail) ==
+                GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+            "incremental KS retained a previous solve's final-state token");
+    require(
+        plan.final_state_token(token, detail) == GENERATIVEQC_STATUS_SUCCESS &&
+            plan.read_final_state(token, false, snapshot, detail) == GENERATIVEQC_STATUS_SUCCESS,
+        "warm incremental KS failed unshifted physical final-state validation");
+  }
 }
 
 void run_density_fitted_exchange_case(bool restricted) {
@@ -1789,6 +1871,10 @@ int main() {
     rejected_api_requests_revoke_tokens();
     run_exact_exchange_case(true);
     run_exact_exchange_case(false);
+    run_exact_exchange_case(true, true);
+    run_exact_exchange_case(false, true);
+    run_exact_exchange_case(true, true, 0.0);
+    run_exact_exchange_case(false, true, 0.0);
     run_density_fitted_exchange_case(true);
     run_density_fitted_exchange_case(false);
     run_range_exchange_case(true);

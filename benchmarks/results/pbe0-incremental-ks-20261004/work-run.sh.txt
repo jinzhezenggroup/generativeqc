@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-pbe0-incremental-work-20261004
+source /home/jzzeng/codes/qc-pbe0-generated-sources-20261003/.artifacts/gpu-environment.sh
+: "${SLURM_JOB_ID:?finite Slurm required}"
+mode="${1:?off or on required}"
+export LD_LIBRARY_PATH="$PWD/.artifacts/candidate:$LD_LIBRARY_PATH"
+export EXPECTED_SOURCE_IDENTITY="$(cat .artifacts/candidate/source-identity.txt)"
+export GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=0
+directory="$PWD/.artifacts/work-$mode-$SLURM_JOB_ID"
+mkdir -p "$directory"
+scontrol show job "$SLURM_JOB_ID" -o
+sha256sum -c .artifacts/candidate/library.sha256
+sha256sum .artifacts/ks-work-probe.cpp .artifacts/candidate/ks-work-probe .artifacts/input-96-basis.txt > "$directory/inputs.sha256"
+status=0
+.artifacts/candidate/ks-work-probe .artifacts/input-96-basis.txt "$mode" \
+  >"$directory/work.jsonl" 2>"$directory/stderr.log" || status=$?
+printf '{"exit_code":%s}\n' "$status" > "$directory/outcome.json"
+tail -4 "$directory/work.jsonl"
+cat "$directory/stderr.log"
+exit "$status"
