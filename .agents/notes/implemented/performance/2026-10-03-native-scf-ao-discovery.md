@@ -1,6 +1,6 @@
 # Decision: explicit native SCF sampled-AO discovery
 
-Status: implemented, experimental; integration qualified, endpoint timing pending
+Status: implemented, experimental; composition 24/48 measured, default unchanged
 Date: 2026-10-03
 
 ## Problem
@@ -86,6 +86,45 @@ must include synchronized preparation plus the first energy/force execution
 for both engines. The historical comparator's execute-only `native_cold` field
 alone excludes this preparation. Preserve that field and report an explicit
 complete-cold total; lifetime discovery time must not be added again to warms.
+
+## Completed composition endpoints
+
+The unchanged integration source/library identified above has complete same-GPU
+dense versus joint SCF/force-map results on n1 RTX 5090. These use spherical
+def2-SVP and 48 x 16 x 32 unpruned points per atom, the matched full semilocal
+and VV10 grids, three frozen-post-cold warm repeats and synchronized preparation.
+Native and reference use their own converged density snapshots; neither receives
+the other's density. Every priming/warm sample takes one SCF iteration.
+
+| Atoms / AO | Native dense warm median | Native joint warm median | GPU4PySCF paired with joint |
+| --- | ---: | ---: | ---: |
+| 24 / 192 | 27.110692 s | 26.330918 s | 27.397887 s |
+| 48 / 384 | 106.139498 s | 97.112717 s | 103.042334 s |
+
+Joint/reference ratios are 0.961057 and 0.942455 respectively. All five E/F
+pairs per variant pass the unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates. The 48-atom
+joint maximum errors are 1.001e-11 Eh and 6.307e-10 Eh/Bohr; actual XC backend
+flags are all on-GPU. Native joint warm samples are 97.129844, 97.112717 and
+97.014143 s; paired reference samples are 103.055296, 103.042334 and 103.035995 s.
+Do not attribute the joint improvement solely to either the SCF or force map.
+
+Complete cold includes preparation. At 48 atoms it is 1113.882289 s for dense,
+962.211204 s for joint and 474.695895 s for the joint-paired reference: cold is
+still slower than reference. Both native variants submit 21 cold XC evaluations
+and one per warm. SCF discovery costs 0.649430 s once in preparation, with
+14194184 numeric peak host bytes, 4608 tiles, 436 empty tiles and active-AO sum
+621388. Actual SCF and force point/AO-square work fractions are 0.145202 and
+0.187396. Reduced work alone was not used as a performance claim.
+
+Slurm jobs are 5577 (24) and 5576 (48). Ignored integration artifacts under
+`.artifacts/scf-active-ao/` retain raw samples, environment/source/library
+receipts and `scripts/verify-matched.py`, which independently recomputes every
+pair's numerical errors, verifies actual map selection, constant preparation
+work, complete-cold addition and reference XC backend. The summaries are
+`results/matched24-verified.json` and `results/matched48-verified.json`.
+The 96-atom control and candidate remain pending. These composition endpoints
+do not qualify this standalone PR head, promote default screening, or resolve
+the public host-budget boundary above.
 
 ## Revisit when
 
