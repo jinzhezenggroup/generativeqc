@@ -15,11 +15,42 @@ is divided by iterations or selected for matching work.
 
 The primary comparison is candidate then baseline in n5 Slurm job **1369**.
 An earlier baseline in job **1367** gives 5.557 s warm, followed by the
-response-only candidate at 5.085 s. [comparison.json](comparison.json) retains
-all four runs, every scalar endpoint, complete work counters, identities and
-independent original/moved force arrays. That reference was measured on node3;
-it is a numerical oracle only for this n5 comparison. Cold and reconvergence
-have one observation per arm and are not statistical latency estimates.
+response-only candidate at 5.085 s. Cold and reconvergence have one observation
+per arm and are not statistical latency estimates.
+
+## Compact checkout evidence
+
+The repository checkout retains the material needed for routine review without
+keeping a second copy of every raw observation:
+
+- [summary.json](summary.json) records the six-size direct/DF medians, endpoint
+  counts, maximum numerical errors and native identity.
+- [validation.json](validation.json) records tests, sanitizers, source/build
+  identities, 99/108-atom resource qualification and the disclosed baseline
+  failures.
+- [hf.svg](hf.svg) is the rendered six-size direct/DF comparison used by the
+  top-level README.
+- [larger-harness.patch](larger-harness.patch) is the small deterministic
+  99/108-atom reproduction extension.
+
+The complete pre-compaction raw bundle remains recoverable from Git commit
+`f4faedbd02a428ba9ac2eca467e88fada53866fe`, the immediate parent of the
+storage-only CI fix. This follows the repository retention policy: historical
+payloads stay recoverable from Git history while the tracked checkout remains
+within the aggregate evidence budget. The removed large records have these
+exact identities:
+
+| Historical path | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `comparison.json` | 293370 | `9dce78c397fa09c600f8ea1b3064e4e311fc9ea178581de5832bb91b0c8c80f7` |
+| `larger.json` | 279491 | `5a14b744a5c3abccee61d50ceac4826b38c8e77ab4c6f168e46b9ee1258696c4` |
+| `references.json` | 230576 | `0f7243dd0c8746721e84d2165c61efd9470f96b5ce8c9d074159d1a8b5713f92` |
+| `work.json` | 151016 | `7d1ceb7450dda487888660352e5846e6e09c13c50027b0ee4df21c3d9103ec37` |
+
+Smaller raw sample, integration and reconstruction-patch files from the same
+qualification are recoverable from that commit as well. Removing them from the
+current checkout does not alter the implementation, benchmark claims or test
+results.
 
 ## README figure
 
@@ -32,71 +63,48 @@ are **4.73e-11 Eh** and **1.44e-10 Eh/Bohr**.
 
 At 96 atoms/768 AOs the plotted DF warm medians are **4.575 s** for
 GenerativeQC and **11.234 s** for GPU4PySCF. These are complete engine-local
-frozen warm endpoints with their actual SCF work: native needs one iteration,
-reference repeats need one, two or four. Crosses expose variable-iteration
-samples. Node3 and n5 timings are not combined into one speedup estimate.
-
-- [summary.json](summary.json) contains all phase medians and the shared native identity.
-- [samples.json](samples.json) retains every scalar native result in named columns;
-  recover a row with `dict(zip(table["columns"], row, strict=True))`.
-- [references.json](references.json) contains every reference sample and independent arrays.
-- [work.json](work.json) retains all grouped diagnostic counters.
-- [validation.json](validation.json) records tests, sanitizers, build/source identities,
-  larger-size checks and known baseline failures.
+frozen warm endpoints with their actual SCF work. Node3 and n5 timings are not
+combined into one speedup estimate.
 
 The figure uses nested 3/6/12/24/48/96-atom water clusters, spherical def2-SVP,
-RHF, full analytic forces and eight OMP/OpenBLAS/MKL threads. DF uses the
-retained cc-pVDZ-JKFIT record (3712 auxiliaries at 96 atoms), explicit
-`packed-single` values, occupied fitted response, the qualified derivative
-schedule and FP64 BLAS. Native energy/density/screening thresholds are
-`1e-12`/`1e-10`/`1e-12`; the reference uses energy/gradient thresholds
-`1e-12`/`1e-10`, full Fock and direct screening `1e-14`. The second atom moves
-by 0.001 Bohr along z before reconvergence and five further frozen replays.
-This qualifies these explicit DF settings, not every automatic DF planner.
+RHF, full analytic forces and eight OMP/OpenBLAS/MKL threads. DF uses
+cc-pVDZ-JKFIT (3712 auxiliaries at 96 atoms), explicit `packed-single` values,
+occupied fitted response, the qualified derivative schedule and FP64 BLAS.
+Native energy/density/screening thresholds are
+`1e-12`/`1e-10`/`1e-12`; the independent reference uses
+energy/gradient thresholds `1e-12`/`1e-10`, full Fock and direct screening
+`1e-14`.
 
 ## Larger size and resource boundary
 
-[larger.json](larger.json) retains all 28 baseline/candidate 99-atom endpoints
-and their independent reference. Warm time changes from 6.259 s to 5.690 s;
-all numerical gates pass. The existing value planner reduces the auxiliary tile
-from 128 at 96 atoms to 12 at 99 atoms. Twenty Gram partials would be required,
-so the generated K correctly retains SYRK at this boundary; compact response
-still provides a 9.1% warm saving. Cold/moved iterations remain 58/13 and all
-warm repeats remain one iteration.
+The 99-atom/792-AO campaign has 28 baseline/candidate endpoints. Warm time
+changes from 6.259 s to 5.690 s and all numerical gates pass. The value planner
+reduces the auxiliary tile from 128 at 96 atoms to 12 at 99 atoms, so the
+generated K partials are not admitted there; K correctly retains SYRK while the
+compact response still provides a 9.1% warm saving. Cold/moved iterations
+remain 58/13 and all warm repeats remain one iteration.
 
-Both versions reject the 108-atom attempt before SCF with out-of-memory status
-under the measured value/response budget policy. This is retained as a resource
-boundary, not an inaccurate result or a timing sample. Native memory fields are
-ledger estimates, not measured whole-process peaks.
+Both versions reject the 108-atom/864-AO attempt before SCF with out-of-memory
+status under the same measured value/response budget policy. This is a resource
+boundary, not a successful timing or a measured whole-process VRAM limit. The
+complete raw 99/108-atom record is in the historical bundle above.
 
 ## Implementation and provenance
 
 The response roots `r*(r+1)/2` occupied pairs and forms a weighted triangular
-metric Gram. Large packed K uses a generated triangular FP64 tiled product
-with deterministic reduction slices. Both reuse existing disjoint storage;
-no device allocation, precision relaxation, iteration shortcut or oracle work
-is added. Exact final-state/resource gates and bounded BLAS/spectral fallbacks
-remain explicit. See the [decision note](../../../.agents/notes/implemented/performance/2026-10-03-df-symmetric-occupied-products.md)
+metric Gram. Large packed K uses a generated triangular FP64 tiled product with
+deterministic reduction slices. Both reuse existing disjoint storage; no device
+allocation, precision relaxation, iteration shortcut or oracle work is added.
+Exact final-state/resource gates and bounded BLAS/spectral fallbacks remain
+explicit. See the
+[decision note](../../../.agents/notes/implemented/performance/2026-10-03-df-symmetric-occupied-products.md)
 and [current contracts](../../../docs/developer/df_occupied_cuda.md).
 
-The figure's library SHA-256 is
-`6b216cf564aaf61518f5497ed80071baddb1ffab610d1128a891cfac5b5cb8d4`.
-The n5 combined candidate before source formatting has SHA-256
-`40a483e0f17d612f4b1bd3be6860af4694b92d0d4597cec1b3d1b72b27fa35a2`;
-its exact dirty source is retained in [combined-preformat.patch](combined-preformat.patch).
-[source.patch](source.patch) reconstructs the measured final implementation
-on the baseline above. [response-only.patch](response-only.patch) reconstructs
-the earlier response-only arm. The integration recheck uses master `06459d469`;
-[integration.json](integration.json) retains another complete 96-atom DF run
-from clean commit `b317e0b7f`, with all gates passing. Subsequent master
-`db44f7939` changes only CC arena reuse and has no HF DF overlap. The final [provider compatibility patch](provider-compatibility.patch)
-keeps full GEMM available for BLAS interfaces without SYRK; the timed NVIDIA
-operation sequence is unchanged. The final compatibility build passes 274 host
-tests with both BLAS interfaces and 34 molecular GPU tests; its library hash
-and test receipts are retained in [validation.json](validation.json). These reconstruction patches are not needed
-to run the current checkout. Raw traces, logs, binaries and exploratory
-products remain in ignored
-`.artifacts/hf-df-96/` directories.
+The final compatibility build passes 274 host tests with both BLAS interfaces
+and 34 molecular GPU tests. The complete identities and sanitizer receipts are
+in [validation.json](validation.json). The raw reconstruction patches and full
+observation tables are intentionally historical rather than duplicated in the
+tracked checkout.
 
 ## Reproduce
 
@@ -129,14 +137,11 @@ PYTHONPATH=python:. python -m tools.render_hf_acceptance_benchmarks \
 
 For an A/B study, build the baseline in a separate checkout with identical
 flags and retain a native run from each library against the same independently
-computed DF reference. Use `benchmarks.compare_df_direct_endpoint native
---nested-water --aos 768 --route df --repeats 5 --reference <reference/results.json>
---output <new-directory>` in the same finite Slurm allocation. Preserve assigned
-`CUDA_VISIBLE_DEVICES`; do not mix measurements from different nodes.
+computed DF reference. Preserve assigned `CUDA_VISIBLE_DEVICES`; do not mix
+measurements from different nodes.
 
-For larger-size qualification only, apply [larger-harness.patch](larger-harness.patch)
-in an isolated checkout. It adds deterministic 99/108-atom extensions and retains
-failed endpoint status before optional metric diagnostics. Run the same reference
-and native commands with `--aos 792` or `864`. These sizes are outside the README
-plot. The 108-atom/864-AO case is rejected under the same measured budget policy on
-both versions; its failure must not be represented as a performance sample.
+For larger-size qualification only, apply
+[larger-harness.patch](larger-harness.patch) in an isolated checkout, then run
+the same reference/native commands with `--aos 792` or `864`. The 108-atom
+case must remain a rejected resource-boundary observation rather than a
+performance sample.
