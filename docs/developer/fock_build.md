@@ -29,7 +29,7 @@ the existing strict-FP64 value mathematics and derivative ownership. The
 [bounded value policy note](../../.agents/notes/implemented/performance/2026-10-02-through-f-value-policy.md)
 records the measured regression and requirements for future default promotion.
 
-### Experimental bounded force schedule
+## Experimental bounded force schedule
 
 `GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=1` (or `indexed`) opts derivative-capable
 generated exchange owners into per-system descending Schwarz pair order.
