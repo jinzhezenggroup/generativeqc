@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <limits>
@@ -185,7 +186,8 @@ struct RawHamiltonian {
 
 RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& source,
                                const hf::PhysicalReference& ref, std::size_t max_bytes, bool cuda,
-                               int device_id, std::size_t provider_budget) {
+                               int device_id, std::size_t provider_budget, unsigned axis_tile,
+                               posthf::ProviderWork& work) {
   const auto n = ref.nbf;
   if (source.nbf() != n || !source.supports(integrals::ElectronInteractionOperator::eri))
     throw std::invalid_argument("RCCSD(T) raw Hamiltonian source/reference mismatch");
@@ -203,9 +205,10 @@ RawHamiltonian raw_hamiltonian(const integrals::ElectronInteractionSource& sourc
     tensor::cpu_congruence('T', n, ref.coefficients.data(), ref.hcore.data(), out.h.data(),
                            workspace.data());
   }
-  posthf::NativeBlockProvider provider(source, ref, provider_budget, 2);
+  posthf::NativeBlockProvider provider(source, ref, provider_budget, axis_tile,
+                                       posthf::AOTileDomain::Basis);
   const auto all = range(n);
-  out.g = provider.get({all, all, all, all}, cuda, device_id);
+  out.g = provider.get({all, all, all, all}, cuda, device_id, nullptr, &work);
   if (out.g.size() != n4) throw std::runtime_error("RCCSD(T) full MO ERI shape mismatch");
   out.density.assign(n2, 0.0);
   for (std::size_t i = 0; i < ref.nocc; ++i) out.density[i * n + i] = 2.0;
@@ -396,8 +399,8 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                                     std::size_t source_bytes,
                                                     bool cuda_transform = false) {
   const auto o = p.nocc, v = p.nvir, n = checked_add(o, v);
-  if (!o || !v || n > 12 || reference.nbf != n || reference.nocc != o ||
-      molecule::ao_count(system) != n || !max_bytes)
+  if (!o || !v || n > (include_triples ? kRccsdtForceMaxAOs : 12) || reference.nbf != n ||
+      reference.nocc != o || molecule::ao_count(system) != n || !max_bytes)
     throw std::invalid_argument("invalid RCCSD(T) force resource dimensions");
   const auto n2 = square(n), n4 = fourth(n), ov = checked_mul(o, v),
              amplitudes = checked_add(ov, square(ov));
@@ -461,7 +464,8 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                 ? 2 * l + 1
                                 : (l + 1) * (l + 2) / 2);
   }
-  const auto tile = std::min<std::size_t>(2, shell);
+  const std::size_t tile = 1;
+  plan.raw_provider_axis_tile = static_cast<unsigned>(tile);
   // The generated MO provider plan supplies its source/recurrence, coefficient,
   // full output and cyclic transform bounds. Its borrowed reference is already
   // in retained_input_bytes, so request only its additional buffers here.
@@ -524,8 +528,27 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
   plan.peak_bytes =
       std::max({plan.lambda_phase_bytes, plan.parameter_phase_bytes, plan.raw_phase_bytes,
                 plan.response_phase_bytes, plan.derivative_phase_bytes, plan.triples_phase_bytes});
+  plan.minimum_peak_bytes = plan.peak_bytes;
   if (plan.peak_bytes > max_bytes)
     throw std::length_error("RCCSD(T) complete force exceeds simultaneous host budget");
+  // Admit wider source tiles against the complete endpoint, not merely the
+  // provider's local allowance. A roomy selected peak is not a minimum budget:
+  // tight callers can shrink to width one before any numerical source work.
+  for (std::size_t width = n; width > tile; --width) {
+    const auto wider = posthf::numeric_block_plan(n, 0, 0, {n, n, n, n},
+                                                  {width, width, width, width}, cuda_transform);
+    if (cuda_transform && wider.stage_elements > INT32_MAX) continue;
+    const auto phase =
+        sum({before_raw, bytes(checked_mul(3, n2)), wider.host_bytes, wider.device_bytes,
+             checked_mul(checked_mul(13, n), sizeof(std::size_t))});
+    if (phase > max_bytes) continue;
+    plan.raw_provider_axis_tile = static_cast<unsigned>(width);
+    plan.raw_provider_budget_bytes = sum({wider.host_bytes, wider.device_bytes,
+                                          bytes(checked_add(checked_mul(5, n2), n)), source_bytes});
+    plan.raw_phase_bytes = std::max(rank2_transform_phase, phase);
+    plan.peak_bytes = std::max(plan.minimum_peak_bytes, plan.raw_phase_bytes);
+    break;
+  }
   return plan;
 }
 
@@ -579,10 +602,10 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
 #endif
   if (!cc_result.converged())
     throw std::invalid_argument("RCCSD(T) force requires converged RCCSD amplitudes");
-  if (!max_bytes || reference.nbf > 12 || reference.nbf != problem.nocc + problem.nvir ||
-      reference.nocc != problem.nocc || eps_o.size() != problem.nocc ||
-      eps_v.size() != problem.nvir || !std::isfinite(denominator_threshold) ||
-      denominator_threshold <= 0.0 ||
+  if (!max_bytes || reference.nbf > (include_triples ? kRccsdtForceMaxAOs : 12) ||
+      reference.nbf != problem.nocc + problem.nvir || reference.nocc != problem.nocc ||
+      eps_o.size() != problem.nocc || eps_v.size() != problem.nvir ||
+      !std::isfinite(denominator_threshold) || denominator_threshold <= 0.0 ||
       (cuda_derivative && (device_id < 0 || !derivative_stage_budget)))
     throw std::invalid_argument("RCCSD(T) force is outside the qualified conventional domain");
   const auto o = problem.nocc, v = problem.nvir, n = reference.nbf;
@@ -596,6 +619,9 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
       system, reference, problem, cc_result, max_bytes, include_triples,
       source.retained_numeric_bytes(), cuda_derivative);
 
+  using Clock = std::chrono::steady_clock;
+  const auto triples_started = Clock::now();
+
   std::optional<TriplesResponseResult> triples;
   if (include_triples) {
     TriplesResponseOptions triples_options;
@@ -607,6 +633,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   }
 
   LambdaOptions lambda_options;
+  const auto lambda_started = Clock::now();
   lambda_options.max_bytes = max_bytes;
   lambda_options.cc_tolerance = 1e-9;
   lambda_options.lambda_tolerance = 1e-9;
@@ -640,8 +667,12 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
   if (triples) add_triples_parameter_sources(parameters, *triples);
+  const auto raw_started = Clock::now();
+  posthf::ProviderWork raw_work;
   auto raw = raw_hamiltonian(source, reference, max_bytes, cuda_derivative,
-                             cuda_derivative ? device_id : 0, resources.raw_provider_budget_bytes);
+                             cuda_derivative ? device_id : 0, resources.raw_provider_budget_bytes,
+                             resources.raw_provider_axis_tile, raw_work);
+  const auto orbital_started = Clock::now();
 #if GENERATIVEQC_HAS_CUDA
   std::unique_ptr<CudaHamiltonianResponseOwner> cuda_response;
   if (cuda_derivative)
@@ -817,6 +848,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   weights.two_electron = std::move(total_eri);
   weights.overlap = std::move(total.overlap);
   weights.stationarity_residual = stationarity;
+  const auto derivative_started = Clock::now();
   auto gradient = cuda_derivative
                       ? mp2::conventional_derivative_cuda(system, reference, weights, device_id,
                                                           derivative_stage_budget)
@@ -834,6 +866,19 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   result.minimum_same_space_gap = minimum_same_space_gap;
   result.triples_response_pages = triples ? triples->pages : 0;
   result.numeric_capacity_bytes = resources.peak_bytes;
+  result.raw_source_reads = raw_work.source_reads;
+  result.raw_device_source_reads = raw_work.device_source_reads;
+  result.raw_source_values = raw_work.source_values;
+  result.raw_transform_fmas = raw_work.transform_fmas;
+  result.raw_source_seconds = raw_work.source_seconds;
+  result.raw_provider_seconds = raw_work.provider_seconds;
+  result.triples_seconds = std::chrono::duration<double>(lambda_started - triples_started).count();
+  result.lambda_parameter_seconds =
+      std::chrono::duration<double>(raw_started - lambda_started).count();
+  result.orbital_seconds =
+      std::chrono::duration<double>(derivative_started - orbital_started).count();
+  result.derivative_seconds =
+      std::chrono::duration<double>(Clock::now() - derivative_started).count();
 #if GENERATIVEQC_HAS_CUDA
   if (cuda_response) {
     result.response_owned_device_bytes = cuda_response->owned_device_bytes();

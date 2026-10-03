@@ -113,7 +113,8 @@ void launch_canonical_rsh_derivative_kernel(cudaStream_t stream, DeviceBatch bat
                                             std::uint64_t* work_count);
 
 /** Provider-facing shell derivative seam. Queue/numerical ownership remains in
- * the Direct consumer layer; host source owners borrow only this launch ABI. */
+ * the Direct consumer layer; host source owners borrow only this launch ABI.
+ * Output owns two total_atoms*3 channels, weighted Coulomb then exchange. */
 void launch_bounded_shell_energy_derivative(
     bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell_pair_bounds,

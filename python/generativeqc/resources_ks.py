@@ -28,6 +28,7 @@ from generativeqc_compiler.common.resources import (
 )
 
 from ._cpu_force_resources import CPU_FORCE_HOST_CAP, qualified_basis
+from ._snapshot_grid_cache import SNAPSHOT_GRID_CACHE_BYTES
 from .basis import BasisSet
 from .basis_capabilities import require_basis
 from .calculator import Atom, _snapshot_basis
@@ -465,6 +466,18 @@ def ks_resource_request(
             "force JIT/compiler processes, loaded code, BLAS/runtime internal storage",
         )
     if backend == "cuda":
+        # One immutable exact grid survives snapshot closure for public forces.
+        # The cache replaces rather than accumulates entries across ragged items.
+        estimates.append(
+            ResourceEstimate(
+                "serialized KS snapshot grid cache cap",
+                SNAPSHOT_GRID_CACHE_BYTES,
+                "pageable",
+                first_phase,
+                last_phase,
+                kind="persistent",
+            )
+        )
         estimates.append(
             ResourceEstimate(
                 "serialized generated KS force host staging cap",

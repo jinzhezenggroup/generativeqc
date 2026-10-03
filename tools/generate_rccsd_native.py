@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 import typing
+from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +64,26 @@ def _prepare_production(
         backend,
         preserve_reduction_order=preserve_reduction_order,
     )
+
+
+def _reassociated_independent(program: Program, backend: str) -> Program:
+    """Lower the separately expanded equations with bounded-degree contractions.
+
+    Output-driven ordering avoids retaining all independent contraction branches
+    at one dependency level. Runtime admission keeps the strict schedule when
+    its symbolic-shape arena is smaller, including extreme occupied/virtual ratios.
+    """
+    prepared = _prepare_production(program, backend)
+    return Program(
+        prepared.outputs,
+        provenance={**prepared.provenance, "native_execution_order": "dependencies"},
+    )
+
+
+def _execution_nodes(program: Program) -> tuple[typing.Any, ...]:
+    if program.provenance.get("native_execution_order") == "dependencies":
+        return program.dependency_order
+    return program.live_nodes
 
 
 TRIPLES_RESPONSE_INPUTS = (
@@ -240,10 +262,71 @@ def _scaled_bilinear_cpp() -> str:
 }"""
 
 
-def _cpu_node(node: typing.Any, number: int, names: dict[int, str]) -> list[str]:
+@dataclass(frozen=True)
+class ArenaPlan:
+    """Shape-symbolic storage shared by admission and CPU/CUDA emission.
+
+    Slots are reused only after their last reader and only for an identical
+    product of runtime extents. This is valid for every o/v/q, including equal
+    concrete extents; no representative-shape size comparison is involved.
+    Program outputs remain live through return because callers borrow pointers.
+    """
+
+    slots: tuple[tuple[str, ...], ...]
+    node_slots: dict[int, int]
+
+    @property
+    def sizes(self) -> tuple[str, ...]:
+        return tuple(
+            "checked_product({" + ",".join(shape) + "})" if shape else "1"
+            for shape in self.slots
+        )
+
+
+def _arena_plan(program: Program) -> ArenaPlan:
+    """Color last-use intervals without aliasing a node with its own inputs.
+
+    All emitted operations write their entire output. Reusing a dead slot needs
+    no clearing or extra arithmetic. CUDA launches use one ordered stream, so
+    the same intervals apply to queued kernels and captured graph replays.
+    """
+    nodes = _execution_nodes(program)
+    numbers = {id(node): number for number, node in enumerate(nodes)}
+    last_use = list(range(len(nodes)))
+    for number, node in enumerate(nodes):
+        for source in node.inputs:
+            last_use[numbers[id(source)]] = number
+    for node in program.outputs.values():
+        last_use[numbers[id(node)]] = len(nodes)
+
+    releases: dict[int, list[int]] = defaultdict(list)
+    available: dict[tuple[str, ...], list[int]] = defaultdict(list)
+    slots: list[tuple[str, ...]] = []
+    node_slots = {}
+    for number, node in enumerate(nodes):
+        for slot in releases[number]:
+            available[slots[slot]].append(slot)
+        if node.op == "input":
+            continue
+        if node.spec.dtype != "float64":
+            raise ValueError("native RCCSD arena requires FP64 intermediates")
+        shape = tuple(sorted(_dim(index) for index in node.spec.indices))
+        if available[shape]:
+            slot = available[shape].pop()
+        else:
+            slot = len(slots)
+            slots.append(shape)
+        node_slots[number] = slot
+        releases[last_use[number] + 1].append(slot)
+    return ArenaPlan(tuple(slots), node_slots)
+
+
+def _cpu_node(
+    node: typing.Any, number: int, names: dict[int, str], *, storage: str
+) -> list[str]:
     out = names[number]
     size = _size(node.spec)
-    lines = [f"  double* {out}=allocate({size});"]
+    lines = [f"  double* {out}={storage};"]
     if node.op == "add":
         terms = []
         for source, coefficient in zip(node.inputs, node.attrs["coefficients"]):
@@ -514,7 +597,7 @@ def _cpu_node(node: typing.Any, number: int, names: dict[int, str]) -> list[str]
 
 def _prepare_program(program: Program) -> dict[int, str]:
     names = {}
-    for number, node in enumerate(program.live_nodes):
+    for number, node in enumerate(_execution_nodes(program)):
         object.__setattr__(node, "_emit_index", number)
         names[number] = f"n{number}"
     return names
@@ -530,6 +613,7 @@ def _cpu_function(
     batch_dim: bool = False,
 ) -> str:
     names = _prepare_program(program)
+    arena_plan = _arena_plan(program)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     dimensions = "std::size_t o,std::size_t v"
     if batch_dim:
@@ -543,8 +627,12 @@ def _cpu_function(
         '    if(next>arena_elements) throw std::length_error("RCCSD generated CPU arena is too small");',
         "    double* result=arena+cursor; cursor=next; return result;",
         "  };",
+        *[
+            f"  double* slot{slot}=allocate({size});"
+            for slot, size in enumerate(arena_plan.sizes)
+        ],
     ]
-    for number, node in enumerate(program.live_nodes):
+    for number, node in enumerate(_execution_nodes(program)):
         if node.op == "input":
             input_name = node.attrs["name"]
             access = input_overrides.get(input_name)
@@ -553,7 +641,9 @@ def _cpu_function(
             ctype = "std::int64_t" if node.spec.dtype == "int64" else "double"
             lines.append(f"  const {ctype}* {names[number]}={access};")
         else:
-            lines += _cpu_node(node, number, names)
+            lines += _cpu_node(
+                node, number, names, storage=f"slot{arena_plan.node_slots[number]}"
+            )
     outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
     if output_type == "IterationOutputs":
         returned = [
@@ -608,8 +698,7 @@ def _cpu_function(
 
 
 def _required_function(program: Program, name: str, *, batch_dim: bool = False) -> str:
-    _prepare_program(program)
-    pieces = [_size(node.spec) for node in program.live_nodes if node.op != "input"]
+    pieces = _arena_plan(program).sizes
     # Emit sequential checked additions rather than an expression whose parser
     # nesting grows with the AD graph. Clang's default bracket limit is finite.
     body = "std::size_t required=0;"
@@ -624,13 +713,74 @@ def _required_function(program: Program, name: str, *, batch_dim: bool = False) 
     )
 
 
+def _independent_admission(strict: Program, fast: Program, name: str) -> str:
+    """Retain the original capacity ceiling and select the matching execution."""
+    return "\n".join(
+        (
+            _required_function(strict, f"{name}_strict_arena_elements"),
+            _required_function(fast, f"{name}_reassociated_arena_elements"),
+            (
+                f"inline bool {name}_uses_reassociation(std::size_t o,std::size_t v){{"
+                f"const auto ceiling={name}_strict_arena_elements(o,v);"
+                # An optional contraction intermediate may overflow at an extreme
+                # shape even when the original schedule remains representable.
+                f"try{{return {name}_reassociated_arena_elements(o,v)<=ceiling;}}"
+                "catch(const std::length_error&){return false;}}"
+            ),
+            (
+                f"inline std::size_t {name}_arena_elements(std::size_t o,std::size_t v){{"
+                f"return {name}_uses_reassociation(o,v)?{name}_reassociated_arena_elements(o,v):"
+                f"{name}_strict_arena_elements(o,v);}}"
+            ),
+            (
+                f"inline const char* {name}_selected_program_hash(std::size_t o,std::size_t v){{"
+                f'return {name}_uses_reassociation(o,v)?"{fast.logical_hash}":"{strict.logical_hash}";}}'
+            ),
+        )
+    )
+
+
+def _independent_cpu(
+    strict: Program,
+    fast: Program,
+    name: str,
+    output_type: str,
+    *,
+    seeds: tuple[str, ...] = (),
+) -> str:
+    signature = "const Inputs& inputs" + "".join(
+        f",const double* {seed}" for seed in seeds
+    )
+    arguments = (
+        "o,v,inputs," + "".join(f"{seed}," for seed in seeds) + "arena,arena_elements"
+    )
+    return "\n".join(
+        [
+            *[
+                _cpu_function(
+                    program,
+                    f"run_{name}_{variant}_cpu",
+                    output_type,
+                    signature=signature,
+                    input_overrides={seed: seed for seed in seeds},
+                )
+                for variant, program in (("strict", strict), ("reassociated", fast))
+            ],
+            (
+                f"inline {output_type} run_{name}_cpu(std::size_t o,std::size_t v,{signature},"
+                "double* arena,std::size_t arena_elements){"
+                f"return {name}_uses_reassociation(o,v)?run_{name}_reassociated_cpu({arguments}):"
+                f"run_{name}_strict_cpu({arguments});}}"
+            ),
+        ]
+    )
+
+
 def cpu_header() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
-    replay = _prepare_production(
-        build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False),
-        "cpu",
-        preserve_reduction_order=True,
-    )
+    expanded = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
+    replay = _prepare_production(expanded, "cpu", preserve_reduction_order=True)
+    replay_fast = _reassociated_independent(expanded, "cpu")
     lambda_programs = build_lambda_programs(*REPRESENTATIVE, form="shared")
     lambda_independent = build_lambda_programs(*REPRESENTATIVE, form="expanded")
     lambda_rhs = _prepare_production(lambda_programs.energy_vjp.program, "cpu")
@@ -644,6 +794,12 @@ def cpu_header() -> str:
         lambda_independent.residual_vjp.program,
         "cpu",
         preserve_reduction_order=True,
+    )
+    independent_rhs_fast = _reassociated_independent(
+        lambda_independent.energy_vjp.program, "cpu"
+    )
+    independent_transpose_fast = _reassociated_independent(
+        lambda_independent.residual_vjp.program, "cpu"
     )
     parameter_vjps = {
         parameter: _prepare_production(
@@ -794,14 +950,16 @@ def cpu_header() -> str:
             f'inline constexpr const char* fock_small_weights_program_hash="{fock_small_weights.logical_hash}";',
             f'inline constexpr const char* triples_response_program_hash="{triples_response.logical_hash}";',
             _required_function(iteration, "iteration_arena_elements"),
-            _required_function(replay, "replay_arena_elements"),
+            _independent_admission(replay, replay_fast, "replay"),
             _required_function(lambda_rhs, "lambda_rhs_arena_elements"),
             _required_function(lambda_transpose, "lambda_transpose_arena_elements"),
-            _required_function(
-                independent_rhs, "lambda_independent_rhs_arena_elements"
+            _independent_admission(
+                independent_rhs, independent_rhs_fast, "lambda_independent_rhs"
             ),
-            _required_function(
-                independent_transpose, "lambda_independent_transpose_arena_elements"
+            _independent_admission(
+                independent_transpose,
+                independent_transpose_fast,
+                "lambda_independent_transpose",
             ),
             *[
                 _required_function(program, f"parameter_{parameter}_arena_elements")
@@ -826,7 +984,7 @@ def cpu_header() -> str:
                 triples_response, "triples_response_arena_elements", batch_dim=True
             ),
             _cpu_function(iteration, "run_iteration_cpu", "IterationOutputs"),
-            _cpu_function(replay, "run_replay_cpu", "ReplayOutputs"),
+            _independent_cpu(replay, replay_fast, "replay", "ReplayOutputs"),
             _cpu_function(
                 lambda_rhs,
                 "run_lambda_rhs_cpu",
@@ -847,25 +1005,19 @@ def cpu_header() -> str:
                     "bar_doubles_residual": "bar_doubles_residual",
                 },
             ),
-            _cpu_function(
+            _independent_cpu(
                 independent_rhs,
-                "run_lambda_independent_rhs_cpu",
+                independent_rhs_fast,
+                "lambda_independent_rhs",
                 "LambdaOutputs",
-                signature="const Inputs& inputs,const double* bar_correlation_energy",
-                input_overrides={"bar_correlation_energy": "bar_correlation_energy"},
+                seeds=("bar_correlation_energy",),
             ),
-            _cpu_function(
+            _independent_cpu(
                 independent_transpose,
-                "run_lambda_independent_transpose_cpu",
+                independent_transpose_fast,
+                "lambda_independent_transpose",
                 "LambdaOutputs",
-                signature=(
-                    "const Inputs& inputs,const double* bar_singles_residual,"
-                    "const double* bar_doubles_residual"
-                ),
-                input_overrides={
-                    "bar_singles_residual": "bar_singles_residual",
-                    "bar_doubles_residual": "bar_doubles_residual",
-                },
+                seeds=("bar_singles_residual", "bar_doubles_residual"),
             ),
             *[
                 _cpu_function(
@@ -1109,16 +1261,18 @@ def _cuda_program(
     output_type: str,
     *,
     input_overrides: dict[str, str] | None = None,
+    arena_field: str | None = None,
 ) -> str:
     names = _prepare_program(program)
+    arena_plan = _arena_plan(program)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     kernels = []
-    for number, node in enumerate(program.live_nodes):
+    for number, node in enumerate(_execution_nodes(program)):
         if node.op != "input":
             kernels.append(_cuda_kernel(node, number, prefix, names))
     uses_complete_orbital = any(
         _dim(index) == "n"
-        for node in program.live_nodes
+        for node in _execution_nodes(program)
         if node.op != "input"
         for index in node.spec.indices
     )
@@ -1126,20 +1280,27 @@ def _cuda_program(
         f"static {output_type} run_{prefix}(CudaState& s){{",
         "  auto* arena=s."
         + (
-            "iteration_arena"
-            if prefix == "iteration"
-            else "replay_arena"
-            if prefix == "replay"
-            else "response_arena"
+            arena_field
+            or (
+                "iteration_arena"
+                if prefix == "iteration"
+                else "replay_arena"
+                if prefix == "replay"
+                else "response_arena"
+            )
         )
         + ";",
         "  const auto o=s.o,v=s.v;",
         *(["  const std::size_t n=checked_add(o,v);"] if uses_complete_orbital else []),
         "  std::size_t cursor=0;",
         "  auto allocate=[&](std::size_t count)->double*{double* p=arena+cursor;cursor=checked_add(cursor,count);return p;};",
+        *[
+            f"  double* slot{slot}=allocate({size});"
+            for slot, size in enumerate(arena_plan.sizes)
+        ],
         "  generativeqc_tensor::cuda_check(cudaMemsetAsync(s.error,0,sizeof(int),s.stream));",
     ]
-    for number, node in enumerate(program.live_nodes):
+    for number, node in enumerate(_execution_nodes(program)):
         if node.op == "input":
             input_name = node.attrs["name"]
             access = (
@@ -1149,7 +1310,7 @@ def _cuda_program(
             )
             lines.append(f"  const double* {names[number]}={access};")
             continue
-        lines.append(f"  double* {names[number]}=allocate({_size(node.spec)});")
+        lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         sources = [names[x._emit_index] for x in node.inputs]
         count = _size(node.spec)
         launch_args = ",".join([*sources, names[number], "s.o", "s.v", "s.error"])
@@ -1206,13 +1367,42 @@ def _cuda_program(
     return "\n".join(lines)
 
 
+def _independent_cuda(
+    strict: Program,
+    fast: Program,
+    name: str,
+    output_type: str,
+    *,
+    input_overrides: dict[str, str] | None = None,
+) -> str:
+    """Dispatch with the same shape/capacity decision used by host admission."""
+    arena_field = "replay_arena" if name == "replay" else "response_arena"
+    return "\n".join(
+        [
+            *[
+                _cuda_program(
+                    program,
+                    f"{name}_{variant}",
+                    output_type,
+                    input_overrides=input_overrides,
+                    arena_field=arena_field,
+                )
+                for variant, program in (("strict", strict), ("reassociated", fast))
+            ],
+            (
+                f"static {output_type} run_{name}(CudaState& s){{"
+                f"return {name}_uses_reassociation(s.o,s.v)?run_{name}_reassociated(s):"
+                f"run_{name}_strict(s);}}"
+            ),
+        ]
+    )
+
+
 def cuda_source() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
-    replay = _prepare_production(
-        build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False),
-        "cuda",
-        preserve_reduction_order=True,
-    )
+    expanded = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
+    replay = _prepare_production(expanded, "cuda", preserve_reduction_order=True)
+    replay_fast = _reassociated_independent(expanded, "cuda")
     lambda_programs = build_lambda_programs(*REPRESENTATIVE, form="shared")
     lambda_independent = build_lambda_programs(*REPRESENTATIVE, form="expanded")
     lambda_rhs = _prepare_production(lambda_programs.energy_vjp.program, "cuda")
@@ -1226,6 +1416,12 @@ def cuda_source() -> str:
         lambda_independent.residual_vjp.program,
         "cuda",
         preserve_reduction_order=True,
+    )
+    independent_rhs_fast = _reassociated_independent(
+        lambda_independent.energy_vjp.program, "cuda"
+    )
+    independent_transpose_fast = _reassociated_independent(
+        lambda_independent.residual_vjp.program, "cuda"
     )
     parameter_vjps = {
         parameter: _prepare_production(
@@ -1287,7 +1483,7 @@ def cuda_source() -> str:
             '#include "generated_rccsd_cpu.hpp"',
             "namespace generativeqc::cc::generated {",
             _cuda_program(iteration, "iteration", "DeviceIterationOutputs"),
-            _cuda_program(replay, "replay", "DeviceReplayOutputs"),
+            _independent_cuda(replay, replay_fast, "replay", "DeviceReplayOutputs"),
             _cuda_program(
                 lambda_rhs,
                 "lambda_rhs",
@@ -1300,14 +1496,16 @@ def cuda_source() -> str:
                 "DeviceLambdaOutputs",
                 input_overrides=residual_seed,
             ),
-            _cuda_program(
+            _independent_cuda(
                 independent_rhs,
+                independent_rhs_fast,
                 "lambda_independent_rhs",
                 "DeviceLambdaOutputs",
                 input_overrides=energy_seed,
             ),
-            _cuda_program(
+            _independent_cuda(
                 independent_transpose,
+                independent_transpose_fast,
                 "lambda_independent_transpose",
                 "DeviceLambdaOutputs",
                 input_overrides=residual_seed,

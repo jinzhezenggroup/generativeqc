@@ -35,8 +35,13 @@ struct Reference { int diis_history=8; double screening_tolerance=0; };
 namespace scf {
 enum class FockSpin { Restricted };
 enum class FockBackend { Cpu, Cuda };
-int make_hf_fock_spec(FockSpin) { return 0; }
-int resolve_fock_build(int,FockBackend,double) { return 0; }
+// Match the real derivative default so value-only admission is tested.
+struct FockBuildSpec { unsigned derivative_order=1; };
+FockBuildSpec make_hf_fock_spec(FockSpin) { return {}; }
+int resolve_fock_build(FockBuildSpec spec,FockBackend,double) {
+  if (spec.derivative_order != 0) throw std::runtime_error("unused derivative source");
+  return 0;
+}
 struct PreparedFockPlan {
   PreparedFockPlan(const core::System&,std::nullptr_t,int,int=-1) { ++allocations; }
 };

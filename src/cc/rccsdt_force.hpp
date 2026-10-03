@@ -21,6 +21,9 @@ class ElectronInteractionSource;
 
 namespace generativeqc::cc {
 
+/** Public conventional CCSD(T) force qualification; CCSD keeps its own limit. */
+inline constexpr std::size_t kRccsdtForceMaxAOs = 28;
+
 /** Conservative simultaneous numeric peaks for the serialized force phases.
  * Every phase includes borrowed molecule/CC/reference inputs once and all earlier
  * outputs still retained by the force owner. Object headers and allocator
@@ -31,6 +34,10 @@ struct RccsdtForcePlan {
   std::size_t triples_phase_bytes{}, lambda_phase_bytes{}, parameter_phase_bytes{};
   std::size_t raw_phase_bytes{}, response_phase_bytes{}, derivative_phase_bytes{};
   std::size_t raw_provider_budget_bytes{};
+  // Selected within the complete endpoint budget; execution must use the
+  // same basis-wide tile domain as admission, including partial final tiles.
+  unsigned raw_provider_axis_tile{};
+  std::size_t minimum_peak_bytes{};
   std::size_t peak_bytes{};
 };
 
@@ -64,6 +71,13 @@ struct RccsdtForceResult {
   double minimum_same_space_gap{};
   std::size_t triples_response_pages{};
   std::size_t numeric_capacity_bytes{};
+  std::size_t raw_source_reads{}, raw_device_source_reads{}, raw_source_values{};
+  std::size_t raw_transform_fmas{};
+  double raw_source_seconds{}, raw_provider_seconds{};
+  // Serialized native response phases, excluding the preceding energy solve.
+  // Together with complete endpoint time these locate work amplification at
+  // larger dimensions without treating a single faster phase as a speedup.
+  double triples_seconds{}, lambda_parameter_seconds{}, orbital_seconds{}, derivative_seconds{};
   std::size_t response_owned_device_bytes{};
   std::size_t response_h2d_bytes{};
   std::size_t response_d2h_bytes{};
@@ -77,11 +91,12 @@ struct RccsdtForceResult {
  * This is the native/public closure of the already-qualified #155 graph.  It
  * composes generated CC/(T)/Hamiltonian adjoints and the shared RHF orbital
  * response, then reuses the generic conventional derivative consumer.  The
- * first public domain is deliberately bounded to conventional all-electron
- * references with at most 12 AOs. The CPU owner evaluates the complete
- * response and derivative on host; the CUDA publication owner currently reuses
- * the same audited host response weights and sends the final conventional
- * nuclear derivative contraction to the CUDA consumer. DF, frozen-core, ECP
+ * public domain is bounded to conventional all-electron references, through
+ * 28 AOs for CCSD(T) and 12 AOs for CCSD. The CPU owner evaluates the complete
+ * response and derivative on host. The CUDA owner runs generated Lambda,
+ * parameter and Hamiltonian/orbital actions on device; GMRES control, triples
+ * response and the final MO-to-AO weight pullback retain their host ownership.
+ * The final nuclear derivative contraction uses the CUDA consumer. DF, frozen-core, ECP
  * and open-shell variants remain separate capabilities. max_bytes is the complete numeric
  * allowance, including the borrowed molecule, physical reference, CC problem/amplitudes
  * and occupied/virtual energy vectors, as in plan_rccsdt_force_cpu.

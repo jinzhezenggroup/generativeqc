@@ -138,3 +138,23 @@ Revisit the bootstrap if a new public consumer genuinely needs initial
 numerical values, or if provider setup can be made structural without weakening
 first-request validation. Remaining constructor and first-process gaps require
 separate bounded lifetime/loader work and complete cold timing.
+
+## Historical cold-timing qualifications
+
+The later [PR #1739 comparator audit](https://github.com/jinzhezenggroup/generativeqc/pull/1739)
+found that the old constructor timer also destroyed the preceding calculator.
+The historical multi-case cold totals above therefore include preceding cleanup;
+they are not isolated construction plus first-call measurements. The subsequent
+comparator records result/calculator cleanup separately. The original rows are
+retained unchanged, with no estimated cleanup subtraction. First-singlepoint,
+warm/changed timings and scientific gates retain their original scope.
+
+The later [PR #1742 lazy-loading correction](https://github.com/jinzhezenggroup/generativeqc/pull/1742)
+found that xTBloom library identity verification triggered its lazy native/provider
+load outside both timed phases. Historical first-process comparisons above thus
+undercount reference loading. The corrected v3 comparator includes lazy loading
+and keeps cleanup separate; its timings begin after Python package import, not
+OS process launch. Warm/changed timings and numerical gates are unaffected. The
+corrected six-run results in that later PR qualify a later stack state, not an
+isolated remeasurement of this bootstrap change, and do not establish universal
+startup superiority.

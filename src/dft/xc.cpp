@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <limits>
 #include <stdexcept>
+#include <type_traits>
+#include <utility>
 
 #include "dft/xc_point.hpp"
 #include "runtime/resource_usage.hpp"
@@ -76,17 +78,35 @@ const scf::OccupiedDensityFactor* resolve_density_source(std::size_t n,
   return nullptr;
 }
 
+// Fixed masks expose each axis as a compile-time constant while preserving
+// the runtime fallback and the 0, 1, 2 update order, including scalar tau.
+template <int IngredientMask, typename Function>
+void for_feature_axes(Function&& function) {
+  if constexpr (IngredientMask < 0) {
+    for (unsigned axis = 0; axis < 3; ++axis) function(axis);
+  } else {
+    [&function]<unsigned... Axes>(std::integer_sequence<unsigned, Axes...>) {
+      (static_cast<void>(function(std::integral_constant<unsigned, Axes>{})), ...);
+    }(std::make_integer_sequence<unsigned, 3>{});
+  }
+}
+
 /** Same total-density features for both algorithms. C uses the generated
  * bilinears with B=C*sqrt(f), so closed-shell occupation is already included.
  * Its four scalar orbital jets are reduced immediately: no grid-by-orbital
  * array survives a point. The established D contraction retains all symmetric
  * cross terms, including for matrices accepted within symmetry tolerance.
  */
-std::array<double, 5> rks_features(const double* phi,
-                                   const std::array<const double*, 3>& derivatives, std::size_t n,
-                                   const std::vector<double>& density,
-                                   const scf::OccupiedDensityFactor* factor,
-                                   unsigned ingredient_mask) {
+template <int IngredientMask>
+std::array<double, 5> rks_features_impl(const double* phi,
+                                        const std::array<const double*, 3>& derivatives,
+                                        std::size_t n, const std::vector<double>& density,
+                                        const scf::OccupiedDensityFactor* factor,
+                                        unsigned runtime_ingredient_mask) {
+  static_assert(IngredientMask == -1 || IngredientMask == 1 || IngredientMask == 7 ||
+                IngredientMask == 15);
+  const unsigned ingredient_mask =
+      IngredientMask < 0 ? runtime_ingredient_mask : static_cast<unsigned>(IngredientMask);
   std::array<double, 5> features{};
   const bool need_first = (ingredient_mask & 14U) != 0;
   const bool need_tau = (ingredient_mask & 8U) != 0;
@@ -97,7 +117,8 @@ std::array<double, 5> rks_features(const double* phi,
         const double b = factor->values()[mu * factor->rank() + o];
         work[0] += phi[mu] * b;
         if (need_first)
-          for (unsigned axis = 0; axis < 3; ++axis) work[axis + 1] += derivatives[axis][mu] * b;
+          for_feature_axes<IngredientMask>(
+              [&](auto axis) { work[axis + 1] += derivatives[axis][mu] * b; });
       }
       generated::add_features(work[0], work + 1, work, features.data(), ingredient_mask);
     }
@@ -110,27 +131,50 @@ std::array<double, 5> rks_features(const double* phi,
       const double diagonal = density[mu * n + mu];
       features[0] += phi_mu * diagonal * phi_mu;
       if (need_first)
-        for (unsigned axis = 0; axis < 3; ++axis)
+        for_feature_axes<IngredientMask>([&](auto axis) {
           features[axis + 1] +=
               (derivatives[axis][mu] * phi_mu + phi_mu * derivatives[axis][mu]) * diagonal;
+        });
       if (need_tau)
-        for (unsigned axis = 0; axis < 3; ++axis)
+        for_feature_axes<IngredientMask>([&](auto axis) {
           features[4] += 0.5 * derivatives[axis][mu] * diagonal * derivatives[axis][mu];
+        });
 
       for (std::size_t nu = mu + 1; nu < n; ++nu) {
         const double pair_density = density[mu * n + nu] + density[nu * n + mu];
         features[0] += phi_mu * pair_density * phi[nu];
         if (need_first)
-          for (unsigned axis = 0; axis < 3; ++axis)
+          for_feature_axes<IngredientMask>([&](auto axis) {
             features[axis + 1] +=
                 (derivatives[axis][mu] * phi[nu] + phi_mu * derivatives[axis][nu]) * pair_density;
+          });
         if (need_tau)
-          for (unsigned axis = 0; axis < 3; ++axis)
+          for_feature_axes<IngredientMask>([&](auto axis) {
             features[4] += 0.5 * derivatives[axis][mu] * pair_density * derivatives[axis][nu];
+          });
       }
     }
   }
   return features;
+}
+
+// Specialize only the validated ingredient layouts. The runtime instantiation
+// preserves all existing internal-mask semantics without duplicating the body.
+std::array<double, 5> rks_features(const double* phi,
+                                   const std::array<const double*, 3>& derivatives, std::size_t n,
+                                   const std::vector<double>& density,
+                                   const scf::OccupiedDensityFactor* factor,
+                                   unsigned ingredient_mask) {
+  switch (ingredient_mask) {
+    case 1U:
+      return rks_features_impl<1>(phi, derivatives, n, density, factor, ingredient_mask);
+    case 7U:
+      return rks_features_impl<7>(phi, derivatives, n, density, factor, ingredient_mask);
+    case 15U:
+      return rks_features_impl<15>(phi, derivatives, n, density, factor, ingredient_mask);
+    default:
+      return rks_features_impl<-1>(phi, derivatives, n, density, factor, ingredient_mask);
+  }
 }
 
 void sample_xc_capacity(XcIntegral& result, const std::vector<double>& ao, std::size_t count) {
