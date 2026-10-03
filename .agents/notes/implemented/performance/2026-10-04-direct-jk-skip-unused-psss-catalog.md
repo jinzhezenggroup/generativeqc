@@ -69,6 +69,23 @@ header absent from its include path. The test instead checks total pair coverage
 independently of the schedule's chunk width. That failed attempt is retained;
 full-library/device qualification remains separate from the host probe.
 
+The subsequent full build exposed an existing standalone DFT test linkage gap:
+the resident-grid test and borrowed-grid XC validation require
+`cuda_quadrature.cu`, which that executable omitted. Add that source and its
+code-generation dependency to the test target. This affects only the test
+executable, not production ownership or numerical behavior. The failed link
+receipt is retained separately from the successful build.
+
+After merging master `38fc52352`, the full Release/sm_120 build succeeds and
+the host packing regression passes against the newly built library. All 452
+C++/CUDA compiler commands use ccache 4.5.1; the final incremental build records
+three hits and five misses in the shared-cache counters. Library SHA-256 is
+`282889cd499f70ee700ded665dc81633e7b91b3361912e764aebe00835efe360` and the
+standalone DFT executable is
+`25a8092b8dcc56ea2882d859710a17f50405b7ce0bb78331787683d619894e82`.
+Independent GPU qualification and complete endpoint comparisons are still
+pending at this checkpoint.
+
 ## Revisit when
 
 If Direct J/K gains a consumer of the legacy resident-PSSS catalog, that consumer
