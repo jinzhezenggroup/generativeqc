@@ -1,9 +1,12 @@
 """Regression gates for the native GFN2 S/D/Q primitive lowering."""
 
+import ctypes
 import shutil
 import subprocess
+from itertools import product
 from pathlib import Path
 
+import numpy as np
 import pytest
 from generativeqc_compiler.integral.gfn2_sdq_cpu import (
     emit_gfn2_sdq_cpu,
@@ -21,6 +24,20 @@ def test_gfn2_sdq_cpu_inventory_is_bounded_to_public_spd() -> None:
     assert inventory["operator_origin"] == "ket"
     assert inventory["gradient_center"] == "ket"
     assert inventory["component_pairs"] == 100
+    assert inventory["maximum_shell_block_pairs"] == 36
+    assert inventory["shell_block_gaussian_prefactors_per_primitive_pair"] == 1
+
+
+def test_cpu_shell_blocks_share_one_gaussian_prefactor() -> None:
+    """Prevent repeated expensive source work as Cartesian output count grows."""
+    source = emit_gfn2_sdq_cpu()
+    for tag in ("overlap", "overlap_gradient", "sdq_values", "sdq"):
+        for bra, ket in product(range(3), repeat=2):
+            body = source.split(
+                f"inline void evaluate_gfn2_{tag}_block_{bra}{ket}(", 1
+            )[1].split("\n}", 1)[0]
+            assert body.count("exp(") == 1
+            assert body.count("pow(") == 1
 
 
 def test_gfn2_sdq_cpu_emitter_is_deterministic_generated_math() -> None:
@@ -88,3 +105,126 @@ int main() {
         [str(binary)], check=False, capture_output=True, text=True, timeout=10
     )
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+
+
+def test_generated_sdq_all_cartesian_pairs_against_quadrature(tmp_path: Path) -> None:
+    """Gate branch CSE and ket derivatives against independent Gaussian moments.
+
+    Five-point Gauss-Hermite quadrature integrates the polynomial part exactly
+    for every s/p/d pair, including quadrupoles. Displacing the ket in that
+    oracle checks both basis derivatives and the moving multipole origin.
+    """
+    from generativeqc_compiler.integral.shell_spec import cartesian_components
+
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("host C++ compiler required")
+    (tmp_path / "sdq.hpp").write_text(emit_gfn2_sdq_cpu())
+    source = tmp_path / "check.cpp"
+    source.write_text(r"""
+#include "sdq.hpp"
+extern "C" bool evaluate(unsigned la, unsigned lb, unsigned ia, unsigned ib,
+    double alpha, double beta, const double* vector, double* output) {
+  using namespace generativeqc::xtb::generated;
+  Gfn2SdqPrimitive result{};
+  if (!evaluate_gfn2_sdq_primitive(la, lb, ia, ib, alpha, beta, vector, result)) return false;
+  Gfn2SdqPrimitive block[36];
+  if (!evaluate_gfn2_sdq_shell_block(la, lb, alpha, beta, vector, block)) return false;
+  const unsigned counts[] = {1, 3, 6};
+  const auto& selected = block[ia * counts[lb] + ib];
+  for (int i=0; i<10; ++i) if (result.values[i] != selected.values[i]) return false;
+  for (int a=0; a<3; ++a) for (int i=0; i<10; ++i)
+    if (result.ket_gradient[a][i] != selected.ket_gradient[a][i]) return false;
+  // The values-only and overlap-only entry points must preserve the same
+  // selected outputs without exposing unwritten derivative slots.
+  if (!evaluate_gfn2_sdq_values_shell_block(la, lb, alpha, beta, vector, block)) return false;
+  for (int i=0; i<10; ++i) if (result.values[i] != selected.values[i]) return false;
+  if (!evaluate_gfn2_overlap_gradient_shell_block(la, lb, alpha, beta, vector, block)) return false;
+  for (int a=0; a<3; ++a) if (result.ket_gradient[a][0] != selected.ket_gradient[a][0]) return false;
+  if (!evaluate_gfn2_overlap_shell_block(la, lb, alpha, beta, vector, block)) return false;
+  if (result.values[0] != selected.values[0]) return false;
+  for (int i=0; i<10; ++i) output[i] = result.values[i];
+  for (int a=0; a<3; ++a) for (int i=0; i<10; ++i) output[10+a*10+i] = result.ket_gradient[a][i];
+  return true;
+}
+""")
+    binary = tmp_path / "check.so"
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++20",
+            "-O2",
+            "-shared",
+            "-fPIC",
+            str(source),
+            "-o",
+            str(binary),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=120,
+    )
+    evaluate = ctypes.CDLL(str(binary)).evaluate
+    array = np.ctypeslib.ndpointer(dtype=np.float64, flags="C_CONTIGUOUS")
+    evaluate.argtypes = [ctypes.c_uint] * 4 + [ctypes.c_double] * 2 + [array, array]
+    evaluate.restype = ctypes.c_bool
+    nodes, weights = np.polynomial.hermite.hermgauss(5)
+    indices = np.array(list(product(range(5), repeat=3)))
+    grid = nodes[indices]
+    grid_weights = np.prod(weights[indices], axis=1)
+
+    def quadrature(
+        alpha: float, beta: float, vector: np.ndarray, bra: str, ket: str
+    ) -> np.ndarray:
+        total = alpha + beta
+        points = grid / np.sqrt(total) + (beta / total) * vector
+        relative = points - vector
+        integrand = (
+            grid_weights
+            * np.exp(-alpha * beta / total * np.dot(vector, vector))
+            / total**1.5
+        )
+        for axis, label in enumerate("xyz"):
+            integrand = (
+                integrand
+                * points[:, axis] ** bra.count(label)
+                * relative[:, axis] ** ket.count(label)
+            )
+        moments = [integrand.sum(), *(integrand @ relative)]
+        raw = (relative.T * integrand) @ relative
+        quadrupole = 1.5 * raw - 0.5 * np.trace(raw) * np.eye(3)
+        moments.extend(
+            quadrupole[a, b]
+            for a, b in ((0, 0), (0, 1), (1, 1), (0, 2), (1, 2), (2, 2))
+        )
+        return np.asarray(moments)
+
+    for alpha, beta, position in (
+        (0.83, 1.17, (0.21, -0.34, 0.49)),
+        (2.1, 0.35, (-0.63, 0.27, -0.15)),
+        (1.3, 0.7, (0.0, 0.0, 0.0)),
+    ):
+        vector = np.asarray(position)
+        for la, lb in product(range(3), repeat=2):
+            for ia, bra in enumerate(cartesian_components(la)):
+                for ib, ket in enumerate(cartesian_components(lb)):
+                    actual = np.empty(40)
+                    assert evaluate(la, lb, ia, ib, alpha, beta, vector, actual)
+                    np.testing.assert_allclose(
+                        actual[:10],
+                        quadrature(alpha, beta, vector, bra, ket),
+                        rtol=3e-12,
+                        atol=3e-12,
+                    )
+                    for axis in range(3):
+                        step = np.eye(3)[axis] * 2e-5
+                        expected = (
+                            quadrature(alpha, beta, vector + step, bra, ket)
+                            - quadrature(alpha, beta, vector - step, bra, ket)
+                        ) / 4e-5
+                        np.testing.assert_allclose(
+                            actual[10 + axis * 10 : 20 + axis * 10],
+                            expected,
+                            rtol=2e-7,
+                            atol=2e-8,
+                        )

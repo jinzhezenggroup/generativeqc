@@ -1,23 +1,25 @@
 {
   "adaptations": {
-    "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 energy/potential/coordinate and CN reverse response; preserve runtime validation, topology, and publication ownership.",
+    "src/backends/cuda/gfn2_aes2.cu": "Consume compiler-generated TensorIR/AD AES2 science and bounded atom/peer schedules; validate once, retain ordered component sums and fused small-system fallback, and suppress failed-system publication.",
     "src/backends/cuda/gfn2_es3.cu": "Consume compiler-generated TensorIR/AD ES3 energy/potential and finite-range recovery; preserve runtime validation, topology, and publication ownership.",
     "src/backends/cuda/gfn2_geometry.cu": "Consume compiler-generated TensorIR/AD coordination pair science; retain CUDA geometry/topology ownership.",
-    "src/backends/cuda/gfn2_hamiltonian.cu": "Consume compiler-generated fixed-state TensorIR S/D/Q pair Hamiltonian for both spin layouts.",
+    "src/backends/cuda/gfn2_hamiltonian.cu": "Consume compiler-generated fixed-state TensorIR S/D/Q pair Hamiltonian for both spin layouts. Consume compiler-owned bounded matrix tiling while preserving scalar order, ragged/spin ownership and per-system atomic publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile.",
     "src/backends/cuda/gfn2_hamiltonian_force.cu": "Consume the matching compiler-generated S/D/Q reverse-mode pair adjoints, including spin overlap.",
     "src/backends/cuda/gfn2_pairlist.cu": "Backport xTBloom #487: pass pair-list CUDA kernel descriptors by value so device code never dereferences launcher-stack host references. Consume the same compiler-generated TensorIR/AD coordination pair helper as dense geometry, preserving bitwise CN admission and canonical neighbor accumulation.",
     "src/backends/cuda/gfn2_preprocessing.cu": "Backport xTBloom #487: pass committed pair-list CUDA kernel descriptors by value for GPUs without pageable host-memory access.",
     "src/backends/cuda/gfn2_repulsion.cu": "Consume compiler-generated TensorIR/AD repulsion pair science and radial Cartesian projection; retain native element-pair parameter composition, CUDA reduction, and error ownership.",
     "src/backends/cuda/gfn2_repulsion.cuh": "Add explicit generated-pair nonfinite arithmetic status.",
-    "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, diagnostic snapshots, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback.",
-    "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, and AO contraction arithmetic while retaining CUDA topology, validation, reductions, atomics, thresholds, and failure semantics.",
-    "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces.",
+    "src/runtime/gfn2_cuda_execution.cu": "Reuse GenerativeQC canonical packed D4 tables and expand the C6 matrix once in host setup; no duplicate generated D4 table is vendored. Retire standalone asynchronous request/plan APIs, diagnostic snapshots, their request graph and cell staging; preserve synchronous molecular SCC graph and bounded fallback. Build topology storage with neutral numerical images and identity overlap; remove artificial-geometry CPU evaluators and synthetic energy/force smoke. Retain provider factorization checks, invalidate placeholder factor provenance, and require real CUDA epoch-one refresh before SCC/publication.",
+    "src/backends/cuda/gfn2_h0_force.cu": "Consume compiler-generated TensorIR H0 Pulay seed, Cartesian distance/pullback, pair factors, CN/radial reverse response, AO contraction arithmetic and bounded shell-pair schedules; retain native ragged traversal, once-per-system validation/seeding, FP64 atomics, thresholds and whole-system failure publication.",
+    "src/backends/cuda/gfn2_integrals.cu": "Consume compiler-generated S/D/Q primitive values and coordinate derivatives; retain CUDA screening, contraction, spherical transforms, translation, reduction, and publication ownership. H0 values consume the same generated pair primal as CPU/CUDA forces. Use compiler-selected 64/256-thread force preflight widths for small/large mean matrix extents; retain once-per-system validation and seed scans, all launches, and fixed 64-lane scientific reductions.",
     "src/backends/cuda/gfn2_es2.cu": "Consume compiler-generated TensorIR/AD ES2 scalar science and coordinate-VJP algebra; retain CUDA topology, validation, reductions, cache/publication, and error ownership.",
     "src/backends/cuda/gfn2_spin.cu": "Consume shared compiler TensorIR FMA potential/energy updates and symmetric-energy AD identity; retain ragged admission, restricted zero branch and scratch publication.",
     "src/backends/cuda/gfn2_d4.cu": "After shared D4 scalar ownership, retire the unreachable dense-cache CUDA API and keep only production pair-list traversal, cutoff, validation, reduction, error, and publication policy.",
     "src/backends/cuda/gfn2_mulliken.cu": "Consume compiler-generated #505 population-update TensorIR for overlap/dipole/quadrupole Mulliken contractions in restricted and spin-packed paths; retain CUDA topology, reductions, reference-charge/spin conversion, validation and publication ownership.",
     "src/backends/cuda/gfn2_classical_force.cu": "Consume compiler-generated TensorIR/AD repulsion and ES2 coordinate response, including radial Cartesian projection; retain CUDA topology, activity masks, cutoffs, reductions, force publication, and error ownership.",
-    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership."
+    "src/backends/cuda/gfn2_external_point_charges.cu": "Consume compiler-generated softened shell/point energy VJP force weight and Cartesian projection; retain stable softened distance, topology, zero-displacement handling, accumulation, and error/publication ownership.",
+    "src/backends/cuda/gfn2_density.cu": "Consume compiler-owned bounded matrix tiling; preserve complete ordered orbital sums, finite-range checks, trace reductions, ragged spin packing and atomic per-system publication. Reuse the compiler tile width for disjoint final matrix copies after all per-system errors settle; scalar/channel diagnostics have one publishing tile.",
+    "src/backends/cuda/gfn2_occupations.cu": "Consume compiler-owned exact restricted-spin task sharing after full native admission; copy identical occupation and diagnostic outputs while preserving independent open-shell/unrestricted solves and all binary64 root, reduction, degeneracy and publication policies."
   },
   "backports": {
     "9881f3ef1c63364cecfc3c1226101b96fc38fd96": "fix(cuda): pass kernel descriptors by value (#487)"
@@ -91,7 +93,7 @@
     "src/backends/cuda/gfn2_aes2.cu": {
       "adapted": true,
       "upstream_sha256": "86ebfe4e4c846f2f2358e75eaa521b98ff2627e0ff1d659ddb4a64be9eb801de",
-      "vendored_sha256": "10192647b0262b9cf245575880d93e1a54ea7b8041030958d3de8bf5e8862434"
+      "vendored_sha256": "64c67896bb7f11364752b515c0b73284e439927f7019db5414e6da9565642e90"
     },
     "src/backends/cuda/gfn2_aes2.cuh": {
       "adapted": true,
@@ -121,7 +123,7 @@
     "src/backends/cuda/gfn2_density.cu": {
       "adapted": true,
       "upstream_sha256": "22e2f182a418ddf43834578605ba913c9e9e043f491e0f95f2f7ec6f16735a34",
-      "vendored_sha256": "89588e47750add95e713a82843a7bb038945cfb2cef7a959f37aab28ac0ddd4b"
+      "vendored_sha256": "9e7f41984ba90bc3fb4940244bc45fbdd7094e268f6f863669799df9c5e4aa24"
     },
     "src/backends/cuda/gfn2_density.cuh": {
       "adapted": true,
@@ -231,7 +233,7 @@
     "src/backends/cuda/gfn2_h0_force.cu": {
       "adapted": true,
       "upstream_sha256": "ffccf6543aefc02feba9c23913bff8c544f6389a67956535d9e2372f1b50176a",
-      "vendored_sha256": "7a9958244f22aee8e0c26a04c2e4e5a5ea7be4b3333be23b8b20b695a7e5f5e3"
+      "vendored_sha256": "c971c8d3c64aad76eff73c8a688bb159d304a44edeb66bdca8f2ade69bdcc3d5"
     },
     "src/backends/cuda/gfn2_h0_force.cuh": {
       "adapted": true,
@@ -241,7 +243,7 @@
     "src/backends/cuda/gfn2_hamiltonian.cu": {
       "adapted": true,
       "upstream_sha256": "3c3be624100613cef64a01b2d3bc78756f59f0847e832472678b9018bc11729b",
-      "vendored_sha256": "a310fe87dc7e72fadd6098e0689d471464c76512d141b605331d2d08f42850c5"
+      "vendored_sha256": "48c63cbd351f23e82010d4d4408496540f206d95265159c6b5e3b51b330555f8"
     },
     "src/backends/cuda/gfn2_hamiltonian.cuh": {
       "adapted": true,
@@ -276,7 +278,7 @@
     "src/backends/cuda/gfn2_integrals.cu": {
       "adapted": true,
       "upstream_sha256": "8da9042b184a7c81650cf9e7f4dbcc4b183cffeee0bf0eab6596b5adb18f99d6",
-      "vendored_sha256": "2920a3678bc265bd175dc33312df5a9fb473b8771a4f2d26f734112c514514e2"
+      "vendored_sha256": "037e30e6ca6ebff8d9c196f11e2c5ea4adc0c6af9acdd993b576023e4e41cd04"
     },
     "src/backends/cuda/gfn2_integrals.cuh": {
       "adapted": true,
@@ -296,7 +298,7 @@
     "src/backends/cuda/gfn2_occupations.cu": {
       "adapted": true,
       "upstream_sha256": "565d3a11f08d7061ddd83858f3575938c24fd8b0542c0bd8177354e2acac5570",
-      "vendored_sha256": "8297547862142c02ec6c254b2ff49cb00e96516b1bf61c675db7bd23671d7a9d"
+      "vendored_sha256": "37e5838630d0da1bc81c4c1cf502e93ea1257bd814fdc978560e8eac5cdc4c12"
     },
     "src/backends/cuda/gfn2_occupations.cuh": {
       "adapted": true,
@@ -606,7 +608,7 @@
     "src/runtime/gfn2_cuda_execution.cu": {
       "adapted": true,
       "upstream_sha256": "593eb50ce83db6f066748a29f41f09438c3cc142b5fc45408fefccf4fed317af",
-      "vendored_sha256": "99cf7c18baa74c6685ff9be89b1cc1d90cdd7f9e1062659423f549cad3a13cb7"
+      "vendored_sha256": "c88219fc674eb51d775f5e2699cde866c588472af0dc7b410351e0a03bf2f46b"
     },
     "src/runtime/gfn2_cuda_execution.hpp": {
       "adapted": true,

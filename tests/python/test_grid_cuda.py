@@ -157,6 +157,160 @@ def test_full_identity_map_matches_explicit_local_map(artifact: typing.Any) -> N
             check(identity_potential, explicit_potential)
 
 
+@pytest.mark.parametrize("mask", range(1, 16))
+@pytest.mark.parametrize("foreign_stream", [False, True])
+@pytest.mark.parametrize("map_kind", ["identity", "subset", "empty"])
+def test_resident_restricted_products_match_general_spin_path_bitwise(
+    artifact: typing.Any, mask: int, foreign_stream: bool, map_kind: str
+) -> None:
+    """Copying one ordered spin panel must preserve every requested feature.
+
+    Exercise producer ordering and owned-density lifetime, followed by a UKS
+    replacement and a host replacement on the same plan. No source-pointer or
+    numerical-equality heuristic is allowed to retain restricted provenance.
+    """
+    import cupy as cp
+
+    meta, arrays = load_fixture("water")
+    ingredients = tuple(
+        name
+        for bit, name in enumerate(("rho", "gradient", "sigma", "tau"))
+        if mask & (1 << bit)
+    )
+    with (
+        NativeAO(**basis_arguments(meta)) as basis,
+        CudaGrid(
+            basis,
+            artifact,
+            order=1,
+            tile_points=7,
+            active_ao_capacity=basis.nao,
+            ingredients=ingredients,
+        ) as cuda,
+    ):
+        ids = {
+            "identity": None,
+            "subset": np.arange(0, basis.nao, 2, dtype=np.uintp),
+            "empty": np.empty(0, dtype=np.uintp),
+        }[map_kind]
+        total = np.ascontiguousarray(arrays["density"].sum(axis=0))
+        # Host uploads symmetrize accepted near-symmetric fixture inputs;
+        # resident uploads require that canonicalization at their producer.
+        total = np.ascontiguousarray(0.5 * (total + total.T))
+        restricted = np.stack((0.5 * total, 0.5 * total))
+        cuda.set_density(restricted)
+        expected = [
+            cuda.evaluate(arrays["points"][:count], ao_ids=ids, download_jets=True)
+            for count in (0, 1, 7)
+        ]
+        with cuda._borrow_current_task() as task:
+            owner_stream = cp.cuda.ExternalStream(task.view.stream)
+        producer = cp.cuda.Stream(non_blocking=True) if foreign_stream else owner_stream
+        with producer:
+            device_total = cp.asarray(total)
+        cuda.set_density_device(
+            device_id=cp.cuda.runtime.getDevice(),
+            alpha=device_total.data.ptr,
+            beta=None,
+            matrix_elements=total.size,
+            spins=1,
+            source_stream=producer.ptr,
+        )
+        with producer:
+            device_total.fill(123.0)
+        for count, reference in zip((0, 1, 7), expected, strict=True):
+            actual = cuda.evaluate(
+                arrays["points"][:count], ao_ids=ids, download_jets=True
+            )
+            for name in reference:
+                np.testing.assert_array_equal(
+                    actual[name].view(np.uint64), reference[name].view(np.uint64)
+                )
+        unrestricted = restricted.copy()
+        unrestricted[0] *= 0.7
+        unrestricted[1] *= 1.3
+        with producer:
+            device_spins = cp.asarray(unrestricted)
+        cuda.set_density_device(
+            device_id=cp.cuda.runtime.getDevice(),
+            alpha=device_spins[0].data.ptr,
+            beta=device_spins[1].data.ptr,
+            matrix_elements=total.size,
+            spins=2,
+            source_stream=producer.ptr,
+        )
+        actual = cuda.evaluate(arrays["points"][:7], ao_ids=ids)
+        cuda.set_density(unrestricted)
+        reference = cuda.evaluate(arrays["points"][:7], ao_ids=ids)
+        for name in reference:
+            np.testing.assert_array_equal(
+                actual[name].view(np.uint64), reference[name].view(np.uint64)
+            )
+
+
+@pytest.mark.parametrize("mask", range(1, 16))
+@pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+def test_cooperative_features_match_independent_density_contractions(
+    artifact: typing.Any, mask: int, representation: str
+) -> None:
+    """Cover warp AO tails, scalar fallback, vacuum and independent spin sums."""
+    from generativeqc import Primitive, Shell
+    from generativeqc_compiler.dft import density_features
+
+    atoms = [("H", (2.0 * atom - 3.0, 0.0, 0.0)) for atom in range(4)]
+    shells = tuple(
+        Shell(atom, angular, (Primitive(0.7, 1.0), Primitive(1.3, -0.1)))
+        for atom in range(4)
+        for angular in range(4)
+    )
+    ingredients = tuple(
+        name
+        for bit, name in enumerate(("rho", "gradient", "sigma", "tau"))
+        if mask & (1 << bit)
+    )
+    with (
+        NativeAO(atoms, basis=shells, representation=representation) as basis,
+        CudaGrid(
+            basis,
+            artifact,
+            order=1,
+            tile_points=17,
+            active_ao_capacity=basis.nao,
+            ingredients=ingredients,
+        ) as cuda,
+    ):
+        generator = np.random.default_rng(24913)
+        points = generator.normal(size=(17, 3))
+        matrices = generator.normal(size=(2, basis.nao, basis.nao)) * 0.03
+        density = matrices + matrices.swapaxes(1, 2)
+        all_jets = basis.evaluate(points, order=1)
+        for empty_spins in (0, 1, 2):
+            current = density.copy()
+            if empty_spins:
+                current[2 - empty_spins :] = 0.0
+            cuda.set_density(current)
+            for ids in (
+                np.arange(basis.nao, dtype=np.uintp),
+                np.arange(33, dtype=np.uintp),
+                np.arange(0, basis.nao, 2, dtype=np.uintp),
+                np.arange(31, dtype=np.uintp),
+                np.empty(0, dtype=np.uintp),
+            ):
+                local_density = current[:, ids[:, None], ids[None, :]]
+                for count in (0, 1, 17):
+                    expected = density_features(
+                        all_jets[:, :count, ids],
+                        local_density,
+                        ingredients=ingredients,
+                    )
+                    actual = cuda.evaluate(points[:count], ao_ids=ids)
+                    for name in expected:
+                        if count:
+                            check(actual[name], expected[name])
+                        else:
+                            np.testing.assert_array_equal(actual[name], expected[name])
+
+
 def test_orders_zero_to_three_and_budget_rejection(artifact: typing.Any) -> None:
     meta, arrays = load_fixture("f_spherical")
     with NativeAO(**basis_arguments(meta)) as basis:

@@ -110,7 +110,6 @@ def test_runtime_and_tuning_api_share_cuda_target_info() -> None:
     tuning = (root / "src/api/c_api_tuning.cpp").read_text(encoding="utf-8")
     direct = (root / "src/scf/cuda_rhf.cpp").read_text(encoding="utf-8")
 
-    needle = "cuda_target_info_from_properties"
-    assert needle in runtime
-    assert needle in tuning
-    assert needle in direct
+    assert "cuda_device_facts" in runtime
+    assert "cuda_device_facts" in tuning
+    assert "cuda_target_info_from_properties" in direct

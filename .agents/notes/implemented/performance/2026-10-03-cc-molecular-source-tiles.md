@@ -63,7 +63,7 @@ inside the smaller bound. The native force allocation-intercept tests separately
 retain exact-cap success and one-byte-short refusal for the unavoidable force
 stage. This distinguishes schedule flexibility from weakening admission.
 
-The [retained complete-endpoint evidence](../../../../benchmarks/results/cc-mo-tiles-20261003/summary.json)
+The [retained complete-endpoint evidence](../../../../benchmarks/results/cc-mo-tiles-20261003/summary.json.gz)
 compares baseline and candidate CPU libraries pinned to core 45. In the 28-AO
 case, the warm endpoint mean decreases from about 13.22 s to 5.64 s; MO preparation
 is about 0.082 s. Source reads decrease from 10,000 to 1, with the same 614,656 AO
@@ -101,3 +101,7 @@ Retain full cold, warm, repeated and changed-geometry endpoints and semantic wor
 counts when changing this selection policy. Revisit other consumers only with
 their own complete admission and numerical gates, particularly the full force
 Hamiltonian provider.
+
+## Lossless storage (2026-10-03)
+
+The retained records now use deterministic gzip without changing their original bytes, scientific values, failures or measured identities. [cc-mo-tiles-20261003/storage.json](../../../../benchmarks/results/cc-mo-tiles-20261003/storage.json) pins the original Git blob, original/stored SHA-256 and byte counts. The storage revision identifies the accepted source of these bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json`, or decode with `gzip -cd FILE.json.gz`. Decode any `experimental-comparator.patch.gz` before applying the original patch. Historical Git objects remain available; no new experiment or performance claim is added.

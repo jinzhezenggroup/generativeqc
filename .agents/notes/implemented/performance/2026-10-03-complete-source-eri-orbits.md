@@ -60,7 +60,7 @@ the ordinary native suite also includes the new complete-tensor cases.
 Complete CCSD(T) cold/warm/changed energy and force calls remain the performance
 boundary, with unchanged public work and resource accounting checked explicitly.
 
-The [reviewed final-binary evidence](../../../../benchmarks/results/cc-source-orbits-20261003/summary.json)
+The [reviewed final-binary evidence](../../../../benchmarks/results/cc-source-orbits-20261003/summary.json.gz)
 compares with the resident-orbit parent. On node1, 28-AO complete energy
 cold/warm/changed time decreases from 3.415/2.901/2.932 to
 2.097/1.554/1.573 seconds; force time decreases from
@@ -107,3 +107,7 @@ not the dense source_values count alone.
 - [Resident orbit materialization](2026-10-03-dense-eri-orbit-materialization.md)
 - `tests/native/test_cuda_fock_provider.cpp --eri-tiles-only`
 - `tests/python/test_eri_orbit_materialization.py`
+
+## Lossless storage (2026-10-03)
+
+The retained records use deterministic gzip of the exact public originals, preserving every original byte, scientific value, failure and measured identity. [storage.json](../../../../benchmarks/results/cc-source-orbits-20261003/storage.json) pins original Git blobs, original/stored SHA-256 and byte counts. The complete original validation envelope is retained as `evidence.original.json.gz`; the active `evidence.json.gz` changes only attachment paths and checksums to bind the stored members. The storage revision is provenance for these retained bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json` or `gzip -cd FILE.json.gz`, and decode `source.patch.gz` before applying it. No new experiment or performance claim is added.

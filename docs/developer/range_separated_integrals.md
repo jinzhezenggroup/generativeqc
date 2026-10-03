@@ -155,3 +155,17 @@ a compact bundle with the existing validation/publication schema. Publication
 requires committed measured source. Timing samples are diagnostic; no
 production schedule or speedup is promoted without the separate performance
 gates.
+
+## Prepared SCF stationary source composition
+
+The generated CUDA SCF shell owner has a separate production derivative
+consumer. At its packaged `omega=0.3` value it obtains separate Coulomb and
+full-range exchange derivatives in one traversal, then a unit-coefficient LR
+exchange derivative in a second traversal. It preserves the stationary source
+inventory by publishing the short-range exchange row as the functional's short
+coefficient times `Kfull' - KLR'`, and the long-range row as its long coefficient
+times `KLR'`. The LR shell force changes sign before entering these derivative
+rows. Other omega values retain the bounded fused RSH consumer. This composition
+does not alter the primitive short-range interval evaluator described above.
+The owner drains queued host downloads before their storage is destroyed on
+both success and failure, and only publishes a complete successful result.
