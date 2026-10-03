@@ -62,3 +62,34 @@ iterations, available semantic work/allocation counters, cold and warm timings
 separately. Changed-geometry and smaller controlled endpoints complement the
 larger run. Keep the integration experimental if the complete advantage is not
 measured, even when an isolated kernel or component improves.
+
+## Qualification of the composed binary
+
+The frozen production composition is
+`cac0727f3c26650161bd511484d7c402394981c1`. Its library SHA-256 is
+`08b276c3dbfd7b37ac5efa2f7e8a0c4518933673822b9428f872d48102a0d5d7`, with
+independently recomputed source identity
+`8b42be023a9db34c66c2968a5ba7ace55ce9521ebe8831bd1c3c05d0d98ae106`.
+All 442 compiler commands use ccache. Later note-only commits do not relabel
+this source or binary.
+
+n1 Slurm job 5526 completed successfully on RTX 5090:
+
+- Native s/p/d/f SR/LR derivatives match independent displaced CPU ERIs;
+  the same native gates pass compute-sanitizer with zero errors.
+- All 41 storage-lifetime, capacity and device-facts tests pass, without skips.
+- All 22 storage-lifetime tests also pass compute-sanitizer with zero errors.
+- All seven selected complete independent-engine force and rebuild/failure
+  isolation tests pass, without skips, in 197.35 seconds.
+
+The retained qualification receipt binds the library and native-test executable
+to hashes of all five logs. These hashes and the acceptance assertions were
+independently checked after copying the evidence from n1. This qualification
+releases the candidate phase of the separately running 96-atom job 5521.
+Same-allocation full-grid 24-atom job 5528 and changed-geometry job 5527 are
+additional pending controls, not completed performance evidence.
+
+Master subsequently advanced to `5d68bcc07` through #1742, changing xTBloom
+cold-timer accounting and related documentation/tests. It does not change the
+WB97M-V production path or the comparator used here. The retained baseline
+remains exactly `a20b8801f`; it is not relabeled as the newer master.
