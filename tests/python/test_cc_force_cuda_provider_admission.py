@@ -32,9 +32,9 @@ def test_force_provider_backend_and_complete_cap(tmp_path: Path) -> None:
     # reserve zero scratch here; the real generated provider model remains live.
     names = sorted(set(re.findall(r"generated::(\w+)\(", planner)))
     generated = (
-        "namespace generated {\n"
+        "namespace generated {\nstd::size_t scratch = 0;\n"
         + "\n".join(
-            f"template<class... T> std::size_t {name}(T...) {{ return 0; }}"
+            f"template<class... T> std::size_t {name}(T...) {{ return scratch; }}"
             for name in names
         )
         + "\n}\n"
@@ -71,7 +71,12 @@ def test_cuda_force_uses_its_admitted_provider_allowance() -> None:
     assert "source.retained_numeric_bytes(), cuda_derivative)" in execution
     assert execution.index("const auto resources") < execution.index("triples.emplace(")
     assert "resources.raw_provider_budget_bytes" in execution
-    assert "NativeBlockProvider provider(source, ref, provider_budget, 2)" in source
+    assert "resources.raw_provider_axis_tile" in execution
+    assert (
+        "NativeBlockProvider provider(source, ref, provider_budget, axis_tile,"
+        in source
+    )
+    assert "posthf::AOTileDomain::Basis" in source
 
 
 PREFIX = r"""
@@ -120,7 +125,7 @@ int main() {
       const auto gpu=cc::plan_relaxed_rccsd_force_cpu(
           system,reference,problem,result,budget,triples,source_bytes,true);
       const auto provider=posthf::numeric_block_plan(
-          n,8*(5*n*n+n),source_bytes,{n,n,n,n},{1,1,1,1},true);
+          n,8*(5*n*n+n),source_bytes,{n,n,n,n},{n,n,n,n},true);
       if (gpu.raw_phase_bytes-cpu.raw_phase_bytes!=provider.device_bytes) return 1;
       if (gpu.raw_provider_budget_bytes!=provider.host_bytes+provider.device_bytes) return 2;
       if (gpu.raw_provider_budget_bytes>=gpu.raw_phase_bytes) return 3;
@@ -128,13 +133,44 @@ int main() {
       const auto exact=cc::plan_relaxed_rccsd_force_cpu(
           system,reference,problem,result,gpu.peak_bytes,triples,source_bytes,true);
       if (exact.peak_bytes!=gpu.peak_bytes) return 5;
+      const auto tight=cc::plan_relaxed_rccsd_force_cpu(
+          system,reference,problem,result,gpu.peak_bytes-1,triples,source_bytes,true);
+      if (tight.peak_bytes>=gpu.peak_bytes || tight.raw_provider_axis_tile>=n) return 11;
+      const auto minimum=cc::plan_relaxed_rccsd_force_cpu(
+          system,reference,problem,result,gpu.minimum_peak_bytes,triples,source_bytes,true);
+      if (minimum.raw_provider_axis_tile!=1 || minimum.peak_bytes!=gpu.minimum_peak_bytes) return 12;
       bool rejected=false;
       try {
         (void)cc::plan_relaxed_rccsd_force_cpu(
-            system,reference,problem,result,gpu.peak_bytes-1,triples,source_bytes,true);
+            system,reference,problem,result,gpu.minimum_peak_bytes-1,triples,source_bytes,true);
       } catch (const std::length_error&) { rejected=true; }
       if (!rejected) return 6;
     }
+  }
+  // Expensive response arenas may dominate even the full-basis provider.
+  // Their unavoidable peak must still reject one byte less before execution.
+  cc::generated::scratch = 1ULL << 28;
+  for (std::size_t n : {14, 28}) for (bool cuda : {false, true}) {
+    core::System system; system.atoms.resize(1); system.shells.resize(n);
+    hf::PhysicalReference reference; reference.nbf=n; reference.nocc=n/2;
+    cc::Problem problem; problem.nocc=n/2; problem.nvir=n-n/2;
+    cc::SolverResult result;
+    constexpr std::size_t budget=8ULL<<30, source_bytes=8192;
+    const auto wide=cc::plan_relaxed_rccsd_force_cpu(
+        system,reference,problem,result,budget,true,source_bytes,cuda);
+    if (wide.raw_provider_axis_tile!=n || wide.raw_phase_bytes>wide.peak_bytes) return 7;
+    const auto provider=posthf::numeric_block_plan(
+        n,8*(5*n*n+n),source_bytes,{n,n,n,n},{n,n,n,n},cuda);
+    if (wide.raw_provider_budget_bytes!=provider.host_bytes+provider.device_bytes) return 8;
+    const auto exact=cc::plan_relaxed_rccsd_force_cpu(
+        system,reference,problem,result,wide.peak_bytes,true,source_bytes,cuda);
+    if (exact.peak_bytes!=wide.peak_bytes || exact.raw_provider_axis_tile!=n) return 9;
+    bool rejected=false;
+    try {
+      (void)cc::plan_relaxed_rccsd_force_cpu(
+          system,reference,problem,result,wide.peak_bytes-1,true,source_bytes,cuda);
+    } catch (const std::length_error&) { rejected=true; }
+    if (!rejected) return 10;
   }
 }
 """
