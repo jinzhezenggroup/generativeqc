@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "dft/ao_grid.hpp"
+#include "dft/ao_selection_work.hpp"
 #include "dft/grid.hpp"
 #include "runtime/bounded_workspace.hpp"
 
@@ -64,6 +65,15 @@ struct CudaXcLayout {
 struct CudaXcAoTiles {
   std::vector<std::size_t> offsets, indices;
 };
+
+/** Worst-case admission for sampled-jet discovery. The device bound includes
+ * the dense arena and one global-capacity map per tile; host peak includes
+ * those maps, offsets, and the current tile's flags. No mean AO count enters
+ * admission. Discovery borrows the already charged AO/work scratch. */
+struct CudaXcAoSelectionResources {
+  std::size_t device_bytes{}, host_peak_bytes{}, max_entries{}, tiles{};
+};
+CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& dense);
 
 /** Validate maps and charge their storage on top of the ordinary dense layout.
  * Only physical FP64 execution is admitted; response retains its dense route.
@@ -140,6 +150,12 @@ class CudaXcPlan {
 
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
+  /** Explicit setup-only policy; no density work or external oracle is used.
+   * Returns false without discovery if either numeric budget is insufficient.
+   * A successful selection is immutable for the lifetime of this geometry
+   * owner. A positive sampled-jet cutoff requires endpoint qualification. */
+  bool select_local_ao(double cutoff, std::size_t max_host_bytes);
+  const CudaXcAoSelectionWork& ao_selection_work() const noexcept { return ao_selection_work_; }
   /** Borrow immutable device quadrature owned by this plan. */
   CudaXcGridView grid_view() const;
   void enqueue(const double* density, std::size_t elements, std::uint64_t generation,
@@ -197,8 +213,11 @@ class CudaXcPlan {
   CudaXcLayout layout_;
   CudaXcPointLauncher point_launcher_{};
   CudaXcTransfers transfers_;
+  CudaXcAoSelectionWork ao_selection_work_;
+  bool evaluation_started_{};
   int device_{};
   void* arena_{};
+  std::size_t arena_bytes_{};
   cudaStream_t stream_{};
   std::shared_ptr<const void> grid_lifetime_;
   generativeqc::runtime::AsyncGeneration generations_;
@@ -212,6 +231,11 @@ class CudaXcPlan {
 };
 
 namespace cuda_xc_detail {
+/** Populate one host flag per global AO from all actual jets in a point tile.
+ * The caller lends full-capacity panels and owns stream/error lifetimes. */
+void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
+               const double* points, std::size_t count, double cutoff, double* ao, double* work,
+               int* error, unsigned* host_flags);
 /** Emitted finite admission selector; performs no CUDA calls or allocation. */
 CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response);
 /** Allocation-free launch adapter compiled with the existing generated AO
