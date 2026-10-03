@@ -1,7 +1,7 @@
 # Proposal: share low-order long-range force roots across components and centers
 
 Status: proposed; independent device and complete numerical gates pass;
-controlled full-grid endpoint measurements pending
+controlled full-grid 24-atom endpoint passes; 96-atom comparison pending
 Date: 2026-10-03
 
 ## Measured problem
@@ -115,3 +115,39 @@ has a fresh full-density Fock reference and three engine-local warm repeats.
 No controlled final-candidate speedup is established yet. Master advanced to
 `59eee77f4` through Python loader work while these frozen measurements ran;
 no old result is relabeled as that newer source.
+
+## Final controlled full-grid 24-atom endpoint
+
+n1 Slurm 5511 completed (exit 0) with both frozen builds sequentially on one
+RTX 5090, water24/192 spherical def2-SVP AOs, 48 x 16 x 32 grid and three
+engine-local warm repeats. Every cold/priming/warm native-reference pair and
+all reference consistency gates pass. Across both builds, maximum errors are
+2.73e-12 Eh and 4.96e-10 Eh/Bohr.
+
+| Complete endpoint | Base / s | Candidate / s |
+| --- | --- | --- |
+| Native cold | 263.275725909 | 256.124819398 |
+| Native priming | 38.985069916 | 30.759933736 |
+| Native warm median | 39.042251013 | 30.441405468 |
+| Fresh reference warm median | 27.692985114 | 27.682573192 |
+
+The candidate warm samples are 30.458534, 30.441405 and 30.423864 seconds.
+Native warm time improves by 22.030%, yet remains above the reference.
+Both native cold solves take 18 iterations; all priming/warm solves take one.
+The reference takes 14 cold iterations and one warm iteration/two J-K builds.
+The first warm integral-derivative component falls from 14.872265 to 6.297789
+seconds; grid/pair drain stays at 10.967430 versus 10.963736 seconds. Grid,
+geometry, collocation and allocation work fields remain unchanged. Actual
+executed bounded shell-quartet counts remain unavailable and are not inferred
+from dense logical capacities.
+
+Final moved12 qualification in n1 Slurm 5512 also completed (exit 0). All five
+observations per build pass the retained independent CPU oracle. Base/candidate
+cold, priming, single warm and moved endpoints are 168.526401/166.538064,
+23.193344/21.721125, 23.220666/21.749440 and 92.803257/91.119179 seconds.
+Iteration counts are 22/1/1/11. Maximum errors across both builds are 1.37e-12
+Eh and 8.97e-10 Eh/Bohr. This reduced 24 x 8 x 16 grid remains a correctness
+and rebuild diagnostic, not the full-grid performance comparison.
+
+The full-grid 96-atom same-allocation comparison remains live in n5 Slurm 1410.
+No large-system reference advantage is established by the completed 24-atom run.
