@@ -136,6 +136,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/solver/proposal_control.cpp
     src/scf/solver/mean_field_driver.cpp
     src/scf/solver/eigen_frame.cpp
+    src/scf/solver/cpu_target_eigen.cpp
     src/scf/solver/final_state.cpp
     src/scf/solver/warm_subspace.cpp
     src/scf/gradient/hf_gradient.cpp

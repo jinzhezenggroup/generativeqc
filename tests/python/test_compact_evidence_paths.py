@@ -131,3 +131,122 @@ def test_script_entrypoint_imports_without_pythonpath(tmp_path: Path) -> None:
         check=True,
     )
     assert "--check" in completed.stdout
+
+
+@pytest.mark.parametrize("packed_parent", [False, True])
+def test_compaction_rebinds_parts_inside_sample_records(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, packed_parent: bool
+) -> None:
+    from tools.generativeqc_validation.record import load_publication_record
+
+    root = tmp_path / "checkout"
+    directory = root / "campaign"
+    (directory / "parts").mkdir(parents=True)
+    child = b'[{"seconds":0.12345678901234567},{"seconds":1e-14}]\n'
+    samples = {
+        "record_parts": {
+            "timings": [
+                {
+                    "path": "parts/water.json",
+                    "bytes": len(child),
+                    "sha256": hashlib.sha256(child).hexdigest(),
+                }
+            ]
+        }
+    }
+    samples_data = json.dumps(samples).encode()
+    samples_name = "samples.json"
+    if packed_parent:
+        samples_name += ".gz"
+        samples_data = gzip.compress(samples_data, mtime=0)
+    evidence = json.dumps(
+        {
+            "attachments": [
+                {
+                    "path": samples_name,
+                    "bytes": len(samples_data),
+                    "sha256": hashlib.sha256(samples_data).hexdigest(),
+                }
+            ]
+        }
+    ).encode()
+    members = [
+        ("evidence.json", "evidence", evidence),
+        (samples_name, "samples", samples_data),
+        ("parts/water.json", "samples", child),
+    ]
+    files = []
+    for name, role, data in members:
+        (directory / name).write_bytes(data)
+        files.append(
+            {
+                "path": name,
+                "role": role,
+                "bytes": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        )
+    (directory / "publication.json").write_text(json.dumps({"files": files}))
+    monkeypatch.setattr(compact, "ROOT", root)
+    monkeypatch.setattr(compact, "THRESHOLD", 1)
+    expected = load_publication_record(directory, role="samples", name="samples.json")
+    compact.compact_publication("campaign/publication.json")
+    assert not (directory / "parts/water.json").exists()
+    assert gzip.decompress((directory / "parts/water.json.gz").read_bytes()) == child
+    assert (
+        load_publication_record(directory, role="samples", name="samples.json")
+        == expected
+    )
+    active = load_publication_record(directory)
+    assert active["attachments"][0]["path"] == "samples.json.gz"
+    assert (
+        active["attachments"][0]["sha256"]
+        == hashlib.sha256((directory / "samples.json.gz").read_bytes()).hexdigest()
+    )
+    assert compact.compact_publication("campaign/publication.json", check=True) == []
+
+
+def test_cyclic_record_dependencies_fail_without_writes(
+    publication: tuple[Path, Path],
+) -> None:
+    root, _ = publication
+    directory = root / "campaign"
+    files = []
+    for name, role, target in [
+        ("evidence.json", "evidence", "samples.json"),
+        ("samples.json", "samples", "evidence.json"),
+    ]:
+        data = json.dumps(
+            {"attachments": [{"path": target, "sha256": "0" * 64}]}
+        ).encode()
+        (directory / name).write_bytes(data)
+        files.append(
+            {
+                "path": name,
+                "role": role,
+                "bytes": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        )
+    (directory / "publication.json").write_text(json.dumps({"files": files}))
+    before = snapshot(root)
+    with pytest.raises(ValueError, match="cyclic"):
+        compact.compact_publication("campaign/publication.json")
+    assert snapshot(root) == before
+
+
+def test_default_inventory_discovers_only_tracked_publications(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    tracked = tmp_path / "benchmarks/results/current/publication.json"
+    untracked = tmp_path / "benchmarks/results/transient/publication.json"
+    ignored = tmp_path / ".artifacts/private/publication.json"
+    for path in [tracked, untracked, ignored]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n")
+    subprocess.run(["git", "add", str(tracked)], cwd=tmp_path, check=True)
+    monkeypatch.setattr(compact, "ROOT", tmp_path)
+    assert compact.publication_paths() == (
+        "benchmarks/results/current/publication.json",
+    )

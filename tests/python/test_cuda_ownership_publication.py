@@ -11,6 +11,7 @@ from xml.etree import ElementTree
 import pytest
 
 from tools.generativeqc_validation.publication import validate_publication
+from tools.generativeqc_validation.record import decode_json, load_publication_record
 from tools.publish_cuda_ownership import compact_comparison, validate_resources, write
 
 BUNDLE = (
@@ -23,7 +24,7 @@ def restore_workers(
     directory: typing.Any, *, one_case: typing.Any = False, bundle: typing.Any = BUNDLE
 ) -> typing.Any:
     """Reconstruct original workers solely from permanent retained records."""
-    compact = json.loads((bundle / "samples.json").read_text())
+    compact = load_publication_record(bundle, role="samples", name="samples.json")
     records = compact["records"]
     for entry in compact["runs"]:
         run = dict(records[entry["provenance"]])
@@ -124,10 +125,18 @@ def test_published_checksums_and_decision(bundle: typing.Any) -> None:
     files = {e["path"]: (bundle / e["path"]).read_bytes() for e in manifest["files"]}
     validate_publication(manifest, files)
     assert manifest["decision"]["scope"] == "numerical"
-    evidence = json.loads(files["evidence.json"])
+    evidence_name = next(
+        e["path"] for e in manifest["files"] if e["role"] == "evidence"
+    )
+    evidence = decode_json(files[evidence_name], path=evidence_name)
     assert evidence["performance"]["status"] == "not-run"
     assert evidence["stages"]["production"]["status"] == "not-run"
-    files["samples.json"] += b" "
+    samples_name = next(
+        e["path"]
+        for e in manifest["files"]
+        if e["path"] in {"samples.json", "samples.json.gz"}
+    )
+    files[samples_name] += b" "
     with pytest.raises(ValueError, match="checksum/size mismatch"):
         validate_publication(manifest, files)
 
@@ -174,7 +183,7 @@ def test_final_df_validation_is_bound_to_the_endpoint_library() -> None:
         assert len(data) == row["bytes"]
         assert hashlib.sha256(data).hexdigest() == row["sha256"]
     validation = json.loads((bundle / "validation.json").read_text())
-    compact = json.loads((bundle / "samples.json").read_text())
+    compact = load_publication_record(bundle, role="samples", name="samples.json")
     for run in compact["runs"]:
         if run["selection"] == "candidate":
             worker = compact["records"][run["provenance"]]

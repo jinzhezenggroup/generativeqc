@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tools.generativeqc_validation.publication import validate_publication
-from tools.generativeqc_validation.record import load_record
+from tools.generativeqc_validation.record import load_publication_record
 from tools.publish_xc_contractions import summarize, validate_run
 
 ROOT = Path(__file__).resolve().parents[2] / "benchmarks/results/xc-contractions"
@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2] / "benchmarks/results/xc-contractions
 
 @pytest.fixture(scope="module")
 def run() -> typing.Any:
-    return load_record(ROOT / "samples.json")
+    return load_publication_record(ROOT, role="samples", name="samples.json")
 
 
 def test_retained_xc_publication_is_complete_and_reconstructs(

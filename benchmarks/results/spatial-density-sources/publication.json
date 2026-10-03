@@ -7,10 +7,10 @@
   },
   "files": [
     {
-      "bytes": 819312,
-      "path": "evidence.json",
+      "bytes": 107034,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "fedb67edad733b727d150fde69df2a8087c074a25e77e96ef24a7a134909669f"
+      "sha256": "c7c6cb27f2d0895069c413460558bb8da67c8b2e6893dad378af2218e2297052"
     },
     {
       "bytes": 24421,
@@ -19,33 +19,33 @@
       "sha256": "24b7453f05430604a622b559c1a02083579980950daf5f1b35c21edbc99907d9"
     },
     {
-      "bytes": 4028,
+      "bytes": 4343,
       "path": "README.md",
       "role": "summary",
-      "sha256": "a5b792b55a5f55c390450081faeff526c7c9fc5be2abe53e2bc09e9f3410a7e7"
+      "sha256": "d97c3c1af3ddf787f01d67c1fe7f4c532614ff0681808d6ca7ce38effdb7b342"
     },
     {
-      "path": "evidence-endpoint_cases/h2.json",
-      "bytes": 273253,
-      "sha256": "837d47d9e51fd8feb845dce854d188ee31bb2b1e328a4e2d75126f0c4d9ce656",
+      "path": "evidence-endpoint_cases/h2.json.gz",
+      "bytes": 9724,
+      "sha256": "f1f3492e62f32f641ef4569df9c6819f253934075c0ca115ad8a8a3b31a010fd",
       "role": "samples"
     },
     {
-      "path": "evidence-endpoint_cases/water.json",
-      "bytes": 275395,
-      "sha256": "710069221adbac5f55d151548f0e6ebf102816d1d89e971c5a0c98ad6ebcdf6d",
+      "path": "evidence-endpoint_cases/water.json.gz",
+      "bytes": 10133,
+      "sha256": "966dd40027bb0ed7793ce14526c37a5b6f9f1bbfb9bcd1ef6738f49e247649f8",
       "role": "samples"
     },
     {
-      "path": "evidence-endpoint_cases/f_cartesian.json",
-      "bytes": 274013,
-      "sha256": "a7944b53500dfa7582bbd774b67c915430ea585a835b6d29922b5372a42bf148",
+      "path": "evidence-endpoint_cases/f_cartesian.json.gz",
+      "bytes": 9822,
+      "sha256": "e9ebd2ad50a0e56bd86a8c81dd0576dac8a2d57e3bcc2bb80d802bad5adc5a94",
       "role": "samples"
     },
     {
-      "path": "evidence-endpoint_cases/f_spherical.json",
-      "bytes": 273999,
-      "sha256": "843b9615ebbb26f38c3ca0a707bbc14b88e1e7b90df1692a1309717b5384307a",
+      "path": "evidence-endpoint_cases/f_spherical.json.gz",
+      "bytes": 9851,
+      "sha256": "ae651344f39f741c406ad87a9c88e624da0dc846baf523aee7510a2c12f25ad2",
       "role": "samples"
     }
   ],
