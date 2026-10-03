@@ -115,9 +115,26 @@ takes one iteration, and maximum energy/force errors are below 2.388e-12 Eh /
 
 One fewer expensive SCF submission reduces complete cold by about 5%; it does
 not close the reference gap. The 12/16 difference is not established beyond
-single-cold-run variability. The same 48-atom three-way experiment is scheduled
-with a finite 2.5-hour allocation, retaining every variant rather than choosing
-a winner from the 24-atom timings.
+single-cold-run variability.
+
+The same-binary 48-atom comparison completes in finite n1 Slurm 5614. All 15
+cold/priming/warm pairs pass the independent verifier, with maximum errors
+below 1.206e-11 Eh / 6.307e-10 Eh/Bohr. Reference XC remains on GPU and every
+warm/priming call takes one iteration. Every variant is retained:
+
+| DIIS history | Native complete cold | Paired reference complete cold | Native cold iterations / XC submissions | Native warm median |
+| --- | ---: | ---: | ---: | ---: |
+| 8 | 961.199066 s | 472.069554 s | 21 / 21 | 97.112920 s |
+| 12 | 964.064881 s | 471.756488 s | 21 / 21 | 96.571170 s |
+| 16 | 916.073826 s | 471.785992 s | 20 / 20 | 97.400964 s |
+
+History 12 does not reduce iteration work at 48 atoms; history 16 saves one
+submission and 4.69% of complete cold. This small gain still leaves the native
+endpoint 1.94 times the paired reference. Do not promote a universal history
+default or spend another 96-atom campaign on this knob alone: first investigate
+a cheaper GPU preliminary operator, retaining DIIS as a possible later combined
+control. The original raw reports and `matched48-verified.json` remain under
+`.artifacts/cold-scf-20261003/` in the SCF composition worktree.
 
 The public preliminary-SCF and cross-method seed APIs are currently CPU-only
 or HF-only respectively. This investigation does not bypass those contracts,

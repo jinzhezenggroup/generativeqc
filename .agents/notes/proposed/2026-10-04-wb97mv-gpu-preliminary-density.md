@@ -76,6 +76,27 @@ The corrected finite n1 allocation is Slurm 5640. It restores the source map
 policy explicitly, validates provider names before deployment and propagates
 unexpected source failure statuses. Full comparison results remain pending.
 
+## Completed small pilot
+
+Slurm 5640 completes all three 3-atom variants and passes the independent
+15-pair verifier before continuing to 24 atoms. Maximum errors are below
+8.669e-13 Eh / 1.177e-9 Eh/Bohr; every reference XC component stays on GPU
+and every priming/warm replay takes one iteration. The target gates and full
+grid are unchanged.
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations / XC submissions | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 9.404071 s | 9.744874 s | 15 / 15 | none |
+| LDA | 8.536679 s | 9.598415 s | 12 / 12 | 15 / 0.656032 s |
+| PBE | 8.156632 s | 9.645183 s | 11 / 11 | 15 / 0.681369 s |
+
+Both sources actually converge and are imported. Their XC submission counts
+are 15 each, their Fock-build counters remain unavailable, and the complete
+source cost is included in the respective cold preparation totals. The small
+pilot supports testing the mechanism at 24 atoms; it does not establish a
+large-system benefit or justify a default/API promotion. The 24-atom sequence
+continues in the same allocation and will retain all three controls.
+
 ## Promotion gates
 
 Require larger and displaced-system complete endpoints before claiming a
