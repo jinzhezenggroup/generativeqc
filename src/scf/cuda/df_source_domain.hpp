@@ -6,16 +6,26 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+/** Diagnostic choices frozen before expensive reference work. Source construction
+ * consumes this snapshot rather than reading a possibly changed environment.
+ */
+struct CudaDfSourcePolicy {
+  unsigned requested_value_mapping{};
+  unsigned value_math{};
+};
+
+/** Host-only policy resolution; leaves policy unchanged on failure. */
+bool resolve_cuda_df_source_policy(CudaDfSourcePolicy& policy, std::string& detail);
+
 /** Host-only capability preflight shared by source factories and their callers.
- * Check this before expensive reference work; the factory repeats it before
- * allocating a source. This query creates no CUDA context or numerical state.
+ * This query creates no CUDA context or numerical state.
  */
 bool cuda_df_shell_domain(const core::System& system, const char* role, std::string& detail);
 
-/** Value-only source domain: orbital through f, auxiliary through g.
- * Legacy exporters/derivatives continue to use the stricter f query above.
+/** Value-only source domain: orbital through f, auxiliary through g. Auxiliary g
+ * requires generic generated math. Legacy exporters/derivatives retain f admission.
  */
 bool cuda_df_value_domain(const core::System& orbital, const core::System& auxiliary,
-                          std::string& detail);
+                          const CudaDfSourcePolicy& policy, std::string& detail);
 
 }  // namespace generativeqc::scf::cuda_execution

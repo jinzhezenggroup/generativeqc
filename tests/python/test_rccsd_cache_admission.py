@@ -34,7 +34,10 @@ struct MethodError : std::runtime_error {
 struct Reference { std::size_t reference_memory_budget_bytes=100; int diis_history=8; double screening_tolerance=0; };
 namespace scf {
 namespace cuda_execution {
-bool cuda_df_value_domain(const core::System& orbital,const core::System& system,std::string& detail) {
+struct CudaDfSourcePolicy {};
+bool resolve_cuda_df_source_policy(CudaDfSourcePolicy&,std::string&) { return true; }
+bool cuda_df_value_domain(const core::System& orbital,const core::System& system,
+                          const CudaDfSourcePolicy&,std::string& detail) {
   detail="unsupported DF source basis";
   return orbital.df_supported && system.df_supported;
 }
@@ -72,7 +75,8 @@ Reference reference_options(const generativeqc_method_descriptor&,std::size_t) {
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,int,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*,
-                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*) {
+                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*,
+                                      const scf::cuda_execution::CudaDfSourcePolicy*) {
   ++executions;
   return {p != nullptr,0,{80}};
 }
@@ -125,8 +129,10 @@ int main(int argc,char** argv) {
 
 def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+    cache = shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler/ccache unavailable")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     start = source.index("RccsdNativeState run_rccsd_native_state(")
     end = source.index("\ngenerativeqc_status validate_rccsd_system", start)
@@ -135,6 +141,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
     path.write_text(program)
     compiled = subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-O0",

@@ -9,6 +9,7 @@
 
 #include "core/types.hpp"
 #include "generativeqc/generativeqc.h"
+#include "scf/cuda/df_source_domain.hpp"
 #include "scf/density_factor.hpp"
 #include "scf/df_value_storage.hpp"
 #include "scf/fock_build.hpp"
@@ -79,12 +80,14 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
  *
  * The source owns only packed basis metadata and public-basis transforms. It
  * intentionally does not allocate or retain the O(nbf^2*naux) three-center
- * tensor; callers request individual transformed tiles on demand.
+ * tensor; callers request individual transformed tiles on demand. A supplied policy
+ * is already resolved; otherwise the factory resolves it once before any allocation.
  */
 generativeqc_status create_cuda_density_fitting_integral_source(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems, CudaDensityFittingIntegralSource** source,
-    std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail);
+    std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail,
+    const cuda_execution::CudaDfSourcePolicy* policy = nullptr);
 
 void destroy_cuda_density_fitting_integral_source(
     CudaDensityFittingIntegralSource* source) noexcept;
