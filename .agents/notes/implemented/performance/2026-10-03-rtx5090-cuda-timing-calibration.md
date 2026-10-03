@@ -88,3 +88,8 @@ setup, iteration, force/response, transfer, and numerical acceptance evidence.
 
 This extends the earlier [calibrated-kernel decision](2026-10-03-calibrated-cuda-kernel-timing.md),
 which intentionally had no measured calibration at implementation time.
+
+Follow-up: the [refined timing model decision](2026-10-04-refined-cuda-timing-model.md)
+adds new training coverage and fresh validation for separate resource response,
+family rates and fixed batch cost. It supersedes the decision to defer nonlinear
+corrections while preserving this v1 profile, its decoded measurements and replay.

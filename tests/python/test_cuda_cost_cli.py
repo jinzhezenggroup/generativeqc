@@ -185,6 +185,42 @@ def test_calibrated_cli_uses_calibration_topology_and_retains_inputs(
     assert timing["cost"]["launch_count"] == 2
 
 
+@pytest.mark.parametrize("mismatched_schema", [False, True])
+def test_refined_cli_uses_v2_formula_and_checks_schema(
+    tmp_path: Path, mismatched_schema: bool
+) -> None:
+    path = _calibration_file(tmp_path)
+    calibration = json.loads(path.read_text())
+    calibration.update(
+        schema="generativeqc.compiler.cuda-timing-calibration."
+        + ("v1" if mismatched_schema else "v2"),
+        model="roofline-calibrated-overlap.v2",
+        memory_throughput_curve=[[0, 0], [1, 1]],
+        crossover_penalty_curve=[[0, 0.5], [1, 0.5]],
+        batch_seconds=2e-5,
+    )
+    path.write_text(json.dumps(calibration))
+    result = _run(
+        tmp_path,
+        _row("kernel", 64, "sm_120"),
+        "--calibration",
+        str(path),
+        "--grid-blocks",
+        "680",
+        *_WORK,
+    )
+    if mismatched_schema:
+        assert result.returncode != 0
+        assert "schema and model version disagree" in result.stderr
+        return
+    assert result.returncode == 0, result.stderr
+    timing = json.loads(result.stdout)["time_estimate"]
+    assert timing["schema"] == "generativeqc.compiler.cuda-time-estimate.v2"
+    # Occupancy 1/3: C=1.5 ms, M=3 ms, k=0.5, fixed+launch=40 us.
+    assert timing["estimated_seconds"] == pytest.approx(0.003 + 0.000375 + 0.00004)
+    assert timing["batch_seconds"] == pytest.approx(2e-5)
+
+
 @pytest.mark.parametrize("fallback", [False, True])
 def test_calibrated_cli_missing_grid_requires_explicit_fallback(
     tmp_path: Path, fallback: bool

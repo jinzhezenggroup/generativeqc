@@ -1,6 +1,7 @@
 """CPU-only independent fitting oracle and train/holdout isolation checks."""
 
 import copy
+import gzip
 import hashlib
 import json
 import subprocess
@@ -150,16 +151,18 @@ def test_collection_refuses_to_bypass_scheduler(
 
 
 @pytest.mark.parametrize("fail_holdout", [False, True])
+@pytest.mark.parametrize("compressed", [False, True])
 def test_cpu_replay_cli_preserves_samples_and_reports_failed_gate(
-    tmp_path: Path, fail_holdout: bool
+    tmp_path: Path, fail_holdout: bool, compressed: bool
 ) -> None:
     measurement = _measurement()
     if fail_holdout:
         for row in measurement["cases"]:
             if row["split"] == "holdout":
                 row["wall_seconds"] = [value * 10 for value in row["wall_seconds"]]
-    path = tmp_path / "retained.json"
-    path.write_text(json.dumps(measurement), encoding="utf-8")
+    raw = json.dumps(measurement).encode()
+    path = tmp_path / ("retained.json.gz" if compressed else "retained.json")
+    path.write_bytes(gzip.compress(raw, mtime=0) if compressed else raw)
     destination = tmp_path / "replayed"
     runner = Path(__file__).resolve().parents[2] / "tools/calibrate_cuda_time.py"
     process = subprocess.run(
@@ -177,9 +180,9 @@ def test_cpu_replay_cli_preserves_samples_and_reports_failed_gate(
         check=False,
     )
     assert process.returncode == int(fail_holdout), process.stderr
-    assert (destination / "measurement.json").read_bytes() == path.read_bytes()
+    assert (destination / "measurement.json").read_bytes() == raw
     report = json.loads((destination / "qualification.json").read_text())
-    assert report["measurement_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert report["measurement_sha256"] == hashlib.sha256(raw).hexdigest()
     assert report["qualified"] is not fail_holdout
 
 
@@ -189,10 +192,12 @@ def test_retained_rtx5090_measurements_reproduce_profile_and_qualification() -> 
         Path(__file__).resolve().parents[2]
         / "benchmarks/results/cuda-timing-rtx5090-20261003"
     )
-    data = (bundle / "measurement.json").read_bytes()
+    data = gzip.decompress((bundle / "measurement.json.gz").read_bytes())
     measurement = json.loads(data)
     expected = json.loads((bundle / "calibration.json").read_text())
-    retained = json.loads((bundle / "qualification.json").read_text())
+    retained = json.loads(
+        gzip.decompress((bundle / "qualification.json.gz").read_bytes())
+    )
     calibration, qualification = fit(measurement, hashlib.sha256(data).hexdigest())
     for field, value in calibration.to_payload().items():
         assert expected[field] == (

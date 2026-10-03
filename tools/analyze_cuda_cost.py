@@ -92,7 +92,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--calibration",
         type=Path,
-        help="cuda-timing-calibration.v1 JSON with measured device/workload rates",
+        help="cuda-timing-calibration.v1 or .v2 JSON with measured device/workload rates",
     )
     parser.add_argument(
         "--spill-traffic-bytes",
@@ -132,7 +132,7 @@ def _report(args: argparse.Namespace) -> dict[str, object]:
             "generativeqc.compiler.cuda-timing-calibration.v2",
         }:
             raise ValueError(
-                "calibration must be a cuda-timing-calibration.v1 JSON object"
+                "calibration must be a cuda-timing-calibration.v1 or .v2 JSON object"
             )
         calibration = CudaTimingCalibration(**calibration_payload)
         if calibration.to_payload()["schema"] != schema:

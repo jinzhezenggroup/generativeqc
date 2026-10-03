@@ -7,7 +7,7 @@ not change production scheduling or qualify a chemistry endpoint.
 Measured on NVIDIA GeForce RTX 5090, 170 SMs (`sm_120`), driver 580.95.05,
 CUDA 12.9.86, 575 W power limit, through Slurm job **12164** on 2026-10-03 UTC.
 The device was warmed before sampling; clock/power snapshots and exact source,
-compiler, PTXAS and binary identities are retained in `measurement.json`.
+compiler, PTXAS and binary identities are retained in `measurement.json.gz`.
 
 | Parameter | Measured/fitted value |
 | --- | ---: |
@@ -38,11 +38,12 @@ absolute error against the independent host numerical oracle is
 **8.881784197001252e-16**, below the 2e-12 gate. Compute Sanitizer memcheck reports
 **zero errors** across all four kernel families and non-divisible tail cases.
 
-`measurement.json` retains all 360 wall samples and 360 event samples, work counts,
+`measurement.json.gz` retains all 360 wall samples and 360 event samples, work counts,
 resource evidence and provenance. `calibration.json` is directly consumable by
-`tools/analyze_cuda_cost.py --calibration`. `qualification.json` retains every
+`tools/analyze_cuda_cost.py --calibration`. `qualification.json.gz` retains every
 prediction, residual, band decision and gate. `sanitizer.json` is the compact
-sanitizer receipt for the exact measured binary. Build objects and verbose logs
+sanitizer receipt for the exact measured binary. Gzip storage preserves the
+original decoded bytes and SHA-256 identities. Build objects and verbose logs
 remain ignored local artifacts.
 
 ## Reproduction
@@ -60,7 +61,7 @@ CPU-only replay must reproduce the profile and qualification without CUDA:
 
 ```bash
 PYTHONPATH=python python tools/calibrate_cuda_time.py \
-  --measurement benchmarks/results/cuda-timing-rtx5090-20261003/measurement.json \
+  --measurement benchmarks/results/cuda-timing-rtx5090-20261003/measurement.json.gz \
   --output .artifacts/cuda-timing-replay
 ```
 

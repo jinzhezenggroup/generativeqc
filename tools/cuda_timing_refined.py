@@ -298,9 +298,18 @@ def fit_refined(
 def score_refined(
     measurement: dict[str, Any], profiles: dict[str, CudaTimingCalibration], digest: str
 ) -> dict[str, Any]:
-    """Score frozen profiles and retain every case, including all gate failures."""
+    """Score frozen profiles, rejecting invalid evidence and retaining gate failures.
+
+    Qualification requires fresh holdouts for every calibrated probe family.
+    Partial or training-only collections may be scored but cannot qualify.
+    """
     from tools.calibrate_cuda_time import _errors, cost_for_case
 
+    if measurement.get("schema") != "generativeqc.cuda-timing-probe.v2":
+        raise ValueError("refined scoring requires probe.v2 measurements")
+    rows = measurement["cases"]
+    if len({row["id"] for row in rows}) != len(rows):
+        raise ValueError("duplicate qualification case")
     scored = []
     for row in measurement["cases"]:
         if row["split"] not in {"train", "holdout"}:
@@ -308,12 +317,17 @@ def score_refined(
         if (
             not math.isfinite(row["max_absolute_error"])
             or not 0 <= row["max_absolute_error"] <= 2e-12
+            or row["local_bytes"] != 0
         ):
-            raise ValueError("qualification numerical acceptance failed")
+            raise ValueError("qualification numerical/resource acceptance failed")
         if not row["wall_seconds"] or any(
             not math.isfinite(x) or x <= 0 for x in row["wall_seconds"]
         ):
             raise ValueError("qualification requires positive finite times")
+        if type(row["launch_count"]) is not int or row["launch_count"] <= 0:
+            raise ValueError("qualification launch counts must be positive integers")
+        if row["family"] not in FAMILY_PROFILE:
+            raise ValueError("qualification requires a known probe family")
         profile = FAMILY_PROFILE[row["family"]]
         prediction = estimate_cuda_time(
             cost_for_case(row, measurement), profiles[profile]
@@ -363,6 +377,7 @@ def score_refined(
         "qualified": bool(
             summary
             and summary["passes_accuracy_gates"]
+            and set(groups) == set(FAMILY_PROFILE)
             and all(group["passes_accuracy_gates"] for group in groups.values())
         ),
         "scope": "explicit family profiles for the measured FP64 warm-batch domain; not chemistry endpoint prediction",

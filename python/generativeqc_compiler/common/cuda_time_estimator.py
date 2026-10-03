@@ -51,9 +51,17 @@ class CudaTimingCalibration:
     retained measurements, including software, clocks, and measurement procedure.
     The caller must ensure these match the candidate; names cannot certify this.
 
-    Rates are achieved whole-device rates at ``saturation_occupancy``, not vendor
-    peaks. The occupancy threshold and engineering ``uncertainty_fraction`` are
-    explicit inputs, not fitted defaults or statistical confidence guarantees.
+    Rates are achieved whole-device rates, not vendor peaks. The v1 model uses
+    ``saturation_occupancy`` for both resources. In v2 a nonempty monotone
+    ``memory_throughput_curve`` instead maps occupancy to memory-rate fractions;
+    ``crossover_penalty_curve`` maps occupancy to bounded resource-contention
+    coefficients. Empty curves retain linear memory scaling and full overlap.
+    ``compute_wave_correction`` assumes equal work per block on identical SMs.
+    ``batch_seconds`` is a fixed cost per nonempty serial batch, independent of
+    launch count. These terms require v2 and explicit matching-family selection.
+
+    The occupancy threshold and engineering ``uncertainty_fraction`` are explicit
+    inputs, not fitted defaults or statistical confidence guarantees.
     """
 
     device: str
@@ -177,6 +185,10 @@ class CudaTimeEstimate:
     counts cover ALL repetitions; launch_count multiplies only launch latency.
     Missing components and totals remain None. The interval is an engineering
     band around the estimate, not a bound on the actual device execution time.
+    ``parallel_scale`` scales compute; ``memory_parallel_scale`` scales memory.
+    ``overlap_seconds`` is the modeled time saved versus serialized compute and
+    memory, so body time is compute + memory - overlap. ``batch_seconds`` is
+    charged once, and is zero for a known no-op.
     """
 
     calibration: CudaTimingCalibration
@@ -233,9 +245,14 @@ def estimate_cuda_time(
     grid/resources per launch. Heterogeneous kernels must be estimated separately:
     max(sum(compute), sum(memory)) loses sequential compute/memory bottlenecks.
 
-    The model is max(ops / compute_rate, bytes / memory_rate) / parallel_scale
+    The v1 model is max(ops / compute_rate, bytes / memory_rate) / parallel_scale
     + launches * launch_latency, with scale = min(1, occupancy / saturation).
-    Occupancy is an optimistic static upper bound, not measured utilization.
+    The v2 model can scale compute and memory independently. For corrected times
+    C and M, body time is max(C,M) + k * min(C,M)^2 / max(C,M), with k in [0,1]
+    interpolated from the crossover curve; zero body work costs zero. Fixed
+    batch overhead is added once. The optional wave correction models uniform
+    blocks finishing on the busiest SM; it does not model arbitrary block costs.
+    Occupancy remains an optimistic static upper bound, not measured utilization.
 
     PTXAS spill bytes are static compiler evidence, NOT dynamic grid traffic.
     Nonzero or unknown static spills require explicit total ``spill_traffic_bytes``
