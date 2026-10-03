@@ -1,7 +1,7 @@
 # Proposal: screen range-exchange force tasks by their requested source
 
-Status: proposed; independent numerical gates and full-grid 24-atom comparison pass;
-48/96-atom qualification remains pending
+Status: proposed; independent numerical gates and full-grid 24/48-atom comparisons pass;
+96-atom qualification remains pending
 Date: 2026-10-03
 
 ## Problem
@@ -90,6 +90,36 @@ grid are correctness evidence, not the full-grid performance comparison.
 Raw journals, exact library hashes, terminal receipts and the all-observation
 verifier remain in `.artifacts/exchange-force-screen/`. The verifier checks
 the molecular grid, convergence, all force entries, comparator policy and
-reported medians. n1 Slurm 5499 retains the ongoing full-grid 48-atom run.
+reported medians. n1 Slurm 5499 has completed the full-grid 48-atom run (exit 0).
 Later master `d35ae539f` contains separate low-order full-range force reuse;
 these frozen measurements remain attributed to base `cd08953d5`.
+
+## Completed controlled 48-atom endpoint
+
+n1 Slurm 5499 runs both frozen builds sequentially in one RTX 5090 allocation,
+water48/384 spherical def2-SVP AOs, full 48 x 16 x 32 grid, cold, priming and
+three engine-local warm repeats. All five pairs per build and all independent
+full-Fock reference consistency checks pass. Maximum errors across both builds
+are 1.16e-11 Eh and 6.33e-10 Eh/Bohr.
+
+| Complete endpoint | Base / s | Candidate / s |
+| --- | --- | --- |
+| Native cold | 1175.920684069 | 1153.960843235 |
+| Native priming | 155.593584530 | 131.872031592 |
+| Native warm median | 155.284395609 | 131.989203334 |
+| Fresh reference warm median | 105.602346297 | 105.418984771 |
+
+Native cold uses 21 iterations for both builds; every priming/warm solve uses
+one. The reference uses 16 cold iterations/17 J-K builds and one warm
+iteration/two J-K builds. The native warm improvement is 15.002%, while native
+still takes 1.252x the candidate's independent reference median. The first
+warm integral-derivative component falls from 57.885080 to 34.679230 seconds;
+grid/pair drain stays near 46 seconds. Grid, geometry, collocation and allocation
+work fields remain identical. Actual executed bounded shell-quartet counts are
+not exported and remain unavailable; the timings do not establish a strict
+subset of screened work.
+
+Candidate-only full-grid 96-atom qualification now runs in n1 Slurm 5507 with a
+fresh full-Fock reference and three warm repeats. Its 4-hour finite allocation
+and the latest-master composition remain pending. This larger run is numerical
+and endpoint qualification, not an isolated base/candidate speed comparison.
