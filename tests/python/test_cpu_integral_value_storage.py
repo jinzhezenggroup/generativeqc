@@ -8,15 +8,20 @@ SOURCE = (
 
 
 def test_generated_value_producer_writes_scalar_storage() -> None:
-    quartet = SOURCE.split("void build_value_eri_shell_quartet(", 1)[1].split(
-        "void build_value_eri_shell_quartets(", 1
+    quartet = SOURCE.split("std::size_t build_value_eri_shell_quartet(", 1)[1].split(
+        "std::vector<std::size_t> cartesian_shell_offsets(", 1
     )[0]
-    assert "std::vector<double>& eri" in quartet
+    assert "ValueEriComponents& components" in quartet
     assert "Jet" not in quartet
     assert "generated_eri_cpu::make_geometry" in quartet
     assert "generated_eri_cpu::prepare_coulomb" in quartet
     assert "generated_eri_cpu::prepared_primitive" in quartet
-    assert "store_eri_symmetry" in quartet
+    assert "return count;" in quartet
+    consumer = SOURCE.split("void build_value_eri_shell_quartets(", 1)[1].split(
+        "using ValueEriCartesianBlock", 1
+    )[0]
+    assert "std::vector<double>& eri" in consumer
+    assert "store_eri_symmetry" in consumer
 
 
 def test_dense_jet_storage_and_unpack_are_derivative_only() -> None:
