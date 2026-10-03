@@ -3,7 +3,8 @@
 Run each engine in its own process in the same Slurm GPU allocation. Warm
 measurements reuse the public calculator but never reuse a converged SCC state.
 Every sample retains energy, forces and iteration counts for subsequent gates;
-construction and complete host-visible endpoint times are reported separately.
+construction and host-visible calculation times are recorded separately. The
+comparison also reports cold_total: construction plus the first calculation.
 """
 
 from __future__ import annotations
@@ -62,6 +63,14 @@ def compare_reports(reference: dict, candidate: dict) -> dict:
         raise ValueError("case inventories differ")
     rows = []
     for expected, actual in zip(reference["rows"], candidate["rows"], strict=True):
+        for measured in (expected, actual):
+            construction = measured.get("construction_seconds")
+            if (
+                construction is None
+                or not np.isfinite(construction)
+                or construction < 0
+            ):
+                raise ValueError("missing or invalid calculator construction timing")
         if expected["geometry_sha256"] != actual["geometry_sha256"]:
             raise ValueError("input geometries differ")
         errors = []
@@ -92,9 +101,16 @@ def compare_reports(reference: dict, candidate: dict) -> dict:
                 raise ValueError("nonfinite numerical result")
             errors.append((energy_error, force_error))
         energy_error, force_error = np.max(errors, axis=0).tolist()
-        for mode in ("cold", "warm", "changed"):
-            left = [sample for sample in expected["samples"] if sample["mode"] == mode]
-            right = [sample for sample in actual["samples"] if sample["mode"] == mode]
+        for mode in ("cold", "warm", "changed", "cold_total"):
+            sample_mode = "cold" if mode == "cold_total" else mode
+            left = [
+                sample
+                for sample in expected["samples"]
+                if sample["mode"] == sample_mode
+            ]
+            right = [
+                sample for sample in actual["samples"] if sample["mode"] == sample_mode
+            ]
             if not left or not right:
                 raise ValueError("missing endpoint mode")
             if any(
@@ -103,6 +119,11 @@ def compare_reports(reference: dict, candidate: dict) -> dict:
                 raise ValueError("invalid endpoint timing")
             reference_seconds = median(sample["seconds"] for sample in left)
             candidate_seconds = median(sample["seconds"] for sample in right)
+            if mode == "cold_total":
+                # The APIs assign setup to different phases. Include both
+                # phases so moving work into the constructor cannot hide it.
+                reference_seconds += expected["construction_seconds"]
+                candidate_seconds += actual["construction_seconds"]
             rows.append(
                 {
                     "case": expected["case"],

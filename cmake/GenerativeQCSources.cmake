@@ -32,7 +32,11 @@ function(generativeqc_add_runtime_sources target)
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
       src/runtime/cuda_runtime.cu
+      src/runtime/cuda_device_facts.cpp
       src/runtime/cuda_component_trace.cpp)
+    if(CMAKE_DL_LIBS)
+      target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
+    endif()
   endif()
 endfunction()
 

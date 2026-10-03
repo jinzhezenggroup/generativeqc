@@ -111,6 +111,10 @@ tight FP64 roundoff gate because materialization changes NVCC's FMA boundary.
 `benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
 matched fresh-SCC settings. It records cold, repeated and changed-geometry
 timings, every SCC iteration count, numerical outputs and loaded binary hashes.
+Comparisons retain the separate construction and first-call measurements and
+also report `cold_total`, their sum, because the public APIs assign setup to
+different phases. A cold call is the first call of a new calculator in the
+measurement process; it is not a new process for each molecule.
 Run CUDA measurements inside Slurm as described below; compare the resulting
 JSON files using `--reference`, `--candidate` and `--output`. Both reports must
 use the same geometries and settings, and every sample participates in the
