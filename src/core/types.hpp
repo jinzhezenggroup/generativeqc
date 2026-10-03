@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,19 @@ struct System {
   std::vector<EcpTerm> ecp_terms;
 };
 
+/** One context-owned execution workspace, independent of method interfaces.
+ *
+ * A method may retain at most one workspace here instead of rebuilding its
+ * backend for every prepared calculation. Prepared owners also hold a strong
+ * reference, so replacement cannot invalidate an outstanding calculation.
+ * Acquisition/replacement is protected by the owning API context's mutex;
+ * each concrete workspace owns its scientific identity and execution lock.
+ */
+class ContextWorkspace {
+ public:
+  virtual ~ContextWorkspace() = default;
+};
+
 struct ContextState {
   generativeqc_backend requested_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
   generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
@@ -65,6 +79,7 @@ struct ContextState {
   bool aot_profile_tuned{};
   bool aot_profile_portable{true};
   bool aot_profile_compatible{};
+  std::shared_ptr<ContextWorkspace> workspace;
 };
 
 }  // namespace generativeqc::core

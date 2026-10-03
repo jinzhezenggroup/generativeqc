@@ -707,14 +707,6 @@
       "sha256": "5caca21fb3c48a5e185821603750cf6041331c0f9e67f35255f61f25dc9f3780"
     },
     {
-      "bytes": 291958,
-      "classification": "required-compact-accepted-evidence",
-      "family": "posthf-147",
-      "path": "benchmarks/results/posthf-147/evidence.json",
-      "role": "decision-or-audit-record",
-      "sha256": "6f7ad361e827ce83df319a0a21f957dd7d9d277571e4d5212b90af466a37591f"
-    },
-    {
       "bytes": 217567,
       "classification": "required-compact-accepted-evidence",
       "family": "rccsd-148-c",

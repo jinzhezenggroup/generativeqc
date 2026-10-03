@@ -46,14 +46,45 @@ def force_resource_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("case", ("h2o", "nh3"))
+@pytest.mark.parametrize("case", ("h2o", "nh3", "water2"))
 def test_native_force_exact_cap_and_nested_live_allocations(
     force_resource_probe: Path, tmp_path: Path, case: str
 ) -> None:
     """Use physical converged states large enough to expose the omitted arenas."""
-    inputs = json.loads(
-        (ROOT / "tests/reference_data/cc/gradients" / f"{case}.json").read_text()
-    )["inputs"]
+    if case == "water2":
+        records = json.loads(
+            (
+                ROOT / "tests/reference_data/cc/gradients/water_clusters_ccsdt.json"
+            ).read_text()
+        )
+        atoms = next(
+            row["inputs"]
+            for row in records["rows"]
+            if row["atoms"] == 6 and row["geometry"] == "original"
+        )
+        elements = json.loads(
+            (ROOT / "python/generativeqc/data/basis_pack.json").read_text()
+        )["bases"]["sto-3g"]["elements"]
+        numbers = [{"H": 1, "O": 8}[z] for z, _ in atoms]
+        inputs = {
+            "atomic_numbers": numbers,
+            "coordinates": [xyz for _, xyz in atoms],
+            "shells": [
+                {
+                    "atom_index": i,
+                    "angular_momentum": shell["angular_momentum"],
+                    "primitives": list(
+                        zip(shell["exponents"], shell["coefficients"], strict=True)
+                    ),
+                }
+                for i, z in enumerate(numbers)
+                for shell in elements[str(z)]
+            ],
+        }
+    else:
+        inputs = json.loads(
+            (ROOT / "tests/reference_data/cc/gradients" / f"{case}.json").read_text()
+        )["inputs"]
     rows = [f"{len(inputs['atomic_numbers'])} {len(inputs['shells'])}"]
     rows.extend(
         " ".join(map(str, (z, *xyz)))
@@ -76,7 +107,7 @@ def test_native_force_exact_cap_and_nested_live_allocations(
     (tmp_path / "trace.json").write_text(result.stdout)
     assert result.returncode == 0, result.stdout + result.stderr
     record = json.loads(result.stdout)
-    assert record["nested_peak"] + record["retained"] <= record["planned_peak"]
+    assert record["nested_peak"] + record["retained"] <= record["minimum_peak"]
     assert record["source_reads"] > 0
     # Tie observation to the current generated response arena, whose size may
     # shrink when dead intermediates share storage. An arbitrary historical
@@ -87,6 +118,7 @@ def test_native_force_exact_cap_and_nested_live_allocations(
 
 CPP = r"""
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <fstream>
@@ -183,7 +215,7 @@ int main(int argc,char** argv) {
     trace::start(); bool refused=false;
     try {
       (void)generativeqc::cc::rccsdt_force_cpu(system,force_source,*state.reference,state.problem,
-                                       state.solved,state.eps_o,state.eps_v,plan.peak_bytes-1);
+                                       state.solved,state.eps_o,state.eps_v,plan.minimum_peak_bytes-1);
     } catch(const std::length_error&) { refused=true; }
     trace::active=false;
     if(!refused || trace::largest>=4096 || force_source.reads!=0) return 4;
@@ -204,6 +236,27 @@ int main(int argc,char** argv) {
     trace::active=false;
     if(force.numeric_capacity_bytes!=plan.peak_bytes || force_source.reads==0 ||
        trace::peak+plan.retained_input_bytes>plan.peak_bytes) return 5;
+    const auto tiles=(state.reference->nbf+plan.raw_provider_axis_tile-1)/
+                     plan.raw_provider_axis_tile;
+    if(force_source.reads!=tiles*tiles*tiles*tiles ||
+       force.raw_source_reads!=force_source.reads || force.raw_device_source_reads!=0 ||
+       force.raw_source_values!=state.reference->nbf*state.reference->nbf*
+                                state.reference->nbf*state.reference->nbf) return 8;
+    if(plan.minimum_peak_bytes<plan.peak_bytes) {
+      const auto minimum=generativeqc::cc::plan_rccsdt_force_cpu(
+          system,force_source,*state.reference,state.problem,state.solved,plan.minimum_peak_bytes);
+      force_source.reads=0;
+      trace::start();
+      const auto constrained=generativeqc::cc::rccsdt_force_cpu(
+          system,force_source,*state.reference,state.problem,state.solved,state.eps_o,state.eps_v,
+          plan.minimum_peak_bytes);
+      trace::active=false;
+      if(constrained.numeric_capacity_bytes>plan.minimum_peak_bytes ||
+         trace::peak+minimum.retained_input_bytes>plan.minimum_peak_bytes ||
+         force_source.reads<force.raw_source_reads) return 9;
+      for(std::size_t i=0;i<force.forces.size();++i)
+        if(std::abs(force.forces[i]-constrained.forces[i])>1e-11) return 10;
+    }
     const auto old_capacity=state.problem.foo.capacity();
     state.problem.foo.reserve(old_capacity+32);
     const auto enlarged=generativeqc::cc::plan_rccsdt_force_cpu(
@@ -213,7 +266,11 @@ int main(int argc,char** argv) {
     std::cout << "{\"nested_peak\":" << trace::peak
               << ",\"largest_allocation\":" << trace::largest
               << ",\"triples_arena_bytes\":" << triples_arena_bytes
-              << ",\"source_reads\":" << force_source.reads
+              << ",\"source_reads\":" << force.raw_source_reads
+              << ",\"minimum_source_reads\":" << force_source.reads
+              << ",\"source_tile\":" << plan.raw_provider_axis_tile
+              << ",\"transform_fmas\":" << force.raw_transform_fmas
+              << ",\"minimum_peak\":" << plan.minimum_peak_bytes
               << ",\"retained\":" << plan.retained_input_bytes
               << ",\"planned_peak\":" << plan.peak_bytes << "}\n";
   } catch(const std::exception& e) { std::cerr<<e.what()<<'\n';return 7; }

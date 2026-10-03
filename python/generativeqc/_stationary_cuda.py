@@ -488,7 +488,7 @@ class _CudaSources:
         profile_device: bool = False,
         source_names: tuple[str, ...] = _SOURCE_NAMES,
         integral_derivatives: bool = True,
-        cooperative_becke: bool = False,
+        cooperative_becke: bool | None = None,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
@@ -3102,6 +3102,7 @@ def _complete_rks_cuda_gradient_diagnostic(
             0 if prepared is None else prepared._lease.refreshes
         ),
         snapshot_host_bytes=state._source.values.nbytes,
+        snapshot_grid_cache_work=dict(state._source.grid_cache_work),
         snapshot_export_work=dict(state._source.export_work),
         snapshot_export="explicit native CUDA final-state export; W/frame validation is host work",
         host_scope=(

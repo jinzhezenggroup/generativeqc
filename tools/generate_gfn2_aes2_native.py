@@ -32,6 +32,7 @@ from generativeqc_compiler.method.gfn2_aes2 import (
     build_gfn2_aes2_pair_vjp_compose_program,
     build_gfn2_aes2_radius_from_fraction_program,
 )
+from generativeqc_compiler.method.gfn2_aes2_schedule import emit_gfn2_aes2_schedule
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 
@@ -313,8 +314,11 @@ def _header(*, cuda: bool) -> str:
 #pragma once
 
 #include <cmath>
+#include <cstdint>
 
 namespace generativeqc::xtb::generated {{
+
+{emit_gfn2_aes2_schedule() if cuda else ""}
 
 inline constexpr const char* gfn2_aes2_runtime_version = "{GFN2_AES2_RUNTIME_VERSION}";
 inline constexpr double gfn2_aes2_multipole_max_radius = 5.0;

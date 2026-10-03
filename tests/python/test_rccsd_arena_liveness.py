@@ -40,7 +40,8 @@ def test_cuda_uses_the_same_plan_as_host_admission(programs: Programs) -> None:
     cpu, cuda = programs
     assert {
         "iteration",
-        "replay",
+        "replay_strict",
+        "replay_reassociated",
         "lambda_transpose",
         "hamiltonian_weights",
     } <= cuda.keys()
@@ -55,7 +56,7 @@ def test_every_slot_excludes_live_inputs_and_retains_all_outputs(
     """Check pairwise intervals, independently of the allocator's free lists."""
     cpu, _ = programs
     for name, program in cpu.items():
-        nodes = tuple(program.live_nodes)
+        nodes = codegen._execution_nodes(program)
         numbers = {id(node): index for index, node in enumerate(nodes)}
         outputs = {id(node) for node in program.outputs.values()}
         consumers = defaultdict(list)
@@ -93,7 +94,13 @@ def test_arena_capacity_reduces_without_shape_specialization(
             result *= extents[axis]
         return result
 
-    for name in ("iteration", "replay", "lambda_transpose", "triples_response"):
+    for name in (
+        "iteration",
+        "replay_strict",
+        "replay_reassociated",
+        "lambda_transpose",
+        "triples_response",
+    ):
         program = cpu[name]
         plan = codegen._arena_plan(program)
         old = sum(

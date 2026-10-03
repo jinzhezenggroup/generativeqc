@@ -1,0 +1,304 @@
+{
+  "conclusion": "Both independent RHF and native response identify the same 14 same-space degenerate pairs. Dividing residual roundoff by these gaps can create a spurious cotangent as large as 190.94; the numerical gate remains necessary.",
+  "endpoint_settings": {
+    "basis": "exact repository sto-3g",
+    "basis_representation": "spherical",
+    "budget_bytes": 8589934592,
+    "ccsd_energy_tolerance": 1e-12,
+    "ccsd_max_iterations": 150,
+    "ccsd_residual_tolerance": 1e-10,
+    "device": "cuda",
+    "method": "ccsd(t)",
+    "scf_density_tolerance": 1e-11,
+    "scf_energy_tolerance": 1e-13,
+    "scf_max_iterations": 200
+  },
+  "environment": "node2\nSLURM_JOB_ID=2083 CUDA_VISIBLE_DEVICES=0\nname, uuid, driver_version\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, 595.91.07\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-4b4be14f-ec84-6736-a7d8-968d62900c72, 595.91.07\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-cacd0aaf-c80f-41eb-d7a2-4c3a5970f282, 595.91.07\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-1979d573-6626-6718-5e52-11741b0a9575, 595.91.07\n73c5cec8fc4811538f4877923aa016ea9d9267c10f6a425439ada8daa9fe15d2  libgenerativeqc.so\ne7b8f9295bbb3733631c359a121a7950ee673842fcda21e8bb0cd618c0bf5003  source.tar.gz\n7dee61da009612be03a9139558ec0f2ea432682d1c5683a045189cf6de3e8eba  source.patch\n",
+  "experimental_only": true,
+  "geometry_source": "benchmarks.readme_hf_scaling.scaling_cases()[water-24]",
+  "gres": "gpu:pro6000:1",
+  "independent_rhf": {
+    "basis_pack_sha256": "1bbb5611e5580d033e56eea7e24cf17ef85e58d0d6d67aa25e3732690822d6fe",
+    "energy": -599.8431008584826,
+    "nbf": 56,
+    "near_same_space_pairs": [
+      {
+        "gap": -1.0302869668521453e-13,
+        "p": 2,
+        "q": 3
+      },
+      {
+        "gap": -2.1316282072803006e-14,
+        "p": 4,
+        "q": 5
+      },
+      {
+        "gap": -1.021405182655144e-14,
+        "p": 10,
+        "q": 11
+      },
+      {
+        "gap": -1.0658141036401503e-14,
+        "p": 12,
+        "q": 13
+      },
+      {
+        "gap": -4.440892098500626e-15,
+        "p": 17,
+        "q": 18
+      },
+      {
+        "gap": -9.992007221626409e-16,
+        "p": 22,
+        "q": 23
+      },
+      {
+        "gap": -1.5210055437364645e-14,
+        "p": 26,
+        "q": 27
+      },
+      {
+        "gap": -3.0531133177191805e-15,
+        "p": 29,
+        "q": 30
+      },
+      {
+        "gap": -1.6653345369377348e-15,
+        "p": 33,
+        "q": 34
+      },
+      {
+        "gap": -1.3489209749195652e-14,
+        "p": 36,
+        "q": 37
+      },
+      {
+        "gap": -2.4091839634365897e-14,
+        "p": 41,
+        "q": 42
+      },
+      {
+        "gap": -3.852473895449293e-14,
+        "p": 44,
+        "q": 45
+      },
+      {
+        "gap": -1.3766765505351941e-14,
+        "p": 51,
+        "q": 52
+      },
+      {
+        "gap": -1.5765166949677223e-14,
+        "p": 53,
+        "q": 54
+      }
+    ],
+    "nocc": 40,
+    "orbital_energies": [
+      -20.22258727962985,
+      -20.222575861218694,
+      -20.222562960660515,
+      -20.22256296066041,
+      -20.221617143135738,
+      -20.221617143135717,
+      -20.221604081620463,
+      -20.22153722840964,
+      -1.2790691454383496,
+      -1.2668852680146294,
+      -1.2643372597301399,
+      -1.2643372597301297,
+      -1.2495125982893491,
+      -1.2495125982893385,
+      -1.2468851611322096,
+      -1.2351787124766407,
+      -0.6318016492486013,
+      -0.6277624513042094,
+      -0.6277624513042049,
+      -0.6245241267745282,
+      -0.611723433531696,
+      -0.6091580282845334,
+      -0.6071034669303145,
+      -0.6071034669303135,
+      -0.5123740556303448,
+      -0.4751296510350246,
+      -0.4725840537996927,
+      -0.4725840537996775,
+      -0.4427275944185417,
+      -0.44255918594060256,
+      -0.4425591859405995,
+      -0.41085168779435344,
+      -0.38013514483467575,
+      -0.3789696089654602,
+      -0.37896960896545856,
+      -0.37627819321001665,
+      -0.36885300862337705,
+      -0.36885300862336357,
+      -0.3665393273633276,
+      -0.365300775590676,
+      0.5297738322474372,
+      0.5962475526342388,
+      0.5962475526342629,
+      0.5968580519133342,
+      0.6681290335720192,
+      0.6681290335720578,
+      0.6683050498426217,
+      0.7120902823172713,
+      0.7719809410381736,
+      0.7740718980167755,
+      0.7788883463961795,
+      0.7820817131178135,
+      0.7820817131178273,
+      0.7853554257377419,
+      0.7853554257377576,
+      0.785406434060367
+    ],
+    "pyscf": "2.14.0"
+  },
+  "limitations": [
+    "This is a failed experimental force endpoint, not 56-AO force qualification or a force speedup.",
+    "The diagonal denominator cotangents agree within each observed pair, but that alone does not prove the full degenerate-block adjoint or justify setting off-diagonal response to zero.",
+    "A general extension needs a gauge-invariant derivative of the triples denominator operator, independent gradient/rotation tests and complete resource qualification."
+  ],
+  "native_log": "force_frontier n=56 o=40 v=16\npair p=2 q=3 gap=-8.5265128291212022e-14 stationarity=4.2182240773264157e-19 eps_bar_p=-3.2354548089452981e-08 eps_bar_q=-3.2354548089451115e-08\npair p=4 q=5 gap=-5.3290705182007514e-14 stationarity=1.5953865561534747e-18 eps_bar_p=-3.377283417553899e-08 eps_bar_q=-3.377283417553038e-08\npair p=10 q=11 gap=-2.042810365310288e-14 stationarity=4.9682480351975755e-15 eps_bar_p=-3.6510424906441203e-05 eps_bar_q=-3.6510424906441406e-05\npair p=12 q=13 gap=-1.4432899320127035e-14 stationarity=-1.1744077932362984e-15 eps_bar_p=-3.9192353180955063e-05 eps_bar_q=-3.9192353180952332e-05\npair p=17 q=18 gap=-9.2148511043887993e-15 stationarity=-1.4193155114736178e-14 eps_bar_p=-6.3578390235463904e-05 eps_bar_q=-6.3578390235465951e-05\npair p=22 q=23 gap=-1.1102230246251565e-15 stationarity=7.1849806920071257e-15 eps_bar_p=-6.6315786343460321e-05 eps_bar_q=-6.6315786343460714e-05\npair p=26 q=27 gap=-6.6613381477509392e-15 stationarity=5.8751224371600408e-13 eps_bar_p=-7.0773331736985763e-05 eps_bar_q=-7.0773331736977388e-05\npair p=29 q=30 gap=-1.9428902930940239e-15 stationarity=-7.4195337373961223e-13 eps_bar_p=-7.6095168687303149e-05 eps_bar_q=-7.6095168687320388e-05\npair p=33 q=34 gap=-1.609823385706477e-14 stationarity=-2.2985180924382786e-14 eps_bar_p=-7.5893161885291833e-05 eps_bar_q=-7.5893161885292782e-05\npair p=36 q=37 gap=-7.2164496600635175e-15 stationarity=1.637400610064732e-13 eps_bar_p=-0.000105093214409607 eps_bar_q=-0.00010509321440962735\npair p=41 q=42 gap=-1.8762769116165146e-14 stationarity=2.641701961347831e-13 eps_bar_p=0.00013681122691842245 eps_bar_q=0.00013681122691841394\npair p=44 q=45 gap=-5.9952043329758453e-15 stationarity=1.610466588645304e-13 eps_bar_p=0.00013966468753332629 eps_bar_q=0.00013966468753331751\npair p=51 q=52 gap=-9.9920072216264089e-16 stationarity=2.1906146923424954e-14 eps_bar_p=0.00013601886571119081 eps_bar_q=0.00013601886571144913\npair p=53 q=54 gap=-2.1094237467877974e-15 stationarity=2.3367423176556129e-14 eps_bar_p=0.00011588321913505826 eps_bar_q=0.00011588321913481739\nTraceback (most recent call last):\n  File \"/home/jzzeng/codes/cc-force-frontier-20261003/diagnose-force56.py\", line 10, in <module>\n    result=calc.singlepoint(scaling_cases()['water-24'].atoms,properties=('energy','forces'))\n  File \"/home/jzzeng/codes/cc-force-frontier-20261003/python/generativeqc/calculator.py\", line 2312, in singlepoint\n    _native.check(self._library, status, context=context)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/jzzeng/codes/cc-force-frontier-20261003/python/generativeqc/_native.py\", line 1418, in check\n    raise RuntimeError(f\"GENERATIVEQC error {status}: {message}\")\nRuntimeError: GENERATIVEQC error 5: degenerate RCCSD(T) canonical occupied/virtual subspace\nelapsed_seconds 287.29440100397915\n",
+  "native_response": {
+    "max_diagonal_cotangent_difference": 2.5831116759467143e-16,
+    "max_null_stationarity": 7.419533737396122e-13,
+    "max_unsafe_division": 190.940625,
+    "pairs": [
+      {
+        "eps_bar_p": -3.235454808945298e-08,
+        "eps_bar_q": -3.2354548089451115e-08,
+        "gap": -8.526512829121202e-14,
+        "p": 2,
+        "q": 3,
+        "stationarity": 4.2182240773264157e-19,
+        "unsafe_division": 2.473592758178711e-06
+      },
+      {
+        "eps_bar_p": -3.377283417553899e-08,
+        "eps_bar_q": -3.377283417553038e-08,
+        "gap": -5.3290705182007514e-14,
+        "p": 4,
+        "q": 5,
+        "stationarity": 1.5953865561534747e-18,
+        "unsafe_division": 1.4968713124593099e-05
+      },
+      {
+        "eps_bar_p": -3.65104249064412e-05,
+        "eps_bar_q": -3.6510424906441406e-05,
+        "gap": -2.042810365310288e-14,
+        "p": 10,
+        "q": 11,
+        "stationarity": 4.9682480351975755e-15,
+        "unsafe_division": 0.12160326086956522
+      },
+      {
+        "eps_bar_p": -3.919235318095506e-05,
+        "eps_bar_q": -3.919235318095233e-05,
+        "gap": -1.4432899320127035e-14,
+        "p": 12,
+        "q": 13,
+        "stationarity": -1.1744077932362984e-15,
+        "unsafe_division": -0.040685096153846155
+      },
+      {
+        "eps_bar_p": -6.35783902354639e-05,
+        "eps_bar_q": -6.357839023546595e-05,
+        "gap": -9.2148511043888e-15,
+        "p": 17,
+        "q": 18,
+        "stationarity": -1.4193155114736178e-14,
+        "unsafe_division": -0.7701239528426205
+      },
+      {
+        "eps_bar_p": -6.631578634346032e-05,
+        "eps_bar_q": -6.631578634346071e-05,
+        "gap": -1.1102230246251565e-15,
+        "p": 22,
+        "q": 23,
+        "stationarity": 7.184980692007126e-15,
+        "unsafe_division": 3.23582763671875
+      },
+      {
+        "eps_bar_p": -7.077333173698576e-05,
+        "eps_bar_q": -7.077333173697739e-05,
+        "gap": -6.661338147750939e-15,
+        "p": 26,
+        "q": 27,
+        "stationarity": 5.875122437160041e-13,
+        "unsafe_division": 44.09866536458333
+      },
+      {
+        "eps_bar_p": -7.609516868730315e-05,
+        "eps_bar_q": -7.609516868732039e-05,
+        "gap": -1.942890293094024e-15,
+        "p": 29,
+        "q": 30,
+        "stationarity": -7.419533737396122e-13,
+        "unsafe_division": -190.940625
+      },
+      {
+        "eps_bar_p": -7.589316188529183e-05,
+        "eps_bar_q": -7.589316188529278e-05,
+        "gap": -1.609823385706477e-14,
+        "p": 33,
+        "q": 34,
+        "stationarity": -2.2985180924382786e-14,
+        "unsafe_division": -0.71390380859375
+      },
+      {
+        "eps_bar_p": -0.000105093214409607,
+        "eps_bar_q": -0.00010509321440962735,
+        "gap": -7.216449660063518e-15,
+        "p": 36,
+        "q": 37,
+        "stationarity": 1.637400610064732e-13,
+        "unsafe_division": 11.344918118990385
+      },
+      {
+        "eps_bar_p": 0.00013681122691842245,
+        "eps_bar_q": 0.00013681122691841394,
+        "gap": -1.8762769116165146e-14,
+        "p": 41,
+        "q": 42,
+        "stationarity": 2.641701961347831e-13,
+        "unsafe_division": 7.0397443602071
+      },
+      {
+        "eps_bar_p": 0.0001396646875333263,
+        "eps_bar_q": 0.0001396646875333175,
+        "gap": -5.995204332975845e-15,
+        "p": 44,
+        "q": 45,
+        "stationarity": 1.610466588645304e-13,
+        "unsafe_division": 13.431290237991899
+      },
+      {
+        "eps_bar_p": 0.00013601886571119081,
+        "eps_bar_q": 0.00013601886571144913,
+        "gap": -9.992007221626409e-16,
+        "p": 51,
+        "q": 52,
+        "stationarity": 2.1906146923424954e-14,
+        "unsafe_division": 10.961835013495552
+      },
+      {
+        "eps_bar_p": 0.00011588321913505826,
+        "eps_bar_q": 0.00011588321913481739,
+        "gap": -2.1094237467877974e-15,
+        "p": 53,
+        "q": 54,
+        "stationarity": 2.336742317655613e-14,
+        "unsafe_division": 5.538816753186677
+      }
+    ],
+    "status": "rejected_by_unchanged_numerical_gate"
+  },
+  "partition": "main",
+  "patch": "diff --git a/src/cc/rccsdt_force.cpp b/src/cc/rccsdt_force.cpp\nindex 6a0b0a902..173972eae 100644\n--- a/src/cc/rccsdt_force.cpp\n+++ b/src/cc/rccsdt_force.cpp\n@@ -5,6 +5,7 @@\n #include <chrono>\n #include <cmath>\n #include <cstddef>\n+#include <cstdio>\n #include <limits>\n #include <memory>\n #include <numeric>\n@@ -720,6 +721,23 @@ static RccsdtForceResult relaxed_rccsd_force_impl(\n   }\n   auto correlation = control_dispatch(parameters, 0.0);\n \n+  // Diagnostic-only branch: retain the production rejection after recording\n+  // the null-space RHS and diagonal denominator cotangents for every near pair.\n+  std::fprintf(stderr, \"force_frontier n=%zu o=%zu v=%zu\\n\", n, o, v);\n+  for (const auto& bounds :\n+       {std::pair<std::size_t, std::size_t>{0, o}, std::pair<std::size_t, std::size_t>{o, n}}) {\n+    for (std::size_t p = bounds.first; p < bounds.second; ++p)\n+      for (std::size_t q = p + 1; q < bounds.second; ++q) {\n+        const double gap = reference.orbital_energies[p] - reference.orbital_energies[q];\n+        if (std::abs(gap) <= 1e-8) {\n+          const double bp = !triples ? 0.0 : p < o ? triples->eps_o[p] : triples->eps_v[p-o];\n+          const double bq = !triples ? 0.0 : q < o ? triples->eps_o[q] : triples->eps_v[q-o];\n+          std::fprintf(stderr, \"pair p=%zu q=%zu gap=%.17g stationarity=%.17g eps_bar_p=%.17g eps_bar_q=%.17g\\n\",\n+                       p, q, gap, correlation.stationarity[p*n+q], bp, bq);\n+        }\n+      }\n+  }\n+  std::fflush(stderr);\n   double minimum_same_space_gap = std::numeric_limits<double>::infinity();\n   for (const auto& bounds :\n        {std::pair<std::size_t, std::size_t>{0, o}, std::pair<std::size_t, std::size_t>{o, n}}) {\ndiff --git a/src/cc/rccsdt_force.hpp b/src/cc/rccsdt_force.hpp\nindex 4f8656c96..d483b9275 100644\n--- a/src/cc/rccsdt_force.hpp\n+++ b/src/cc/rccsdt_force.hpp\n@@ -22,7 +22,7 @@ class ElectronInteractionSource;\n namespace generativeqc::cc {\n \n /** Public conventional CCSD(T) force qualification; CCSD keeps its own limit. */\n-inline constexpr std::size_t kRccsdtForceMaxAOs = 28;\n+inline constexpr std::size_t kRccsdtForceMaxAOs = 56;\n \n /** Conservative simultaneous numeric peaks for the serialized force phases.\n  * Every phase includes borrowed molecule/CC/reference inputs once and all earlier\n",
+  "patch_description": "Raise the admission cap to 56 only in an isolated diagnostic build and print near-pair data before the unchanged 1e-10 rejection. No force result is published.",
+  "patch_sha256": "7dee61da009612be03a9139558ec0f2ea432682d1c5683a045189cf6de3e8eba",
+  "schema": "generativeqc.cc-degenerate-frontier.v1",
+  "source_base_commit": "6fe3eb7da",
+  "time_limit": "00:25:00"
+}

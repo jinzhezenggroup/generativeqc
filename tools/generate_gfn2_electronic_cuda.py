@@ -20,6 +20,9 @@ from generativeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_runtime_electronic_pair_vjp,
     build_gfn2_runtime_overlap_vjp,
 )
+from generativeqc_compiler.method.gfn2_electronic_schedule import (
+    emit_gfn2_electronic_schedule,
+)
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -185,12 +188,15 @@ def cuda_header() -> str:
 #pragma once
 
 #include <cmath>
+#include <cstdint>
 
 namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_electronic_pair_version = "{GFN2_ELECTRONIC_PAIR_VERSION}";
 inline constexpr const char* gfn2_electronic_pair_primal_hash = "{primal.logical_hash}";
 inline constexpr const char* gfn2_electronic_pair_vjp_hash = "{vjp.logical_hash}";
+
+{emit_gfn2_electronic_schedule()}
 
 struct Gfn2ElectronicPairIntegrals {{
   double overlap = 0.0;

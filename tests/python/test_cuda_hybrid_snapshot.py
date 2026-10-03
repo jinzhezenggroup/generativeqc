@@ -63,3 +63,102 @@ def test_cuda_hybrid_snapshot_matches_cpu_composition_and_state(method: str) -> 
     assert exported["cuda"][0] == pytest.approx(exported["cpu"][0], abs=2e-9)
     for cpu, cuda in zip(exported["cpu"][1:], exported["cuda"][1:], strict=True):
         np.testing.assert_allclose(cuda, cpu, atol=2e-8, rtol=0)
+
+
+@pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks", "pbe-rks"))
+@pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+def test_separate_full_range_derivatives_match_libcint(
+    method: str, representation: str
+) -> None:
+    """One shell traversal must still publish independent J'/K' source channels.
+
+    The fixed final density removes SCF differences from this derivative gate.
+    Libcint evaluates the independent analytic integral derivatives, including
+    the d-shell classes that use the shared high-order recurrence on CUDA.
+    """
+    from pyscf import gto
+    from pyscf.grad import rhf
+
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
+    unrestricted = method.endswith("uks")
+    charge, multiplicity = (1, 2) if unrestricted else (0, 1)
+    calculator = Calculator(
+        method=method,
+        device="cuda",
+        basis="def2-svp",
+        basis_representation=representation,
+        ks_options=KsOptions(
+            grid=GridSpec(radial_points=24, angular_polar=8, angular_azimuth=16)
+        ),
+        max_iterations=200,
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-14,
+    )
+    molecule = gto.M(
+        atom=atoms,
+        basis="def2-svp",
+        unit="Bohr",
+        charge=charge,
+        spin=multiplicity - 1,
+        cart=representation == "cartesian",
+        verbose=0,
+    )
+    with (
+        calculator.prepare_batch(
+            [atoms], charges=[charge], multiplicities=[multiplicity]
+        ) as batch,
+        NativeAO(
+            atoms,
+            basis="def2-svp",
+            representation="real_spherical"
+            if representation == "spherical"
+            else representation,
+            charge=charge,
+            multiplicity=multiplicity,
+        ) as basis,
+    ):
+        batch.execute(properties=("energy",), strict=True)
+        state = StationaryKsState.from_native(batch, basis)
+        try:
+            actual = state._source.cuda_full_range_derivatives(len(atoms))
+            assert actual is not None
+            overlap = molecule.intor("int1e_ovlp")
+            norms = np.sqrt(np.diag(overlap))
+            normalization = np.outer(norms, norms)
+            np.testing.assert_allclose(
+                state.overlap, overlap / normalization, atol=2e-12
+            )
+            density = np.asarray(state.density) / normalization
+            total_density = density.sum(axis=0)
+            coulomb, _ = rhf.get_jk(molecule, total_density)
+            exchange = [
+                rhf.get_jk(molecule, spin_density)[1] for spin_density in density
+            ]
+            # The snapshot carries the signed Fock coefficient: -alpha/2 for
+            # RKS and -alpha for UKS, not the positive exchange fraction.
+            exchange_coefficient = state._source.coefficients[2]
+            expected = np.zeros_like(actual)
+            for atom, (_, _, begin, end) in enumerate(molecule.aoslice_by_atom()):
+                expected[0, atom] = 2 * np.einsum(
+                    "xij,ij->x", coulomb[:, begin:end], total_density[begin:end]
+                )
+                expected[1, atom] = (
+                    2
+                    * exchange_coefficient
+                    * sum(
+                        np.einsum(
+                            "xij,ij->x", response[:, begin:end], spin_density[begin:end]
+                        )
+                        for response, spin_density in zip(
+                            exchange, density, strict=True
+                        )
+                    )
+                )
+            np.testing.assert_allclose(actual, expected, atol=1e-8, rtol=0)
+            np.testing.assert_allclose(actual.sum(axis=1), 0, atol=2e-10, rtol=0)
+            if not exchange_coefficient:
+                np.testing.assert_array_equal(actual[1], 0)
+        finally:
+            state._source.close()

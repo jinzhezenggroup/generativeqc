@@ -12,7 +12,7 @@
 namespace generativeqc::xtb::detail::cuda {
 namespace {
 
-constexpr int kThreadsPerBlock = 256;
+constexpr int kThreadsPerBlock = generativeqc::xtb::generated::gfn2_electronic_threads;
 constexpr std::int64_t kMaximumInt64 = 9223372036854775807LL;
 
 struct SystemRanges {
@@ -286,7 +286,10 @@ __global__ void assemble_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch,
   const std::int64_t matrix_begin = batch.matrix_offsets[system];
   const std::int64_t matrix_elements = orbitals * orbitals;
 
-  for (std::int64_t local = threadIdx.x; local < matrix_elements; local += blockDim.x) {
+  // Each upper-triangle entry has one owner across the compiler-selected
+  // tiles. No reduction order changes; publication waits for every tile.
+  for (std::int64_t local = std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       local < matrix_elements; local += std::int64_t{gridDim.y} * blockDim.x) {
     const std::int64_t local_row = local / orbitals;
     const std::int64_t local_column = local - local_row * orbitals;
     if (local_column < local_row) {
@@ -375,8 +378,8 @@ __global__ void assemble_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch,
       }
     }
     double shift = 0.0;
-    if (finite && !generativeqc::xtb::generated::evaluate_gfn2_electronic_pair(pair_integrals,
-                                                                         pair_potentials, shift)) {
+    if (finite && !generativeqc::xtb::generated::evaluate_gfn2_electronic_pair(
+                      pair_integrals, pair_potentials, shift)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2HamiltonianDeviceError::kNonfiniteAssemblyArithmetic);
       finite = false;
@@ -427,7 +430,8 @@ __global__ void assemble_spin_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batc
   const std::int64_t spin_atom_begin = layout.spin_atom_offsets[system];
   const int channels = layout.spin_channels[system];
 
-  for (std::int64_t local = threadIdx.x; local < matrix_elements; local += blockDim.x) {
+  for (std::int64_t local = std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       local < matrix_elements; local += std::int64_t{gridDim.y} * blockDim.x) {
     const std::int64_t local_row = local / orbitals;
     const std::int64_t local_column = local - local_row * orbitals;
     if (local_column < local_row) {
@@ -647,7 +651,10 @@ __global__ void publish_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch,
   }
   const std::int64_t begin = batch.matrix_offsets[system];
   const std::int64_t end = batch.matrix_offsets[system + 1];
-  for (std::int64_t element = begin + threadIdx.x; element < end; element += blockDim.x) {
+  // The preceding assembly launch has settled every tile's system error.
+  // Publication tiles only copy disjoint entries from the accepted matrix.
+  for (std::int64_t element = begin + std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       element < end; element += std::int64_t{gridDim.y} * blockDim.x) {
     output.matrix[element] = workspace.matrix_scratch[element];
   }
 }
@@ -665,7 +672,10 @@ __global__ void publish_spin_hamiltonian_kernel(Gfn2HamiltonianDeviceBatch batch
   }
   const std::int64_t begin = layout.spin_matrix_offsets[system];
   const std::int64_t end = layout.spin_matrix_offsets[system + 1];
-  for (std::int64_t element = begin + threadIdx.x; element < end; element += blockDim.x) {
+  // The preceding assembly launch has settled every tile's system error.
+  // Publication tiles only copy disjoint entries from the accepted matrix.
+  for (std::int64_t element = begin + std::int64_t{blockIdx.y} * blockDim.x + threadIdx.x;
+       element < end; element += std::int64_t{gridDim.y} * blockDim.x) {
     output.matrix[element] = workspace.matrix_scratch[element];
   }
 }
@@ -994,15 +1004,16 @@ cudaError_t assemble_gfn2_hamiltonian_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  assemble_hamiltonian_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
-                                stream>>>(batch, input, activity, workspace, system_errors,
-                                          device_error);
+  const dim3 assembly_grid(static_cast<unsigned>(batch.batch_size),
+                           generativeqc::xtb::generated::gfn2_electronic_matrix_tiles(
+                               batch.total_matrix_elements, batch.batch_size));
+  assemble_hamiltonian_kernel<<<assembly_grid, kThreadsPerBlock, 0, stream>>>(
+      batch, input, activity, workspace, system_errors, device_error);
   status = check_launch();
   if (status != cudaSuccess) {
     return status;
   }
-  publish_hamiltonian_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock, 0,
-                               stream>>>(batch, activity, output, workspace, system_errors);
+  publish_hamiltonian_kernel<<<assembly_grid, kThreadsPerBlock, 0, stream>>>(batch, activity, output, workspace, system_errors);
   return check_launch();
 }
 
@@ -1036,15 +1047,16 @@ cudaError_t assemble_gfn2_spin_hamiltonian_cuda(
   if (status != cudaSuccess) {
     return status;
   }
-  assemble_spin_hamiltonian_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock,
-                                     0, stream>>>(batch, layout, input, activity, workspace,
-                                                  system_errors, device_error);
+  const dim3 assembly_grid(static_cast<unsigned>(batch.batch_size),
+                           generativeqc::xtb::generated::gfn2_electronic_matrix_tiles(
+                               batch.total_matrix_elements, batch.batch_size));
+  assemble_spin_hamiltonian_kernel<<<assembly_grid, kThreadsPerBlock, 0, stream>>>(
+      batch, layout, input, activity, workspace, system_errors, device_error);
   status = check_launch();
   if (status != cudaSuccess) {
     return status;
   }
-  publish_spin_hamiltonian_kernel<<<static_cast<unsigned int>(batch.batch_size), kThreadsPerBlock,
-                                    0, stream>>>(batch, layout, activity, output, workspace,
+  publish_spin_hamiltonian_kernel<<<assembly_grid, kThreadsPerBlock, 0, stream>>>(batch, layout, activity, output, workspace,
                                                  system_errors);
   return check_launch();
 }

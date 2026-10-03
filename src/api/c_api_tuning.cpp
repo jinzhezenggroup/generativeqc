@@ -7,7 +7,7 @@
 
 #include <cstdio>
 
-#include "runtime/cuda_target_info.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include "scf/aot_shell_registry.hpp"
 #endif
 
@@ -23,26 +23,25 @@ generativeqc_status generativeqc_cuda_tuning_device(
   }
 #if GENERATIVEQC_HAS_CUDA
   int previous = 0;
-  cudaDeviceProp properties{};
+  generativeqc::runtime::CudaTargetInfo target{};
+  char device_name[256]{};
   if (cudaGetDevice(&previous) != cudaSuccess ||
-      cudaGetDeviceProperties(&properties, device_id) != cudaSuccess ||
+      generativeqc::runtime::cuda_device_facts(device_id, target, device_name) != cudaSuccess ||
       cudaSetDevice(device_id) != cudaSuccess)
     return GENERATIVEQC_STATUS_CUDA_ERROR;
-  const generativeqc::runtime::CudaTargetInfo target =
-      generativeqc::runtime::cuda_target_info_from_properties(properties);
   // Registry selection is device-scoped. Restore the caller's current device,
   // including after a failed probe, before exposing any usable identity.
   const cudaError_t runtime = cudaRuntimeGetVersion(&output->runtime_version);
   const cudaError_t driver = cudaDriverGetVersion(&output->driver_version);
-  generativeqc::scf::generated::select_profile_for_device(device_id, properties.major,
-                                                          properties.minor);
+  generativeqc::scf::generated::select_profile_for_device(
+      device_id, target.compute_capability_major, target.compute_capability_minor);
   const auto& profile = generativeqc::scf::generated::selected_profile();
   std::snprintf(output->official_profile, sizeof(output->official_profile), "%s", profile.name);
   output->portable = profile.portable ? 1 : 0;
   const cudaError_t restored = cudaSetDevice(previous);
   if (runtime != cudaSuccess || driver != cudaSuccess || restored != cudaSuccess)
     return GENERATIVEQC_STATUS_CUDA_ERROR;
-  std::snprintf(output->name, sizeof(output->name), "%s", properties.name);
+  std::snprintf(output->name, sizeof(output->name), "%s", device_name);
   output->major = target.compute_capability_major;
   output->minor = target.compute_capability_minor;
   output->warp_size = static_cast<int32_t>(target.warp_size);
