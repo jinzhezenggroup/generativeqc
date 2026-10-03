@@ -85,8 +85,10 @@ def test_nonlocal_pair_generation_is_standalone_and_deterministic(
     assert first == second
     assert str(ROOT) not in first
     assert str(tmp_path) not in first
-    assert first.count("// TensorIR logical hash: ") == 12
-    assert first.count("GENERATIVEQC_NONLOCAL_PAIR_HD inline bool pair_") == 12
+    # Twelve unchanged ordered closures plus the separately versioned, bounded
+    # VV10 derivative policies; the latter never replaces the fallback.
+    assert first.count("// TensorIR logical hash: ") == 17
+    assert first.count("GENERATIVEQC_NONLOCAL_PAIR_HD inline bool pair_") == 16
     assert "#define GENERATIVEQC_NONLOCAL_PAIR_HD __host__ __device__" in first
     # The runtime owns numerical failure observation, including outputs that
     # are not consumed physically but remain part of raw CPU admission.
@@ -312,7 +314,29 @@ def native_pair_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
         )
     source, library = directory / "pair_probe.cpp", directory / "pair_probe.so"
     source.write_text(
-        _LEGACY_CPP + "\n".join(branches) + "\n  }\n}\n", encoding="utf-8"
+        _LEGACY_CPP
+        + "\n".join(branches)
+        + "\n  }\n}\n"
+        + r"""
+extern "C" void denominator_probe(int geometry, const double* x, double* actual, double* expected) {
+  const bool g = geometry & 1;
+  const bool admitted = geometry & 2;
+  const auto a = admitted
+      ? (g ? generated::pair_values_vv10_admitted<true>(x[0], x[1], x[2], x[3], x[4])
+           : generated::pair_values_vv10_admitted<false>(x[0], x[1], x[2], x[3], x[4]))
+      : g
+      ? generated::pair_values_vv10_rational<true>(x[0], x[1], x[2], x[3], x[4], x[5])
+      : generated::pair_values_vv10_rational<false>(x[0], x[1], x[2], x[3], x[4], x[5]);
+  const auto b = g
+      ? legacy_cuda<Vv10Variant::vv10, true, true>(x[0], x[1], x[2], x[3], x[4], x[5])
+      : legacy_cuda<Vv10Variant::vv10, true, false>(x[0], x[1], x[2], x[3], x[4], x[5]);
+  actual[0] = a.phi; actual[1] = a.dphi_domega;
+  actual[2] = a.dphi_dkappa; actual[3] = a.dphi_dr2;
+  expected[0] = b.phi; expected[1] = b.dphi_domega;
+  expected[2] = b.dphi_dkappa; expected[3] = b.dphi_dr2;
+}
+""",
+        encoding="utf-8",
     )
     subprocess.run(
         [
@@ -335,6 +359,8 @@ def native_pair_probe(tmp_path_factory: pytest.TempPathFactory) -> ct.CDLL:
     native = ct.CDLL(str(library))
     native.pair_probe.argtypes = [ct.c_int, *(ct.POINTER(ct.c_double),) * 3]
     native.pair_probe.restype = None
+    native.denominator_probe.argtypes = [ct.c_int, *([ct.POINTER(ct.c_double)] * 3)]
+    native.denominator_probe.restype = None
     return native
 
 
@@ -352,6 +378,135 @@ def _same_fp64(actual: float, expected: float) -> bool:
         return math.isnan(actual)
     # This also distinguishes infinity signs, signed zero, and every finite ULP.
     return struct.pack("=d", actual) == struct.pack("=d", expected)
+
+
+def _evaluate_denominator(
+    native: ct.CDLL,
+    values: tuple[float, ...],
+    geometry: bool = True,
+    admitted: bool = False,
+) -> tuple[list[float], list[float]]:
+    inputs = (ct.c_double * 6)(*values)
+    actual, expected = (ct.c_double * 4)(), (ct.c_double * 4)()
+    native.denominator_probe(
+        int(geometry) | (2 if admitted else 0), inputs, actual, expected
+    )
+    return list(actual), list(expected)
+
+
+@pytest.mark.parametrize("geometry", [False, True])
+def test_rational_derivatives_preserve_energy_and_reduce_divisions(
+    geometry: bool,
+) -> None:
+    from generativeqc_compiler.method.nonlocal_pair import build_nonlocal_pair_program
+    from generativeqc_compiler.tensor.program import node_hashes
+
+    ordered = build_nonlocal_pair_program("vv10", geometry=geometry)
+    shared = build_nonlocal_pair_program(
+        "vv10", geometry=geometry, rational_derivatives=True
+    )
+    hashes, old = node_hashes(shared.live_nodes), node_hashes(ordered.live_nodes)
+    assert hashes[shared.outputs["phi"]] == old[ordered.outputs["phi"]]
+    for name in shared.outputs:
+        if name != "phi":
+            assert hashes[shared.outputs[name]] != old[ordered.outputs[name]]
+    assert sum(n.op == "divide" for n in ordered.live_nodes) == (6 if geometry else 3)
+    assert sum(n.op == "divide" for n in shared.live_nodes) == 1
+    with pytest.raises(ValueError, match="require VV10"):
+        build_nonlocal_pair_program("vv10", rational_derivatives=True, features=False)
+    with pytest.raises(ValueError, match="require VV10"):
+        build_nonlocal_pair_program("rvv10", rational_derivatives=True)
+
+
+@pytest.mark.parametrize("geometry", [False, True])
+def test_unit_reciprocal_energy_has_distinct_identity(geometry: bool) -> None:
+    from generativeqc_compiler.method.nonlocal_pair import build_nonlocal_pair_program
+    from generativeqc_compiler.tensor.program import node_hashes
+
+    previous = build_nonlocal_pair_program(
+        "vv10", geometry=geometry, rational_derivatives=True
+    )
+    unit = build_nonlocal_pair_program(
+        "vv10", geometry=geometry, rational_derivatives=True, reciprocal_energy=True
+    )
+    assert unit.logical_hash != previous.logical_hash
+    assert (
+        node_hashes(unit.live_nodes)[unit.outputs["phi"]]
+        != node_hashes(previous.live_nodes)[previous.outputs["phi"]]
+    )
+    assert sum(n.op == "divide" for n in unit.live_nodes) == 1
+    with pytest.raises(ValueError, match="requires bounded"):
+        build_nonlocal_pair_program("vv10", reciprocal_energy=True)
+
+
+@pytest.mark.parametrize("geometry", [False, True])
+def test_rational_derivatives_retain_ordered_extreme_fallback(
+    native_pair_probe: ct.CDLL,
+    geometry: bool,
+) -> None:
+    lower, upper = 2.0**-32, 2.0**32
+    cases = _pair_cases()
+    for index in range(6):
+        for bound in (lower, upper):
+            for value in (
+                math.nextafter(bound, 0),
+                bound,
+                math.nextafter(bound, math.inf),
+            ):
+                sample = [0.75, 0.9, 1.1, 1.2, 1.4, 1.0 / 1.2]
+                sample[index] = value
+                cases.append(tuple(sample))
+    for values in cases:
+        actual, expected = _evaluate_denominator(native_pair_probe, values, geometry)
+        admitted = 0 <= values[0] <= upper and all(
+            lower <= v <= upper for v in values[1:5]
+        )
+        for i, (a, b) in enumerate(zip(actual, expected, strict=True)):
+            if admitted:
+                assert a == pytest.approx(b, rel=2e-15, abs=0), values
+            else:
+                assert _same_fp64(a, b), (values, i, a, b)
+
+
+@pytest.mark.parametrize("geometry", [False, True])
+@pytest.mark.parametrize("admitted", [False, True])
+def test_rational_derivatives_match_high_precision_energy_differences(
+    native_pair_probe: ct.CDLL,
+    geometry: bool,
+    admitted: bool,
+) -> None:
+    # Independently differentiate the scalar energy in all consumed arguments.
+    # Random exponents and interval endpoints exercise conditioning, not only
+    # typical molecular scales. The finite-difference step is evaluated at 90
+    # decimal digits and never enters production.
+    rng = random.Random(71929)
+    cases = [tuple(2.0 ** rng.uniform(-32, 32) for _ in range(6)) for _ in range(512)]
+    cases += [tuple(v for _ in range(6)) for v in (2.0**-32, 1.0, 2.0**32)]
+    cases += [(0.0, *case[1:]) for case in cases[:16]]
+
+    def phi(x: list[Decimal]) -> Decimal:
+        r2, wi, wj, ki, kj, _ = x
+        gi, gj = ki + wi * r2, kj + wj * r2
+        return Decimal("-1.5") / (gi * gj * (gi + gj))
+
+    for values in cases:
+        actual, _ = _evaluate_denominator(native_pair_probe, values, geometry, admitted)
+        with localcontext() as context:
+            context.prec = 90
+            x = list(map(Decimal.from_float, values))
+            assert actual[0] == pytest.approx(float(phi(x)), rel=2e-15, abs=0), values
+            for output, argument in [(1, 1), (2, 3), *([(3, 0)] if geometry else [])]:
+                step = max(Decimal(1), abs(x[argument])) * Decimal("1e-30")
+                plus, minus = x.copy(), x.copy()
+                plus[argument] += step
+                minus[argument] -= step
+                expected = float((phi(plus) - phi(minus)) / (2 * step))
+                assert actual[output] == pytest.approx(expected, rel=3e-15, abs=0), (
+                    values,
+                    output,
+                )
+        if not geometry:
+            assert actual[3] == 0.0
 
 
 def _pair_cases() -> list[tuple[float, ...]]:

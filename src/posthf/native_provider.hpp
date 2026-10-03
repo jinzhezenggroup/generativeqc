@@ -13,6 +13,13 @@ namespace generativeqc::posthf {
 using MOSlots = std::array<std::vector<std::size_t>, 4>;
 inline constexpr std::size_t padded_mo = static_cast<std::size_t>(-1);
 
+/** Candidate AO-tile extent, independent of the source's recurrence scratch.
+ * Shell preserves existing consumers' small-tile admission contracts. Basis
+ * permits cross-shell tiles; callers must select an admitted tile with plan()
+ * or batch_bytes() before execution. Both use the same ordered AO source API.
+ */
+enum class AOTileDomain { Shell, Basis };
+
 struct ProviderWork {
   std::size_t source_scans{};
   std::size_t source_reads{};
@@ -50,7 +57,7 @@ class NativeBlockProvider final : public MOBlockProvider {
  public:
   NativeBlockProvider(const integrals::ElectronInteractionSource& source,
                       const hf::PhysicalReference& reference, std::size_t budget,
-                      unsigned axis_tile = 2);
+                      unsigned axis_tile = 2, AOTileDomain tile_domain = AOTileDomain::Shell);
   NumericBlockPlan plan(const std::array<std::size_t, 4>& shape, bool cuda = false) const;
   std::size_t batch_bytes(const std::array<std::size_t, 4>& shape, std::size_t requests,
                           bool cuda = false) const;
