@@ -48,7 +48,7 @@ the compiler-selected schedules where available.
 | CN and repulsion | `geometry/gfn2_pair.py` | CPU and CUDA geometry/classical terms |
 | S/D/Q Cartesian primitives | `integral/gfn2_sdq.py`, `integral/gfn2_sdq_cpu.py` | CPU and CUDA integral values/coordinate response |
 | Electronic pair Hamiltonian and S/D/Q adjoints | `method/gfn2_electronic_runtime.py` | CPU and CUDA electronic owners |
-| ES2, ES3 and AES2 | `method/gfn2_es2_runtime.py`, `method/gfn2_es3_runtime.py`, `method/gfn2_aes2.py` | CPU and CUDA electrostatics |
+| ES2, ES3 and AES2 | `method/gfn2_es2_runtime.py`, `method/gfn2_es3_runtime.py`, `method/gfn2_aes2.py`, `method/gfn2_aes2_schedule.py` | CPU/CUDA electrostatics and bounded AES2 CUDA scheduling |
 | H0 shell factors, CN/radial/Cartesian adjoints and AO adjoint updates | `method/gfn2_h0_force_runtime.py` | CPU H0 values/VJP and CUDA H0 values/forces |
 | Shell spin energy and potential | `method/gfn2_spin_runtime.py` | CPU and CUDA spin owners |
 
@@ -94,6 +94,19 @@ entropy. Unequal populations and unrestricted spectra retain two independent
 solves. Root finding, finite-range/degenerate fallbacks and reduction order remain
 native policy and are unchanged. This removes repeated work within one SCC
 iteration and does not reuse occupation results from an earlier iteration.
+
+AES2 CUDA potentials and coordinate/CN derivatives use compiler-selected atom
+tiles when the rounded-up mean atom count exceeds 32. At most 256 blocks per
+system evaluate independent 32-peer chunks in bounded shared storage. Potential
+components accumulate independently in their original peer order; the derivative
+owner also preserves the first failing peer. Inputs and pair caches are validated
+once per system before evaluation, and a separate publication launch suppresses
+the complete output of a failed system. Smaller means retain fused validation and
+evaluation. Neither path adds allocations, host synchronization or SCC reuse.
+The native schedule harness compares these paths by adding independent single-atom
+systems to select the fused policy, including ragged tails, Graph replay and
+failure publication. Potential outputs must be bitwise equal; VJP outputs have a
+tight FP64 roundoff gate because materialization changes NVCC's FMA boundary.
 
 `benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
 matched fresh-SCC settings. It records cold, repeated and changed-geometry
