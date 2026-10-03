@@ -320,3 +320,20 @@ is now superseded for this union, so earlier endpoint records retain their
 frozen inputs. A new ccache build and finite full-native/independent fallback
 qualification are required before this newer composition is merged. The earlier
 large endpoint remains evidence for its original source, not a new timing claim.
+
+The frozen union 3d5323471 subsequently completes n2 Slurm 2190 on RTX PRO
+6000: the full native DFT regression and all seven independent complete
+E/F/displaced-energy/stale-state cases pass in each of sparse and zero-force-cache
+modes. Each mode again records 66 successful native calls and 467 actual XC
+submissions. There are no skipped qualified cases. All 451 compiler commands
+use ccache. Native identity is
+`7d94e015d9b63017c8dd01e16e91f3be327d92c02d513085d4e06d77eaf834bf`;
+library SHA-256 is
+`90d74009910c1f949a39dff7f802faa85abc1eb1e6c06104b411cc5602ea4864`.
+The bound qualification receipt lives in ignored
+`.artifacts/masterb909-20261004/qualification-verified.json`. Initial Slurm 2189
+passed native regression but could not compile generated forces because the
+copied toolchain directory lacked the ptxas link; preserve its unsuccessful
+attempt before copying the complete existing toolchain and rerunning. This is
+numerical composition qualification, not a fresh timing campaign. Current-head
+CI and an actual current-composition review remain merge gates.
