@@ -887,7 +887,7 @@ void launch_bounded_shell_energy_derivative(
       unrestricted, DirectScreeningPurpose::Force, worker_blocks, kBoundedDirectThreads, 0, stream,
       batch, screening, shell_pair_bounds, shell_pair_density_bounds, pair_order,
       shell_pair_block_bounds, system_density_bounds, nullptr, 0U, class_state, schwarz_bounds,
-      density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient);
+      density, active, output, cursor, nullptr, coulomb_coefficient, exchange_coefficient, true);
 }
 
 void launch_bounded_shell_range_exchange_derivative(

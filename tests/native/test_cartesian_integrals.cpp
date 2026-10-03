@@ -149,6 +149,7 @@ int main() {
               "generated ERI contraction fixture normalization failed");
       const auto values = generativeqc::integrals::build_integrals(system, false);
       const auto derivatives = generativeqc::integrals::build_integrals(system, true);
+      const auto one_electron = generativeqc::integrals::build_integrals(system, false, false);
       generativeqc::posthf::RawSource source(system);
       const auto n = source.nbf();
       std::vector<double> reference(n * n * n * n);
@@ -156,6 +157,14 @@ int main() {
                   reference.data(), reference.size());
       require(values.eri.size() == reference.size() && values.eri_derivative.empty(),
               "generated value ERI layout changed");
+      require(values.ncoord == 0 && values.overlap_derivative.empty() &&
+                  values.hcore_derivative.empty() && values.nuclear_repulsion_derivative.empty(),
+              "value-only integral output retained derivative storage");
+      require(one_electron.nbf == values.nbf && one_electron.ncoord == 0 &&
+                  one_electron.eri.empty() && one_electron.eri_derivative.empty() &&
+                  one_electron.overlap == values.overlap && one_electron.hcore == values.hcore &&
+                  one_electron.nuclear_repulsion == values.nuclear_repulsion,
+              "omitting ERIs changed value-only one-electron output");
       require(derivatives.eri_derivative.size() == system.atoms.size() * 3 * reference.size(),
               "ERI derivative fallback layout changed");
       for (std::size_t i = 0; i < reference.size(); ++i) {
@@ -205,16 +214,19 @@ int main() {
         }
       }
     }
-    {
+    for (const auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       generativeqc::core::System higher;
       higher.atoms = {{2, {0.1, -0.2, 0.3}}};
       higher.shells = {{0, 0, {{0.8, 1.0}}}, {0, 3, {{0.55, 1.0}}}};
+      higher.basis_representation = representation;
       higher.multiplicity = 1;
       std::string detail;
       require(generativeqc::molecule::validate_and_normalize(higher, detail) ==
                   GENERATIVEQC_STATUS_SUCCESS,
               "f-shell fallback fixture normalization failed");
       const auto values = generativeqc::integrals::build_integrals(higher, false);
+      require(values.ncoord == 0 && values.eri_derivative.empty(),
+              "f-shell value fallback retained derivative storage");
       generativeqc::posthf::RawSource source(higher);
       for (const auto indices :
            {std::array<std::size_t, 4>{0, 1, 0, 1}, std::array<std::size_t, 4>{1, 1, 1, 1},
