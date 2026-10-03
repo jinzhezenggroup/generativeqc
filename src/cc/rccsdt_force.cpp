@@ -369,7 +369,9 @@ double minimum_symmetric_eigenvalue(std::vector<double> matrix, std::size_t n) {
   // plan: its matrix/vector storage is completely admitted below, including
   // builds where an external LAPACK provider has opaque private workspace.
   const tensor::CpuLinalgPlan plan{tensor::CpuLinalgProvider::scalar};
-  auto eigen = tensor::cpu_symmetric_eigen(std::move(matrix), n, plan);
+  // Preserve the former absolute off-diagonal accuracy: a large remote
+  // eigenvalue must not hide a coupled low block near the 1e-8 stability gate.
+  auto eigen = tensor::cpu_symmetric_eigen(std::move(matrix), n, plan, 1.0e-13);
   return eigen.values.front();
 }
 

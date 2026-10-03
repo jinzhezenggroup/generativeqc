@@ -88,6 +88,36 @@ def test_force_curvature_rotated_stability_boundary(
     assert (observed > 1e-8) == (expected > 1e-8) == (minimum > 1e-8)
 
 
+@pytest.mark.parametrize("center", (1.01e-8, 1.04e-8))
+@pytest.mark.parametrize("rotation", ("identity", "low_block", "dense"))
+def test_force_curvature_clustered_small_eigenvalues(
+    curvature_probe: Path, center: float, rotation: str
+) -> None:
+    """A remote large eigenvalue must not hide a near-threshold low block."""
+    matrix = np.array([[center, 3e-10, 0.0], [3e-10, center, 0.0], [0.0, 0.0, 4e4]])
+    if rotation == "low_block":
+        angle = 0.31
+        c, s = np.cos(angle), np.sin(angle)
+        q = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
+        matrix = q @ matrix @ q.T
+    elif rotation == "dense":
+        q, _ = np.linalg.qr(np.random.default_rng(1753).normal(size=(3, 3)))
+        matrix = q @ matrix @ q.T
+    result = subprocess.run(
+        [str(curvature_probe)],
+        input="3\n" + " ".join(format(x, ".17g") for x in matrix.ravel()),
+        text=True,
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    observed = float(result.stdout)
+    expected = float(np.linalg.eigvalsh(matrix)[0])
+    tolerance = 2e-11 if rotation == "dense" else 2e-13
+    assert observed == pytest.approx(expected, abs=tolerance)
+    assert (observed > 1e-8) == (expected > 1e-8) == (center - 3e-10 > 1e-8)
+
+
 PREFIX = r"""
 #include <algorithm>
 #include <iomanip>

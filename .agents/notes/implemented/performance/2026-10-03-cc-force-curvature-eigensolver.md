@@ -89,6 +89,26 @@ integer-only curvature diagnostic and interrupted comparisons are excluded.
 
 ## Retained boundary
 
+### Review correction: absolute off-diagonal accuracy
+
+The default shared solver stops at a relative off-diagonal tolerance. Applying
+that rule without the former CC absolute cap can accept a matrix whose minimum
+is below the unchanged 1e-8 stability gate. For example, a 2-by-2 block with
+diagonal 1.01e-8 and coupling 3e-10, alongside an uncoupled 4e4 eigenvalue,
+has minimum 9.8e-9. The global relative tolerance skips its coupling and reports
+1.01e-8. Rotations of this clustered small-eigenvalue example reproduce the
+problem; the original tests isolated their small eigenvalue.
+
+CC now requests the stricter of the existing relative tolerance and an absolute
+1e-13 off-diagonal cap through an explicit scalar-only overload. The original
+shared API and all default consumers retain their prior behavior. This restores
+the prior CC stopping accuracy; it is not a rigorous eigenvalue error bound.
+There is no additional numeric storage or provider-dependent workspace.
+
+The 100 complete-call observations and performance numbers above retain their
+original measured source and binary identities. They predate this accuracy
+repair and must not be described as measurements of the repaired source.
+
 The native conventional CCSD(T) force limit remains 56 AOs. No new GPU
 mathematics, derivative equations, precision policy, response tolerance, or
 reference-oracle dependency is introduced.

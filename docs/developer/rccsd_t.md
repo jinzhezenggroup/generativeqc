@@ -280,7 +280,11 @@ stationarity and residual gates are unchanged.
 
 The physical orbital-response matrix retains its full symmetry and stability
 checks. Its minimum curvature uses the shared scalar cyclic Jacobi eigensolver
-with explicit convergence checking. Complete-force admission includes the
+with explicit convergence checking and the former absolute 1e-13 off-diagonal
+stopping cap as an opt-in scalar accuracy control, so large eigenvalues cannot
+loosen that tolerance near the
+absolute 1e-8 stability gate. Other shared-eigensolver consumers retain their
+default relative accuracy. Complete-force admission includes the
 matrix copy, working/sorted eigenvectors, eigenvalues and sorting permutation.
 The generated GMRES actions and independent dense response residual remain
 mandatory. Completed-force traces separate matrix formation and curvature
