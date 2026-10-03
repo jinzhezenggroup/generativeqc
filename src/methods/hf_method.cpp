@@ -1,11 +1,8 @@
 #include "methods/hf_method.hpp"
 
 #include <algorithm>
-#include <charconv>
 #include <cmath>
 #include <cstddef>
-#include <cstdlib>
-#include <cstring>
 #include <iterator>
 #include <memory>
 #include <numeric>
@@ -14,6 +11,7 @@
 #include <utility>
 
 #include "api/handles.hpp"
+#include "methods/incremental_direct_jk.hpp"
 #include "runtime/execution_context.hpp"
 #include "scf/fleet.hpp"
 #include "scf/fock_prepared.hpp"
@@ -61,32 +59,6 @@ std::optional<generativeqc_precision_mode> precision_mode(
                       "unknown floating-point precision mode");
   }
   return mode;
-}
-
-/** Benchmark-only #990 selector. It is intentionally not a public method ABI. */
-bool incremental_direct_jk_benchmark_requested() {
-  const char* value = std::getenv("GENERATIVEQC_INCREMENTAL_DIRECT_JK");
-  if (value == nullptr || std::strcmp(value, "0") == 0 || std::strcmp(value, "off") == 0) {
-    return false;
-  }
-  if (std::strcmp(value, "1") == 0 || std::strcmp(value, "on") == 0) return true;
-  throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-                    "GENERATIVEQC_INCREMENTAL_DIRECT_JK must be 0/off or 1/on");
-}
-
-/** Parse the optional #990 accepted-update interval without weakening fail-closed policy. */
-std::optional<unsigned> incremental_direct_jk_benchmark_rebuild_interval() {
-  const char* value = std::getenv("GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL");
-  if (value == nullptr) return std::nullopt;
-  unsigned parsed = 0U;
-  const char* end = value + std::strlen(value);
-  const auto result = std::from_chars(value, end, parsed);
-  if (result.ec != std::errc{} || result.ptr != end) {
-    throw MethodError(
-        GENERATIVEQC_STATUS_INVALID_ARGUMENT,
-        "GENERATIVEQC_INCREMENTAL_DIRECT_JK_REBUILD_INTERVAL must be an unsigned integer");
-  }
-  return parsed;
 }
 
 scf::ScfOptions scf_options(const generativeqc_method_descriptor& descriptor) {

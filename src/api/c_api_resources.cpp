@@ -7,6 +7,7 @@
 
 #include "dft/grid.hpp"
 #include "dft/scf_diagnostic.hpp"
+#include "methods/incremental_direct_jk.hpp"
 #include "runtime/resource_ledger.hpp"
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda_batch.hpp"
@@ -88,7 +89,18 @@ int generativeqc_resource_ks_cuda_v1(std::size_t nao, std::size_t atoms, std::si
   if (!output || count != 3 || diis_history > 64 || (spins != 1 && spins != 2) || pbe > 1) return 1;
 #if GENERATIVEQC_HAS_CUDA
   try {
-    const auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
+    auto state = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history);
+    if (generativeqc::methods::detail::incremental_direct_jk_benchmark_requested()) {
+      // The v1 query has no exact-exchange flag. Reserve the larger J + spin-K
+      // anchor even for pure J; the existing hybrid allowance remains separate.
+      // Use the allocator's checked layout, including its trailing alignment.
+      const auto hybrid = generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history, true);
+      const auto incremental =
+          generativeqc::dft::cuda_ks_state_bytes(nao, spins, diis_history, true, false, true);
+      const auto extra = incremental - hybrid;
+      if (extra > std::numeric_limits<std::size_t>::max() - state) return 1;
+      state += extra;
+    }
     const auto xc = generativeqc::dft::cuda_xc_layout_shape(atoms, primitives, nao, points,
                                                             pbe != 0, spins == 2, tile_points);
     const auto direct =

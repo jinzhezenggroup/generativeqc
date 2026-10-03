@@ -1,3 +1,5 @@
+#include <cuda_runtime_api.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -7,6 +9,7 @@
 
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
+#include "scf/cuda/scf_matrix_kernels.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/mean_field.hpp"
 
@@ -24,6 +27,94 @@ bool cuda_device_available() {
   const generativeqc_status status = generativeqc_context_create(&descriptor, &context);
   if (context != nullptr) generativeqc_context_destroy(context);
   return status == GENERATIVEQC_STATUS_SUCCESS;
+}
+
+/** Managed storage makes the independent linear-map oracle host-readable.
+ * Only this test uses managed memory; the production anchors remain resident. */
+template <class Value>
+struct ManagedArray {
+  Value* data{};
+  explicit ManagedArray(std::size_t size) {
+    require(cudaMallocManaged(&data, size * sizeof(Value)) == cudaSuccess,
+            "incremental kernel test allocation failed");
+  }
+  ~ManagedArray() { cudaFree(data); }
+  ManagedArray(const ManagedArray&) = delete;
+  ManagedArray& operator=(const ManagedArray&) = delete;
+};
+
+void verify_linear_channels(unsigned spins, unsigned channels, bool with_hcore) {
+  using namespace generativeqc::scf::cuda_execution;
+  constexpr unsigned batch = 3, basis_size = 2, matrix = basis_size * basis_size;
+  const auto density_elements = batch * spins * matrix;
+  const auto channel_elements = batch * channels * matrix;
+  ManagedArray<double> density(density_elements), anchor_density(density_elements),
+      delta(density_elements), hcore(batch * matrix), output(channel_elements),
+      anchor_output(channel_elements), maximum_delta(batch);
+  ManagedArray<std::uint32_t> updates(batch);
+  ManagedArray<std::uint8_t> active(batch), full(batch);
+  std::fill_n(anchor_density.data, density_elements, 77.0);
+  std::fill_n(anchor_output.data, channel_elements, 77.0);
+  std::fill_n(delta.data, density_elements, 77.0);
+  std::fill_n(output.data, channel_elements, 77.0);
+  for (unsigned system = 0; system < batch; ++system) {
+    active.data[system] = system == 1 ? 0 : 1;
+    full.data[system] = 77;
+    updates.data[system] = 0xffffffffU;
+    maximum_delta.data[system] = 0.0;
+    for (unsigned element = 0; element < matrix; ++element)
+      hcore.data[system * matrix + element] = 0.3 + 0.1 * element;
+  }
+  const auto blocks = (batch * std::max(spins, channels) * matrix + 127) / 128;
+  const auto linear_value = [&](const double* input, unsigned system, unsigned channel,
+                                unsigned element) {
+    double value = 0.0;
+    for (unsigned spin = 0; spin < spins; ++spin)
+      value += (channel + 1.0) * (spin + 0.5) * input[(system * spins + spin) * matrix + element];
+    return value;
+  };
+  for (unsigned iteration = 0; iteration < 4; ++iteration) {
+    for (unsigned element = 0; element < density_elements; ++element)
+      density.data[element] = 0.02 * element + 0.01 * iteration;
+    launch_prepare_incremental_direct_jk_kernel(
+        blocks, 128, 0, nullptr, batch, spins, basis_size, 1, density.data,
+        with_hcore ? hcore.data : nullptr, active.data, anchor_density.data, anchor_output.data,
+        delta.data, updates.data, full.data, maximum_delta.data, channels);
+    require(cudaDeviceSynchronize() == cudaSuccess, "incremental prepare kernel failed");
+    for (unsigned system : {0U, 2U}) {
+      require(full.data[system] == (iteration % 2 == 0), "periodic full/delta policy changed");
+      for (unsigned channel = 0; channel < channels; ++channel)
+        for (unsigned element = 0; element < matrix; ++element)
+          output.data[(system * channels + channel) * matrix + element] =
+              linear_value(delta.data, system, channel, element) +
+              (with_hcore ? hcore.data[system * matrix + element] : 0.0);
+    }
+    launch_finalize_incremental_direct_jk_kernel(
+        blocks, 128, 0, nullptr, batch, spins, basis_size, density.data,
+        with_hcore ? hcore.data : nullptr, active.data, anchor_density.data, anchor_output.data,
+        output.data, updates.data, full.data, channels);
+    require(cudaDeviceSynchronize() == cudaSuccess, "incremental finalize kernel failed");
+    for (unsigned system = 0; system < batch; ++system) {
+      for (unsigned channel = 0; channel < channels; ++channel)
+        for (unsigned element = 0; element < matrix; ++element) {
+          const auto offset = (system * channels + channel) * matrix + element;
+          const double expected =
+              system == 1 ? 77.0
+                          : linear_value(density.data, system, channel, element) +
+                                (with_hcore ? hcore.data[system * matrix + element] : 0.0);
+          require(std::abs(output.data[offset] - expected) < 1e-13 &&
+                      std::abs(anchor_output.data[offset] - expected) < 1e-13,
+                  "incremental channels mixed spin, system, hcore or refresh state");
+        }
+      for (unsigned element = 0; element < spins * matrix; ++element) {
+        const auto offset = system * spins * matrix + element;
+        require(anchor_density.data[offset] == (system == 1 ? 77.0 : density.data[offset]),
+                "incremental density anchor advanced an inactive system or lost a spin");
+      }
+    }
+    require(updates.data[1] == 0xffffffffU && full.data[1] == 77 && maximum_delta.data[1] == 0,
+            "inactive incremental control state changed");
+  }
 }
 
 generativeqc::core::System asymmetric_two_center(bool unrestricted) {
@@ -175,6 +266,11 @@ void verify_case(bool unrestricted, double screening_tolerance, unsigned request
 int main() {
   if (!cuda_device_available()) return 77;
   try {
+    verify_linear_channels(1, 2, false);
+    verify_linear_channels(2, 3, false);
+    verify_linear_channels(2, 1, false);
+    verify_linear_channels(1, 1, true);
+    verify_linear_channels(2, 2, true);
     verify_case(false, 0.0, 0U);
     verify_case(true, 0.0, 0U);
     verify_case(false, 1.0e-12, 8U);
