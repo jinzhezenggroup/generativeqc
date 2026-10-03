@@ -1724,6 +1724,75 @@ void range_exchange_derivatives() {
   }
 }
 
+/** Independent CPU ERIs qualify both public source channels, not their sum.
+ * Opposing UKS spins make J exactly zero while K remains live; each coefficient
+ * mask must also preserve the disabled channel without contaminating its peer.
+ */
+void full_range_shell_source_oracles(const generativeqc::core::System& system,
+                                     std::span<const double> eri_derivatives,
+                                     const std::vector<double>& alpha,
+                                     const std::vector<double>& beta) {
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  const auto matrix_size = dimension * dimension;
+  const auto coordinates = system.atoms.size() * 3U;
+  CudaDirectJkPlan* raw{};
+  CudaDirectJkDiagnostic diagnostic;
+  std::string detail;
+  require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, 64U << 20, &raw, diagnostic, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+      raw, &destroy_cuda_direct_jk_plan);
+  for (const bool unrestricted : {false, true}) {
+    for (const bool opposing : {false, true}) {
+      auto selected_alpha = alpha;
+      auto selected_beta = beta;
+      if (opposing) {
+        if (unrestricted) {
+          for (std::size_t pair = 0; pair < matrix_size; ++pair)
+            selected_beta[pair] = -selected_alpha[pair];
+        } else {
+          std::fill(selected_alpha.begin(), selected_alpha.end(), 0.0);
+        }
+      }
+      DeviceMatrix device_alpha(selected_alpha), device_beta(selected_beta);
+      const auto spin = unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted;
+      for (unsigned mask = 0; mask < 4; ++mask) {
+        const double coulomb = mask & 1U ? 1.7 : 0.0;
+        const double exchange = mask & 2U ? -0.23 : 0.0;
+        std::vector<double> actual;
+        require(execute_cuda_direct_shell_full_range_derivatives_device(
+                    plan.get(), spin, coulomb, exchange, device_alpha.pointer,
+                    unrestricted ? device_beta.pointer : nullptr, matrix_size, actual,
+                    detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        require(actual.size() == 2U * coordinates, "full-range J/K source shape changed");
+        for (unsigned source = 0; source < 2U; ++source) {
+          auto spec = make_hf_fock_spec(spin);
+          spec.derivative_order = 1;
+          spec.coulomb.present = source == 0U && coulomb != 0.0;
+          spec.exchange.present = source == 1U && exchange != 0.0;
+          spec.coulomb.coefficient = coulomb;
+          spec.exchange.coefficient = exchange;
+          const auto cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+          for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+            const auto expected = contract_exact_direct_energy_derivative(
+                cpu, dimension,
+                eri_derivatives.subspan(coordinate * matrix_size * matrix_size,
+                                        matrix_size * matrix_size),
+                selected_alpha, unrestricted ? selected_beta : std::vector<double>{});
+            const auto value = actual[source * coordinates + coordinate];
+            require(std::isfinite(value) && std::abs(value - expected) < 3e-10,
+                    "independent full-range shell J/K derivative differs from CPU ERIs");
+            if (!(mask & (1U << source)))
+              require(value == 0.0, "disabled full-range source acquired a contribution");
+          }
+        }
+      }
+    }
+  }
+}
+
 void direct_providers(bool through_f_response) {
   for (unsigned angular : {0U, 1U, 2U, 3U})
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
@@ -1757,6 +1826,10 @@ void direct_providers(bool through_f_response) {
       for (std::size_t ij = 0; ij < matrix; ++ij) {
         a[ij] = std::cos(0.3 * (ij / n) + 0.7 * (ij % n)) / n;
         b[ij] = std::sin(0.8 * (ij / n) - 0.2 * (ij % n)) / n;
+      }
+      if (derivatives) {
+        full_range_shell_source_oracles(first, ints.eri_derivative, a, b);
+        full_range_shell_source_oracles(second, other.eri_derivative, a, b);
       }
       packed_a = a;
       packed_a.insert(packed_a.end(), a.begin(), a.end());

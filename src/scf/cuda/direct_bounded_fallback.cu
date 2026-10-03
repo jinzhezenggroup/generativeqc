@@ -14,6 +14,7 @@
 #include "scf/cuda/direct_fock_order2.cuh"
 #include "scf/cuda/direct_fock_quartet.cuh"
 #include "scf/cuda/direct_force_low_order.cuh"
+#include "scf/cuda/direct_force_low_order_sources.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_order3.cuh"
 #include "scf/cuda/direct_metadata.hpp"
@@ -155,8 +156,16 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
               radial_operator != DirectRangeOperator::FullSources) {
             continue;
           }
-          // These workers contract density into the recurrence early. Retain
-          // that qualified algebra twice but share screening and the task queue.
+          if (radial_operator == DirectRangeOperator::FullSources && angular_order <= 3U) {
+            const unsigned shell_class = direct_quartet_shell_class_device(
+                batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+                batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+            contract_two_electron_force_low_order_sources<Unrestricted>(
+                shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
+                output, coulomb_coefficient, exchange_coefficient);
+            continue;
+          }
+          // The combined force owner retains its qualified single-channel path.
           const bool separate = radial_operator == DirectRangeOperator::FullSources;
           for (unsigned source = 0; source < (separate ? 2U : 1U); ++source) {
             const double coulomb = source == 0 ? coulomb_coefficient : 0.0;
