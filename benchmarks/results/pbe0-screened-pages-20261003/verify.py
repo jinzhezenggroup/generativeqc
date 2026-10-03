@@ -1,13 +1,16 @@
-"""Recheck every retained endpoint against the unchanged independent references."""
+"""Recheck the corrected campaign without relabeling historical timings."""
 
 from __future__ import annotations
 
 import gzip
 import hashlib
 import json
+import lzma
 import sys
 from pathlib import Path
 from statistics import median
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
@@ -18,92 +21,123 @@ from tools.render_omol25_benchmarks import validate
 
 
 def main() -> None:
-    """Validate byte identities, all-repeat gates, and paired timing provenance."""
+    """Validate all 144 corrected endpoints and the original unchanged gates."""
     directory = Path(__file__).resolve().parent
     storage = json.loads((directory / "storage.json").read_text())
-    summary = json.loads(
-        gzip.decompress((directory / "endpoints-summary.json.gz").read_bytes())
-    )
-    by_atoms = {point["atoms"]: point for point in summary["results"]}
-    campaigns = {}
-    samples = 0
-    for entry in storage["files"]:
-        compressed = (directory / entry["path"]).read_bytes()
-        assert hashlib.sha256(compressed).hexdigest() == entry["sha256"]
-        raw = gzip.decompress(compressed)
-        assert hashlib.sha256(raw).hexdigest() == entry["uncompressed_sha256"]
-        if "atoms" not in entry:
-            continue
-        atoms, variant = entry["atoms"], entry["variant"]
-        record = json.loads(raw)
-        reference_path = (
-            directory / storage["reference_root"] / f"water{atoms}-reference.json.gz"
+    compressed = (directory / "corrected-campaign.json.xz").read_bytes()
+    assert hashlib.sha256(compressed).hexdigest() == storage["sha256"]
+    raw = lzma.decompress(compressed)
+    assert hashlib.sha256(raw).hexdigest() == storage["uncompressed_sha256"]
+    members = json.loads(raw)
+    assert set(members) == set(storage["members"])
+    for name, value in members.items():
+        assert hashlib.sha256(value.encode()).hexdigest() == storage["members"][name]
+    summary = json.loads(members["summary.json"])
+    qualification = json.loads(members["native-qualification.json"])
+    assert qualification["status"] == "passed"
+    assert qualification["memcheck_errors"] == qualification["initcheck_errors"] == 0
+    for key in ("source_identity", "library_sha256"):
+        assert storage[key] == summary[key] == qualification[key]
+    cases = {case["atoms"]: case for case in summary["cases"]}
+    assert set(cases) == {3, 6, 12, 24, 48, 96}
+    checked = 0
+    for atoms, case in sorted(cases.items()):
+        reference_raw = gzip.decompress(
+            (
+                directory
+                / storage["reference_root"]
+                / f"water{atoms}-reference.json.gz"
+            ).read_bytes()
         )
-        reference_bytes = gzip.decompress(reference_path.read_bytes())
-        reference = json.loads(reference_bytes)
-        assert record["reference_sha256"] == hashlib.sha256(reference_bytes).hexdigest()
-        assert record["stage"] == "complete" and record["status"] == "measured"
-        assert entry["outcome"]["exit_code"] == 0
+        reference = json.loads(reference_raw)
         validate(reference, reference, schema=SCHEMA)
-        validate(record, reference, schema=SCHEMA)
-        campaign = entry["campaign"]
-        assert record["environment"]["git"]["commit"] == campaign["base_commit"]
-        assert record["environment"]["git"]["dirty"] == (variant == "candidate")
-        assert record["native_build"]["library_sha256"] == campaign["library_sha256"]
-        assert (
-            record["native_build"]["probe"]["source_identity"]
-            == campaign["source_identity"]
-        )
-        assert campaign["bounded_schwarz_schedule"] == (
-            "0" if variant == "baseline" else "1"
-        )
-        retained = by_atoms[atoms]["variants"][variant]
-        assert retained["provenance"] == campaign
-        assert retained["native_sha256"] == entry["uncompressed_sha256"]
-        rows = record["records"]
-        assert len(rows) == 12 and all(row["converged"] for row in rows)
-        for phase in ("cold", "warm", "moved", "moved-warm"):
-            selected = [row for row in rows if row["phase"] == phase]
-            times = [row["complete_seconds"] for row in selected]
-            assert times == retained["phases"][phase]["complete_seconds"]
-            assert median(times) == retained["phases"][phase]["median"]
-            assert [row["iterations"] for row in selected] == retained["phases"][phase][
-                "iterations"
-            ]
-        assert (
-            max(row["energy_error"] for row in rows)
-            == retained["energy_gate_max_error"]
-        )
-        assert (
-            max(row["force_error"] for row in rows) == retained["force_gate_max_error"]
-        )
-        assert (atoms, variant) not in campaigns
-        campaigns[atoms, variant] = campaign
-        samples += len(rows)
-    assert set(campaigns) == {
-        (atoms, variant)
-        for atoms in (3, 6, 12, 24, 48, 96)
-        for variant in ("baseline", "candidate")
-    }
-    assert samples == summary["native_samples"] == 144
-    for atoms, point in sorted(by_atoms.items()):
-        for key in ("host", "job", "cuda_visible_devices", "base_commit"):
+        grids = []
+        for variant in ("baseline", "candidate"):
+            prefix = f"{variant}/{atoms}/"
+            raw_record = members[prefix + "native.json"]
+            record = json.loads(raw_record)
+            campaign = json.loads(members[prefix + "campaign.json"])
+            retained = case["variants"][variant]
+            assert json.loads(members[prefix + "native.outcome"])["exit_code"] == 0
+            assert hashlib.sha256(raw_record.encode()).hexdigest() == retained["sha256"]
             assert (
-                campaigns[atoms, "baseline"][key] == campaigns[atoms, "candidate"][key]
+                record["reference_sha256"]
+                == retained["reference_sha256"]
+                == hashlib.sha256(reference_raw).hexdigest()
             )
-        before = point["variants"]["baseline"]["phases"]
-        after = point["variants"]["candidate"]["phases"]
-        for phase, key in (
-            ("warm", "warm_time_reduction"),
-            ("moved-warm", "moved_warm_time_reduction"),
-        ):
-            assert 1 - after[phase]["median"] / before[phase]["median"] == point[key]
-        print(
-            f"{atoms:2} atoms: {before['warm']['median']:.6f} -> {after['warm']['median']:.6f} s"
+            assert campaign == retained["campaign"]
+            assert campaign["claim_consumption_barrier"] is True
+            assert campaign["bounded_schwarz_schedule"] == (
+                "0" if variant == "baseline" else "1"
+            )
+            for key in ("source_identity", "library_sha256"):
+                assert campaign[key] == summary[key]
+            assert record["native_build"]["library_sha256"] == summary["library_sha256"]
+            assert (
+                record["native_build"]["probe"]["source_identity"]
+                == summary["source_identity"]
+            )
+            assert record["status"] == "measured" and record["stage"] == "complete"
+            validate(record, reference, schema=SCHEMA)
+            rows = record["records"]
+            assert len(rows) == 12
+            checked += len(rows)
+            errors = {"energy": 0.0, "force": 0.0}
+            for row in rows:
+                assert row["converged"] and row["status"] == 0 and row["gate"]
+                for oracle in reference["records"]:
+                    if row["geometry"] != oracle["geometry"]:
+                        continue
+                    errors["energy"] = max(
+                        errors["energy"], abs(row["energy"] - oracle["energy"])
+                    )
+                    errors["force"] = max(
+                        errors["force"],
+                        float(
+                            np.max(np.abs(np.asarray(row["forces"]) - oracle["forces"]))
+                        ),
+                    )
+            assert errors["energy"] <= 1e-8 and errors["force"] <= 1e-7
+            assert (
+                errors == retained["maximum_errors_all_same_geometry_reference_pairs"]
+            )
+            for phase in ("cold", "warm", "moved", "moved-warm"):
+                selected = [row for row in rows if row["phase"] == phase]
+                expected = retained["phases"][phase]
+                seconds = [row["complete_seconds"] for row in selected]
+                assert seconds == expected["seconds"]
+                assert median(seconds) == expected["median"]
+                assert [row["iterations"] for row in selected] == expected["iterations"]
+            grid = rows[0]["native_force_components"]["grid_work_plan"]
+            assert all(
+                row["native_force_components"]["grid_work_plan"] == grid for row in rows
+            )
+            assert grid["grid_points"] == atoms * 48 * 16 * 32
+            assert (
+                grid["grid_pair_visits"]
+                == (1 + 2 * grid["grid_points"]) * atoms * (atoms - 1) // 2
+            )
+            grids.append(grid)
+        before, after = (
+            case["variants"][variant] for variant in ("baseline", "candidate")
         )
-    print(
-        f"PASS: {samples} complete endpoints, all-repeat independent energy/force gates"
-    )
+        for key in (
+            "host",
+            "job",
+            "cuda_visible_devices",
+            "source_identity",
+            "library_sha256",
+        ):
+            assert before["campaign"][key] == after["campaign"][key]
+        assert grids[0] == grids[1]
+        reduction = (
+            1 - after["phases"]["warm"]["median"] / before["phases"]["warm"]["median"]
+        )
+        assert reduction == case["warm_reduction"]
+        print(f"water{atoms}: corrected warm reduction {100 * reduction:.3f}%")
+    assert checked == summary["native_endpoints_checked"] == 144
+    assert storage["historical"]["commit"] == "0b99c6ce298f2726373f1909ad10a37b5acffc43"
+    print("PASS: 144 corrected endpoints; historical pre-fix bytes remain separate")
 
 
 if __name__ == "__main__":

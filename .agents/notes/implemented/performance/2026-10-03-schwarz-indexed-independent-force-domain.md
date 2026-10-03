@@ -3,6 +3,39 @@
 Status: implemented, experimental opt-in; not a default promotion
 Date: 2026-10-03
 
+## Corrected-binary qualification and historical retention
+
+This section supersedes earlier pending qualification statements, not their
+historical measurements. PR1767's reviewed shared-claim repair is compiled as
+source `ffc146230c1b44103fba01a8b14a061deadbb29d17e5160c79d198fca6e7b10b`,
+library `c43436f7e39901e01434e39d46e5a81e4d71ca3af3489c1d92a0791fe681d280`.
+The unconditional CTA barrier before each leader claim write protects prior
+readers across empty pages and inactive/screened skips. The old tail barrier
+or caching a first read cannot establish that invariant.
+
+Native job5550 passes the four extracted-protocol host/plain/synccheck/racecheck
+gates, baseline/OFF/ON through-f independent CPU oracles, batch/exact-prefix
+budgets, and memcheck/initcheck (zero errors). Fresh corrected-binary jobs5552
+and5551 complete all144 native endpoints; both modes share this source/binary
+and allocation. Independent all-reference-repeat comparisons pass the unchanged
+`1e-8 Eh` / `1e-7 Eh/Bohr` gates (maxima`1.060e-10` / `3.623e-11`).
+
+Corrected96 warm is76.949750→63.354224s (17.67% less), moved-warm
+76.872031→63.543085s. Negative corrected48 moved is70.550929→76.673851s
+(12→14iterations). Every cold/moved and variable-iteration observation remains;
+ordered compilation/artifact caches preclude isolated cold-speedup claims.
+The schedule remains default OFF and the larger reference gap is unresolved.
+
+Current acceptance is the compact lossless corrected campaign in
+`benchmarks/results/pbe0-screened-pages-20261003/`. To avoid keeping superseded
+raw campaigns alongside corrected acceptance under a nearly full aggregate
+storage cap, pre-fix/coarse bytes remain in already-published immutable Git
+commit `0b99c6ce298f2726373f1909ad10a37b5acffc43` at the same paths. The new
+bundle preserves the original README, verifier and every old member hash;
+ignored local copies are also retained. No external publication or Release,
+aggregate-cap increase, unrelated-evidence deletion, or relabeling of old
+timings is used. The earlier source/endpoint sections below are historical.
+
 ## Problem
 
 The independent J/K fallback groups shell pairs into 32-entry blocks and uses
