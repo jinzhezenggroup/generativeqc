@@ -193,7 +193,7 @@ print(first.energies)
 
 | Method | Performance |
 | --- | --- |
-| HF (direct / DF) | <a href="benchmarks/results/df-one-step-warm-20260926/hf.svg"><img src="benchmarks/results/df-one-step-warm-20260926/hf.svg" width="900" alt="GenerativeQC versus GPU4PySCF: direct and DF RHF energy-plus-force latency"></a> |
+| HF (direct / DF) | <a href="benchmarks/results/df-source-screening-20261004/hf.svg"><img src="benchmarks/results/df-source-screening-20261004/hf.svg" width="900" alt="GenerativeQC versus GPU4PySCF: direct and DF RHF energy-plus-force latency"></a> |
 | ωB97M-V / def2-SVP | <a href="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg"><img src="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg" width="900" alt="GenerativeQC versus GPU4PySCF: warm WB97M-V energy-plus-analytic-force latency at 3, 6, 12, 24, 48 and 96 atoms; medians and min–max ranges"></a> |
 
 <!-- DFT benchmark rows are temporarily withheld from the rendered README.
@@ -203,7 +203,7 @@ Restore these rows to the table above only after approval to publish the results
 -->
 
 RTX 5090, spherical def2-SVP: complete warm RHF energy + forces, five repeats.
-[Protocol and results](benchmarks/results/df-one-step-warm-20260926/README.md).
+[Protocol and results](benchmarks/results/df-source-screening-20261004/README.md).
 
 ωB97M-V uses an explicitly enabled integration candidate with SCF/force AO
 selection and matched unpruned grids on an RTX 5090. The six-point figure uses
