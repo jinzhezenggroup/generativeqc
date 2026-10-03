@@ -1,6 +1,6 @@
 # Qualification: resident AO maps and indexed WB97M-V forces
 
-Status: opt-in integration; current-master device qualification in progress
+Status: opt-in integration; current-master complete endpoint qualification passed, timings pending
 Date: 2026-10-03
 
 ## Composition and ownership
@@ -78,12 +78,21 @@ and all ten claim tests, then fails before force evaluation because the adjacent
 `toolchain/ptxas` symlink was not copied. All seven endpoints fail; no numerical
 qualification is inferred. The failed job/logs are preserved under
 `failed-attempt1/`. The missing assembler is restored from the existing qualified
-toolchain, with no source/library change. Finite n1 Slurm 5618 requalifies the
-complete library and both claim protocols
-including synccheck/racecheck, independent full E/F/displaced-energy/stale-state
-cases with joint maps and zero force-cache allowance, then 24/96-atom OFF/ON
-comparisons sequentially in the same allocation. These new results are pending;
-older timings are not assigned to this library.
+toolchain, with no source/library change. Finite n1 Slurm 5618 passes both native
+targets and all ten claim tests, including synccheck/racecheck. All seven
+independent full E/F/displaced-energy/stale-state cases pass with joint maps,
+and all seven pass with force-cache allowance zero. Each mode checks 66
+successful native calls and 467 XC submissions; every successful call actually
+selects SCF maps. `qualification-verified.json` binds all source/binary identities,
+raw test/work logs and the successful Slurm outcome. Suite durations are not
+performance measurements. Sequential 24/96-atom OFF/ON timing now follows in
+the same allocation; older timings are not assigned to this library.
+
+An additional 65 host resource/cache/lease checks pass, with 34 real-device cases
+explicitly skipped in that host command. The first host attempt retained 64
+passes and one C++ compile failure because `/tmp` was full; the unchanged suite
+passes using `/data` temporary storage and the ccache compiler wrapper. The
+environment failure and its original log are retained.
 
 ## Readiness boundaries
 

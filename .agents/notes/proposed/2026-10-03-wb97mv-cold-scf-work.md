@@ -57,7 +57,23 @@ XC device bytes increase 7034208 to 13897056. Sampled point/AO-square work
 increases from 9896403968 to 11154944000 because larger tiles retain more AOs.
 The force map and force scheduling remain unchanged. This is a measured
 scheduling tradeoff, not a fourfold speedup or default-promotion justification.
-The same complete 48-atom comparison is running in finite Slurm 5600.
+The same complete 48-atom comparison finishes in finite Slurm 5600. All ten
+cold/priming/warm E/F pairs pass the independent unchanged gates (maximum
+9.778e-12 Eh / 6.307e-10 Eh/Bohr), every warm call takes one iteration, and
+reference XC remains on GPU. Both native cold solves take 21 iterations:
+
+| SCF tile points | Native complete cold | Paired reference complete cold | Native warm median | Paired reference warm median |
+| --- | ---: | ---: | ---: | ---: |
+| 256 | 963.522488 s | 475.194824 s | 97.760966 s | 103.112731 s |
+| 1024 | 941.008620 s | 475.510140 s | 96.158374 s | 103.201642 s |
+
+Cold decreases 2.34% and warm 1.64%. SCF tiles decrease 4608 to 1152, numeric
+host peak decreases 14194184 to 3549704 bytes and reserved device bytes increase
+21709472 to 30046880. Point/AO-square work increases from 25257336832 to
+30993444864. Force maps and their work remain unchanged. The 96-atom planner
+boundary still needs its own measurement; these two sizes do not promote a
+universal 1024-point default. Measurements remain attributed to 0132d7584 and
+its original b82 library, not the newer master integration.
 
 ## Next controlled experiment and provenance
 
@@ -159,12 +175,22 @@ and compares looser preliminary stopping controls with the same final target
 and unchanged all-pair gates. It does not relax the scientific endpoint or
 claim public preliminary-SCF support. No default is changed.
 
+Finite n1 Slurm 5620 runs four 24-atom controls sequentially: no seed, then
+grid-16 preliminary energy/density tolerances 1e-3/1e-2, 1e-4/1e-3 and the
+original 1e-6/1e-4. Every preliminary solve must converge under its recorded
+controls before installing the density; the final full-grid target remains
+1e-11/1e-9 with DIIS history 8. The same frozen ebb/fc614 source and library
+are verified inside Slurm. All source work remains in complete-cold preparation.
+These stopping-control results are pending.
+
 Ignored artifacts in the SCF composition worktree retain:
 - `.artifacts/scf-active-ao/profiles/cold24-complete.*` and the independent
   `results/cold24-complete-trace.json` scientific/work record;
-- `.artifacts/scf-tiles/results/matched24-verified.json`, every raw sample and
+- `.artifacts/scf-tiles/results/matched{24,48}-verified.json`, every raw sample and
   the independent all-pair verifier;
 - `.artifacts/cold-scf-20261003/` for latest-master source/binary identities,
   qualification, exact scripts, the 15-pair verifier and all cold-control attempts;
 - `.artifacts/coarse-grid-seed-20261003/` for the native warm-state experiment,
   source/target work and timing records, exact scripts and failed-attempt receipt.
+- `.artifacts/coarse-grid-stopping-20261003/` for the four preliminary stopping
+  controls, independent all-pair verifier and immutable final-target settings.
