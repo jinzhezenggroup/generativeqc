@@ -154,12 +154,38 @@ Native CPU and CUDA generated graphs reuse scratch after each tensor's last
 reader. Slots are shared only by identical symbolic products of runtime extents,
 and returned output pointers stay live until the graph returns. CUDA execution
 and capture preserve these lifetimes through the owner's ordered stream. The
-generated admission functions reserve the same slots as execution; equations,
-contraction order, node count and independent physical replay are unchanged.
-This also applies to Lambda, Hamiltonian and CPU triples-response scratch. It
-reduces workspace capacity without expanding the public analytic-force domain.
-See the [arena lifetime decision](../../.agents/notes/implemented/performance/2026-10-02-cc-runtime-arena-reuse.md)
+generated admission functions reserve the same slots as execution. This also
+applies to Lambda, Hamiltonian and CPU triples-response scratch. Slot reuse alone
+does not change contractions or arithmetic work. See the
+[arena lifetime decision](../../.agents/notes/implemented/performance/2026-10-02-cc-runtime-arena-reuse.md)
 for invariants and qualification evidence.
+
+The separately expanded physical replay and independent Lambda RHS/transpose
+have two generated execution schedules. The reassociated schedule uses the
+existing TensorIR contraction lowering and output-driven dependency order. Its
+maximum contraction degree is six for replay and Lambda transpose. For each
+runtime shape, it is selected only when its checked arena capacity is no larger
+than the original strict schedule's capacity; otherwise execution retains the
+strict schedule, including when an optional intermediate size overflows.
+CPU and CUDA admission and execution use the same selector. The expanded
+equations, independent residual gates and convergence tolerances remain in force;
+floating-point reduction order changes in the reassociated schedule. Lambda
+diagnostics report the selected program hash. This does not expand the public
+analytic-force domain. The
+[independent schedule decision](../../.agents/notes/implemented/performance/2026-10-02-cc-independent-reassociation.md)
+records numerical and complete-endpoint qualification.
+
+The conventional CCSD MO provider considers source tiles across the complete
+public AO basis. Cross-shell tiles use the same ordered AO-source and cyclic
+FP64 transform contracts; generated checked resource plans charge their larger
+source/stage buffers and all retained output batches. The planner selects among
+admitted tiles by complete source-read count, preserving smaller-tile and
+multiple-batch fallbacks under tighter budgets. Other MO consumers retain their
+existing shell-bounded default until their own admission is updated. A reported
+roomy endpoint peak is therefore the capacity of the selected schedule, not a
+minimum feasible budget: a smaller budget can succeed by doing more source work.
+See the [MO source tile decision](../../.agents/notes/implemented/performance/2026-10-03-cc-molecular-source-tiles.md)
+for the schedule and numerical qualification.
 
 Prepared RCCSD batches intentionally admit one homogeneous `(nocc,nvir)` shape.
 Each input owns an independent prepared calculation, amplitudes, DIIS and status;

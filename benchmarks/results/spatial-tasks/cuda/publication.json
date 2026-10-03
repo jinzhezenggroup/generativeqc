@@ -7,16 +7,16 @@
   },
   "files": [
     {
-      "bytes": 214821,
-      "path": "evidence.json",
+      "bytes": 10236,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "56afac2991be967e6f729c3f8ca7d9e6dfeb32e016e8ebfd491c868f9c1ad663"
+      "sha256": "3ec39cdb0da32c65eb5469a9d778bc030f41c3b1f51e8670fbad7d2e5cdd07c8"
     },
     {
-      "bytes": 274093,
-      "path": "samples.json",
+      "bytes": 30290,
+      "path": "samples.json.gz",
       "role": "samples",
-      "sha256": "78050dcdb56f14dfbe98cc77736f25f3d7cc62a14a1122c6780d548761c40ccf"
+      "sha256": "408f9b78c369f4fab7f95c896c84d307f534bce3fffb41139d6cd97df6de695e"
     },
     {
       "bytes": 18316,
@@ -25,10 +25,10 @@
       "sha256": "a9e5f4f7b7269d9d74610648fcc864bec2f04d5578978c64fb5d076f3220ff78"
     },
     {
-      "bytes": 363155,
-      "path": "dense-comparison-samples.json",
+      "bytes": 42150,
+      "path": "dense-comparison-samples.json.gz",
       "role": "samples",
-      "sha256": "a3a3196d28a6bc6cfe01c70d7432a7cf4b185518fddcd22462b8910594f8bf1a"
+      "sha256": "ef4a63a9d13a08f6836826a2f358e6d183b2a212f883cced5c9cada1531ba315"
     }
   ],
   "reproduction": {

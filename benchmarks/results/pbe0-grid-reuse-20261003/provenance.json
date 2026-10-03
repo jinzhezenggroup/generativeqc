@@ -1,0 +1,147 @@
+{
+  "base_commit": "74c89369ce10a7c07a5a6b3edc37d03b8af2b791",
+  "production_delta": [
+    "python/generativeqc_compiler/dft/ao_cuda.py",
+    "python/generativeqc_compiler/method/stationary_cuda.py",
+    "src/dft/cuda_grid.cu"
+  ],
+  "source_sha256": {
+    "python/generativeqc_compiler/dft/ao_cuda.py": "87fb89c6f629309d3c9e0951cff6e25007b52c3034d9d37582798be1a7271968",
+    "python/generativeqc_compiler/method/stationary_cuda.py": "1ed3b32d253428ea022e774bffa872666849d98a73266584c0785163767bfc7a",
+    "src/dft/cuda_grid.cu": "1e8723227942ab3460fbce26c5befdc78bb85910916110a6936a6d0ba4e2c7d0",
+    "src/dft/cuda_ks.cpp": "4b10e05c79eeb0401c99222086e9e27c9aec4a539e94c2f8df89f895f530b46a",
+    "src/scf/cuda/direct_jk.cpp": "fa75ba78bf25f1750a93847b3f19c2b91905677fe3850b443fdb6d30b7749774",
+    "tests/python/test_grid_cuda.py": "582f404c81320ef084d9192c4404511668cd56d8a3cf4f59ec1772b4136ae5f9",
+    "tests/python/test_grid_cuda_publication.py": "28a444b795f01322a25b5b2fdfb95862f6e097a518f3d0959fe766d2fe401e09",
+    "tests/python/test_grid_features_cooperative_host.py": "2306391c9cad2e672a42b429077c3892a5ab5b1e30151d328a7140fdd4b3716c"
+  },
+  "native_library_sha256": "955293a77d2f662abdd6b180cd3b9eae957ea1f36f93bdb1de392a6915402644",
+  "source_identity": "0d25cdc922c0849699403213cb99740f1fa6546f5e5c70e9a9a5fe2661a6d812",
+  "raw_files": {
+    "water3-native.json.gz": {
+      "raw_sha256": "f59421fc43603b18880d1183437626fc899b9ac9b7b9c3d4be71b842753a32b5",
+      "raw_bytes": 85580
+    },
+    "water3-reference.json.gz": {
+      "raw_sha256": "2bfc61255079fb8b6006672daf444e49a04620584ca972099668243e694799e7",
+      "raw_bytes": 20476
+    },
+    "water6-native.json.gz": {
+      "raw_sha256": "db1a93dcbaafe602491e5660ce5dec862e4f4031e02894dae52e57cc8d51c943",
+      "raw_bytes": 90956
+    },
+    "water6-reference.json.gz": {
+      "raw_sha256": "064668f5f254426a5d1074e201bfc6d8a80c066ab6333ca0358b818fca0b9a91",
+      "raw_bytes": 25764
+    },
+    "water12-native.json.gz": {
+      "raw_sha256": "c2660ad88ec344038ace52a9d66647c2983aa57338a130b9451f19e4e478e5ca",
+      "raw_bytes": 101599
+    },
+    "water12-reference.json.gz": {
+      "raw_sha256": "8e74969f3ef7f2e518ab3946fb0d9d8fb356c53cf952a6e9fdaa6edf6e4ce6b1",
+      "raw_bytes": 36170
+    },
+    "water24-native.json.gz": {
+      "raw_sha256": "a5b20734befddd696df42ba3e4361330d4b922e9535d1e639551d3564771aab6",
+      "raw_bytes": 122651
+    },
+    "water24-reference.json.gz": {
+      "raw_sha256": "c4efa8d932d0284dc0899648cfea9858d4b2e67bc16934f8dcb8324c47560a0f",
+      "raw_bytes": 57148
+    },
+    "water48-native.json.gz": {
+      "raw_sha256": "dc71d0610c67c418211798b5bbff9147c378d8abf360c87c3eb8da30b415e37b",
+      "raw_bytes": 164687
+    },
+    "water48-reference.json.gz": {
+      "raw_sha256": "09bcfbb6d7781b301327789d6894936e205d71380f71822217b649f9a182daf7",
+      "raw_bytes": 98843
+    },
+    "water96-native.json.gz": {
+      "raw_sha256": "97728addf62906bf0a81944424985cf80e971eb5533550c0907e5177b193944c",
+      "raw_bytes": 248102
+    },
+    "water96-reference.json.gz": {
+      "raw_sha256": "6e0f2e0f66fbc8ad86e1ac98133948f45fa7f88a93fb0f33e8f5a5d89f256d42",
+      "raw_bytes": 182380
+    }
+  },
+  "local_artifact_root": "/home/jzzeng/codes/qc-pbe0-performance-20261003/.artifacts/pbe0-final-master",
+  "remote_root": "n1:/home/jzzeng/codes/qc-pbe0-final-master-20261003",
+  "local_receipt_sha256": {
+    "build.log": "1f73b9892dd471c55e82be61a997d81a80a69deae419412f1014d24be797018d",
+    "ccache-before-build.txt": "b2a8386a164bdf8b65726b999b692604784f1156e9a5e4690035f6c92dce7d39",
+    "ccache-after-build.txt": "63ae82536c46cd12a426d17002ecfe9831096a588b6fe9b84714530927e42d30",
+    "host-contracts.log": "8f01537f501ef9cb60755f0d3a02522f9608b899521a2fac550b619427f4afdd",
+    "qualification.log": "e0709f391dee80967c68abbca830de40d7e6d4995c3f005123ab16156b57ebfd",
+    "node1-endpoints-small.log": "02e6a6e0e2fb05c60b97f46c530e35c6f679d82f6f5d823e3cc4e5f2d2355a3e",
+    "node1-endpoints-48.log": "116b24c4b20b0c0a6ef2a7c5ebf37cdf6fb6a3c6260a4f5408d455b88779fcd4",
+    "node1-endpoints-96.log": "5082fd2a4a841362ac019be0f69a6fd37557921012d722a55b702c9a1dc5c61f",
+    "qualify.sh": "3bd014e1d42a442b5e3c33c9ca239b4800c19ed8dacc785ed3f7ffa607f38ff2",
+    "remote-endpoints.sh": "9f5452b5a8b7c602bb15dac1da5bd28d1b20ecd796466b7527664e506d5dac9c",
+    "all-grid-tests.log": "62d724e34db8e815f35f5e295d3f98d61338c4f4a204bef6865b54229b1a1686",
+    "host-final.log": "a919ec77b633c3dedbe2fa8cadac5088824d303828a187d6dd6e4e88f92c07cc",
+    "ccache-before-host.txt": "fb212004739a0c1df3c3d1e4b6615cd3f29f2def93e516eee64bd90779c383ca",
+    "ccache-after-host.txt": "c36f14fa1502f624ff43e90e2343e8c69bf86ba1e1ef2432094098d1a0311813",
+    "pre-commit-production.log": "4d3f44a4bff27c1e5a214ae6aa03c5ee2139d7205bc706c7a209a64593c0f7f4"
+  },
+  "native_jobs": {
+    "5445": [
+      3,
+      6,
+      12,
+      24
+    ],
+    "5447": [
+      48
+    ],
+    "5446": [
+      96
+    ]
+  },
+  "qualification_job": {
+    "node": "node3",
+    "job": 12101,
+    "grid_tests": 133,
+    "geometry_tests": 14,
+    "fock_provider": "passed"
+  },
+  "full_grid_job": {
+    "node": "node3",
+    "job": 12102,
+    "grid_tests": 138
+  },
+  "host_tests_passed": {
+    "initial_contracts": 663,
+    "final_eight_modules": 672
+  },
+  "jit_generated_source_sha256": {
+    "25719f5521ed64003f4c793a17060ce8d1eff4574844523fc60ca2ab367cc526.primitive.cu": "f6235c5951595853ee16b033e10267a9bb0daff53c6c6fece5891498f00d560a",
+    "2f5e81c385a5983958f9cad11f3e9a08d576554838d152dcf9fd8f5313a8f11d.primitive.cu": "a66ecf5d733d8ce8c3c1bc0b07706b53e5ab5c0e70935e339d50c9cd5c92c98e",
+    "36c7af9694e51256c31ec7f2f9930852888182235bf574d5b9d1979daf27ebd4.primitive.cu": "4bc3742853a497659649e37f12f40134c0d8b5f940d75a5cecd808660ea1a1b5",
+    "3ce11f77f0cbd33a67f0e1db1a361c5a1e39b3e4c747c6ee948b74e7acc42798.primitive.cu": "c686da8d351f4bfb190f5c111a113abef63d3fd200f4aa42b153adaf95e922d0",
+    "7197ef844c15878fc6c9972edbd32e1d00cd6fc2912e09ffa8781a45c5e2050c.primitive.cu": "a2dbedd41195bd0f35dbfc5e075ada4a8bea98f6138a84ea19b5f9aa4023c092",
+    "74bfb470798d76ab92f89a4ccfaca7122382873b5c2854ac15e587bb27bc2c50.primitive.cu": "306c23da1937eb183cf20daf31aeacaf9a8cceab195b205d3bca0f02803ef445",
+    "783131ed348f607b12ea804bee47f8069ab28cacee740541192b16658e218500.primitive.cu": "9052b0745efcbe32e8a5021418f144c78626f2174e3976f12a145738939d293a",
+    "7cb9592294f82d016f323b2573580987dbf2cdeb0f1e5d4d4a95911537b1bebb.primitive.cu": "a8d7f8edfedf961038dd2623fb7ba5b1d27b267f7c5bf02ec5030c585e4535f9",
+    "82aa170bdb914c05af6a1d6cb2d3ae6841169abbb9b6cc6f2703c73177483e24.primitive.cu": "547a8bd669b6209859337b3cd84cc5db626a80126c830211649a0ab5ba90fc01",
+    "84c503dc215e2dd887612ff1c77293049efc7eec4ff90dd0fe555cde42c61230.primitive.cu": "aeedd1fb2b4007499d3913066db63647a25687fc18db2dc6c3470a2ca8c06524",
+    "869699de9cf0eaa00dfa88c3e32c4250690f50ef9388dbc2e2f297b93ff32e21.primitive.cu": "00d0e4cfabdec66ce742d0c8fdbb44f7cc1eb616378145dad0492750ce20d99a",
+    "8d5f89085272779ece09373e7f4e43ec5666b1dd5e2ceeb0f4f43cc8f97d1895.primitive.cu": "81f46798fdd1d7871599e1332c8587bbee585ecb410132c4b2f46587b4f89ef7",
+    "96c7d9236e92ae9fd2671b9c1fba0649bb5a8eb0423258a22cb572551b241fc6.primitive.cu": "6d4f1b4f14fa15dadd189930ba9335d8252f6c338579d840b94e49891516566b",
+    "9c4605f464aaac427c20843b4adb764e7a8392c9a43e7f4b6048f611f5ed2cbc.primitive.cu": "0ea2545164743996ddbb5330645b6e3982a2889552b03b2defb074c45dd30e95",
+    "a66dc7790596fd41dba70b52c7252231c753a7fceb4341ff35cfa90a015fd12f.stationary.cu": "6af930c58cea66ebc6be930522964efccb28c79a98ab369d0a801f5ec41e5919",
+    "b3161e4d9e20aa4b698fd1061e379db31be2aa02fc42a355cc30ea61aa8dae6f.primitive.cu": "d02c4d37971cd105f406d3f98d1a25a009aa1d4232490b9c16ff7ff39b7b2433",
+    "d7ac8ad3fb6d815243141e8777a682cd2e948ded3acc6888ffd44f2cf2ace6e1.primitive.cu": "378222cf981810fb0caf19f616ff484fb4b08f70be60eee45f8c1a283710fc14",
+    "d9f16cecbc15cca5b558dffb3017d2462c52345e52845c93b41e203b564f4f7b.primitive.cu": "6b7f52288d3a978516ba1c3f03f111550e2293d0a6862f0634807e1d47c25d20",
+    "dd9b15f76056fe8511bd822bb3774b488c1ef84e36c123bac892f8b59d3e733b.primitive.cu": "e603450ad234ea51935c06488cb3e0dd210945e4fd3375abe07511cd9d3af655",
+    "df8c0445d67d6d1d6ccc89ecc3f73f72cfca10d1cf228846c2ce7fd180191db6.primitive.cu": "6909b4497f9259e0a42484f36b49487954e37913089d2a6ba334af669d3b5dca",
+    "e34a8189448e9eb1ca889e0b1fca086b7ebd28fcc8aedb451627aaf0291da1bb.primitive.cu": "54bb95acaaf82f73ab241f5b05baf01d4b6a421090468172fbc2979450dd3578",
+    "ea039c88736d7ba954caa1da8caadcab6d3cca701935172fba6ebca54db92dac.primitive.cu": "76d517338d2bf43b881e93306f2bbd606ae63fbf8f23690c8296bf25b172fd0b",
+    "eeae97223a864e4ad0a72bcc26cbae274b1e3443f548abb9949d846d5d7a5232.primitive.cu": "7ac1387f219164ab331ddd5111e43f88d0e67b23a92223ee407c80ae1e434490",
+    "f85bfcf812a50494e70afa81b048f4fc6ff0fad55e8c2bd66307aeb0007b4ea9.primitive.cu": "4d4674649b96a7802ff1cfe4121493aea50863301b61573a3c7941465568af66"
+  },
+  "reference_policy": "Byte-identical independent references from the preceding master52 campaign; exact bindings and scheduler identities remain in each raw record.",
+  "profile_scope": "Node3 job12100 measures the separately frozen master52 composition, not the final-master library."
+}

@@ -16,8 +16,22 @@ def test_restricted_j_only_uses_shared_cpu_gemv() -> None:
     assert "tensor::cpu_gemv('N', count, count, eri.data(), density.data()" in SOURCE
 
 
-def test_generic_jk_loop_remains_for_exchange_and_uhf() -> None:
+def test_scalar_jk_fallback_remains_for_exchange_and_uhf() -> None:
     gemv = SOURCE.index("tensor::cpu_gemv")
-    generic = SOURCE.index("for (std::size_t i = 0; i < nbf; ++i)", gemv)
-    assert gemv < generic
-    assert "if (strategy.spec.exchange.present)" in SOURCE[:generic]
+    fallback = SOURCE.index("if (unrestricted)", gemv)
+    assert "return result;" in SOURCE[gemv:fallback]
+    body = SOURCE[fallback : SOURCE.index("FockMatrices assemble_fock", fallback)]
+    # Restricted J-only alone takes GEMV; every exchange/UHF combination still
+    # dispatches to the shared scalar owner after that fast path returns.
+    expected = (
+        "true, true, false",
+        "true, false, true",
+        "true, true, true",
+        "false, false, true",
+        "false, true, true",
+    )
+    assert body.count("contract_exact_source_major<") == len(expected)
+    for flags in expected:
+        assert (
+            f"contract_exact_source_major<{flags}>(nbf, eri, density, beta, result)"
+        ) in body

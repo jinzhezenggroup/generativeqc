@@ -269,7 +269,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "b0f74c3900d7754fc9a2b4c25878c4e82ea2586aaa4578d3559f22a67c083cde"
+    "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -302,7 +302,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "c29ed5e27de74d03e92e035fdba81f745e1f4f608fa6b175cdf9ca315402a5b5"
+    "7bb03b7286a5868527104420a74f4749c8af92360f17ad12ced31051a7ae9d75"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -335,13 +335,16 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "1b4e6a5979f74cfe8afd8e4df20c4be3614bdc7bf80fe683c64aa57db953e389"
+    "d10b448db22bdd46fac91e189303e54a694998e87e77c6ec6395bfaa713ec3fe"
 )
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
     "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
 )
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
+    "5bd874ce5ba8d4d5d78eb282244144052822bb2f0266d40d33361735302b1a97"
+)
+SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
+    "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "ded1b7e2cc0a93881cc17b4da32a3695bdbaf05421535ac3dcc4efb646da003b"
@@ -364,11 +367,18 @@ NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256 = (
     "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
 )
+# Local AO admission changes only collocation/contraction domain. The census
+# still charges global n AO capacity and every molecular-grid/Becke point pair.
+# Bind the out-of-line predicate itself so later weakening cannot hide behind
+# unchanged callers and stale favorable memory/work bounds.
+NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256 = (
+    "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
+)
 NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
-    "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
+    "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
 )
 NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
-    "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
+    "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
 )
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -419,7 +429,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "681474a5c9456a76db9059e48fcfd1447289b455d9291a6df80951789a231589"
+    "51730953ed9a62807442f672013fcc40787ed3c0b0cca838d6c492c8b1c080b1"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -634,6 +644,13 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
             raise RuntimeError("native KS snapshot functional contract changed")
         key = "init_sha256" if name == "__init__" else f"{name}_sha256"
         methods[key] = digest
+    # Decode now delegates exact grid reuse. Bind the delegated content proof
+    # and retention cap as well as the caller; a caller hash alone is insufficient.
+    cache_source = repository / "python/generativeqc/_snapshot_grid_cache.py"
+    cache_digest = _lf_sha256(cache_source.read_bytes())
+    if cache_digest != SNAPSHOT_GRID_CACHE_CONTRACT_SHA256:
+        raise RuntimeError("native KS snapshot grid-cache contract changed")
+    methods["grid_cache_sha256"] = cache_digest
     return methods
 
 
@@ -777,6 +794,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_nuclear_sha256": (
             "int stationary_nuclear(",
             NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256,
+        ),
+        "native_geometry_ao_map_sha256": (
+            "bool valid_geometry_ao_map(",
+            NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256,
         ),
         "native_geometry_external_sha256": (
             "int stationary_geometry_external(",
@@ -2467,6 +2488,9 @@ def _build_report(
 
     owner_files = (
         "python/generativeqc/_stationary_cuda.py",
+        "python/generativeqc/_ks_snapshot.py",
+        "python/generativeqc/_snapshot_grid_cache.py",
+        "python/generativeqc/resources_ks.py",
         "python/generativeqc/calculator.py",
         "python/generativeqc/batch.py",
         "python/generativeqc/ks.py",

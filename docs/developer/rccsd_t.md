@@ -205,7 +205,9 @@ final contractions therefore consume the same total response weights.
 
 The current qualification is restricted to real closed-shell canonical RHF,
 conventional unscreened all-electron Hamiltonians, no frozen core, no ECP or
-auxiliary basis, and the existing <=12-AO small-system validation boundary.
+auxiliary basis. The native/public CCSD(T) force owner is qualified through
+28 AOs; the separate Python complete-gradient validation owner retains its
+<=12-AO boundary.
 `derivative_backend="cuda"` moves only the final AO/nuclear derivative consumers
 to CUDA; it does not by itself qualify a fully resident GPU response chain.
 Failure of any RHF, CCSD, corrected-Lambda, canonical-gauge, Z-vector, identity,
@@ -228,19 +230,45 @@ The ownership rationale is recorded in
 CUDA RHF, the existing conventional MO-block preparation, resident RCCSD with
 physical residual replay, and the generated CUDA standard `(T)` evaluator.
 Energy single points and homogeneous prepared batches use this owner. Force
-requests in the qualified <=12-AO conventional all-electron domain reuse the
+requests in the qualified <=28-AO conventional all-electron domain reuse the
 same native CCSD(T) response mathematics as CPU and send the final one-/two-
 electron nuclear derivative contractions to the existing CUDA consumers.
 
-The existing MO provider retains its explicit host preparation/staging contract.
+The shared CUDA RHF reference owner may retain unscreened s/p ERIs in device
+memory for its Fock iterations. It admits this optional cache after querying
+mandatory solver workspaces, charges its complete numeric peak and device
+ownership, and limits the cache to 256 MiB. Tight budgets, device allocation
+pressure and higher angular momentum retain the bounded matrix-direct route.
+Geometry changes rebuild the cache, and its lifetime ends with the RHF bucket.
+The existing physical-reference validation gates apply to both schedules.
+
+The MO provider borrows admitted prepared CPU/CUDA value sources, with an
+explicit bounded host-source fallback when optional CUDA source storage is
+unavailable. Source requests and their memory queries both use derivative order
+zero. The force Hamiltonian selects wider AO tiles within the complete endpoint
+budget, retaining width-one fallback and refusing below its minimum peak before
+numerical work. Dense final ERI weights are symmetrized over the
+eight exact permutations before the AO pullback, and the derivative consumer
+visits canonical shell quartets with their distinct orbit multiplicities.
+Repeated shells and coincident physical centers retain independent slot
+derivatives before atom scatter. Factorized weight consumers retain their
+ordered schedule. No additional rank-four weight storage is introduced.
+
 Accepted CC amplitudes and MO blocks are host-owned between the resident CC solve
 and `(T)`; the triples owner stages those inputs once. The corrected-Lambda
 scientific RHS and transpose actions are now generated CUDA programs, with the
-symmetry-packed GMRES control flow still on host. Parameter/Hamiltonian response
-and the physical Z-vector remain host-owned in the native C++ force owner. The
-fully CUDA-resident response composition introduced by #1215-#1225 remains the
-qualification target for later slices. Therefore this path still does not make an
-end-to-end device-residency or performance claim.
+symmetry-packed GMRES control flow still on host. Generated parameter,
+Hamiltonian and orbital actions execute on CUDA. Triples response, the physical
+response control and the final MO-to-AO weight pullback retain host ownership;
+the complete endpoint is not fully device resident.
+
+`tests/python/test_rccsdt_public.py` includes an independent 14-AO force reference,
+cold/warm/changed-geometry reuse and two-step directional energy finite
+differences. Set `GENERATIVEQC_RCCSDT_LARGE_TEST=1` to include the longer 28-AO
+reference test. CUDA tests additionally require a Slurm GPU allocation and
+`GENERATIVEQC_RCCSDT_CUDA_TEST=1`. Independent pinned PySCF references are
+reproducible with `benchmarks/ccsdt_cluster_oracle.py`; complete endpoint timing
+uses `benchmarks/ccsdt_prepared_endpoint.py`.
 
 The generated evaluator shares the CPU audited permutation inventory, evaluates
 the triangular virtual domain, and uses fixed-order block/final reductions.

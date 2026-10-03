@@ -29,6 +29,35 @@ SHAPE = {
 }
 
 
+@pytest.mark.parametrize("architecture", ["sm_80", "sm_89", "sm_120"])
+@pytest.mark.parametrize("atoms", [1, 3, 6, 11, 12, 24, 32, 33, 48, 96, 128])
+def test_automatic_cooperation_is_limited_to_qualified_target_and_shape(
+    architecture: str, atoms: int
+) -> None:
+    target = cuda_target_info(architecture)
+    shape = {**SHAPE, "atoms": atoms, "points": 256}
+    automatic = plan_stationary_cuda_resources(
+        **shape, target=target, budget_bytes=1 << 30
+    )
+    generic = plan_stationary_cuda_resources(
+        **shape, target=target, budget_bytes=1 << 30, cooperative_becke=False
+    )
+    expected_threads = 32 if architecture == "sm_120" and atoms >= 12 else 1
+    assert automatic.becke_threads_per_point == expected_threads
+    assert generic.becke_threads_per_point == 1
+    assert automatic.allocation_bytes == generic.allocation_bytes
+    assert automatic.geometry_lanes == generic.geometry_lanes
+    for limited in (
+        replace(target, warp_size=16, maximum_threads_per_block=16),
+        replace(target, tuning_maximum_shared_bytes=16),
+    ):
+        fallback = plan_stationary_cuda_resources(
+            **shape, target=limited, budget_bytes=1 << 30
+        )
+        assert fallback.becke_threads_per_point == 1
+        assert fallback.allocation_bytes == generic.allocation_bytes
+
+
 def test_geometry_schedule_is_bounded_by_points_scratch_budget_and_target() -> None:
     for atoms in (1, 3, 12, 128):
         for points in (1, 17, 32, 33, 255, 256, 257, 2048, 4096):

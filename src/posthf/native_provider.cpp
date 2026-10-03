@@ -14,7 +14,7 @@
 namespace generativeqc::posthf {
 NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSource& source,
                                          const hf::PhysicalReference& reference, std::size_t budget,
-                                         unsigned axis_tile)
+                                         unsigned axis_tile, AOTileDomain tile_domain)
     : source_(source),
       ref_(reference),
       budget_(budget),
@@ -34,7 +34,11 @@ NativeBlockProvider::NativeBlockProvider(const integrals::ElectronInteractionSou
                            : (l + 1) * (l + 2) / 2;
     largest_shell = std::max(largest_shell, static_cast<std::size_t>(count));
   }
-  tile_.fill(std::min<std::size_t>(axis_tile, largest_shell));
+  // Source reads already accept arbitrary public-AO ranges. Cross-shell tiles
+  // avoid repeating a full MO-output transformation for each shell-sized tile;
+  // the existing checked block/batch plans charge their larger intermediates.
+  const auto maximum = tile_domain == AOTileDomain::Basis ? ref_.nbf : largest_shell;
+  tile_.fill(std::min<std::size_t>(axis_tile, maximum));
   if (!tile_[0]) throw std::invalid_argument("empty native AO source");
 }
 

@@ -9,6 +9,7 @@
 #include "dft/semilocal_family.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/density_fitting.hpp"
+#include "scf/initial_guess/eigen_operation.hpp"
 #include "scf/types.hpp"
 
 namespace generativeqc::scf {
@@ -43,7 +44,8 @@ namespace generativeqc::scf {
 ResolvedFockBuild fock_strategy_for_execution(const ScfOptions& options);
 ScfResult run_prepared_fock_strategy(const PreparedFockPlan& plan, const ScfOptions& options,
                                      const std::vector<double>* initial_density = nullptr,
-                                     initial_guess::OverlapOrthogonalizer* overlap_cache = nullptr);
+                                     initial_guess::OverlapOrthogonalizer* overlap_cache = nullptr,
+                                     const initial_guess::EigenOperation& target_eigen = {});
 
 /** CPU energy-only LDA RKS using a Coulomb-only prepared Fock source and the
  * matching prepared AO/grid/XC state. */
@@ -195,6 +197,12 @@ void validate_hf_warm_density(const core::System& source, generativeqc_method me
 ScfResult run_cpu_fock_strategy(const core::System& system, const core::System* auxiliary,
                                 const ScfOptions& options,
                                 const std::vector<double>* initial_density = nullptr);
+/** Fresh independent CPU oracle solve. Shares the primary entry's resolver,
+ * admission and plan lifetime, but keeps the reference target eigen operation.
+ * This does not request or allocate a physical-reference export object. */
+ScfResult run_cpu_reference_fock_strategy(const core::System& system, const core::System* auxiliary,
+                                          const ScfOptions& options,
+                                          const std::vector<double>* initial_density = nullptr);
 
 /** General independent CUDA route. Reuses host DIIS/eigensolve/finalization
  * control with CUDA direct/DF J/K and matched two-electron derivatives. The

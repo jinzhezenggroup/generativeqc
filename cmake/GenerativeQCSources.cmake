@@ -32,7 +32,11 @@ function(generativeqc_add_runtime_sources target)
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
       src/runtime/cuda_runtime.cu
+      src/runtime/cuda_device_facts.cpp
       src/runtime/cuda_component_trace.cpp)
+    if(CMAKE_DL_LIBS)
+      target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
+    endif()
   endif()
 endfunction()
 
@@ -132,6 +136,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/solver/proposal_control.cpp
     src/scf/solver/mean_field_driver.cpp
     src/scf/solver/eigen_frame.cpp
+    src/scf/solver/cpu_target_eigen.cpp
     src/scf/solver/final_state.cpp
     src/scf/solver/warm_subspace.cpp
     src/scf/gradient/hf_gradient.cpp
