@@ -12,10 +12,14 @@ monomial supremum are elementary; no ERI, Boys function or auxiliary center
 is required. Center derivatives use raised/lowered polynomial envelopes.
 """
 
+from generativeqc_compiler.common.host_device_math import emit_host_device_math_cpp
+
 
 def emit_df_pair_screening_cuda() -> str:
     """Emit cheap value and first-derivative envelopes for the through-f domain."""
-    return r"""
+    return (
+        emit_host_device_math_cpp()
+        + r"""
 #pragma once
 #include <cmath>
 #include <cstddef>
@@ -23,6 +27,7 @@ def emit_df_pair_screening_cuda() -> str:
 #define GENERATIVEQC_DF_BOUND_DEVICE __host__ __device__
 #endif
 namespace generativeqc::scf::generated_df_screening {
+namespace math = ::generativeqc::generated_math;
 // One extra degree covers a first center derivative of an orbital f shell.
 // Invalid/overflowing envelopes retain work by returning infinity.
 GENERATIVEQC_DF_BOUND_DEVICE inline double radial_pair_norm(
@@ -31,11 +36,11 @@ GENERATIVEQC_DF_BOUND_DEVICE inline double radial_pair_norm(
   constexpr double pi = 3.141592653589793238462643383279502884;
   const double infinity = HUGE_VAL;
   if (la > 7 || lb > 7 || la + lb > 7 || !(alpha > 0) || beta < 0 || distance < 0 ||
-      !std::isfinite(alpha) || !std::isfinite(beta) ||
-      !std::isfinite(distance) || !std::isfinite(coefficient)) return infinity;
+      !math::isfinite(alpha) || !math::isfinite(beta) ||
+      !math::isfinite(distance) || !math::isfinite(coefficient)) return infinity;
   if (coefficient == 0) return 0;
   const double p = alpha + beta;
-  if (!std::isfinite(p)) return infinity;
+  if (!math::isfinite(p)) return infinity;
   const double pa = distance * (beta / p), pb = distance * (alpha / p);
   double polynomial[8] = {1};
   unsigned degree = 0;
@@ -51,29 +56,29 @@ GENERATIVEQC_DF_BOUND_DEVICE inline double radial_pair_norm(
   }
   // Integral over R^3 of r^k exp(-p*r^2); even/odd recurrences avoid gamma.
   double moment[8] = {};
-  moment[0] = pi * std::sqrt(pi) / (p * std::sqrt(p));
+  moment[0] = pi * math::sqrt(pi) / (p * math::sqrt(p));
   moment[1] = 2 * pi / (p * p);
   for (unsigned k = 2; k <= degree; ++k)
     moment[k] = (k + 1) * moment[k - 2] / (2 * p);
   double mass = 0, peak = 0;
   for (unsigned k = 0; k <= degree; ++k) {
     mass += polynomial[k] * moment[k];
-    const double maximum = k == 0 ? 1 : std::pow(k / (2 * p * std::exp(1.0)), .5 * k);
+    const double maximum = k == 0 ? 1 : math::pow(k / (2 * p * math::exp(1.0)), .5 * k);
     peak += polynomial[k] * maximum;
   }
-  if (!(mass > 0) || !(peak > 0) || !std::isfinite(mass) || !std::isfinite(peak))
+  if (!(mass > 0) || !(peak > 0) || !math::isfinite(mass) || !math::isfinite(peak))
     return infinity;
   const double gaussian = (alpha / p) * beta * distance * distance;
-  if (!std::isfinite(gaussian)) return infinity;
+  if (!math::isfinite(gaussian)) return infinity;
   // Coefficients and the Gaussian attenuation enter in log space so a tiny
   // overlap cannot underflow before a large normalization factor is applied.
   // The factor 16 supplies FP64 headroom; this is an analytical envelope with
   // independently tested floating-point behavior, not interval arithmetic.
-  const double log_norm = std::log(16.0) + .5 * std::log(1.5 * std::cbrt(4 * pi)) +
-      (5.0 / 6.0) * std::log(mass) + std::log(peak) / 6 +
-      std::log(std::abs(coefficient)) - gaussian;
-  if (!std::isfinite(log_norm)) return infinity;
-  return std::exp(std::fmax(log_norm, -640.0));
+  const double log_norm = math::log(16.0) + .5 * math::log(1.5 * math::cbrt(4 * pi)) +
+      (5.0 / 6.0) * math::log(mass) + math::log(peak) / 6 +
+      math::log(math::fabs(coefficient)) - gaussian;
+  if (!math::isfinite(log_norm)) return infinity;
+  return math::exp(math::fmax(log_norm, -640.0));
 }
 
 GENERATIVEQC_DF_BOUND_DEVICE inline double radial_pair_derivative_norm(
@@ -90,3 +95,4 @@ GENERATIVEQC_DF_BOUND_DEVICE inline double radial_pair_derivative_norm(
 }
 } // namespace generativeqc::scf::generated_df_screening
 """
+    )

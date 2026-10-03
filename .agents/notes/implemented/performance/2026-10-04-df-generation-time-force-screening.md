@@ -101,6 +101,25 @@ contains only fully accepted endpoints.
 
 ## Numerical and measurement limits
 
+### CI portability follow-up
+
+The first published screening head failed CuMetal compilation because its
+host/device envelope called host-only `std` math overloads. A shared emitted
+host/device math binding now selects the CUDA global overloads for the device
+pass and standard C++ overloads for the host pass. The envelope equations,
+screening budget and runtime admission/fallback code are unchanged. The
+inventory test fixture also now materializes every registered source, including
+sources outside the control-scanning list. A negative host-only-name probe and
+both emitted name-lookup branches are exercised on the host; this does not
+substitute for real NVIDIA/CuMetal compilation in CI.
+
+The frozen measured-source hashes and GPU receipts above retain their original
+identities. The portability correction is not a new GPU execution or performance
+measurement. In particular, the retained one-test `integration-budget-test.log`
+summary does not identify a complete native CUDA cache-budget fixture run or
+record its statuses/plan state, so it does not independently clear that earlier
+runtime verification item.
+
 The analytic envelope has FP64 headroom and conservative tiny/invalid-value
 handling; it is not interval arithmetic. Tests do not establish universal
 floating-point certification. Screening error is separate from the existing

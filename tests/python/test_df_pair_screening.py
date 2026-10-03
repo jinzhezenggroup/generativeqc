@@ -6,6 +6,7 @@ import math
 import shutil
 import subprocess
 from collections.abc import Callable
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -170,3 +171,63 @@ def test_same_center_and_signed_coefficients(bound: Bound) -> None:
         assert math.isfinite(positive) and positive > 0
         assert bound(a, b, 0.3, 1.7, 0, -2, 0) == positive
         assert bound(a, b, 0.3, 1.7, 0, 0, 0) == 0
+
+
+def test_device_math_names_and_negative_host_reference(
+    bound: Bound, tmp_path: Path
+) -> None:
+    """Check exact device-branch name lookup without pretending to run CUDA."""
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a host C++ compiler")
+    # CUDA provides device overloads in the global namespace. Preload the host
+    # standard library, then forbid std references in the selected device arm.
+    # Real target annotations/compilation are still checked by NVIDIA/CuMetal CI.
+    prefix = """#include <cmath>
+#include <cstddef>
+using std::isfinite;
+#pragma GCC poison std
+#define __CUDA_ARCH__ 1200
+#define GENERATIVEQC_DF_BOUND_DEVICE
+"""
+    emitted = emit_df_pair_screening_cuda()
+    suffix = """
+extern "C" double device_bound(int a,int b,double alpha,double beta,double distance,double weight,int derivative) {
+  using namespace generativeqc::scf::generated_df_screening;
+  return derivative ? radial_pair_derivative_norm(a,b,alpha,beta,distance,weight)
+                    : radial_pair_norm(a,b,alpha,beta,distance,weight);
+}
+"""
+    source = tmp_path / "device_lookup.cpp"
+    source.write_text(prefix + emitted + suffix)
+    library_path = tmp_path / "device_lookup.so"
+    command = [
+        compiler,
+        "-O2",
+        "-std=c++20",
+        "-shared",
+        "-fPIC",
+        str(source),
+        "-o",
+        str(library_path),
+    ]
+    subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
+    library = ct.CDLL(str(library_path))
+    library.device_bound.argtypes = (
+        [ct.c_int, ct.c_int] + [ct.c_double] * 4 + [ct.c_int]
+    )
+    library.device_bound.restype = ct.c_double
+    for a, b, derivative in itertools.product(range(4), range(4), range(2)):
+        for distance in (0.0, 1.7, 40.0):
+            arguments = (a, b, 0.3, 1.7, distance, -2.0, derivative)
+            assert library.device_bound(*arguments) == bound(*arguments)
+    # The old host-only spelling must actually fail this device-name contract.
+    assert "math::sqrt(pi)" in emitted
+    source.write_text(
+        prefix + emitted.replace("math::sqrt(pi)", "std::sqrt(pi)") + suffix
+    )
+    failed = subprocess.run(
+        command, check=False, capture_output=True, text=True, timeout=60
+    )
+    assert failed.returncode != 0
+    assert "poisoned" in failed.stderr and "std" in failed.stderr
