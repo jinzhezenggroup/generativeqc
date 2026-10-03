@@ -206,16 +206,33 @@ generativeqc_status generate_cuda_density_fitting_metric_derivative_tile_impl(
 generativeqc_status create_cuda_density_fitting_integral_source(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems, CudaDensityFittingIntegralSource** source,
-    std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail) {
+    std::vector<double>& metrics, std::size_t& nbf, std::size_t& naux, std::string& detail,
+    const cuda_execution::CudaDfSourcePolicy* policy) {
   runtime::df_progress::Scope progress("source_setup");
   if (source == nullptr) {
     detail = "bounded DF source output handle is null";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  if (device_id < 0 || orbital_systems.empty() ||
+      orbital_systems.size() != auxiliary_systems.size()) {
+    detail = "bounded DF source dimensions are invalid";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  CudaDfSourcePolicy resolved_policy;
+  if (policy) {
+    resolved_policy = *policy;
+  } else if (!resolve_cuda_df_source_policy(resolved_policy, detail)) {
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  for (std::size_t system = 0; system < orbital_systems.size(); ++system)
+    if (!cuda_df_value_domain(orbital_systems[system], auxiliary_systems[system], resolved_policy,
+                              detail))
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   *source = nullptr;
   CudaDensityFittingIntegralSourceImpl* implementation = nullptr;
   const generativeqc_status status = create_cuda_density_fitting_integral_source_impl(
-      device_id, orbital_systems, auxiliary_systems, &implementation, metrics, nbf, naux, detail);
+      device_id, orbital_systems, auxiliary_systems, &implementation, metrics, nbf, naux, detail,
+      resolved_policy);
   if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
   auto* handle = new (std::nothrow) CudaDensityFittingIntegralSource{};
   if (handle == nullptr) {
