@@ -1,0 +1,173 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Promotion remains inconclusive: ordered/shared-cache endpoints, cold/moved regressions and unequal trajectories; clean integral-source timing is not endpoint timing.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 18981,
+      "path": "pr-head-summary.json",
+      "role": "summary",
+      "sha256": "75909703eb783439fc7572810689694c055a173e46e4fb7f714decc90d08a6bc"
+    },
+    {
+      "bytes": 19498,
+      "path": "pr-head-3.json.gz",
+      "role": "samples",
+      "sha256": "cc50a5f2e3256a571378294ea8978d2b6b39d003eeba06ee15252d8bb5c84985"
+    },
+    {
+      "bytes": 21849,
+      "path": "pr-head-6.json.gz",
+      "role": "samples",
+      "sha256": "84a54a9d5166653682ed9788d749a7fba4fe95913154a53a8915af3381f86c78"
+    },
+    {
+      "bytes": 26685,
+      "path": "pr-head-12.json.gz",
+      "role": "samples",
+      "sha256": "5e579347996327e2db1e0c0b46d5a03deb033a55b51fdc5c349e2fc9a1c2f3ee"
+    },
+    {
+      "bytes": 36884,
+      "path": "pr-head-24.json.gz",
+      "role": "samples",
+      "sha256": "a1cb5188827bb4e3f713c5c8a4c82a1714cc6e22b4df861f5daae244a643b331"
+    },
+    {
+      "bytes": 54860,
+      "path": "pr-head-48.json.gz",
+      "role": "samples",
+      "sha256": "8d830c9a419917a7f9bd4da56672b8c438d546ae63af16d2bb00198e0108e427"
+    },
+    {
+      "bytes": 91192,
+      "path": "pr-head-96.json.gz",
+      "role": "samples",
+      "sha256": "7786d1e9c231e038abe8442524553bf0a21602d7e3fd2bf3a251c0f017b1b74d"
+    },
+    {
+      "bytes": 21423,
+      "path": "pr-head-4.json.gz",
+      "role": "samples",
+      "sha256": "ee548f183d5dd75c3729dea6e746c59df5250c794041afa861cd61e57a4dcf11"
+    },
+    {
+      "bytes": 33845,
+      "path": "pr-head-work.json.gz",
+      "role": "samples",
+      "sha256": "a83d13fbffc2759ae8aed14cd62bc3e147c77d654baf9ce14b1211b629598e5c"
+    },
+    {
+      "bytes": 474,
+      "path": "pr-head-fd.json.gz",
+      "role": "samples",
+      "sha256": "838535db80af4daa45f5131a6256ad57373d162c840ed865b66e2e21a2c8485e"
+    },
+    {
+      "bytes": 19012,
+      "path": "integrated-summary.json",
+      "role": "summary",
+      "sha256": "02aa30d4a4924af3a6db5cf13d6c9cf2296beba627a21dcbb1ce86615188d488"
+    },
+    {
+      "bytes": 19677,
+      "path": "integrated-3.json.gz",
+      "role": "samples",
+      "sha256": "ed23acbce57fcf3e5209504d3504e281df49b7d3fb1b0e574fbb3186ab948ae3"
+    },
+    {
+      "bytes": 22026,
+      "path": "integrated-6.json.gz",
+      "role": "samples",
+      "sha256": "215a48d538619636a6167528e3d65611516aef847fd975b87296acaebe5c69c6"
+    },
+    {
+      "bytes": 26965,
+      "path": "integrated-12.json.gz",
+      "role": "samples",
+      "sha256": "59891f5f348c7d691504bb57377b612fa5765b4e085f82bcf48f40a4f4ebf242"
+    },
+    {
+      "bytes": 37189,
+      "path": "integrated-24.json.gz",
+      "role": "samples",
+      "sha256": "bf7d688ebc480644a8b9b549be109d34c7ae96ae357f7f7eb4826f2c5f8bd6f6"
+    },
+    {
+      "bytes": 55322,
+      "path": "integrated-48.json.gz",
+      "role": "samples",
+      "sha256": "efc08f4d786c1ec374e85dcd6ed5ca16b423d02d5274edfd60790a683b19c1d4"
+    },
+    {
+      "bytes": 91201,
+      "path": "integrated-96.json.gz",
+      "role": "samples",
+      "sha256": "e4a2bbefb349b1986f309ff5512c210a9242b7b932ad775582bfedac353143eb"
+    },
+    {
+      "bytes": 21588,
+      "path": "integrated-4.json.gz",
+      "role": "samples",
+      "sha256": "fe675b4d8f23c342967b5021f0647d65cfc356f375a172d4e726fe924d102591"
+    },
+    {
+      "bytes": 33751,
+      "path": "integrated-work.json.gz",
+      "role": "samples",
+      "sha256": "4031badc78c91584ee56a3a30fceb38808572dd22ef3f17d81bcdd5ca14d4f06"
+    },
+    {
+      "bytes": 491,
+      "path": "integrated-fd.json.gz",
+      "role": "samples",
+      "sha256": "1cc3896022433dfe866134a66e932edf7802b48c1153accc8205222d186b2ae4"
+    },
+    {
+      "bytes": 1112,
+      "path": "launch-controls.json",
+      "role": "summary",
+      "sha256": "53142c9aaa31067f79359e85c2e3aad18c3514afdfb3006a56cb4fcc3d66f025"
+    },
+    {
+      "bytes": 2233,
+      "path": "endpoint-runner.py.txt",
+      "role": "reproduction",
+      "sha256": "e03075c512474e9bece23d91f61608f29485fb24bd4145bdcdc88154bb078b09"
+    },
+    {
+      "bytes": 1537,
+      "path": "holdout-runner.py.txt",
+      "role": "reproduction",
+      "sha256": "5f13ba888c41f0bedcf5d3661cc501e57a2cbbf0331b0ca241b45299b1fb10cc"
+    },
+    {
+      "bytes": 4323,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "4720793390258e3fffd5be192199e238b493cc5caff7aaa92e4df25f200dbe29"
+    },
+    {
+      "bytes": 5261,
+      "path": "validation.json.gz",
+      "role": "evidence",
+      "sha256": "d8556cba2f0f4dee89f33a24688b76b2a7fa129d018229970a8980c9e3220f9c"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.readme_pbe0",
+      "--help"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "c830a0369837ccb90290de1370d2483bb65399b4"
+  }
+}
