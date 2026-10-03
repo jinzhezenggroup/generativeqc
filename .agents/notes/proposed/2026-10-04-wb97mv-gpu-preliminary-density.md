@@ -143,8 +143,23 @@ pairs pass independent E/F and coordinate checks (maximum errors below
 1.024e-12 Eh / 1.065e-9 Eh/Bohr), with on-GPU reference XC and one-iteration
 priming/warm calls. Complete cold is 10.336747 / 8.675310 / 8.130738 s for
 none/LDA/PBE; target iterations are 15/12/11. Each source takes 15 iterations
-and costs 0.654103 / 0.673232 s in full. The 24-atom displaced comparison
-continues in the same allocation.
+and costs 0.654103 / 0.673232 s in full.
+
+The 24-atom displaced comparison also completes in Slurm 5644. All 15 pairs
+pass the independent E/F, coordinate, source-cost and backend checks, with
+maximum errors below 3.070e-12 Eh / 5.350e-10 Eh/Bohr. Every priming/warm
+replay takes one iteration. Complete cold, including all source work, is:
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 281.416608 s | 130.752835 s | 21 | none |
+| LDA | 222.939598 s | 130.674971 s | 15 | 24 / 17.473217 s |
+| PBE | 235.506555 s | 130.489469 s | 16 | 23 / 17.127575 s |
+
+LDA retains a 20.78% complete-cold reduction after this perturbation; PBE
+retains 16.31%. Native remains slower than the corresponding reference.
+These are fresh displaced solves, not same-plan geometry-rebuild timings,
+and do not qualify the still-running larger-size or public resource contracts.
 
 The separate scripts, geometry records, raw pairs, independent verifiers and
 Slurm/source/library receipts remain in ignored
