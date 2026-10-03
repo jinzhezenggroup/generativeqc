@@ -20,6 +20,45 @@ Storage and reproduction
 Deterministic gzip contains scientific JSON only, not logs/profiler archives/matrices. Original hashes and expanded-payload identity preserve scalar values and order. Historical source deltas must match pre-existing receipt SHA-256.
 python decode_cpu_evidence.py verify
 python decode_cpu_evidence.py expand --output NEW_DIRECTORY
-Expansion writes readable JSON and exact source snapshots without executing them. Copy expanded qualification-harness/*.py.txt to qualification-harness/*.py, prepare pinned builds from retained toolchain/cache inputs, and record fresh actual build identities. Run publication.json's balanced command in an exclusive CPU0 lane and new output directory. Never relabel a new binary as measured a7c118aa. Oracles retain exact primitives/grid/geometry/thresholds.
+Expansion writes readable JSON and exact source snapshots without executing them. Keep this expanded historical evidence unchanged. Use a separate new-run directory; the balanced driver derives its ROOT from its own parent directory, not from the shell working directory. The following staging commands run from a directory containing expanded/ (the decoder output) and an absent new-run/:
+
+mkdir -p new-run/qualification-harness new-run/oracles
+for name in balanced_endpoints cpu_endpoint; do
+  cp "expanded/reproduction/qualification-harness/$name.py.txt" "new-run/qualification-harness/$name.py"
+done
+cp expanded/oracles/*.json new-run/oracles/
+git clone https://github.com/jinzhezenggroup/generativeqc.git new-run/repo
+git -C new-run/repo checkout --detach 9a5871dca1f371e5f6e9fcf9d6b076c83b894c14
+git clone https://github.com/jinzhezenggroup/generativeqc.git new-run/candidate
+git -C new-run/candidate checkout --detach b039eea4354b55fa7bcd0d274f14dbad6a11a10c
+
+Prepare both fresh builds at <checkout>/build/cpu-revalidation/libgenerativeqc.so. Use the retained expanded/provenance/build-configuration.json and bootstrap/{environment.json,pip-freeze.txt} for compiler, CMake, Python and OpenBLAS versions/options, translating absolute toolchain paths to this host. Verify ccache and use the same Release options/provider capability for both variants; do not copy old CMakeCache.txt absolute paths or old binaries. Retain fresh cache/compile-command/environment records and run scientific tests before timing. The retained oracle JSON can be used for its exact primitives/grid/geometry/thresholds; generating new oracle measurements must use separate files and preserve the originals.
+
+After both builds, run this Python snippet from new-run/. It creates the manifest consumed by the driver, binding the ACTUAL clean revisions, trees and binary/build-input hashes. It must not copy expanded/provenance/fresh-build-manifest.json or label the candidate alias as a7c118aa. The original manifest remains historical evidence.
+
+python - <<'PY_MANIFEST'
+from pathlib import Path
+import hashlib, json, platform, subprocess
+root = Path.cwd()
+manifest = {"scope": "New reproduction; not original measurements", "python": platform.python_version(), "platform": platform.platform(), "variants": {}}
+for variant, name in (("baseline", "repo"), ("candidate", "candidate")):
+    source = root / name
+    def git(*args):
+        return subprocess.check_output(["git", "-C", str(source), *args], text=True).strip()
+    if git("status", "--porcelain"):
+        raise RuntimeError("Dirty source: " + str(source))
+    build = source / "build/cpu-revalidation"
+    artifacts = {}
+    for role, name in (("library", "libgenerativeqc.so"), ("cmake_cache", "CMakeCache.txt"), ("compile_commands", "compile_commands.json"), ("native_source_identity", "generated/build_identity.hpp")):
+        path = (build / name).resolve(strict=True)
+        data = path.read_bytes()
+        artifacts[role] = {"path": str(path), "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+    manifest["variants"][variant] = {"revision": git("rev-parse", "HEAD"), "tree": git("rev-parse", "HEAD^{tree}"), "dirty": False, "artifacts": artifacts}
+with (root / "fresh-build-manifest.json").open("x") as output:
+    json.dump(manifest, output, indent=2)
+    output.write("\n")
+PY_MANIFEST
+
+The resulting layout is new-run/{qualification-harness/,oracles/,repo/,candidate/,fresh-build-manifest.json}. Activate the pinned Python environment, cd new-run, and run publication.json's balanced command with an absent --output directory. Reserve an exclusive CPU0 lane; no builds/tests/archive jobs during timing. The driver verifies clean actual revisions/library hashes and rejects changed scientific inputs against each oracle. Never relabel a new binary or new measurements as the original measured a7c118aa.
 
 Source recovery: local measured candidate a7c118aa is available through remote commit b039eea4354b55fa7bcd0d274f14dbad6a11a10c. Its complete Git tree is exactly 0680717ea6cda4e6abb2d3c478defba37a02b755; only commit metadata differs. Use that remote commit for the candidate checkout, and retain a7c118aa as the original measurement identifier. This alias was not separately timed.
