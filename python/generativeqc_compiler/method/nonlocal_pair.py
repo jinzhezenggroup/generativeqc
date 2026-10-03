@@ -26,6 +26,10 @@ from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
 NONLOCAL_PAIR_LOWERING_VERSION = "nonlocal-pair-ordered-native-fp64-v1"
+NONLOCAL_PAIR_RATIONAL_VERSION = "nonlocal-pair-vv10-bounded-energy-denominator-fp64-v1"
+NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION = (
+    "nonlocal-pair-vv10-bounded-unit-reciprocal-fp64-v1"
+)
 PAIR_INPUT_ORDER = ("r2", "wi", "wj", "ki", "kj", "row_inverse_kappa")
 PAIR_OUTPUT_ORDER = ("phi", "dphi_domega", "dphi_dkappa", "dphi_dr2")
 
@@ -107,6 +111,8 @@ def build_nonlocal_pair_program(
     preconditioned: bool = False,
     features: bool = True,
     geometry: bool = True,
+    rational_derivatives: bool = False,
+    reciprocal_energy: bool = False,
 ) -> Program:
     """Select live pair outputs without changing runtime admission semantics.
 
@@ -115,11 +121,30 @@ def build_nonlocal_pair_program(
     separately for feature outputs. CPU raw callers retain all legacy output
     roots for failure observation even when an output is not physically used.
     Only their existing bounded admission may omit the radial root.
+
+    Rational derivatives reuse the ordered VV10 energy denominator.
+    The generated caller admits a bounded positive domain and retains the
+    ordered closure elsewhere. Energy is unchanged; derivative roots deliberately
+    use a separately versioned FP64 operation order. The optional unit-reciprocal
+    energy policy changes energy rounding too, under its own lowering identity.
     """
     if variant not in (VV10, RVV10):
         raise UnsupportedNonlocalCorrelation(f"unsupported pair variant {variant!r}")
-    if any(type(flag) is not bool for flag in (preconditioned, features, geometry)):
+    if any(
+        type(flag) is not bool
+        for flag in (
+            preconditioned,
+            features,
+            geometry,
+            rational_derivatives,
+            reciprocal_energy,
+        )
+    ):
         raise TypeError("pair representation and output demands must be Boolean")
+    if rational_derivatives and not (variant == VV10 and features):
+        raise ValueError("rational derivatives require VV10 features")
+    if reciprocal_energy and not rational_derivatives:
+        raise ValueError("reciprocal energy requires bounded rational derivatives")
     scalar = TensorSpec((), role="input", differentiable=True)
     r2, wi, wj, ki, kj, row_inverse = (
         input_tensor(name, scalar) for name in PAIR_INPUT_ORDER
@@ -164,30 +189,114 @@ def build_nonlocal_pair_program(
     else:
         gi, gj = add(multiply(wi, r2), ki), add(multiply(wj, r2), kj)
         gsum = add(gi, gj)
-        phi = divide(minus_three_halves, multiply(multiply(gi, gj), gsum))
+        denominator = multiply(multiply(gi, gj), gsum)
+        # A unit numerator selects the compiler's FP64 reciprocal lowering.
+        # The admitted domain keeps both reciprocal and product normal/finite;
+        # the extra rounding is deliberate and independently qualified.
+        phi = (
+            multiply(minus_three_halves, divide(one, denominator))
+            if reciprocal_energy
+            else divide(minus_three_halves, denominator)
+        )
         negative_phi = multiply(minus_one, phi)
         outputs["phi"] = phi
         if features:
-            dphi_dgi = multiply(negative_phi, add(divide(one, gi), divide(one, gsum)))
+            if rational_derivatives:
+                # phi = -3/(2*D), so (2/3)*phi^2 = 3/(2*D^2).
+                # Reuse the ordered energy's denominator without another divide.
+                # The generated caller bounds all positive factors before this
+                # reassociation; the original closure owns extreme inputs.
+                denominator_partial = multiply(
+                    constant("2/3"), multiply(negative_phi, negative_phi)
+                )
+                dphi_dgi = multiply(multiply(denominator_partial, gj), add(gi, gsum))
+            else:
+                dphi_dgi = multiply(
+                    negative_phi, add(divide(one, gi), divide(one, gsum))
+                )
             outputs["dphi_domega"] = multiply(dphi_dgi, r2)
             outputs["dphi_dkappa"] = dphi_dgi
         if geometry:
-            logarithmic = add(
-                add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
-            )
-            outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
+            if rational_derivatives:
+                # Positive denominator factors avoid cancellation in each
+                # logarithmic partial. This shares dphi/dg_i with SCF features.
+                dphi_dgj = multiply(multiply(denominator_partial, gi), add(gj, gsum))
+                outputs["dphi_dr2"] = add(
+                    multiply(wi, dphi_dgi), multiply(wj, dphi_dgj)
+                )
+            else:
+                logarithmic = add(
+                    add(divide(wi, gi), divide(wj, gj)), divide(add(wi, wj), gsum)
+                )
+                outputs["dphi_dr2"] = multiply(negative_phi, logarithmic)
     return Program(
         outputs,
         provenance={
             "kind": "nonlocal-correlation-pair",
             "scientific_version": NONLOCAL_CORRELATION_VERSION,
-            "lowering_version": NONLOCAL_PAIR_LOWERING_VERSION,
+            "lowering_version": (
+                NONLOCAL_PAIR_RECIPROCAL_ENERGY_VERSION
+                if reciprocal_energy
+                else NONLOCAL_PAIR_RATIONAL_VERSION
+                if rational_derivatives
+                else NONLOCAL_PAIR_LOWERING_VERSION
+            ),
             "variant": variant,
             "representation": "preconditioned"
             if preconditioned and variant == RVV10
             else "raw",
-            "arithmetic": "ordered-native-fp64; caller-owned-failure-checks",
+            "arithmetic": (
+                "bounded-unit-reciprocal-energy-fp64; caller-owned-failure-checks"
+                if reciprocal_energy
+                else "bounded-rational-derivatives-fp64; caller-owned-failure-checks"
+                if rational_derivatives
+                else "ordered-native-fp64; caller-owned-failure-checks"
+            ),
             "features": features,
             "geometry": geometry,
+        },
+    )
+
+
+ROW_FEATURE_INPUT_ORDER = (
+    "sum_phi",
+    "sum_domega",
+    "sum_dkappa",
+    "rho",
+    "domega_drho",
+    "domega_dsigma",
+    "dkappa_drho",
+    "beta",
+    "coefficient",
+)
+
+
+def build_nonlocal_row_feature_program() -> Program:
+    """Contract ordered parameter-partial sums with row-local scale derivatives.
+
+    The CUDA caller bounds the entire row before publishing these reassociated
+    feature sums. This saves row-invariant chain factors inside the pair loop;
+    its rounding policy is distinct from summing fully chained pair features.
+    """
+    scalar = TensorSpec((), role="input", differentiable=True)
+    phi, dw, dk, rho, wrho, wsigma, krho, beta, coefficient = (
+        input_tensor(name, scalar) for name in ROW_FEATURE_INPUT_ORDER
+    )
+    return Program(
+        {
+            "vrho": multiply(
+                coefficient,
+                add(
+                    add(beta, phi),
+                    multiply(rho, add(multiply(dw, wrho), multiply(dk, krho))),
+                ),
+            ),
+            "vsigma": multiply(multiply(coefficient, rho), multiply(dw, wsigma)),
+        },
+        provenance={
+            "kind": "nonlocal-correlation-row-feature-contraction",
+            "scientific_version": NONLOCAL_CORRELATION_VERSION,
+            "lowering_version": "vv10-bounded-row-chain-fp64-v1",
+            "arithmetic": "ordered-parameter-sums-then-row-chain-fp64",
         },
     )

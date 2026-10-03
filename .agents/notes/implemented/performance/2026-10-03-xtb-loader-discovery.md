@@ -124,3 +124,15 @@ Further ABI-handle retention needs explicit identity, lifetime, diagnostics,
 threading and monkeypatch contracts. Do not introduce a global ordinal cache
 or assume an earlier profile remains valid to save constructor time. First-process
 startup and the remaining native scientific schedules require independent work.
+
+## Historical first-process timing qualification
+
+The later [PR #1742 comparator correction](https://github.com/jinzhezenggroup/generativeqc/pull/1742)
+found that identity verification triggered xTBloom's lazy native/provider load
+outside both timed phases. The historical first-process comparisons above omit
+that reference loading cost. The corrected v3 comparator includes lazy loading
+and retains separate cleanup; warm/changed timings and numerical gates keep
+their original scope. Its measured endpoint begins after Python package import,
+not OS process launch. The later corrected measurements include subsequent
+stack changes and are not an isolated remeasurement of loader discovery.
+Original timing rows are unchanged; no universal startup superiority is claimed.

@@ -14,7 +14,7 @@ from tools.render_omol25_benchmarks import collect, figure
 
 
 def main() -> None:
-    """Keep raw oracle forces alongside compact, hash-bound public evidence."""
+    """Keep raw forces and compact JSON without dropping large-point fields."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw-directory", type=Path, required=True)
     parser.add_argument("--basis-file", type=Path, required=True)
@@ -24,7 +24,7 @@ def main() -> None:
     points = [collect(args.raw_directory, atoms, schema=SCHEMA) for atoms in SIZES]
     for point in points:
         (args.destination / f"water{point['atoms']}.json").write_text(
-            json.dumps(point, indent=2, allow_nan=False) + "\n"
+            json.dumps(point, separators=(",", ":"), allow_nan=False) + "\n"
         )
         for engine in ("native", "reference"):
             source = args.raw_directory / str(point["atoms"]) / f"{engine}.json"

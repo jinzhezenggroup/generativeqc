@@ -216,6 +216,7 @@ class PreparedBatch:
         # The KS ResourcePlan reserves one serialized generated-force staging cap.
         # Keep one retained execution per PreparedBatch and reprepare on topology drift.
         self._stationary_cuda_execution: typing.Any = None
+        self._snapshot_grid_cache: typing.Any = None
         self._calculator = calculator
         self._initial_guess_spec = calculator._initial_guess
         self._library = calculator._library
@@ -582,6 +583,7 @@ class PreparedBatch:
         from generativeqc_compiler.dft import NativeAO
 
         from ._dft_gradient import StationaryKsState
+        from ._snapshot_grid_cache import SnapshotGridCache
         from ._stationary_composite_cuda import (
             PreparedCompositeStationaryCudaGradient,
             requires_composite_stationary_cuda,
@@ -593,6 +595,8 @@ class PreparedBatch:
         )
 
         calculator = self._calculator
+        if self._snapshot_grid_cache is None:
+            self._snapshot_grid_cache = SnapshotGridCache()
         with NativeAO(
             atoms,
             basis=calculator._basis,
@@ -1444,6 +1448,9 @@ class PreparedBatch:
         return read_inactive_eigensolver_profile(self._library, self._batch)
 
     def close(self) -> None:
+        if self._snapshot_grid_cache is not None:
+            self._snapshot_grid_cache.clear()
+            self._snapshot_grid_cache = None
         if self._dispersion_batch is not None:
             with suppress(Exception):
                 self._dispersion_batch.close()

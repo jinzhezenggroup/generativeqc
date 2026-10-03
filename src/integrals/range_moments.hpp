@@ -40,6 +40,62 @@ GENERATIVEQC_RANGE_HD inline double range_exp(double value) {
   return std::exp(value);
 #endif
 }
+GENERATIVEQC_RANGE_HD inline double range_erf(double value) {
+#if defined(__CUDA_ARCH__)
+  return ::erf(value);
+#else
+  return std::erf(value);
+#endif
+}
+
+namespace range_detail {
+/** Evaluate the LR interval by M_n(T,a) = a^(2n+1) F_n(T a^2).
+ *
+ * At small scaled T, sum the positive incomplete-gamma series for the highest
+ * order, then recur downwards. Above nmax+1.5, upward recurrence from erf is
+ * stable and its multiplier is less than one at every requested order.
+ * No alternating series or nearly equal full-minus-long subtraction is used.
+ * The caller validates finite nonnegative T, 0 <= a <= 1, and nmax <= 14.
+ * A bounded series failure leaves the output untouched for interval fallback.
+ */
+GENERATIVEQC_RANGE_HD inline bool long_moments(unsigned maximum_order, double argument,
+                                               double boundary, double* output) {
+  // Multiplication in this order preserves T*a^2 when a^2 alone underflows.
+  const double scaled = (argument * boundary) * boundary;
+  const double decay = range_exp(-scaled);
+  if (scaled <= static_cast<double>(maximum_order) + 1.5) {
+    double term = 1.0 / (2.0 * maximum_order + 1.0);
+    double sum = term;
+    bool converged = false;
+    for (unsigned k = 1; k <= 128; ++k) {
+      term *= scaled / (static_cast<double>(maximum_order + k) + 0.5);
+      sum += term;
+      if (term <= 0x1p-54 * sum) {
+        converged = true;
+        break;
+      }
+    }
+    if (!converged) return false;
+    output[maximum_order] = decay * sum;
+    for (unsigned n = maximum_order; n > 0; --n)
+      output[n - 1] = (2.0 * scaled * output[n] + decay) / (2.0 * n - 1.0);
+  } else {
+    constexpr double sqrt_pi_over_two = 0x1.c5bf891b4ef6bp-1;
+    output[0] = sqrt_pi_over_two / range_sqrt(scaled) * range_erf(range_sqrt(scaled));
+    // Dividing first avoids overflow in 2*scaled near DBL_MAX.
+    const double inverse_twice_scaled = 0.5 / scaled;
+    for (unsigned n = 1; n <= maximum_order; ++n)
+      output[n] = ((2.0 * n - 1.0) * output[n - 1] - decay) * inverse_twice_scaled;
+  }
+  double factor = boundary;
+  const double squared_boundary = boundary * boundary;
+  for (unsigned n = 0; n <= maximum_order; ++n) {
+    output[n] *= factor;
+    factor *= squared_boundary;
+  }
+  return true;
+}
+}  // namespace range_detail
 
 /** Radial kernels in atomic units. Omega is finite, nonnegative, inverse Bohr.
  * Nuclear derivatives hold omega fixed. No omega derivatives or screening
@@ -47,15 +103,16 @@ GENERATIVEQC_RANGE_HD inline double range_exp(double value) {
  */
 enum class CoulombRange : std::uint32_t { Full = 0, Long = 1, Short = 2 };
 
-/** Positive interval quadrature with an explicit compile-time moment bound.
+/** Range moments with an explicit compile-time bound and stable positive SR.
  *
  * LR integrates u^(2n) exp(-T u^2) over [0, omega/hypot(omega,sqrt(rho))];
  * SR integrates over the complementary interval. In particular, SR never
  * subtracts nearly equal full/LR values. Its width uses a rational expression
  * that remains accurate when the lower endpoint rounds to one.
  *
- * This intentionally conservative experimental evaluator uses a 64-point
- * Gauss-Legendre rule, with positive weights and factored powers/decay. A tail
+ * LR uses scaled Boys moments with a positive series/downward recurrence or
+ * an erf/upward recurrence. SR and standalone Full retain the 64-point
+ * Gauss-Legendre rule with positive weights and factored powers/decay. A tail
  * beyond an additional exponent of 90+2*nmax is negligible for these orders;
  * clipping it resolves arbitrarily narrow peaks at large T. The full-range
  * branch is for standalone generated consumers, not a replacement for the
@@ -78,6 +135,9 @@ GENERATIVEQC_RANGE_HD inline bool bounded_range_moments(unsigned maximum_order, 
   const double root_rho = range_sqrt(rho);
   const double radius = range_hypot(omega, root_rho);
   const double boundary = omega / radius;
+  if (range == CoulombRange::Long &&
+      range_detail::long_moments(maximum_order, argument, boundary, output))
+    return true;
   double lower = 0, width = 1;
   if (range == CoulombRange::Long) width = boundary;
   if (range == CoulombRange::Short) {

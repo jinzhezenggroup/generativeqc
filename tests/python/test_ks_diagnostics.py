@@ -162,7 +162,17 @@ def test_batch_snapshot_history_abi_invalidation(device: typing.Any) -> None:
         saved = cold.items[0].ks_diagnostic.to_payload()
         replay = batch.execute(properties=("energy",), strict=True)
         assert replay.items[0].ks_diagnostic.initial_density_used
-        assert replay.items[0].ks_diagnostic.history[0].energy_change is None
+        first_replay = replay.items[0].ks_diagnostic.history[0]
+        if device == "cuda":
+            # The CUDA UKS scalar loop retains the preceding converged energy;
+            # its first replay row is a measured difference, not missing history.
+            assert first_replay.energy_change == pytest.approx(
+                abs(first_replay.components.total - cold.items[0].energy),
+                rel=0,
+                abs=1e-14,
+            )
+        else:
+            assert first_replay.energy_change is None
         assert cold.items[0].ks_diagnostic.to_payload() == saved
         assert (
             query(batch._batch, 0, ctypes.byref(summary), None, 0)
