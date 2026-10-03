@@ -41,17 +41,18 @@ their lifetime is the existing force arena and stream.
 
 ## Evidence
 
-The initial same-binary RTX 5090 A/B reduces five-repeat warm median from
-4.561811 s to 3.313826 s, and moved warm from 4.585902 s to 3.344354 s.
+The final same-binary RTX 5090 A/B reduces five-repeat warm median from
+4.564127 s to 3.314961 s (27.4%), and moved warm from 4.584961 s to 3.335904 s.
 Cold/moved iterations remain 24/13; all warm calls retain one iteration.
 All complete calls pass unchanged independent `1e-8 Eh` and `1e-7 Eh/Bohr`
-gates. This early A/B is distinct from the final six-size figure campaign.
+gates. Maximum off/on force difference is 4.23e-13 Eh/Bohr. This A/B in
+Slurm job 12192 is distinct from the final six-size figure campaign (12189).
 
 The separate work replay executes 94,730,671 of 342,802,304 primitive products,
 skipping 248,071,633 (72.37%). It skips 67,578,393 of 101,861,760 active shell
 tasks (66.34%). All 58 auxiliary panels remain. New norm storage is 1,190,400
-bytes; its observed preparation is 2.889 ms. Three-center derivative GPU time
-drops from 1,951.918 ms to 695.332 ms. These component/counter observations are
+bytes; its observed preparation is 2.840 ms. Three-center derivative GPU time
+drops from 1,955.433 ms to 701.513 ms. These component/counter observations are
 diagnostic and excluded from clean medians.
 
 Host tests compile the emitted helper and compare all 64 s/p/d/f triples with
@@ -73,6 +74,12 @@ assertion. They concern signature counters, BLAS response-route attribution,
 scratch/residency expectations and old insufficient-budget assumptions; none
 is an energy/force gate failure. The retained validation record lists each
 case and both assertions. This suite is not classified as passing.
+
+The final 99-atom attempt rejects before SCF under the existing admission
+policy. Clean baseline and both screening arms fail identically. This is a
+retained resource boundary; the older PR qualification's successful 99-atom
+result is not a success of this newer source baseline. The six-size figure
+contains only fully accepted endpoints.
 
 ## Rejected and deferred alternatives
 

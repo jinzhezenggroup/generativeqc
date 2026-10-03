@@ -320,7 +320,7 @@
     },
     {
       "id": "df.shell-force-screening",
-      "classification": "guarded-promotion-candidate",
+      "classification": "already-default",
       "controls": [
         "hf-runtime:GENERATIVEQC_DF_SHELL_SCREEN_ABS"
       ],
@@ -333,10 +333,11 @@
         "src/scf/cuda/df_gradient_bridge.cu",
         "python/generativeqc_compiler/integral/df_pair_screening.py"
       ],
-      "rationale": "Whole-shell Coulomb-norm screening is being qualified with a 1e-10 absolute force-component budget on the established sm_120 automatic shell domain. Generic and capacity-limited consumers retain strict evaluation. The earlier SSS primitive screen remains independently off.",
-      "revisit_condition": "Promote only after complete endpoints, larger/resource cases and independent force/finite-difference gates; retain explicit off and strict resource fallback.",
+      "rationale": "Qualified whole-shell Coulomb-norm screening defaults to a 1e-10 absolute force-component budget on the established sm_120 automatic shell domain. Complete 96-atom warm endpoints improve 27.4%; independent numerical, geometry, batch and constrained-panel checks pass. Generic and capacity-limited consumers retain strict evaluation. The earlier SSS primitive screen remains independently off.",
+      "revisit_condition": "Broaden the architecture or workload domain only with complete endpoint and resource evidence. Preserve explicit off, unchanged tile selection and strict optional-allocation fallback; forward B storage is unchanged.",
       "evidence": [
-        "docs:docs/developer/df_tuning.md"
+        "docs:docs/developer/df_tuning.md",
+        "benchmarks:benchmarks/results/df-source-screening-20261004/README.md"
       ]
     },
     {
