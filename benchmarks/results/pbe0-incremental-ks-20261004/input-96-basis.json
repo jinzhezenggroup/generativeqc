@@ -1,0 +1,11 @@
+{
+  "schema": "generativeqc.ks-work-basis-input.v1",
+  "input_sha256": "618ef36be3450cd4882713608b2794da03a0f83bcfb1d5b356b22058777ea300",
+  "source_input_sha256": "a9a669914ca2b75be5b6ad74ba168aa4f62cf61b818b274d1a491fae376e9775",
+  "reference_sha256": "fd1c6994729817f49d4acbcda0c0822fb860e00868a98727200a7799dfca14a3",
+  "atoms": 96,
+  "shells": 384,
+  "historical_density_consumed": false,
+  "basis_normalization": "native validate_and_normalize, same raw prefix as the source fixture",
+  "scope": "fresh native SCF work probe, not the historical force-density census"
+}

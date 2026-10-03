@@ -79,3 +79,29 @@ ks_molecular_grid, retaining the same grid specification and resident lifetime.
 This is not a new production optimization. Complete work counts and independent
 energy checks remain pending; no J/K work reduction or large-system speedup is
 claimed from this API alone.
+
+## Completed admission census and audit endpoint follow-up
+
+Resident-grid jobs 5678/5679 complete a fresh 96-atom SCF solve and two frozen
+warm replays each. All 21 present s/p/d classes are covered, including native
+DDDD. Every energy passes against all six matching-geometry independent reference
+energies. J admits 142,757,104 shell-task dispatches on every build, including
+all 13 delta builds. OFF cold executes 26 ordinary builds; ON executes 14 full
+and 13 delta builds. K's delta admissions fall from 108,832,786 to 5,197 at the
+last delta. The code limitation therefore corresponds to actual J admissions,
+not just a suspected density-insensitive gate. Primitive work remains unobserved.
+
+Both warm replays execute one full build, with 142,757,104 J and 72,116,584 K
+dispatches. Instrumented durations are not clean endpoint measurements. The
+separate, older fe6aea98 audit-source 96-atom E/F campaign also completes:
+OFF/ON warm medians 78.024929/78.010056 s, all one build and no retry. Moved
+cost regresses 260.733 s/12 iterations to 297.989 s/15. All 144 comparisons pass
+(maximum E/F about 1.07e-10/3.27e-11), but this restores warm parity rather
+than proving a speedup. It is not large E/F qualification of the observer source.
+
+Compact publication: `benchmarks/results/pbe0-incremental-ks-20261004/` retains
+all five initial/audit source-case campaigns, controls and failures, actual work
+rows, small geometry/basis input and an offline all-repeat verifier. No missing
+counter is backfilled, discarded attempt removed, old publication overwritten,
+release used or storage cap raised. Reusing the shared density-bound reduction
+for an opt-in prepared J admission is the next experiment, not a result here.

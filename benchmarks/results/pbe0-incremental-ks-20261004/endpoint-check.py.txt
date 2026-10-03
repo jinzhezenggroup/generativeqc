@@ -1,0 +1,125 @@
+"""Independently gate every complete incremental-KS endpoint and its provenance.
+
+Returned-attempt counters are never presented as total endpoint work when the
+native runner reports a warm retry. Ordered runs are not causal timing controls.
+"""
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+from statistics import median
+
+import numpy as np
+
+SOURCE = "8269ab4411352e9ee653efafa85522a1ce4a0c15ecfe76f8e944efce54a22630"
+LIBRARY = "0455a330b42871e9e4b4e8255b0d8a9351623128446ec68ef904e6453e94fd70"
+PHASES = ["cold", *(["warm"] * 5), "moved", *(["moved-warm"] * 5)]
+
+
+def read(path):
+    return json.loads(path.read_text())
+
+
+def inspect(directory, source, library):
+    """Require every repeat and all matching-geometry independent comparisons."""
+    reference_path = directory / "reference.json"
+    if not reference_path.with_suffix(".outcome").exists():
+        return {"complete": False, "reason": "reference outcome unavailable"}
+    reference = read(reference_path)
+    reference_digest = hashlib.sha256(reference_path.read_bytes()).hexdigest()
+    atoms = reference["protocol"]["atoms"]
+    output = {"atoms": atoms, "variants": {}, "complete": True}
+    for variant in ("reference", "off", "on"):
+        path = directory / f"{variant}.json"
+        if not path.with_suffix(".outcome").exists():
+            output["complete"] = False
+            output["variants"][variant] = {"complete": False}
+            continue
+        record = read(path)
+        receipt = read(path.with_suffix(".campaign.json"))
+        outcome = read(path.with_suffix(".outcome"))
+        assert outcome["exit_code"] == 0 and record["status"] == "measured"
+        assert record["protocol"] == reference["protocol"]
+        assert [row["phase"] for row in record["records"]] == PHASES
+        assert receipt["source_identity"] == source
+        assert receipt["requested_indexed_schedule"] == "0"
+        if variant == "reference":
+            assert receipt["reference_xc_objects"]
+            assert all(item["xc"] == "406" and item["on_gpu"] for item in receipt["reference_xc_objects"])
+        else:
+            assert record["reference_sha256"] == reference_digest
+            assert receipt["library_sha256"] == library
+            assert receipt["requested_incremental_jk"] == ("1" if variant == "on" else "0")
+            assert len(receipt["native_build_observations"]) == 12
+        energy_error = force_error = 0.0
+        pair_count = 0
+        for index, row in enumerate(record["records"]):
+            assert row["converged"] and row["status"] == 0 and row["gate"]
+            force = np.asarray(row["forces"])
+            assert force.shape == (atoms, 3) and np.isfinite(force).all()
+            assert np.isfinite(row["energy"])
+            assert np.isfinite(row["complete_seconds"]) and row["complete_seconds"] > 0
+            matching = [other for other in reference["records"] if other["geometry"] == row["geometry"]]
+            assert len(matching) == 6
+            for other in matching:
+                pair_count += 1
+                energy_error = max(energy_error, abs(row["energy"] - other["energy"]))
+                force_error = max(force_error, float(np.max(np.abs(force - other["forces"]))))
+            if variant != "reference":
+                observation = receipt["native_build_observations"][index]
+                assert observation["status"] == row["status"] and observation["converged"]
+                assert observation["iterations"] == row["iterations"]
+                assert observation["fock_builds_origin"] == "ks_diagnostic"
+                assert observation["fock_builds"] == row["iterations"]
+                counts = observation["incremental"]
+                assert counts["active"] == (variant == "on")
+                assert not counts["quartet_work_counters_valid"]
+                if variant == "on":
+                    assert sum(counts[key] for key in ("anchor_full_builds", "delta_builds", "post_scf_full_builds")) == observation["fock_builds"]
+                    assert counts["anchor_full_builds"] > 0
+                    assert counts["anchor_updates"] == counts["delta_builds"]
+                    assert counts["periodic_rebuilds"] + 1 == counts["anchor_full_builds"]
+        assert pair_count == 72
+        assert energy_error <= 1e-8 and force_error <= 1e-7
+        output["variants"][variant] = {
+            "complete": True,
+            "records": len(record["records"]),
+            "raw_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "maximum_energy_error": energy_error,
+            "maximum_force_error": force_error,
+            "pair_comparisons": pair_count,
+            "actual_reference_xc": receipt["reference_xc_objects"],
+            "returned_attempt_observations": receipt["native_build_observations"],
+            "counter_scope": "returned attempt only; discarded warm attempts are unavailable",
+            "phases": {
+                phase: {
+                    "seconds": [row["complete_seconds"] for row in record["records"] if row["phase"] == phase],
+                    "median_seconds": median(row["complete_seconds"] for row in record["records"] if row["phase"] == phase),
+                    "iterations": [row["iterations"] for row in record["records"] if row["phase"] == phase],
+                    "warm_fallback": [row.get("warm_start_fallback") for row in record["records"] if row["phase"] == phase],
+                }
+                for phase in ("cold", "warm", "moved", "moved-warm")
+            },
+        }
+    return output
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--directory", type=Path, default=Path(__file__).parent / "endpoints")
+    parser.add_argument("--source", default=SOURCE)
+    parser.add_argument("--library", default=LIBRARY)
+    parser.add_argument("--output", type=Path, default=Path(__file__).parent / "endpoint-validation.json")
+    arguments = parser.parse_args()
+    cases = [inspect(arguments.directory / str(atoms), arguments.source, arguments.library) for atoms in (48, 96)]
+    summary = {
+        "source_identity": arguments.source,
+        "library_sha256": arguments.library,
+        "complete": all(case["complete"] for case in cases),
+        "cases": cases,
+        "scope": "ordered reference/OFF/ON; not interleaved endpoint causality or default promotion",
+    }
+    arguments.output.write_text(json.dumps(summary, indent=2) + "\n")
+    for case in cases:
+        print(case.get("atoms"), "complete", case["complete"], {key: item.get("phases", {}).get("warm", {}) for key, item in case.get("variants", {}).items()})
