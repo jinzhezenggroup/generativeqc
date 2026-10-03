@@ -348,3 +348,11 @@ timing receipts retain their original identities. The evidence-verifier review
 finding is fixed separately: all 33 acceptance predicates are unchanged but
 remain active under Python optimization, with coherent bad-hash, failed-native-
 qualification and inaccurate-energy controls rejecting under `python -O`.
+
+Master then merges the reviewed composite local-AO force caller as f88f42b4f
+(#1778). Its two production Python files and caller tests are byte-identical
+to this integration. The sole add/add conflict is the caller's historical note;
+retain master's expanded qualification and endpoint record. No native/compiler/
+Python build input changes from frozen 44b9606c4, whose ccache build is already
+running. This history/documentation merge does not relabel any measured endpoint
+or independently authorize the remaining SCF-map/indexed-force composition.
