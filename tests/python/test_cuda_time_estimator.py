@@ -408,3 +408,117 @@ def test_estimator_requires_typed_inputs() -> None:
         estimate_cuda_time({}, _calibration())
     with pytest.raises(TypeError, match="CudaTimingCalibration"):
         estimate_cuda_time(_cost(), {})
+
+
+def test_refined_model_accounts_for_crossover_and_fixed_batch_time() -> None:
+    cost = static_cuda_cost(
+        GpuProfitability(
+            arithmetic_operation_count=200,
+            semantic_traffic_bytes=100,
+            launch_count=1,
+            compiled_registers_per_thread=32,
+            shared_bytes=0,
+            spill_store_bytes=0,
+            spill_load_bytes=0,
+        ),
+        cuda_target_info("sm_120"),
+        128,
+        grid_blocks=2040,
+        sm_count=170,
+    )
+    calibration = _calibration(
+        model="roofline-calibrated-overlap.v2",
+        effective_compute_ops_per_second=100,
+        effective_memory_bytes_per_second=100,
+        launch_seconds=0.02,
+        batch_seconds=0.03,
+        memory_throughput_curve=((0, 0), (1, 1)),
+        crossover_penalty_curve=((0, 0.4), (1, 0.4)),
+    )
+    estimate = estimate_cuda_time(cost, calibration)
+    # C=2, M=1, crossover=0.4*1^2/2=0.2, launch=0.02, batch=0.03.
+    assert estimate.estimated_seconds == pytest.approx(2.25)
+    assert estimate.overlap_seconds == pytest.approx(0.8)
+    assert estimate.batch_seconds == 0.03
+    payload = estimate.to_payload()
+    assert payload["model"] == "roofline-calibrated-overlap.v2"
+    assert payload["calibration"]["schema"].endswith(".v2")
+    json.dumps(payload, allow_nan=False)
+
+
+def test_refined_memory_curve_is_independent_of_compute_saturation() -> None:
+    estimate = estimate_cuda_time(
+        _cost(),
+        _calibration(
+            model="roofline-calibrated-overlap.v2",
+            memory_throughput_curve=((0, 0), (0.25, 0.5), (1, 1)),
+        ),
+    )
+    # At occupancy 1/3, interpolate memory scale to 5/9; compute remains 2/3.
+    assert estimate.parallel_scale == pytest.approx(2 / 3)
+    assert estimate.memory_parallel_scale == pytest.approx(5 / 9)
+    assert estimate.compute_seconds == pytest.approx(0.0015)
+    assert estimate.memory_seconds == pytest.approx(0.0018)
+
+
+@pytest.mark.parametrize(
+    ("grid", "body"), [(85, 1.0), (170, 1.0), (255, 2.0), (340, 2.0)]
+)
+def test_uniform_compute_blocks_pay_for_partial_sm_wave(grid: int, body: float) -> None:
+    cost = static_cuda_cost(
+        GpuProfitability(
+            arithmetic_operation_count=grid * 100,
+            semantic_traffic_bytes=0,
+            launch_count=1,
+            compiled_registers_per_thread=32,
+            shared_bytes=0,
+            spill_store_bytes=0,
+            spill_load_bytes=0,
+        ),
+        cuda_target_info("sm_120"),
+        128,
+        grid_blocks=grid,
+        sm_count=170,
+    )
+    calibration = _calibration(
+        model="roofline-calibrated-overlap.v2",
+        compute_wave_correction=True,
+        saturation_occupancy=1 / 12,
+        effective_compute_ops_per_second=17000,
+    )
+    estimate = estimate_cuda_time(cost, calibration)
+    assert estimate.compute_seconds == pytest.approx(body)
+
+
+def test_refined_noop_does_not_charge_batch_synchronization() -> None:
+    result = estimate_cuda_time(
+        _cost(launch_count=0, arithmetic_operation_count=0, semantic_traffic_bytes=0),
+        _calibration(model="roofline-calibrated-overlap.v2", batch_seconds=1.0),
+    )
+    assert result.estimated_seconds == result.batch_seconds == 0.0
+
+
+@pytest.mark.parametrize(
+    "curve",
+    [
+        ((0, 0), (0.5, 0.8), (0.75, 0.7), (1, 1)),
+        ((0, 0), (0.5, 0.5), (0.5, 0.7), (1, 1)),
+        ((0, 0), (1, 0.9)),
+        ((0, 0), (1, float("nan"))),
+        ((0, 0), (1, True)),
+        ((0, 0), (0.5, 0), (1, 1)),
+    ],
+)
+def test_refined_memory_curve_rejects_invalid_or_nonmonotone_calibration(
+    curve: tuple,
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        _calibration(
+            model="roofline-calibrated-overlap.v2", memory_throughput_curve=curve
+        )
+
+
+def test_refined_terms_cannot_silently_change_a_v1_calibration() -> None:
+    with pytest.raises(ValueError, match="require the v2 model"):
+        _calibration(batch_seconds=0.1)
+    assert "model" not in _calibration().to_payload()

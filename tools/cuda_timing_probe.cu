@@ -50,8 +50,8 @@ __global__ void copy_probe(const double* __restrict__ input, double* __restrict_
     output[i] = input[i];
 }
 
-// A different, held-out mixed compute/streaming kernel. It is not used to fit
-// either achieved rate. Each element executes exactly iterations FP64 FMAs.
+// Streaming transform family: each element executes exactly iterations FP64
+// FMAs. The refined suite fits this family separately from independent chains.
 __global__ void mixed_probe(const double* __restrict__ input, double* __restrict__ output,
                             std::size_t count, int iterations) {
   for (std::size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < count;
@@ -146,6 +146,8 @@ int main(int argc, char** argv) {
     if (!std::getenv("SLURM_JOB_ID")) throw std::runtime_error("run this probe through srun");
     const int samples = argc > 1 ? std::stoi(argv[1]) : 7;
     const bool smoke = argc > 2 && std::string(argv[2]) == "--smoke";
+    const bool refined = argc > 2 && std::string(argv[2]) == "--refined";
+    const bool training_only = argc > 3 && std::string(argv[3]) == "--training-only";
     if (samples < 3 || samples > 31) throw std::runtime_error("samples must be 3..31");
     checked(cudaSetDevice(0));  // Slurm's visible ordinal, never a physical index override.
     cudaDeviceProp prop{};
@@ -194,6 +196,41 @@ int main(int argc, char** argv) {
     for (int launches : {512, 2048})
       cases.push_back(
           {"held-launch-" + std::to_string(launches), "holdout", "launch", 1, 128, launches, 0});
+    if (refined) {
+      cases.clear();
+      // Training grids include underfill and saturation. The held-out grids
+      // introduce unseen fractional SM waves; no holdout was used to choose fits.
+      for (int blocks : {std::max(1, sm / 4), std::max(1, sm / 2), sm, sm * 2, sm * 4, sm * 8}) {
+        for (int iterations : {384, 1536})
+          cases.push_back({"train-fma-" + std::to_string(blocks) + "-" + std::to_string(iterations),
+                           "train", "fma", blocks, 256, iterations, 0});
+        for (std::size_t n : {base, maximum})
+          cases.push_back({"train-copy-" + std::to_string(blocks) + "-" + std::to_string(n),
+                           "train", "copy", blocks, 256, 0, n});
+        for (int iterations : {2, 8, 32, 64})
+          cases.push_back(
+              {"train-mixed-" + std::to_string(blocks) + "-" + std::to_string(iterations), "train",
+               "mixed", blocks, 256, iterations, base});
+      }
+      for (int launches : {1, 4, 16, 64, 256, 1024, 4096})
+        cases.push_back(
+            {"train-launch-" + std::to_string(launches), "train", "launch", 1, 128, launches, 0});
+      if (!training_only) {
+        for (int blocks : {std::max(1, sm / 3), sm * 3 / 2, sm * 5}) {
+          cases.push_back(
+              {"fresh-fma-" + std::to_string(blocks), "holdout", "fma", blocks, 256, 896, 0});
+          cases.push_back({"fresh-copy-" + std::to_string(blocks), "holdout", "copy", blocks, 256,
+                           0, base + base / 3});
+          for (int iterations : {3, 6, 12, 24, 48})
+            cases.push_back(
+                {"fresh-mixed-" + std::to_string(blocks) + "-" + std::to_string(iterations),
+                 "holdout", "mixed", blocks, 256, iterations, base + base / 3});
+        }
+        for (int launches : {2, 8, 32, 128, 512, 2048})
+          cases.push_back({"fresh-launch-" + std::to_string(launches), "holdout", "launch", 1, 128,
+                           launches, 0});
+      }
+    }
     // Small, non-divisible extents exercise grid-stride tails under sanitizers.
     // They never enter a calibration fit or performance report.
     if (smoke)
@@ -214,10 +251,12 @@ int main(int argc, char** argv) {
     } while (std::chrono::duration<double>(std::chrono::steady_clock::now() - warm_begin).count() <
              (smoke ? 0.01 : 1.0));
     std::cout << std::setprecision(17);
-    std::cout << "{\"schema\":\"generativeqc.cuda-timing-probe.v1\",\"device\":\"" << prop.name
-              << "\",\"architecture\":\"sm_" << prop.major << prop.minor << "\",\"sm_count\":" << sm
-              << ",\"l2_bytes\":" << prop.l2CacheSize << ",\"driver_version\":" << driver
-              << ",\"runtime_version\":" << runtime
+    std::cout << "{\"schema\":\""
+              << (refined ? "generativeqc.cuda-timing-probe.v2"
+                          : "generativeqc.cuda-timing-probe.v1")
+              << "\",\"device\":\"" << prop.name << "\",\"architecture\":\"sm_" << prop.major
+              << prop.minor << "\",\"sm_count\":" << sm << ",\"l2_bytes\":" << prop.l2CacheSize
+              << ",\"driver_version\":" << driver << ",\"runtime_version\":" << runtime
               << ",\"max_threads_per_sm\":" << prop.maxThreadsPerMultiProcessor
               << ",\"seed\":1787,\"samples\":" << samples << ",\"cases\":[\n";
     bool first_case = true;

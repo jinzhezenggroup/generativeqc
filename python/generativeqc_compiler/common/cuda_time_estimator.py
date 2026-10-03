@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass
+from itertools import pairwise
 
 from .cuda_cost_model import StaticCudaCost
 from .cuda_target import normalize_cuda_architecture
@@ -65,6 +66,11 @@ class CudaTimingCalibration:
     launch_seconds: float
     saturation_occupancy: float
     uncertainty_fraction: float
+    model: str = "roofline-linear-occupancy.v1"
+    memory_throughput_curve: tuple[tuple[float, float], ...] = ()
+    crossover_penalty_curve: tuple[tuple[float, float], ...] = ()
+    batch_seconds: float = 0.0
+    compute_wave_correction: bool = False
 
     def __post_init__(self) -> None:
         for name in ("device", "architecture", "workload", "provenance"):
@@ -96,12 +102,70 @@ class CudaTimingCalibration:
             "uncertainty_fraction",
             _unit_interval(self.uncertainty_fraction, "uncertainty_fraction"),
         )
+        if self.model not in {
+            "roofline-linear-occupancy.v1",
+            "roofline-calibrated-overlap.v2",
+        }:
+            raise ValueError("unsupported CUDA timing model")
+        if type(self.compute_wave_correction) is not bool:
+            raise TypeError("compute_wave_correction must be a boolean")
+        object.__setattr__(
+            self, "batch_seconds", _finite_float(self.batch_seconds, "batch_seconds")
+        )
+        curve = tuple(tuple(point) for point in self.memory_throughput_curve)
+        if curve:
+            if any(len(point) != 2 for point in curve):
+                raise ValueError(
+                    "memory_throughput_curve requires occupancy/fraction pairs"
+                )
+            for x, y in curve:
+                _unit_interval(x, "curve occupancy")
+                _unit_interval(y, "curve throughput")
+            if curve[0] != (0.0, 0.0) or curve[-1] != (1.0, 1.0):
+                raise ValueError("memory_throughput_curve must span (0, 0) to (1, 1)")
+            if any(
+                x1 >= x2 or y1 > y2 or y2 == 0 for (x1, y1), (x2, y2) in pairwise(curve)
+            ):
+                raise ValueError(
+                    "memory_throughput_curve must be monotone with positive throughput"
+                )
+        object.__setattr__(self, "memory_throughput_curve", curve)
+        penalties = tuple(tuple(point) for point in self.crossover_penalty_curve)
+        if penalties:
+            if any(len(point) != 2 for point in penalties):
+                raise ValueError(
+                    "crossover_penalty_curve requires occupancy/penalty pairs"
+                )
+            for x, y in penalties:
+                _unit_interval(x, "crossover occupancy")
+                _unit_interval(y, "crossover penalty")
+            if penalties[0][0] != 0.0 or penalties[-1][0] != 1.0:
+                raise ValueError("crossover_penalty_curve must span occupancies 0 to 1")
+            if any(x1 >= x2 for (x1, _), (x2, _) in pairwise(penalties)):
+                raise ValueError("crossover occupancies must be strictly increasing")
+        object.__setattr__(self, "crossover_penalty_curve", penalties)
+        if self.model.endswith(".v1") and (
+            curve or self.batch_seconds or penalties or self.compute_wave_correction
+        ):
+            raise ValueError("refined calibration terms require the v2 model")
 
     def to_payload(self) -> dict[str, object]:
         """Serialize calibration identity and all explicit modeling assumptions."""
+        payload = asdict(self)
+        version = "v2" if self.model.endswith(".v2") else "v1"
+        if version == "v1":
+            # Preserve the retained v1 profile byte semantics and replay results.
+            for name in (
+                "model",
+                "memory_throughput_curve",
+                "crossover_penalty_curve",
+                "batch_seconds",
+                "compute_wave_correction",
+            ):
+                payload.pop(name)
         return {
-            "schema": "generativeqc.compiler.cuda-timing-calibration.v1",
-            **asdict(self),
+            "schema": f"generativeqc.compiler.cuda-timing-calibration.{version}",
+            **payload,
         }
 
 
@@ -129,6 +193,9 @@ class CudaTimeEstimate:
     parallel_scale: float | None
     bottleneck: str | None
     diagnostics: tuple[str, ...]
+    memory_parallel_scale: float | None = None
+    overlap_seconds: float | None = None
+    batch_seconds: float = 0.0
 
     @property
     def device(self) -> str:
@@ -139,8 +206,9 @@ class CudaTimeEstimate:
         """Serialize a self-contained report, including static evidence caveats."""
         return {
             **asdict(self),
-            "schema": "generativeqc.compiler.cuda-time-estimate.v1",
-            "model": "roofline-linear-occupancy.v1",
+            "schema": "generativeqc.compiler.cuda-time-estimate."
+            + self.calibration.model.rsplit(".", 1)[1],
+            "model": self.calibration.model,
             "scope": (
                 "experimental homogeneous-kernel engineering estimate; "
                 "not an endpoint prediction or a statistical confidence interval; "
@@ -256,8 +324,39 @@ def estimate_cuda_time(
             diagnostics.append("known launch shape exposes no executable parallelism")
 
     parallel_scale = None
+    memory_scale = None
     if parallelism is not None and parallelism > 0.0:
         parallel_scale = min(1.0, parallelism / calibration.saturation_occupancy)
+        memory_scale = parallel_scale
+        if (
+            calibration.compute_wave_correction
+            and cost.grid_blocks is not None
+            and cost.sm_count is not None
+        ):
+            # Uniform compute-bound blocks share SM-local execution units. A
+            # fractional final SM wave completes at the busiest SM, not at the
+            # device-average work count. Integer arithmetic keeps huge grids safe.
+            resident = cost.resident_blocks_per_sm_upper_bound
+            if resident > 0 and cost.occupancy_upper_bound is not None:
+                busy_blocks = (cost.grid_blocks + cost.sm_count - 1) // cost.sm_count
+                busy_occupancy = (
+                    min(busy_blocks, resident) * cost.occupancy_upper_bound / resident
+                )
+                balance = cost.grid_blocks / (cost.sm_count * busy_blocks)
+                parallel_scale = balance * min(
+                    1.0, busy_occupancy / calibration.saturation_occupancy
+                )
+                diagnostics.append(
+                    "compute throughput includes uniform-block SM wave imbalance"
+                )
+        if calibration.memory_throughput_curve:
+            for (x0, y0), (x1, y1) in pairwise(calibration.memory_throughput_curve):
+                if parallelism <= x1:
+                    memory_scale = y0 + (y1 - y0) * ((parallelism - x0) / (x1 - x0))
+                    break
+            diagnostics.append(
+                "memory throughput uses a measured monotone occupancy curve"
+            )
         if parallel_scale < 1.0:
             diagnostics.append(
                 "effective throughput is linearly reduced below the calibrated saturation occupancy"
@@ -292,7 +391,7 @@ def estimate_cuda_time(
     compute_seconds = memory_seconds = None
     if empty:
         compute_seconds = memory_seconds = 0.0
-    elif parallel_scale is not None:
+    elif parallel_scale is not None and parallel_scale > 0:
         compute_seconds = finite_seconds(
             cost.arithmetic_operation_count,
             calibration.effective_compute_ops_per_second,
@@ -304,12 +403,13 @@ def estimate_cuda_time(
             if cost.semantic_traffic_bytes is None or effective_spills is None
             else cost.semantic_traffic_bytes + effective_spills
         )
-        memory_seconds = finite_seconds(
-            traffic,
-            calibration.effective_memory_bytes_per_second,
-            parallel_scale,
-            "memory time",
-        )
+        if memory_scale is not None and memory_scale > 0:
+            memory_seconds = finite_seconds(
+                traffic,
+                calibration.effective_memory_bytes_per_second,
+                memory_scale,
+                "memory time",
+            )
     # Multiplication avoids overflowing the reciprocal for tiny launch latencies.
     launch_seconds = None
     if cost.launch_count is not None:
@@ -322,14 +422,31 @@ def estimate_cuda_time(
             launch_seconds = None
 
     estimated_seconds = lower_seconds = upper_seconds = None
+    overlap_seconds = None
+    batch_seconds = 0.0 if empty else calibration.batch_seconds
     bottleneck = None
     if (
         compute_seconds is not None
         and memory_seconds is not None
         and launch_seconds is not None
     ):
-        body_seconds = max(compute_seconds, memory_seconds)
-        total = body_seconds + launch_seconds
+        # The bounded crossover correction is largest near C == M and decays
+        # quadratically when one resource dominates. It stays between a roofline
+        # maximum and serialized C+M, without overflowing C+M before subtraction.
+        major, minor = (
+            max(compute_seconds, memory_seconds),
+            min(compute_seconds, memory_seconds),
+        )
+        penalty = 0.0
+        if calibration.crossover_penalty_curve and parallelism is not None:
+            for (x0, y0), (x1, y1) in pairwise(calibration.crossover_penalty_curve):
+                if parallelism <= x1:
+                    penalty = y0 + (y1 - y0) * ((parallelism - x0) / (x1 - x0))
+                    break
+        correction = penalty * (minor / major) * minor if major else 0.0
+        overlap_seconds = minor - correction
+        body_seconds = major + correction
+        total = body_seconds + launch_seconds + batch_seconds
         upper = total * (1.0 + calibration.uncertainty_fraction)
         if math.isfinite(total) and math.isfinite(upper):
             estimated_seconds = total
@@ -337,7 +454,7 @@ def estimate_cuda_time(
             upper_seconds = upper
             if empty:
                 bottleneck = "none"
-            elif launch_seconds > body_seconds:
+            elif launch_seconds + batch_seconds > body_seconds:
                 bottleneck = "launch"
             elif math.isclose(
                 compute_seconds, memory_seconds, rel_tol=1.0e-9, abs_tol=0.0
@@ -365,4 +482,7 @@ def estimate_cuda_time(
         parallel_scale=parallel_scale,
         bottleneck=bottleneck,
         diagnostics=tuple(diagnostics),
+        memory_parallel_scale=memory_scale,
+        overlap_seconds=overlap_seconds,
+        batch_seconds=batch_seconds,
     )

@@ -122,15 +122,21 @@ def _report(args: argparse.Namespace) -> dict[str, object]:
     calibration = None
     if args.calibration is not None:
         calibration_payload = json.loads(args.calibration.read_text(encoding="utf-8"))
-        if (
-            not isinstance(calibration_payload, dict)
-            or calibration_payload.pop("schema", None)
-            != "generativeqc.compiler.cuda-timing-calibration.v1"
-        ):
+        schema = (
+            calibration_payload.pop("schema", None)
+            if isinstance(calibration_payload, dict)
+            else None
+        )
+        if schema not in {
+            "generativeqc.compiler.cuda-timing-calibration.v1",
+            "generativeqc.compiler.cuda-timing-calibration.v2",
+        }:
             raise ValueError(
                 "calibration must be a cuda-timing-calibration.v1 JSON object"
             )
         calibration = CudaTimingCalibration(**calibration_payload)
+        if calibration.to_payload()["schema"] != schema:
+            raise ValueError("calibration schema and model version disagree")
     elif args.spill_traffic_bytes is not None or args.allow_per_sm_fallback:
         raise ValueError("timing options require --calibration")
     target = cuda_target_info(args.arch)

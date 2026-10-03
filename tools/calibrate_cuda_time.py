@@ -9,6 +9,7 @@ band. Held-out cases are scored only after those parameters have been frozen.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import math
@@ -24,6 +25,7 @@ from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "python"))
+sys.path.insert(0, str(_ROOT))
 
 from generativeqc_compiler.common.cuda_cost_model import (
     StaticCudaCost,
@@ -67,7 +69,13 @@ def _run(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
 
 
 def collect(
-    nvcc: Path, architecture: str, samples: int, destination: Path
+    nvcc: Path,
+    architecture: str,
+    samples: int,
+    destination: Path,
+    *,
+    refined: bool = False,
+    training_only: bool = False,
 ) -> dict[str, Any]:
     """Compile with ccache and measure only within the caller's Slurm allocation.
 
@@ -125,7 +133,12 @@ def collect(
         "--format=csv",
     ]
     before = _run(query).stdout
-    result = _run([str(binary), str(samples)], cwd=_ROOT)
+    probe_args = [str(binary), str(samples)]
+    if refined:
+        probe_args.append("--refined")
+        if training_only:
+            probe_args.append("--training-only")
+    result = _run(probe_args, cwd=_ROOT)
     (build / "progress.txt").write_text(result.stderr, encoding="utf-8")
     measurement = json.loads(result.stdout)
     if measurement["architecture"] != target.architecture:
@@ -137,7 +150,12 @@ def collect(
         "source_revision": _run(["git", "rev-parse", "HEAD"], cwd=_ROOT).stdout.strip(),
         "source_files": {
             str(path.relative_to(_ROOT)): _hash(path)
-            for path in (source, Path(__file__).resolve())
+            for path in (
+                source,
+                Path(__file__).resolve(),
+                _ROOT / "tools/cuda_timing_refined.py",
+                _ROOT / "python/generativeqc_compiler/common/cuda_time_estimator.py",
+            )
         },
         "binary_sha256": _hash(binary),
         "compiler_version": compiler_version,
@@ -374,25 +392,75 @@ def main() -> None:
     parser.add_argument("--nvcc", type=Path)
     parser.add_argument("--arch", help="explicit CUDA architecture for collection")
     parser.add_argument("--samples", type=int, default=7)
+    parser.add_argument("--suite", choices=("legacy", "refined"), default="legacy")
+    parser.add_argument(
+        "--training-only",
+        action="store_true",
+        help="collect refined training before inspecting fresh holdouts",
+    )
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     if args.measurement:
-        measurement = json.loads(args.measurement.read_text(encoding="utf-8"))
-        source = args.measurement
-        if source.resolve() != (args.output / "measurement.json").resolve():
-            shutil.copyfile(source, args.output / "measurement.json")
+        raw = args.measurement.read_bytes()
+        if args.measurement.suffix == ".gz":
+            raw = gzip.decompress(raw)
+        measurement = json.loads(raw)
+        source = args.output / "measurement.json"
+        if source.resolve() != args.measurement.resolve():
+            source.write_bytes(raw)
     else:
         if args.nvcc is None or args.arch is None:
             parser.error("collection requires --nvcc and --arch")
-        measurement = collect(args.nvcc.resolve(), args.arch, args.samples, args.output)
+        if args.training_only and args.suite != "refined":
+            parser.error("--training-only requires --suite refined")
+        measurement = collect(
+            args.nvcc.resolve(),
+            args.arch,
+            args.samples,
+            args.output,
+            refined=args.suite == "refined",
+            training_only=args.training_only,
+        )
         source = args.output / "measurement.json"
-    calibration, qualification = fit(measurement, _hash(source))
-    _json(args.output / "calibration.json", calibration.to_payload())
+    if measurement.get("schema") == "generativeqc.cuda-timing-probe.v2":
+        from tools.cuda_timing_refined import fit_refined, score_refined
+
+        profiles = fit_refined(measurement, _hash(source))
+        qualification = score_refined(measurement, profiles, _hash(source))
+        calibration_payload = {
+            name: profile.to_payload() for name, profile in profiles.items()
+        }
+        for name, payload in calibration_payload.items():
+            _json(args.output / f"calibration-{name}.json", payload)
+        if qualification["holdout"] is not None:
+            # The matched v1 comparator uses its original training recipe:
+            # pure compute/copy and long launch batches. Both models predict
+            # every same fresh holdout; no case is removed from the comparison.
+            baseline_input = {
+                **measurement,
+                "schema": "generativeqc.cuda-timing-probe.v1",
+                "cases": [
+                    row
+                    for row in measurement["cases"]
+                    if row["split"] == "holdout"
+                    or (
+                        row["family"] != "mixed"
+                        and (row["family"] != "launch" or row["launch_count"] >= 256)
+                    )
+                ],
+            }
+            baseline, comparison = fit(baseline_input, _hash(source))
+            qualification["baseline"] = comparison
+            _json(args.output / "calibration-baseline.json", baseline.to_payload())
+    else:
+        calibration, qualification = fit(measurement, _hash(source))
+        calibration_payload = calibration.to_payload()
+        _json(args.output / "calibration.json", calibration_payload)
     _json(args.output / "qualification.json", qualification)
     print(
         json.dumps(
             {
-                "calibration": calibration.to_payload(),
+                "calibration": calibration_payload,
                 "holdout": qualification["holdout"],
                 "holdout_by_family": qualification["holdout_by_family"],
                 "qualified": qualification["qualified"],
@@ -400,7 +468,7 @@ def main() -> None:
             indent=2,
         )
     )
-    if not qualification["qualified"]:
+    if qualification["holdout"] is not None and not qualification["qualified"]:
         raise SystemExit(1)
 
 
