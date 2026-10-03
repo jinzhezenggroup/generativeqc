@@ -41,6 +41,18 @@
       "path": "summary.json",
       "role": "summary",
       "sha256": "b7f72a50a619a78f82123d6ad15752223f4e6767a26484132f7805cc38cb615f"
+    },
+    {
+      "bytes": 1076,
+      "path": "qualification.patch.gz",
+      "role": "source-patch",
+      "sha256": "aa4cd6f80683191323b21fd481f9747104230475d20f3ad8bc1b1aad73e87dd0"
+    },
+    {
+      "bytes": 1862,
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "d081a95a5c75a1abb766577aea66ed4d2e80b44ae954e4cbe322aa663a194045"
     }
   ],
   "reproduction": {
@@ -53,7 +65,7 @@
       "tests/python/test_df_cc_native_codegen.py",
       "tests/python/test_tensor_complexity.py"
     ],
-    "instructions": "Apply gzip -dc source.patch.gz | git apply to the exact parent. Use ccache with CCACHE_BASEDIR at checkout root. Set PYTHONPATH=python:., PATH to CUDA12.9.86, and GENERATIVEQC_DF_CC_CUDA_TEST=1 inside a finite Slurm main gpu:5090:1 allocation. Native fixtures compile separate cached objects then link; run all four action stdin records under unfiltered compute-sanitizer memcheck on the built CUDA probe. The action-only arena excludes caller retention/staging and is not an endpoint budget. The oracles archive retains both complete original reference JSON records and their exact measured source, including pinned PySCF2.14.0, geometry, basis, metric policy and state hashes; invoke that source with --case ethane230/benzene264 --output <ignored directory> under finite Slurm CPU jobs. Its large .npz states are reproducible validation-only artifacts, never production dependencies."
+    "instructions": "Apply gzip -dc source.patch.gz | git apply to the exact parent to reproduce the measured snapshot. Then apply gzip -dc qualification.patch.gz | git apply for the final typing-only fix; qualification.json records generated-source byte parity and host checks. Use ccache with CCACHE_BASEDIR at checkout root. Set PYTHONPATH=python:., PATH to CUDA12.9.86, and GENERATIVEQC_DF_CC_CUDA_TEST=1 inside a finite Slurm main gpu:5090:1 allocation. Native fixtures compile separate cached objects then link; run all four action stdin records under unfiltered compute-sanitizer memcheck on the built CUDA probe. The action-only arena excludes caller retention/staging and is not an endpoint budget. The oracles archive retains both complete original reference JSON records and their exact measured source, including pinned PySCF2.14.0, geometry, basis, metric policy and state hashes; invoke that source with --case ethane230/benzene264 --output <ignored directory> under finite Slurm CPU jobs. Its large .npz states are reproducible validation-only artifacts, never production dependencies."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

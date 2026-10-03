@@ -81,39 +81,39 @@ def build_df_virtual_correction_program(nocc: int, nvir: int) -> Program:
         node.attrs["name"]: node for node in source.live_nodes if node.op == "input"
     }
     occupied, virtual = (index.space for index in inputs["t1"].spec.indices)
-    common = {
-        "role": "parameter",
-        "differentiable": True,
-        "representation": "restricted_spatial",
-    }
     bov = input_tensor(
-        "bov", TensorSpec((Index("i", occupied), Index("a", virtual)), **common)
+        "bov",
+        TensorSpec(
+            (Index("i", occupied), Index("a", virtual)),
+            role="parameter",
+            differentiable=True,
+            representation="restricted_spatial",
+        ),
     )
     bvv = input_tensor(
         "bvv",
         TensorSpec(
             (Index("a", virtual), Index("b", virtual)),
             symmetries=(Symmetry((1, 0)),),
-            **common,
+            role="parameter",
+            differentiable=True,
+            representation="restricted_spatial",
         ),
     )
     selected: dict[Node, Node | None] = {}
     for node in source.dependency_order:
         if node.op == "add":
-            terms = [
-                (selected[child], Fraction(*coefficient))
-                for child, coefficient in zip(
-                    node.inputs, node.attrs["coefficients"], strict=True
-                )
-                if selected[child] is not None
-            ]
+            terms: list[Node] = []
+            coefficients: list[Fraction] = []
+            for child, coefficient in zip(
+                node.inputs, node.attrs["coefficients"], strict=True
+            ):
+                selected_child = selected[child]
+                if selected_child is not None:
+                    terms.append(selected_child)
+                    coefficients.append(Fraction(*coefficient))
             selected[node] = (
-                add(
-                    *(term for term, _ in terms),
-                    coefficients=tuple(c for _, c in terms),
-                )
-                if terms
-                else None
+                add(*terms, coefficients=tuple(coefficients)) if terms else None
             )
             continue
         if node.op != "einsum" or not any(
@@ -150,12 +150,15 @@ def build_df_virtual_correction_program(nocc: int, nvir: int) -> Program:
             *operands,
             coefficient=Fraction(*node.attrs["coefficient"]),
         )
-    outputs = {
-        "df_virtual_singles": selected[source.outputs["singles_residual"]],
-        "df_virtual_doubles": selected[source.outputs["doubles_residual"]],
-    }
-    if any(node is None for node in outputs.values()):
-        raise ValueError("RCCSD inventory has no DF virtual correction")
+    outputs: dict[str, Node] = {}
+    for target, source_name in (
+        ("df_virtual_singles", "singles_residual"),
+        ("df_virtual_doubles", "doubles_residual"),
+    ):
+        selected_output = selected[source.outputs[source_name]]
+        if selected_output is None:
+            raise ValueError("RCCSD inventory has no DF virtual correction")
+        outputs[target] = selected_output
     program = Program(
         outputs,
         provenance={
