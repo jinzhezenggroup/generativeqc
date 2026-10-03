@@ -175,8 +175,14 @@ Conventional admission rejects the DF representation unless an owner explicitly
 opts in. Existing Lambda, triples and force consumers remain conventional.
 This internal supplied-Hamiltonian solver does not register a native source or
 public DF Calculator endpoint. Its qualification is
-`tests/python/test_df_cc_native_solver.py`; complete hundreds-AO native
-CCSD(T) energy and forces still require the remaining source/response owners.
+`tests/python/test_df_cc_native_solver.py`. The supplied-Hamiltonian solver is
+also checked for 230-AO ethane using `benchmarks/df_ccsd_native_solver_probe.py`:
+energy must agree within 3e-9 Eh, every amplitude within 1e-8, and expanded
+physical residuals must be below 1e-10. That adapter reconstructs the same packed
+AO factors consumed by the independent oracle before the symmetric MO transform;
+stored full MO factors are not substituted for the oracle's packed source.
+Complete hundreds-AO native CCSD(T) energy and forces still require the remaining
+source/response owners.
 
 See the [native solver decision](../../.agents/notes/implemented/architecture/2026-10-03-df-cc-native-solver.md)
 for ownership and auxiliary-work rationale.

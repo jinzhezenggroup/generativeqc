@@ -8,7 +8,7 @@
     {
       "kind": "numerical-qualification",
       "path": "summary.json",
-      "sha256": "b825f1d08990d33db8669a5875a15e0b9420ec258aac0d51b2e6daf817f1ca50"
+      "sha256": "2c03db6095738184a6ed04a73b332fdcf682f39cbcfddfc18ba9b565daa9e0f7"
     },
     {
       "kind": "numerical-qualification",
@@ -19,6 +19,11 @@
       "kind": "numerical-qualification",
       "path": "qualification.json.gz",
       "sha256": "e45ba3e3702beb5aac50fd107944ea9046ea38199f4f2e7a22628b324959b4b0"
+    },
+    {
+      "kind": "numerical-qualification",
+      "path": "large-ethane230.json.gz",
+      "sha256": "361bb113dbeef36e8f01591c48dec0c8f00137a81cbdf558e58fc871319fc5e6"
     }
   ],
   "backend_selected": "cuda",
@@ -54,6 +59,17 @@
       "rtol": 0,
       "shape": [
         574
+      ]
+    },
+    "cuda_ethane230_oracle_energy": {
+      "atol": 3e-09,
+      "max_absolute_error": 1.4473977572038166e-12,
+      "max_scaled_error": 0.00048246591906793884,
+      "passed": true,
+      "rms_error": 1.4473977572038166e-12,
+      "rtol": 0,
+      "shape": [
+        1
       ]
     },
     "cuda_oracle_energy": {

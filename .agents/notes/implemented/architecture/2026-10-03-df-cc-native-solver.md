@@ -67,3 +67,24 @@ and two full unfiltered small-solve memchecks report zero errors in Slurm job
 This is internal supplied-Hamiltonian solver qualification. Independent
 hundreds-AO PySCF source states are validation targets, never production inputs.
 A complete native DF CCSD(T) energy/force endpoint remains unqualified.
+
+## Hundreds-AO supplied-Hamiltonian follow-up
+
+Slurm job 2156 on n2's RTX PRO 6000 converged 230-AO ethane from MP2 amplitudes
+in 20 iterations: correlation energy -0.44469476610196296 Eh, differing from
+the pinned PySCF value by 1.4473977572038166e-12 Eh. Maximum T1/T2 discrepancies
+are 8.19218729311566e-11 and 5.602699727769167e-12; expanded replay R1/R2 maxima
+are 4.052430266354712e-12 and 1.5784908102833839e-12. The internal solve took
+688.284329257 s and admitted 2730069584 numeric bytes, including 2339939072
+device bytes. Its 38 primary plus one replay evaluation consumed all 19032 Q
+slices and 1027728 generated virtual operations. This is a baseline work
+diagnosis, not a speedup or complete molecular endpoint measurement.
+
+The first attempt correctly rejected stored B_MO symmetry error of
+5.133386246761707e-10. The independent oracle actually passes packed lower
+AO factors to PySCF. The reproducer rebuilds that packed Hamiltonian, restores
+AO pair symmetry, transforms to MO, and symmetrizes only floating-point pair
+roundoff. The maximum change from separately stored B_MO is
+5.955858803319108e-10. It preserves the native 1e-10 symmetry gate, and the
+resulting input reproduces the measured SHA256 exactly. Do not relax input
+symmetry checks to accommodate a different representation of the oracle state.
