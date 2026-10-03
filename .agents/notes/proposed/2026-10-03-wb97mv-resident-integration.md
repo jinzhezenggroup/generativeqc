@@ -215,6 +215,20 @@ Ignored `.artifacts/master837-20261004/` retains build, cache, source archive an
 all qualification receipts; `.artifacts/master837-pro6000-96-20261004/` retains
 the new complete timing campaign. No existing endpoint is relabeled.
 
+## Master resident-component merges without changed build inputs
+
+Merge `7bbbd9c54` incorporates actual master `79418329e`, including the reviewed
+resident AO-column discovery and geometry-bound map-cache components. Those
+component changes already exist in this integration: the merge tree has no
+file-content difference from its first parent. Recomputing the complete
+1355-input manifest preserves identity `d198acd7` above exactly. The existing
+`fe826ad7` library and Slurm 2181 qualification therefore still describe every
+native/compiler/Python build input in this composition; no rebuild or repeated
+device test is represented as necessary or performed for this history-only
+merge. The ignored `.artifacts/master794-20261004/input-identity.json` records
+the full hashes and this scope. All running benchmark snapshots retain their
+original commits and timings.
+
 ## Readiness boundaries
 
 The earlier parent B3LYP failure is superseded by the full-regression result
