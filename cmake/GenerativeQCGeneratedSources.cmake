@@ -823,7 +823,8 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_cartesian.cuh"
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_contraction.cuh")
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_contraction.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_eri_materialization.cuh")
   generativeqc_register_generated_sources(
     NAME generativeqc_direct_cartesian_contraction_codegen
     TARGET ${target}
