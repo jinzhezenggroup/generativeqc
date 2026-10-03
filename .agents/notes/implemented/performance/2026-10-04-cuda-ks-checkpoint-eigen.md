@@ -101,3 +101,29 @@ The failure and initial attempts remain under ignored
 The four new tests are scientific admission/lifetime qualification, not a
 complete WB97M-V cold speed measurement. Latest-master composition and complete
 preliminary-source plus target E/F controls remain separate required evidence.
+
+## Latest-master composition
+
+Merge 622af6871 includes master b909e14c1. Its frozen Release/sm_120 build
+verifies 453 ccache compiler commands, native identity
+`20dac455927d54d4361dd08c163a3ca3c92641ef08f69e5a48fa0a0a068841f1` and library
+`06c296721006fbdd79378e96dcca5f8880b119ded66e94290b11187b01e0e3f7`.
+Finite n5 Slurm 1427 passes all three native executables: ordinary stream eigen,
+shared proposal/seed guards and the now-linkable full CUDA DFT regression.
+Python again reports 29 passes, including all four new admission/live-lease
+cases, and the one unchanged baseline PBE-UKS OH failure above (no skips).
+The raw allocation exits 1. The scoped receipt preserves that outcome and
+explicitly says `whole_suite_passed: false`; it admits only the new checkpoint
+path, not a passing full Python regression.
+
+The complete private LDA-source plus WB97M-V E/F control compares this candidate
+with actual master b909e14c1 on one allocated RTX 5090. The baseline reuses the
+qualified #1801 binary only after recomputing and matching every native input
+of the actual master snapshot. Both sides use identical source/target settings,
+charge source creation/solve/export/import/destruction to complete cold, retain
+three warm samples and require every E/F pair against GPU4PySCF. Slurm 1430 is
+queued with a finite two-hour limit for 3- and 48-atom controls. No result or
+endpoint speed claim is inferred from submission. Source archives, binary and
+driver hashes, the exact retained baseline failure and all raw outputs remain
+in ignored `.artifacts/masterb909-20261004/` and
+`.artifacts/cold-admission-20261004/`.
