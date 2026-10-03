@@ -98,6 +98,31 @@ corrections already existed in the larger integration branch; no production
 precision gate is widened here. Keep the failed device receipt and rerun the
 complete standalone test before claiming qualification.
 
+With these test-only corrections, n2 Slurm 2185 passes the complete native DFT
+regression and all seven independent WB97M-V energy/analytic-force, displaced
+geometry and stale-state/failure-isolation cases (194.66 seconds). The library
+hash above is unchanged; the corrected standalone executable is
+`1d5d9e1c535bc69b4e4899e110ef8ff1a45df1210b3411e4390b6fcc26592c0c`.
+The 1351-input source identity is
+`aeb864b833898c11bb4bef40923bf3dae54b539aa27cb74e257751719a6dd748`, built from
+master `38fc52352` plus this patch; the frozen test/source commit is `54a1d40e1`.
+An intermediate deployment attempt (2184) passed native DFT but could not run
+the Python force endpoints because the private compiler wrapper directory
+lacked its `ptxas` link. That environment failure is retained separately and
+does not count as numerical qualification. No device visibility was overridden.
+
+The n5 RTX 5090 complete comparator first passes all ten 3-atom master/candidate
+cold, priming and warm reference pairs at unchanged 1e-8 Eh / 1e-7 Eh/Bohr gates.
+Both paths take 15 cold iterations and one iteration per replay; force work
+counts agree. These first-use cold numbers cannot establish a packing speedup:
+force preparation takes 17.767120 s in the first baseline process but 2.328321 s
+in the later candidate, whereas their SCF preparation is 0.433469/0.435216 s.
+This is an existing persistent-cache asymmetry outside the changed packing
+code. Retain the measurements, then run fresh processes in reversed order
+after both caches have been exercised. Neither ccache nor JIT caches are
+cleared. The 24-atom and reversed-order cache controls are pending at this
+checkpoint; no complete-cold acceleration is claimed.
+
 ## Revisit when
 
 If Direct J/K gains a consumer of the legacy resident-PSSS catalog, that consumer
