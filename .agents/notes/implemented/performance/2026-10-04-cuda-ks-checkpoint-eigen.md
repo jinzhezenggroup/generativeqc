@@ -174,3 +174,22 @@ remain unchanged, but the runtime Python inputs change, so the completed
 master-737 library is retained as an intermediate build and is not relabeled.
 A new source-bound ccache build and native/admission qualification cover this
 union. The running b909 baseline/candidate endpoint comparison remains frozen.
+
+Frozen 11d793fac completes the new build with 453 verified ccache compiler
+commands, source identity
+`dcfdc7f0687b950381ea5dca9c3f47601a521cfdb43fca3756cef7cad93f94eb`
+and library SHA-256
+`1d5d7ac28cd214bc6ae4e86fb9682657dca793b5b398f6b8d7b6af0312bdd955`.
+All 37 device-free resident-caller tests and applicable hooks pass. Finite n2
+RTX PRO 6000 Slurm 2194 passes all three native executables and all four new
+admission/live-lease cases. The Python selection again has 29 passes, no skips,
+and the same single PBE-UKS changed/fresh failure: -75.58331065095037 versus
+-75.58331066533135 Eh at the unchanged 1e-9 gate. The prior n5 baseline control
+remains separately identified; no new PRO 6000 baseline rerun is implied.
+
+The raw job exits 1 and the source-bound scoped receipt explicitly retains
+`whole_suite_passed: false`. Before execution, the runner verifies every deployed
+source/test file against the archived commit, the native manifest, library,
+native executables and qualification-script hashes. The completed evidence is
+under ignored `.artifacts/masterf88-20261004/`; it establishes current-composition
+admission qualification, not a passing whole Python suite or an endpoint speedup.
