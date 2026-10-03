@@ -1,12 +1,8 @@
-"""Calibrated CUDA wall-time estimates layered over static cost evidence.
+"""Experimental, GPU-free kernel timing from explicit achieved-rate calibration.
 
-This module deliberately keeps hardware calibration separate from architecture
-limits. A CUDA architecture alone is not enough to predict seconds: callers
-must provide measured effective rates for the intended device/SKU.
-
-The first model is intentionally small and auditable. It uses a roofline-style
-maximum of compute and memory time, explicit launch latency, and a disclosed
-parallelism correction derived from the static CUDA cost report.
+This is a separate layer over static candidate screening, not a promotion policy
+or an endpoint predictor. Rates and work counts must use the same operation,
+precision, and traffic conventions. No calibration or device topology is guessed.
 """
 
 from __future__ import annotations
@@ -15,64 +11,94 @@ import math
 from dataclasses import asdict, dataclass
 
 from .cuda_cost_model import StaticCudaCost
+from .cuda_target import normalize_cuda_architecture
 
 
-def _positive_float(value: float, name: str) -> float:
+def _finite_float(value: float, name: str, *, positive: bool = False) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{name} must be a finite positive number")
-    numeric = float(value)
-    if not math.isfinite(numeric) or numeric <= 0.0:
-        raise ValueError(f"{name} must be a finite positive number")
+        raise TypeError(f"{name} must be a finite number")
+    try:
+        numeric = float(value)
+    except OverflowError as exc:
+        raise ValueError(f"{name} must be finite") from exc
+    if not math.isfinite(numeric) or numeric < 0.0 or (positive and numeric == 0.0):
+        qualifier = "positive" if positive else "non-negative"
+        raise ValueError(f"{name} must be a finite {qualifier} number")
     return numeric
 
 
 def _unit_interval(value: float, name: str, *, positive: bool = False) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise TypeError(f"{name} must be a finite number")
-    numeric = float(value)
-    lower = 0.0 if not positive else math.nextafter(0.0, 1.0)
-    if not math.isfinite(numeric) or numeric < lower or numeric > 1.0:
-        qualifier = "(0, 1]" if positive else "[0, 1]"
-        raise ValueError(f"{name} must be in {qualifier}")
+    numeric = _finite_float(value, name, positive=positive)
+    if numeric > 1.0:
+        raise ValueError(f"{name} must be in {'(0, 1]' if positive else '[0, 1]'}")
     return numeric
+
+
+def _count(value: int | None, name: str, *, positive: bool = False) -> None:
+    if value is not None and (type(value) is not int or value < int(positive)):
+        raise ValueError(
+            f"{name} must be a {'positive' if positive else 'non-negative'} integer or None"
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class CudaTimingCalibration:
-    """Measured device calibration used to turn compiler work into seconds.
+    """Caller-supplied measured rates for a concrete device and workload regime.
 
-    The effective rates are achieved rates from calibration workloads, not
-    vendor peak specifications. saturation_occupancy states the whole-device
-    occupancy fraction at which those rates are assumed to saturate.
+    ``workload`` identifies the kernel family, precision, operation convention
+    (e.g. FMA counts as two), and cache/traffic regime. ``provenance`` identifies
+    retained measurements, including software, clocks, and measurement procedure.
+    The caller must ensure these match the candidate; names cannot certify this.
 
-    uncertainty_fraction is a disclosed engineering error band, not a
-    statistical confidence interval.
+    Rates are achieved whole-device rates at ``saturation_occupancy``, not vendor
+    peaks. The occupancy threshold and engineering ``uncertainty_fraction`` are
+    explicit inputs, not fitted defaults or statistical confidence guarantees.
     """
 
     device: str
+    architecture: str
+    sm_count: int
+    workload: str
+    provenance: str
     effective_compute_ops_per_second: float
     effective_memory_bytes_per_second: float
     launch_seconds: float
-    saturation_occupancy: float = 0.5
-    uncertainty_fraction: float = 0.25
-    provenance: str = ""
+    saturation_occupancy: float
+    uncertainty_fraction: float
 
     def __post_init__(self) -> None:
-        if not isinstance(self.device, str) or not self.device.strip():
-            raise ValueError("device must be a non-empty string")
-        _positive_float(
-            self.effective_compute_ops_per_second,
+        for name in ("device", "architecture", "workload", "provenance"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if normalize_cuda_architecture(self.architecture) != self.architecture:
+            raise ValueError("architecture must use canonical sm_XX notation")
+        if self.sm_count is None:
+            raise ValueError("sm_count is required for device calibration")
+        _count(self.sm_count, "sm_count", positive=True)
+        for name in (
             "effective_compute_ops_per_second",
-        )
-        _positive_float(
-            self.effective_memory_bytes_per_second,
             "effective_memory_bytes_per_second",
+            "launch_seconds",
+        ):
+            object.__setattr__(
+                self, name, _finite_float(getattr(self, name), name, positive=True)
+            )
+        object.__setattr__(
+            self,
+            "saturation_occupancy",
+            _unit_interval(
+                self.saturation_occupancy, "saturation_occupancy", positive=True
+            ),
         )
-        _positive_float(self.launch_seconds, "launch_seconds")
-        _unit_interval(self.saturation_occupancy, "saturation_occupancy", positive=True)
-        _unit_interval(self.uncertainty_fraction, "uncertainty_fraction")
+        object.__setattr__(
+            self,
+            "uncertainty_fraction",
+            _unit_interval(self.uncertainty_fraction, "uncertainty_fraction"),
+        )
 
     def to_payload(self) -> dict[str, object]:
+        """Serialize calibration identity and all explicit modeling assumptions."""
         return {
             "schema": "generativeqc.compiler.cuda-timing-calibration.v1",
             **asdict(self),
@@ -81,9 +107,17 @@ class CudaTimingCalibration:
 
 @dataclass(frozen=True, slots=True)
 class CudaTimeEstimate:
-    """One calibrated wall-time prediction for a CUDA candidate."""
+    """One homogeneous kernel's estimate, with inputs retained for auditing.
 
-    device: str
+    Component times already include the throughput correction. Work/traffic
+    counts cover ALL repetitions; launch_count multiplies only launch latency.
+    Missing components and totals remain None. The interval is an engineering
+    band around the estimate, not a bound on the actual device execution time.
+    """
+
+    calibration: CudaTimingCalibration
+    cost: StaticCudaCost
+    spill_traffic_bytes: int | None
     estimated_seconds: float | None
     lower_seconds: float | None
     upper_seconds: float | None
@@ -91,64 +125,90 @@ class CudaTimeEstimate:
     memory_seconds: float | None
     launch_seconds: float | None
     parallelism_fraction: float | None
+    parallelism_basis: str | None
+    parallel_scale: float | None
     bottleneck: str | None
     diagnostics: tuple[str, ...]
 
+    @property
+    def device(self) -> str:
+        """Device identity from the retained calibration."""
+        return self.calibration.device
+
     def to_payload(self) -> dict[str, object]:
+        """Serialize a self-contained report, including static evidence caveats."""
         return {
-            "schema": "generativeqc.compiler.cuda-time-estimate.v1",
-            "scope": (
-                "calibrated engineering estimate; requires validation against "
-                "real-device endpoint timings"
-            ),
             **asdict(self),
+            "schema": "generativeqc.compiler.cuda-time-estimate.v1",
+            "model": "roofline-linear-occupancy.v1",
+            "scope": (
+                "experimental homogeneous-kernel engineering estimate; "
+                "not an endpoint prediction or a statistical confidence interval; "
+                "requires real-device endpoint validation"
+            ),
+            "device": self.device,
+            "calibration": self.calibration.to_payload(),
+            "cost": self.cost.to_payload(),
         }
-
-
-def _parallelism_fraction(cost: StaticCudaCost) -> tuple[float | None, tuple[str, ...]]:
-    """Return the strongest available whole-device parallelism evidence."""
-
-    diagnostics: list[str] = []
-    if cost.device_occupancy_upper_bound is not None:
-        return cost.device_occupancy_upper_bound, ()
-
-    if cost.occupancy_upper_bound is not None:
-        diagnostics.append(
-            "device SM count or grid size is unavailable; using per-SM occupancy "
-            "without a global underfill correction"
-        )
-        return cost.occupancy_upper_bound, tuple(diagnostics)
-
-    diagnostics.append("parallelism evidence is unavailable")
-    return None, tuple(diagnostics)
 
 
 def estimate_cuda_time(
     cost: StaticCudaCost,
     calibration: CudaTimingCalibration,
+    *,
+    spill_traffic_bytes: int | None = None,
+    allow_per_sm_fallback: bool = False,
 ) -> CudaTimeEstimate:
-    """Estimate CUDA wall time from compiler work and explicit calibration.
+    """Estimate repeated, identical, serial kernel launches without probing CUDA.
 
-    First draft formula:
+    Work and semantic traffic must be totals across all launches, with the same
+    grid/resources per launch. Heterogeneous kernels must be estimated separately:
+    max(sum(compute), sum(memory)) loses sequential compute/memory bottlenecks.
 
-    max(ops / compute_rate, bytes / memory_rate) / parallel_scale
-    + launches * launch_latency
+    The model is max(ops / compute_rate, bytes / memory_rate) / parallel_scale
+    + launches * launch_latency, with scale = min(1, occupancy / saturation).
+    Occupancy is an optimistic static upper bound, not measured utilization.
 
-    parallel_scale is min(1, occupancy / saturation_occupancy).
+    PTXAS spill bytes are static compiler evidence, NOT dynamic grid traffic.
+    Nonzero or unknown static spills require explicit total ``spill_traffic_bytes``
+    (excluding bytes already counted in semantic traffic); otherwise memory time
+    is unknown. Zero compiler spills allow a zero spill-traffic assumption.
 
-    Missing operation count, semantic traffic, launch count, or usable parallelism
-    remains unknown rather than being guessed.
+    Whole-device parallelism is required by default. ``allow_per_sm_fallback``
+    opts into a disclosed optimistic estimate when global underfill is unknown.
+    Contradictory device identities/invalid facts raise; missing evidence returns
+    an unknown total while preserving independently computable component times.
     """
-
     if not isinstance(cost, StaticCudaCost):
         raise TypeError("CUDA timing estimate requires StaticCudaCost")
     if not isinstance(calibration, CudaTimingCalibration):
         raise TypeError("CUDA timing estimate requires CudaTimingCalibration")
+    if type(allow_per_sm_fallback) is not bool:
+        raise TypeError("allow_per_sm_fallback must be a boolean")
+    if cost.architecture != calibration.architecture:
+        raise ValueError("cost architecture does not match calibration architecture")
+    for name in (
+        "arithmetic_operation_count",
+        "semantic_traffic_bytes",
+        "launch_count",
+        "spill_bytes",
+        "grid_blocks",
+        "resident_blocks_per_sm_upper_bound",
+    ):
+        _count(getattr(cost, name), name)
+    _count(cost.sm_count, "sm_count", positive=True)
+    if cost.sm_count is not None and cost.sm_count != calibration.sm_count:
+        raise ValueError("cost SM count does not match calibration SM count")
+    _count(spill_traffic_bytes, "spill_traffic_bytes")
+    for name in ("occupancy_upper_bound", "device_occupancy_upper_bound"):
+        value = getattr(cost, name)
+        if value is not None:
+            _unit_interval(value, name)
 
-    diagnostics: list[str] = []
-    parallelism, parallelism_diagnostics = _parallelism_fraction(cost)
-    diagnostics.extend(parallelism_diagnostics)
-
+    diagnostics = list(cost.diagnostics)
+    diagnostics.append(
+        "occupancy is an optimistic resource bound, not achieved utilization"
+    )
     required = {
         "arithmetic operation count": cost.arithmetic_operation_count,
         "semantic traffic bytes": cost.semantic_traffic_bytes,
@@ -158,84 +218,151 @@ def estimate_cuda_time(
         if value is None:
             diagnostics.append(f"{label} is unavailable")
 
-    if parallelism is not None and parallelism <= 0.0:
-        diagnostics.append("known launch shape exposes no executable parallelism")
-
-    if any(value is None for value in required.values()):
-        return CudaTimeEstimate(
-            device=calibration.device,
-            estimated_seconds=None,
-            lower_seconds=None,
-            upper_seconds=None,
-            compute_seconds=None,
-            memory_seconds=None,
-            launch_seconds=None,
-            parallelism_fraction=parallelism,
-            bottleneck=None,
-            diagnostics=tuple(diagnostics),
+    # A known no-op needs no occupancy or spill evidence, but must not hide work.
+    no_launches = cost.launch_count == 0
+    if no_launches and any(
+        value is not None and value > 0
+        for value in (
+            cost.arithmetic_operation_count,
+            cost.semantic_traffic_bytes,
+            spill_traffic_bytes,
         )
-    if parallelism is None or parallelism <= 0.0:
-        return CudaTimeEstimate(
-            device=calibration.device,
-            estimated_seconds=None,
-            lower_seconds=None,
-            upper_seconds=None,
-            compute_seconds=None,
-            memory_seconds=None,
-            launch_seconds=None,
-            parallelism_fraction=parallelism,
-            bottleneck=None,
-            diagnostics=tuple(diagnostics),
-        )
+    ):
+        raise ValueError("zero launch count contradicts nonzero work or traffic")
+    empty = no_launches and all(value == 0 for value in required.values())
 
-    assert cost.arithmetic_operation_count is not None
-    assert cost.semantic_traffic_bytes is not None
-    assert cost.launch_count is not None
+    parallelism = cost.device_occupancy_upper_bound
+    basis = "whole-device" if parallelism is not None else None
+    if cost.grid_blocks == 0 or cost.resident_blocks_per_sm_upper_bound == 0:
+        # In particular, a zero grid with unknown SM count cannot fall back to
+        # positive per-SM occupancy and manufacture an executable launch.
+        parallelism, basis = 0.0, "no-executable-grid"
+    elif parallelism is not None and (
+        cost.grid_blocks is None or cost.sm_count is None
+    ):
+        raise ValueError("whole-device occupancy requires grid size and SM count")
+    if parallelism is None and allow_per_sm_fallback:
+        parallelism = cost.occupancy_upper_bound
+        if parallelism is not None:
+            basis = "per-sm-fallback"
+            diagnostics.append(
+                "using per-SM occupancy without a global underfill correction; "
+                "explicit optimistic fallback"
+            )
+    if not empty:
+        if parallelism is None:
+            diagnostics.append("whole-device parallelism is unavailable")
+        elif parallelism <= 0.0:
+            diagnostics.append("known launch shape exposes no executable parallelism")
 
-    parallel_scale = min(1.0, parallelism / calibration.saturation_occupancy)
-    if parallel_scale < 1.0:
+    parallel_scale = None
+    if parallelism is not None and parallelism > 0.0:
+        parallel_scale = min(1.0, parallelism / calibration.saturation_occupancy)
+        if parallel_scale < 1.0:
+            diagnostics.append(
+                "effective throughput is linearly reduced below the calibrated saturation occupancy"
+            )
+
+    effective_spills = spill_traffic_bytes
+    if empty or (effective_spills is None and cost.spill_bytes == 0):
+        effective_spills = 0
+    if effective_spills is None:
         diagnostics.append(
-            "effective throughput is linearly reduced below the calibrated "
-            "saturation occupancy"
+            "dynamic spill traffic is unavailable; PTXAS spill bytes cannot be "
+            "used as total runtime traffic"
         )
+    elif spill_traffic_bytes is not None:
+        diagnostics.append("caller-supplied total dynamic spill traffic is included")
 
-    traffic_bytes = cost.semantic_traffic_bytes
-    if cost.spill_bytes is not None:
-        traffic_bytes += cost.spill_bytes
-        if cost.spill_bytes:
-            diagnostics.append("compiled spill bytes are included as memory traffic")
-    else:
-        diagnostics.append("spill traffic is unknown and omitted from memory work")
+    def finite_seconds(
+        work: int | None, rate: float, scale: float, label: str
+    ) -> float | None:
+        """Keep out-of-range arithmetic out of the report's strict JSON payload."""
+        if work is None:
+            return None
+        try:
+            seconds = work / rate / scale
+        except OverflowError:
+            seconds = math.inf
+        if not math.isfinite(seconds):
+            diagnostics.append(f"{label} exceeds the finite timing range")
+            return None
+        return seconds
 
-    compute_seconds = (
-        cost.arithmetic_operation_count
-        / calibration.effective_compute_ops_per_second
-        / parallel_scale
-    )
-    memory_seconds = (
-        traffic_bytes / calibration.effective_memory_bytes_per_second / parallel_scale
-    )
-    launch_seconds = cost.launch_count * calibration.launch_seconds
-    body_seconds = max(compute_seconds, memory_seconds)
-    estimated_seconds = body_seconds + launch_seconds
+    compute_seconds = memory_seconds = None
+    if empty:
+        compute_seconds = memory_seconds = 0.0
+    elif parallel_scale is not None:
+        compute_seconds = finite_seconds(
+            cost.arithmetic_operation_count,
+            calibration.effective_compute_ops_per_second,
+            parallel_scale,
+            "compute time",
+        )
+        traffic = (
+            None
+            if cost.semantic_traffic_bytes is None or effective_spills is None
+            else cost.semantic_traffic_bytes + effective_spills
+        )
+        memory_seconds = finite_seconds(
+            traffic,
+            calibration.effective_memory_bytes_per_second,
+            parallel_scale,
+            "memory time",
+        )
+    # Multiplication avoids overflowing the reciprocal for tiny launch latencies.
+    launch_seconds = None
+    if cost.launch_count is not None:
+        try:
+            launch_seconds = cost.launch_count * calibration.launch_seconds
+        except OverflowError:
+            launch_seconds = math.inf
+        if not math.isfinite(launch_seconds):
+            diagnostics.append("launch time exceeds the finite timing range")
+            launch_seconds = None
 
-    if math.isclose(compute_seconds, memory_seconds, rel_tol=1.0e-9, abs_tol=0.0):
-        bottleneck = "balanced"
-    elif compute_seconds > memory_seconds:
-        bottleneck = "compute"
-    else:
-        bottleneck = "memory"
+    estimated_seconds = lower_seconds = upper_seconds = None
+    bottleneck = None
+    if (
+        compute_seconds is not None
+        and memory_seconds is not None
+        and launch_seconds is not None
+    ):
+        body_seconds = max(compute_seconds, memory_seconds)
+        total = body_seconds + launch_seconds
+        upper = total * (1.0 + calibration.uncertainty_fraction)
+        if math.isfinite(total) and math.isfinite(upper):
+            estimated_seconds = total
+            lower_seconds = total * (1.0 - calibration.uncertainty_fraction)
+            upper_seconds = upper
+            if empty:
+                bottleneck = "none"
+            elif launch_seconds > body_seconds:
+                bottleneck = "launch"
+            elif math.isclose(
+                compute_seconds, memory_seconds, rel_tol=1.0e-9, abs_tol=0.0
+            ):
+                bottleneck = "balanced"
+            else:
+                bottleneck = "compute" if compute_seconds > memory_seconds else "memory"
+        else:
+            diagnostics.append(
+                "total time or uncertainty band exceeds the finite timing range"
+            )
 
-    uncertainty = calibration.uncertainty_fraction
     return CudaTimeEstimate(
-        device=calibration.device,
+        calibration=calibration,
+        cost=cost,
+        spill_traffic_bytes=effective_spills,
         estimated_seconds=estimated_seconds,
-        lower_seconds=estimated_seconds * (1.0 - uncertainty),
-        upper_seconds=estimated_seconds * (1.0 + uncertainty),
+        lower_seconds=lower_seconds,
+        upper_seconds=upper_seconds,
         compute_seconds=compute_seconds,
         memory_seconds=memory_seconds,
         launch_seconds=launch_seconds,
         parallelism_fraction=parallelism,
+        parallelism_basis=basis,
+        parallel_scale=parallel_scale,
         bottleneck=bottleneck,
         diagnostics=tuple(diagnostics),
     )
