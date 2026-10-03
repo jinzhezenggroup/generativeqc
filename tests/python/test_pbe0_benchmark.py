@@ -8,6 +8,7 @@ import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from generativeqc import GridSpec
@@ -15,6 +16,7 @@ from generativeqc._model_resolution import snapshot_basis
 
 from benchmarks.readme_omol25 import protocol
 from benchmarks.readme_pbe0 import PBE0, SCHEMA
+from benchmarks.readme_wb97mv import configure_reference_full_fock
 from tests.python.test_omol25_benchmark import run
 from tools.render_omol25_benchmarks import collect, figure, validate
 
@@ -35,7 +37,40 @@ def test_pbe0_protocol_reuses_full_svp_and_has_no_vv10() -> None:
         assert not scientific["density_fitting"]
         assert not any("nonlocal" in key for key in scientific)
         assert scientific["repeats"] == 5
+        assert scientific["reference_fock_policy"] == "full-density-rebuild"
         assert max(shell.angular_momentum for shell in basis.by_element[8].shells) == 2
+
+
+def test_reference_full_fock_discards_incremental_inputs_and_preserves_density() -> (
+    None
+):
+    """The RKS backend ignores direct_scf alone; no stale potential may leak in."""
+    calls = []
+    potential = object()
+
+    def original(
+        mol: object = None,
+        dm: object = None,
+        dm_last: object = None,
+        vhf_last: object = None,
+        hermi: int = 1,
+    ) -> object:
+        calls.append((mol, dm, dm_last, vhf_last, hermi))
+        return potential
+
+    engine = SimpleNamespace(get_veff=original, direct_scf=True)
+    configure_reference_full_fock(engine)
+    molecule, density, stale_density, stale_potential = (object() for _ in range(4))
+    assert (
+        engine.get_veff(molecule, density, stale_density, stale_potential, 2)
+        is potential
+    )
+    assert (
+        engine.get_veff(dm=density, dm_last=stale_density, vhf_last=stale_potential)
+        is potential
+    )
+    assert calls == [(molecule, density, None, None, 2), (None, density, None, None, 1)]
+    assert engine.direct_scf is False
 
 
 def test_pbe0_evidence_uses_own_schema_and_exact_oracle(tmp_path: Path) -> None:
@@ -103,6 +138,49 @@ def test_retained_pbe0_larger_failures_are_not_timings(atoms: int) -> None:
     assert point["engines"]["reference"]["status"] == "failed"
     for entry in point["engines"].values():
         assert "medians" not in entry
+
+
+@pytest.mark.parametrize("atoms", (3, 6, 12, 24, 48, 96))
+def test_grid_reuse_campaign_rechecks_every_endpoint(
+    atoms: int, tmp_path: Path
+) -> None:
+    """Rebuild each retained point from exact raw bytes, not summary gate flags."""
+    directory = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks/results/pbe0-grid-reuse-20261003"
+    )
+    provenance = json.loads((directory / "provenance.json").read_text())
+    summaries = json.loads(
+        gzip.decompress((directory / "summary.json.gz").read_bytes())
+    )
+    summary = next(point for point in summaries if point["atoms"] == atoms)
+    restored = tmp_path / str(atoms)
+    restored.mkdir()
+    for engine, entry in summary["engines"].items():
+        name = f"water{atoms}-{engine}.json.gz"
+        raw = gzip.decompress((directory / name).read_bytes())
+        identity = provenance["raw_files"][name]
+        assert hashlib.sha256(raw).hexdigest() == identity["raw_sha256"]
+        assert len(raw) == identity["raw_bytes"]
+        (restored / f"{engine}.json").write_bytes(raw)
+        (restored / f"{engine}.outcome").write_text(json.dumps(entry["outcome"]))
+    checked = collect(tmp_path, atoms, schema=SCHEMA)
+    assert checked["protocol"] == summary["protocol"]
+    for engine, entry in checked["engines"].items():
+        assert entry["status"] == "measured"
+        assert len(entry["records"]) == 12
+        assert entry["medians"] == summary["engines"][engine]["medians"]
+        assert entry["raw_sha256"] == summary["engines"][engine]["raw_sha256"]
+    native = checked["engines"]["native"]
+    assert (
+        native["native_build"]["library_sha256"] == provenance["native_library_sha256"]
+    )
+    for record in native["records"]:
+        assert record["converged"] and record["gate"]
+        if record["phase"] in ("warm", "moved-warm"):
+            assert record["iterations"] == 1
+            assert record["warm_start_used"]
+            assert not record["warm_start_fallback"]
 
 
 def test_pbe0_plot_has_its_own_method_label(tmp_path: Path) -> None:

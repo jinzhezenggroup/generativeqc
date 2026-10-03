@@ -73,6 +73,17 @@ remain fail-closed; callers should use the contextual capability record rather
 than infer support from the method name alone. Implementation and response
 details belong in the [Hessian developer documentation](../developer/hessian.md).
 
+## Repeated GFN2 calculations
+
+Reuse a `Calculator(method="gfn2-xtb")` for repeated molecular energy/force
+calls. It retains one native workspace and starts fresh SCC on every call,
+including changed coordinates. Changes to the molecule or scientific controls
+are checked before reuse. Calls on the same calculator are serialized.
+
+Call `calc.clear_cache()` when you want to release its resident CPU/GPU storage;
+the next `singlepoint()` rebuilds the workspace. Collection of the calculator
+also releases this storage. Separate calculators own separate workspaces.
+
 ## DFT forces
 
 Analytic DFT forces are requested through the ordinary property interface when

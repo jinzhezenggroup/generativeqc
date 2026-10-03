@@ -101,6 +101,45 @@ void validate_densities(FockSpin spin, std::size_t count, std::span<const double
   for (double value : beta) require(std::isfinite(value), "nonfinite Fock spin density");
 }
 
+template <bool Unrestricted, bool Coulomb, bool Exchange>
+void contract_exact_source_major(std::size_t nbf, std::span<const double> eri,
+                                 std::span<const double> density, std::span<const double> beta,
+                                 DirectJkMatrices& result) {
+  // Consume each stored [i,a,b,c] once. J[i,a] retains its (b,c) reduction
+  // order, while each K[i,b] retains its (a,c) order. The existing output row
+  // carries K between a values; no ERI copy or additional workspace is needed.
+  for (std::size_t i = 0; i < nbf; ++i) {
+    for (std::size_t a = 0; a < nbf; ++a) {
+      double coulomb = 0.0;
+      for (std::size_t b = 0; b < nbf; ++b) {
+        const std::size_t ib = i * nbf + b;
+        double exchange_alpha = Exchange ? result.exchange_alpha[ib] : 0.0;
+        double exchange_beta = Exchange && Unrestricted ? result.exchange_beta[ib] : 0.0;
+        const double* source = eri.data() + ((i * nbf + a) * nbf + b) * nbf;
+        for (std::size_t c = 0; c < nbf; ++c) {
+          const double value = source[c];
+          if constexpr (Coulomb) {
+            const std::size_t bc = b * nbf + c;
+            const double alpha = density[bc];
+            const double beta_value = Unrestricted ? beta[bc] : 0.0;
+            coulomb += (Unrestricted ? alpha + beta_value : alpha) * value;
+          }
+          if constexpr (Exchange) {
+            const std::size_t ac = a * nbf + c;
+            exchange_alpha += density[ac] * value;
+            if constexpr (Unrestricted) exchange_beta += beta[ac] * value;
+          }
+        }
+        if constexpr (Exchange) {
+          result.exchange_alpha[ib] = exchange_alpha;
+          if constexpr (Unrestricted) result.exchange_beta[ib] = exchange_beta;
+        }
+      }
+      if constexpr (Coulomb) result.coulomb[i * nbf + a] = coulomb;
+    }
+  }
+}
+
 constexpr FockProviderCapabilities supported_fock_domain() {
   FockProviderCapabilities capabilities;
   capabilities.restricted = true;
@@ -370,31 +409,18 @@ DirectJkMatrices build_exact_direct_jk(const ResolvedFockBuild& strategy, std::s
     return result;
   }
 
-  for (std::size_t i = 0; i < nbf; ++i) {
-    for (std::size_t j = 0; j < nbf; ++j) {
-      double coulomb = 0.0, exchange_alpha = 0.0, exchange_beta = 0.0;
-      for (std::size_t k = 0; k < nbf; ++k) {
-        for (std::size_t l = 0; l < nbf; ++l) {
-          const std::size_t kl = k * nbf + l;
-          const double alpha = density[kl];
-          const double beta_value = unrestricted ? beta[kl] : 0.0;
-          if (strategy.spec.coulomb.present)
-            coulomb += (unrestricted ? alpha + beta_value : alpha) *
-                       eri[((i * nbf + j) * nbf + k) * nbf + l];
-          if (strategy.spec.exchange.present) {
-            const double value = eri[((i * nbf + k) * nbf + j) * nbf + l];
-            exchange_alpha += alpha * value;
-            if (unrestricted) exchange_beta += beta_value * value;
-          }
-        }
-      }
-      const std::size_t ij = i * nbf + j;
-      if (strategy.spec.coulomb.present) result.coulomb[ij] = coulomb;
-      if (strategy.spec.exchange.present) {
-        result.exchange_alpha[ij] = exchange_alpha;
-        if (unrestricted) result.exchange_beta[ij] = exchange_beta;
-      }
-    }
+  if (unrestricted) {
+    if (!strategy.spec.exchange.present)
+      contract_exact_source_major<true, true, false>(nbf, eri, density, beta, result);
+    else if (!strategy.spec.coulomb.present)
+      contract_exact_source_major<true, false, true>(nbf, eri, density, beta, result);
+    else
+      contract_exact_source_major<true, true, true>(nbf, eri, density, beta, result);
+  } else {
+    if (!strategy.spec.coulomb.present)
+      contract_exact_source_major<false, false, true>(nbf, eri, density, beta, result);
+    else
+      contract_exact_source_major<false, true, true>(nbf, eri, density, beta, result);
   }
   return result;
 }

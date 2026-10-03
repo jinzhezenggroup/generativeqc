@@ -99,6 +99,6 @@ def test_owner_options_keep_integral_and_cooperative_scopes_distinct() -> None:
 
     parameters = inspect.signature(_CudaSources).parameters
     assert parameters["integral_derivatives"].default is True
-    assert parameters["cooperative_becke"].default is False
+    assert parameters["cooperative_becke"].default is None
     names = tuple(parameters)
     assert names.index("integral_derivatives") < names.index("cooperative_becke")
