@@ -1,6 +1,6 @@
 # Decision: explicitly configure local AO maps in composite resident forces
 
-Status: implemented (private opt-in caller; complete endpoint qualification pending)
+Status: implemented (private opt-in caller; qualified composition, no default promotion)
 Date: 2026-10-03
 
 The composite force owner now accepts an explicit positive active-AO cutoff and
@@ -43,5 +43,33 @@ persistent-claim barrier repair, and the native explicit SCF map API (unused
 by ordinary SCF in this build). It is not a fresh standalone whole-library
 claim for this small stacked caller PR. Raw logs, per-call work, source archive,
 and build receipts remain ignored under the composition's
-`.artifacts/wb97m-active-ao/` directory. Matched 24/48-atom cold plus three-warm
-endpoint runs are in progress; no performance advantage or default is promoted.
+`.artifacts/wb97m-active-ao/` directory.
+
+## Matched complete endpoints on the same composition
+
+Finite n1 RTX 5090 Slurm jobs 5569 and 5570 measured full unpruned matched grids,
+def2-SVP spherical AOs, complete energy/analytic forces, cold/priming plus three
+interleaved warm repeats. Native SCF remains dense in this composition. Both
+engines use their own frozen post-cold densities, with full-density reference
+Fock builds. All five pairs pass the 1e-8 Ha / 1e-7 Ha/Bohr gates; every recorded
+reference XC backend reports `on_gpu=true`.
+
+| Atoms | Dense warm median | Mapped-force warm median | Mapped-run reference median | Force map GM² / dense |
+| --- | --- | --- | --- | --- |
+| 24 | 28.10386 s | 27.20335 s | 27.67637 s | 53.599% |
+| 48 | 103.77642 s | 102.11401 s | 101.45820 s | 18.740% |
+
+The 24-atom ranges overlap. At 48 atoms, mapped forces improve the complete
+endpoint by about 1.6% but remain 0.65% slower than the reference. This establishes
+no robust large-system advantage. The large work reduction is not an equivalent
+elapsed-time reduction. Dense-disabled cache counters are absent, not reported
+as fabricated zeros.
+
+For 48 atoms, mapped maximum E/F errors are 1.092e-11 Ha and 6.307e-10 Ha/Bohr.
+All 1152 warm tiles hit the cache (96 empty); 1,408,624 map bytes remain retained.
+Execute-only dense/mapped cold timings are 1087.01986/1087.24158 s, versus
+467.01439/467.01102 s for their reference runs. Native preparation is separately
+recorded as 1.08184/1.09476 s. Force discovery belongs to first execution, performs
+zero density contractions, and has no warm rediscovery. Discovery-call wall spans
+include preceding stream work and must not be treated as isolated additive cost.
+No default changes follow from these measurements.
