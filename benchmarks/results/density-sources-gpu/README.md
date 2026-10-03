@@ -4,7 +4,7 @@ Numerical acceptance on clean revision
 `db6f65bd96df7dc6f2eae6e7fc8eb766829d1027`, RTX 5090, CUDA 12.9.1,
 driver 580.95.05. The source hash, native/JIT binary identities, actual Slurm
 allocation, compiler versions and complete reproduction command are in
-[evidence.json](evidence.json); [publication.json](publication.json) pins its
+[evidence.json.gz](evidence.json.gz); [publication.json](publication.json) pins its
 bytes through the existing validation/publication schemas.
 
 Six independent saved grid fixtures cover H2, water, Cartesian/spherical f,
@@ -45,3 +45,10 @@ D/C bilinears/sigma share one generated definition. The conservative native
 scientific traversal/reduction region grows 54 → 89 code lines (+41 / -6),
 and runtime code grows 332 → 447 (+123 / -8). No legacy production path is
 removed; D/C are distinct algorithms, so retained duplicate reason is `none`.
+
+### Stored JSON records
+
+Large retained JSON members use deterministic gzip. The publication manifest
+pins their stored paths and hashes; the shared record reader restores every
+original numerical value and sample order. This storage change adds no new
+measurement, acceptance decision or performance claim.

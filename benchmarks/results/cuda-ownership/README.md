@@ -47,10 +47,10 @@ Cartesian direct case preserves its legacy unbudgeted scope because public HF
 inventory v1 supports at most 16 AOs; no total-budget guarantee is claimed for
 that case. Every scope note, resource plan and observation is retained.
 
-`samples.json` losslessly interns repeated input, build and resource records by
+`samples.json.gz` losslessly interns repeated input, build and resource records by
 canonical hash. Its runs retain all individual timings, energies, forces,
 residuals and iteration counts. `summary.json` retains the shared timing/noise
-assessments for every case and phase. `evidence.json` contains every numerical
+assessments for every case and phase. `evidence.json.gz` contains every numerical
 error block and provenance. `resources.json` reports native kernel resources:
 generated thread/shell-warp schedules use 180/200 registers and 176-byte stacks,
 with zero local/shared memory, unchanged by the generic-runtime extraction.
@@ -91,3 +91,10 @@ The subsequent retirement removes the handwritten double-value kernel and
 one-electron/DF value dispatches. Shared recurrences remain for separately owned
 Dual derivatives and other integral domains. Independent Libcint checks remain
 the scientific oracle; generated-schedule parity is labeled separately.
+
+### Stored JSON records
+
+Large retained JSON members use deterministic gzip. The publication manifest
+pins their stored paths and hashes; the shared record reader restores every
+original numerical value and sample order. This storage change adds no new
+measurement, acceptance decision or performance claim.

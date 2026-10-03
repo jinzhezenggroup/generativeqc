@@ -1,7 +1,7 @@
 # Prepared spatial density sources (#235 C1 / #299)
 
 Clean measured revision `4d23418a8af4d8363c41b10b300ecfc4208919e8`, RTX 5090,
-CUDA 12.9.1 and driver 580.95.05. [evidence.json](evidence.json) retains exact
+CUDA 12.9.1 and driver 580.95.05. [evidence.json.gz](evidence.json.gz) retains exact
 source/library/generated identities, assigned Slurm device, settings, raw samples
 and the reproduction command. [publication.json](publication.json) pins all
 selected bytes through the existing evidence schema.
@@ -60,3 +60,10 @@ the original record. Every file fits the hard 1 MiB limit.
 CUDA ownership: existing generated AO and D/C feature definitions are reused.
 Handwritten scientific CUDA LOC +0 / -0; runtime CUDA LOC +0 / -0. No legacy
 production path removed; retained duplicate reason: none.
+
+### Stored JSON records
+
+Large retained JSON members use deterministic gzip. The publication manifest
+pins their stored paths and hashes; the shared record reader restores every
+original numerical value and sample order. This storage change adds no new
+measurement, acceptance decision or performance claim.

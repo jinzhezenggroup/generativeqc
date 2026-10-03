@@ -117,31 +117,6 @@
       "reason": "Bounded native preparation outputs, exact accepted/initial-rejected native source reconstruction, input identity and reproduction commands; excludes binaries, routine logs and full transient matrices. Every member byte-restored.",
       "sha256": "08880e8b611d21dd4e111152cb084a34819684a6b0c1f93aa0bf809e8e4cbf37"
     },
-    "benchmarks/results/rccsd-148-a/raw-evidence.zip": {
-      "owner": "rccsd-148-a",
-      "reason": "Legacy compact hash-verified scientific evidence archive consumed by test_evidence_archives.py and documented reproduction instructions. Contains unique endpoint/reference/source records; do not replace permanent replay data with expiring artifacts.",
-      "sha256": "f4c11760dd15afa092fec00baf577b8b38de646399b4ff1570820d041b1f2311"
-    },
-    "benchmarks/results/rccsd-148-b/raw-evidence.zip": {
-      "owner": "rccsd-148-b",
-      "reason": "Legacy compact hash-verified scientific evidence archive consumed by test_evidence_archives.py and documented reproduction instructions. Contains unique endpoint/reference/source records; do not replace permanent replay data with expiring artifacts.",
-      "sha256": "c6fd591623424312bb80a880eb3a70c34021b4a6ac38f0451622fa525f5f74b5"
-    },
-    "benchmarks/results/rccsd-148-c/raw-evidence.zip": {
-      "owner": "rccsd-148-c",
-      "reason": "Legacy compact hash-verified scientific evidence archive consumed by test_evidence_archives.py and documented reproduction instructions. Contains unique endpoint/reference/source records; do not replace permanent replay data with expiring artifacts.",
-      "sha256": "bd6879e101dc3a47e6ec4bd517014859a95f13033d85a4a01447fc91da6007f4"
-    },
-    "benchmarks/results/rccsd-149-a/raw-evidence.zip": {
-      "owner": "rccsd-149-a",
-      "reason": "Legacy compact hash-verified scientific evidence archive consumed by test_evidence_archives.py and documented reproduction instructions. Contains unique endpoint/reference/source records; do not replace permanent replay data with expiring artifacts.",
-      "sha256": "dee1ead19fb45abeb7f07934c9b642dd9dbd8716a9634469285a2cadd56e0a72"
-    },
-    "benchmarks/results/xc-integration-162/raw-evidence.zip": {
-      "owner": "xc-integration-162",
-      "reason": "Legacy compact hash-verified scientific evidence archive consumed by test_evidence_archives.py and documented reproduction instructions. Contains unique endpoint/reference/source records; do not replace permanent replay data with expiring artifacts.",
-      "sha256": "d8b21b9660bab21a13a1a9f4014f5468c5aa4811cf632167988c7f08ff8b8a0f"
-    },
     "benchmarks/results/ecp-consumers-171/raw-evidence.zip": {
       "owner": "ecp-consumers-171",
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/ecp-consumers-171/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
@@ -156,11 +131,6 @@
       "owner": "issue174-slice-e",
       "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/issue174-slice-e/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
       "sha256": "5965ee285b48bfd618bc94cc0c170d2ce069145b538c5e0d6b7a7a3ee318f5fc"
-    },
-    "benchmarks/results/issue206-df-a/raw-evidence.zip": {
-      "owner": "issue206-df-a",
-      "reason": "Legacy accepted qualification archive retained byte-for-byte with benchmarks/results/issue206-df-a/raw-evidence.manifest.json and the family README for historical audit/recovery. New run bundles are transient and must use artifact storage plus compact publication.",
-      "sha256": "e4cda40de612613950d441a33a70b4b7f88ddaa0ea88d08ada3356437ba5cc89"
     },
     "benchmarks/results/issue282-283-integration/raw-evidence.zip": {
       "owner": "issue282-283-integration",

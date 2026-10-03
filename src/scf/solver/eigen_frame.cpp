@@ -25,9 +25,12 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
   }
   // These host matrix checks share elementary products with the oracle,
   // never its eigensolver. They compare against the original F/S inputs.
-  const auto fc = reference::multiply(matrix, coefficients, n);
   const auto sc = overlap ? reference::multiply(*overlap, coefficients, n) : coefficients;
   const auto gram = reference::multiply(reference::transpose(coefficients, n), sc, n);
+  // Allocate FC only after the Gram expression's transpose temporary dies.
+  // This removes one live matrix without changing any product reduction,
+  // scalar reduction, diagnostic assignment or rejection priority below.
+  const auto fc = reference::multiply(matrix, coefficients, n);
   // Finite inputs may still overflow a product. Do not let NaNs disappear
   // through std::max or an infinite scale hide an invalid residual.
   if (!finite(fc) || !finite(sc) || !finite(gram)) {

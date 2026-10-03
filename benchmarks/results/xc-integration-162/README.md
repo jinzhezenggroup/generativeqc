@@ -8,27 +8,35 @@ The interface and remaining dependencies are in
 
 ## Archived raw records
 
-Detailed JSON results and execution logs are stored in
-[`raw-evidence.zip`](raw-evidence.zip). The
-[manifest](raw-evidence.manifest.json) lists every member's size and SHA-256,
-plus the archive hash and the Git commit from which the original bytes were
-copied. That commit identifies the storage migration input, not a new
-scientific run. Existing source snapshots and the acceptance summary below
-retain the original experiment identity, tolerances and limitations.
+This is a historical acceptance/diagnostic report, not an active numerical
+fixture. Its conclusions, failures, source identities and limits remain below;
+current independent fixtures remain under `tests/reference_data/`. The raw ZIP
+is no longer required in the normal checkout. Its exact bytes are pinned to
+commit `1a4acc519eb881cc19d418de65ecca72324359d4` by the
+[shared recovery manifest](../retention-reports-20261003/snapshot.manifest.json).
+The original [member manifest](raw-evidence.manifest.json) still verifies every
+extracted member and preserves the earlier storage/source provenance.
 
-From the repository root, verify without extracting, or restore into a **new**
-directory (Python standard library only):
+Restore the ZIP from locally available Git history, then verify or unpack it
+into a new directory (Python standard library only):
 
 ```bash
-python -m tools.unpack_evidence benchmarks/results/xc-integration-162
+python tools/restore_retained_evidence.py \
+  benchmarks/results/xc-integration-162/raw-evidence.zip \
+  --manifest benchmarks/results/retention-reports-20261003/snapshot.manifest.json \
+  --output .artifacts/xc-integration-162/raw-evidence.zip
 python -m tools.unpack_evidence benchmarks/results/xc-integration-162 \
-  --output build/xc-integration-162-history
+  --archive .artifacts/xc-integration-162/raw-evidence.zip \
+  --output .artifacts/xc-integration-162/unpacked
 ```
 
-Files listed in the manifest are relative to the restored directory. Small
-provenance records remain beside this README. Restoration checks every hash before writing and refuses
-an existing output directory. Historical scripts are records, not commands to
-execute. Test fixtures remain directly available under `tests/reference_data/`.
+Both operations refuse an existing destination. Omit `--output` from the
+unpack command to verify without extracting. Names of archived members below
+refer to the unpacked directory; scripts there are records, not commands to
+execute. No implicit network fetch occurs. For source archives or shallow
+clones missing the recorded objects, see the
+[history availability instructions](../retention-reports-20261003/README.md#recovery).
+Restoration proves storage integrity, not a fresh scientific acceptance run.
 
 ## Source and environment
 

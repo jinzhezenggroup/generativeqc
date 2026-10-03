@@ -7,27 +7,35 @@ GPU method/API, (T), Lambda or gradients; those have separate issues.
 
 ## Archived raw records
 
-Detailed JSON results and execution logs are stored in
-[`raw-evidence.zip`](raw-evidence.zip). The
-[manifest](raw-evidence.manifest.json) lists every member's size and SHA-256,
-plus the archive hash and the Git commit from which the original bytes were
-copied. That commit identifies the storage migration input, not a new
-scientific run. Existing source snapshots and the acceptance summary below
-retain the original experiment identity, tolerances and limitations.
+This is a historical acceptance/diagnostic report, not an active numerical
+fixture. Its conclusions, failures, source identities and limits remain below;
+current independent fixtures remain under `tests/reference_data/`. The raw ZIP
+is no longer required in the normal checkout. Its exact bytes are pinned to
+commit `1a4acc519eb881cc19d418de65ecca72324359d4` by the
+[shared recovery manifest](../retention-reports-20261003/snapshot.manifest.json).
+The original [member manifest](raw-evidence.manifest.json) still verifies every
+extracted member and preserves the earlier storage/source provenance.
 
-From the repository root, verify without extracting, or restore into a **new**
-directory (Python standard library only):
+Restore the ZIP from locally available Git history, then verify or unpack it
+into a new directory (Python standard library only):
 
 ```bash
-python -m tools.unpack_evidence benchmarks/results/rccsd-148-c
+python tools/restore_retained_evidence.py \
+  benchmarks/results/rccsd-148-c/raw-evidence.zip \
+  --manifest benchmarks/results/retention-reports-20261003/snapshot.manifest.json \
+  --output .artifacts/rccsd-148-c/raw-evidence.zip
 python -m tools.unpack_evidence benchmarks/results/rccsd-148-c \
-  --output build/rccsd-148-c-history
+  --archive .artifacts/rccsd-148-c/raw-evidence.zip \
+  --output .artifacts/rccsd-148-c/unpacked
 ```
 
-Files listed in the manifest are relative to the restored directory. Small
-provenance records remain beside this README. Restoration checks every hash before writing and refuses
-an existing output directory. Historical scripts are records, not commands to
-execute. Test fixtures remain directly available under `tests/reference_data/`.
+Both operations refuse an existing destination. Omit `--output` from the
+unpack command to verify without extracting. Names of archived members below
+refer to the unpacked directory; scripts there are records, not commands to
+execute. No implicit network fetch occurs. For source archives or shallow
+clones missing the recorded objects, see the
+[history availability instructions](../retention-reports-20261003/README.md#recovery).
+Restoration proves storage integrity, not a fresh scientific acceptance run.
 
 ## Fixed implementation and environment
 
@@ -99,7 +107,9 @@ validation require the pinned PySCF 2.14.0. Endpoint generation checks that
 version and records source hashes; endpoint validation checks the pinned RCCSD
 source hash. The commands need no author's absolute directory or pre-existing
 untracked checksum files. Each output directory below must be new or dedicated
-to this run; do not overwrite another experiment.
+to this run; do not overwrite another experiment. Restore the historical ZIP
+as shown in [Archived raw records](#archived-raw-records) before replaying it
+with the commands below.
 
 ```bash
 export PYTHONPATH=.:python OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
@@ -115,6 +125,7 @@ python -m pytest tests/python/test_cc*.py \
   tests/python/test_posthf_providers.py tests/python/test_validation.py -q
 python -m tools.validate_cc_solver --output build/cc-c-reproduction
 python -m tools.unpack_evidence benchmarks/results/rccsd-148-c \
+  --archive .artifacts/rccsd-148-c/raw-evidence.zip \
   --output build/cc-c-history
 python -m tools.replay_ccsd \
   build/cc-c-history/endpoints/h2-same-C-state.json \
