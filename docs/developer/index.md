@@ -76,6 +76,7 @@ one_electron_codegen
 one_electron_derivatives
 second_integral_derivatives
 fock_build
+direct_force_pages
 fock_strategies
 scf_module_boundaries
 scf_proposals
