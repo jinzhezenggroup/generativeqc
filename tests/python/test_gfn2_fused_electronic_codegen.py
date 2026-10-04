@@ -122,9 +122,7 @@ def test_gfn2_cpu_generated_density_failures_mark_staging_status() -> None:
         "GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;"
     )
     failure_lines = [
-        index
-        for index, line in enumerate(publication.splitlines())
-        if failure in line
+        index for index, line in enumerate(publication.splitlines()) if failure in line
     ]
     assert failure_lines
     lines = publication.splitlines()
