@@ -452,8 +452,23 @@ bool bounded_angular_force_requested() noexcept {
   return selected("GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "angular");
 }
 
-bool direct_coulomb_reachable_requested() noexcept {
-  return selected("GENERATIVEQC_DIRECT_COULOMB_REACHABLE", "reachable");
+unsigned direct_coulomb_reachable_mode() noexcept {
+  const char* mode = std::getenv("GENERATIVEQC_DIRECT_COULOMB_REACHABLE");
+  if (mode == nullptr) return 0;
+  if (std::strcmp(mode, "values") == 0) return 1;
+  if (std::strcmp(mode, "forces") == 0) return 2;
+  return std::strcmp(mode, "1") == 0 || std::strcmp(mode, "all") == 0 ||
+                 std::strcmp(mode, "reachable") == 0
+             ? 3
+             : 0;
+}
+
+unsigned direct_hermite_convolution_mode() noexcept {
+  const char* mode = std::getenv("GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION");
+  if (mode == nullptr) return 0;
+  if (std::strcmp(mode, "values") == 0) return 1;
+  if (std::strcmp(mode, "forces") == 0) return 2;
+  return std::strcmp(mode, "1") == 0 || std::strcmp(mode, "all") == 0 ? 3 : 0;
 }
 
 bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }

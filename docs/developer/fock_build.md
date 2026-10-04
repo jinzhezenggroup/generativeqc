@@ -71,6 +71,22 @@ resource/checkpoint identity. The public-AO fallback and specialized low-order
 workers retain their existing evaluation. Host arithmetic checks do not qualify
 CUDA execution or performance; see the [recurrence experiment](../../.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md).
 
+The recurrence control also accepts `values` or `forces` to qualify either
+consumer independently; `1`, `reachable` and `all` select both. This selection
+is frozen with each source owner. It does not adapt to molecule size or current
+SCF iteration.
+
+`GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION=values`, `forces`, or `all` (`1`)
+separately selects experimental pair-axis coefficient convolution in generic
+strict-FP64 Cartesian contractions of total order five or higher. This replaces
+the six pair-index loops with three axis convolutions and a three-axis root
+contraction. It retains radial moments, primitive/AO admission and the original
+Coulomb workspace; floating-point accumulation order changes. Specialized
+low-order/all-center consumers, mixed precision and public-AO fallback keep
+their existing contraction. The switch defaults off and participates in
+resource/checkpoint identity. It establishes no automatic policy or performance
+claim; see the [reassociation experiment](../../.agents/notes/proposed/2026-10-04-hermite-axis-convolution.md).
+
 ## Public prepared API
 
 `FockPlan` owns normalized geometry, orbital/auxiliary data and native sources.

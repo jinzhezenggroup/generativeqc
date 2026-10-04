@@ -70,6 +70,14 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
       CoefficientScalar{batch.direct_ao_coefficients[ao_i] * batch.direct_ao_coefficients[ao_j] *
                         batch.direct_ao_coefficients[ao_k] * batch.direct_ao_coefficients[ao_l]};
 
+  // Independent experimental value/derivative bits permit attribution without
+  // changing density, primitive admission or the established mixed evaluator.
+  constexpr unsigned source_role =
+      (std::is_same_v<Scalar, double> || std::is_same_v<Scalar, MixedPrecisionFloat>) ? 1U :
+      (std::is_same_v<Scalar, Dual> || std::is_same_v<Scalar, Dual3> ? 2U : 0U);
+  const bool reachable_coulomb = (batch.direct_coulomb_reachable & source_role) != 0;
+  const bool hermite_convolution = !std::is_same_v<Scalar, MixedPrecisionFloat> &&
+      (batch.direct_hermite_convolution & source_role) != 0;
   Scalar result = scalar<Scalar>(0.0);
   for (std::int64_t a = batch.shell_primitive_offsets[shell_i];
        a < batch.shell_primitive_offsets[shell_i + 1]; ++a) {
@@ -92,7 +100,7 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
                              batch.primitive_exponents[b], second, angular_second,
                              batch.primitive_exponents[c], third, angular_third,
                              batch.primitive_exponents[d], fourth, angular_fourth, range, omega,
-                             batch.direct_coulomb_reachable);
+                             reachable_coulomb, hermite_convolution);
           } else if constexpr (MaximumAngular == 0) {
             result = result + weight * primitive_eri(batch.primitive_exponents[a], first,
                                                      batch.primitive_exponents[b], second,
@@ -107,7 +115,7 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
                              batch.primitive_exponents[b], second, angular_second,
                              batch.primitive_exponents[c], third, angular_third,
                              batch.primitive_exponents[d], fourth, angular_fourth,
-                             batch.direct_coulomb_reachable);
+                             reachable_coulomb, hermite_convolution);
           }
         }
       }
