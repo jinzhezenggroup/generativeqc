@@ -153,8 +153,8 @@ void check_df_values_pack_g_metadata_without_scf_work() {
   // g metadata is admitted only for the explicit DF value owner. Ordinary
   // SCF remains bounded by its existing f recurrences and three-term AO ABI.
   assert(!pack_host_batch({system}, no_warm, scf, false, true));
-  assert(pack_host_batch({system}, no_warm, values, false, true, false,
-                         ResidentPsssPolicy::Skip, HostBasisPacking::DfValues));
+  assert(pack_host_batch({system}, no_warm, values, false, true, false, ResidentPsssPolicy::Skip,
+                         HostBasisPacking::DfValues));
   assert(values.nbf == 16 && values.direct_nbf == 16);
   assert(values.ao_term_counts.size() == 16);
   assert(std::all_of(values.ao_term_counts.begin(), values.ao_term_counts.end(),
@@ -164,8 +164,8 @@ void check_df_values_pack_g_metadata_without_scf_work() {
   assert(values.occupied.empty() && values.warm_mask.empty());
   system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
   HostBatch invalid;
-  assert(!pack_host_batch({system}, no_warm, invalid, false, true, false,
-                          ResidentPsssPolicy::Skip, HostBasisPacking::DfValues));
+  assert(!pack_host_batch({system}, no_warm, invalid, false, true, false, ResidentPsssPolicy::Skip,
+                          HostBasisPacking::DfValues));
 }
 
 }  // namespace
