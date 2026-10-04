@@ -68,6 +68,7 @@ def test_native_cutlass_execution(tmp_path: Path) -> None:
         f'include("{root / "cmake/GenerativeQCCutlass.cmake"}")\n'
         f'add_executable(cutlass "{root / "tests/native/test_native_cutlass.cu"}")\n'
         f'target_include_directories(cutlass PRIVATE "{root / "src"}")\n'
+        "target_compile_definitions(cutlass PRIVATE GENERATIVEQC_TEST_HOOKS=1)\n"
         "generativeqc_configure_cutlass(cutlass)\n"
     )
     build = tmp_path / "build"

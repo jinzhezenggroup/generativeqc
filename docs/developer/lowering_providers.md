@@ -90,6 +90,10 @@ qualified reservation for context-retained module storage. It resolves lazy
 kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
 release does not zero this charge. This native slice has no production profile.
+The reservation is charged before the first module-loading call and survives
+failed preparation as well as successful-plan release. An observed excess remains
+visible in the charge while the exception aborts admission. A retained owner
+cannot be re-prepared on another device.
 `tensor.cuda_cutlass.CutlassAotProvider` registers the same canonical request with
 explicit compiled-family/version/artifact and host/module qualification facts.
 The common registry charges module bytes as retained cache storage and enforces

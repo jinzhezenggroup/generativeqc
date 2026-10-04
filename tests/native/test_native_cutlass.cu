@@ -117,8 +117,24 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     rejects([&] { (void)binding.provenance(); });
     rejects([&] { binding.prepare(request, stream, "unverified", 1 << 20, 256ULL << 20); });
     if (binding.prepare(request, stream, artifact, 0, 256ULL << 20) ||
-        binding.prepare(request, stream, artifact, 1 << 20, 0) || binding.preparations())
+        binding.prepare(request, stream, artifact, 1 << 20, 0) || binding.preparations() ||
+        binding.module_bytes())
       throw std::runtime_error("unreserved CUTLASS preparation");
+#if defined(GENERATIVEQC_TEST_HOOKS)
+    // Failure after loading must roll back descriptors while keeping the
+    // context-retained reservation, including after an explicit release.
+    cutlass_fail_after_module_load_for_test = true;
+    rejects([&] { binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20); });
+    cutlass_fail_after_module_load_for_test = false;
+    binding.release();
+    if (binding.module_bytes() != (256ULL << 20) ||
+        binding.host_bytes() != sizeof(CudaCutlassContraction) || binding.preparations() ||
+        binding.calls() || binding.summands())
+      throw std::runtime_error("CUTLASS failed preparation lost retained module charge");
+    rejects([&] { (void)binding.provenance(); });
+    if (binding.prepare(request, stream, artifact, 1 << 20, (256ULL << 20) - 1))
+      throw std::runtime_error("CUTLASS failed preparation admitted a smaller reservation");
+#endif
     if (!binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20))
       throw std::runtime_error("CUTLASS preparation unavailable");
     const auto host = binding.host_bytes();
