@@ -228,6 +228,15 @@ visits `T v^3` points. Standard triples retain seventh-order leading work.
 Diagnostics separately report panel/moment GEMMs, epilogue/reduction kernels,
 transfers, and admitted/observed storage; summands are not hardware FLOPs.
 
+#1764 now has an explicit compiler-owned first precision candidate:
+`w_fp32_candidate_program` lowers only the two reduction-heavy W contractions
+inside each occupied moment to FP32 storage/compute/accumulation. The surrounding
+W sum, V algebra, denominator checks, energy epilogue, reductions and published
+outputs remain FP64, and the precision schedule records strict FP64 as the audit
+dtype. This candidate is not selected by the native endpoint yet and carries no
+performance/default claim; complete endpoint numerical and device evidence remain
+required before a runtime owner may promote it.
+
 The owner uploads inputs once and orders every panel producer, W consumer,
 epilogue and reuse on one owned stream. The numeric budget includes staged
 inputs, panels, moments, reductions, a 4-MiB BLAS workspace and a conservative
@@ -260,12 +269,27 @@ Rys quadrature; g auxiliary values use compiler-generated Gaussian moment
 polynomials with F0–F10 from the shared FP64 Boys evaluator. The generic source
 policy reports `generated_rys_auxiliary_g_polynomial` when g is present; other
 math policies are rejected for such an owner. Raw/transformed three-center and
-metric derivative requests on this owner are rejected before launch. Legacy
-integral exporters and public derivative capabilities retain their f limit.
+metric derivative tiles use the explicit auxiliary-g F0–F11 response policy.
+The standalone weighted DF gradient bridge also accepts auxiliary g: it contracts
+full unit-weight A and M cotangents with all nuclear centers in one traversal.
+It selects six-term expansion metadata for both basis views when g is present;
+through-f calls retain their three-term metadata and original evaluator. Legacy
+integral exporters and public method derivative capabilities retain their f limit.
+These internal source/weight derivatives do not certify a complete CC nuclear force.
+
+`scf::CudaDfNuclearSink` is the internal device-weight consumer for source-response
+callbacks. It uploads basis metadata once, binds one producer stream, and contracts
+raw/metric weight tiles into one compact nuclear gradient. The caller charges its
+combined host/device numeric capacity to the source response and calls `finish`
+only after the complete producer succeeds. Destruction drains borrowed reads
+without publishing a partial result; the producer stream must outlive the sink.
+The caller must supply the exact geometry/basis of its physical source. This
+consumer provides fixed-orbital nuclear response; orbital/Z and Pulay assembly
+remain the method's responsibility.
 
 The DF metadata packer skips SCF warm densities and pair/quartet task tables.
 It uses Cartesian metadata plus a separate six-term public g expansion, leaving
-the legacy three-term SCF topology unchanged. This is an internal value-domain
+the legacy three-term SCF topology unchanged. This is an internal source-domain
 extension; hundreds-AO molecular endpoints still require independent
 conditioning, energy, residual and amplitude qualification.
 

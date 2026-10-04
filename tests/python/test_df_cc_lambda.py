@@ -194,6 +194,10 @@ def run(
     *,
     df: bool = True,
     source: bool = False,
+    reduction: bool = True,
+    matrix: bool = True,
+    batch_two: bool = False,
+    overflow: bool = False,
     budget: int = 1 << 30,
 ) -> tuple:
     o, v = arrays["t1"].shape
@@ -220,13 +224,18 @@ def run(
     result = [np.full(shape, np.nan) for shape in shapes]
     outputs = (dp * len(result))(*(x.ctypes.data_as(dp) for x in result))
     values = np.full(6, np.nan)
-    counts = np.zeros(10, dtype=np.uintp)
+    counts = np.zeros(20, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
         v,
         q,
-        int(df) + 2 * int(source),
+        int(df)
+        + 2 * int(source)
+        + 4 * int(not reduction)
+        + 8 * int(not matrix)
+        + 16 * int(batch_two)
+        + 32 * int(overflow),
         budget,
         ptrs,
         *(x.ctypes.data_as(dp) for x in seeds),
@@ -256,9 +265,11 @@ def test_native_df_lambda_and_parameters_match_complete_integral_path(
     for actual, expected in zip(result[:12], dense[:12], strict=True):
         np.testing.assert_allclose(actual, expected, atol=3e-10, rtol=3e-10)
     assert np.max(values[1:]) < 1e-9
-    # Every Q appears once in the primal replay, each GMRES action, the
-    # independent transpose audit, and final factor publication.
-    assert counts[7] == (counts[1] + 3) * len(arrays["bov"])
+    # Staging adds one complete Q traversal, amortized over all GMRES actions.
+    # Replay, the independent transpose audit and final factors still visit Q.
+    assert counts[7] == (counts[1] + 3 + counts[11]) * len(arrays["bov"])
+    assert counts[10] == counts[11] == 1
+    assert counts[12] == counts[1]
     assert counts[8] > 0 and counts[9] > 0
     # Compare virtual-factor cotangents to an independent explicit Gram chain.
     bov, bvv = arrays["bov"], arrays["bvv"]
@@ -321,16 +332,70 @@ def test_native_response_matches_resolved_factor_energy_derivative(
     )
 
 
+@pytest.mark.parametrize("o,v", [(1, 3), (2, 3), (3, 2)])
+def test_native_matrix_tail_batches_and_scalar_reference(
+    probe: typing.Any, o: int, v: int
+) -> None:
+    _, _, arrays = case(o, v, q=5)
+    status, scalar, _, scalar_counts, error = run(probe, arrays, matrix=False)
+    assert status == 0, error
+    for batch_two in (False, True):
+        status, actual, values, counts, error = run(probe, arrays, batch_two=batch_two)
+        assert status == 0, error
+        assert counts[13] == 1 and counts[14] == (2 if batch_two else 5)
+        # Packing can increase generated kernels for tiny batches; report them
+        # rather than assuming fewer Q batches imply fewer total launches.
+        assert counts[15] < scalar_counts[15]
+        assert counts[16] > 0 and counts[17] > 0 and counts[18] > 0
+        assert counts[7] == scalar_counts[7]
+        assert np.max(values[1:]) < 1e-9
+        for value, expected in zip(actual, scalar, strict=True):
+            np.testing.assert_allclose(value, expected, atol=3e-10, rtol=3e-10)
+
+
 def test_failed_native_response_has_no_publication(probe: typing.Any) -> None:
-    _, _, arrays = case(2, 3)
+    _, _, arrays = case(2, 3, q=5)
     status, reference, _, counts, error = run(probe, arrays)
     assert status == 0, error
     budget = int(counts[2])
-    status, exact, _, _, error = run(probe, arrays, budget=budget)
+    status, exact, _, exact_counts, error = run(probe, arrays, budget=budget)
     assert status == 0, error
+    assert exact_counts[13] == 1 and exact_counts[14] == 5
     for actual, expected in zip(exact, reference, strict=True):
         np.testing.assert_array_equal(actual, expected)
-    for refused in (1, budget - 1):
+    # A one-byte shortage shrinks Q before giving up matrix execution.
+    status, tail, _, tail_counts, error = run(probe, arrays, budget=budget - 1)
+    assert status == 0, error
+    assert tail_counts[13] == 1 and tail_counts[14] < counts[14]
+    for actual, expected in zip(tail, reference, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-10, rtol=3e-10)
+    scalar_status, scalar, _, scalar_counts, error = run(probe, arrays, matrix=False)
+    assert scalar_status == 0, error
+    status, expanded, _, expanded_counts, error = run(probe, arrays, reduction=False)
+    assert status == 0, error
+    assert expanded_counts[10] == expanded_counts[11] == expanded_counts[12] == 0
+    assert expanded_counts[2] < scalar_counts[2] < budget
+    for allowed, reduced, expected in (
+        (int(scalar_counts[2]), 1, scalar),
+        (int(scalar_counts[2]) - 1, 0, expanded),
+        (int(expanded_counts[2]), 0, expanded),
+    ):
+        status, actual, _, actual_counts, error = run(probe, arrays, budget=allowed)
+        assert status == 0, error
+        assert actual_counts[10] == reduced and actual_counts[13] == 0
+        for value, want in zip(actual, expected, strict=True):
+            np.testing.assert_array_equal(value, want)
+    for refused in (1, int(expanded_counts[2]) - 1):
         status, result, values, _, error = run(probe, arrays, budget=refused)
         assert status != 0 and "DF Lambda" in error and "budget" in error
         assert np.isnan(values).all() and all(np.isnan(x).all() for x in result)
+
+
+@pytest.mark.parametrize("matrix", [False, True])
+def test_nonfinite_adjoint_is_sticky_and_unpublished(
+    probe: typing.Any, matrix: bool
+) -> None:
+    _, _, arrays = case(2, 3, q=5)
+    status, result, values, _, error = run(probe, arrays, matrix=matrix, overflow=True)
+    assert status != 0 and "nonfinite native DF Lambda" in error
+    assert np.isnan(values).all() and all(np.isnan(x).all() for x in result)

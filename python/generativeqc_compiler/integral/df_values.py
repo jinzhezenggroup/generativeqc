@@ -267,6 +267,7 @@ def build_df_axis_moment(
     *,
     internal_derivative: bool = False,
     auxiliary_g: bool = False,
+    auxiliary_g_derivative: bool = False,
     states: set[tuple[int, int, int]] | None = None,
 ) -> tuple[Graph, Expr]:
     """Build one-axis Gaussian moments used by a bounded Rys value schedule.
@@ -278,18 +279,35 @@ def build_df_axis_moment(
     Internal first derivatives may raise one orbital power to four. This is
     recurrence scratch, not an extension of public orbital/auxiliary families.
     ``auxiliary_g`` selects a separate value domain: f/f/g three-center or
-    g/g metric moments (the metric has b=0). It does not extend derivatives.
+    g/g metric moments (the metric has b=0). The separate
+    ``auxiliary_g_derivative`` domain permits one internally raised orbital
+    power in f/f/g, or a raised first g power in g/g metric (b=0). It does not
+    admit public orbital g or raising the auxiliary power by a second route.
     An optional diagnostic set collects the nonconstant recurrence states visited
     by this same builder, before expression simplification or backend CSE.
     """
     powers = (a, b, c)
-    maximum = 4 if internal_derivative or auxiliary_g else 3
+    maximum = (
+        5 if auxiliary_g_derivative else 4 if internal_derivative or auxiliary_g else 3
+    )
     invalid = any(type(n) is not int or not 0 <= n <= maximum for n in powers)
-    if auxiliary_g:
+    if auxiliary_g_derivative:
+        invalid = (
+            invalid
+            or internal_derivative
+            or auxiliary_g
+            or c > 4
+            or b > 4
+            or (a == 5 and b != 0)
+            or (a == 4 and b == 4)
+        )
+    elif auxiliary_g:
         invalid = invalid or internal_derivative or b > 3 or (a == 4 and b != 0)
     else:
         invalid = invalid or c > 3 or sum(n == 4 for n in powers) > 1
     if invalid:
+        if auxiliary_g_derivative:
+            raise ValueError("DF axis powers exceed the auxiliary-g derivative domain")
         raise ValueError("DF axis powers must lie within s/p/d/f")
     graph = Graph()
     means = tuple(graph.variable(f"mean_{i}") for i in range(3))

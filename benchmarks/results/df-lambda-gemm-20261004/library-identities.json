@@ -1,0 +1,19 @@
+{
+  "frozen": {
+    "library_sha256": "76e9d53a5c3fbb1a52bd2c2ecfac144a297a153df80ea3956f08eba08838c23e",
+    "source_identity": "3dae8b870b4d21e94fd189daeb34be1fd19d5d9383f135a93e7d430f18816201"
+  },
+  "rebased": {
+    "library_sha256": "a55e5f1eb93aa1987c40eea75d8b7d92c680c5b7c4a0c3a63d3424797d6d1464",
+    "source_identity": "a816e40829e7a2c5480765da85ee1082462865bd27f43b733fa43a63c6257012"
+  },
+  "paired_endpoint_sha256": "7d9e06fdb635ba835298695f47c184836c0212a607b5f29d790e3026112bbc17",
+  "shared_state": {
+    "binary_sha256": "02aa47b2a3d872b33bb98b2170eb41e456438f5903087550932e73bc700323a8",
+    "source_sha256": "4281e86d8eece670acf7a7086a85b4163638b72f628b843da579659648ff68c1",
+    "formatted_source_rebuild": "byte-identical executable to measured diagnostic",
+    "library": "frozen",
+    "slurm_job": 2207,
+    "gpu_uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a"
+  }
+}

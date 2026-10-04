@@ -10,6 +10,27 @@
 // angular order. Layout assertions guard the existing workspace contract.
 namespace generativeqc::scf::cuda_execution {
 
+/** Optional exact dependency domain of one Cartesian component contraction.
+ *
+ * The consumer reads R(0,t,u,v) only through the component's summed x/y/z
+ * powers. Its x-first dependency graph needs n+t<=x, then n+u<=x+y
+ * on the t=0 plane, and n+v<=L on the t=u=0 line. This prunes recurrence
+ * states, never integrals or small numerical values. Unselected or invalid
+ * domains retain the complete simplex and its original initialization.
+ */
+struct CoulombComponentDomain {
+  unsigned x{};
+  unsigned y{};
+  unsigned z{};
+  bool selected{};
+
+  template <unsigned MaximumAngular>
+  __host__ __device__ bool valid() const {
+    return selected && x <= MaximumAngular && y <= MaximumAngular && z <= MaximumAngular &&
+           x + y + z == MaximumAngular;
+  }
+};
+
 template <typename Scalar, unsigned MaximumAngular>
 struct CoulombAuxiliary {
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
@@ -54,9 +75,13 @@ static_assert(CoulombAuxiliary<double, 12>::kStateCount == 1820);
 template <unsigned MaximumAngular, typename Scalar>
 __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<Scalar>& product,
                                     const Vec3<Scalar>& center,
-                                    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
-  for (unsigned item = 0; item < CoulombAuxiliary<Scalar, MaximumAngular>::kStateCount; ++item) {
-    auxiliary.data[item] = scalar<Scalar>(0.0);
+                                    CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary,
+                                    CoulombComponentDomain domain = {}) {
+  const bool reachable = domain.valid<MaximumAngular>();
+  if (!reachable) {
+    for (unsigned item = 0; item < CoulombAuxiliary<Scalar, MaximumAngular>::kStateCount; ++item) {
+      auxiliary.data[item] = scalar<Scalar>(0.0);
+    }
   }
   const Vec3<Scalar> pc{product.x - center.x, product.y - center.y, product.z - center.z};
   Scalar boys[MaximumAngular + 1];
@@ -67,7 +92,10 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
     factor = factor * (-2.0 * exponent);
   }
 
-  for (unsigned v = 1; v <= MaximumAngular; ++v) {
+  // Every reachable read has an earlier write in this unchanged z/y/x
+  // recurrence order. Unused simplex cells need neither evaluation nor zeroing.
+  const unsigned maximum_v = reachable ? domain.z : MaximumAngular;
+  for (unsigned v = 1; v <= maximum_v; ++v) {
     for (unsigned n = 0; n + v <= MaximumAngular; ++n) {
       Scalar value = pc.z * auxiliary.at(n + 1, 0, 0, v - 1);
       if (v > 1) {
@@ -76,9 +104,11 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
       auxiliary.at(n, 0, 0, v) = value;
     }
   }
-  for (unsigned v = 0; v <= MaximumAngular; ++v) {
-    for (unsigned u = 1; u + v <= MaximumAngular; ++u) {
-      for (unsigned n = 0; n + u + v <= MaximumAngular; ++n) {
+  for (unsigned v = 0; v <= maximum_v; ++v) {
+    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    for (unsigned u = 1; u <= maximum_u; ++u) {
+      const unsigned maximum_n = reachable ? domain.x + domain.y - u : MaximumAngular - u - v;
+      for (unsigned n = 0; n <= maximum_n; ++n) {
         Scalar value = pc.y * auxiliary.at(n + 1, 0, u - 1, v);
         if (u > 1) {
           value = value + static_cast<double>(u - 1) * auxiliary.at(n + 1, 0, u - 2, v);
@@ -87,10 +117,13 @@ __device__ inline void fill_coulomb(EvaluationReal<Scalar> exponent, const Vec3<
       }
     }
   }
-  for (unsigned v = 0; v <= MaximumAngular; ++v) {
-    for (unsigned u = 0; u + v <= MaximumAngular; ++u) {
-      for (unsigned t = 1; t + u + v <= MaximumAngular; ++t) {
-        for (unsigned n = 0; n + t + u + v <= MaximumAngular; ++n) {
+  for (unsigned v = 0; v <= maximum_v; ++v) {
+    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    for (unsigned u = 0; u <= maximum_u; ++u) {
+      const unsigned maximum_t = reachable ? domain.x : MaximumAngular - u - v;
+      for (unsigned t = 1; t <= maximum_t; ++t) {
+        const unsigned maximum_n = reachable ? domain.x - t : MaximumAngular - t - u - v;
+        for (unsigned n = 0; n <= maximum_n; ++n) {
           Scalar value = pc.x * auxiliary.at(n + 1, t - 1, u, v);
           if (t > 1) {
             value = value + static_cast<double>(t - 1) * auxiliary.at(n + 1, t - 2, u, v);
@@ -112,11 +145,15 @@ template <unsigned MaximumAngular, typename Scalar>
 __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& product,
                                           const Vec3<Scalar>& center,
                                           generativeqc::integrals::CoulombRange range, double omega,
-                                          CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
+                                          CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary,
+                                          CoulombComponentDomain domain = {}) {
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
   if (range == generativeqc::integrals::CoulombRange::Full) return false;
-  for (unsigned item = 0; item < CoulombAuxiliary<Scalar, MaximumAngular>::kStateCount; ++item)
-    auxiliary.data[item] = scalar<Scalar>(0.0);
+  const bool reachable = domain.valid<MaximumAngular>();
+  if (!reachable) {
+    for (unsigned item = 0; item < CoulombAuxiliary<Scalar, MaximumAngular>::kStateCount; ++item)
+      auxiliary.data[item] = scalar<Scalar>(0.0);
+  }
 
   const Vec3<Scalar> pc{product.x - center.x, product.y - center.y, product.z - center.z};
   const Scalar argument = exponent * distance_squared(product, center);
@@ -142,26 +179,32 @@ __device__ inline bool fill_range_coulomb(double exponent, const Vec3<Scalar>& p
     auxiliary.at(n, 0, 0, 0) = factor * moment;
     factor *= -2.0 * exponent;
   }
-  for (unsigned v = 1; v <= MaximumAngular; ++v) {
+  const unsigned maximum_v = reachable ? domain.z : MaximumAngular;
+  for (unsigned v = 1; v <= maximum_v; ++v) {
     for (unsigned n = 0; n + v <= MaximumAngular; ++n) {
       Scalar value = pc.z * auxiliary.at(n + 1, 0, 0, v - 1);
       if (v > 1) value = value + static_cast<double>(v - 1) * auxiliary.at(n + 1, 0, 0, v - 2);
       auxiliary.at(n, 0, 0, v) = value;
     }
   }
-  for (unsigned v = 0; v <= MaximumAngular; ++v) {
-    for (unsigned u = 1; u + v <= MaximumAngular; ++u) {
-      for (unsigned n = 0; n + u + v <= MaximumAngular; ++n) {
+  for (unsigned v = 0; v <= maximum_v; ++v) {
+    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    for (unsigned u = 1; u <= maximum_u; ++u) {
+      const unsigned maximum_n = reachable ? domain.x + domain.y - u : MaximumAngular - u - v;
+      for (unsigned n = 0; n <= maximum_n; ++n) {
         Scalar value = pc.y * auxiliary.at(n + 1, 0, u - 1, v);
         if (u > 1) value = value + static_cast<double>(u - 1) * auxiliary.at(n + 1, 0, u - 2, v);
         auxiliary.at(n, 0, u, v) = value;
       }
     }
   }
-  for (unsigned v = 0; v <= MaximumAngular; ++v) {
-    for (unsigned u = 0; u + v <= MaximumAngular; ++u) {
-      for (unsigned t = 1; t + u + v <= MaximumAngular; ++t) {
-        for (unsigned n = 0; n + t + u + v <= MaximumAngular; ++n) {
+  for (unsigned v = 0; v <= maximum_v; ++v) {
+    const unsigned maximum_u = reachable ? domain.y : MaximumAngular - v;
+    for (unsigned u = 0; u <= maximum_u; ++u) {
+      const unsigned maximum_t = reachable ? domain.x : MaximumAngular - u - v;
+      for (unsigned t = 1; t <= maximum_t; ++t) {
+        const unsigned maximum_n = reachable ? domain.x - t : MaximumAngular - t - u - v;
+        for (unsigned n = 0; n <= maximum_n; ++n) {
           Scalar value = pc.x * auxiliary.at(n + 1, t - 1, u, v);
           if (t > 1) value = value + static_cast<double>(t - 1) * auxiliary.at(n + 1, t - 2, u, v);
           auxiliary.at(n, t, u, v) = value;

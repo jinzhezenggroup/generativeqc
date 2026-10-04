@@ -272,6 +272,17 @@ class CudaLambdaActions {
     target.df_auxiliary_slices = d.df_auxiliary_slices;
     target.df_contraction_terms = d.df_contraction_terms;
     target.df_generated_kernels = d.df_generated_kernels;
+    target.df_auxiliary_reduction = d.df_auxiliary_reduction;
+    target.df_preparation_calls = d.df_preparation_calls;
+    target.df_reduced_actions = d.df_reduced_actions;
+    target.df_matrix_gemm = d.df_matrix_gemm;
+    target.df_auxiliary_batch_size = d.df_auxiliary_batch_size;
+    target.df_auxiliary_batches = d.df_auxiliary_batches;
+    target.df_gemm_calls = d.df_gemm_calls;
+    target.df_gemm_summands = d.df_gemm_summands;
+    target.df_packing_output_bytes = d.df_packing_output_bytes;
+    target.df_provider_allowance_bytes = d.df_provider_allowance_bytes;
+
     target.shared_program_hash = d.shared_program_hash;
     target.independent_program_hash = d.independent_program_hash;
   }

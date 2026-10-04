@@ -360,6 +360,7 @@ generativeqc_status create_cuda_direct_jk_plan(
     plan->coordinate_elements = coord_elements;
     plan->coordinates_per_item = coordinates;
     plan->screening_tolerance = screening_tolerance;
+    configure_direct_coulomb_recurrence(plan->batch);
     plan->batch.batch_size = static_cast<std::int32_t>(systems.size());
     plan->batch.nbf = static_cast<std::int32_t>(host.nbf);
     plan->batch.direct_nbf = static_cast<std::int32_t>(host.direct_nbf);
@@ -1008,6 +1009,14 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
       }
     auto* generated_coulomb = plan->generated_exchange ? plan->generated_exchange->shared.get()
                                                        : plan->generated_coulomb.get();
+    // The current generated mixed-Fock capability also narrows the
+    // density-by-integral product (#1434). DFT AUTO Direct-J is qualified for a
+    // narrower recurrence-only contract, so mixed_j deliberately retains the
+    // independent kernel as an unsupported-contract fallback rather than
+    // silently widening its FP32 arithmetic. Retire this fallback when the
+    // generated streaming owner can express FP32 ERI recurrence + FP64 density
+    // product/Fock accumulation and passes the existing mixed-work/numerical
+    // gates; do not remove the !mixed_j guards before that contract exists.
     const bool generated_coulomb_available =
         !mixed_j && (plan->generated_exchange
                          ? direct_jk_generated_full_range_value_available(*plan)

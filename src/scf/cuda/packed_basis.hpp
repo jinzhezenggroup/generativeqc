@@ -77,6 +77,9 @@ struct DeviceBatch {
   const double* primitive_exponents;
   const double* primitive_coefficients;
   const std::int32_t* occupied;
+  // Frozen with the owning provider's resource/checkpoint identity. This
+  // diagnostic prunes unreachable recurrence states, never physical tasks.
+  bool direct_coulomb_reachable{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

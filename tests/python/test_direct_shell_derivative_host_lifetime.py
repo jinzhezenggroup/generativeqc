@@ -69,23 +69,43 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 @pytest.mark.parametrize("throw_error", [False, True])
 @pytest.mark.parametrize(
-    ("route", "failed_step"),
+    ("route", "angular_schedule", "failed_step"),
     [
-        (route, step)
+        (route, angular_schedule, step)
+        for angular_schedule in (False, True)
         for route, count in (
             ("full_range", 8),
             ("rsh", 8),
             ("rsh_split", 14),
             ("rsh_zero", 8),
         )
-        for step in range(count)
+        # Angular full/LR launchers replace one launch-error check with thirteen
+        # cursor-reset/check pairs. The split route invokes both launchers.
+        for step in range(
+            count
+            + (
+                25 * (2 if route == "rsh_split" else 1)
+                if angular_schedule and route != "rsh"
+                else 0
+            )
+        )
     ],
 )
 def test_pending_downloads_outlive_early_returns_and_exceptions(
-    host_lifetime_probe: Path, route: str, failed_step: int, throw_error: bool
+    host_lifetime_probe: Path,
+    route: str,
+    angular_schedule: bool,
+    failed_step: int,
+    throw_error: bool,
 ) -> None:
     result = subprocess.run(
-        [str(host_lifetime_probe), str(failed_step), str(int(throw_error)), route],
+        [
+            str(host_lifetime_probe),
+            str(failed_step),
+            str(int(throw_error)),
+            route,
+            str(int(angular_schedule)),
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -94,6 +114,8 @@ def test_pending_downloads_outlive_early_returns_and_exceptions(
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.parametrize("angular_schedule", [False, True])
+@pytest.mark.parametrize("route", ["full_range", "rsh_split"])
 @pytest.mark.parametrize(
     "coulomb,short,long,density_fixture",
     [
@@ -103,10 +125,14 @@ def test_pending_downloads_outlive_early_returns_and_exceptions(
         (0.0, 0.0, 0.0, True),
         (1.0, -0.1, 0.0, False),
         (1.0, 0.0, -0.5, False),
+        (0.0, -0.1, 0.0, False),
+        (0.0, 0.0, -0.5, False),
     ],
 )
-def test_split_rsh_preserves_disabled_sources(
+def test_shell_derivatives_preserve_disabled_sources(
     host_lifetime_probe: Path,
+    route: str,
+    angular_schedule: bool,
     coulomb: float,
     short: float,
     long: float,
@@ -118,7 +144,8 @@ def test_split_rsh_preserves_disabled_sources(
             str(host_lifetime_probe),
             "0",
             "0",
-            "rsh_split",
+            route,
+            str(int(angular_schedule)),
             str(coulomb),
             str(short),
             str(long),
@@ -163,7 +190,8 @@ int step=0, fail_step=0, syncs=0; bool throw_error=false;
 unsigned source_count=2, submitted_copies=0;
 bool tracking=false, pending=false, freed_pending=false;
 void* watched[32]{}; unsigned watched_count=0; bool split=false;
-bool density_fixture=false; unsigned range_calls=0;
+bool density_fixture=false, angular_schedule=false;
+unsigned full_calls=0, range_calls=0, fused_calls=0, angular_calls=0;
 void* operator new(std::size_t n) {
   void* p=std::malloc(n);
   if(!p) throw std::bad_alloc();
@@ -207,7 +235,7 @@ int cudaStreamSynchronize(cudaStream_t) {
 }
 namespace generativeqc::scf::cuda_execution {
 namespace detail { constexpr unsigned kDirectQuartetShellClassCount=1; }
-enum class DirectCoulombRange { Short, Long };
+enum class DirectCoulombRange { Full, Short, Long };
 struct Batch { int total_atoms=1; };
 struct Shared {
   Batch batch; cudaStream_t stream=1; unsigned worker_blocks=1;
@@ -215,7 +243,7 @@ struct Shared {
   std::uint8_t* active=nullptr;
 };
 struct GeneratedExchangePlan {
-  Shared* shared; bool force_capability=true;
+  Shared* shared; bool force_capability=true, angular_force_opt_in=false;
   std::uint32_t* bounded_pair_order;
   double *shell_pair_block_bounds, *force;
   unsigned long long* force_cursor;
@@ -231,28 +259,61 @@ int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const do
 }
 // Independent labelled source values expose both coefficient and force-sign
 // mistakes in the host decomposition, without evaluating any integral kernel.
-template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... args) {
-  const auto values=std::make_tuple(args...);
-  auto* force=std::get<14>(values);
-  const auto* density=std::get<12>(values);
+void full_sources(double* force,const double* density,double cj,double ck,bool accumulate=false) {
   const double j=density_fixture ? direct_force_density_coefficient_scaled<true>(
-      2,0,0,density,1,1,0,0,std::get<16>(values),0.0) : std::get<16>(values);
+      2,0,0,density,1,1,0,0,cj,0.0) : cj;
   const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
-      2,0,0,density,1,1,0,0,0.0,std::get<17>(values)) : std::get<17>(values);
+      2,0,0,density,1,1,0,0,0.0,ck) : ck;
   for(unsigned i=0;i<3;++i) {
-    force[i]=-j*(1+i);
-    force[3+i]=-k*(10+i);
+    force[i]=(accumulate ? force[i] : 0.0)-j*(1+i);
+    force[3+i]=(accumulate ? force[3+i] : 0.0)-k*(10+i);
   }
+}
+void range_source(double* force,const double* density,double ck,bool accumulate=false) {
+  const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
+      2,0,0,density,1,1,0,0,0.0,ck) : ck;
+  for(unsigned i=0;i<3;++i) force[i]=(accumulate ? force[i] : 0.0)-k*(20+i);
+}
+template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... args) {
+  ++full_calls;
+  const auto values=std::make_tuple(args...);
+  full_sources(std::get<14>(values),std::get<12>(values),std::get<16>(values),std::get<17>(values));
 }
 template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
   ++range_calls;
   const auto values=std::make_tuple(args...);
-  auto* force=std::get<14>(values);
-  const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
-      2,0,0,std::get<12>(values),1,1,0,0,0.0,std::get<18>(values)) : std::get<18>(values);
-  for(unsigned i=0;i<3;++i) force[i]=-k*(20+i);
+  range_source(std::get<14>(values),std::get<12>(values),std::get<18>(values));
+}
+template<class... Args> int launch_bounded_shell_angular_energy_derivative(Args&&... args) {
+  ++angular_calls;
+  const auto values=std::make_tuple(args...);
+  const auto range=std::get<16>(values);
+  if(range!=DirectCoulombRange::Full && range!=DirectCoulombRange::Long)
+    return cudaErrorInvalidValue;
+  if(std::get<17>(values)!=(range==DirectCoulombRange::Full ? 0.0 : 0.3) ||
+     (range==DirectCoulombRange::Long && std::get<18>(values)!=0.0))
+    throw std::runtime_error("wrong angular radial/source arguments");
+  if(range==DirectCoulombRange::Full) ++full_calls; else ++range_calls;
+  // Model the real launcher's returned-error seam and partial device work:
+  // thirteen owning-stream cursor resets, each followed by a launch check.
+  // Source labels accumulate across passes; the host wrapper must zero them
+  // on retry and must never publish a partially submitted angular result.
+  for(unsigned order=0;order<13;++order) {
+    auto* cursor=std::get<15>(values);
+    auto error=cudaMemsetAsync(cursor,0,sizeof(*cursor),std::get<2>(values));
+    if(error!=cudaSuccess) return error;
+    if(range==DirectCoulombRange::Full)
+      full_sources(std::get<14>(values),std::get<12>(values),
+                   std::get<18>(values)/13.0,std::get<19>(values)/13.0,true);
+    else
+      range_source(std::get<14>(values),std::get<12>(values),std::get<19>(values)/13.0,true);
+    error=cudaGetLastError();
+    if(error!=cudaSuccess) return error;
+  }
+  return cudaSuccess;
 }
 template<class... Args> void launch_bounded_shell_rsh_derivatives(Args&&... args) {
+  ++fused_calls;
   const auto values=std::make_tuple(args...);
   auto* force=std::get<14>(values);
   for(unsigned i=0;i<3;++i) {
@@ -271,12 +332,21 @@ int main(int argc,char** argv) {
   const bool zero_exchange=argc>3 && std::strcmp(argv[3],"rsh_zero")==0;
   split=zero_exchange || (argc>3 && std::strcmp(argv[3],"rsh_split")==0);
   source_count=(argc>3 && std::strcmp(argv[3],"full_range")!=0) ? 3U : 2U;
-  const double cj=argc>4 ? std::strtod(argv[4],nullptr) : 1.0;
-  const double cs=argc>5 ? std::strtod(argv[5],nullptr) : (zero_exchange ? 0.0 : -0.1);
-  const double cl=argc>6 ? std::strtod(argv[6],nullptr) : (zero_exchange ? 0.0 : -0.5);
-  density_fixture=argc>7 && std::atoi(argv[7]);
+  angular_schedule=argc>4 && std::atoi(argv[4]);
+  const double cj=argc>5 ? std::strtod(argv[5],nullptr) : 1.0;
+  const double cs=argc>6 ? std::strtod(argv[6],nullptr) :
+      (zero_exchange ? 0.0 : (source_count==2 ? -0.5 : -0.1));
+  const double cl=argc>7 ? std::strtod(argv[7],nullptr) : (zero_exchange ? 0.0 : -0.5);
+  density_fixture=argc>8 && std::atoi(argv[8]);
+  const bool want_full=(source_count==2 || split) && (cj!=0.0 || cs!=0.0);
   const bool want_range=split && (cs!=0.0 || cl!=0.0);
+  const bool want_fused=source_count==3 && !split;
   const int expected_syncs=want_range ? 2 : 1;
+  const auto dispatch_matches = [&]() {
+    return full_calls==unsigned(want_full) && range_calls==unsigned(want_range) &&
+           fused_calls==unsigned(want_fused) &&
+           angular_calls==(angular_schedule ? unsigned(want_full)+unsigned(want_range) : 0U);
+  };
   using namespace generativeqc::scf::cuda_execution;
   Shared shared;
   std::uint32_t pair=0,head=0; unsigned long long cursor=0;
@@ -287,13 +357,25 @@ int main(int argc,char** argv) {
       2,0,0,spin_density,1,1,0,0,1.0,0.0)!=4.0 ||
       std::isfinite(direct_force_density_coefficient_scaled<true>(
           2,0,0,spin_density,1,1,0,0,0.0,1.0)))) return 9;
-  GeneratedExchangePlan plan{&shared,true,&pair,&bound,force,&cursor,&head};
+  GeneratedExchangePlan plan{&shared,true,angular_schedule,&pair,&bound,force,&cursor,&head};
   std::vector<double> output{99.0};
+  const auto result_matches = [&]() {
+    if(output.size()!=3*source_count) return false;
+    for(unsigned i=0;i<3;++i) {
+      if(!std::isfinite(output[i]) || !std::isfinite(output[3+i]) ||
+         std::abs(output[i]-cj*(density_fixture ? 4 : 1)*(1+i))>1e-12 ||
+         std::abs(output[3+i]-(source_count==2 ? cs*(10+i) : -10.0*cs))>1e-12 ||
+         (source_count==3 && (!std::isfinite(output[6+i]) ||
+          std::abs(output[6+i]-cl*(20+i))>1e-12))) return false;
+    }
+    return true;
+  };
   const auto execute = [&]() {
-    submitted_copies=0; range_calls=0;
+    submitted_copies=0; full_calls=0; range_calls=0; fused_calls=0; angular_calls=0;
     return source_count==2
         ? execute_generated_full_range_energy_derivatives(
-            plan,false,&density,nullptr,1.0,-0.5,output)
+            plan,density_fixture,density_fixture ? spin_density : &density,
+            density_fixture ? spin_density+4 : nullptr,cj,cs,output)
         : execute_generated_rsh_energy_derivatives(
             plan,density_fixture,density_fixture ? spin_density : &density,
             density_fixture ? spin_density+4 : nullptr,cj,cs,cl,split ? 0.3 : 0.4,output);
@@ -309,23 +391,16 @@ int main(int argc,char** argv) {
     if(throw_error ? !threw : status!=7) {std::cerr<<"lost injected failure";return 4;}
     if(output!=std::vector<double>{99.0}) {std::cerr<<"published partial result";return 5;}
   } else {
-    if(threw || status || output.size()!=3*source_count) return 6;
-    for(unsigned i=0;i<3;++i) {
-      if(!std::isfinite(output[i]) || !std::isfinite(output[3+i]) ||
-         std::abs(output[i]-cj*(density_fixture ? 4 : 1)*(1+i))>1e-12 ||
-         std::abs(output[3+i]-(source_count==2 ? -0.5*(10+i) : -10.0*cs))>1e-12 ||
-         (source_count==3 && (!std::isfinite(output[6+i]) ||
-          std::abs(output[6+i]-cl*(20+i))>1e-12))) {
-        std::cerr<<"published derivative source/sign/coefficient changed";return 6;
-      }
+    if(threw || status || !result_matches()) {
+      std::cerr<<"published derivative source/sign/coefficient changed";return 6;
     }
-    if(range_calls!=(want_range ? 1U : 0U)) {std::cerr<<"unused LR worker executed";return 10;}
+    if(!dispatch_matches()) {std::cerr<<"wrong full/LR/angular/fused dispatch";return 10;}
     if(syncs!=expected_syncs) {std::cerr<<"extra success-path synchronization";return 7;}
   }
   // Reuse the same retained owner after the failed call.
   step=0;fail_step=0;syncs=0;throw_error=false;
   if(execute()!=cudaSuccess || pending || syncs!=expected_syncs ||
-     range_calls!=(want_range ? 1U : 0U)) {
+     !dispatch_matches() || !result_matches()) {
     std::cerr<<"owner did not recover";return 8;
   }
 }

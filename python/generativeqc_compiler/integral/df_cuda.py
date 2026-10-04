@@ -124,6 +124,7 @@ __device__ __forceinline__ void df_rys1_roots(double argument, double* rw) {
   rw[0] = f1 / f0;
   rw[1] = f0;
 }
+// COMPENSATED_DF_VALUES
 """
     suffix = r"""
 /** Contract three scalar Gaussian moments for each exact Rys quadrature root. */
@@ -210,9 +211,18 @@ __device__ __forceinline__ double three_center(
 """
     # Scalar headers are shared across typed consumers. Internal CUDA linkage
     # prevents NVCC host registration symbols and tables from violating ODR.
+    from .df_compensated import emit_df_compensated
+
     return (
-        prefix + tables + emit_df_axis_cuda() + emit_df_g_values_cuda() + suffix
-    ).replace("__device__", "static __device__")
+        (prefix + tables + emit_df_axis_cuda() + emit_df_g_values_cuda() + suffix)
+        .replace("__device__", "static __device__")
+        .replace(
+            "// COMPENSATED_DF_VALUES",
+            emit_df_compensated().replace(
+                "__device__ inline", "static __device__ inline"
+            ),
+        )
+    )
 
 
 def emit_df_values_cpu() -> str:
@@ -227,6 +237,7 @@ def emit_df_values_cpu() -> str:
     source = source.replace("static __device__ __forceinline__", "inline")
     source = source.replace("static __device__ __noinline__", "inline")
     source = source.replace("static __device__", "static")
+    source = source.replace("__device__", "")
     source = source.replace("__forceinline__", "inline")
     source = source.replace("__noinline__", "")
     source = "\n".join(

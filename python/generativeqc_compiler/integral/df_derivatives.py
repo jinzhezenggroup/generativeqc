@@ -207,7 +207,12 @@ def evaluate_df_derivative(
 
 
 def axis_polynomial(
-    a: typing.Any, b: typing.Any, c: typing.Any, *, auxiliary_g: bool = False
+    a: typing.Any,
+    b: typing.Any,
+    c: typing.Any,
+    *,
+    auxiliary_g: bool = False,
+    auxiliary_g_derivative: bool = False,
 ) -> typing.Any:
     """Rewrite the shared Gaussian moment DAG as coefficients in u=t^2.
 
@@ -217,9 +222,17 @@ def axis_polynomial(
     internal raising of one orbital Gaussian power.
     The separate g-auxiliary value domain also ends at F_10 (f/f/g); it
     explicitly disables internal derivative raising.
+    The independently selected auxiliary-g derivative domain raises one orbital
+    power (or the first metric power) and ends at F_11; existing domains retain
+    their original bounds and generated arithmetic.
     """
     source, root = build_df_axis_moment(
-        a, b, c, internal_derivative=not auxiliary_g, auxiliary_g=auxiliary_g
+        a,
+        b,
+        c,
+        internal_derivative=not (auxiliary_g or auxiliary_g_derivative),
+        auxiliary_g=auxiliary_g,
+        auxiliary_g_derivative=auxiliary_g_derivative,
     )
     g = Graph()
     z = g.constant(0)

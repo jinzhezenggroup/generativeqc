@@ -91,7 +91,8 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
                              batch.primitive_exponents[a], first, angular_first,
                              batch.primitive_exponents[b], second, angular_second,
                              batch.primitive_exponents[c], third, angular_third,
-                             batch.primitive_exponents[d], fourth, angular_fourth, range, omega);
+                             batch.primitive_exponents[d], fourth, angular_fourth, range, omega,
+                             batch.direct_coulomb_reachable);
           } else if constexpr (MaximumAngular == 0) {
             result = result + weight * primitive_eri(batch.primitive_exponents[a], first,
                                                      batch.primitive_exponents[b], second,
@@ -105,7 +106,8 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
                              batch.primitive_exponents[a], first, angular_first,
                              batch.primitive_exponents[b], second, angular_second,
                              batch.primitive_exponents[c], third, angular_third,
-                             batch.primitive_exponents[d], fourth, angular_fourth);
+                             batch.primitive_exponents[d], fourth, angular_fourth,
+                             batch.direct_coulomb_reachable);
           }
         }
       }

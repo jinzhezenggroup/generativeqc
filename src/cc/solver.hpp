@@ -19,6 +19,8 @@ struct SolverOptions {
   // Internal DF scheduling control; dense/conventional paths are unaffected.
   // Admission retains the bounded original schedule when work or storage wins.
   bool df_auxiliary_reduction{true};
+  // Optional compiler-packed FP64 matrix contractions, with scalar fallback.
+  bool df_matrix_gemm{true};
 };
 
 struct Problem {
@@ -74,6 +76,9 @@ struct SolverDiagnostic {
   std::size_t df_hoisted_evaluations{};
   std::size_t df_preparation_calls{};
   std::size_t df_contraction_terms{};
+  bool df_matrix_gemm{};
+  std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_bytes{};
+  std::size_t df_provider_capacity_bytes{};
   double tensor_seconds{};
   double iteration_seconds{};
   double replay_seconds{};

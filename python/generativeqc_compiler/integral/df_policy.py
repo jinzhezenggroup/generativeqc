@@ -8,6 +8,40 @@ center channels, including the translation-derived auxiliary contribution.
 
 import typing
 
+from .df_derivatives_cuda import emit_df_derivatives_cuda
+
+
+def _auxiliary_g_policy_adapter() -> str:
+    """Preserve the f evaluator while binding g responses to the same policy ABI.
+
+    The conversion only copies value/center channels. The explicit g evaluator
+    owns its F11 work arrays; lower angular classes keep their existing stack
+    and arithmetic, even when another shell in the same source contains g.
+    """
+    return r"""namespace generativeqc::scf::generated_df_g_adapter {
+using Vec3=generated_df_derivatives::Vec3;
+using Angular=generated_df_derivatives::Angular;
+using Response=generated_df_derivatives::Response;
+__device__ __forceinline__ Response convert(generated_df_auxiliary_g_derivatives::Response r) {
+  return {r.value,{r.first.x,r.first.y,r.first.z},{r.second.x,r.second.y,r.second.z},
+                 {r.third.x,r.third.y,r.third.z}};
+}
+__device__ __forceinline__ Response metric(double alpha,Vec3 A,Angular a,double gamma,Vec3 C,Angular c) {
+  if(generated_df_derivatives::order(a)<=3 && generated_df_derivatives::order(c)<=3)
+    return generated_df_derivatives::metric(alpha,A,a,gamma,C,c);
+  return convert(generated_df_auxiliary_g_derivatives::metric(alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},
+                  gamma,{C.x,C.y,C.z},{c.x,c.y,c.z}));
+}
+__device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
+    double beta,Vec3 B,Angular b,double gamma,Vec3 C,Angular c) {
+  if(generated_df_derivatives::order(c)<=3)
+    return generated_df_derivatives::three_center(alpha,A,a,beta,B,b,gamma,C,c);
+  return convert(generated_df_auxiliary_g_derivatives::three_center(alpha,{A.x,A.y,A.z},{a.x,a.y,a.z},
+       beta,{B.x,B.y,B.z},{b.x,b.y,b.z},gamma,{C.x,C.y,C.z},{c.x,c.y,c.z}));
+}
+} // namespace generativeqc::scf::generated_df_g_adapter
+""".replace("__device__", "static __device__")
+
 
 def emit_df_value_source_schedule_cuda() -> str:
     """Separate raw public tiles from outputs that reduce over auxiliaries.
@@ -93,6 +127,26 @@ template<unsigned Math=0> struct ValueMath {
   }
 };
 using Value=ValueMath<0>;
+
+/** Retain raw-value residuals until the first orbital contraction. Ordinary
+ * HF values and all derivative policies keep their existing arithmetic.
+ */
+template<unsigned Math=0> struct CompensatedValue {
+  using Vec3 = generated_df::Vec3;
+  using Angular = generated_df::Angular;
+  using Weight = generated_df::fp64_expansion::Wide;
+  using Accumulator = Weight;
+  template<unsigned Rank>
+  __device__ static void accumulate(Accumulator& out,const double* e,const Vec3* r,
+                                   const Angular* a,Weight weight) {
+    static_assert(Rank==3);
+    const unsigned total=generated_df::order(a[0])+generated_df::order(a[1])+generated_df::order(a[2]);
+    if(total<=2)
+      out+=weight*generated_df::compensated::value(e[0],r[0],a[0],e[1],r[1],a[1],e[2],r[2],a[2]);
+    else
+      out+=weight*generated_df_value_candidates::three_center<Math>(e[0],r[0],a[0],e[1],r[1],a[1],e[2],r[2],a[2]);
+  }
+};
 """
     )
     derivative = r"""struct Derivative {
@@ -123,11 +177,25 @@ using Value=ValueMath<0>;
   }
 };
 """
+    g_support = (
+        emit_df_derivatives_cuda(auxiliary_g=True) + _auxiliary_g_policy_adapter()
+        if derivatives
+        else ""
+    )
+    g_policy = (
+        derivative.replace("struct Derivative", "struct AuxiliaryGDerivative").replace(
+            "generated_df_derivatives::", "generated_df_g_adapter::"
+        )
+        if derivatives
+        else ""
+    )
     return (
         "// Generated DF policy; runtime owns normalized basis traversal.\n"
         f"#ifndef {guard}\n#define {guard}\n"
         f'#include "{header}"\n'
-        "namespace generativeqc::scf::generated_df_policy {\n"
+        + g_support
+        + "namespace generativeqc::scf::generated_df_policy {\n"
         + (derivative if derivatives else value)
+        + g_policy
         + "} // namespace generativeqc::scf::generated_df_policy\n#endif\n"
     )

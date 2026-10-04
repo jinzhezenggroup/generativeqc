@@ -12,8 +12,10 @@ namespace generativeqc::scf::cuda_execution {
  */
 bool cuda_df_shell_domain(const core::System& system, const char* role, std::string& detail);
 
-/** Value-only source domain: orbital through f, auxiliary through g.
- * Legacy exporters/derivatives continue to use the stricter f query above.
+/** Source value domain: orbital through f, auxiliary through g.
+ * Raw source derivatives also have explicit auxiliary-g polynomial lowering.
+ * Legacy exporters and method force-capability queries retain their own
+ * stricter admission; creating this source does not enable a molecular force.
  */
 bool cuda_df_value_domain(const core::System& orbital, const core::System& auxiliary,
                           std::string& detail);

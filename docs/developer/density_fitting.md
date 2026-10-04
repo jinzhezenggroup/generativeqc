@@ -185,6 +185,37 @@ or separate four-center tuning pipeline is duplicated. The final source and
 energy-only gates are retained in the
 [DF retirement bundle](../../benchmarks/results/cuda-ownership/df/README.md).
 
+### Cancellation-sensitive post-HF source
+
+The native CC factor source uses `generate_cuda_density_fitting_raw_expansion`
+for its streamed AO rows. This explicit API has a canonical one-lane value
+schedule independent of the experimental ordinary-tile math/mapping overrides.
+It reuses the shared integral IR and Gaussian traversal. Total angular degree
+at most two retains FP64 high/low components through geometry, Boys moments,
+primitive evaluation and contraction; higher classes retain the strict existing
+value lowering, with compensated contraction. Ordinary HF value and derivative
+APIs retain their existing arithmetic.
+
+Both MO projections use compiler-generated compensated FP64 dots. The first
+consumes both raw components; each large intermediate stores one double per
+element, and final metric whitening uses FP64 cuBLAS. No production CPU oracle,
+PySCF dependency or extended native scalar type is introduced. Metric rank,
+cutoff, basis normalization/order and the supplied orbital frame are unchanged.
+
+For `N` orbitals and `Q` auxiliaries this adds one `N*Q` double row to the
+admitted transform storage. It performs the same `N*N*Q` raw outputs and
+`2*N^3*Q + N^2*Q^2` transform summands; these are semantic terms, not hardware
+FLOPs. Expansion arithmetic adds operations. Source traffic counters charge
+both raw component arrays, totaling `16*N*N*Q` output bytes in `N` tiles.
+There is no new resident raw tensor. This precision repair carries no endpoint
+speedup claim.
+
+The [frozen source qualification procedure](../maintainer/df_frozen_precision.md)
+requires every original factor/block gate and separate checks before physical
+pair projection. Ethane230 qualification does not establish benzene264 or
+complete large-system forces. The [decision note](../../.agents/notes/implemented/numerics/2026-10-04-df-frozen-factor-precision.md)
+preserves the independent reference correction and rejected alternatives.
+
 Manual validation tools must run through a finite Slurm allocation:
 
 - `tools/validate_df_values.py` checks every complete Cartesian shell block and

@@ -185,7 +185,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
         ),
         "prepared_aot_selection_sha256": (
-            "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
+            "d63c25b8993857082f2d6792bcd591b78a63cfde49a9be1fa69b11d7e3359649"
         ),
     }
 
@@ -259,7 +259,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
 
     assert result["admission_limits"]["native_owner_capacity"] == {
         "atom_count": 128,
-        "ao_count": 1024,
+        "ao_count": 2048,
         "basis_primitive_count": 16384,
     }
     assert result["admission_limits"]["ao_task_fallback_capacity"] == {
@@ -284,7 +284,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "0addc7ec684aa1e2116fb0f52d328a9717484b79009e9c236107f4f55bb19563",
+        "geometry_resources_sha256": "7949d2b5f585c0f5cadeaa8a6f52426355821046b209422d0947835093eb0da4",
         "public_wrapper_sha256": (
             "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
         ),
@@ -331,13 +331,13 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "7916c0f782cb6e40882144c091887bb57cb67cdc12ad733531a1d79c9df87d8a"
+            "f94b63e26682a0796fe28b145885c1d9bae20d4147b6bc2e7f6cd6b8fc0e8af3"
         ),
         "native_owner_sha256": (
             "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
         ),
         "native_allocation_sha256": (
-            "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
+            "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
         ),
         "native_create_sha256": (
             "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
@@ -1288,8 +1288,18 @@ def test_native_finish_span_fails_closed_on_contract_drift(
         qualify_capacity._source_limits(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+            "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+        ),
+        ("n > 2048", "n > 2049"),
+    ],
+)
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
-    tmp_path: Path,
+    tmp_path: Path, old: str, new: str
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
@@ -1297,14 +1307,8 @@ def test_memory_bounds_fail_closed_when_native_allocation_moves(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na"
     assert old in native
-    target.write_text(
-        native.replace(
-            old, "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na", 1
-        ),
-        encoding="utf-8",
-    )
+    target.write_text(native.replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="native_allocation_sha256 contract changed"):
         qualify_capacity._source_limits(tmp_path)
@@ -2065,7 +2069,7 @@ def test_device_budget_requires_a_positive_minimum_remainder(
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2111,7 +2115,7 @@ def test_primitive_descriptor_budget_is_page_local_and_ordered_after_host() -> N
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2154,7 +2158,7 @@ def test_logical_primitive_metric_retains_uint64_range_gate() -> None:
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2286,7 +2290,7 @@ def current_admission_fixture() -> tuple[dict, dict, dict, dict]:
     "key,cap",
     [
         ("atom_count", 128),
-        ("ao_count_spherical", 1024),
+        ("ao_count_spherical", 2048),
         ("basis_primitive_count", 16384),
     ],
 )
@@ -2353,8 +2357,28 @@ def test_public_work_retains_representable_capacity(key: str, cap: int) -> None:
     assert [failure["gate"] for failure in failures] == ["grid_work_capacity"]
 
 
-def test_native_required_domain_never_admits_ao_descriptor_fallback_work() -> None:
+@pytest.mark.parametrize(
+    "key,cap,native_value",
+    [
+        ("atom_count", 32, 33),
+        ("ao_count_spherical", 128, 129),
+        ("ao_count_spherical", 128, 1024),
+        ("ao_count_spherical", 128, 1025),
+        ("ao_count_spherical", 128, 1856),
+        ("ao_count_spherical", 128, 2048),
+        ("basis_primitive_count", 4096, 4097),
+    ],
+)
+def test_native_required_domain_never_admits_ao_descriptor_fallback_work(
+    key: str, cap: int, native_value: int
+) -> None:
     limits, shape, requirements, memory = current_admission_fixture()
+    shape[key] = cap
+    assert not qualify_capacity.stationary_cuda_requires_native_integrals(
+        atoms=shape["atom_count"],
+        aos=shape["ao_count_spherical"],
+        primitives=shape["basis_primitive_count"],
+    )
     requirements["primitive_descriptor_peak_records"] = limits["primitive_records"] + 1
     assert [
         failure["gate"]
@@ -2364,7 +2388,12 @@ def test_native_required_domain_never_admits_ao_descriptor_fallback_work() -> No
     ] == ["primitive_descriptor_page_budget"]
     # The public larger-domain route must succeed through complete native sources
     # or fail at runtime; the unused AO descriptor page is not its capacity gate.
-    shape["ao_count_spherical"] = 129
+    shape[key] = native_value
+    assert qualify_capacity.stationary_cuda_requires_native_integrals(
+        atoms=shape["atom_count"],
+        aos=shape["ao_count_spherical"],
+        primitives=shape["basis_primitive_count"],
+    )
     assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
 
 
@@ -2413,7 +2442,7 @@ def test_logical_primitive_work_and_native_work_are_method_specific() -> None:
     "old,new",
     [
         ("STATIONARY_MAX_ATOMS = 128", "STATIONARY_MAX_ATOMS = 129"),
-        ("STATIONARY_MAX_AOS = 1024", "STATIONARY_MAX_AOS = 1025"),
+        ("STATIONARY_MAX_AOS = 2048", "STATIONARY_MAX_AOS = 2049"),
         ("STATIONARY_MAX_PRIMITIVES = 16384", "STATIONARY_MAX_PRIMITIVES = 16385"),
         (
             "return atoms > 32 or aos > 128 or primitives > 4096",

@@ -14,6 +14,11 @@ namespace generativeqc::scf::cuda_execution {
 
 struct ShellPairDensityBounds;
 
+/** Freeze source recurrence controls behind the shared preparation boundary.
+ * The canonical provider stays independent of the HF runtime policy header.
+ */
+void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
+
 /** Optional geometry owner for the generated pure-J consumer. It borrows the
  * direct provider's stream and public basis metadata, and owns bounded shell
  * topology, Cartesian transforms and scratch. No quartet list is materialized.
@@ -79,6 +84,8 @@ struct GeneratedExchangePlan {
   // Optional bounded Direct-HF lease. Value fallback and stationary forces
   // share immutable shell topology, screening metadata and one cursor.
   bool force_capability{}, bounded_value_capability{};
+  /** Experimental schedule only; false retains the qualified single traversal. */
+  bool angular_force_opt_in{};
   const std::uint32_t* bounded_pair_order{};
   /** Optional geometry-live row index; owned by allocations, never by a call. */
   detail::BoundedDirectBlockDomain bounded_block_domain{};

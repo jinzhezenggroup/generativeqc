@@ -248,51 +248,74 @@ def test_component_schedule_limits_lowering_to_qualified_density_families(
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a C++ compiler")
-    source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    definitions = "\n".join(
-        (
-            _method(source, "constexpr bool is_semilocal_family("),
-            _method(source, "struct CudaKsPrecisionSchedule") + ";",
-            _method(
-                source, "CudaKsPrecisionSchedule resolve_cuda_ks_precision_schedule("
-            ),
-        )
-    )
-    harness = (
-        r"""
+    harness = r"""
 #include <cassert>
 #include <optional>
 #include <stdexcept>
-#include "generativeqc/generativeqc.h"
-#include "dft/semilocal_family.hpp"
+#include "dft/cuda_ks_precision.hpp"
+using namespace generativeqc;
 using namespace generativeqc::dft;
-"""
-        + definitions
-        + r"""
+
 int main() {
+  using runtime::PrecisionDtype;
+  assert(runtime::kExecutionPrecisionSchema == "generativeqc.compiler.execution-precision.v1");
+  assert(runtime::kStrictPrecisionMathMode == "ieee-rn-no-tf32");
   for (const auto family : {SemilocalFamily::Lda, SemilocalFamily::Pbe,
                             SemilocalFamily::R2scan, SemilocalFamily::B3lyp}) {
     const auto code = semilocal_family_code(family);
-    const auto strict = resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_FP64, code, false, false);
-    assert(!strict.any_mixed() && !strict.mixed_coulomb && !strict.mixed_density_contraction);
-    assert(!resolve_cuda_ks_precision_schedule(std::nullopt, code, false, false).any_mixed());
-    const auto automatic = resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, false, false);
-    assert(automatic.any_mixed() && automatic.mixed_coulomb);
-    assert(automatic.mixed_density_contraction == (family != SemilocalFamily::B3lyp));
+    const auto strict =
+        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_FP64, code, false, false);
+    assert(strict.size() == 6 && strict.is_strict_fp64() && !strict.any_lower_precision());
+    assert(strict.strict_audit_dtype() == PrecisionDtype::Fp64);
+    assert(strict.audit_owner() == "method-controller");
+    assert(strict.math_mode() == runtime::kStrictPrecisionMathMode);
+    assert(!resolve_cuda_ks_precision_schedule(std::nullopt, code, false, false)
+                .any_lower_precision());
+
+    const auto automatic =
+        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, false, false);
+    assert(automatic.any_lower_precision());
+    assert(automatic.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    const bool density_mixed = family != SemilocalFamily::B3lyp;
+    assert(automatic.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
+           density_mixed);
+    for (const auto region : {cuda_ks_precision_region::kExactExchange,
+                              cuda_ks_precision_region::kTau,
+                              cuda_ks_precision_region::kXcPointAlgebra,
+                              cuda_ks_precision_region::kFinalAudit})
+      assert(!automatic.uses_lower_precision(region));
+
+    const auto* coulomb = automatic.find(cuda_ks_precision_region::kCoulombJ);
+    assert(coulomb != nullptr && coulomb->storage_dtype == PrecisionDtype::Fp64 &&
+           coulomb->compute_dtype == PrecisionDtype::Fp32 &&
+           coulomb->accumulation_dtype == PrecisionDtype::Fp64 &&
+           !coulomb->qualification.empty());
+    const auto* density = automatic.find(cuda_ks_precision_region::kDensityContraction);
+    assert(density != nullptr);
+    assert(density->compute_dtype ==
+           (density_mixed ? PrecisionDtype::Fp32 : PrecisionDtype::Fp64));
+    assert(density->accumulation_dtype == PrecisionDtype::Fp64);
+
     for (const bool fitted : {false, true}) {
       bool rejected = false;
-      try { resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, fitted, !fitted); }
-      catch (const std::invalid_argument&) { rejected = true; }
-      assert(rejected); // Fitted Coulomb and nonlocal composition remain fail-closed.
+      try {
+        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, fitted, !fitted);
+      } catch (const std::invalid_argument&) {
+        rejected = true;
+      }
+      assert(rejected);
     }
   }
   bool rejected = false;
-  try { resolve_cuda_ks_precision_schedule(static_cast<generativeqc_precision_mode>(999), 0, false, false); }
-  catch (const std::invalid_argument&) { rejected = true; }
+  try {
+    resolve_cuda_ks_precision_schedule(static_cast<generativeqc_precision_mode>(999), 0, false,
+                                       false);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
   assert(rejected);
 }
 """
-    )
     cpp = tmp_path / "component_schedule.cpp"
     executable = tmp_path / "component_schedule"
     cpp.write_text(harness)

@@ -1,0 +1,131 @@
+{
+  "schema": "generativeqc.df-factor-1840-evidence.v1",
+  "base_revision": "ffe7ed9c981619d715c5a43fa6bcf39da29190d6",
+  "measured_source": "Base git archive plus the exact final code files in this PR; source archive had no .git. All 3198 code/config/test input files were hash-compared to the final worktree after the run.",
+  "validation_input_count": 3198,
+  "validation_input_tree_sha256": "58d832f61a3cf736c8480ead0a9e62c29f5b8b594ef4f835bdc3f1e4ae43850a",
+  "validation_input_selection": "Git-tracked plus new PR files under python, src, include, tools, cmake, tests; also CMakeLists.txt and pyproject.toml. No build/ignored files.",
+  "validation_input_hash_serialization": "SHA-256 of UTF-8 JSON mapping relative path to file SHA-256, sort_keys=True, separators=(comma,colon)",
+  "modified_input_sha256": {
+    "python/generativeqc_compiler/common/fp64_expansion.py": "05afb8ede128ae4d4d04ccad2ce8cccaa1afa84fec62a6fe79800c8740710a08",
+    "python/generativeqc_compiler/integral/df_compensated.py": "b149583d181c2b1fe0e58183132902410761fe6fbb38070aedf7182c6dd86f0f",
+    "python/generativeqc_compiler/integral/df_cuda.py": "4da3dd075f1d4a299b4dddd901d0441f209880170ff47a3d781d798a5eabcc8d",
+    "python/generativeqc_compiler/integral/df_derivatives_cuda.py": "7386325b90ea8d4bcfeb97a42337ef25ce322203210a5cd516154e6c84b407b6",
+    "python/generativeqc_compiler/integral/df_policy.py": "c09b2fcbff5be369abd64f73b7eb33a888326c67d795826fd05073e315ec4f56",
+    "python/generativeqc_compiler/method/df_mo_source.py": "38518800ceaaf7ed41025d54ab043f3685043f811bcbf87f959002030f8cc931",
+    "src/cc/df_source_cuda.cu": "316f5bbe878edccaa4851ac6a8cb9477ea41261945c96ff96a3323db383614fc",
+    "src/runtime/cuda_gaussian_products.cuh": "c1a035d528c5e1617f4b075a8ab9616c15027235250314aa329d1a7af70f173c",
+    "src/scf/cuda/df_source.cpp": "553ba13725b907b5f5c780a5bcb3fb19d7c66ffa1a8ec73279c43a3224a8992f",
+    "src/scf/cuda/df_source_kernels.cu": "5d05bcdb2291c4b5d815fd1ab99db4a7274a863b7beb31dbb18e4796dda3e52e",
+    "src/scf/cuda/df_source_kernels.hpp": "2a47fe66d9d3465fceb0f8e02c1d6e69a1dac506e639aab9b2758ab7a873b62d",
+    "src/scf/cuda_density_fitting.hpp": "805e60e500066326c2dc92b13b1c84288f36954c5f08efdbaaa8fd4ff21f2768",
+    "src/scf/cuda_density_fitting_stub.cpp": "f68d1f0b2195a85940116a7612c162b36ef8c4687b9eef5a1a1853b059d00a2c",
+    "tests/native/df_frozen_precision_capture.cpp": "6f9c248e9df2b17a9b7eafe3a8e933d594a1037600f2b097069338d62accaa80",
+    "tests/python/test_df_cc_source_admission.py": "6a5f6f5b4c5ad3593cde89443343d736593772abeb4982a0f99759cc0d9f4344",
+    "tests/python/test_df_compensated_precision.py": "2c738fb4e86d040c9baeb8ed0ce8ed7c1b0dd34766a718573df5861ed86ea0be",
+    "tests/python/test_df_frozen_oracle.py": "28b1188ccdf18693c0035ebe9faeb3c0dbd9e781e034c16ce419911417c2f5cb",
+    "tools/generate_df_cc_source.py": "c3f4e6622ddedd18166b215a73c979f0ff6bf9d47fde24f826d5ce5b72358679",
+    "tools/generativeqc_validation/df_frozen_oracle.py": "e7d1bc780d5e24b272e9344683be87e6a7a03cc8c533efc7771e4a7b506540ac",
+    "tools/generativeqc_validation/df_frozen_replay.py": "3eaba9918c2c93b4d17a909e45fc9c4c91aed46f94ba09971685798e35b045d4",
+    "tools/generativeqc_validation/df_precision_oracle.cpp": "eb2c3bbd254a52c2722d3d78d49f26d1677dfc1ea601e43bdd22b5a8bac685c4",
+    "tools/generativeqc_validation/df_reference_roots.c": "d68e231addb5c549a904e7dd0862bab70aad25f53e9415697b916d8f8a65a03e"
+  },
+  "archive": {
+    "name": "pr1781-ethane230-frozen-309669bb-n2.zip",
+    "bytes": 1353823563,
+    "sha256": "8415c7dd8e81caf7702f423785aff8e925f24b4d1010992226ffdfe8c7305ae2",
+    "public_url": null
+  },
+  "build": {
+    "job": "2267",
+    "host": "node2",
+    "cuda": "12.9.1",
+    "cuda_architectures": "120",
+    "type": "Release",
+    "ccache": "4.5.1",
+    "aot_shells": true,
+    "aot_profile": "portable_cuda",
+    "stationary_force_aot": false,
+    "stationary_cpu_force_aot": false,
+    "cxx": "/usr/bin/g++",
+    "cuda_compiler": "/group/software/cuda-12.9.1/bin/nvcc",
+    "library_sha256": "368f16fd2410b3c9a241e310918346a1bc1565309f5fc278928eaa1b35766216"
+  },
+  "checks": [
+    {
+      "job": "2270",
+      "scope": "host precision/IR/source/admission/oracle",
+      "passed": 124,
+      "skipped": 14,
+      "skip_reason": "requires finite Slurm GPU allocation; all 14 subsequently passed in job2271"
+    },
+    {
+      "job": "2268",
+      "scope": "molecular factors/blocks",
+      "passed": 12,
+      "deselected": 4,
+      "deselected_reason": "complete RHF/CC endpoints excluded from source-only qualification"
+    },
+    {
+      "job": "2268",
+      "scope": "physical source, fixed-rank response, transactional and capacity gates",
+      "passed": 22,
+      "deselected": 1,
+      "deselected_reason": "complete CCSD/Lambda composition excluded from source-only qualification"
+    },
+    {
+      "job": "2271",
+      "scope": "streamed MO response against independent complete expression, callback lifetime/ownership and nonfinite arithmetic",
+      "passed": 14,
+      "deselected": 34,
+      "deselected_reason": "host cases already passed in job2270"
+    }
+  ],
+  "structure_checks": {
+    "compiler_modules": 427,
+    "dependency_errors": 0,
+    "cuda_ownership_files": 313
+  },
+  "qualification": {
+    "case": "ethane230",
+    "original_factor_gates": "passed against independently corrected reference, atol=rtol=3e-10",
+    "original_reference": "preserved, known inaccurate, still fails",
+    "benzene264": "unqualified",
+    "complete_large_force": "unqualified",
+    "endpoint_performance": "not measured; instrumented timings are not benchmarks",
+    "independent_numerical_review": "pending"
+  },
+  "before_fix": {
+    "revision": "309669bb3476b3e20410b2c549a54b2b3b8b6e73",
+    "reference": "original saved arrays",
+    "Bov": {
+      "max_abs": 8.102559946772392e-10,
+      "failures": 44
+    },
+    "Bvv": {
+      "max_abs": 5.8931808133303246e-08,
+      "failures": 988025
+    },
+    "oovv": {
+      "max_abs": 2.9842685544956282e-09,
+      "failures": 5915
+    }
+  },
+  "non_numerical_diagnostic_failures": [
+    {
+      "jobs": [
+        "2259",
+        "2263"
+      ],
+      "reason": "validation interposer RTLD_NEXT could not find native factory because --as-needed dropped the library dependency; aborted before factors; fixed forced dependency and passed jobs2265/2268"
+    },
+    {
+      "jobs": [
+        "2269"
+      ],
+      "reason": "host wrapper resolved /usr/bin/python without pytest; changed to explicit validated interpreter; passed job2270"
+    }
+  ],
+  "artifact_location_n2": "/data/jzzeng/df-factor-1840-20261004",
+  "note": "native-replay.json gpu lists the host inventory; Slurm allocated one pro6000, CUDA_VISIBLE_DEVICES=0. No cross-device timing calibration is used."
+}
