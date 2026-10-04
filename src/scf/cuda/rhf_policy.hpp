@@ -252,7 +252,7 @@ bool direct_tile_validation_requested() noexcept;
 double converged_fock_reuse_density_rms(double density_tolerance) noexcept;
 bool force_density_product_screening_requested() noexcept;
 
-/** Diagnostic only until complete independent-source endpoints are qualified. */
+/** Qualified default; GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=0/none opts out. */
 bool bounded_schwarz_schedule_requested() noexcept;
 /** Qualification only: partition force source evaluation by total angular order. */
 bool bounded_angular_force_requested() noexcept;
