@@ -238,6 +238,35 @@ class UHFReferenceSnapshot:
         """Number of AOs and canonical MOs in each spin channel."""
         return self.overlap.shape[0]
 
+    @property
+    def nmo(self) -> typing.Any:
+        """Number of spatial MOs per spin channel."""
+        return self.nbf
+
+    @property
+    def numeric_bytes(self) -> typing.Any:
+        """Owned immutable numeric bytes charged to bounded post-HF consumers."""
+        return sum(
+            getattr(self, name).nbytes
+            for name in (
+                "overlap",
+                "hcore",
+                "fock_alpha",
+                "fock_beta",
+                "coefficients_alpha",
+                "coefficients_beta",
+                "orbital_energies_alpha",
+                "orbital_energies_beta",
+                "occupations_alpha",
+                "occupations_beta",
+            )
+        )
+
+    @property
+    def screening_tolerance(self) -> float:
+        """The current exported UHF Hamiltonian is exact/unscreened."""
+        return 0.0
+
     def nocc(self, spin: typing.Any) -> typing.Any:
         """Return the occupied alpha or beta orbital count."""
         if spin not in ("alpha", "beta"):

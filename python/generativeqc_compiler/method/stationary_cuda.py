@@ -802,6 +802,45 @@ def qualified_sp_requests() -> tuple[tuple[str, tuple[str, ...]], ...]:
     )
 
 
+@dataclass(frozen=True)
+class StationaryCudaPrimitiveDemand:
+    """Reachable primitive roots and their unchanged task-kind ABI."""
+
+    requests: tuple[tuple[str, tuple[str, ...]], ...]
+    component_mode: bool
+    integral_derivatives: bool
+
+
+def plan_stationary_cuda_primitive_demand(
+    requests: tuple[tuple[str, tuple[str, ...]], ...],
+    *,
+    component_mode: bool,
+    native_integrals_required: bool,
+    packaged: bool,
+) -> StationaryCudaPrimitiveDemand:
+    """Project JIT roots only when the complete native producer is mandatory.
+
+    The native producer owns one-electron, Pulay, J and K derivatives, not the
+    nuclear repulsion derivative. Its failure must reject the endpoint, never
+    execute a pruned AO-task fallback. Small domains retain that fallback even
+    if a native producer is usually available. Packaged artifacts retain their
+    full inventory and numbering: selecting AOT must not trigger new emission.
+
+    This removes compilation work, not executed integrals or scientific sources.
+    Basis capability and native resource admission remain caller obligations.
+    """
+    if any(
+        type(flag) is not bool
+        for flag in (component_mode, native_integrals_required, packaged)
+    ):
+        raise TypeError("stationary primitive demand flags must be boolean")
+    if native_integrals_required and not packaged:
+        if ("nuclear", ()) not in requests:
+            raise ValueError("stationary primitive inventory omits nuclear repulsion")
+        return StationaryCudaPrimitiveDemand((("nuclear", ()),), False, False)
+    return StationaryCudaPrimitiveDemand(requests, component_mode, True)
+
+
 def _qualified_component_aot_domain(
     component_domain: typing.Iterable[str] | None,
 ) -> tuple[str, ...] | None:

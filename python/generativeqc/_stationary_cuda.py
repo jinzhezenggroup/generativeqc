@@ -63,6 +63,7 @@ from generativeqc_compiler.method.stationary_cuda import (
     compile_stationary_cuda,
     encode_stationary_derivative_kind,
     load_stationary_aot_artifact,
+    plan_stationary_cuda_primitive_demand,
     qualified_sp_requests,
     stationary_runtime_sources,
 )
@@ -1680,6 +1681,7 @@ class PreparedStationaryCudaExecution:
         primitive_tile: int,
         integral_terms: int,
         page_work_budget: int,
+        integral_derivatives: bool = True,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
         scientific_identity = canonical_hash(
@@ -1708,6 +1710,7 @@ class PreparedStationaryCudaExecution:
                 "primitive_tile": primitive_tile,
                 "integral_terms": integral_terms,
                 "primitive_page_work_budget": page_work_budget,
+                "primitive_integral_derivatives": integral_derivatives,
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
                 "tensor_plans": [
                     (name, value.identity)
@@ -1772,7 +1775,19 @@ class PreparedStationaryCudaExecution:
         max_host_bytes: int,
         host_bound: int,
         profile_device: bool = False,
+        integral_derivatives: bool = True,
     ) -> None:
+        if not integral_derivatives and (
+            aot_directory is not None
+            or ecp
+            or requests != (("nuclear", ()),)
+            or not stationary_cuda_requires_native_integrals(
+                atoms=basis.natom, aos=basis.nao, primitives=basis.nprimitive
+            )
+        ):
+            raise ValueError(
+                "pruned primitive roots require mandatory native JIT sources"
+            )
         target = compiler.target if target is None else target
         request = self._request(
             state=state,
@@ -1792,6 +1807,7 @@ class PreparedStationaryCudaExecution:
             primitive_tile=primitive_tile,
             integral_terms=integral_terms,
             page_work_budget=page_work_budget,
+            integral_derivatives=integral_derivatives,
         )
         if self._lease.contract is not None:
             try:
@@ -1840,7 +1856,7 @@ class PreparedStationaryCudaExecution:
         started = perf_counter()
         cache = Path(cache)
         _, _, expansions, _ = _layout(basis)
-        component_mode = _component_mode(expansions)
+        component_mode = integral_derivatives and _component_mode(expansions)
         stationary_artifact = (
             compile_stationary_cuda(
                 (
@@ -1916,6 +1932,7 @@ class PreparedStationaryCudaExecution:
                     target=target,
                     page_work_budget=page_work_budget,
                     profile_device=profile_device,
+                    integral_derivatives=integral_derivatives,
                 )
             )
             tensors = {
@@ -2400,7 +2417,14 @@ def _complete_rks_cuda_gradient_diagnostic(
             "enlarged stationary CUDA domains require prepared native integral derivatives"
         )
     _, aos, expansions, requests = _layout(basis)
-    component_mode = _component_mode(expansions)
+    primitive_demand = plan_stationary_cuda_primitive_demand(
+        requests,
+        component_mode=_component_mode(expansions),
+        native_integrals_required=requires_native_integrals,
+        packaged=aot_directory is not None and not ecp,
+    )
+    requests = primitive_demand.requests
+    component_mode = primitive_demand.component_mode
     primitive_sum = sum(
         int(row[2]) * len(expansion)
         for row, expansion in zip(aos, expansions, strict=True)
@@ -2574,6 +2598,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                 max_host_bytes=max_host_bytes,
                 host_bound=host_bound,
                 profile_device=profile_device,
+                integral_derivatives=primitive_demand.integral_derivatives,
             )
         artifact = prepared.stationary_artifact
         grid_artifact = prepared.grid_artifact
@@ -2648,6 +2673,7 @@ def _complete_rks_cuda_gradient_diagnostic(
                         page_work_budget=max_primitive_records,
                         timeline=timeline,
                         profile_device=profile_device,
+                        integral_derivatives=primitive_demand.integral_derivatives,
                     )
                 )
             source_before = grid_before = None
@@ -3076,6 +3102,7 @@ def _complete_rks_cuda_gradient_diagnostic(
         ),
         grid_tile_points_requested=requested_tile_points,
         native_integrals_required=requires_native_integrals,
+        primitive_integral_roots_retained=primitive_demand.integral_derivatives,
         ordered_pairs=n * n,
         ordered_quartets=(1 + int(has_exchange)) * n**4,
         exchange_ordered_quartets=n**4 if has_exchange else 0,
