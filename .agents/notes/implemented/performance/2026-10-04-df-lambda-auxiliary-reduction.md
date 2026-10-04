@@ -57,9 +57,25 @@ Cache identities cannot outlive or migrate between scientific owners.
 The compiler prototype is checked against expanded AD at arbitrary amplitudes,
 independent NumPy factor-direction finite differences at two steps, and all
 eight retained parameter VJPs. The corrected five-test host suite passes.
-The native owner and generated CUDA translation units compile with CUDA 12.9,
-strict FP64 scalar arithmetic and ccache; native numerical qualification is
-still pending at this checkpoint.
+The full library compiles with CUDA 12.9, strict FP64 scalar arithmetic and
+ccache. The rebased prerequisite also contained the generic AOT query twice
+in a single stub; removing its duplicate definition repairs AOT-disabled builds.
+
+RTX5090 Slurm job 12234 passes 22 tests in 53.50 s across
+test_df_cc_lambda.py and test_df_complete_force.py, including independent
+H2/water/LiH force finite differences, every water coordinate, exact-budget
+fallback, and failure without publication. Job 12237 passes the seven native
+Lambda tests under Compute Sanitizer memcheck with zero reported errors.
+On n2 PRO6000 job 2196, paired complete water endpoints have identical energy
+and maximum force difference 5.3291e-15. The 230-AO complete force endpoint
+is still running at this checkpoint; these small gates do not qualify it.
+
+Frozen library SHA256:
+461bd4f0e7defcc4c513bf1ecb6989ba9dce786cd2552ef6b05c1d1a2b99232a.
+Build source identity:
+1ac0c9753b8ce92a5c2b56ca025921c679391fa935210b788f2418733ca1ebc0.
+The geometry/basis-only ethane230 input SHA256 is
+9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e.
 
 Per-action semantic contraction summands, excluding one-time primal staging:
 
