@@ -20,6 +20,12 @@ from generativeqc_compiler.cc.occupied_triples import (
     moment_program,
     v_scalar_program,
 )
+from generativeqc_compiler.cc.occupied_triples_fock import (
+    moment_program as fock_moment_program,
+)
+from generativeqc_compiler.cc.occupied_triples_fock import (
+    resolvent_scalar_program,
+)
 from generativeqc_compiler.cc.occupied_triples_response import (
     energy_scalar_vjp,
     gap_vjp,
@@ -98,7 +104,9 @@ def _gemm(
     if c != m + n:
         raise ValueError("occupied triples output needs an unqualified packing")
     dims = {
-        label: {"occupied": "o", "virtual": "v", "auxiliary": "q"}[index.space.kind]
+        label: {"occupied": "o", "virtual": "v", "auxiliary": "q", "batch": "capacity"}[
+            index.space.kind
+        ]
         for operand, labels in zip(node.inputs, node.attrs["labels"], strict=True)
         for index, label in zip(operand.spec.indices, labels, strict=True)
     }
@@ -387,6 +395,86 @@ def response_cuda_source() -> str:
     return "\n".join(lines)
 
 
+def fock_header() -> str:
+    """Lower occupied-resolvent scalar algebra and its two marginal products."""
+    scalar = resolvent_scalar_program()
+    lines = [
+        f'inline constexpr const char* resolvent_hash="{scalar.logical_hash}";',
+        emit_scalar_cpp(
+            scalar, function_name="resolvent_element", ordered_native_sums=True
+        ).replace("inline bool ", "GQC_DF_TRIPLES_HD inline bool "),
+    ]
+    for block in ("oo", "vv"):
+        program = fock_moment_program(3, 2, block)
+        names = _inputs(program)
+        lines += [
+            f"template<class Gemm> void fock_{block}(std::size_t v,std::size_t capacity,",
+            ",".join(f"const double* {name}" for name in names)
+            + ",double weight,double* output,Gemm&& gemm){",
+        ]
+        for index, node in enumerate(program.outputs.values()):
+            lines.append(
+                _gemm(
+                    node,
+                    {name: (name, None) for name in names},
+                    "-0.5*weight" if block == "oo" else "0.5*weight",
+                    "0.0" if block == "oo" and index == 0 else "1.0",
+                )
+            )
+        lines.append("}")
+    return "\n".join(lines)
+
+
+def fock_cuda_source() -> str:
+    """Bind six W cubes and pointwise V values without an ovvv source."""
+    program = resolvent_scalar_program()
+    lines = [
+        "__global__ void resolvent_kernel(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,",
+        " double threshold,Inputs in,const double* moments,double* x,double* y,int* error){",
+        " const auto v3=v*v*v; const std::size_t occupied[3]={i,j,k};",
+        " for(std::size_t flat=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;flat<v3;flat+=std::size_t(blockDim.x)*gridDim.x){",
+        " const std::size_t a=flat/(v*v),b=(flat/v)%v,c=flat%v;",
+        " const double gap=in.eps_o[i]+in.eps_o[j]+in.eps_o[k]-in.eps_v[a]-in.eps_v[b]-in.eps_v[c];",
+        " if(!isfinite(gap)||gap>=0.0||fabs(gap)<=threshold){atomicCAS(error,0,1);x[flat]=y[flat]=0.0;continue;}",
+    ]
+    bindings = {"gap": "gap"}
+    for name in _inputs(program):
+        if name == "gap":
+            continue
+        kind, occ, vir = name.split("_")
+        a, b, c = ("abc"[axis] for axis in VP[vir])
+        if kind == "w":
+            bindings[name] = f"moments[{_LABELS.index(occ)}*v3+({a}*v+{b})*v+{c}]"
+        else:
+            I, J, K = (f"occupied[{axis}]" for axis in VP[occ])
+            lines += [
+                f"double {name}=0.0;",
+                _call(
+                    v_scalar_program(),
+                    "v_element",
+                    {
+                        "ovov": f"in.ovov[((({I})*v+{a})*o+({J}))*v+{b}]",
+                        "t1": f"in.t1[({K})*v+{c}]",
+                        "t2": f"in.t2[((({I})*o+({J}))*v+{a})*v+{b}]",
+                        "fov": f"in.fov[({K})*v+{c}]",
+                    },
+                    name,
+                ),
+            ]
+            bindings[name] = name
+    call = _call(program, "resolvent_element", bindings, "xx,yy").removesuffix(";")
+    lines += [
+        "double xx=0.0,yy=0.0;",
+        f"if(!{call}) atomicCAS(error,0,2);",
+        "x[flat]=generativeqc_tensor::finite(xx,error,3); y[flat]=generativeqc_tensor::finite(yy,error,3); } }",
+        "void resolvent_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,",
+        " double threshold,const Inputs& in,const double* moments,unsigned blocks,double* x,double* y,int* error,cudaStream_t stream){",
+        "resolvent_kernel<<<blocks,256,0,stream>>>(o,v,i,j,k,threshold,in,moments,x,y,error);",
+        "generativeqc_tensor::cuda_check(cudaGetLastError()); }",
+    ]
+    return "\n".join(lines)
+
+
 def header() -> str:
     panel = df_panel_program(3, 4)
     moments = moment_program(2, 3)
@@ -460,6 +548,7 @@ def header() -> str:
     lines += [
         response_blas_header(),
         response_scalar_header(),
+        fock_header(),
         "}  // namespace generativeqc::cc::triples::generated_df",
         "#undef GQC_DF_TRIPLES_HD",
         "",
@@ -488,6 +577,9 @@ void response_gap_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,s
 struct GapCudaState { std::size_t o{},v{}; const double* bar_gap{}; double* response_arena{};
                       int* error{}; cudaStream_t stream{}; };
 GapOutputs gap_response_cuda(GapCudaState& state);
+void resolvent_tile(std::size_t o,std::size_t v,std::size_t i,std::size_t j,std::size_t k,
+                    double threshold,const Inputs& in,const double* moments,unsigned blocks,
+                    double* x,double* y,int* error,cudaStream_t stream);
 }
 """
 
@@ -553,6 +645,7 @@ def cuda_source() -> str:
         "  generativeqc_tensor::cuda_check(cudaGetLastError());",
         "}",
         response_cuda_source(),
+        fock_cuda_source(),
         "}",
         "",
     ]
