@@ -77,6 +77,23 @@ and decisions remain preparation metadata; they do not resolve executable owners
 
 ## Current integration
 
+`src/tensor/cuda_cutlass.cuh` provides an optional native CUTLASS AOT SIMT owner
+for the same canonical affine contractions. It uses the shared matrix view proof,
+homogeneous FP32/FP64 arithmetic, a fixed scalar-aligned tile family and the
+canonical alpha/beta epilogue. Preparation initializes kernel parameters once;
+replay only replaces borrowed addresses and submits the retained specialization.
+It supports padded/batched row/column views without separate packing or scatter,
+and audits only logical output elements. Capture remains explicitly unsupported.
+
+The owner requires a build artifact digest, exact host capacity and an externally
+qualified reservation for context-retained module storage. It resolves lazy
+kernel loading during preparation. Module growth beyond that reservation is a
+hard failure: CUDA can retain loaded modules after local plan destruction, so
+release does not zero this charge. This native slice has no production profile
+or registry selection yet. The opt-in `test_native_cutlass_binding.py` probe uses
+an external CUTLASS 3.9.2 include tree and hashes its contents, owned source,
+toolchain and flags into the actual validation artifact.
+
 `tensor.matrix_view` and `src/tensor/native_matrix_view.hpp` prove the direct
 matrix address mapping of an existing affine contraction. Providers share this
 mode-group/stride proof and retain their own precision, toolkit and resource
