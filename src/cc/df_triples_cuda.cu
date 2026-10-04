@@ -288,7 +288,8 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
   result.precision = precision;
   if (mixed_w) {
     result.w_storage_bits = result.w_compute_bits = result.w_accumulation_bits = 32;
-    result.precision_schedule_identity = generated_df::w_fp32_precision_schedule_identity;
+    std::copy_n(generated_df::w_fp32_precision_schedule_identity, 64,
+                result.precision_schedule_identity.begin());
   }
   int failed = 0;
   {
