@@ -61,6 +61,7 @@ def test_generated_auxiliary_accumulation_preserves_order(
             str(obj),
             "-L" + str(library.parent),
             "-lgenerativeqc",
+            "-lcublas",
             "-arch=sm_120",
             "-Xlinker",
             "-rpath=" + str(library.parent),

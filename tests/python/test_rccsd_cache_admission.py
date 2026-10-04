@@ -16,6 +16,7 @@ PREFIX = r"""
 #include <memory>
 #include <stdexcept>
 #include <vector>
+#include "cc/solver.hpp"
 int allocations=0, executions=0;
 bool retained_response=false;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3, GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
@@ -71,7 +72,7 @@ void validate_descriptor(const generativeqc_method_descriptor& d,const runtime::
   if (!d.valid) throw std::invalid_argument("invalid descriptor");
 }
 std::size_t correlation_budget(const generativeqc_method_descriptor& d) { return d.budget; }
-struct SolverOptions { bool df_matrix_gemm=true; };
+using SolverOptions = generativeqc::cc::SolverOptions;
 SolverOptions cc_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
@@ -153,7 +154,17 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     start = source.index("RccsdNativeState run_rccsd_native_state(")
     end = source.index("\ngenerativeqc_status validate_rccsd_system", start)
-    program = PREFIX + source[start:end] + MAIN
+    # Keep production defaults and option fields as selectors evolve; the
+    # intercepted physical owners still prove admission happens before work.
+    header = (ROOT / "src/methods/rccsd_method.hpp").read_text()
+    declaration = (
+        "RccsdNativeState run_rccsd_native_state("
+        + header.split("RccsdNativeState run_rccsd_native_state(", 1)[1].split(");", 1)[
+            0
+        ]
+        + ");\n"
+    )
+    program = PREFIX + declaration + source[start:end] + MAIN
     path, executable = tmp_path / "probe.cpp", tmp_path / "probe"
     path.write_text(program)
     compiled = subprocess.run(
@@ -163,6 +174,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
             "-std=c++20",
             "-O0",
             "-DGENERATIVEQC_HAS_CUDA=1",
+            f"-I{ROOT / 'src'}",
             "-c",
             str(path),
             "-o",

@@ -98,3 +98,16 @@ All changed production/compiler/test sources match the frozen n2 checkout by
 SHA-256. Full energy/force/budget-admission evidence is still required.
 
 No performance result or default promotion is inferred from these host gates.
+
+## Current prepared-provider integration
+
+The parent subsequently incorporated master's shared prepared contraction
+owner. Retain that owner, its full/tail descriptor charges and precision guards;
+do not restore the older method-local GEMM callback when resolving the packed
+history merge. Both numeric allocations coexist with descriptor storage, and
+the history-refusal bound includes the retained provider/descriptor capacity.
+The host ownership/lifetime fixtures now audit both allocations. Job2339 passes
+all38 current admission, binding and lifetime cases on each integrated branch,
+plus compiler, SCF and native architecture checks. New real-GPU qualification
+is separate from the frozen2327–2329 endpoint receipts; those receipts keep
+their original binary and source identity.

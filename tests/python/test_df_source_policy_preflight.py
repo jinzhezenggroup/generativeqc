@@ -19,6 +19,7 @@ PREFIX = r"""
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "cc/solver.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 namespace probe {
 namespace core = generativeqc::core;
@@ -83,7 +84,7 @@ struct RccsdNativeState {
 };
 void validate_descriptor(const generativeqc_method_descriptor&, const runtime::ExecutionContext&) {}
 std::size_t correlation_budget(const generativeqc_method_descriptor&) { return 100; }
-struct SolverOptions { bool df_matrix_gemm = true; };
+using SolverOptions = generativeqc::cc::SolverOptions;
 SolverOptions cc_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
 Reference reference_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(
@@ -200,8 +201,20 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     start = source.index("RccsdNativeState run_rccsd_native_state(")
     end = source.index("\ngenerativeqc_status validate_rccsd_system", start)
+    # Use the real declaration's defaults and SolverOptions fields while
+    # retaining the intercepted RHF/source owners and their no-work assertions.
+    header = (ROOT / "src/methods/rccsd_method.hpp").read_text()
+    declaration = (
+        "RccsdNativeState run_rccsd_native_state("
+        + header.split("RccsdNativeState run_rccsd_native_state(", 1)[1].split(");", 1)[
+            0
+        ]
+        + ");\n"
+    )
     probe = tmp / "probe.cpp"
-    probe.write_text(PREFIX + factory + AFTER_FACTORY + source[start:end] + MAIN)
+    probe.write_text(
+        PREFIX + factory + AFTER_FACTORY + declaration + source[start:end] + MAIN
+    )
     objects = []
     env = dict(os.environ, CCACHE_BASEDIR=str(ROOT))
     # Compile the complete real policy/domain translation units, not test reimplementations.

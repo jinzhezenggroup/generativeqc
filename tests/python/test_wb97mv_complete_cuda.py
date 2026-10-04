@@ -5,6 +5,7 @@ time limit. Grid motion, partition response, SR/LR exchange and self-consistent
 VV10 are all included in both engines; no component-only success promotes API.
 """
 
+import ast
 import os
 import typing
 from dataclasses import replace
@@ -95,6 +96,43 @@ def test_wb97mv_cuda_local_force_basis_admits_f_but_not_g() -> None:
     assert not cuda_wb97mv_force_basis_eligible(higher)
 
 
+def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
+    """AUTO changes SCF components, not the strict stationary derivative owner."""
+    source = (
+        Path(__file__).resolve().parents[2] / "python/generativeqc/calculator.py"
+    ).read_text(encoding="utf-8")
+    owner = next(
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.ClassDef) and node.name == "Calculator"
+    )
+    constructor = next(
+        node
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    assignment = next(
+        node
+        for node in ast.walk(constructor)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "cuda_wb97mv_force"
+            for target in node.targets
+        )
+    )
+    segment = ast.get_source_segment(source, assignment)
+    assert segment is not None
+    assert "_precision_mode" not in segment
+    for guard in (
+        'self._device_name == "cuda"',
+        'self._method_name.startswith("wb97m-v")',
+        "not basis_has_ecp",
+        "self._ks_options is not None",
+        "cuda_wb97mv_force_basis_eligible(self._basis)",
+    ):
+        assert guard in segment
+
+
 def test_cuda_geometry_only_f_nuclear_pair(tmp_path: Path) -> None:
     """Qualify nuclear dispatch independently of costly SCF and grid composition."""
     if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
@@ -153,6 +191,121 @@ def test_cuda_geometry_only_f_nuclear_pair(tmp_path: Path) -> None:
     separation = np.asarray(atoms[0][1]) - atoms[1][1]
     first = -8.0 * separation / np.linalg.norm(separation) ** 3
     np.testing.assert_allclose(actual, [first, -first], atol=1e-12, rtol=0)
+
+
+def _assert_wb97mv_auto_component_precision(result: typing.Any) -> None:
+    precision = result.precision
+    assert precision is not None
+    assert precision["requested_mode"] == "auto"
+    assert precision["effective_bits"] == 32
+    assert precision["strict_refinement_applied"] is True
+    assert precision["refinement_iterations"] >= 1
+    assert precision["complete"] is True
+    assert precision["operator_inventory_complete"] is True
+    assert precision["operator_work_counters_valid"] is True
+
+    operators = precision["operators"]
+    mixed_names = {
+        row["name"]
+        for row in operators
+        if row["arithmetic_mode"] == "mixed" and row["count"] > 0
+    }
+    assert mixed_names == {"coulomb_j", "coulomb_recurrence"}
+    assert any(
+        row["name"] == "coulomb_recurrence"
+        and row["compute"] == "fp32"
+        and row["accumulation"] == "fp64"
+        and row["reduction"] == "fp64"
+        and row["count"] > 0
+        for row in operators
+    )
+    for name in ("exchange_k", "xc", "nonlocal_correlation"):
+        rows = [row for row in operators if row["name"] == name]
+        assert rows
+        assert all(
+            row["storage"] == "fp64"
+            and row["compute"] == "fp64"
+            and row["accumulation"] == "fp64"
+            and row["reduction"] == "fp64"
+            and row["arithmetic_mode"] == "strict"
+            for row in rows
+        )
+    timeline = precision["scf_fock_timeline"]
+    assert timeline and timeline[-1]["kind"] == "final_audit"
+    assert timeline[-1]["state"] == precision["returned_state_identity"]
+
+
+@pytest.mark.parametrize(
+    "method,spin,atoms",
+    [
+        ("wb97m-v", 0, [("H", (0.0, 0.0, 0.0)), ("H", (0.15, 0.13, 1.5))]),
+        (
+            "wb97m-v-uks",
+            1,
+            [
+                ("H", (0.0, 0.0, 0.0)),
+                ("H", (0.15, 0.13, 1.5)),
+                ("H", (1.8, -0.1, -0.3)),
+            ],
+        ),
+    ],
+)
+def test_wb97mv_auto_matches_fp64_cold_warm_and_moved(
+    method: str, spin: int, atoms: typing.Any
+) -> None:
+    """AUTO lowers only Direct J and returns the same strict physical E/F state."""
+    if os.environ.get("GENERATIVEQC_TEST_WB97MV_CUDA") != "1":
+        pytest.skip("set GENERATIVEQC_TEST_WB97MV_CUDA=1 inside Slurm")
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    from generativeqc import Calculator, GridSpec, KsOptions
+
+    common = {
+        "method": method,
+        "basis": "sto-3g",
+        "basis_representation": "spherical",
+        "device": "cuda",
+        "ks_options": KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "screening_tolerance": 1e-14,
+        "max_iterations": 200,
+    }
+    automatic = Calculator(**common, precision="auto")
+    strict = Calculator(**common, precision="fp64")
+    assert automatic.capabilities.supported_properties == frozenset(
+        {"energy", "forces"}
+    )
+
+    with (
+        automatic.prepare_batch(
+            [atoms], multiplicities=[spin + 1], warm_start=True
+        ) as automatic_batch,
+        strict.prepare_batch(
+            [atoms], multiplicities=[spin + 1], warm_start=True
+        ) as strict_batch,
+    ):
+        auto_cold = automatic_batch.execute(strict=True).items[0]
+        fp64_cold = strict_batch.execute(strict=True).items[0]
+        auto_warm = automatic_batch.execute(strict=True).items[0]
+        fp64_warm = strict_batch.execute(strict=True).items[0]
+
+        moved = np.asarray([xyz for _, xyz in atoms], dtype=float)
+        moved[-1, 0] += 0.02
+        auto_moved = automatic_batch.execute(coordinates=[moved], strict=True).items[0]
+        fp64_moved = strict_batch.execute(coordinates=[moved], strict=True).items[0]
+
+    for automatic_result, fp64_result in (
+        (auto_cold, fp64_cold),
+        (auto_warm, fp64_warm),
+        (auto_moved, fp64_moved),
+    ):
+        _assert_wb97mv_auto_component_precision(automatic_result)
+        assert automatic_result.energy == pytest.approx(fp64_result.energy, abs=2e-8)
+        np.testing.assert_allclose(
+            automatic_result.forces, fp64_result.forces, atol=2e-7, rtol=0
+        )
 
 
 @pytest.mark.parametrize(

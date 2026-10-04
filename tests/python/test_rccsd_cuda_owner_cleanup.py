@@ -1,6 +1,5 @@
 """Compile the real CUDA owner's construction path with injected API failures."""
 
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -31,13 +30,14 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
             "  template <class Output>"
         )
     ]
-    # Host-compile the constructor's callback body without CUDA launch syntax.
-    # The callback is never executed by this ownership test; keep all provider
-    # construction, configuration and cleanup calls in the extracted code.
-    owner, replaced = re.subn(
-        r"audit_df_matrix<<<.*?>>>", "audit_df_matrix", owner, flags=re.DOTALL
-    )
-    assert replaced == 1
+    provider = (ROOT / "src/tensor/cuda_contraction.cuh").read_text()
+    provider = provider[
+        provider.index("class CudaContractionContext {") : provider.index(
+            "template <class T>"
+        )
+    ]
+    # Compile the real shared preparation/cleanup owner against injected CUDA
+    # APIs. Generated numerical tables are irrelevant to setup unwinding.
     support = (ROOT / "src/cc/cuda_solver_support.cuh").read_text()
     state = support[
         support.index("struct CudaState {") : support.index(
@@ -46,7 +46,19 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
     ]
     write_df_cpu_headers(tmp_path)
     cpp = tmp_path / "owner.cpp"
-    cpp.write_text(PREFIX + state + GENERATED + helpers + owner + "};\n" + MAIN)
+    cpp.write_text(
+        PREFIX
+        + "namespace generativeqc::tensor {\n"
+        + provider
+        + "}\n"
+        + OPEN_CC
+        + state
+        + GENERATED
+        + helpers
+        + owner
+        + "};\n"
+        + MAIN
+    )
     exe = tmp_path / "owner"
     compile_owner(compiler, tmp_path, [cpp], exe)
     result = subprocess.run(
@@ -131,11 +143,18 @@ int cudaStreamSynchronize(cudaStream_t) { return step(); }
 int cudaFree(void* p) { delete[] static_cast<unsigned char*>(p); --allocations; return 0; }
 int cudaStreamDestroy(cudaStream_t p) { delete static_cast<int*>(p); --streams; return 0; }
 void cuda_check(int code) { if (code) throw std::runtime_error("injected CUDA failure"); }
+using cudaStreamCaptureStatus = int;
+constexpr int cudaStreamCaptureStatusNone=0;
+int cudaStreamIsCapturing(cudaStream_t, int* p) { *p=0; return step(); }
+int cublasGetVersion(cublasHandle_t, int* p) { *p=120900; return step(); }
+int cudaRuntimeGetVersion(int* p) { *p=12090; return step(); }
 namespace generativeqc_tensor {
-template<class... T> void gemm(T...) {
-  throw std::logic_error("ownership test must not execute numerical callback");
+using ::cuda_check;
+using ::blas_check;
+struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
 }
-}
+"""
+OPEN_CC = r"""
 namespace generativeqc::cc {
 constexpr std::size_t kDFBlasProviderAllowance=96ULL<<20;
 namespace generated {
@@ -158,12 +177,13 @@ struct CudaState {
 namespace dfhoist {
 struct CudaState : dfcore::CudaState {
   double *prepare_arena{}, *auxiliary_arena{};
-  std::size_t q{1};
-  std::function<void(char,char,std::size_t,std::size_t,std::size_t,double,
-                     const double*,const double*,double*)> gemm;
-  std::function<void(char,char,std::size_t,std::size_t,std::size_t,std::size_t,double,
-                     const double*,const double*,double*)> batched_gemm;
 };
+constexpr std::size_t contraction_host_bytes(std::size_t variants) { return 1024+variants*512; }
+std::size_t prepared_batch=0,prepared_tail=0;
+void prepare_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t batch,
+                          std::size_t tail,std::size_t&,std::size_t&) {
+  prepared_batch=batch; prepared_tail=tail;
+}
 }
 }
 std::size_t problem_host_bytes(const Problem&) { return 128; }
@@ -179,7 +199,7 @@ int main() {
   // Compile the production owner once, then exercise disabled, one-slot and
   // ordinary DIIS. Event creation participates in the same failure sequence.
   bool saw_matrix=false;
-  for (const unsigned naux : {0U, 2U}) {
+  for (const unsigned naux : {0U, 2U, 5U, 10U, 15U, 16U}) {
   p.naux = naux; p.df_bov.assign(naux, 0.1); p.df_bvv.assign(naux, 0.1);
   for (const unsigned history : {0U, 1U, 6U}) {
   for (const bool packed : {false, true}) {
@@ -195,6 +215,17 @@ int main() {
       if (good.diagnostic.numeric_capacity_bytes < 128 + good.layout.total + detached) {
         std::cerr << "CUDA detached result storage was not reserved\n"; return 8;
       }
+      // Both numeric allocations coexist with prepared host descriptors.
+      auto expected_capacity = 128 + good.layout.total + good.layout.history_bytes + detached;
+      if (good.plan.matrix_gemm) {
+        const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
+        const auto variants=batch>1 ? 1+(tail>1) : 0;
+        expected_capacity+=generativeqc::cc::kDFBlasProviderAllowance+
+          generativeqc::cc::generated::dfhoist::contraction_host_bytes(variants);
+        if(generativeqc::cc::generated::dfhoist::prepared_batch!=batch ||
+           generativeqc::cc::generated::dfhoist::prepared_tail!=tail) return 17;
+      }
+      if(good.diagnostic.numeric_capacity_bytes!=expected_capacity) return 18;
       if (events != (history ? 2 : 0)) return 9;
     }
     if (streams || events || allocations || handles || device != 7 || constructor_calls < 18) return 1;
@@ -222,6 +253,7 @@ int main() {
   }
   }
   if (!saw_matrix) return 11;
+  p.naux=2; p.df_bov.assign(2,0.1); p.df_bvv.assign(2,0.1);
   // Allocation rejection exercises the actual production retry chain: a Q
   // tile may lose its arena while the admitted matrix provider stays usable.
   for (int failures : {0, 1, 2}) {

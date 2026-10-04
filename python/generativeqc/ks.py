@@ -421,8 +421,9 @@ def cuda_wb97mv_force_basis_eligible(basis: typing.Any) -> bool:
     """Match the complete WB97M-V CUDA geometry owner's through-f basis domain.
 
     Its integral derivatives come from the native stationary owner, not the
-    generic SPD descriptor inventory. Precision, ECP, DF and shape/resource
-    restrictions remain with the calculator and prepared force owner.
+    generic SPD descriptor inventory. ECP, DF and shape/resource restrictions
+    remain with the calculator and prepared force owner. AUTO is an SCF
+    component policy; the stationary derivative owner remains strict FP64.
     """
     if isinstance(basis, str):
         return basis in ("sto-3g", "def2-svp", "def2-tzvp")

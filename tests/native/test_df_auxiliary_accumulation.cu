@@ -20,8 +20,13 @@ int main() {
     generated::CudaState state;
     state.o = o;
     state.v = v;
-    state.gemm = [](auto...) { throw std::logic_error("accumulation cannot call a provider"); };
     cuda_check(cudaStreamCreate(&state.stream));
+    generativeqc::tensor::CudaContractionContext context;
+    if (!context.prepare(state.stream)) throw std::runtime_error("provider preparation failed");
+    std::size_t calls = 0, summands = 0;
+    // Mark the admitted matrix path without providing an executable request:
+    // this ordered-consumer test must never invoke a contraction.
+    state.auxiliary_contractions.add(o, v, 1, {}, context, calls, summands);
     cuda_check(cudaMalloc(&source, 6 * q * stride * sizeof(double)));
     cuda_check(cudaMalloc(&target, 6 * stride * sizeof(double)));
     cuda_check(cudaMalloc(&state.error, sizeof(int)));
@@ -77,6 +82,8 @@ int main() {
     cuda_check(cudaFree(state.error));
     cuda_check(cudaFree(target));
     cuda_check(cudaFree(source));
+    if (calls || summands) throw std::runtime_error("accumulation executed a contraction");
+    context.reset();
     cuda_check(cudaStreamDestroy(state.stream));
     std::cout << "ordered Q accumulation: 8 cancellation/overflow/tail cases passed\n";
     return 0;
