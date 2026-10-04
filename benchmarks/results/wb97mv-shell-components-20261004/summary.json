@@ -1,0 +1,461 @@
+{
+  "status": "device-qualified; three-atom complete endpoint regresses; experiment remains default off",
+  "frozen": {
+    "commit": "64780b7355f628892886d5e08c32efe7c38ca34b",
+    "identity": "149c7e55fa02f6a08eca1ad973b60305a3804612f7a57d05e61e03b4c35b3fa6",
+    "input_count": 1381,
+    "archive_sha256": "0b48ff0e092cd08fe82fdc9891eb47dff327c6de9d47cb9427ccd282edfd72eb",
+    "tests": {
+      "tests/native/test_cuda_fock_provider.cpp": "8c882bb34f9ec8e06ddd97a0e8cb251ffce0acc5442c79f82be76fe45bda750e",
+      "tests/python/test_checkpoint.py": "23cfd5fe8063672f9ccea2ca8c4e31e20e6ff40f99f683c39a63c6d7a6d2c1d4",
+      "tests/python/test_shell_component_source.py": "6f737525104414dfca7e9963d6ab96acdc29c4633ca8bf42a017fecab794e21b"
+    }
+  },
+  "library_sha256": "935e13e4aa7b52e4fbf52a047f4fd03c4bb5e0825743826618155c3f8a0d0dd1",
+  "evidence_sha256": "5301fed06387b766b2185c3fda758f107f77b485877c968c90cf621670d666b2",
+  "qualification": {
+    "node": "n1",
+    "job": 5760,
+    "native_checks": "pass",
+    "sanitizer_runs": 6,
+    "sanitizer_errors": 0,
+    "checkpoint_cases_passed": 9
+  },
+  "endpoint3": {
+    "node": "n1",
+    "job": 5761,
+    "device": "2",
+    "protocol": {
+      "case": "water-3",
+      "atoms": 3,
+      "aos": 58,
+      "method": "WB97M-V/RKS",
+      "basis": "def2-TZVPD",
+      "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+      "representation": "spherical",
+      "geometries_bohr": [
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ]
+        ],
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8911348693023315
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ]
+        ]
+      ],
+      "grid": {
+        "radial_points": 48,
+        "angular_polar": 16,
+        "angular_azimuth": 32,
+        "element_radii": [],
+        "partition_iterations": 3,
+        "coincident_tolerance": 1e-12,
+        "version": 1,
+        "radial_rule": "rational-legendre",
+        "angular_rule": "legendre-trapezoid",
+        "partition": "becke-equal-radius",
+        "pruning": "none",
+        "units": "Bohr",
+        "ordering": "atom-radial-polar-azimuth"
+      },
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "force_return": "host_array_in_timed_endpoint",
+      "density_fitting": false,
+      "nonlocal_density_policy": "vv10-molecular-rho-ge-1e-8-v1",
+      "nonlocal_density_threshold": 1e-08,
+      "reference_nonlocal_weight_threshold": 1e-14,
+      "repeats": 5,
+      "energy_tolerance": 1e-12,
+      "density_tolerance": 1e-10,
+      "reference_gradient_tolerance": 1e-10,
+      "screening_tolerance": 1e-12,
+      "reference_direct_scf_tolerance": 1e-14,
+      "reference_fock_policy": "full-density-rebuild",
+      "max_iterations": 100,
+      "energy_gate": 1e-08,
+      "force_gate": 1e-07,
+      "cold_definition": "preparation plus first synchronized energy/force endpoint",
+      "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+      "threads": {
+        "OMP_NUM_THREADS": "8",
+        "OPENBLAS_NUM_THREADS": "8",
+        "MKL_NUM_THREADS": "8"
+      }
+    },
+    "processes": {
+      "reference-a": {
+        "sha256": "c23345db927767e6091de3171a0ec45bff431ec193ca42d8589d184cdb821e0d",
+        "calls": 12,
+        "phases": {
+          "cold": {
+            "median_seconds": 47.67749345302582,
+            "iterations": [
+              35
+            ]
+          },
+          "warm": {
+            "median_seconds": 6.414738561958075,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "moved": {
+            "median_seconds": 45.23550491780043,
+            "iterations": [
+              36
+            ]
+          },
+          "moved-warm": {
+            "median_seconds": 6.505321945995092,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "off-a": {
+        "sha256": "011b024577d7302dffa16e9b9a9637c1d6d413e8175a558da706cf8011b4b094",
+        "calls": 12,
+        "phases": {
+          "cold": {
+            "median_seconds": 16.22626518085599,
+            "iterations": [
+              17
+            ]
+          },
+          "warm": {
+            "median_seconds": 1.923334989696741,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "moved": {
+            "median_seconds": 10.377087451517582,
+            "iterations": [
+              11
+            ]
+          },
+          "moved-warm": {
+            "median_seconds": 1.9251892417669296,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "component-a": {
+        "sha256": "2c1ee399f285489861c4a563b13af32c2f7af1f10fd2bdf2c51bf21af43a1b65",
+        "calls": 12,
+        "phases": {
+          "cold": {
+            "median_seconds": 17.070635959506035,
+            "iterations": [
+              17
+            ]
+          },
+          "warm": {
+            "median_seconds": 2.0240864418447018,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "moved": {
+            "median_seconds": 11.559687927365303,
+            "iterations": [
+              11
+            ]
+          },
+          "moved-warm": {
+            "median_seconds": 2.027367126196623,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "component-b": {
+        "sha256": "639b93c16fbc2bb9000abbf83d03fc24eca3ae385346372cb472ff5acef88c42",
+        "calls": 12,
+        "phases": {
+          "cold": {
+            "median_seconds": 17.061313688755035,
+            "iterations": [
+              17
+            ]
+          },
+          "warm": {
+            "median_seconds": 2.022239938378334,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "moved": {
+            "median_seconds": 11.489950209856033,
+            "iterations": [
+              11
+            ]
+          },
+          "moved-warm": {
+            "median_seconds": 2.023162443190813,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "off-b": {
+        "sha256": "0b6ea33a2ca9b7a545ea671ea881065eb951399e9e34ff297bb2855916ea6be4",
+        "calls": 12,
+        "phases": {
+          "cold": {
+            "median_seconds": 15.444447677582502,
+            "iterations": [
+              17
+            ]
+          },
+          "warm": {
+            "median_seconds": 1.9256432503461838,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "moved": {
+            "median_seconds": 10.539674490690231,
+            "iterations": [
+              11
+            ]
+          },
+          "moved-warm": {
+            "median_seconds": 1.9311895966529846,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      },
+      "reference-b": {
+        "sha256": "0603d9f134e572afe79deceec276158c8c04d14819e1a4d4a9de5313f85a8fe3",
+        "calls": 12,
+        "phases": {
+          "cold": {
+            "median_seconds": 47.60970285534859,
+            "iterations": [
+              35
+            ]
+          },
+          "warm": {
+            "median_seconds": 6.499976046383381,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "moved": {
+            "median_seconds": 45.82641625031829,
+            "iterations": [
+              36
+            ]
+          },
+          "moved-warm": {
+            "median_seconds": 6.537915598601103,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      }
+    },
+    "candidate_over_baseline": {
+      "cold": 1.0777133372660033,
+      "warm": 1.0512728646078056,
+      "moved": 1.1019697121813872,
+      "moved-warm": 1.050345347047665
+    },
+    "accepted_calls": 72,
+    "maximum_energy_error": 3.126388037344441e-13,
+    "maximum_force_error": 5.870193220403053e-11
+  },
+  "work12": {
+    "node": "n1",
+    "job": 5762,
+    "census": {
+      "atoms": 12,
+      "public_aos": 232,
+      "flops": null,
+      "scope": "resident values; identity density; no endpoint timing",
+      "calls": [
+        {
+          "mode": "off",
+          "operation": "full",
+          "device_bytes": 23288465,
+          "schedule": "canonical-cartesian-jk/screened-rows/automatic",
+          "candidates": 407065289,
+          "contracted_radial_evaluations": 407065289,
+          "matrix_maximum_absolute_error": 0,
+          "component_scope": "orders5-8",
+          "component_counts": null
+        },
+        {
+          "mode": "off",
+          "operation": "LR",
+          "device_bytes": 23288465,
+          "schedule": "canonical-cartesian-jk/screened-rows/automatic",
+          "candidates": 407065289,
+          "contracted_radial_evaluations": 407065289,
+          "matrix_maximum_absolute_error": 0,
+          "component_scope": "orders5-8",
+          "component_counts": null
+        },
+        {
+          "mode": "component",
+          "operation": "full",
+          "device_bytes": 23754544,
+          "schedule": "canonical-cartesian-jk/shell-components-5-8/experimental",
+          "candidates": 418127294,
+          "contracted_radial_evaluations": 407065289,
+          "matrix_maximum_absolute_error": 3.055333763768431e-13,
+          "component_scope": "orders5-8",
+          "component_counts": {
+            "shell_visits": 1354668,
+            "geometry_preparations": 5308640,
+            "radial_preparations": 5308640,
+            "primitive_component_contractions": 487996523
+          }
+        },
+        {
+          "mode": "component",
+          "operation": "LR",
+          "device_bytes": 23754544,
+          "schedule": "canonical-cartesian-jk/shell-components-5-8/experimental",
+          "candidates": 418127294,
+          "contracted_radial_evaluations": 407065289,
+          "matrix_maximum_absolute_error": 1.7763568394002505e-15,
+          "component_scope": "orders5-8",
+          "component_counts": {
+            "shell_visits": 1354668,
+            "geometry_preparations": 5308640,
+            "radial_preparations": 5308640,
+            "primitive_component_contractions": 487996523
+          }
+        },
+        {
+          "mode": "component+joint",
+          "operation": "full+LR",
+          "device_bytes": 24803120,
+          "schedule": "canonical-cartesian-jk/shell-components-5-8/experimental",
+          "candidates": 418127294,
+          "contracted_radial_evaluations": 814130578,
+          "matrix_maximum_absolute_error": 3.090860900556436e-13,
+          "component_scope": "orders5-8",
+          "component_counts": {
+            "shell_visits": 1354668,
+            "geometry_preparations": 5308640,
+            "radial_preparations": 10617280,
+            "primitive_component_contractions": 975993046
+          }
+        }
+      ]
+    }
+  },
+  "unknown": {
+    "twelve_atom_endpoint_performance": null,
+    "force_work": null,
+    "flops": null,
+    "dynamic_memory_traffic": null
+  },
+  "interpretation": "Preparation reuse is measured; its ratio is neither FLOPs nor speedup. Three-atom regression does not establish a larger-size crossover."
+}
