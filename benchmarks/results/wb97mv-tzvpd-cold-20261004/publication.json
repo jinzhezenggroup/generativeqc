@@ -1,0 +1,74 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Every original, displaced and fixed-density replay passes independent energy 1e-8 Eh and force 1e-7 Eh/Bohr gates. Timings are observations of explicitly selected policies at these sizes, not general/default performance promotion.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 119523,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "a2e3fdf72c6efe8b2eb7011e54c2983e246ed626bb8aec01da2a6f602e9a941a"
+    },
+    {
+      "bytes": 91017,
+      "path": "samples.json.gz",
+      "role": "samples",
+      "sha256": "fdc3474418213da9161d4d588ac1eb1f3fcb1d3cced0f9a07f038400f6620440"
+    },
+    {
+      "bytes": 40952,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "e292164fe6735d38309cbefcc5297876b2e79a967a0e9734efaeb70fed7f4a7e"
+    },
+    {
+      "bytes": 5169,
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "563c735f2bf381d9471df0f13988006206c21d739d0c16e0b3d0742c2d5f52be"
+    },
+    {
+      "bytes": 20573,
+      "path": "omol25.svg",
+      "role": "summary",
+      "sha256": "cb2bc6cf74289bf2a03a5070526b5ed2c1871ae9306d83ae055037d9f62fae0a"
+    },
+    {
+      "bytes": 21005,
+      "path": "omol25-cold.svg",
+      "role": "summary",
+      "sha256": "06da3b16381b1dd6f8a4ab2dac3387a7a4982ddbdb9059584e521f29f478880f"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "-m",
+      "benchmarks.readme_omol25",
+      "native",
+      "--atoms",
+      "12",
+      "--basis-file",
+      "benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json",
+      "--reference-full-fock",
+      "--repeats",
+      "5",
+      "--force-active-ao",
+      "--preliminary-provider",
+      "none",
+      "--reference",
+      ".artifacts/tzvpd/reference.json",
+      "--output",
+      ".artifacts/tzvpd/none.json"
+    ],
+    "instructions": "Build the pinned composition with verified ccache, Release/sm_120, and exact offline basis. Run each engine through finite Slurm main --gres=gpu:5090:1, 8 CPUs/16 GiB; preserve device visibility, select the verified library, set three BLAS thread counts to 8, GENERATIVEQC_CUDA_KS_ACTIVE_AO=1 and GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=indexed. First run the reference mode without native-only switches; then run native none and lda16 in separate processes with the same reference bytes. All detailed protocols, original reports, identities and outcomes are retained. Imports/library probes are outside prepared cold; this is not an empty disk/JIT-cache measurement."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "revision": "e45e29c99c12496a35d24b4f331070252aa21ab2"
+  }
+}

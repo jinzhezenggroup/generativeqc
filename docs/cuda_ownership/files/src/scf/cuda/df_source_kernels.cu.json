@@ -2,7 +2,7 @@
   "path": "src/scf/cuda/df_source_kernels.cu",
   "role": "scientific",
   "subsystem": "df_values",
-  "reason": "Existing generated-policy traversal and bounded raw/public-layout DF value/response contractions, moved from cuda_rhf.cu without copying formulas.",
+  "reason": "Existing generated-policy traversal and bounded raw/public-layout DF value/response contractions, moved from cuda_rhf.cu without copying formulas. Compensated values select generated FP64 arithmetic and write both raw components in the same traversal.",
   "regions": [
     {
       "start": "#include <cuda_runtime.h>",

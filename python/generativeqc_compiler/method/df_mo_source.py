@@ -259,6 +259,57 @@ def native_header() -> str:
             ]
         )
         + native_response_header()
+        + native_compensated_cuda_header()
+    )
+
+
+def native_compensated_cuda_header() -> str:
+    """Lower the packed FP64 products with retained product/sum residuals.
+
+    This is an execution precision choice for the same TensorIR GEMMs. It
+    allocates no tensor and accepts optional low components for the streamed
+    first operand. The consumer may keep cuBLAS for well-conditioned stages.
+    Semantic contraction counts are unchanged; expansion operations are not
+    additional mathematical integral or contraction work.
+    """
+    from ..common.fp64_expansion import emit_fp64_expansion
+
+    arithmetic = emit_fp64_expansion().replace(
+        "__device__ inline", "static __device__ inline"
+    )
+    return (
+        "\n#ifdef __CUDACC__\n#include <cuda_runtime.h>\n#include <algorithm>\n#include <cmath>\n"
+        "namespace generativeqc::posthf::generated::compensated {\n"
+        + arithmetic
+        + r"""
+/** Packed column-major GEMM, alpha=1/beta=0, with optional input residuals.
+ * Every thread consumes a complete dot in its original reduction order.
+ * No low component is materialized for the large intermediate or output.
+ */
+static __global__ void gemm_kernel(bool at,bool bt,std::size_t m,std::size_t n,
+    std::size_t k,const double* a,const double* b,const double* al,const double* bl,
+    double* c) {
+  for(std::size_t out=static_cast<std::size_t>(blockIdx.x)*blockDim.x+threadIdx.x;
+      out<m*n;out+=static_cast<std::size_t>(gridDim.x)*blockDim.x) {
+    const auto row=out%m,col=out/m;
+    fp64_expansion::Wide sum;
+    for(std::size_t i=0;i<k;++i) {
+      const auto ai=at?i+row*k:row+i*m,bi=bt?col+i*n:i+col*k;
+      sum+=fp64_expansion::Wide(a[ai],al?al[ai]:0)*fp64_expansion::Wide(b[bi],bl?bl[bi]:0);
+    }
+    c[out]=sum.value();
+  }
+}
+inline void gemm(char ta,char tb,std::size_t m,std::size_t n,std::size_t k,
+    const double* a,const double* b,const double* al,const double* bl,double* c,
+    cudaStream_t stream) {
+  const auto count=checked_mul(m,n);
+  const auto blocks=std::min<std::size_t>((count+255)/256,65535);
+  gemm_kernel<<<static_cast<unsigned>(blocks),256,0,stream>>>(ta=='T',tb=='T',m,n,k,a,b,al,bl,c);
+}
+} // namespace generativeqc::posthf::generated::compensated
+#endif
+"""
     )
 
 

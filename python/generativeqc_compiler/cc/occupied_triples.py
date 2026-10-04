@@ -15,12 +15,14 @@ from fractions import Fraction
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
+    PrecisionDirective,
     Program,
     TensorSpec,
     add,
     divide,
     einsum,
     input_tensor,
+    lower_precision,
     multiply,
 )
 
@@ -30,6 +32,7 @@ if typing.TYPE_CHECKING:
     from generativeqc_compiler.tensor import Node
 
 PERMUTATIONS = tuple(VP[label] for label in _LABELS)
+DF_TRIPLES_W_FP32_QUALIFICATION = "issue1764/df-triples-w-fp32-candidate-v1"
 
 
 def inverse(permutation: tuple[int, ...]) -> tuple[int, ...]:
@@ -98,6 +101,35 @@ def moment_program(occupied: int, virtuals: int) -> Program:
             "domain": "one ordered occupied triple",
         },
     )
+
+
+def w_fp32_candidate_program(occupied: int, virtuals: int) -> Program:
+    """Lower only the two W GEMM reductions to an explicit FP32 candidate.
+
+    Inputs, the W sum, every V term, denominator algebra and all published
+    outputs remain FP64. This is a compiler-owned qualification candidate for
+    #1764, not a production selection policy: a method owner must still compare
+    complete endpoints against the strict-FP64 schedule before promotion.
+    """
+    strict = moment_program(occupied, virtuals)
+    w = strict.outputs["w"]
+    if (
+        w.op != "add"
+        or len(w.inputs) != 2
+        or any(node.op != "einsum" for node in w.inputs)
+    ):
+        raise ValueError("occupied triples W candidate requires two direct reductions")
+    names = strict.debug_names
+    directives = {
+        names[node]: PrecisionDirective(
+            storage_dtype="float32",
+            compute_dtype="float32",
+            accumulation_dtype="float32",
+            qualification=DF_TRIPLES_W_FP32_QUALIFICATION,
+        )
+        for node in w.inputs
+    }
+    return lower_precision(strict, directives)
 
 
 def v_scalar_program() -> Program:

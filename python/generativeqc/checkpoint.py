@@ -164,7 +164,7 @@ def _validate_controls(controls: typing.Any) -> None:
     ):
         raise CheckpointError("invalid source precision policy")
     policy = controls["runtime_policy"]
-    # Older schema-1 files predate the added DF controls. Keep their missing
+    # Older schema-1 files predate the added execution controls. Keep their missing
     # fields as source provenance, so exact restart remains conservative and
     # allow_warm can still import their density. Unknown fields and missing
     # original controls remain corruption rather than silently defaulting.

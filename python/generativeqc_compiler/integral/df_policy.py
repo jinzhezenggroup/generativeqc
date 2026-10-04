@@ -127,6 +127,26 @@ template<unsigned Math=0> struct ValueMath {
   }
 };
 using Value=ValueMath<0>;
+
+/** Retain raw-value residuals until the first orbital contraction. Ordinary
+ * HF values and all derivative policies keep their existing arithmetic.
+ */
+template<unsigned Math=0> struct CompensatedValue {
+  using Vec3 = generated_df::Vec3;
+  using Angular = generated_df::Angular;
+  using Weight = generated_df::fp64_expansion::Wide;
+  using Accumulator = Weight;
+  template<unsigned Rank>
+  __device__ static void accumulate(Accumulator& out,const double* e,const Vec3* r,
+                                   const Angular* a,Weight weight) {
+    static_assert(Rank==3);
+    const unsigned total=generated_df::order(a[0])+generated_df::order(a[1])+generated_df::order(a[2]);
+    if(total<=2)
+      out+=weight*generated_df::compensated::value(e[0],r[0],a[0],e[1],r[1],a[1],e[2],r[2],a[2]);
+    else
+      out+=weight*generated_df_value_candidates::three_center<Math>(e[0],r[0],a[0],e[1],r[1],a[1],e[2],r[2],a[2]);
+  }
+};
 """
     )
     derivative = r"""struct Derivative {

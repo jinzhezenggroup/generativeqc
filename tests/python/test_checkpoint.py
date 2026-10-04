@@ -608,6 +608,8 @@ def test_checkpoint_respects_a_feasible_current_resource_plan(
     [
         "GENERATIVEQC_FINAL_FOCK_REBUILD",
         "GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING",
+        "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
+        "GENERATIVEQC_DIRECT_COULOMB_REACHABLE",
         "GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD",
     ],
 )
@@ -677,7 +679,7 @@ def test_retired_environment_control_does_not_change_checkpoint_identity(
     assert variable not in source["controls"]["runtime_policy"]
 
 
-def test_older_checkpoint_without_new_df_controls_keeps_source_provenance(
+def test_older_checkpoint_without_new_execution_controls_keeps_source_provenance(
     tmp_path: typing.Any,
 ) -> None:
     """Adding execution controls must not make valid historical seeds corrupt."""

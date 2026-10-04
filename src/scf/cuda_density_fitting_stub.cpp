@@ -64,7 +64,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDensityFittingJkPlan*, std::size_t, const core::System&, const core::System&,
     std::span<const double>, const std::vector<double>&,
     std::span<const DensityFittingDensityResponse>, unsigned, std::size_t, std::size_t,
-    std::vector<double>&, std::string& detail, DfGradientResources*, const CudaDfFinalStateToken*) {
+    std::vector<double>&, std::string& detail, DfGradientResources*, const CudaDfFinalStateToken*,
+    const CudaDfBorrowedFittedProjection*) {
   detail = "CUDA DF generated response is unavailable in this build";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
@@ -172,6 +173,15 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(CudaDensityFittingInt
                                                            std::size_t, std::size_t, std::size_t,
                                                            std::size_t, std::size_t, std::int64_t,
                                                            void*, double*, std::string& detail) {
+  detail = "CUDA density-fitting support is unavailable in this build";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
+generativeqc_status generate_cuda_density_fitting_raw_expansion(CudaDensityFittingIntegralSource*,
+                                                                std::size_t, std::size_t,
+                                                                std::size_t, std::size_t,
+                                                                std::size_t, void*, double*,
+                                                                double*, std::string& detail) {
   detail = "CUDA density-fitting support is unavailable in this build";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }

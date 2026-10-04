@@ -262,8 +262,12 @@ struct Owner {
         // Only optional-resource failure permits retry. Arithmetic and driver
         // failures are propagated, and a retry never changes the equations.
         (void)cudaGetLastError();
-        blas_check(cublasDestroy(blas));
-        blas = nullptr;
+        {
+          // A release can hide another owner's measured provider growth.
+          std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+          blas_check(cublasDestroy(blas));
+          blas = nullptr;
+        }
         scalar_plan();
         allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
       }
@@ -453,6 +457,8 @@ struct Owner {
   }
 
   void cleanup() noexcept {
+    // Serialize every owned release against provider/graph allocation deltas.
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) cudaStreamSynchronize(stream);
     if (blas) cublasDestroy(blas);
     blas = nullptr;
