@@ -72,6 +72,7 @@
       "files": [
         "src/scf/cuda/direct_force_low_order.cuh",
         "src/scf/cuda/direct_force_low_order_sources.cuh",
+        "src/scf/cuda/direct_force_order4_sources.cuh",
         "src/scf/cuda/direct_force_order2.cuh",
         "src/scf/cuda/direct_force_order3.cuh",
         "src/scf/cuda/direct_force_quartet.cuh",

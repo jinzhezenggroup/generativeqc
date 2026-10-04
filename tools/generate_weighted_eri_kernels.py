@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from generativeqc_compiler.integral.weighted_eri_cuda import (
     emit_low_order_weighted_header,
+    emit_order4_weighted_header,
 )
 
 
@@ -23,11 +24,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--inline-single-use", action="store_true")
+    parser.add_argument("--order4-output", type=Path)
     args = parser.parse_args()
     source = emit_low_order_weighted_header(inline_single_use=args.inline_single_use)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if not args.output.exists() or args.output.read_text() != source:
         args.output.write_text(source)
+    if args.order4_output is not None:
+        source = emit_order4_weighted_header()
+        args.order4_output.parent.mkdir(parents=True, exist_ok=True)
+        if not args.order4_output.exists() or args.order4_output.read_text() != source:
+            args.order4_output.write_text(source)
 
 
 if __name__ == "__main__":
