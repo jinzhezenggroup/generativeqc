@@ -132,8 +132,6 @@ def test_gfn2_cpu_generated_density_failures_mark_staging_status() -> None:
         assert status in "\n".join(lines[max(0, index - 2) : index])
 
 
-
-
 def test_gfn2_mulliken_publication_consumers_use_generated_transforms() -> None:
     root = Path(__file__).resolve().parents[2]
     cpu = (root / "src/xtb/native/src/model/gfn2/mulliken.cpp").read_text()
