@@ -169,6 +169,7 @@ class CudaCacheRefreshTests(unittest.TestCase):
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return dict(line.split("=", 1) for line in output.read_text().splitlines()), (
@@ -312,8 +313,8 @@ class CudaCacheRefreshTests(unittest.TestCase):
         match = re.search(r"cuda_inputs=\(\s*(.*?)\s*\)", SCRIPT, re.DOTALL)
         self.assertIsNotNone(match)
         paths = shlex.split(match.group(1))
-        for dependency in dependencies:
-            dependency = dependency.removesuffix("/**")
+        for raw_dependency in dependencies:
+            dependency = raw_dependency.removesuffix("/**")
             with self.subTest(dependency=dependency):
                 self.assertTrue(
                     any(
