@@ -59,7 +59,30 @@ links the probe to the same full library as the endpoint benchmark; the default
 fixture retains standalone code-generation coverage.
 
 On PRO6000 job 2197, scalar/matrix complete water forces differ by at most
-3.5527e-15. Matched large energy and complete-force runs are still in progress.
+3.5527e-15. RTX5090 job 12240 completes the entire matrix water force endpoint
+under Compute Sanitizer memcheck with zero errors.
+
+The 230-AO cold energy pair completed sequentially on the same PRO6000 (UUID
+GPU-4b4be14f-ec84-6736-a7d8-968d62900c72). Both use 38 primary residual
+evaluations plus independent replay. This is one paired measurement, not a
+median or a cross-GPU calibration:
+
+| Phase | Scalar seconds | Matrix seconds |
+| --- | ---: | ---: |
+| Exact RHF | 145.935925 | 159.010956 |
+| DF source | 0.969436 | 0.974524 |
+| CCSD | 263.134257 | 170.829741 |
+| (T) | 4.919768 | 4.894072 |
+| Complete energy | 414.959598 | 335.709511 |
+
+The CCSD and complete energy speedups are 1.5403x and 1.2361x. Total energies
+differ by 6.3949e-13 Eh. Complete numeric capacity rises from 2,922,911,728 to
+3,278,103,280 bytes. Actual contraction summands are 44,105,252,811,046 and
+44,063,877,939,352, so this is an execution improvement rather than a large
+arithmetic reduction. The matrix run records 317,528 GEMM calls,
+39,019,400,687,592 GEMM summands and 7,347,698,382,880 packing read/write bytes.
+The large complete-force run is still in progress.
+
 Frozen library SHA256 is
 a92445a75857471438c9a752554a27a32964abc09bbc02b7e680ff5d6c9d7539;
 build source identity is

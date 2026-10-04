@@ -1,4 +1,4 @@
-// Complete cold DF-CCSD(T) force benchmark; optional expanded Lambda baseline.
+// Complete cold DF-CCSD(T) energy/force benchmark with explicit schedule selectors.
 // The input contains no orbitals, Fock matrix, factors or amplitudes from an oracle.
 #include <chrono>
 #include <fstream>
@@ -92,6 +92,10 @@ int main(int argc, char** argv) {
     };
     field("nbf", generativeqc::molecule::ao_count(orbital));
     field("naux", generativeqc::molecule::ao_count(auxiliary));
+    // Distinguish phases absent by request from measured zero-cost phases.
+    field("forces_requested", forces ? 1 : 0);
+    field("lambda_reduction_requested", reduction ? 1 : 0);
+    field("matrix_gemm_requested", matrix ? 1 : 0);
     field("total_energy", result.energy);
     field("reference_energy", result.reference_energy);
     field("correlation_energy", result.correlation_energy);
@@ -143,7 +147,8 @@ int main(int argc, char** argv) {
     output << "]\n}\n";
     output.close();
     if (!output) throw std::runtime_error("failed publishing completed force output");
-    std::cout << "Complete force endpoint in " << result.total_seconds << " seconds\n";
+    std::cout << "Complete " << (forces ? "force" : "energy") << " endpoint in "
+              << result.total_seconds << " seconds\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << std::endl;
