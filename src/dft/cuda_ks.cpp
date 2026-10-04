@@ -753,10 +753,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool select_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
     if (ao_selection && !select_ao && std::strcmp(ao_selection, "0") != 0)
       throw std::invalid_argument("GENERATIVEQC_CUDA_KS_ACTIVE_AO accepts only 0 or 1");
-    if (select_ao && (host_unfused || precision_schedule.any_mixed() ||
-                      !is_semilocal_family(functional, SemilocalFamily::Wb97mv)))
+    // PBE0 uses the scaled PBE graph, not a separate XC functional code. Keep
+    // admission tied to its exact composition; this does not qualify arbitrary
+    // PBE hybrids, DF, ECP, spin or range-separated SCF trajectories.
+    const bool local_pbe0_ao =
+        spins == 1 && has_exchange && !has_range_correction && !fitted_coulomb &&
+        !fitted_exchange && !nonlocal_correlation && provider.system().ecp_terms.empty() &&
+        is_semilocal_family(functional, SemilocalFamily::Pbe) &&
+        options.semilocal_exchange_scale == 0.75 && options.semilocal_correlation_scale == 1.0 &&
+        exchange_coefficient == -0.125;
+    if (select_ao &&
+        (host_unfused || precision_schedule.any_mixed() ||
+         (!is_semilocal_family(functional, SemilocalFamily::Wb97mv) && !local_pbe0_ao)))
       throw std::invalid_argument(
-          "experimental local SCF AO maps require device-fused FP64 WB97M-V");
+          "experimental local SCF AO maps require device-fused FP64 WB97M-V or "
+          "all-electron direct RKS-PBE0");
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call
@@ -163,9 +164,26 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     cache_bytes: int,
     allocation_delta: int,
     rejected: bool,
+    phase_case: str = "disabled",
 ) -> None:
     from generativeqc import _stationary_cuda as runtime
 
+    planned_phase_bytes = 1024 if phase_case != "disabled" else 0
+    actual_phase_bytes = 1024 if phase_case == "retained" else 0
+    if phase_case == "mismatch":
+        actual_phase_bytes = 1023
+    allocation_delta += actual_phase_bytes - planned_phase_bytes
+    original_plan = runtime.plan_stationary_cuda_resources
+
+    def phase_plan(**arguments: object) -> object:
+        planned = original_plan(**arguments)
+        return replace(
+            planned,
+            phased_becke_bytes=planned_phase_bytes,
+            allocation_bytes=planned.allocation_bytes + planned_phase_bytes,
+        )
+
+    monkeypatch.setattr(runtime, "plan_stationary_cuda_resources", phase_plan)
     contract = SimpleNamespace(
         family="lda", spin="unpolarized", validate=lambda state: state
     )
@@ -213,7 +231,10 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         runtime,
         "plan_tiles",
         lambda *_a, **options: SimpleNamespace(
-            peak_bytes=1024, host_bytes=256, tile_points=options["tile_points"]
+            peak_bytes=1024,
+            host_bytes=256,
+            tile_points=options["tile_points"],
+            order=options["order"],
         ),
     )
     tensor_plan = SimpleNamespace(peak_bytes=128, host_bytes=64)
@@ -256,6 +277,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
     owner = MagicMock()
     owner.__enter__.return_value = owner
+    owner.phased_becke_supported = phase_case != "old-abi"
     owner.borrowed_streams = set()
     owner.finish.return_value = {
         name: np.zeros((2, 3)) for name in runtime._SOURCE_NAMES
@@ -291,6 +313,11 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     owner.metrics.side_effect = lambda: {
         "owned_device_bytes": admitted["budget"] + allocation_delta,
         "center_geometry_bytes": cache_bytes,
+        **(
+            {"phased_becke_bytes": actual_phase_bytes}
+            if phase_case not in ("old-abi", "missing-supported", "disabled")
+            else {}
+        ),
         "h2d_bytes": 0,
         "d2h_bytes": 0,
         "launches": 1,
@@ -376,9 +403,12 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         )
 
     if rejected:
-        with pytest.raises(
-            RuntimeError, match="allocation disagrees with admitted bytes"
-        ):
+        message = (
+            "stationary phase allocation metrics missing"
+            if phase_case == "missing-supported"
+            else "allocation disagrees with admitted bytes"
+        )
+        with pytest.raises(RuntimeError, match=message):
             execute()
         return
     result = execute()
@@ -433,6 +463,32 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         1,
     ]
     assert result.execution.endswith("/generated-device-stationary-weights-v1")
+
+
+@pytest.mark.parametrize("aot", (False, True))
+@pytest.mark.parametrize("resident_grid", (False, True))
+@pytest.mark.parametrize(
+    "phase_case",
+    ("retained", "allocation-fallback", "old-abi", "mismatch", "missing-supported"),
+)
+def test_optional_phase_allocation_accounting(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    aot: bool,
+    resident_grid: bool,
+    phase_case: str,
+) -> None:
+    """Admission is conservative; verify actual storage without zero-filling work."""
+    test_weight_fusion_orchestration_runs_without_a_device(
+        monkeypatch,
+        tmp_path,
+        aot,
+        resident_grid,
+        48,
+        0,
+        phase_case in ("mismatch", "missing-supported"),
+        phase_case,
+    )
 
 
 def test_stationary_cuda_production_task_page_default() -> None:

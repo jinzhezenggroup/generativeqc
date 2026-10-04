@@ -219,7 +219,13 @@ using cudaEvent_t=void*;
 using cudaStream_t=void*;
 namespace generativeqc_stationary_cuda {}
 namespace generativeqc_grid_adjoint { struct CenterPair { double values[6]; }; }
+namespace generativeqc::runtime {
+template <class Element> struct OwnedCudaBuffer {
+  explicit operator bool() const { return false; }
+};
+}
 constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
+constexpr size_t stationary_becke_retained_max_atoms=32;
 constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_threads=32;
 constexpr size_t stationary_geometry_max_scratch_bytes=8<<20, task_stride=9;
 int allocations=0, owners=0, arenas=0, max_threads=1024;
@@ -267,7 +273,7 @@ int main() {
   oom=false;
   if(create(bytes) || !result || allocations!=2 || owners!=1) return 4;
   auto* p=static_cast<Owner*>(result);
-  if(p->bytes!=bytes || p->geometry_lanes!=256 || p->geometry_threads!=32) return 5;
+  if(p->bytes!=bytes || p->byte_budget!=bytes || p->geometry_lanes!=256 || p->geometry_threads!=32) return 5;
   if(p->scratch-p->partial!=256*9*12 || p->sources-p->scratch!=256*9*12) return 6;
   if(reinterpret_cast<unsigned char*>(p->weighted_density+2*96*96)-p->context.arena != bytes-256)
     return 7;

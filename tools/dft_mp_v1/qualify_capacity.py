@@ -302,7 +302,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "7bb03b7286a5868527104420a74f4749c8af92360f17ad12ced31051a7ae9d75"
+    "7b3e71ce4e3821ee697ce52c9770263858c094b90cf263e9a7507bcd8f9aee78"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -335,7 +335,13 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "7916c0f782cb6e40882144c091887bb57cb67cdc12ad733531a1d79c9df87d8a"
+    "1cdb7080aa43ea0b04cf82c752b18e5f0376aaa9701ba3e063d5e55bfaed6797"
+)
+STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
+    "c2ba1b47e5655f75196c79384079d4ecd9c1edf9fe9aa1e97e339e96cbbaad0a"
+)
+STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
+    "dcf02f08e8d0279dcb49f2093d0ac3bf023523a7519a0faf6537fc9140711c9f"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
     "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
@@ -353,16 +359,16 @@ SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
+    "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
+    "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
-    "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
+    "4e0dfc6c59fa2358a0cc8c1ca20f00853f294c5632b72089dfac6ab9360239d1"
 )
 NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
     "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
@@ -381,16 +387,16 @@ NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256 = (
     "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
 )
 NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
-    "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
+    "7270f2f21f44baf101f9e503f9238dd972f729e431a95b3dd0212311014fe601"
 )
 NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
-    "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
+    "ff5b6e5a6790cc2a75d29906011cf863e04dac04930205d09fc36dcacdaac9e1"
 )
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "7a06757b893e51c6924675c88c66c6d0817923904283bf48378fb4e8302f47be"
+    "a6f197f1ac3fa905f87a8b1d29b083fa51af9c14f57afabb05ad1376a1496264"
 )
 NATIVE_STATIONARY_CONFIGURE_BECKE_CONTRACT_SHA256 = (
     "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -402,7 +408,10 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
+    "a9d5f920839f2a020b17addaddb8e00c674bf78e37f112a113751d67ef336224"
+)
+PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
+    "ef5b67eebcd197e3c470f4b244252cbaae74daa2e8aeb3e58ee486f3ecaa8355"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -435,7 +444,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "7949d2b5f585c0f5cadeaa8a6f52426355821046b209422d0947835093eb0da4"
+    "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -1098,6 +1107,59 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         raise RuntimeError("stationary CUDA ordinary tile-resource contract changed")
     page_contract["ordinary_tile_resources_sha256"] = resource_owner_digest
     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
+    if signature.parameters["resident_ao_cutoff"].default is not None:
+        raise RuntimeError("stationary CUDA default AO membership changed")
+    ao_reserves = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and ast.unparse(node.targets[0]) == "ao_map_reserve"
+    ]
+    ao_charges = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.AugAssign)
+        and ast.unparse(node.target) == "host_bound"
+        and isinstance(node.op, ast.Add)
+        and ast.unparse(node.value) == "ao_map_reserve"
+    ]
+    cache_paths = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and ast.unparse(node.targets[0]) == "cache"
+    ]
+    expected_ao_reserve = ast.parse(
+        "_stationary_ao_map_reserve(resident_ao_cutoff, resident_ao_cache_bytes, "
+        "host_bound + (sum(value.host_bytes for value in tensor_plans.values()) "
+        "if prepared is not None else 0), max_host_bytes)",
+        mode="eval",
+    ).body
+    if (
+        len(ao_reserves) != 1
+        or ast.dump(ao_reserves[0].value) != ast.dump(expected_ao_reserve)
+        or len(ao_charges) != 1
+        or len(cache_paths) != 1
+        or not selections[0].end_lineno
+        < ao_reserves[0].lineno
+        < ao_charges[0].lineno
+        < cache_paths[0].lineno
+    ):
+        raise RuntimeError("stationary CUDA AO-map reserve admission changed")
+    for name, expected in (
+        ("_stationary_ao_map_reserve", STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256),
+        ("_stationary_resident_ao_cache", STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256),
+    ):
+        helpers = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ]
+        if len(helpers) != 1 or _source_node_sha256(source, helpers[0]) != expected:
+            raise RuntimeError(f"stationary CUDA {name} contract changed")
+        page_contract[f"{name.removeprefix('_stationary_')}_sha256"] = expected
 
     def default(name: str) -> int:
         value = signature.parameters[name].default
@@ -2026,6 +2088,17 @@ def _prepared_aot_route_contract(repository: Path) -> str:
     digest = _source_node_sha256(source, methods[0])
     if digest != PREPARED_AOT_SELECTION_CONTRACT_SHA256:
         raise RuntimeError("prepared stationary AOT selection contract changed")
+    requests = [
+        node
+        for node in classes[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "_request"
+    ]
+    if (
+        len(requests) != 1
+        or _source_node_sha256(source, requests[0])
+        != PREPARED_AO_REQUEST_CONTRACT_SHA256
+    ):
+        raise RuntimeError("prepared stationary AO request contract changed")
     return digest
 
 

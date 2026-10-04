@@ -80,6 +80,8 @@ def source_hashes() -> dict[str, str]:
         "benchmarks/readme_omol25.py",
         "benchmarks/ks_preliminary_density.py",
         "benchmarks/readme_pbe0.py",
+        "benchmarks/readme_pbe0_integrated.py",
+        "benchmarks/dft_force_components.py",
         "benchmarks/readme_wb97mv.py",
         "benchmarks/compare_df_direct_endpoint.py",
         "src/scf/cuda/direct_jk.cpp",
@@ -266,7 +268,11 @@ def force_execution_options(
     return options
 
 
-def main(benchmark: EndpointSpec = OMOL25) -> None:
+def main(
+    benchmark: EndpointSpec = OMOL25,
+    *,
+    qualification_policy: dict[str, Any] | None = None,
+) -> None:
     """Journal complete independent endpoints, including experimental cold seeds."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("engine", choices=("reference", "native"))
@@ -353,6 +359,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         "status": "running",
         "protocol": scientific,
         "records": [],
+        "qualification_policy": qualification_policy,
         "source_file_sha256": source_hashes(),
         "native_experiment": {
             "preliminary_provider": args.preliminary_provider,

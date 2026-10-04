@@ -134,6 +134,22 @@ is increased implicitly. The selected size appears in `grid_work_plan`, and
 from explicit capacity. This changes scheduling, not AO screening or the total
 point/Becke-pair domain. Larger tiles are not guaranteed to fit or to be faster.
 
+Ordinary force diagnostics accept an explicit `resident_ao_cutoff` to consume
+the shared geometry-bound resident AO map cache. The default is `None` (full AO
+membership). A sampled-jet cutoff is a heuristic, not a certified force-error
+bound; validate complete energy and force results against an independent oracle.
+Selection uses the force AO derivative order, not an SCF order-one map.
+
+`resident_ao_cache_bytes` requests up to 16 MiB of optional host numeric storage
+by default, clipped to the remaining unchanged host allowance after prepared
+TensorIR owners. Zero budget or unsupported discovery falls back to full AO.
+Device capacities remain full-sized for discovery and fallback. Maps may survive
+density changes but invalidate on geometry, grid, basis-generation or owner
+changes; each call still binds the current final density. Empty maps do not skip
+grid points or partition response. `resident_ao_selection` reports the policy,
+actual map work and charged cache allowance. This option does not select SCF
+local AO, force paging, or phased Becke; those policies remain independent.
+
 The source arena has one private stream and retains no borrowed grid pointers.
 Geometry work finishes on the grid owner's stream before releasing its lease,
 including exceptional exits. Device ordinal comes from the actual snapshot and

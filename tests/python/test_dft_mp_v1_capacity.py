@@ -185,7 +185,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
         ),
         "prepared_aot_selection_sha256": (
-            "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
+            "a9d5f920839f2a020b17addaddb8e00c674bf78e37f112a113751d67ef336224"
         ),
     }
 
@@ -284,9 +284,15 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "7949d2b5f585c0f5cadeaa8a6f52426355821046b209422d0947835093eb0da4",
+        "geometry_resources_sha256": "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a",
         "public_wrapper_sha256": (
-            "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
+            "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
+        ),
+        "ao_map_reserve_sha256": (
+            "c2ba1b47e5655f75196c79384079d4ecd9c1edf9fe9aa1e97e339e96cbbaad0a"
+        ),
+        "resident_ao_cache_sha256": (
+            "dcf02f08e8d0279dcb49f2093d0ac3bf023523a7519a0faf6537fc9140711c9f"
         ),
         "ordinary_tile_layout_sha256": (
             "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -295,7 +301,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
         ),
         "initializer_sha256": (
-            "7bb03b7286a5868527104420a74f4749c8af92360f17ad12ced31051a7ae9d75"
+            "7b3e71ce4e3821ee697ce52c9770263858c094b90cf263e9a7507bcd8f9aee78"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -331,16 +337,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "7916c0f782cb6e40882144c091887bb57cb67cdc12ad733531a1d79c9df87d8a"
+            "1cdb7080aa43ea0b04cf82c752b18e5f0376aaa9701ba3e063d5e55bfaed6797"
         ),
         "native_owner_sha256": (
-            "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
+            "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
         ),
         "native_allocation_sha256": (
             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
         ),
         "native_create_sha256": (
-            "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
+            "4e0dfc6c59fa2358a0cc8c1ca20f00853f294c5632b72089dfac6ab9360239d1"
         ),
         "native_reset_sha256": (
             "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
@@ -355,16 +361,16 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
         ),
         "native_geometry_external_sha256": (
-            "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
+            "7270f2f21f44baf101f9e503f9238dd972f729e431a95b3dd0212311014fe601"
         ),
         "native_geometry_enqueue_sha256": (
-            "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
+            "ff5b6e5a6790cc2a75d29906011cf863e04dac04930205d09fc36dcacdaac9e1"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
         ),
         "native_launch_geometry_sha256": (
-            "7a06757b893e51c6924675c88c66c6d0817923904283bf48378fb4e8302f47be"
+            "a6f197f1ac3fa905f87a8b1d29b083fa51af9c14f57afabb05ad1376a1496264"
         ),
         "native_configure_becke_sha256": (
             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -2218,16 +2224,24 @@ def test_snapshot_grid_cache_identity_and_cap_changes_fail_closed(
         qualify_capacity._source_limits(tmp_path)
 
 
-def test_geometry_resource_budget_changes_fail_closed(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        (
+            "GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20",
+            "GEOMETRY_MAX_SCRATCH_BYTES = 16 << 20",
+        ),
+        ("phased_becke: bool = False", "phased_becke: bool = True"),
+    ],
+)
+def test_geometry_resource_budget_changes_fail_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
     stationary_contract_tree(tmp_path, source)
     path = tmp_path / "python/generativeqc_compiler/method/stationary_resources.py"
-    path.write_text(
-        path.read_text().replace(
-            "GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20",
-            "GEOMETRY_MAX_SCRATCH_BYTES = 16 << 20",
-        )
-    )
+    assert old in path.read_text()
+    path.write_text(path.read_text().replace(old, new))
     with pytest.raises(RuntimeError, match="geometry-resource contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
@@ -2579,6 +2593,61 @@ def test_extracted_tile_admission_and_selected_owners_fail_closed(
     stationary_contract_tree(tmp_path, source.replace(old, new, 1))
     with pytest.raises(RuntimeError, match=message):
         qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new,message",
+    [
+        (
+            "min(requested_bytes, max_host_bytes - host_bound)",
+            "requested_bytes",
+            "_stationary_ao_map_reserve contract changed",
+        ),
+        (
+            "    host_bound += ao_map_reserve\n",
+            "",
+            "AO-map reserve admission changed",
+        ),
+        (
+            "        grid.geometry_generation,\n",
+            "        0,\n",
+            "_stationary_resident_ao_cache contract changed",
+        ),
+        (
+            "    state._source.check_current()\n    domain = ResidentAoMapDomain(",
+            "    domain = ResidentAoMapDomain(",
+            "_stationary_resident_ao_cache contract changed",
+        ),
+        (
+            (
+                "            sum(value.host_bytes for value in tensor_plans.values())\n"
+                "            if prepared is not None\n"
+            ),
+            "            0\n            if prepared is not None\n",
+            "AO-map reserve admission changed",
+        ),
+    ],
+)
+def test_optional_resident_ao_admission_and_lifetime_fail_closed(
+    tmp_path: Path, old: str, new: str, message: str
+) -> None:
+    """Optional maps cannot escape the original cap or stale-owner checks."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert old in source
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match=message):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_prepared_request_cannot_drop_the_resident_ao_policy(tmp_path: Path) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    old = '"resident_ao_cutoff": resident_ao_cutoff,'
+    assert old in source
+    stationary_contract_tree(
+        tmp_path, source.replace(old, '"resident_ao_cutoff": None,', 1)
+    )
+    with pytest.raises(RuntimeError, match="AO request contract changed"):
+        qualify_capacity._prepared_aot_route_contract(tmp_path)
 
 
 @pytest.mark.parametrize("key", ["max_grid_points", "max_grid_pair_visits"])
