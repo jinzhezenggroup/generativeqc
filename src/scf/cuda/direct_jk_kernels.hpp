@@ -64,8 +64,8 @@ void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::in
  */
 void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, std::size_t nbf,
                                    const std::array<std::size_t, 4>& begin,
-                                   const std::array<std::size_t, 4>& count,
-                                   std::size_t elements, double* eri);
+                                   const std::array<std::size_t, 4>& count, std::size_t elements,
+                                   double* eri);
 
 /** Materialize one validated system's complete public-AO ERI tensor.
  * The caller owns an nbf^4 output and its stream. No cache is retained here;

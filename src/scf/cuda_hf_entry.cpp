@@ -19,43 +19,42 @@
 namespace generativeqc::scf {
 namespace {
 
-using RhfPlanOwner =
-    std::unique_ptr<CudaRhfBucketPlan, void (*)(CudaRhfBucketPlan*)>;
+using RhfPlanOwner = std::unique_ptr<CudaRhfBucketPlan, void (*)(CudaRhfBucketPlan*)>;
 
 bool exact_reference_source_identity(const CudaRhfBucketPlan* plan, const core::System& system,
                                      const ScfOptions& requested_options, int device_id) noexcept {
   try {
     if (plan == nullptr || !plan->initialized || plan->batch_size != 1 || plan->unrestricted ||
-      plan->resources.device_id_ != device_id || plan->resources.stream_ == nullptr ||
-      plan->resources.reference_eri_ == nullptr) {
-    return false;
-  }
-  if (!plan->options.export_physical_reference || plan->options.screening_tolerance != 0.0 ||
-      plan->options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) !=
-          GENERATIVEQC_PRECISION_FP64) {
-    return false;
-  }
+        plan->resources.device_id_ != device_id || plan->resources.stream_ == nullptr ||
+        plan->resources.reference_eri_ == nullptr) {
+      return false;
+    }
+    if (!plan->options.export_physical_reference || plan->options.screening_tolerance != 0.0 ||
+        plan->options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64) !=
+            GENERATIVEQC_PRECISION_FP64) {
+      return false;
+    }
 
-  auto expected_options = requested_options;
-  if (expected_options.resolved_fock_build.has_value() &&
-      expected_options.resolved_fock_build != plan->options.resolved_fock_build) {
-    return false;
-  }
-  expected_options.resolved_fock_build = plan->options.resolved_fock_build;
-  if (!same_hf_bucket_options(plan->options, expected_options)) return false;
+    auto expected_options = requested_options;
+    if (expected_options.resolved_fock_build.has_value() &&
+        expected_options.resolved_fock_build != plan->options.resolved_fock_build) {
+      return false;
+    }
+    expected_options.resolved_fock_build = plan->options.resolved_fock_build;
+    if (!same_hf_bucket_options(plan->options, expected_options)) return false;
 
-  const auto n = molecule::ao_count(system);
-  if (n != plan->nbf) return false;
-  const auto n2 = posthf::checked_mul(n, n);
-  const auto n4 = posthf::checked_mul(n2, n2);
-  if (plan->resources.reference_eri_bytes_ != posthf::checked_mul(n4, sizeof(double)))
-    return false;
+    const auto n = molecule::ao_count(system);
+    if (n != plan->nbf) return false;
+    const auto n2 = posthf::checked_mul(n, n);
+    const auto n4 = posthf::checked_mul(n2, n2);
+    if (plan->resources.reference_eri_bytes_ != posthf::checked_mul(n4, sizeof(double)))
+      return false;
 
-  cuda_execution::HostBatch candidate;
-  const std::vector<core::System> systems{system};
-  const std::vector<const std::vector<double>*> seeds{nullptr};
-  if (!cuda_execution::pack_host_batch(systems, seeds, candidate, false, true, false))
-    return false;
+    cuda_execution::HostBatch candidate;
+    const std::vector<core::System> systems{system};
+    const std::vector<const std::vector<double>*> seeds{nullptr};
+    if (!cuda_execution::pack_host_batch(systems, seeds, candidate, false, true, false))
+      return false;
     return cuda_execution::same_topology(plan->topology, candidate) &&
            plan->cached_positions == candidate.positions;
   } catch (...) {
@@ -94,15 +93,14 @@ class CudaRhfReferenceInteractionSource final : public integrals::ElectronIntera
            plan_->resources.reference_eri_ != nullptr;
   }
 
-  void read(Operator, const std::array<std::size_t, 4>&,
-            const std::array<std::size_t, 4>&, double*, std::size_t) const override {
+  void read(Operator, const std::array<std::size_t, 4>&, const std::array<std::size_t, 4>&, double*,
+            std::size_t) const override {
     throw std::invalid_argument("CUDA RHF reference interaction source is device-only");
   }
 
   void read_device(Operator op, const std::array<std::size_t, 4>& begin,
                    const std::array<std::size_t, 4>& count,
-                   integrals::DeviceInteractionTarget target,
-                   std::size_t elements) const override {
+                   integrals::DeviceInteractionTarget target, std::size_t elements) const override {
     if (!supports_device_read(op, target.device) || target.values == nullptr ||
         target.stream == nullptr || target.capacity < elements) {
       throw std::invalid_argument("invalid CUDA RHF reference interaction target");
@@ -118,8 +116,8 @@ class CudaRhfReferenceInteractionSource final : public integrals::ElectronIntera
     if (cudaSetDevice(device_) != cudaSuccess)
       throw std::runtime_error("CUDA RHF reference source could not select its device");
     auto stream = static_cast<cudaStream_t>(target.stream);
-    cuda_execution::launch_copy_resident_eri_tile(
-        stream, plan_->resources.reference_eri_, nbf_, begin, count, elements, target.values);
+    cuda_execution::launch_copy_resident_eri_tile(stream, plan_->resources.reference_eri_, nbf_,
+                                                  begin, count, elements, target.values);
     if (cudaPeekAtLastError() != cudaSuccess)
       throw std::runtime_error("CUDA RHF reference interaction copy launch failed");
     record_use(stream);

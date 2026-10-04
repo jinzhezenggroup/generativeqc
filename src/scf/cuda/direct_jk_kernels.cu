@@ -213,11 +213,10 @@ __global__ void independent_eri_tile_kernel(DeviceBatch batch, std::int32_t syst
   }
 }
 
-__global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_t n,
-                                              std::size_t b0, std::size_t b1, std::size_t b2,
-                                              std::size_t b3, std::size_t c0, std::size_t c1,
-                                              std::size_t c2, std::size_t c3,
-                                              std::size_t elements, double* eri) {
+__global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_t n, std::size_t b0,
+                                              std::size_t b1, std::size_t b2, std::size_t b3,
+                                              std::size_t c0, std::size_t c1, std::size_t c2,
+                                              std::size_t c3, std::size_t elements, double* eri) {
   const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
   for (std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
        element < elements; element += stride) {
@@ -668,8 +667,8 @@ void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::in
 
 void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, std::size_t nbf,
                                    const std::array<std::size_t, 4>& begin,
-                                   const std::array<std::size_t, 4>& count,
-                                   std::size_t elements, double* eri) {
+                                   const std::array<std::size_t, 4>& count, std::size_t elements,
+                                   double* eri) {
   if (!elements) return;
   constexpr unsigned threads = 128;
   const unsigned blocks =

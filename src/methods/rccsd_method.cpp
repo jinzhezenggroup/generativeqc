@@ -420,8 +420,7 @@ RccsdNativeState execute_rccsd_prepared(
         return scf::run_prepared_fock_strategy(*prepared_exact, prepared_options, seed);
       }
       return cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed,
-                                      correlation_auxiliary ? nullptr
-                                                            : &borrowed_reference_source)
+                                      correlation_auxiliary ? nullptr : &borrowed_reference_source)
                   : scf::run_rhf(system, reference_options, seed);
     };
     scf::ScfResult hf;
@@ -553,7 +552,8 @@ RccsdNativeState execute_rccsd_prepared(
     const auto exact_source_retained =
         state.reference_interaction_source
             ? state.reference_interaction_source->retained_numeric_bytes()
-            : prepared_exact ? prepared_source->retained_numeric_bytes() : 0;
+        : prepared_exact ? prepared_source->retained_numeric_bytes()
+                         : 0;
     if (exact_source_retained)
       state.problem.reference_retained_bytes =
           posthf::checked_add(state.problem.reference_retained_bytes, exact_source_retained);
