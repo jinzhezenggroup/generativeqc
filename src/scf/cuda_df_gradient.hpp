@@ -175,6 +175,9 @@ struct DfGradientResources {
  * attach their shells to distinct atoms. Missing weight spans mean zero.
  * Each domain is tiled independently; maximum_bytes bounds host numeric
  * staging and device allocations separately. Output changes only on success.
+ * Orbital shells through f and auxiliary shells through g are admitted. An
+ * auxiliary-g basis selects six-term metadata for both views; other calls
+ * preserve the established three-term packing and generated derivative policy.
  */
 generativeqc_status execute_cuda_df_gradient(
     int device, const core::System& orbital, const core::System& auxiliary,
