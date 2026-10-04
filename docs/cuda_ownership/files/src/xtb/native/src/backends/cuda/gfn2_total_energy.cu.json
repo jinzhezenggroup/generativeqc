@@ -1,7 +1,7 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_total_energy.cu",
-  "reason": "Vendored transitional GFN2 CUDA source for #560 native backend admission; counted conservatively as handwritten scientific ownership until generated/GenerativeQC-native replacements retire the equivalent path.",
+  "reason": "GFN2 terminal energy validation, component enablement, per-system failure isolation and publication. E_SCC + E_repulsion + E_D4^ATM composition consumes the shared compiler-owned total-energy program.",
   "regions": [],
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "gfn2"
 }
