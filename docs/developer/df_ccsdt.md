@@ -188,7 +188,10 @@ the entire solve, including convergence replay. Summand counts exclude
 elementwise operations and are not hardware FLOPs or timing predictions.
 
 Conventional admission rejects the DF representation unless an owner explicitly
-opts in. Existing Lambda, triples and force consumers remain conventional.
+opts in. Native CUDA Lambda accepts the factorized representation as described
+in [DF response composition](df_ccsdt_gradient.md); molecular triples and force
+consumers remain conventional. The separate internal DF triples energy owner
+is described below.
 This internal supplied-Hamiltonian solver does not register a public DF
 Calculator endpoint. Its qualification is
 `tests/python/test_df_cc_native_solver.py`. The supplied-Hamiltonian solver is
@@ -200,6 +203,49 @@ stored full MO factors are not substituted for the oracle's packed source.
 Complete hundreds-AO native CCSD(T) energy and forces still require the remaining
 source/response owners.
 
+## Internal native DF triples energy
+
+`cc::triples::evaluate_df_cuda` evaluates standard closed-shell FP64 `(T)` from
+supplied Q-major `B_ov/B_vv`, retained `ovoo/ovov`, Fov, T1/T2 and orbital
+energies. It requires physically symmetric Bvv pairs and a canonical occupied/
+virtual gap above the denominator threshold. It is an internal phase API;
+public molecular descriptors and response consumers do not select it yet.
+
+The compiler owns the panel and moment TensorIR in `cc/occupied_triples.py`.
+`tools/generate_df_occupied_triples.py` derives direct BLAS products from the
+shared GEMM contract and emits a fused scalar epilogue using the shared emitter.
+For each `i>=j>=k`, the owner builds six W cubes with twelve GEMMs and computes
+V elements inside the epilogue. All six occupied permutations are retained,
+including repeats divided by the occupied 6/2/1 multiplicity. The virtual domain
+is the full cube: the six original virtual rows have equal complete sums after
+dummy-index relabeling. Folding this virtual cube independently, or keeping only
+one occupied permutation, changes the energy.
+
+One to three occupied integral panels replace full `ovvv`; six W cubes replace
+full T3. Let `T=o(o+1)(o+2)/6` and `P` be the actual panel-build count. Complete
+contraction work is `P Q v^3 + 6 T (v^4 + o v^3)` scalar summands; the epilogue
+visits `T v^3` points. Standard triples retain seventh-order leading work.
+Diagnostics separately report panel/moment GEMMs, epilogue/reduction kernels,
+transfers, and admitted/observed storage; summands are not hardware FLOPs.
+
+The owner uploads inputs once and orders every panel producer, W consumer,
+epilogue and reuse on one owned stream. The numeric budget includes staged
+inputs, panels, moments, reductions, a 4-MiB BLAS workspace and a conservative
+96-MiB provider allowance. If the requested panel count does not fit, admission
+retries with one panel; an infeasible one-panel plan fails before allocation.
+The caller separately charges retained molecular/CC state. Result timing spans
+validation, allocation, uploads, computation, readback, drain and destruction.
+Any input, budget or device-arithmetic failure leaves results unpublished.
+
+`tests/python/test_df_occupied_triples.py` covers the domain rewrite on CPU and,
+with `GENERATIVEQC_DF_TRIPLES_CUDA_TEST=1` plus `GENERATIVEQC_LIBRARY`, real CUDA
+energy, work, exact-budget/fallback, repeatability and failure behavior. Real-GPU
+checks run in finite Slurm allocations. `benchmarks/df_triples_native_probe.py`
+compares large supplied states with the independent oracle; its timings cover
+the complete triples phase, excluding RHF, source construction, CCSD and forces.
+See the [decision note](../../.agents/notes/implemented/performance/2026-10-03-df-occupied-triples.md)
+for the algebraic rationale and qualification evidence.
+
 ## Internal native CUDA molecular source
 
 `cc::build_df_source_cuda` builds correlation-only DF integrals from normalized
@@ -208,9 +254,35 @@ internal `run_rccsd_native_state` entry accepts an optional correlation auxiliar
 system to compose native CUDA RHF, this source, and the native DF CCSD solver.
 Public descriptors still reject DF; native DF triples, Lambda and forces are
 not registered by this entry.
-The current CUDA source accepts orbital and auxiliary shells through f. Its
-shared capability check runs before RHF; g-shell RI auxiliary bases require a
-separately qualified source extension.
+The value source accepts orbital shells through f and auxiliary shells through
+g. The shared capability check runs before RHF. Existing through-f values use
+Rys quadrature; g auxiliary values use compiler-generated Gaussian moment
+polynomials with F0–F10 from the shared FP64 Boys evaluator. The generic source
+policy reports `generated_rys_auxiliary_g_polynomial` when g is present; other
+math policies are rejected for such an owner. Raw/transformed three-center and
+metric derivative tiles use the explicit auxiliary-g F0–F11 response policy.
+The standalone weighted DF gradient bridge also accepts auxiliary g: it contracts
+full unit-weight A and M cotangents with all nuclear centers in one traversal.
+It selects six-term expansion metadata for both basis views when g is present;
+through-f calls retain their three-term metadata and original evaluator. Legacy
+integral exporters and public method derivative capabilities retain their f limit.
+These internal source/weight derivatives do not certify a complete CC nuclear force.
+
+`scf::CudaDfNuclearSink` is the internal device-weight consumer for source-response
+callbacks. It uploads basis metadata once, binds one producer stream, and contracts
+raw/metric weight tiles into one compact nuclear gradient. The caller charges its
+combined host/device numeric capacity to the source response and calls `finish`
+only after the complete producer succeeds. Destruction drains borrowed reads
+without publishing a partial result; the producer stream must outlive the sink.
+The caller must supply the exact geometry/basis of its physical source. This
+consumer provides fixed-orbital nuclear response; orbital/Z and Pulay assembly
+remain the method's responsibility.
+
+The DF metadata packer skips SCF warm densities and pair/quartet task tables.
+It uses Cartesian metadata plus a separate six-term public g expansion, leaving
+the legacy three-term SCF topology unchanged. This is an internal source-domain
+extension; hundreds-AO molecular endpoints still require independent
+conditioning, energy, residual and amplitude qualification.
 
 The source reuses the generated CUDA three-center/metric evaluator and the
 shared cuSOLVER symmetric inverse-root owner, with an explicit relative cutoff.
@@ -236,8 +308,9 @@ includes the caller/reference, source setup, metric owner, transform/packing
 arenas and host outputs. An overflow-checked construction query admits system
 copies, packed metadata, transform scratch and both host/device metric storage
 before device selection or source construction. The source reserves its upload
-metadata and ownership arrays; its legacy pair arrays are reserved before
-packing, and unused resident task tables are skipped. The reported setup ledger
+metadata and ownership arrays. Metadata-only DF value packing skips pair/warm
+payloads and unused resident task tables; the construction bound retains
+conservative legacy allowances. The reported setup ledger
 is checked against that bound before downstream allocation/publication.
 Device capacity includes the shared owner's lazy SCF
 reservations: it is a conservative bound, not a measured physical peak.
@@ -245,17 +318,24 @@ reservations: it is a conservative bound, not a measured physical peak.
 `tests/python/test_df_cc_source_admission.py` checks the real admission prefix
 without CUDA and counts simultaneous host allocations during source packing.
 It covers insufficient construction budget, the exact bound, one byte below,
-overflow, varied shell/primitive inputs and bounded g-expansion scratch. The
+overflow, varied shell/primitive inputs and Cartesian/spherical auxiliary-g
+packing with bounded expansion scratch. The
 numeric budget excludes allocator and driver overhead; the small expansion
 scratch allowance covers the supported libstdc++/libc++ vector growth policy.
 
 `tests/python/test_df_cc_molecular_source.py` is enabled with
 `GENERATIVEQC_DF_CC_SOURCE_CUDA_TEST=1` inside a finite Slurm GPU allocation.
-It checks factors/blocks against committed independent raw integrals, including
-duplicated auxiliary shells and truncated metric rank, and exercises exact
+It checks factors/blocks against committed independent raw integrals and live
+PySCF g-auxiliary fixtures, including duplicated auxiliary shells and truncated metric rank, and exercises exact
 budget admission and transactional failure. Its two-electron molecular CCSD
 case uses an independent determinant-space energy oracle. This small-source
 qualification does not establish a complete hundreds-AO CCSD(T)/force endpoint.
+`tests/python/test_df_auxiliary_g.py` uses `GENERATIVEQC_DF_G_CUDA_TEST=1` for
+its CUDA parameter. `tools/validate_df_source.py --cases g-cartesian g-spherical
+g-dependent g-cartesian-spherical` checks raw/metric/J/K values, mapping and
+tile choices, and derivative rejection using `tests/native/df_value_probe.cpp`.
+All GPU runs require a finite Slurm allocation. Large-source conditioning
+limitations are retained in the [auxiliary-g decision](../../.agents/notes/implemented/numerics/2026-10-03-df-auxiliary-g-values.md).
 
 See the [native solver decision](../../.agents/notes/implemented/architecture/2026-10-03-df-cc-native-solver.md)
 for ownership and auxiliary-work rationale.

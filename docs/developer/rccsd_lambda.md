@@ -95,6 +95,40 @@ force APIs remain independently gated.
 
 ## Validation and remaining consumers
 
+The internal native CUDA DF path composes the retained-core Lambda actions
+with all auxiliary virtual actions. `solve_lambda_parameter_response_cuda`
+returns five retained integral cotangents, three Fock cotangents and
+**virtual-only** Bov/Bvv cotangents. The separate
+`cc::pullback_df_factors_cuda` action composes the retained Gram pullback with
+those virtual terms to produce complete fixed-Fock CCSD factor derivatives.
+Its input views accept arbitrary finite seeds; callers retain responsibility
+for the primal/Lambda stationarity gates.
+
+Native molecular sources retain Q-major Boo, Bov and Bvv. Supplied energy or
+Lambda problems may omit Boo, but the complete factor response requires it.
+Boo/Bvv cotangents use the symmetric dense Frobenius metric. The independent
+Bov cotangent includes both ov and transposed vo contributions; embedding it
+in a full symmetric BMO cotangent assigns half to each cross block. These
+maps use the shared TensorIR AD and never reconstruct ovvv/vvvv. The native
+owner admits all borrowed input values, detached outputs and device scratch;
+callers add other live owners and excess vector capacity through `caller_bytes`.
+
+The internal `posthf::pullback_df_mo_source_cuda` primitive differentiates
+the staged source transform into full raw-A, coefficient and inverse-root
+cotangents. It uses generated BLAS traversal, two immutable source passes,
+two three-index scratch tensors and row callbacks; no complete raw-A copy
+is retained. The caller owns physical factor embedding, source/frame identity,
+the fixed-rank metric rule and all callback output publication.
+
+Molecular source composition, metric/nuclear pullback and DF triples response
+are still required. Complete public DF CCSD(T) forces remain gated. The
+independent dense Gram, reconverged-energy and two-electron
+determinant gates are in `test_df_cc_factor_response.py`. See the
+[factor-response decision](../../.agents/notes/implemented/numerics/2026-10-04-df-retained-factor-response.md)
+for conventions, work bounds and retained limitations.
+The [source-response decision](../../.agents/notes/implemented/numerics/2026-10-04-streamed-df-mo-source-response.md)
+records its reverse traversal, resource bounds and callback contracts.
+
 `test_cc_lambda.py` checks independent determinant-space directional differences
 at three step sizes, a tiny explicit numerical Jacobian, weighted transpose
 identities, symmetry factors, all three primal equation forms, replay, rejection

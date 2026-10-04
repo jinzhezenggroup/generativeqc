@@ -141,11 +141,17 @@ values-only dense integral preparation counts both Cartesian representations
 and the additional public tensor for spherical bases before allocation. This
 limits the CPU reference size under the requested budget. It does not use the old 12-AO
 Python exporter, reconstruct a second HF calculation or calculate HF forces.
-GPU RHF explicitly uses the existing matrix-direct packed device evaluator,
-never its small-system persistent-ERI mode. This generic exact device path is
-usable without an sm_120 generated profile. The optimized quartet path retains
-its strict generated/native shell-class coverage gate; that gate is not
-weakened to make a portable build pass.
+GPU RHF reference export shares the ordinary exact shell-quartet owner for
+d/f bases and for s/p systems beyond the optional 256 MiB ERI-cache domain.
+The bounded queue avoids a complete quartet descriptor table and transforms
+public density/Fock matrices to/from Cartesian space once per build. Reference
+packing and device admission use the same topology policy, including small
+spherical d/f bases below the ordinary HF persistent-ERI threshold.
+Cache-eligible s/p references retain the optional ERI cache, admitted after
+actual eigensolver workspaces, with the existing matrix-direct fallback under
+budget/allocation pressure. The optimized quartet path retains its generated/
+native shell-class coverage gate. Both routes preserve unscreened FP64 work and
+the complete reference numeric budget; this changes no reference Hamiltonian.
 
 The final physical P,F(P),C,epsilon and S/h are exported as an owned reference.
 CUDA column-major C is explicitly converted to CG10 row-major C[mu,p]. Native

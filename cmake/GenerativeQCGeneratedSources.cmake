@@ -513,10 +513,30 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cu"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_hoisted.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_core.py"
     ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cu")
+  endif()
+
+  generativeqc_register_generated_sources(
+    NAME generativeqc_rhf_frame_response_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rhf_frame_response.py"
+    OUTPUTS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rhf_frame_response_cpu.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rhf_frame_response_cuda.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rhf_frame_response_cuda.cu"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/rhf_orbital_response.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_hoisted.py"
+    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  if(GENERATIVEQC_ENABLE_CUDA)
+    target_sources(${target} PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rhf_frame_response_cuda.cu")
   endif()
 
   set(GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER
@@ -1055,6 +1075,34 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/triples.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/cc/triples_cuda.hpp"
     ARGS --output "${GENERATIVEQC_RCCSDT_CUDA_SOURCE}")
+
+  set(GENERATIVEQC_DF_OCCUPIED_TRIPLES_SOURCES
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_occupied_triples.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_occupied_triples_cuda.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_occupied_triples_cuda.cu")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_occupied_triples_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_occupied_triples.py"
+    OUTPUTS ${GENERATIVEQC_DF_OCCUPIED_TRIPLES_SOURCES}
+    DEPENDS
+      ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/cuda_gemm.py"
+    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_lambda_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_lambda.py"
+    OUTPUTS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda_cuda.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda_cuda.cu"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
   set(GENERATIVEQC_MP2_GENERATED_DIRECTORY
       "${CMAKE_CURRENT_BINARY_DIR}/generated/mp2")

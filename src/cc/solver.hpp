@@ -19,6 +19,8 @@ struct SolverOptions {
   // Internal DF scheduling control; dense/conventional paths are unaffected.
   // Admission retains the bounded original schedule when work or storage wins.
   bool df_auxiliary_reduction{true};
+  // Optional compiler-packed FP64 matrix contractions, with scalar fallback.
+  bool df_matrix_gemm{true};
 };
 
 struct Problem {
@@ -38,6 +40,12 @@ struct Problem {
   // retain the explicitly selected reference contract (conventional RHF here).
   std::size_t naux{};
   std::vector<double> df_bov, df_bvv;
+  // Optional for supplied energy/Lambda inputs; required by the physical
+  // retained-block pullback. Native molecular sources always publish Boo.
+  std::vector<double> df_boo;
+  // Binds native physical factor derivatives to their immutable source/frame.
+  // Supplied algebraic problems may leave this zero.
+  std::uint64_t df_source_identity{};
 };
 
 enum class SolveStatus { Converged, NotConverged, NumericalFailure };
@@ -68,6 +76,9 @@ struct SolverDiagnostic {
   std::size_t df_hoisted_evaluations{};
   std::size_t df_preparation_calls{};
   std::size_t df_contraction_terms{};
+  bool df_matrix_gemm{};
+  std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_bytes{};
+  std::size_t df_provider_capacity_bytes{};
   double tensor_seconds{};
   double iteration_seconds{};
   double replay_seconds{};

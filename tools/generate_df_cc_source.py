@@ -13,11 +13,15 @@ if __package__ in (None, ""):
 from generativeqc_compiler.cc.df_source import (
     BLOCK_FACTORS,
     FACTOR_NAMES,
+    PHYSICAL_FACTORS,
     block_program,
+    factor_embedding_vjp,
     factor_program,
+    retained_factor_vjp,
 )
 from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
 
+from tools.generate_df_ccsd_hoisted import contraction_query
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
     _cpu_function,
@@ -26,10 +30,24 @@ from tools.generate_rccsd_native import (
     _required_function,
 )
 
+RESPONSE_INPUTS = (
+    *PHYSICAL_FACTORS,
+    *("bar_" + x for x in (*BLOCK_FACTORS, "bov", "bvv")),
+)
+EMBED_INPUTS = tuple("bar_" + x for x in PHYSICAL_FACTORS)
+RESPONSE_OUTPUTS = tuple("bar_" + x for x in PHYSICAL_FACTORS)
+
 
 def cpu_header() -> str:
-    """Emit packing oracle/capacity and equation-derived matrix products."""
-    program = factor_program(*REPRESENTATIVE, 1)
+    """Emit physical pair projection, packing/capacity and block products.
+
+    The same complete factor projection feeds all sectors. Its materialized
+    intermediates participate in the ordinary generated arena admission;
+    callers must not repair individual downloaded sectors after publication.
+    """
+    program = factor_program(*REPRESENTATIVE, 1, symmetric_pairs=True)
+    response = retained_factor_vjp(*REPRESENTATIVE, 1)
+    embedding = factor_embedding_vjp(*REPRESENTATIVE, 1)
     lines = [
         "// Generated DF-CC source packing/blocks; do not edit.",
         "#pragma once",
@@ -93,7 +111,7 @@ def cpu_header() -> str:
         "  SourceLayout p{}; p.matrix_values=checked_mul(n,n);",
         "  p.source_values=checked_mul(p.matrix_values,q); p.row_values=checked_mul(n,q);",
         "  p.packing_values=factor_arena_elements(o,v,q);",
-        "  p.output_values=checked_mul(q,checked_add(checked_mul(o,v),checked_mul(v,v)));",
+        "  p.output_values=checked_mul(q,checked_add(checked_mul(o,o),checked_add(checked_mul(o,v),checked_mul(v,v))));",
     ]
     for name in BLOCK_FACTORS:
         lines += [
@@ -101,13 +119,47 @@ def cpu_header() -> str:
             f"  p.largest_block=std::max(p.largest_block,{name}_elements(o,v));",
         ]
     lines += [
-        "  p.transform_bytes=checked_mul(sizeof(double),checked_add(checked_mul(2,p.source_values),checked_add(p.row_values,p.matrix_values)));",
+        "  // Two streamed raw-row components; large MO intermediates remain single FP64 arrays.",
+        "  p.transform_bytes=checked_mul(sizeof(double),checked_add(checked_mul(2,p.source_values),checked_add(checked_mul(2,p.row_values),p.matrix_values)));",
         "  p.packing_bytes=checked_add(sizeof(int),checked_mul(sizeof(double),checked_add(p.source_values,p.packing_values)));",
         "  p.blocks_bytes=checked_add(sizeof(int),checked_mul(sizeof(double),checked_add(p.packing_values,checked_add(p.largest_block,p.output_values))));",
         "  return p;",
         "}",
     ]
-    lines += ["}  // namespace generativeqc::cc::generated::df_source", ""]
+    lines += [
+        "struct ResponseInputs {",
+        *(f"  const double* {name}{{}};" for name in RESPONSE_INPUTS),
+        "};",
+        "struct ResponseOutputs { const double *bar_boo{}, *bar_bov{}, *bar_bvv{}; };",
+        f'inline constexpr const char* response_equation_hash="{response.logical_hash}";',
+        f"inline constexpr std::size_t response_operations={sum(n.op != 'input' for n in response.live_nodes)};",
+        _required_function(response, "response_arena_elements", batch_dim=True),
+        contraction_query(response, "response_contraction_terms", batch_dim=True),
+        _cpu_function(
+            response,
+            "response_cpu",
+            "ResponseOutputs",
+            signature="const ResponseInputs& inputs",
+            input_overrides={x: "inputs." + x for x in RESPONSE_INPUTS},
+            batch_dim=True,
+            output_fields=RESPONSE_OUTPUTS,
+        ),
+        "struct EmbeddingInputs { const double *bar_boo{}, *bar_bov{}, *bar_bvv{}; };",
+        "struct EmbeddingOutputs { const double* bar_bmo{}; };",
+        f'inline constexpr const char* embedding_equation_hash="{embedding.logical_hash}";',
+        _required_function(embedding, "embedding_arena_elements", batch_dim=True),
+        _cpu_function(
+            embedding,
+            "embed_cpu",
+            "EmbeddingOutputs",
+            signature="const EmbeddingInputs& inputs",
+            input_overrides={x: "inputs." + x for x in EMBED_INPUTS},
+            batch_dim=True,
+            output_fields=("bar_bmo",),
+        ),
+        "}  // namespace generativeqc::cc::generated::df_source",
+        "",
+    ]
     return "\n".join(lines)
 
 
@@ -125,12 +177,26 @@ struct CudaState {
   cudaStream_t stream{};
 };
 FactorOutputs pack_cuda(CudaState& state);
+struct ResponseCudaState : ResponseInputs {
+  std::size_t o{},v{},q{};
+  double* response_arena{};
+  int* error{};
+  cudaStream_t stream{};
+};
+ResponseOutputs response_cuda(ResponseCudaState& state);
+struct EmbeddingCudaState : EmbeddingInputs {
+  std::size_t o{},v{},q{};
+  double* response_arena{};
+  int* error{};
+  cudaStream_t stream{};
+};
+EmbeddingOutputs embed_cuda(EmbeddingCudaState& state);
 }
 """
 
 
 def cuda_source() -> str:
-    program = factor_program(*REPRESENTATIVE, 1)
+    program = factor_program(*REPRESENTATIVE, 1, symmetric_pairs=True)
     return "\n".join(
         [
             '#include "generated_df_cc_source_cuda.cuh"',
@@ -145,6 +211,26 @@ def cuda_source() -> str:
                 output_fields=FACTOR_NAMES,
             ),
             "FactorOutputs pack_cuda(CudaState& state) { return run_source_pack(state); }",
+            _cuda_program(
+                retained_factor_vjp(*REPRESENTATIVE, 1),
+                "factor_response",
+                "ResponseOutputs",
+                state_type="ResponseCudaState",
+                input_overrides={x: "s." + x for x in RESPONSE_INPUTS},
+                batch_dim=True,
+                output_fields=RESPONSE_OUTPUTS,
+            ),
+            "ResponseOutputs response_cuda(ResponseCudaState& state) { return run_factor_response(state); }",
+            _cuda_program(
+                factor_embedding_vjp(*REPRESENTATIVE, 1),
+                "source_embedding",
+                "EmbeddingOutputs",
+                state_type="EmbeddingCudaState",
+                input_overrides={x: "s." + x for x in EMBED_INPUTS},
+                batch_dim=True,
+                output_fields=("bar_bmo",),
+            ),
+            "EmbeddingOutputs embed_cuda(EmbeddingCudaState& state) { return run_source_embedding(state); }",
             "}",
             "",
         ]

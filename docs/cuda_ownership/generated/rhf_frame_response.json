@@ -1,0 +1,10 @@
+{
+  "name": "rhf_frame_response",
+  "outputs": [
+    "generated/generated_rhf_frame_response_cpu.hpp",
+    "generated/generated_rhf_frame_response_cuda.cuh",
+    "generated/generated_rhf_frame_response_cuda.cu"
+  ],
+  "owner": "python/generativeqc_compiler/method/rhf_orbital_response.py",
+  "scope": "Matrix-sized closed-shell density, frame/Fock pullbacks, Pulay weights and orbital tangents from shared TensorIR AD. Runtime-shaped CUDA offers optional packed matrix BLAS and a scalar fallback; the physical exact J/K provider and matrix-free Z control remain native runtime owners."
+}
