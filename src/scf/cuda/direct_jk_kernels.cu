@@ -135,6 +135,16 @@ __device__ void component_ao_pair(DeviceBatch batch, std::int32_t a, std::int32_
   j += batch.shell_direct_ao_offsets[b];
 }
 
+/** Reconverge every lane before the CTA handoff. Component contractions have
+ * lane-dependent loop bounds and tail masks; on sm120 an explicit warp join
+ * is needed before the subsequent block barrier. All 128 lanes call this,
+ * including lanes that did not consume a component or scatter an output.
+ */
+__device__ __forceinline__ void component_source_barrier() {
+  __syncwarp();
+  __syncthreads();
+}
+
 /** One CTA owns a shell quartet and a bounded tile of up to 128 components.
  * All lanes traverse identical primitive loops and barriers, including masked
  * lanes in a tail tile. Only the leader writes shared sources; every consumer
@@ -215,6 +225,7 @@ __global__ void component_jk_kernel(DeviceBatch batch, std::int32_t system,
           normalization = cartesian_component_normalization(batch, i, j, k, l);
         }
       }
+      __syncwarp();
       const auto admitted = __syncthreads_count(keep);
       if (threadIdx.x == 0 && work_census) {
         // Candidate work includes AO checks below a conservative shell maximum.
@@ -258,20 +269,20 @@ __global__ void component_jk_kernel(DeviceBatch batch, std::int32_t system,
                 if (threadIdx.x == 0)
                   radial_valid = prepare_cartesian_component_radial(
                       source, generativeqc::integrals::CoulombRange::Full, 0.0);
-                __syncthreads();
+                component_source_barrier();
                 if (keep)
                   full_integral +=
                       weight * (radial_valid ? consume_cartesian_component(source, angular) : NAN);
-                __syncthreads();
+                component_source_barrier();
               }
               if (selected) {
                 if (threadIdx.x == 0)
                   radial_valid = prepare_cartesian_component_radial(source, range, omega);
-                __syncthreads();
+                component_source_barrier();
                 if (keep)
                   range_integral +=
                       weight * (radial_valid ? consume_cartesian_component(source, angular) : NAN);
-                __syncthreads();
+                component_source_barrier();
               }
             }
       if (keep) {
@@ -292,7 +303,7 @@ __global__ void component_jk_kernel(DeviceBatch batch, std::int32_t system,
                                                         range_exchange, i, j, k, l, range_integral,
                                                         false, true);
       }
-      __syncthreads();
+      component_source_barrier();
     }
   }
 }
