@@ -31,7 +31,9 @@ from generativeqc_compiler.tensor.cuda_plan import (
 )
 from generativeqc_compiler.tensor.cuda_reduction import (
     cooperative_reduction_provider,
+    streamed_reduction_fusion_groups,
 )
+from generativeqc_compiler.tensor.cuda_search import estimate_schedule
 
 TARGET = cuda_target_info("sm_80")
 
@@ -254,6 +256,50 @@ def test_streamed_einsum_reduction_uses_block_parallel_reduction_axis() -> None:
     source = emit_cuda(plan)
     assert "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)" in source
     assert "gemm(ctx," not in source
+
+
+def test_streamed_reduction_fusion_groups_expose_shared_virtual_work() -> None:
+    q = Index("q_shared", IndexSpace("stream_q_shared", "batch", 7))
+    k = Index("k_shared", IndexSpace("stream_k_shared", "batch", 64))
+    a = input_tensor("stream_a_shared", TensorSpec((q, k), role="input"))
+    b = input_tensor("stream_b_shared", TensorSpec((q, k), role="input"))
+    shared = multiply(a, b)
+    lane_a = einsum("qk,qk->q", shared, a)
+    lane_b = einsum("qk,qk->q", shared, b)
+    total_a = reduce_sum(lane_a, (0,))
+    total_b = reduce_sum(lane_b, (0,))
+
+    plan = plan_cuda(
+        Program({"total_a": total_a, "total_b": total_b}),
+        TARGET,
+        schedule=TensorSchedule(
+            stream_reductions=True,
+            streamed_gemm_reduction=True,
+        ),
+        reassociate_contractions=False,
+    )
+    shared_index = next(i for i, step in enumerate(plan.steps) if step.node is shared)
+    lane_indices = tuple(
+        sorted(
+            i
+            for i, step in enumerate(plan.steps)
+            if step.node is lane_a or step.node is lane_b
+        )
+    )
+
+    groups = streamed_reduction_fusion_groups(plan)
+    assert len(groups) == 1
+    group = groups[0]
+    assert group.steps == lane_indices
+    assert shared_index in group.shared_virtual_steps
+    assert group.reduction_extent == 64
+    assert group.output_shape == (7,)
+    assert group.dtype == "float64"
+    assert group.accumulation_dtype == "float64"
+
+    estimates = estimate_schedule(plan)
+    assert estimates["streamed_reduction_fusion_group_count"] == 1
+    assert estimates["streamed_reduction_fusion_groups"] == [group.to_payload()]
 
 
 def test_streaming_reduction_stops_before_partial_source_consumption() -> None:
