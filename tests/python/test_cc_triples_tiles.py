@@ -308,7 +308,6 @@ def test_runtime_indexed_complete_tiled_reference(
     np.testing.assert_allclose(got, expected, atol=1e-11, rtol=1e-10)
 
 
-
 def test_runtime_mixed_wv_precision_keeps_denominator_and_publication_fp64() -> None:
     """The opt-in candidate lowers W/V work without weakening FP64 audits."""
     from generativeqc_compiler.tensor import describe_precision
@@ -387,9 +386,12 @@ def test_runtime_triples_precision_mode_is_explicit_and_fail_closed() -> None:
     from tools.generativeqc_cc.triples_cuda import TriplesTileConfig
 
     assert TriplesTileConfig(2, 3, 1, 1 << 20).precision_mode == "fp64"
-    assert TriplesTileConfig(2, 3, 1, 1 << 20, precision_mode="mixed-wv").precision_mode == "mixed-wv"
+    mixed = TriplesTileConfig(2, 3, 1, 1 << 20, precision_mode="mixed-wv")
+    assert mixed.precision_mode == "mixed-wv"
     with pytest.raises(ValueError, match="precision_mode"):
         TriplesTileConfig(2, 3, 1, 1 << 20, precision_mode="fp32-everything")
+
+
 def test_runtime_control_subbatches_preserve_triangular_order() -> None:
     tile = TileSpec(0, 3, 3)
     batches = list(runtime_tile_control_batches(tile, 4))
