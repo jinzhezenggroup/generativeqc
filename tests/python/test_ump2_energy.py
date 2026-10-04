@@ -310,7 +310,7 @@ def test_denominator_and_reference_fail_closed_before_source_reads() -> None:
     with pytest.raises(ValueError, match="near-zero UMP2 denominator"):
         PreparedUMP2Energy(close, source, denominator_threshold=1e-9)
     assert source.reads == 0
-    with pytest.raises(ValueError, match="forces/amplitudes"):
+    with pytest.raises(NotImplementedError, match="forces/amplitudes"):
         PreparedUMP2Energy(reference, source).execute(
             properties=("energy", "forces")
         )
