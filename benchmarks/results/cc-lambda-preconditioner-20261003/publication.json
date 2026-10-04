@@ -1,0 +1,71 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All 112 complete calls pass independent energy/triples/force/residual gates; native analytic oracle, disabled/fallback/exact-budget gates, public tests and memcheck pass. Paired speed observations with uncertainty and work counts are retained separately.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 1378,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "17d27f9b2758f04517a7bf4accec70a1af83f3771816a3365bd82e2741378cbf"
+    },
+    {
+      "bytes": 7714,
+      "path": "summary.json.gz",
+      "role": "summary",
+      "sha256": "c55145c31528d75a3a501c4acacf49f8cedaeb83de96a438b395f53052d32b11"
+    },
+    {
+      "bytes": 34232,
+      "path": "records.json.gz",
+      "role": "samples",
+      "sha256": "3ad9c6883d9f7f8ff0050ca4976ef0be66cf1010d287a9f6d96210dd8bf1c5f2"
+    },
+    {
+      "bytes": 8994,
+      "path": "work.json.gz",
+      "role": "summary",
+      "sha256": "55c961e0c3de7fbe855f6d2dacfdaf9b846d1e8a2825bef6722c069f0eeab845"
+    },
+    {
+      "bytes": 4272,
+      "path": "source.patch.gz",
+      "role": "source-patch",
+      "sha256": "7b92e3c4096030277a705d0e5146a93430bb067623590e91c2d746818ccc2dce"
+    },
+    {
+      "bytes": 1374,
+      "path": "evidence.original.json.gz",
+      "role": "reproduction",
+      "sha256": "bc565f97364b5a15b2caad2fc36ca890d19d6d52e58929607688386d2872c267"
+    },
+    {
+      "bytes": 2543,
+      "path": "storage.json",
+      "role": "reproduction",
+      "sha256": "48cb1698e3ed9f5d52267d43e56238f6edc68736a81678bb027a68de22ed9e5f"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/ccsdt_prepared_endpoint.py",
+      "--device",
+      "cuda",
+      "--atoms",
+      "12",
+      "--forces",
+      "--output",
+      ".artifacts/cc-lambda-preconditioner-reproduction.json"
+    ],
+    "instructions": "Decode source.patch.gz byte-for-byte before applying the unchanged patch. Apply source.patch to the parent revision. Configure Release CUDA 12.9 sm_120 with explicit CXX/CUDA ccache launchers, checkout-root CCACHE_BASEDIR and fast_compile=false. Build generativeqc_cc_lambda_preconditioner_tests. Use finite Slurm main allocations (gpu:5090:1 on n5; gpu:pro6000:1 on n2), preserve CUDA_VISIBLE_DEVICES. Set GENERATIVEQC_LIBRARY, PYTHONPATH=python:., CPU library threads=1 and a new GENERATIVEQC_DF_PROGRESS_TRACE path. Use NumPy, SciPy, PySCF 2.14 and threadpoolctl; ensure the Python runtime preloads CUDA 12.9 libraries matching the linked library (runtime-libraries manifest in summary). Alternate parent/candidate processes in six AB/BA pairs for --atoms 6 and 12; retain cold, warm, warm-repeat and changed calls. Run native test with and without --cuda plus test_rccsdt_public.py/test_rccsd_public.py with CUDA opt-in environment variables. Memcheck native probe and all four complete 14-AO calls. Profile four 28-AO calls with Nsight CUDA tracing to verify launches and copies."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "5a5fa24e4442711e9ddee055a14686eb05da618c"
+  }
+}

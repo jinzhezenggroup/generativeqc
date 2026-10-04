@@ -8,6 +8,7 @@
 #include "hf/reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "tensor/cpu_linalg.hpp"
 
 namespace generativeqc::mp2::detail {
@@ -57,7 +58,7 @@ double symmetric_eri_weight(std::span<const double> weights, std::size_t n, std:
 void transform_remaining_shells(const core::System& system, const hf::PhysicalReference& reference,
                                 const std::vector<std::size_t>& offsets, std::size_t si,
                                 std::span<const double> first,
-                                const EriShellDerivativeContract& eri_shell,
+                                const EriShellDerivativeAccumulate& eri_shell,
                                 std::vector<double>& derivative, bool canonical_shells) {
   const auto n = reference.nbf;
   const auto di = offsets[si + 1] - offsets[si];
@@ -109,23 +110,18 @@ void transform_remaining_shells(const core::System& system, const hf::PhysicalRe
           for (double& value : local) value *= orbit;
         }
         const std::array<std::size_t, 4> shells{si, sj, sk, sl};
-        const auto center = eri_shell(shells, local);
-        for (std::size_t slot = 0; slot < 4; ++slot) {
-          const auto atom = system.shells[shells[slot]].atom_index;
-          for (std::size_t axis = 0; axis < 3; ++axis)
-            derivative[3 * atom + axis] += center[3 * slot + axis];
-        }
+        eri_shell(shells, local, derivative);
       }
     }
   }
 }
 }  // namespace
 
-std::vector<double> conventional_derivative(const core::System& system,
-                                            const hf::PhysicalReference& reference,
-                                            const LagrangianWeights& weights,
-                                            const OneElectronDerivativeContract& one_electron,
-                                            const EriShellDerivativeContract& eri_shell) {
+std::vector<double> conventional_derivative_accumulate(
+    const core::System& system, const hf::PhysicalReference& reference,
+    const LagrangianWeights& weights, const OneElectronDerivativeContract& one_electron,
+    const EriShellDerivativeAccumulate& eri_shell,
+    const std::function<void(std::span<double>)>& finalize) {
   const auto n = reference.nbf;
   bool dense_two = false;
   if (!weights.two_electron.empty())
@@ -141,9 +137,15 @@ std::vector<double> conventional_derivative(const core::System& system,
       !finite(weights.one_electron) || !finite(weights.overlap) || !one_electron || !eri_shell)
     throw std::invalid_argument("conventional derivative reference/weight mismatch");
 
+  runtime::df_progress::Scope trace("conventional_derivative");
+  using Clock = std::chrono::steady_clock;
+  const auto now = [&] { return trace.enabled() ? Clock::now() : Clock::time_point{}; };
+  const auto started = now();
   const auto one_ao = pullback_matrix(reference.coefficients, weights.one_electron, n);
   const auto overlap_ao = pullback_matrix(reference.coefficients, weights.overlap, n);
+  const auto one_started = now();
   auto derivative = one_electron(overlap_ao, one_ao);
+  const auto two_started = now();
   if (derivative.size() != posthf::checked_mul(system.atoms.size(), std::size_t{3}) ||
       !finite(derivative))
     throw std::runtime_error("conventional one-electron derivative has the wrong shape");
@@ -151,6 +153,18 @@ std::vector<double> conventional_derivative(const core::System& system,
   if (offsets.back() != n)
     throw std::runtime_error("conventional derivative shell offsets disagree with the reference");
 
+  std::uint64_t shell_ns = 0, shell_calls = 0;
+  EriShellDerivativeAccumulate measured_shell;
+  if (trace.enabled()) {
+    measured_shell = [&](const auto& shells, auto local, auto gradient) {
+      const auto shell_started = Clock::now();
+      eri_shell(shells, local, gradient);
+      shell_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() - shell_started)
+                      .count();
+      ++shell_calls;
+    };
+  }
+  const auto& shell_contract = trace.enabled() ? measured_shell : eri_shell;
   for (std::size_t si = 0; si < system.shells.size(); ++si) {
     const auto di = offsets[si + 1] - offsets[si];
     std::vector<double> first(posthf::checked_mul(di, posthf::checked_mul(n, square(n))), 0.0);
@@ -195,11 +209,48 @@ std::vector<double> conventional_derivative(const core::System& system,
         }
       }
     }
-    transform_remaining_shells(system, reference, offsets, si, first, eri_shell, derivative,
+    transform_remaining_shells(system, reference, offsets, si, first, shell_contract, derivative,
                                dense_two);
   }
+  const auto finalize_started = now();
+  if (finalize) finalize(derivative);
+  const auto finalize_ns =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now() - finalize_started).count();
+  if (trace.enabled()) shell_ns += finalize_ns;
   if (!finite(derivative)) throw std::runtime_error("conventional derivative is nonfinite");
+  if (trace.enabled()) {
+    using runtime::df_progress::Scope;
+    const auto ns = [](auto interval) {
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(interval).count();
+    };
+    const auto two_ns = ns(now() - two_started);
+    // Disjoint intervals. The shell callback may contain nested GPU consumer
+    // work; the remainder measures host pullback/scatter and bookkeeping.
+    Scope::number("ao_functions", n);
+    Scope::number("canonical_shells", dense_two);
+    Scope::number("rank_two_pullback_ns", ns(one_started - started));
+    Scope::number("one_electron_ns", ns(two_started - one_started));
+    Scope::number("two_electron_shell_calls", shell_calls);
+    Scope::number("two_electron_shell_ns", shell_ns);
+    Scope::number("two_electron_finalize_ns", finalize_ns);
+    Scope::number("two_electron_pullback_scatter_ns", two_ns - shell_ns);
+  }
   return derivative;
+}
+
+std::vector<double> conventional_derivative(const core::System& system,
+                                            const hf::PhysicalReference& reference,
+                                            const LagrangianWeights& weights,
+                                            const OneElectronDerivativeContract& one_electron,
+                                            const EriShellDerivativeContract& eri_shell) {
+  if (!eri_shell) throw std::invalid_argument("missing conventional ERI derivative consumer");
+  return conventional_derivative_accumulate(
+      system, reference, weights, one_electron, [&](const auto& shells, auto local, auto gradient) {
+        const auto center = eri_shell(shells, local);
+        for (std::size_t slot = 0; slot < 4; ++slot)
+          for (std::size_t axis = 0; axis < 3; ++axis)
+            gradient[3 * system.shells[shells[slot]].atom_index + axis] += center[3 * slot + axis];
+      });
 }
 
 }  // namespace generativeqc::mp2::detail

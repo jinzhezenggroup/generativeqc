@@ -121,10 +121,10 @@ Reconstruct either summary without running hardware:
 
 ```bash
 .venv/bin/python tools/summarize_density_candidates.py \
-  benchmarks/results/density-candidates/gpu/evidence.json \
+  benchmarks/results/density-candidates/gpu/evidence.json.gz \
   --output .artifacts/gpu-summary.json
 .venv/bin/python tools/summarize_density_candidates.py \
-  benchmarks/results/density-candidates/native/verification.json \
+  benchmarks/results/density-candidates/native/verification.json.gz \
   --output .artifacts/native-summary.json
 ```
 
@@ -133,3 +133,10 @@ publisher and validated in the retained-evidence regression. The GPU envelope
 keeps its timing lists in named workload JSON files. The record loader verifies
 all part hashes and restores the original sample order and values; no size
 exception is used.
+
+### Stored JSON records
+
+Large retained JSON members use deterministic gzip. The publication manifest
+pins their stored paths and hashes; the shared record reader restores every
+original numerical value and sample order. This storage change adds no new
+measurement, acceptance decision or performance claim.

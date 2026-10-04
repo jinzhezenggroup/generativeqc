@@ -27,7 +27,7 @@ collocation are separate `approximation_difference` diagnostics. They are not
 rigorous density, energy or force error bounds. Changing the hardware tile
 preserves the region/mask definition.
 
-`samples.json` retains every timing, quantitative error, input identity,
+`samples.json.gz` retains every timing, quantitative error, input identity,
 resource plan and native observation. It does not retain full AO or potential
 arrays. `summary.json` can be reconstructed from those samples; the publisher
 validates inventories, fixed tolerances, source/build consistency, serialized
@@ -160,6 +160,13 @@ python tools/publish_spatial_tasks.py --artifacts .artifacts/reproduction \
 ```
 
 The publisher never overwrites a bundle. For an archival integrity replay,
-the two final `samples.json` files and expanded `runs` from
-`cuda/dense-comparison-samples.json` restore all eight worker JSON inputs
+the two final `samples.json.gz` files and expanded `runs` from
+`cuda/dense-comparison-samples.json.gz` restore all eight worker JSON inputs
 without requiring a GPU. A new measurement requires actual native execution.
+
+### Stored JSON records
+
+Large retained JSON members use deterministic gzip. The publication manifest
+pins their stored paths and hashes; the shared record reader restores every
+original numerical value and sample order. This storage change adds no new
+measurement, acceptance decision or performance claim.

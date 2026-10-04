@@ -21,7 +21,9 @@ def test_force_provider_backend_and_complete_cap(tmp_path: Path) -> None:
         + planner.split("\nRccsdtForcePlan plan_rccsd_force_cpu", 1)[0]
     )
     helpers = source[
-        source.index("std::size_t checked_add(") : source.index("bool finite(")
+        source.index("constexpr double kStationarityTolerance") : source.index(
+            "bool finite("
+        )
     ]
     parameters = source[
         source.index("std::size_t parameter_elements(") : source.index(
@@ -84,7 +86,9 @@ PREFIX = r"""
 #include <iostream>
 #include <stdexcept>
 #include "cc/rccsdt_force.hpp"
-#include "cc/triples_response.hpp"
+#include "cc/triples_response_internal.hpp"
+#include "cc/triples_fock_response.hpp"
+#include <cmath>
 #include "hf/reference.hpp"
 #include "posthf/block_capacity_generated.hpp"
 
@@ -95,6 +99,16 @@ namespace generativeqc::response {
 GmresPlan prepare_gmres(std::size_t, const GmresOptions&) { return {}; }
 }
 namespace generativeqc::cc {
+namespace detail {
+// This harness isolates the raw MO-provider phase. Like the generated response
+// arena stubs, the separately owned triples layout contributes no scratch here.
+TriplesResponseLayout triples_response_layout(std::size_t, std::size_t, std::size_t, bool) {
+  return {};
+}
+TriplesFockLayout triples_fock_response_layout(std::size_t, std::size_t, std::size_t, bool) {
+  return {};
+}
+}
 std::size_t problem_host_bytes(const Problem&) { return 1024; }
 std::size_t lambda_cpu_numeric_capacity(const Problem& p, const SolverResult& result,
                                       const LambdaOptions&, bool) {
