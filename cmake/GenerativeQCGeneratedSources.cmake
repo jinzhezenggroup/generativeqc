@@ -681,6 +681,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_gfn2_sdq_native.py"
     OUTPUTS "${GENERATIVEQC_GFN2_SDQ_CUDA_HEADER}"
     DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/gfn2_force_schedule.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/gfn2_sdq.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/gfn2_sdq_cpu.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/one_electron_values.py"
@@ -822,7 +823,8 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_DIRECT_CARTESIAN_CONTRACTION_HEADERS
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_cartesian.cuh"
-      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_contraction.cuh")
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_contraction.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_eri_materialization.cuh")
   generativeqc_register_generated_sources(
     NAME generativeqc_direct_cartesian_contraction_codegen
     TARGET ${target}

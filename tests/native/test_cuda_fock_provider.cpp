@@ -294,11 +294,14 @@ void mixed_coulomb_work_census(bool through_f = false) {
 }
 
 void direct_eri_tile(CudaDirectJkPlan* plan, std::size_t item,
-                     const std::vector<double>& expected_eri, std::size_t n) {
+                     const std::vector<double>& expected_eri, std::size_t n,
+                     bool full_basis = false) {
   require(plan != nullptr && n >= 2, "invalid raw ERI tile fixture");
-  const std::array<std::size_t, 4> begin{0, 1, 0, 0};
-  const std::array<std::size_t, 4> count{2, 1, 2, 2};
-  const std::size_t elements = 8;
+  const std::array<std::size_t, 4> begin =
+      full_basis ? std::array<std::size_t, 4>{0, 0, 0, 0} : std::array<std::size_t, 4>{0, 1, 0, 0};
+  const std::array<std::size_t, 4> count =
+      full_basis ? std::array<std::size_t, 4>{n, n, n, n} : std::array<std::size_t, 4>{2, 1, 2, 2};
+  const std::size_t elements = full_basis ? n * n * n * n : 8;
   std::vector<double> expected(elements);
   for (std::size_t local = 0; local < elements; ++local) {
     auto remainder = local;
@@ -1895,7 +1898,7 @@ void full_range_shell_source_oracles(const generativeqc::core::System& system,
   }
 }
 
-void direct_providers(bool through_f_response) {
+void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
   for (unsigned angular : {0U, 1U, 2U, 3U})
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       // Noncoincident centers and unequal primitive/basis metadata distinguish
@@ -1920,7 +1923,7 @@ void direct_providers(bool through_f_response) {
       require(generativeqc::molecule::validate_and_normalize(second, detail) ==
                   GENERATIVEQC_STATUS_SUCCESS,
               detail.c_str());
-      const bool derivatives = angular < 2 || through_f_response;
+      const bool derivatives = !eri_tiles_only && (angular < 2 || through_f_response);
       const auto ints = generativeqc::integrals::build_integrals(first, derivatives);
       const auto other = generativeqc::integrals::build_integrals(second, derivatives);
       const std::size_t n = ints.nbf, matrix = n * n;
@@ -1947,6 +1950,11 @@ void direct_providers(bool through_f_response) {
           raw, &destroy_cuda_direct_jk_plan);
       direct_eri_tile(plan.get(), 0, ints.eri, n);
       direct_eri_tile(plan.get(), 1, other.eri, n);
+      // The complete tensor uses the orbit schedule; the asymmetric rectangle
+      // above must keep its independent bounded path for both batch members.
+      direct_eri_tile(plan.get(), 0, ints.eri, n, true);
+      direct_eri_tile(plan.get(), 1, other.eri, n, true);
+      if (eri_tiles_only) continue;
       if (derivatives) {
         auto value_spec = make_hf_fock_spec(FockSpin::Restricted);
         value_spec.derivative_order = 0;
@@ -2144,6 +2152,11 @@ int main(int argc, char** argv) {
       spd_optional_allocation_fallback();
       spd_canonical_range_values();
       std::cout << "CUDA SPD generated/full and canonical/SR/LR value gates PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--eri-tiles-only") {
+      direct_providers(false, true);
+      std::cout << "CUDA s/p/d/f full and rectangular ERI tiles, both batch items PASS\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-work-only") {

@@ -215,7 +215,9 @@ def _emit_block_dispatch(tag: str) -> str:
 
 @cache
 def emit_gfn2_sdq_cuda() -> str:
-    """Emit the same S/D/Q primitive DAG as CUDA device-only helpers."""
+    """Emit device primitive DAGs and host selection of the admission width."""
+
+    from .gfn2_force_schedule import emit_gfn2_force_preflight_schedule
 
     return (
         _emit_gfn2_sdq_header(shell_blocks=False)
@@ -226,6 +228,13 @@ def emit_gfn2_sdq_cuda() -> str:
         )
         .replace("inline bool ", "__device__ inline bool ")
         .replace("std::isfinite", "isfinite")
+        .replace("#include <cmath>", "#include <cmath>\n#include <cstdint>", 1)
+        .replace(
+            "namespace generativeqc::xtb::generated {",
+            "namespace generativeqc::xtb::generated {\n"
+            + emit_gfn2_force_preflight_schedule(),
+            1,
+        )
     )
 
 

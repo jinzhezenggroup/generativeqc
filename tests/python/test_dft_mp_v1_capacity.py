@@ -284,9 +284,15 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "51730953ed9a62807442f672013fcc40787ed3c0b0cca838d6c492c8b1c080b1",
+        "geometry_resources_sha256": "0addc7ec684aa1e2116fb0f52d328a9717484b79009e9c236107f4f55bb19563",
         "public_wrapper_sha256": (
-            "ded1b7e2cc0a93881cc17b4da32a3695bdbaf05421535ac3dcc4efb646da003b"
+            "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
+        ),
+        "ordinary_tile_layout_sha256": (
+            "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
+        ),
+        "ordinary_tile_resources_sha256": (
+            "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
         ),
         "initializer_sha256": (
             "7bb03b7286a5868527104420a74f4749c8af92360f17ad12ced31051a7ae9d75"
@@ -325,7 +331,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "d10b448db22bdd46fac91e189303e54a694998e87e77c6ec6395bfaa713ec3fe"
+            "7916c0f782cb6e40882144c091887bb57cb67cdc12ad733531a1d79c9df87d8a"
         ),
         "native_owner_sha256": (
             "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -345,11 +351,14 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "native_nuclear_sha256": (
             "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
         ),
+        "native_geometry_ao_map_sha256": (
+            "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
+        ),
         "native_geometry_external_sha256": (
-            "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
+            "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
         ),
         "native_geometry_enqueue_sha256": (
-            "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
+            "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
         ),
         "native_geometry_route_sha256": (
             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -419,12 +428,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     )
     assert result["admission_limits"]["gate_order"] == [
         "native_owner_capacity",
+        "native_integral_provider_required",
+        "primitive_logical_metric_range",
         "grid_work_capacity",
         "grid_point_work_budget",
         "grid_pair_work_budget",
         "pending_grid_pair_budget",
-        "native_integral_provider_required",
-        "primitive_logical_metric_range",
         "additional_device_budget",
         "additional_host_budget",
         "native_integral_result_required",
@@ -1472,13 +1481,13 @@ def test_admission_gate_order_fails_closed_when_leading_gates_move(
     native_begin = source.index(
         "    requires_native_integrals = stationary_cuda_requires_native_integrals("
     )
-    grid_begin = source.index(
-        "    grid_work = plan_stationary_cuda_grid_work(", native_begin
-    )
-    grid_end = source.index("    if requires_native_integrals and (", grid_begin)
-    native = source[native_begin:grid_begin]
-    grid = source[grid_begin:grid_end]
-    stationary_contract_tree(tmp_path, source.replace(native + grid, grid + native, 1))
+    native_end = source.index("    if requires_native_integrals and (", native_begin)
+    records_begin = source.index("    records = (", native_end)
+    records_end = source.index("    # Keep the frozen", records_begin)
+    native = source[native_begin:native_end]
+    records = source[records_begin:records_end]
+    moved = source.replace(native, "", 1).replace(records, records + native, 1)
+    stationary_contract_tree(tmp_path, moved)
 
     with pytest.raises(RuntimeError, match="admission gate order changed"):
         qualify_capacity._source_limits(tmp_path)
@@ -2484,6 +2493,47 @@ def test_current_endpoint_windows_native_requirement_and_reserve_fail_closed(
         qualify_capacity._source_limits(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "old,new,message",
+    [
+        (
+            "    tensor_plans: dict[str, typing.Any]\n",
+            "    tensor_plans: typing.Any\n",
+            "tile layout contract changed",
+        ),
+        (
+            "        active_ao_capacity=n,\n",
+            "        active_ao_capacity=n // 2,\n",
+            "grid-plan input definition changed",
+        ),
+        (
+            "tile_points=tile_points, admit=admit_tile",
+            "tile_points=256, admit=admit_tile",
+            "tile schedule binding changed",
+        ),
+        (
+            "sum(value.host_bytes for value in layout.tensor_plans.values())",
+            "0",
+            "endpoint owner contract changed",
+        ),
+        (
+            "    grid_plan = layout.grid_plan\n",
+            "    grid_plan = None\n",
+            "endpoint owner contract changed",
+        ),
+    ],
+)
+def test_extracted_tile_admission_and_selected_owners_fail_closed(
+    tmp_path: Path, old: str, new: str, message: str
+) -> None:
+    """A helper extraction must not move admission outside the source audit."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert old in source
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match=message):
+        qualify_capacity._source_limits(tmp_path)
+
+
 @pytest.mark.parametrize("key", ["max_grid_points", "max_grid_pair_visits"])
 def test_public_override_cannot_silently_inherit_diagnostic_limits(
     tmp_path: Path, key: str
@@ -2511,3 +2561,52 @@ def test_empty_grid_rejected_but_one_atom_zero_pair_work_is_valid(
     assert [failure["gate"] for failure in failures] == (
         ["grid_work_capacity"] if blocked else []
     )
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("view.nao == aos", "view.nao <= aos"),
+        ("view.nactive <= aos", "view.nactive <= aos + 1"),
+        ("view.ao_ids != nullptr", "true"),
+    ],
+)
+def test_local_ao_admission_helper_remains_bound_to_full_capacity_report(
+    tmp_path: Path, before: str, after: str
+) -> None:
+    """Out-of-line admission drift must not silently reuse the old census."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    stationary_contract_tree(tmp_path, source)
+    target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
+    native = target.read_text()
+    start = native.index("bool valid_geometry_ao_map(")
+    end = native.index("\n}", start)
+    original = native[start:end]
+    assert original.count(before) == 1
+    target.write_text(native[:start] + original.replace(before, after) + native[end:])
+    with pytest.raises(
+        RuntimeError, match="native_geometry_ao_map_sha256 contract changed"
+    ):
+        qualify_capacity._source_limits(tmp_path)
+
+
+def test_local_ao_capacity_stays_global_and_pair_work_stays_complete() -> None:
+    """Admitting local panels is not authority to shrink the fixed upper bound."""
+    limits = qualify_capacity._source_limits(ROOT)
+    assert "active_ao_capacity=n" in limits["grid_plan_definition"]
+    assert "grid_plan.host_bytes" in limits["host_bound_definition"]
+    assert limits["grid_pair_visits_definition"] == "grid_work.grid_pair_visits"
+    # The existing exact source bindings additionally cover allocations, launch
+    # scratch, the deferred route, and every counter in the geometry body.
+    native = (ROOT / "src/dft/stationary_gradient_cuda.cuh").read_text()
+    for marker in (
+        "int stationary_geometry_external(",
+        "int stationary_geometry_enqueue(",
+    ):
+        start = native.index(marker)
+        end = native.index("\n}\n", start)
+        body = native[start:end]
+        assert "p->point_count += view->npoint;" in body
+        assert "p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);" in body
+        assert "std::min(p->geometry_lanes, view->npoint)" in body
+        assert "if (!view->nactive)" not in body

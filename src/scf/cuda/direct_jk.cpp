@@ -301,9 +301,12 @@ generativeqc_status create_cuda_direct_jk_plan(
       }
     }
     HostBatch host;
+    // This provider uploads AO/shell data and constructs its own generated or
+    // bounded shell schedules. Building Direct-HF's unused PSSS catalog here
+    // adds quartic setup work; skipping it must retain the direct AO transform.
     direct_jk_require(
         pack_host_batch(systems, std::vector<const std::vector<double>*>(systems.size()), host,
-                        true, false, true),
+                        true, false, true, ResidentPsssPolicy::Skip),
         "direct J/K basis cannot be packed");
     const std::size_t matrix = direct_jk_product(host.nbf, host.nbf);
     (void)direct_jk_product(matrix, matrix);
@@ -905,9 +908,19 @@ generativeqc_status enqueue_cuda_direct_eri_tile(CudaDirectJkPlan* plan, std::si
     direct_jk_require(attributes.type == cudaMemoryTypeDevice && attributes.device == current,
                       "direct ERI output is not on the prepared CUDA device");
 
-    cuda_execution::launch_independent_eri_tile(caller_stream, plan->batch,
-                                                static_cast<std::int32_t>(item), begin, count,
-                                                elements, output);
+    // A full public-basis tile contains every mate of each ERI orbit. Partial
+    // rectangles do not, so retain their bounded independent producer. This
+    // only changes evaluation work inside the caller's existing output buffer.
+    const bool full_basis =
+        std::all_of(begin.begin(), begin.end(), [](auto value) { return value == 0; }) &&
+        std::all_of(count.begin(), count.end(), [n](auto value) { return value == n; });
+    if (full_basis)
+      cuda_execution::launch_build_eri_system_orbits(
+          caller_stream, plan->batch, static_cast<std::int32_t>(item), elements, output);
+    else
+      cuda_execution::launch_independent_eri_tile(caller_stream, plan->batch,
+                                                  static_cast<std::int32_t>(item), begin, count,
+                                                  elements, output);
     direct_jk_check(cudaGetLastError());
     return GENERATIVEQC_STATUS_SUCCESS;
   } catch (const DirectJkFailure& failure) {

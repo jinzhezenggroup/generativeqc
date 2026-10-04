@@ -69,6 +69,72 @@ const std::array<double, 4> alpha_density{0.7, 0.2, 0.2, 0.1};
 const std::array<double, 4> beta_density{0.1, -0.05, -0.05, 0.4};
 const std::array<double, 4> zero_density{};
 
+void verify_compensated_energy_components() {
+  const auto restricted =
+      resolve_fock_build(make_hf_fock_spec(FockSpin::Restricted), FockBackend::Cpu);
+  DirectJkMatrices jk;
+  jk.nbf = 2;
+  jk.coulomb = {2.0e16, 2.0, -2.0e16, 0.0};
+  jk.exchange_alpha = {4.0e16, 4.0, -4.0e16, 0.0};
+  const std::array<double, 4> positive{1.0, 1.0, 1.0, 0.0};
+  const auto result = contract_fock_energy_components(restricted, jk, positive);
+  require(result.coulomb == 1.0 && result.exchange == -1.0,
+          "signed Fock energy cancellation lost the exact unit remainder");
+
+  const std::array<double, 4> signed_density{-1.0, -1.0, -1.0, 0.0};
+  const auto negative = contract_fock_energy_components(restricted, jk, signed_density);
+  require(negative.coulomb == -1.0 && negative.exchange == 1.0,
+          "Fock energy silently changed indefinite density semantics");
+  jk.coulomb[0] = std::numeric_limits<double>::infinity();
+  const auto nonfinite = contract_fock_energy_components(restricted, jk, positive);
+  require(!std::isfinite(nonfinite.coulomb), "Fock energy hid nonfinite source data");
+  auto invalid_density = positive;
+  invalid_density[0] = std::numeric_limits<double>::infinity();
+  require_rejected([&] { (void)contract_fock_energy_components(restricted, jk, invalid_density); },
+                   "Fock energy accepted nonfinite density");
+
+  // Wider reduction controls exercise both spin terms, scaled J/K, negative
+  // density entries, and thousands of non-exact FP64 products. Keep product
+  // arithmetic/order distinct from the wider summation oracle.
+  auto spec = make_hf_fock_spec(FockSpin::Unrestricted);
+  spec.coulomb.coefficient = 0.7;
+  spec.exchange.coefficient = -0.3;
+  const auto unrestricted = resolve_fock_build(spec, FockBackend::Cpu);
+  jk.nbf = 96;
+  jk.coulomb.resize(9216);
+  jk.exchange_alpha.resize(9216);
+  jk.exchange_beta.resize(9216);
+  std::vector<double> alpha(9216), beta(9216);
+  long double expected_j = 0.0L, expected_k = 0.0L, absolute_j = 0.0L, absolute_k = 0.0L;
+  for (std::size_t i = 0; i < alpha.size(); ++i) {
+    const double sign = i % 3 == 0 ? -1.0 : 1.0;
+    alpha[i] =
+        sign * std::ldexp(1.0 + static_cast<double>(i % 991) / 991.0, -static_cast<int>(i % 30));
+    beta[i] = -0.5 * alpha[i];
+    jk.coulomb[i] =
+        std::ldexp(1.0 + static_cast<double>(i % 997) / 997.0, static_cast<int>(i % 12));
+    jk.exchange_alpha[i] = -0.8 * jk.coulomb[i];
+    jk.exchange_beta[i] = 0.3 * jk.coulomb[i];
+    const double j = 0.5 * (alpha[i] + beta[i]) * spec.coulomb.coefficient * jk.coulomb[i];
+    const double ka = 0.5 * alpha[i] * spec.exchange.coefficient * jk.exchange_alpha[i];
+    const double kb = 0.5 * beta[i] * spec.exchange.coefficient * jk.exchange_beta[i];
+    expected_j += static_cast<long double>(j);
+    expected_k += static_cast<long double>(ka);
+    expected_k += static_cast<long double>(kb);
+    absolute_j += std::abs(static_cast<long double>(j));
+    absolute_k += std::abs(static_cast<long double>(ka)) + std::abs(static_cast<long double>(kb));
+  }
+  const auto spin_result = contract_fock_energy_components(unrestricted, jk, alpha, beta);
+  if (std::numeric_limits<long double>::digits > std::numeric_limits<double>::digits) {
+    require(std::abs(static_cast<long double>(spin_result.coulomb) - expected_j) <=
+                2.0L * std::numeric_limits<double>::epsilon() * absolute_j,
+            "Fock J reduction differs from the wider sum");
+    require(std::abs(static_cast<long double>(spin_result.exchange) - expected_k) <=
+                2.0L * std::numeric_limits<double>::epsilon() * absolute_k,
+            "Fock K reduction differs from the wider sum");
+  }
+}
+
 void verify_restricted_raw_and_assembly() {
   const auto strategy =
       resolve_fock_build(make_hf_fock_spec(FockSpin::Restricted), FockBackend::Cpu);
@@ -772,6 +838,7 @@ void verify_identity_and_invalid_inputs() {
 
 int main() {
   try {
+    verify_compensated_energy_components();
     verify_restricted_raw_and_assembly();
     verify_unrestricted_and_closed_shell_limit();
     verify_source_major_arithmetic_order();

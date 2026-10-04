@@ -67,7 +67,7 @@ reduces the compiler arithmetic-work estimate from 105,782,717,764 to
 graph rebuilt at the benchmark shape. Endpoint iteration/replay calls and MO
 work counters remain identical; internal replay contraction work decreases.
 
-The [CPU evidence](../../../../benchmarks/results/ccsdt-replay-20261002/cpu-summary.json)
+The [CPU evidence](../../../../benchmarks/results/ccsdt-replay-20261002/cpu-summary.json.gz)
 records a single-thread comparison pinned to CPU 45 on the same workstation:
 
 | Endpoint | Strict | Selected |
@@ -87,7 +87,7 @@ PySCF gradients, three-step energy finite differences, exact-budget tests and
 nested allocation probes pass. The shared workstation and small sample count
 limit precision of timing ratios.
 
-The [CUDA evidence](../../../../benchmarks/results/ccsdt-replay-20261002/cuda-summary.json)
+The [CUDA evidence](../../../../benchmarks/results/ccsdt-replay-20261002/cuda-summary.json.gz)
 records node1 Slurm job 5321 (`main`, `gpu:5090:1`, 20-minute limit): all 37 public
 CPU/CUDA tests passed, and the complete 7-AO force endpoint passed memcheck with
 zero errors. Cold, twice-warm and changed-geometry 14/28-AO energy results pass
@@ -121,3 +121,7 @@ triples and force-response work remain separate bottlenecks. Revisit the fallbac
 when a shape-aware contraction planner can prove both work and capacity benefits
 without losing independent verification or admission guarantees. Preserve the
 full endpoint, oracle, resource and device qualification when changing schedules.
+
+## Lossless storage (2026-10-03)
+
+The retained records now use deterministic gzip without changing their original bytes, scientific values, failures or measured identities. [ccsdt-replay-20261002/storage.json](../../../../benchmarks/results/ccsdt-replay-20261002/storage.json) pins the original Git blob, original/stored SHA-256 and byte counts. The storage revision identifies the accepted source of these bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json`, or decode with `gzip -cd FILE.json.gz`. Decode any `experimental-comparator.patch.gz` before applying the original patch. Historical Git objects remain available; no new experiment or performance claim is added.

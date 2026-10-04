@@ -1,6 +1,7 @@
 # Proposal: share low-order long-range force roots across components and centers
 
-Status: proposed; independent device and complete endpoint qualification pending
+Status: proposed; independent device and complete numerical gates pass;
+controlled full-grid 24-atom endpoint passes; 96-atom comparison pending
 Date: 2026-10-03
 
 ## Measured problem
@@ -78,3 +79,75 @@ Promote only after controlled complete endpoint improvement, larger-system
 qualification and independent numerical gates. Reconsider the scalar shell
 schedule if its register pressure or serialization regresses the endpoint;
 the generic higher-order recurrence remains the explicit bounded fallback.
+
+## Final portable candidate qualification
+
+The frozen production candidate is `ac8e14728e389d4a8791da9a603260455feccb81`.
+Its clean-source content identity is
+`d67decd856253688d79dd6e5b330678a10bb5d087a80771ea7cd85743e464c64`, independently
+recomputed and matched against the rebuilt library. Library SHA-256 is
+`e51239008c378cf61e4703abd5e287825beb131bb192f1aea7a444a7a449f5bd`; source archive
+SHA-256 is `dfd3c6b4fd4dbad0ee153d402a1baf931802b992d22e83a8a13bdfb4ad1f269d`.
+
+n1 Slurm 5510 (finite 45-minute RTX 5090 allocation, exit 0) passes native
+s/p/d/f SR/LR and Cartesian order-two independent CPU finite-difference gates,
+including the actual bounded route, four-center and repeated-center bindings.
+The native executable passes compute-sanitizer memcheck with zero errors.
+All seven complete independent WB97M-V RKS/UKS and force-rebuild/stale-state
+tests pass in 199.40 seconds. CuMetal CI run 37101509535 also passes after the
+invalid-input marker was changed to a namespace compile-time NaN constant.
+
+The previous `e08112c` library (`dc835e13...`) passed the same numerical gates
+but failed CuMetal compilation because its `nan()` call was host-only. That
+prototype and all receipts are retained under `attempts/e08112c/`. Its
+reduced-grid water12 diagnostic passes the independent CPU original/moved
+oracles: single warm endpoint 22.580341 -> 20.892754 seconds, moved endpoint
+90.994328 -> 89.742201 seconds, maximum energy/force errors 1.43e-12 Eh /
+8.97e-10 Eh/Bohr. These single observations are neither full-grid speedup
+claims nor timings of the final portable binary.
+
+The final binary's same-allocation full-grid 24-atom comparison runs in n1
+Slurm 5511; its moved12 requalification runs in 5512. The controlled full-grid
+96-atom base/candidate comparison runs in n5 Slurm 1410. Its candidate phase
+is gated by a successful numerical receipt carrying the actual library hash;
+the final 5510 receipt has been verified and installed. Each full-grid engine
+has a fresh full-density Fock reference and three engine-local warm repeats.
+No controlled final-candidate speedup is established yet. Master advanced to
+`59eee77f4` through Python loader work while these frozen measurements ran;
+no old result is relabeled as that newer source.
+
+## Final controlled full-grid 24-atom endpoint
+
+n1 Slurm 5511 completed (exit 0) with both frozen builds sequentially on one
+RTX 5090, water24/192 spherical def2-SVP AOs, 48 x 16 x 32 grid and three
+engine-local warm repeats. Every cold/priming/warm native-reference pair and
+all reference consistency gates pass. Across both builds, maximum errors are
+2.73e-12 Eh and 4.96e-10 Eh/Bohr.
+
+| Complete endpoint | Base / s | Candidate / s |
+| --- | --- | --- |
+| Native cold | 263.275725909 | 256.124819398 |
+| Native priming | 38.985069916 | 30.759933736 |
+| Native warm median | 39.042251013 | 30.441405468 |
+| Fresh reference warm median | 27.692985114 | 27.682573192 |
+
+The candidate warm samples are 30.458534, 30.441405 and 30.423864 seconds.
+Native warm time improves by 22.030%, yet remains above the reference.
+Both native cold solves take 18 iterations; all priming/warm solves take one.
+The reference takes 14 cold iterations and one warm iteration/two J-K builds.
+The first warm integral-derivative component falls from 14.872265 to 6.297789
+seconds; grid/pair drain stays at 10.967430 versus 10.963736 seconds. Grid,
+geometry, collocation and allocation work fields remain unchanged. Actual
+executed bounded shell-quartet counts remain unavailable and are not inferred
+from dense logical capacities.
+
+Final moved12 qualification in n1 Slurm 5512 also completed (exit 0). All five
+observations per build pass the retained independent CPU oracle. Base/candidate
+cold, priming, single warm and moved endpoints are 168.526401/166.538064,
+23.193344/21.721125, 23.220666/21.749440 and 92.803257/91.119179 seconds.
+Iteration counts are 22/1/1/11. Maximum errors across both builds are 1.37e-12
+Eh and 8.97e-10 Eh/Bohr. This reduced 24 x 8 x 16 grid remains a correctness
+and rebuild diagnostic, not the full-grid performance comparison.
+
+The full-grid 96-atom same-allocation comparison remains live in n5 Slurm 1410.
+No large-system reference advantage is established by the completed 24-atom run.

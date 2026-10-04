@@ -2,7 +2,10 @@
 
 import copy
 import importlib.util
+import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -18,6 +21,7 @@ SPEC.loader.exec_module(BENCHMARK)
 def report() -> dict:
     """A tiny complete cold/warm/changed report for gate failure probes."""
     return {
+        "timing_contract": BENCHMARK.TIMING_CONTRACT,
         "settings": {"fresh_scc": True},
         "device": "cuda",
         "library_sha256": "test",
@@ -71,6 +75,119 @@ def test_cold_total_cannot_hide_costly_constructor() -> None:
     assert all(
         row["accuracy_passed"] and row["iterations_match"] for row in rows.values()
     )
+
+
+def test_comparison_rejects_mixed_cleanup_contracts() -> None:
+    reference, candidate = report(), report()
+    del reference["timing_contract"]
+    with pytest.raises(ValueError, match="timing contracts differ"):
+        BENCHMARK.compare_reports(reference, candidate)
+    del candidate["timing_contract"]
+    assert BENCHMARK.compare_reports(reference, candidate)["timing_contract"] == (
+        "legacy-mixed-cleanup"
+    )
+
+
+@pytest.mark.parametrize("engine", ("generativeqc", "xtbloom"))
+@pytest.mark.parametrize("wrong_library", (False, True))
+def test_measurement_separates_previous_calculator_cleanup(
+    engine: str, wrong_library: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Charge lazy loading to the first call and isolate expensive finalizers."""
+    import generativeqc
+
+    library = tmp_path / "native.so"
+    library.touch()
+    destination = tmp_path / "measurement.json"
+    elapsed = [0.0]
+    loaded = []
+
+    def load_library() -> SimpleNamespace:
+        if not loaded:
+            elapsed[0] += 200.0
+            loaded.append(True)
+        return SimpleNamespace(
+            _name=str(tmp_path / "wrong.so" if wrong_library else library)
+        )
+
+    class Calculator:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            elapsed[0] += 1.0
+            if engine == "generativeqc":
+                self._library = load_library()
+
+        def singlepoint(self, *args: object, **kwargs: object) -> SimpleNamespace:
+            load_library()
+            elapsed[0] += 2.0
+            return SimpleNamespace(
+                converged=True,
+                iterations=3,
+                scc_converged=True,
+                scc_iterations=3,
+                energy=-1.0,
+                forces=[[0.0, 0.0, 0.0]],
+            )
+
+        def update(self, **kwargs: object) -> None:
+            pass
+
+        def __del__(self) -> None:
+            elapsed[0] += 100.0
+
+    monkeypatch.setattr(generativeqc, "Calculator", Calculator)
+    monkeypatch.setitem(
+        sys.modules,
+        "xtbloom",
+        SimpleNamespace(Calculator=Calculator, __file__=str(library)),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "xtbloom.library",
+        SimpleNamespace(load_library=load_library),
+    )
+    monkeypatch.setattr(BENCHMARK.time, "perf_counter", lambda: elapsed[0])
+    monkeypatch.setattr(BENCHMARK, "source_revision", lambda _: "fixture")
+    monkeypatch.setattr(
+        BENCHMARK,
+        "cases",
+        lambda _: [
+            {"name": name, "symbols": ["H"], "positions": [[0.0, 0.0, 0.0]]}
+            for name in ("first", "second")
+        ],
+    )
+    monkeypatch.setenv(f"{engine.upper()}_LIBRARY", str(library))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "benchmark",
+            "--engine",
+            engine,
+            "--device",
+            "cpu",
+            "--repeat",
+            "1",
+            "--output",
+            str(destination),
+        ],
+    )
+    if wrong_library:
+        with pytest.raises(RuntimeError, match="loaded .*wrong.so, expected"):
+            BENCHMARK.main()
+        assert not destination.exists()
+        return
+    BENCHMARK.main()
+    measured = json.loads(destination.read_text())
+    assert measured["timing_contract"] == BENCHMARK.TIMING_CONTRACT
+    assert len(measured["rows"]) == 2
+    for index, row in enumerate(measured["rows"]):
+        constructor = 201.0 if index == 0 and engine == "generativeqc" else 1.0
+        cold = 202.0 if index == 0 and engine == "xtbloom" else 2.0
+        assert row["construction_seconds"] == constructor
+        assert row["cleanup_seconds"] == 100.0
+        assert [sample["seconds"] for sample in row["samples"]] == [cold, 2.0, 2.0]
+    first = measured["rows"][0]
+    assert first["construction_seconds"] + first["samples"][0]["seconds"] == 203.0
 
 
 @pytest.mark.parametrize("construction", [None, -0.1, float("nan"), float("inf")])

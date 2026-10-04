@@ -1,0 +1,64 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All retained calls satisfy independent energy/triples/force gates, work and resource invariants, and memcheck. Timing ratios are observational; no formal interleaved performance promotion is asserted.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2682,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "ecd67c9c38169034ded90c7a86472df45224275137b1f4bb1e3d53beaece7fcf"
+    },
+    {
+      "bytes": 4317,
+      "path": "summary.json.gz",
+      "role": "summary",
+      "sha256": "88fef2efd0840d8ad0f5b6cf33d46c538ec3f9ee42b07971c4b9b4c3bfa89b24"
+    },
+    {
+      "bytes": 8209,
+      "path": "records.json.gz",
+      "role": "samples",
+      "sha256": "e31499a6b4b4049a561a7557a9d9ae2d711f4f5432452e05a992a04ec6ea686b"
+    },
+    {
+      "bytes": 4420,
+      "path": "source.patch.gz",
+      "role": "source-patch",
+      "sha256": "e04c20d4003d549de2fb723d8d6a3ea3cffea3279c78f99eecc6fa194a725513"
+    },
+    {
+      "bytes": 2818,
+      "path": "evidence.original.json.gz",
+      "role": "reproduction",
+      "sha256": "f75387c5746e036331c79e763d2ab8b5f13d459d7b17ad4e5ac2cc49b3d674f9"
+    },
+    {
+      "bytes": 1881,
+      "path": "storage.json",
+      "role": "reproduction",
+      "sha256": "d3e6303fa3cf603b9e326a6c7f42563c9e05e2960ac8cf89a966c04c4ae4cb6c"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/ccsdt_prepared_endpoint.py",
+      "--device",
+      "cuda",
+      "--atoms",
+      "24",
+      "--output",
+      ".artifacts/cc-eri-orbits-reproduction.json"
+    ],
+    "instructions": "Decode source.patch.gz byte-for-byte before applying the unchanged patch. Apply source.patch to revision; build CUDA 12.9 sm_120 Release with explicit CXX/CUDA ccache launchers and checkout-root CCACHE_BASEDIR. Run through finite main-partition Slurm allocation preserving CUDA_VISIBLE_DEVICES. Set GENERATIVEQC_LIBRARY/PYTHONPATH=python:., all CPU thread limits=1. For 28 AOs use --atoms 12, optionally --forces. New GPU tests use the final code commit noted in summary."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "6fe3eb7daffb641e7efabe6ca8200e25ea6bffc9"
+  }
+}

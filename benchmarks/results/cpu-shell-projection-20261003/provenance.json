@@ -1,0 +1,106 @@
+{
+  "schema": "manifest-level-provenance-v2",
+  "notice": "These are checksums, not retrieval or recovery data. Complete raw files and detailed indexes are only local. Parent manifests and raw directories were not uploaded.",
+  "historical_anchors": {
+    "schema": "manifest-level-local-provenance-v1",
+    "scope": "Checksums only: the detailed 818-member raw index, parent manifests and raw bytes are retained locally and are not delivered in this variant. These are neither URLs nor recovery data. Manifest authenticity is not established merely by its own hash.",
+    "local_member_index": {
+      "path": "raw-file-hashes.json.xz",
+      "bytes": 33484,
+      "decoded_bytes": 156244,
+      "sha256": "2a76426588d701111d9e149a8581237b169e11b243aa514ae20f841d3cec0764",
+      "decoded_sha256": "af0f36099c5aa37146e20ef2eb3cbf9e0d4e698360a1e00ec27cec26c65cb214",
+      "member_files": 818,
+      "member_file_bytes": 11439140,
+      "relative_local_location": "../ledger/raw-file-hashes.json.xz"
+    },
+    "parent_manifest_and_review_anchors": [
+      {
+        "path": "revalidation/receipts-shell-projection-scientific-20261003-0313/manifest.json",
+        "bytes": 75262,
+        "sha256": "8fbbfa41402f5abb66f7ab2004caf98e8f8128125f1c1255f19f06d7251d2b2c"
+      },
+      {
+        "path": "revalidation/receipts-shell-projection-reference-science-20261003-0409/manifest.json",
+        "bytes": 2600,
+        "sha256": "dde4d2963c12af0f0171082be70e28066acd1d942163925173b6abaaa4039838"
+      },
+      {
+        "path": "revalidation/shell-projection-timing-preparation-20261003-0348/balanced-clean-v1/manifest.json",
+        "bytes": 24395,
+        "sha256": "7ab17343793eb2cfdb21603b04319004acae74c710530c4a6f1ae1af791a0153"
+      },
+      {
+        "path": "revalidation/shell-projection-reference-timing-20261003-0406/balanced-clean-v1/manifest.json",
+        "bytes": 24326,
+        "sha256": "bd0cbc2186036701da41daa7bc6a1d949054f4e34b34480a470df6d496a54ccc"
+      },
+      {
+        "path": "revalidation/shell-projection-openblas-symmetric-cache-20261003-0411/balanced-clean-v1/manifest.json",
+        "bytes": 24614,
+        "sha256": "76e0599eb1b3973b1ea2c0e4931b4c0289ffd476ef76797f4b3a1bbd5db7ce8f"
+      },
+      {
+        "path": "revalidation/shell-projection-cold-start-diagnostic-20261003-0405/manifest.json",
+        "bytes": 1088,
+        "sha256": "000e46a7aaf1ec48ab42199054cb199baf3803222caa1af05b009568b6715118"
+      },
+      {
+        "path": "cpu-shell-local-projection-v1-20261003-0239/evidence/manifest.json",
+        "bytes": 12151,
+        "sha256": "eb96c9f8c8d9ddb941f798f77de6853de48c7a249ee123f6561b2eab17da9a72"
+      },
+      {
+        "path": "revalidation/independent-shell-projection-review-20261003-0431/REVIEW.md",
+        "bytes": 10983,
+        "sha256": "54880f5e0d47e0e260d0edde755081bf511e2b1ef998ce383ebc14c0736b864c"
+      }
+    ],
+    "measured_source_note": "Historical bdcbc008 and 854a7b7 include unpublished HF policy. A7 public alias is not either measured tree. Exact historical reconstruction patches remain local. Availability of new measured-source refs must be verified before describing them as public.",
+    "future_primary": "Superseded only in v2 by the separately measured primary_current_main cohort; the original v1 artifact remains unchanged."
+  },
+  "primary_anchors": [
+    {
+      "path": "revalidation/shell-projection-main-three-arm-20261003-0450/freeze.json",
+      "bytes": 29472,
+      "sha256": "bb7a01ab894d94d7d5901cbb477cdc76cd80ceeff6bf13b04e5fca6fef048688"
+    },
+    {
+      "path": "revalidation/shell-projection-main-three-arm-20261003-0450/balanced-v1/manifest.json",
+      "bytes": 429001,
+      "sha256": "fc234b1c541c9e8b8574822bb88b7a30061bdfa66c3d9376d299dac1b53914a0"
+    },
+    {
+      "path": "revalidation/receipts-shell-projection-main-science-20261003-0445/manifest.json",
+      "bytes": 2518,
+      "sha256": "0ca780015b7388461fffd6c23926e85ae3581f4c805ee4551c04026362d97baf"
+    },
+    {
+      "path": "revalidation/receipts-shell-projection-main-science-20261003-0445/manifest-v2.json",
+      "bytes": 3368,
+      "sha256": "8af360fda6d4ad8fbbde247b148227618e9d0c17ee6f8b43c1a3879845cb433d"
+    },
+    {
+      "path": "revalidation/receipts-ao-index-main-science-20261003-0455/manifest.json",
+      "bytes": 1803,
+      "sha256": "924bc66b5105a70666569170f164fcbb8fbcf073ec96ee90a8440f7e40ee18b8"
+    }
+  ],
+  "new_local_raw_index": {
+    "path": "../primary-local-raw-index.json.xz",
+    "bytes": 17704,
+    "sha256": "8543d80bc8d856e7390f2bf1a34f58bb3181f0b662d9a03f252414bc4a101c8d",
+    "decoded_bytes": 74242,
+    "decoded_sha256": "3de117c2eb1ca83bc0f7b2f25c14eaee6e90e68e00f2c4f0654ad45a823f9714",
+    "member_files": 433,
+    "member_bytes": 47279577
+  },
+  "mutable_review_file": {
+    "original_path": "revalidation/independent-shell-projection-review-20261003-0431/REVIEW.md",
+    "earlier_snapshot_sha256": "54880f5e0d47e0e260d0edde755081bf511e2b1ef998ce383ebc14c0736b864c",
+    "current_snapshot_sha256": "7675a38d91a315705de148bd46e7b3880c8ed89fe5b7b3c94f446e93f1c9a79f",
+    "note": "Original review path was appended/updated. V1 index and staged bytes remain unchanged; checking that old index against the current review path should fail. Exact old and new review bytes are saved as separate local versioned snapshots. All measurement/source receipts remain frozen."
+  },
+  "old_package_preserved": "evidence-staging-shell-projection-20261003-0440/summary",
+  "future_replay": "Portable adapter is a new harness with its own identity, mock-tested only here. Exact source trees required; fresh builds receive observed new hashes. Projection/metadata public aliases pending. Full independent scientific rerun not supplied by benchmark replay."
+}

@@ -15,6 +15,10 @@ bounded fallback remain part of CUDA execution.
 
 ## Runtime lifetime
 
+Native method selectors, including GFN2, do not initialize the bulk-XC resolver
+or its compiler evidence during construction. Automatic Libxc selectors load
+that resolver when resolving their KS request.
+
 Each public GFN2 `Calculator` retains one native context until `clear_cache()`
 or calculator collection. The context owns a single method-neutral workspace
 slot; GFN2 prepared calculations share its bridge with strong references. The
@@ -130,6 +134,15 @@ bitwise AO equality against the single-block route, atom adjoints against an
 independent long-double analytic oracle, and complete molecular forces against
 tblite references. Failed or gated systems preserve all public accumulators.
 
+Integral-force admission uses the compiler policy in
+`integral/gfn2_force_schedule.py`: one block per system with 64 threads up to a
+rounded-up mean of 4096 matrix elements, or 256 threads above that boundary.
+Every actual ragged extent is still scanned once; atom/shell/primitive validation
+and gradient-seed initialization remain in that block. The schedule adds no
+storage, launches or synchronization. Scientific shell-pair force evaluation and
+its fixed 64-lane reduction remain unchanged. Native qualification checks late
+adjoint and metadata faults, gated peers and Graph replay at both widths.
+
 `benchmarks/compare_xtbloom.py` compares public molecular energy/force calls with
 matched fresh-SCC settings. It records cold, repeated and changed-geometry
 timings, every SCC iteration count, numerical outputs and loaded binary hashes.
@@ -137,6 +150,12 @@ Comparisons retain the separate construction and first-call measurements and
 also report `cold_total`, their sum, because the public APIs assign setup to
 different phases. A cold call is the first call of a new calculator in the
 measurement process; it is not a new process for each molecule.
+Calculator/result cleanup after all samples is timed separately, before the
+next case's constructor. Reports record this timing contract and reject a mix
+with older receipts that included preceding-calculator cleanup in construction
+or triggered lazy native-library loading during an untimed identity check.
+Loaded-library identity is verified after the timed first call, before accepting
+that sample, so both engines include any lazy load in their cold endpoint.
 Run CUDA measurements inside Slurm as described below; compare the resulting
 JSON files using `--reference`, `--candidate` and `--output`. Both reports must
 use the same geometries and settings, and every sample participates in the

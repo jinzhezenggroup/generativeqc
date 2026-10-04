@@ -1,0 +1,86 @@
+{
+  "library_sha256": "47a510d5074d28c3798530343d2d6a16201eec4c3f33a9af6fd75ba83bb3830b",
+  "limits": [
+    "No current-integration endpoint timing or new large-force/FD qualification.",
+    "Original measured7cef receipts are not relabeled as current integration.",
+    "Later metadata-only publication commits do not identify a newly measured binary."
+  ],
+  "local_receipt_index": {
+    "bytes": 4625,
+    "files": 27,
+    "publicly_recoverable": false,
+    "sha256": "552705f54d48110daa6f322fc2da9a711ff0734eac9a0d18e1bffa3f32a06577"
+  },
+  "production_matches_original_measured_tree": true,
+  "production_source_sha256": {
+    "src/dft/rks.cpp": "a1a261c3dff591a1b71d0de494b9395c171e4e7f62d3cb319b640a7f70bf5525",
+    "src/scf/fock_build.cpp": "a4f3be0362d5cac977a407d940dd3830aee53652b8ba860106a8c859a131d025",
+    "src/tensor/cpu_compensated_sum.hpp": "5cc3e7374033a1fcfe3778d4faf2e0090aff4a4e1ec58730d2f46521ce74c7fa"
+  },
+  "public_source_alias_rebuild": {
+    "commit": "e4cc2787c02959ea287eb81e4541d009fe860f8c",
+    "compile_commands_using_verified_ccache": 206,
+    "library_sha256": "970c29b8d90129a4f0b00e29f8896d7e3b05574a18ae658de75c7092b942a03c",
+    "matches_original_observed_library_bytes": true,
+    "numerical_replay_performed": false
+  },
+  "replay_preflight": {
+    "negative_cases": 4,
+    "positive_cases": 2,
+    "receipt_sha256": "0b384c821d43f16e32d76bb8daa2989d7d3d83665913d1bf8b331482b00a619a",
+    "status": "passed"
+  },
+  "schema": "cpu-trace-current-main-integration-v1",
+  "source_dirty": false,
+  "source_revision": "fd92d99b569125c563d4f64489676c44c9b0e7a4",
+  "source_tree": "4bbe71ce1ca006e6c5e6e5eaddf50da34ae3c32e",
+  "storage_prerequisite": {
+    "commit": "685776f716d1e1c4c375ad6e2e32d9bc4060a3e3",
+    "merged_at_qualification": false,
+    "pr": 1758
+  },
+  "strict_pbe96": {
+    "energy": -305.0746503676627,
+    "final_gates": {
+      "density_change": {
+        "pass": true,
+        "threshold": 1e-10,
+        "value": 1.5248737028459072e-11
+      },
+      "energy_change": {
+        "pass": true,
+        "threshold": 1e-12,
+        "value": 3.410605131648481e-13
+      },
+      "native_converged": true,
+      "note": "CPU RKS requires all gates, then two final physical builds; history[-1] may differ from final diagnostics",
+      "physical_residual": {
+        "pass": true,
+        "threshold": 1e-10,
+        "value": 2.603467565262699e-11
+      }
+    },
+    "fock_builds": 19,
+    "iterations": 17,
+    "oracle_error": 1.4210854715202004e-12,
+    "oracle_gate": 1e-08,
+    "receipt_sha256": "3359df2e0cbbcce86044df5e0a941a13d7ce905fe62858727c0c1e1dd036371b",
+    "status": "completed_converged"
+  },
+  "tests": {
+    "dft_python": {
+      "cuda_deselected": 20,
+      "passed": 60
+    },
+    "fock_python": {
+      "cuda_skipped": 2,
+      "passed": 42
+    },
+    "native": {
+      "passed": 67
+    },
+    "wb97mv_python": {
+      "passed": 7
+    }
+  }
+}

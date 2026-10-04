@@ -26,6 +26,9 @@ ALLOWED = {
         "scf/fock_prepared.hpp",
         "scf/fock_build.hpp",
         "scf/density_factor.hpp",
+        # The checked CPU target adapter owns only shared dense algebra. The
+        # independent reference/initial-guess layers retain their old boundary.
+        "tensor/cpu_linalg.hpp",
         "core/",
         "integrals/",
         "runtime/",
@@ -546,10 +549,11 @@ CUDA_ALLOWED["cuda_hf_driver"] += (
     "posthf/capacity.hpp",
     "runtime/allocation_measurement.hpp",
     "scf/cuda/reference_export.cuh",
+    "scf/cuda/reference_eri_policy.hpp",
     "scf/mean_field.hpp",
     "tensor/metrics.hpp",
 )
-CUDA_MODULES["cuda_reference_export"] = ("reference_export",)
+CUDA_MODULES["cuda_reference_export"] = ("reference_export", "reference_eri_policy")
 CUDA_ALLOWED["cuda_reference_export"] = (
     "posthf/capacity.hpp",
     "scf/mean_field.hpp",

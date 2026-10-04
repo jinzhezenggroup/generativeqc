@@ -11,6 +11,7 @@ from tools.generativeqc_validation.record import (
     decode_json,
     decode_record,
     load_json,
+    load_publication_record,
     load_record,
 )
 from tools.generativeqc_validation.retention import digest
@@ -23,7 +24,18 @@ def test_migrated_records_match_original_scientific_values() -> None:
         (root / "benchmarks/results/retention-size-limit/migration.json").read_text()
     )
     for entry in audit["records"]:
-        restored = load_record(root / entry["path"])
+        path = root / entry["path"]
+        inventory = path.parent / "publication.json"
+        if inventory.exists():
+            publication = json.loads(inventory.read_bytes())
+            role = next(
+                member["role"]
+                for member in publication["files"]
+                if member["path"] in {path.name, path.name + ".gz"}
+            )
+            restored = load_publication_record(path.parent, role=role, name=path.name)
+        else:
+            restored = load_record(path)
         canonical = json.dumps(
             restored, sort_keys=True, separators=(",", ":"), allow_nan=False
         ).encode()
