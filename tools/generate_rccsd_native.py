@@ -806,9 +806,10 @@ def _independent_cpu(
 
 def cpu_header() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
+    iteration_cuda = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
     iteration_matrix = [
         g
-        for node in iteration.live_nodes
+        for node in iteration_cuda.live_nodes
         if (g := _packed_matrix_gemm(node)) is not None
     ]
     iteration_matrix_dimensions = sorted(
