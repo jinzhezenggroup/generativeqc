@@ -578,9 +578,9 @@ RccsdNativeState execute_rccsd_prepared(
     allocation_stage = "CC resident solve";
     const auto solver_started = std::chrono::steady_clock::now();
     try {
-      state.solved =
-          cuda ? cc::solve_cuda(state.problem, correlation_options, execution.device_id())
-               : cc::solve_cpu(state.problem, correlation_options);
+      state.solved = cuda
+                         ? cc::solve_cuda(state.problem, correlation_options, execution.device_id())
+                         : cc::solve_cpu(state.problem, correlation_options);
     } catch (const std::length_error&) {
       if (!retire_optional_source()) throw;
       state.problem.reference_retained_bytes -= prepared_retained;
@@ -821,14 +821,12 @@ class RccsdPrepared final : public PreparedCalculation {
       if (!force.cuda_response_actions || !force.response_owned_device_bytes)
         throw MethodError(GENERATIVEQC_STATUS_NUMERICAL_FAILURE,
                           "RCCSD CUDA force replayed Hamiltonian/orbital response on host");
-      execution_.observe_numeric_peak(
-          runtime::ExecutionMemorySpace::Device,
-          posthf::checked_add(state.reference_execution_plan_bytes,
-                              force.lambda.owned_device_bytes));
-      execution_.observe_numeric_peak(
-          runtime::ExecutionMemorySpace::Device,
-          posthf::checked_add(state.reference_execution_plan_bytes,
-                              force.response_owned_device_bytes));
+      execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
+                                      posthf::checked_add(state.reference_execution_plan_bytes,
+                                                          force.lambda.owned_device_bytes));
+      execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
+                                      posthf::checked_add(state.reference_execution_plan_bytes,
+                                                          force.response_owned_device_bytes));
       diagnostic.correlation_owned_device_bytes =
           std::max<std::uint64_t>(diagnostic.correlation_owned_device_bytes,
                                   std::max<std::uint64_t>(force.lambda.owned_device_bytes,
@@ -846,9 +844,8 @@ class RccsdPrepared final : public PreparedCalculation {
     diagnostic.response_workspace_allocation_count =
         force.orbital_response.workspace_allocation_count;
     const auto force_capacity = posthf::checked_add(
-        force.numeric_capacity_bytes,
-        posthf::checked_add(state.external_reservation_bytes,
-                            state.reference_execution_plan_bytes));
+        force.numeric_capacity_bytes, posthf::checked_add(state.external_reservation_bytes,
+                                                          state.reference_execution_plan_bytes));
     diagnostic.planned_endpoint_peak_bytes =
         std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force_capacity);
     diagnostic.force_provenance_flags = execution_.cuda_requested() ? 0xf : 0x7;
@@ -1080,11 +1077,10 @@ RccsdNativeState run_rccsd_native_state(
     }
     prepared_exact = prepared_exact_cache->get();
   }
-  auto state =
-      execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
-                             prepared_exact, initial_density, warm_start_fallback,
-                             prepared_exact_cache, correlation_auxiliary, retain_df_response,
-                             cuda_reference_plan);
+  auto state = execute_rccsd_prepared(
+      execution, system, reference, solver_options, reference_capacity, prepared_exact,
+      initial_density, warm_start_fallback, prepared_exact_cache, correlation_auxiliary,
+      retain_df_response, cuda_reference_plan);
   state.external_reservation_bytes = external_reservation_bytes;
   state.diagnostic.numeric_capacity_bytes =
       posthf::checked_add(state.diagnostic.numeric_capacity_bytes, external_reservation_bytes);

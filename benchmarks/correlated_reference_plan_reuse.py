@@ -25,7 +25,9 @@ WATER = [
 ]
 
 
-def _sample(batch: Any, *, coordinates: Any = None, properties: tuple[str, ...]) -> dict[str, Any]:
+def _sample(
+    batch: Any, *, coordinates: Any = None, properties: tuple[str, ...]
+) -> dict[str, Any]:
     started = time.perf_counter()
     result = batch.execute(
         coordinates=[coordinates] if coordinates is not None else None,
@@ -47,7 +49,9 @@ def _sample(batch: Any, *, coordinates: Any = None, properties: tuple[str, ...])
     }
 
 
-def _run_method(method: str, repeats: int, properties: tuple[str, ...], budget: int) -> dict[str, Any]:
+def _run_method(
+    method: str, repeats: int, properties: tuple[str, ...], budget: int
+) -> dict[str, Any]:
     calculator = Calculator(
         method=method,
         basis="sto-3g",
@@ -70,7 +74,9 @@ def _run_method(method: str, repeats: int, properties: tuple[str, ...], budget: 
             stationary = _sample(batch, properties=properties)
             changed = _sample(batch, coordinates=moved, properties=properties)
         if cold["plan_reused"]:
-            raise RuntimeError("fresh correlated owner unexpectedly reused a CUDA RHF plan")
+            raise RuntimeError(
+                "fresh correlated owner unexpectedly reused a CUDA RHF plan"
+            )
         for name, row in (("stationary", stationary), ("changed_geometry", changed)):
             if not row["plan_reused"]:
                 raise RuntimeError(f"{name} did not reuse the retained CUDA RHF plan")
@@ -78,7 +84,9 @@ def _run_method(method: str, repeats: int, properties: tuple[str, ...], budget: 
                 raise RuntimeError(f"{name} retained-plan byte diagnostic is empty")
         if not all(math.isfinite(row["energy"]) for row in (cold, stationary, changed)):
             raise RuntimeError("nonfinite correlated energy")
-        records.append({"cold": cold, "stationary": stationary, "changed_geometry": changed})
+        records.append(
+            {"cold": cold, "stationary": stationary, "changed_geometry": changed}
+        )
 
     def median(phase: str) -> float:
         return statistics.median(row[phase]["seconds"] for row in records)

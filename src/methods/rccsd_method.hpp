@@ -9,7 +9,7 @@
 namespace generativeqc::scf {
 class PreparedFockPlan;
 struct CudaRhfBucketPlan;
-}
+}  // namespace generativeqc::scf
 namespace generativeqc::methods::detail {
 struct RccsdNativeState {
   std::shared_ptr<const hf::PhysicalReference> reference;

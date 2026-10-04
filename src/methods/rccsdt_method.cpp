@@ -115,8 +115,7 @@ class RccsdtPrepared final : public PreparedCalculation {
     auto state = run_rccsd_native_state(
         execution_, system_, descriptor_, &cpu_exact_plan_,
         initial_state ? &initial_state->density : nullptr, warm_start_fallback, warm_capacity,
-        nullptr, false, true,
-        execution_.cuda_requested() ? cuda_reference_plan_.slot() : nullptr);
+        nullptr, false, true, execution_.cuda_requested() ? cuda_reference_plan_.slot() : nullptr);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -179,9 +178,9 @@ class RccsdtPrepared final : public PreparedCalculation {
           std::min(diagnostic.minimum_absolute_denominator, triples_minimum_denominator);
       diagnostic.numeric_capacity_bytes = std::max<std::uint64_t>(
           diagnostic.numeric_capacity_bytes,
-          checked_add(checked_add(retained, triples_workspace_bytes),
-                      checked_add(state.external_reservation_bytes,
-                                  state.reference_execution_plan_bytes)));
+          checked_add(
+              checked_add(retained, triples_workspace_bytes),
+              checked_add(state.external_reservation_bytes, state.reference_execution_plan_bytes)));
       diagnostic.ccsd_t_triples_energy = triples_energy;
       diagnostic.ccsd_t_virtual_triples = triples_virtual_count;
       diagnostic.ccsd_t_workspace_bytes = triples_workspace_bytes;
@@ -242,8 +241,7 @@ class RccsdtPrepared final : public PreparedCalculation {
               checked_add(state.reference_execution_plan_bytes, force.lambda.owned_device_bytes));
           execution_.observe_numeric_peak(
               runtime::ExecutionMemorySpace::Device,
-              checked_add(state.reference_execution_plan_bytes,
-                          force.response_owned_device_bytes));
+              checked_add(state.reference_execution_plan_bytes, force.response_owned_device_bytes));
           diagnostic.correlation_owned_device_bytes =
               std::max<std::uint64_t>(diagnostic.correlation_owned_device_bytes,
                                       std::max<std::uint64_t>(force.lambda.owned_device_bytes,
@@ -260,10 +258,9 @@ class RccsdtPrepared final : public PreparedCalculation {
             force.orbital_response.measured_workspace_peak_bytes;
         diagnostic.response_workspace_allocation_count =
             force.orbital_response.workspace_allocation_count;
-        const auto force_capacity =
-            checked_add(force.numeric_capacity_bytes,
-                        checked_add(state.external_reservation_bytes,
-                                    state.reference_execution_plan_bytes));
+        const auto force_capacity = checked_add(
+            force.numeric_capacity_bytes,
+            checked_add(state.external_reservation_bytes, state.reference_execution_plan_bytes));
         diagnostic.planned_endpoint_peak_bytes =
             std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force_capacity);
         // Bits 0-2 retain the qualified analytic-response provenance. Bit 3

@@ -209,7 +209,8 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
         )
         if device == "cuda":
             assert all(
-                item.correlation.reference_execution_plan_reused for item in forced.items
+                item.correlation.reference_execution_plan_reused
+                for item in forced.items
             )
         partial = prepared.execute([np.zeros((1, 3)), None])
         assert partial.failure_indices == (0,)
@@ -256,7 +257,8 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
         assert all(not item.warm_start_used for item in cleared.items)
         if device == "cuda":
             assert all(
-                item.correlation.reference_execution_plan_reused for item in cleared.items
+                item.correlation.reference_execution_plan_reused
+                for item in cleared.items
             )
 
 

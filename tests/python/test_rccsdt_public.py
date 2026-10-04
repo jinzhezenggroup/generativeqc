@@ -431,7 +431,8 @@ def test_public_native_rccsdt_cuda_batch_rebuild_and_failure_isolation(
         no_density = batch.execute(properties=("energy",), strict=True)
         assert all(not item.warm_start_used for item in no_density.items)
         assert all(
-            item.correlation.reference_execution_plan_reused for item in no_density.items
+            item.correlation.reference_execution_plan_reused
+            for item in no_density.items
         )
         invalid = batch.execute(
             coordinates=[None, [0.0]], properties=("energy",), strict=False

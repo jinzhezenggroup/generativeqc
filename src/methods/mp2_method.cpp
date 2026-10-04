@@ -127,18 +127,18 @@ class Mp2Prepared final : public PreparedCalculation {
           candidate = scf::run_prepared_fock_strategy(*prepared_exact, execution, seed);
           observe_reference_plan(false);
         } else if (density_fitted_) {
-          candidate = fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
-                                         system_, *auxiliary_, reference_options,
-                                         context_.device_id, seed)
-                                   : scf::run_rhf_density_fitting(
-                                         system_, *auxiliary_, reference_options, seed);
+          candidate =
+              fitted_cuda_
+                  ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, reference_options,
+                                                      context_.device_id, seed)
+                  : scf::run_rhf_density_fitting(system_, *auxiliary_, reference_options, seed);
           observe_reference_plan(false);
         } else {
           bool attempt_reused = false;
           try {
-            candidate = scf::run_rhf_cuda_cached(
-                cuda_reference_plan_.slot(), system_, reference_options, context_.device_id, seed,
-                &attempt_reused);
+            candidate =
+                scf::run_rhf_cuda_cached(cuda_reference_plan_.slot(), system_, reference_options,
+                                         context_.device_id, seed, &attempt_reused);
           } catch (...) {
             observe_reference_plan(attempt_reused);
             throw;
@@ -209,10 +209,10 @@ class Mp2Prepared final : public PreparedCalculation {
       const auto corr =
           density_fitted_
               ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
-                                            options_.density_fitting_relative_threshold, 8,
-                                            fitted_cuda_, context_.device_id)
+                                           options_.density_fitting_relative_threshold, 8,
+                                           fitted_cuda_, context_.device_id)
               : mp2::conventional_energy(ref, *conventional_source, correlation_budget, threshold_,
-                                          8, cuda, context_.device_id);
+                                         8, cuda, context_.device_id);
       Result result;
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
@@ -233,9 +233,9 @@ class Mp2Prepared final : public PreparedCalculation {
         response_options.max_workspace_bytes = correlation_budget;
         force_diagnostic =
             density_fitted_
-                ? mp2::density_fitted_force_cpu(
-                      ref, *raw_source, correlation_budget, threshold_,
-                      options_.density_fitting_relative_threshold, 1e-10, response_options)
+                ? mp2::density_fitted_force_cpu(ref, *raw_source, correlation_budget, threshold_,
+                                                options_.density_fitting_relative_threshold, 1e-10,
+                                                response_options)
                 : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, correlation_budget,
                                                        threshold_, 1e-10, response_options,
                                                        context_.device_id)
@@ -291,8 +291,9 @@ class Mp2Prepared final : public PreparedCalculation {
         // External warm/plan reservations are not part of the force allocator
         // telemetry. Keep the whole-endpoint measurement unknown when either
         // owner remains live beside the force phase.
-        last_->measured_endpoint_peak_bytes =
-            warm_capacity || reference_plan_bytes ? 0 : force_diagnostic->measured_endpoint_peak_bytes;
+        last_->measured_endpoint_peak_bytes = warm_capacity || reference_plan_bytes
+                                                  ? 0
+                                                  : force_diagnostic->measured_endpoint_peak_bytes;
         last_->numeric_capacity_bytes =
             std::max(last_->numeric_capacity_bytes, last_->planned_endpoint_peak_bytes);
         last_->force_provenance_flags = density_fitted_ ? 0x5 : 0x7;

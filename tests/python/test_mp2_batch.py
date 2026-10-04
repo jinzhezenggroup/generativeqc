@@ -194,7 +194,9 @@ def test_mp2_cuda_batch_matches_cpu_and_isolates_failed_items(warm_start: bool) 
         changed = batch.execute([moved, None], properties=("energy",), strict=True)
         assert changed.items[0].warm_start_used == warm_start
         assert changed.items[0].correlation.reference_execution_plan_reused
-        assert changed.items[0].correlation.reference_execution_plan_owned_device_bytes > 0
+        assert (
+            changed.items[0].correlation.reference_execution_plan_owned_device_bytes > 0
+        )
         failed = batch.execute([np.zeros((1, 3)), None])
         recovered = batch.execute(strict=True)
         assert all(
