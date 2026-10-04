@@ -155,6 +155,8 @@ int main(int argc, char** argv) {
     field("orbital_linear_screening_available", result.orbital.linear_screening_available);
     field("orbital_screened_converged", result.orbital.screened_converged);
     field("orbital_derivative_passes", result.orbital.derivative_passes);
+    field("orbital_shell_derivative_passes", result.orbital.shell_derivative_passes);
+    field("orbital_generic_derivative_passes", result.orbital.generic_derivative_passes);
     field("hessian_elements", result.orbital.explicit_hessian_elements);
     field("source_weight_values", result.source_weight_values);
     field("metric_weight_values", result.metric_weight_values);

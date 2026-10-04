@@ -8,9 +8,10 @@ Date: 2026-10-04
 The n2 PRO6000 230-AO ethane endpoint for #1829 spent 668.622 s in the combined
 orbital/nuclear reference response. That aggregate does not establish that its
 28 J/K actions dominate. Complete subphase measurements are needed before
-promoting screened Z actions. The through-f provider has no generated shell
-force lease, so three-pass polarization falls back to ordered public-AO
-first-derivative traversals.
+promoting screened Z actions. The through-f provider may retain a bounded shell
+derivative lease after canonical preparation; if that lease is not admitted,
+three-pass polarization falls back to ordered public-AO derivatives. Record
+which consumer actually runs rather than inferring it from angular momentum.
 
 ## Decision
 
@@ -30,13 +31,14 @@ fit in the provider's pre-admitted two density slots; no four-index tensor or
 additional scientific recurrence is introduced. Input, transformed-input,
 weight, derivative/product and final-result finite audits precede publication.
 
-Prefer this consumer only where the specialized shell derivative lease is
-absent. Retain SPD's specialized three-pass path until a measured crossover
-supports changing it, and keep an explicit selector for matched fallback checks.
+Prefer this consumer over the generic and bounded through-f fallbacks. Retain
+SPD's specialized three-pass path until a measured crossover supports changing
+it, and keep an explicit selector for matched fallback checks. Shell/generic
+pass counters identify the actual old consumer under the admitted budget.
 
 ## Work and memory
 
-For N public AOs, the old generic derivative consumer visits 3 N^4 ordered
+For N public AOs, **when the old generic consumer is selected**, it visits 3 N^4 ordered
 quartets across the three polarization passes (before weight/center skips).
 It already uses three-axis Dual3 jets and reconstructs the last distinct atom;
 there is no additional 3A coordinate traversal factor in the current kernel.
@@ -47,7 +49,9 @@ nonzero-weight quartet with u distinct atoms, at most u-1 three-axis derivative
 jets are evaluated; the last atom follows by translation. Canonical storage is
 optional O(Nc^2) plus existing bounded pair metadata. The Cartesian expansion,
 primitive multiplicity, angular recurrence cost and density cancellation prevent
-converting these counts into a universal speedup or a FLOP rate.
+converting these counts into a universal speedup or a FLOP rate. Bounded shell
+fallback work is not the generic N^4 formula and remains unmeasured by this
+new census; the pass counters establish which model applies.
 
 The optional census adds two uint64 device counters, already admitted, and no
 quartet-sized inventory. Profiling synchronizes calls and may select a different

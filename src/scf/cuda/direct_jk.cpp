@@ -1231,11 +1231,12 @@ bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) noexcept {
 }
 
 bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept {
-  // Keep the specialized shell derivative consumer for SPD until its crossover
-  // is qualified. Through-f has no such lease and otherwise repeats ordered-AO
-  // derivatives three times for polarization.
+  // Keep the specialized SPD derivative consumer until its crossover is
+  // qualified. A through-f owner may retain a bounded shell fallback after
+  // canonical preparation; that lease is distinct from specialized coverage.
   return plan && plan->canonical_pairs &&
-         !(plan->generated_exchange && plan->generated_exchange->force_capability);
+         (!(plan->generated_exchange && plan->generated_exchange->force_capability) ||
+          plan->generated_exchange->bounded_value_capability);
 }
 
 generativeqc_status execute_cuda_direct_bilinear_derivative_device(

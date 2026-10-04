@@ -79,8 +79,9 @@ are experimental solver controls, not promoted force approximations.
 
 The reference nuclear branch contracts AO hcore and Pulay weights with existing
 CUDA derivative providers. Its two-electron source `P:G'(D)` uses a direct
-compiler-owned bilinear weight when canonical storage is admitted and no
-specialized shell derivative lease is available (notably through-f). It reuses
+compiler-owned bilinear weight when canonical storage is admitted and the old
+consumer is generic or bounded through-f. Specialized SPD leases retain their
+existing consumer. The bilinear path reuses
 the Cartesian projection, symmetry-unique angular buckets and translation
 reconstruction of the existing integral derivative provider. No derivative ERI
 tensor is materialized. The specialized SPD route and capacity fallback retain

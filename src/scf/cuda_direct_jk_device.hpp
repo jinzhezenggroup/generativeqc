@@ -73,8 +73,8 @@ generativeqc_status enqueue_cuda_direct_jk_linear_device(
     double* coulomb, double* exchange, int* numerical_error, double threshold,
     std::uint64_t* census, std::string& detail);
 
-/** Prefer the bilinear canonical derivative where the fast shell derivative
- * lease is absent (notably through-f). Other domains retain their bounded
+/** Prefer the bilinear canonical derivative over generic or bounded through-f
+ * fallbacks. Specialized SPD derivative leases retain their bounded
  * three-pass shell consumer until a measured crossover is qualified. */
 bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept;
 

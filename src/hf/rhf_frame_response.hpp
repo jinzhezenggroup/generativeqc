@@ -32,8 +32,8 @@ struct RHFFrameResponseOptions {
   // Optional synchronized J/K timing and canonical integral census. Phase wall
   // times are always reported; J/K times are subsets, not additive phases.
   bool profile_jk{false};
-  // Canonical bilinear P:G'(D) is preferred only without a specialized shell
-  // derivative lease. False retains the three-pass polarization oracle/fallback.
+  // Prefer canonical P:G'(D) over generic or bounded through-f fallback.
+  // Specialized SPD keeps its lease. False retains three-pass polarization.
   bool bilinear_derivative{true};
   response::GmresOptions gmres{};
 };
@@ -50,6 +50,7 @@ struct RHFFrameResponseResult {
   bool global_stability_certified{false};
   std::size_t numeric_capacity_bytes{}, direct_device_bytes{}, owned_device_bytes{};
   std::size_t jk_actions{}, derivative_passes{}, orbital_actions{}, gemms{};
+  std::size_t shell_derivative_passes{}, generic_derivative_passes{};
   // Generated matrix-map work and its host boundary only. These transfer
   // counters exclude integral-provider setup and nuclear derivative consumers.
   std::size_t contraction_terms{}, h2d_bytes{}, d2h_bytes{}, synchronizations{};

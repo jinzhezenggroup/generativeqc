@@ -371,8 +371,10 @@ class Owner {
                  direct.get(), scf::make_hf_fock_spec(scf::FockSpin::Restricted), d, {}, result,
                  detail),
              detail);
+      ++stats.generic_derivative_passes;
     } else {
       status(code, detail);
+      ++stats.shell_derivative_passes;
       require(result.size() % 2 == 0, "invalid shell derivative source count");
       const auto coordinates = result.size() / 2;
       for (std::size_t i = 0; i < coordinates; ++i) result[i] += result[coordinates + i];

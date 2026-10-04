@@ -137,7 +137,9 @@ def test_complete_native_force_against_independent_energy_directions(
     expected = independent(metadata, triples)
     np.testing.assert_allclose(values[:4], expected, atol=3e-9, rtol=0)
     assert max(values[4:8]) < 1e-8
-    assert counts[6] == 0 and counts[7] == 3
+    # Canonical bilinear contraction uses one pass; admitted specialized shell
+    # leases and bounded capacity fallback retain three-pass polarization.
+    assert counts[6] == 0 and counts[7] in (1, 3)
     assert counts[1] > 0 and counts[2] > 0 and counts[0] <= 1 << 30
     np.testing.assert_allclose(forces.sum(axis=0), 0, atol=3e-8, rtol=0)
     direction = np.random.default_rng(1764).normal(size=forces.shape)
