@@ -47,7 +47,9 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     for item in families:
         fast_paths = item.get("cuda_fast_paths")
         if not isinstance(fast_paths, dict) or set(fast_paths) != set(FAST_PATH_FIELDS):
-            raise ValueError("native semilocal CUDA fast-path capability census is incomplete")
+            raise ValueError(
+                "native semilocal CUDA fast-path capability census is incomplete"
+            )
         for field in FAST_PATH_FIELDS:
             if fast_paths[field] not in FAST_PATH_STATUS_CPP:
                 raise ValueError(f"unsupported CUDA fast-path status for {field}")
@@ -90,7 +92,8 @@ def _cpp_number(value: str) -> str:
 
 def cpp_fast_path_capabilities(item: dict[str, Any]) -> str:
     return ", ".join(
-        FAST_PATH_STATUS_CPP[item["cuda_fast_paths"][field]] for field in FAST_PATH_FIELDS
+        FAST_PATH_STATUS_CPP[item["cuda_fast_paths"][field]]
+        for field in FAST_PATH_FIELDS
     )
 
 

@@ -101,8 +101,7 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
   const bool scaled = exchange_scale != 1.0 || correlation_scale != 1.0;
   if (scaled && !cuda_xc_capability_qualified(program.fast_paths.component_scaling))
     throw std::invalid_argument("scaled CUDA XC point program is not qualified");
-  if (response && scaled)
-    throw std::invalid_argument("scaled CUDA XC response is not qualified");
+  if (response && scaled) throw std::invalid_argument("scaled CUDA XC response is not qualified");
   if (response && !cuda_xc_capability_qualified(program.fast_paths.response))
     throw std::invalid_argument("CUDA XC response is not qualified for this point program");
   if (ao_precision != CudaXcAoPrecision::Fp64 &&
@@ -110,7 +109,8 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
     throw std::invalid_argument("unknown CUDA XC AO precision");
   if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage &&
       !cuda_xc_capability_qualified(program.fast_paths.mixed_ao_precision))
-    throw std::invalid_argument("mixed CUDA XC AO precision is not qualified for this point program");
+    throw std::invalid_argument(
+        "mixed CUDA XC AO precision is not qualified for this point program");
   if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage && response)
     throw std::invalid_argument("CUDA XC response currently requires strict FP64 AO evaluation");
   constexpr auto overflow = "CUDA XC storage overflow";

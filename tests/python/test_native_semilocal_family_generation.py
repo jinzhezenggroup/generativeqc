@@ -93,13 +93,15 @@ CUDA_FAST_PATH_CENSUS = {
 
 def test_cuda_fast_path_capability_census_is_manifest_owned() -> None:
     families = generator.load_manifest()
-    assert {item["name"]: item["cuda_fast_paths"] for item in families} == CUDA_FAST_PATH_CENSUS
+    assert {
+        item["name"]: item["cuda_fast_paths"] for item in families
+    } == CUDA_FAST_PATH_CENSUS
 
 
 def test_cuda_fast_path_capabilities_ignore_display_names() -> None:
     for item in generator.load_manifest():
         renamed = dict(item)
         renamed["name"] = f"alias-{item['code']}"
-        assert generator.cpp_fast_path_capabilities(renamed) == generator.cpp_fast_path_capabilities(
-            item
-        )
+        assert generator.cpp_fast_path_capabilities(
+            renamed
+        ) == generator.cpp_fast_path_capabilities(item)

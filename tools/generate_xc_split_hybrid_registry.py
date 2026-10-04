@@ -120,10 +120,16 @@ def emit_registry(path: Path = MANIFEST) -> str:
         "qualified": "Qualified",
     }
     split_fast_paths = split_hybrid_fast_path_statuses(entries[0])
-    if any(split_hybrid_fast_path_statuses(entry) != split_fast_paths for entry in entries[1:]):
-        raise MapleImportError("split-hybrid CUDA point programs disagree on fast-path status")
+    if any(
+        split_hybrid_fast_path_statuses(entry) != split_fast_paths
+        for entry in entries[1:]
+    ):
+        raise MapleImportError(
+            "split-hybrid CUDA point programs disagree on fast-path status"
+        )
     split_fast_path_cpp = ",\n".join(
-        f"          CudaXcCapability::{status_cpp[status]}" for status in split_fast_paths
+        f"          CudaXcCapability::{status_cpp[status]}"
+        for status in split_fast_paths
     )
     code_constants = "\n".join(
         f"inline constexpr std::uint32_t k{entry['type_name'].removesuffix('DeviceValue')}FunctionalCode = "
