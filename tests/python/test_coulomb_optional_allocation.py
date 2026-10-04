@@ -9,7 +9,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 # Only external runtime/geometry types and kernel launches are replaced. The
-# complete production preparation and destructor bodies are compiled verbatim,
+# production policy bridge, preparation and destructor bodies are compiled verbatim,
 # with explicit faults immediately before their early/late allocation sites.
 STUBS = r"""
 #include <algorithm>
@@ -68,6 +68,8 @@ std::uint64_t enabled_fock_shell_class_mask() { return 1; }
 namespace cuda_policy {
 struct Schedule { unsigned persistent_quartet_warps_per_sm=1; std::size_t cuda_stack_limit_bytes=1; };
 Schedule resolve_direct_jk_schedule_policy(int) { return {}; }
+bool reachable_policy=false;
+bool direct_coulomb_reachable_requested() { return reachable_policy; }
 }
 namespace detail {
 using generativeqc::scf::detail::BoundedDirectHostSchedule;
@@ -91,6 +93,7 @@ struct HostBatch {
 struct PrimitivePairData { double value; };
 struct DeviceBatch {
   std::size_t batch_size=1, total_shell_pairs=0, nbf=1, direct_nbf=1;
+  bool direct_coulomb_reachable=false;
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -132,13 +135,19 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
-  assert(argc==3);
+  assert(argc==4);
+  const bool reachable=std::atoi(argv[3])!=0;
+  cuda_policy::reachable_policy=reachable;
   HostBatch host; DeviceBatch borrowed;
+  borrowed.direct_coulomb_reachable=!reachable;
   injected_stage=std::atoi(argv[1]); injected_kind=std::atoi(argv[2]);
   bool propagated=false;
   try {
     auto plan=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
-    if(injected_stage==0) assert(plan && live_allocations>0);
+    if(injected_stage==0) {
+      assert(plan && live_allocations>0);
+      assert(plan->batch.direct_coulomb_reachable==reachable);
+    }
     else assert(!plan);
   } catch(const std::bad_alloc&) { return 2; }
     catch(cudaError_t error) { assert(injected_kind==2 && error==cudaErrorUnknown); propagated=true; }
@@ -150,6 +159,14 @@ int main(int argc,char** argv) {
   injected_stage=0;
   auto recovered=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
   assert(recovered && live_allocations>0);
+  assert(recovered->batch.direct_coulomb_reachable==reachable);
+  // A prepared owner freezes its policy; only a new owner sees later changes.
+  cuda_policy::reachable_policy=!reachable;
+  assert(recovered->batch.direct_coulomb_reachable==reachable);
+  auto reselected=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
+  assert(reselected && reselected->batch.direct_coulomb_reachable==!reachable);
+  assert(recovered->batch.direct_coulomb_reachable==reachable);
+  reselected.reset();
   recovered.reset(); assert(live_allocations==0);
 }
 """
@@ -161,7 +178,7 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     if compiler is None:
         pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    begin = source.index("GeneratedCoulombPlan::~GeneratedCoulombPlan()")
+    begin = source.index("void configure_direct_coulomb_recurrence(")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
     for stage, anchor in enumerate(
@@ -190,18 +207,35 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("stage", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("reachable", [False, True])
 def test_optional_host_allocation_failure_falls_back(
-    allocation_probe: Path, stage: int
+    allocation_probe: Path, stage: int, reachable: bool
 ) -> None:
-    subprocess.run([str(allocation_probe), str(stage), "0"], check=True, timeout=10)
+    subprocess.run(
+        [str(allocation_probe), str(stage), "0", str(int(reachable))],
+        check=True,
+        timeout=10,
+    )
 
 
 @pytest.mark.parametrize("kind", [1, 2, 3])
+@pytest.mark.parametrize("reachable", [False, True])
 def test_late_device_oom_falls_back_but_other_errors_propagate(
-    allocation_probe: Path, kind: int
+    allocation_probe: Path, kind: int, reachable: bool
 ) -> None:
-    subprocess.run([str(allocation_probe), "5", str(kind)], check=True, timeout=10)
+    subprocess.run(
+        [str(allocation_probe), "5", str(kind), str(int(reachable))],
+        check=True,
+        timeout=10,
+    )
 
 
-def test_successful_optional_preparation_is_unchanged(allocation_probe: Path) -> None:
-    subprocess.run([str(allocation_probe), "0", "0"], check=True, timeout=10)
+@pytest.mark.parametrize("reachable", [False, True])
+def test_successful_optional_preparation_is_unchanged(
+    allocation_probe: Path, reachable: bool
+) -> None:
+    subprocess.run(
+        [str(allocation_probe), "0", "0", str(int(reachable))],
+        check=True,
+        timeout=10,
+    )

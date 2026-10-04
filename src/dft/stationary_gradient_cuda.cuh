@@ -1,5 +1,5 @@
 #pragma once
-// Small-domain diagnostic runtime. Graph-emitted primitive, AO pullback and
+// Bounded stationary runtime. Graph-emitted primitive, AO pullback and
 // Becke entries precede this include; compiler-emitted contraction bodies follow it.
 // This header owns only resource state, validation, transfers, launches and ABI.
 #include <chrono>
@@ -48,14 +48,16 @@ struct Owner {
   }
 };
 // Caps make all products below representable before any allocation or pointer
-// dereference. Compiler-planned lanes bound O(lanes*natom) adjoint scratch.
+// dereference. D/W and AO metadata have no fixed-size AO array; 2048 admits
+// full 96-atom def2-TZVPD without changing allocation formulas. Compiler-planned
+// lanes bound O(lanes*natom) adjoint scratch; byte admission remains mandatory.
 size_t allocation(size_t na, size_t n, size_t nprimitive, size_t np, size_t ntask, size_t ns,
                   size_t geometry_lanes, bool cache_center_geometry = false) {
-  if (!na || na > 128 || !n || n > 1024 || !nprimitive || nprimitive > 16384 || !np || np > 4096 ||
+  if (!na || na > 128 || !n || n > 2048 || !nprimitive || nprimitive > 16384 || !np || np > 4096 ||
       !ntask || ntask > 4096 || (ns != 1 && ns != 2) || ns != stationary_spin_blocks ||
       !geometry_lanes || geometry_lanes > np || geometry_lanes > stationary_geometry_max_lanes ||
       18 * geometry_lanes * na * sizeof(double) > stationary_geometry_max_scratch_bytes)
-    throw std::invalid_argument("stationary CUDA shape exceeds small-domain caps");
+    throw std::invalid_argument("stationary CUDA shape exceeds bounded resource caps");
   // Three center coordinates, two planned nine-coordinate lane panels,
   // and one three-coordinate panel per compiler-owned gradient source.
   return 8 * (2 * nprimitive + 4 * n + 22 * ntask +
