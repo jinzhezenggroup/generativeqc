@@ -52,12 +52,16 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         in normalized_rsh
     )
     range_begin = consumer.index("void launch_bounded_shell_range_exchange_derivative(")
-    range_end = consumer.index("void launch_bounded_shell_rsh_derivatives(", range_begin)
+    range_end = consumer.index(
+        "void launch_bounded_shell_rsh_derivatives(", range_begin
+    )
     range_body = " ".join(consumer[range_begin:range_end].split())
     assert "detail::BoundedDirectBlockDomain block_domain" in range_body
     assert "radial_operator, omega, exchange_coefficient, block_domain);" in range_body
     bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
-    bounded_begin = bounded.index("void launch_bounded_direct_range_exchange_force_kernel(")
+    bounded_begin = bounded.index(
+        "void launch_bounded_direct_range_exchange_force_kernel("
+    )
     bounded_end = bounded.index(
         "void launch_bounded_direct_range_exchange_fock_kernel(", bounded_begin
     )

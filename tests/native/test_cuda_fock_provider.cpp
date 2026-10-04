@@ -2052,7 +2052,8 @@ void bounded_schwarz_schedule_budget() {
       check(cudaMemcpy(&cursor, owner->force_cursor, sizeof(cursor), cudaMemcpyDeviceToHost));
       require(cursor == products * pages + owner->shared->worker_blocks,
               "LR scheduler did not consume the retained indexed domain");
-      require(owner->device_bytes == charged_bytes && owner->allocations.size() == owner_allocations &&
+      require(owner->device_bytes == charged_bytes &&
+                  owner->allocations.size() == owner_allocations &&
                   owner->shared->allocations.size() == shared_allocations,
               "LR scheduling allocated a second retained block domain");
       double range_delta = 0.0;
