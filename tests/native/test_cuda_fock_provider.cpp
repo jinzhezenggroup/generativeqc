@@ -2062,8 +2062,11 @@ void bounded_schwarz_schedule_budget() {
       } else {
         require(indexed_range.size() == range_actual.size(),
                 "triangular LR route changed indexed source shape");
-        for (std::size_t index = 0; index < range_actual.size(); ++index)
+        for (std::size_t index = 0; index < range_actual.size(); ++index) {
+          require(std::isfinite(range_actual[index]) && std::isfinite(indexed_range[index]),
+                  "nonfinite indexed/triangular LR derivative");
           range_delta = std::max(range_delta, std::abs(range_actual[index] - indexed_range[index]));
+        }
         require(range_delta < 3e-8, "indexed/triangular LR schedules disagree");
       }
       if (indexed && screening > 0)
