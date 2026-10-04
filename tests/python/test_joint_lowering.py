@@ -471,3 +471,31 @@ def test_cpu_selection_requires_no_cuda_provider_and_preserves_science() -> None
     assert binding.selected.request.semantic_identity == _request().semantic_identity
     with pytest.raises(ValueError, match="requested backend"):
         select_lowering_binding(request, TARGET, COMPILATION, (_offer(request),))
+
+
+def test_unmeasured_incumbent_retention_still_requires_legal_strict_fallback() -> None:
+    request = _request()
+    strict = replace(_offer(request), cost=None)
+    mixed = replace(_offer(request, LIBRARY, dtype="float32"), cost=None)
+    for candidates, incumbent in (
+        ((mixed,), mixed.identity),
+        (
+            (strict, replace(mixed, status="unsupported", reason="missing capability")),
+            mixed.identity,
+        ),
+        ((strict, mixed), "0" * 64),
+    ):
+        with pytest.raises(ValueError, match="incumbent|strict"):
+            select_lowering_binding(
+                request, TARGET, COMPILATION, candidates, qualified_incumbent=incumbent
+            )
+    limited = replace(request, constraints=LoweringConstraints(provider_bytes=0))
+    over_budget = replace(mixed, request=limited, provider_bytes=1)
+    with pytest.raises(ValueError, match="incumbent"):
+        select_lowering_binding(
+            limited,
+            TARGET,
+            COMPILATION,
+            (replace(strict, request=limited), over_budget),
+            qualified_incumbent=over_budget.identity,
+        )
