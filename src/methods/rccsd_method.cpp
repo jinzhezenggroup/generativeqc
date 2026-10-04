@@ -222,41 +222,16 @@ cc::Problem build_problem(
   for (std::size_t a = 0; a < v; ++a)
     for (std::size_t b = 0; b < v; ++b) p.fvv[a * v + b] = fmo[(o + a) * n + o + b];
 
-  p.d1.resize(o * v);
-  double minimum = std::numeric_limits<double>::infinity();
-  for (std::size_t i = 0; i < o; ++i)
-    for (std::size_t a = 0; a < v; ++a) {
-      const double physical = ref.orbital_energies[i] - ref.orbital_energies[o + a];
-      minimum = std::min(minimum, std::abs(physical));
-      if (!std::isfinite(physical) || physical >= 0.0 ||
-          std::abs(physical) <= options.denominator_threshold)
-        throw std::invalid_argument("near-zero or nonnegative physical RCCSD denominator");
-      p.d1[i * v + a] = physical - options.level_shift;
-    }
   const auto n2 = o * o * v * v;
-  p.d2.resize(n2);
-  for (std::size_t i = 0; i < o; ++i)
-    for (std::size_t j = 0; j < o; ++j)
-      for (std::size_t a = 0; a < v; ++a)
-        for (std::size_t b = 0; b < v; ++b) {
-          const double physical = (ref.orbital_energies[i] - ref.orbital_energies[o + a]) +
-                                  (ref.orbital_energies[j] - ref.orbital_energies[o + b]);
-          minimum = std::min(minimum, std::abs(physical));
-          if (!std::isfinite(physical) || physical >= 0.0 ||
-              std::abs(physical) <= options.denominator_threshold)
-            throw std::invalid_argument(
-                "near-zero or nonnegative physical RCCSD doubles denominator");
-          p.d2[((i * o + j) * v + a) * v + b] = physical - 2.0 * options.level_shift;
-        }
-
-  p.minimum_absolute_denominator = minimum;
+  cc::initialize_canonical_denominators(p, ref.orbital_energies, options,
+                                        cuda && options.derived_denominators);
   if (correlation_auxiliary) {
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda) throw std::invalid_argument("native molecular DF-CC source requires CUDA");
     // Account for the live Fock transform, split energy spectrum and problem
     // prefix while the DF source owns its device/host phase allocations.
     auto caller_elements = posthf::checked_add(fmo.capacity(), n);
-    for (const auto* values : {&p.foo, &p.fov, &p.fvv, &p.d1, &p.d2})
+    for (const auto* values : {&p.foo, &p.fov, &p.fvv, &p.d1, &p.d2, &p.canonical_eps})
       caller_elements = posthf::checked_add(caller_elements, values->capacity());
     // RawSource owns a basis copy while the caller's original system stays
     // alive. The new source already counts the supplied copy and auxiliary.
@@ -389,7 +364,7 @@ cc::Problem build_problem(
         for (std::size_t b = 0; b < v; ++b) {
           const auto t = ((i * o + j) * v + a) * v + b;
           const auto g = ((i * v + a) * o + j) * v + b;
-          p.initial_t2[t] = p.ovov[g] / p.d2[t];
+          p.initial_t2[t] = p.ovov[g] / cc::doubles_denominator_at(p, t);
           if (!std::isfinite(p.initial_t2[t]))
             throw std::runtime_error("nonfinite RCCSD MP2-like initial amplitude");
         }
@@ -978,7 +953,8 @@ RccsdNativeState run_rccsd_native_state(
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache,
     const std::vector<double>* initial_density, bool* warm_start_fallback,
     std::size_t external_reservation_bytes, const core::System* correlation_auxiliary,
-    bool retain_df_response, bool df_matrix_gemm, std::size_t df_auxiliary_batch_limit) {
+    bool retain_df_response, bool df_matrix_gemm, std::size_t df_auxiliary_batch_limit,
+    bool derived_denominators) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -1004,6 +980,7 @@ RccsdNativeState run_rccsd_native_state(
   auto solver_options = cc_options(descriptor, phase_budget);
   solver_options.df_matrix_gemm = df_matrix_gemm;
   solver_options.df_auxiliary_batch_limit = df_auxiliary_batch_limit;
+  solver_options.derived_denominators = derived_denominators;
   auto reference = reference_options(descriptor, phase_budget);
   const auto auxiliary_reference_bytes =
       correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0;

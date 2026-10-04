@@ -41,7 +41,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
                                   const generativeqc_method_descriptor& descriptor, bool forces,
                                   bool with_triples, bool df_auxiliary_reduction,
                                   bool df_matrix_gemm, bool lambda_matrix_gemm,
-                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit) {
+                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+                                  bool derived_denominators) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -55,7 +56,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
   auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0,
-                                      &auxiliary, forces, df_matrix_gemm, ccsd_batch_limit);
+                                      &auxiliary, forces, df_matrix_gemm, ccsd_batch_limit,
+                                      derived_denominators);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;

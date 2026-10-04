@@ -444,6 +444,9 @@ macro(generativeqc_register_host_generated_sources target)
   file(GLOB GENERATIVEQC_RCCSD_GENERATOR_INPUTS CONFIGURE_DEPENDS
        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/cc/*.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/*.py")
+  list(APPEND GENERATIVEQC_RCCSD_GENERATOR_INPUTS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/cc_denominators.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py")
   set(GENERATIVEQC_GFN2_SDQ_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_sdq_native.hpp")
   generativeqc_register_generated_sources(

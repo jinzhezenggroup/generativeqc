@@ -162,6 +162,7 @@ struct CudaState : dfcore::CudaState {
 }
 }
 std::size_t problem_host_bytes(const Problem&) { return 128; }
+std::uint64_t denominator_identity(const Problem&) { return 1; }
 """
 MAIN = r"""
 }  // namespace generativeqc::cc

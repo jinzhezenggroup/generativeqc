@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -23,13 +24,24 @@ struct SolverOptions {
   bool df_matrix_gemm{true};
   // Shape/budget admission may choose a smaller Q tile, including one slice.
   std::size_t df_auxiliary_batch_limit{8};
+  // Native canonical CUDA construction may retain the small spectrum instead
+  // of a full doubles denominator. Supplied Problems stay explicit by default.
+  bool derived_denominators{true};
 };
+
+enum class DenominatorRepresentation { Explicit, CanonicalSpectrum };
 
 struct Problem {
   std::size_t nocc{}, nvir{};
   std::vector<double> foo, fov, fvv;
   std::vector<double> ovov, ovvo, oovv, ovvv, ovoo, oooo, vvvv;
   std::vector<double> d1, d2;
+  // CanonicalSpectrum requires empty d2 and an occupied-then-virtual spectrum.
+  // d1 remains explicit (O(ov)); shift and physical safety threshold are part
+  // of this representation's provenance, never inferred from a Fock diagonal.
+  DenominatorRepresentation denominator_representation{DenominatorRepresentation::Explicit};
+  std::vector<double> canonical_eps;
+  double canonical_level_shift{}, canonical_denominator_threshold{};
   std::vector<double> initial_t1, initial_t2;
   double reference_energy{};
   double minimum_absolute_denominator{};
@@ -63,6 +75,10 @@ struct SolverDiagnostic {
   std::size_t setup_h2d_bytes{};
   std::size_t scalar_d2h_bytes{};
   std::size_t amplitude_d2h_bytes{};
+  std::uint64_t denominator_identity{};
+  // Only iteration/Jacobi reconstructions; host initialization and Lambda's
+  // diagonal construction are separate consumers, not included in this count.
+  std::size_t derived_d2_iteration_evaluations{};
   std::size_t synchronizations{};
   std::size_t iteration_graph_calls{};
   std::size_t replay_graph_calls{};
@@ -108,6 +124,15 @@ struct SolverResult {
 // must reject DF until their own factorized paths are implemented.
 void validate_problem(const Problem& problem, bool allow_df_virtual = false);
 void validate_options(const SolverOptions& options);
+// Initialize canonical denominators using the compiler-owned ordered scalar
+// expression. Derived admission validates O(ov) extrema, without an O(o²v²) pass.
+void initialize_canonical_denominators(Problem& problem, std::span<const double> energies,
+                                       const SolverOptions& options, bool derived);
+// Callers must first validate the Problem and supply an in-range flattened index.
+double doubles_denominator_at(const Problem& problem, std::size_t flat);
+// Fingerprint the representation and its complete numeric provenance. No cache
+// is introduced; future consumers must not equate explicit and derived inputs.
+std::uint64_t denominator_identity(const Problem& problem);
 std::size_t problem_host_bytes(const Problem& problem);
 SolverResult solve_cpu(const Problem& problem, const SolverOptions& options);
 SolverResult solve_cuda(const Problem& problem, const SolverOptions& options, int device);
