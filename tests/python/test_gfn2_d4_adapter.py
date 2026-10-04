@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def adapter(tmp_path_factory: pytest.TempPathFactory, native_cxx) -> Path:
+def adapter(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Path:
     if sys.platform != "linux":
         pytest.skip("ELF section-GC fixture requires Linux")
     output = tmp_path_factory.mktemp("gfn2-d4-adapter") / "probe"
