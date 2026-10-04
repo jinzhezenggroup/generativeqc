@@ -28,6 +28,7 @@ from .triples import _check_denominators, _validate
 from .triples_tiles import (
     TriplesTileEnumerator,
     build_runtime_tile_triples_program,
+    lower_runtime_tile_triples_precision,
     runtime_tile_capacity,
     runtime_tile_control_batches,
     runtime_tile_static_feeds,
@@ -43,6 +44,7 @@ class TriplesTileConfig:
     vir_chunk_size: int
     max_bytes: int
     device: int = 0
+    precision_mode: str = "fp64"
 
     def __post_init__(self) -> None:
         if any(type(n) is not int or n < 1 for n in (self.nocc, self.nvir)):
@@ -53,6 +55,8 @@ class TriplesTileConfig:
             raise ValueError("max_bytes must be positive")
         if type(self.device) is not int or self.device < 0:
             raise ValueError("device must be a nonnegative visible CUDA ordinal")
+        if self.precision_mode not in ("fp64", "mixed-wv"):
+            raise ValueError("triples precision_mode must be fp64 or mixed-wv")
 
 
 @dataclass
@@ -131,6 +135,9 @@ class CudaTriplesTiles:
         attempts = []
         while True:
             program = build_runtime_tile_triples_program(nocc, nvir, capacity=capacity)
+            program = lower_runtime_tile_triples_precision(
+                program, self.config.precision_mode
+            )
             try:
                 plan = self._plan_cuda(
                     program,
@@ -314,7 +321,16 @@ class CudaTriplesTiles:
             runtime_device=runtime_device,
             timing=timing,
             provenance={
-                "schema": "generativeqc.ccsd-t.cuda-runtime-domain/2",
+                "schema": "generativeqc.ccsd-t.cuda-runtime-domain/3",
+                "precision_mode": self.config.precision_mode,
+                "precision_schedule_identity": getattr(
+                    getattr(plan, "precision_schedule", None), "identity", None
+                ),
+                "precision_schedule": (
+                    plan.precision_schedule.to_payload()
+                    if getattr(plan, "precision_schedule", None) is not None
+                    else None
+                ),
                 "runtime_domain_capacity": capacity,
                 "runtime_batch_count": runtime_batch_count,
                 "capacity_selection": list(capacity_attempts),
