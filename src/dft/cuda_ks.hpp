@@ -58,6 +58,9 @@ struct CudaKsTransfers {
    * cold/warm-seed build where no canonical factor is available; occupied
    * counts only builds whose Cocc generated the exact current device density. */
   std::uint64_t fitted_dense_exchange_builds{}, fitted_occupied_exchange_builds{};
+  /** Successful final RKS states that retained the exact density-generating Cocc
+   * together with the already-computed complete resident U=B*Cocc projection. */
+  std::uint64_t fitted_final_projection_leases{};
 };
 
 /** State arena plus bounded ordinary-eigensolver workspace admission. The
@@ -65,6 +68,26 @@ struct CudaKsTransfers {
  * shape query performs no CUDA call and allocates no numeric buffers. */
 std::size_t cuda_ks_state_bytes(std::size_t nao, unsigned spins, unsigned diis_history,
                                 bool exact_exchange = false, bool range_correction = false);
+
+/** Borrowed exact occupied factor and fitted projection for a successful
+ * restricted density-fitted hybrid final state. Both allocations stay owned by
+ * the KS/provider pair and are ordered by the returned stream. A subsequent
+ * provider scratch writer invalidates the binding even if the KS final-state
+ * token and projection shape are unchanged; reacquire before each use. */
+struct CudaKsResidentFittedProjectionBinding {
+  int device_id{-1};
+  const double* occupied_coefficients{};
+  const double* projection{};
+  std::size_t nbf{}, naux{}, rank{};
+  void* stream{};
+  std::uint64_t owner{}, solve_epoch{}, generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && occupied_coefficients != nullptr && projection != nullptr &&
+           nbf != 0 && naux != 0 && rank != 0 && stream != nullptr && owner != 0 &&
+           solve_epoch != 0 && generation != 0;
+  }
+};
 
 /** Borrowed device density for a successful immutable final-state token.
  * The allocation remains owned by CudaKsPlan and is valid only while that
@@ -197,6 +220,13 @@ class CudaKsPlan {
   generativeqc_status resident_final_density(const CudaKsFinalStateToken& expected,
                                              CudaKsResidentDensityBinding& binding,
                                              std::string& detail) const;
+  /** Borrow the exact Cocc and complete U=B*Cocc produced by the converged
+   * restricted density-fitted hybrid's final physical K build. No K rebuild,
+   * transfer or synchronization is performed; the returned stream owns both
+   * the factor reconstruction and the provider projection lifetime. */
+  generativeqc_status resident_final_fitted_projection(
+      const CudaKsFinalStateToken& expected, CudaKsResidentFittedProjectionBinding& binding,
+      std::string& detail) const;
   /** Borrow total stationary D/W already staged by a successful weighted
    * final-state read. This performs no CUDA launch, transfer, or synchronization. */
   generativeqc_status resident_final_stationary_weights(

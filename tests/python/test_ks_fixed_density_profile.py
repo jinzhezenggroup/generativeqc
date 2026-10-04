@@ -188,6 +188,7 @@ struct Xc {
 };
 struct Impl {
   bool final_state_ready{true}, final_frame_ready{true}, final_stationary_weights_ready{true};
+  bool final_fitted_projection_ready{true};
   unsigned final_generation{5};
   int identity{5}, device{2}, stream{7}, primary_error{}, range_error{};
   unsigned spins{1};
@@ -249,6 +250,7 @@ int main(int argc, char** argv) {
     assert(p.final_state_ready == preflight_failure);
     assert(p.final_frame_ready == preflight_failure);
     assert(p.final_stationary_weights_ready == preflight_failure);
+    assert(p.final_fitted_projection_ready == preflight_failure);
     assert(p.final_generation == (preflight_failure ? 5U : 0U));
     assert(drains == (preflight_failure ? 0 : 1));
     if (preflight_failure) assert(submissions == 0);

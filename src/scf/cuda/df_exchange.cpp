@@ -28,7 +28,7 @@ generativeqc_status build_exchange(CudaDensityFittingJkPlan& plan, const double*
                                    std::size_t system_end) {
   system_end = std::min(system_end, plan.batch_size);
   if (system_begin >= system_end) return GENERATIVEQC_STATUS_SUCCESS;
-  plan.final_projection_token.reset();
+  plan.revoke_projection_leases();
   TraceOperation trace("ri_k", plan.stream,
                        {system_end - system_begin, plan.nbf, plan.naux,
                         plan.integral_source != nullptr, plan.streamed, system_begin});

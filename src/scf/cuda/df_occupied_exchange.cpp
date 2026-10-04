@@ -154,7 +154,7 @@ generativeqc_status build_streamed_projected_exchange(
 generativeqc_status build_shared_coulomb_occupied_exchange(
     CudaDensityFittingJkPlan& plan, const double* density, const double* coefficients,
     std::size_t rank, double weight, bool allow_multiblock, std::string& detail) {
-  plan.final_projection_token.reset();
+  plan.revoke_projection_leases();
   if (plan.batch_size != 1 || !plan.streamed || !plan.integral_source ||
       !plan.triangular_exchange || plan.metric_full_rank.size() != 1 || !plan.metric_full_rank[0] ||
       !density || !coefficients || !rank ||
@@ -192,7 +192,7 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
                                             const double* coefficients, std::size_t rank,
                                             bool column_major, double weight, double* exchange,
                                             std::string& detail) {
-  plan.final_projection_token.reset();
+  plan.revoke_projection_leases();
   using namespace runtime::cuda_trace;
   TraceOperation trace(
       "ri_k_occupied", plan.stream,
@@ -302,6 +302,10 @@ generativeqc_status build_occupied_exchange(CudaDensityFittingJkPlan& plan, std:
     trace_counter("occupied_exchange_n", plan.nbf);
     trace_counter("occupied_exchange_k", plan.naux * rank);
     trace_counter("occupied_intermediate_bytes", plan.nbf * plan.naux * rank * sizeof(double));
+    // All-Q U survives in auxiliary_tile_values until another provider scratch
+    // writer revokes it. Publication as a scientific final-state lease remains
+    // the responsibility of the method owner after its iteration has drained.
+    plan.completed_occupied_projection_rank = rank;
     return status == CUBLAS_STATUS_SUCCESS
                ? GENERATIVEQC_STATUS_SUCCESS
                : blas_failure(status, "resident occupied DF K product", detail);
