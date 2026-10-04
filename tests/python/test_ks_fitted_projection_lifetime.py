@@ -227,14 +227,15 @@ def test_final_projection_rejects_replaced_scratch(
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-
 def test_dft_df_force_consumes_projection_before_revoke() -> None:
     """The method proof is revalidated by the prepared DF owner before K' consumes it."""
     method = (ROOT / "src/methods/dft_method.cpp").read_text()
     prepared = (ROOT / "src/scf/fock_prepared.cpp").read_text()
     response = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
 
-    owner = _definition(method, "  generativeqc_status density_fitted_integral_gradient(")
+    owner = _definition(
+        method, "  generativeqc_status density_fitted_integral_gradient("
+    )
     assert "resident_final_fitted_projection(expected" in owner
     assert (
         "prepared_cuda_occupied_projection_binding(fock_, resident_projection.rank)"
@@ -262,7 +263,5 @@ def test_dft_df_force_consumes_projection_before_revoke() -> None:
     revoke = consumer.index("plan->revoke_projection_leases();")
     assert proof < revoke
     assert "lease.source_identity != plan" in consumer
-    assert (
-        "lease.scratch_generation != plan->projection_scratch_generation" in consumer
-    )
+    assert "lease.scratch_generation != plan->projection_scratch_generation" in consumer
     assert "streamed_factors.owner_identity ? nullptr" in consumer

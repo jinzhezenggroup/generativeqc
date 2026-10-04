@@ -487,25 +487,23 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       detail = "invalid external fitted occupied projection lease";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
-    const bool enabled_external_projection =
-        projection != "off" && space != "dense" && storage != "jk-scratch" &&
-        occupied_source != "raw";
+    const bool enabled_external_projection = projection != "off" && space != "dense" &&
+                                             storage != "jk-scratch" && occupied_source != "raw";
     if (enabled_external_projection) {
       const auto& lease = *occupied_projection;
       const auto matrix = plan->nbf * plan->nbf;
       if (system != 0 || plan->batch_size != 1 || terms.size() != 1 ||
           terms[0].density.size() != matrix || lease.device_id != plan->device_id ||
-          lease.stream != reinterpret_cast<void*>(plan->stream) ||
-          lease.source_identity != plan || lease.projection != plan->auxiliary_tile_values ||
-          lease.nbf != plan->nbf || lease.naux != plan->naux || !lease.rank ||
-          lease.rank > plan->nbf || lease.rank != plan->completed_occupied_projection_rank ||
+          lease.stream != reinterpret_cast<void*>(plan->stream) || lease.source_identity != plan ||
+          lease.projection != plan->auxiliary_tile_values || lease.nbf != plan->nbf ||
+          lease.naux != plan->naux || !lease.rank || lease.rank > plan->nbf ||
+          lease.rank != plan->completed_occupied_projection_rank ||
           lease.scratch_generation != plan->projection_scratch_generation ||
-          lease.scratch_generation == std::numeric_limits<std::uint64_t>::max() ||
-          plan->streamed || !plan->integral_source || !plan->three_center ||
+          lease.scratch_generation == std::numeric_limits<std::uint64_t>::max() || plan->streamed ||
+          !plan->integral_source || !plan->three_center ||
           !df_packed_pairs(plan->value_storage.pairs) || !plan->metric_full_rank[0] ||
           !plan->metric_response_valid[0] || lease.rank > plan->value_storage.rank_capacity ||
-          plan->naux * lease.rank >
-              static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+          plan->naux * lease.rank > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
         detail = "external fitted occupied projection differs from the prepared DF owner";
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }

@@ -462,7 +462,8 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
       throw std::invalid_argument("CUDA DF Fock item/dimensions/cutoff mismatch");
     if (!data.df_gradient_orbital || !data.df_gradient_auxiliary || !data.df_gradient_budget ||
         data.raw.ncoord != 3 * data.df_gradient_orbital->atoms.size())
-      throw std::invalid_argument("CUDA DF Fock source lacks matching generated derivative metadata");
+      throw std::invalid_argument(
+          "CUDA DF Fock source lacks matching generated derivative metadata");
 
     {
       const auto execute = [&](FockBuildSpec spec,
@@ -473,13 +474,13 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
         if (cj == 0.0 && ck == 0.0) return out;
         const DensityFittingDensityResponse term{std::span<const double>(density), cj, ck};
         std::string detail;
-        checked(execute_cuda_density_fitting_generated_force_response(
-                    impl_->cuda_df.get(), 0, *data.df_gradient_orbital,
-                    *data.df_gradient_auxiliary, data.raw.three_center, data.raw.metric,
-                    std::span<const DensityFittingDensityResponse>(&term, 1),
-                    data.df_gradient_mapping, data.df_gradient_budget, 0, out, detail, nullptr,
-                    nullptr, lease),
-                detail);
+        checked(
+            execute_cuda_density_fitting_generated_force_response(
+                impl_->cuda_df.get(), 0, *data.df_gradient_orbital, *data.df_gradient_auxiliary,
+                data.raw.three_center, data.raw.metric,
+                std::span<const DensityFittingDensityResponse>(&term, 1), data.df_gradient_mapping,
+                data.df_gradient_budget, 0, out, detail, nullptr, nullptr, lease),
+            detail);
         if (out.size() != data.raw.ncoord)
           throw std::runtime_error("CUDA DF response coordinate mismatch");
         return out;
