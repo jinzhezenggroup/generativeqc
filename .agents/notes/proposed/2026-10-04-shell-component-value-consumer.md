@@ -1,6 +1,6 @@
 # Experiment: share high-order value sources across Cartesian shell components
 
-Status: proposed; default-off implementation, device/endpoint qualification pending
+Status: proposed; default off, device-qualified, three-atom endpoint regresses
 Date: 2026-10-04
 
 ## Motivation and ownership
@@ -126,3 +126,111 @@ workspace formula above excludes native/compiler storage and consequently is
 smaller than the linked shared-storage result. Finite n1 Slurm 5753 begins
 independent device/sanitizer qualification of the verified deployment; its
 completion and complete-endpoint results are still pending.
+
+## Synchronization qualification and retained failures
+
+The first linked implementation failed n1 job 5753 after the retained values,
+range-force and optional-allocation checks passed. Memcheck 5754 reported an
+illegal instruction in `component_jk_kernel<6,false,false>` at offset 0x1a180;
+synccheck 5755 reported divergent threads at the post-consumer block barrier,
+including masked tail lanes in the smaller allocation fixture. A normal pass
+of that smaller fixture did not qualify its synchronization.
+
+Revision `93cd0dfd2ee94fc396a60ccfc9c4fa0d9775fb39` added an inline
+`__syncwarp()` before the shared-source block handoff. It still failed native
+5758 and synccheck 5759, at the corresponding order-six offset 0x1a210.
+The linked SASS showed a NOP at the inserted inline warp join. Do not repeat
+that inline-only fix or describe the initial matrix passes as sanitizer passes.
+
+Revision `64780b7355f628892886d5e08c32efe7c38ca34b` retains the warp/block
+handoff in a `__noinline__` device helper. Its production source identity is
+`149c7e55fa02f6a08eca1ad973b60305a3804612f7a57d05e61e03b4c35b3fa6`;
+the library SHA-256 is
+`935e13e4aa7b52e4fbf52a047f4fd03c4bb5e0825743826618155c3f8a0d0dd1`.
+The isolated n2 build again verifies 453 ccache compiler commands, with a
+retained statistics-window delta of 451 hits and two misses. Linked SASS now
+contains `WARPSYNC.COLLECTIVE`, `WARPSYNC.ALL` and the block barrier inside
+the helper. This observation does not on its own establish a compiler defect
+or prove a correct device schedule.
+
+On n1 Slurm 5760, this revision passes the retained-value check and both
+separate/joint component fixtures, including allocation rollback. Each fixture
+reports 26,424 geometry preparations, 32,296 radial preparations and 2,590,104
+primitive-component contractions in its counted separate calls; the optional
+joint matrix calls are checked but not included in those totals. Retained force,
+sanitizer and checkpoint completion remain pending at this observation.
+
+The corrected linked component kernels retain 512 B/thread static stacks and
+the original shared-byte counts. Registers are now 155--157 / 156--158 /
+162--164 / 160--162 at orders 5/6/7/8 across their spin/range variants. These
+remain static resources, not dynamic traffic or a timing result. Failed logs,
+corrected build receipts and final SASS are retained separately under
+`.artifacts/shell-component-values-20261004/`, `sync-v2/` and `sync-v3/`.
+
+Job 5760 subsequently completes successfully on n1's assigned device 2. Both
+separate and joint modes pass memcheck, synccheck and initcheck with zero
+errors; retained full-range values and short/long-range derivatives pass; all
+nine selected checkpoint-policy cases pass. The qualification receipt binds
+these checks to the source identity and library hash above. The initial two
+failed revisions remain unqualified. Complete endpoint performance and the
+molecular source-reuse census are separate gates and are not implied by these
+device checks.
+
+## Molecular work census after qualification
+
+Finite n1 Slurm 5762 evaluates the frozen 12-atom, 232-spherical-AO full-TZVPD
+input with identity density, using the same qualified library for retained,
+component and component-plus-joint calls. This is a resident value census,
+not SCF, forces or an endpoint timing experiment. The diagnostic explicitly
+requires joint storage in the joint mode.
+
+Both retained full and LR calls admit 407,065,289 contracted AO quartets.
+Component calls retain exactly those radial admissions while checking
+418,127,294 candidates beneath conservative shell maxima. Each separate call
+executes 1,354,668 high-order shell visits, 5,308,640 geometry/Hermite and
+radial preparations, and 487,996,523 primitive-component contractions. The
+joint call executes the same 5,308,640 geometry preparations, 10,617,280
+radial preparations and 975,993,046 contractions. The preparation count is
+larger than the ideal once-per-shell count because component capacity tiling
+remains; it is not inferred from admitted components alone.
+
+Maximum matrix differences from the same-binary retained calls are
+3.056e-13 (full), 1.777e-15 (LR), and 3.091e-13 (joint), below the diagnostic
+1e-8 gate. These checks complement the independent small-system CPU oracle;
+the same-binary comparison alone is not an independent scientific oracle.
+Charged total device bytes are 23,288,465 retained, 23,754,544 component,
+and 24,803,120 component-plus-joint. Baseline component counters remain
+unavailable (`null`), and FLOPs and endpoint performance remain unavailable.
+The primitive-component/preparation ratio is a reuse observation, not a
+speedup. Raw input identity, probe source, source/binary hashes, assigned
+device and all five calls are retained in `sync-v3/census/runs/5762/`.
+
+## Complete small-endpoint result and retained decision
+
+Finite n1 job 5761, assigned device 2, completes the same-binary three-atom
+full-def2-TZVPD ABBA comparison, bracketed by GPU4PySCF references with CUDA
+LibXC verified on every call. All 72 complete E/F calls pass the unchanged
+1e-8 Eh / 1e-7 Eh/Bohr limits; native maximum errors are 3.127e-13 Eh and
+5.871e-11 Eh/Bohr. Every warm replay takes one SCF iteration.
+
+Baseline cold times are 16.226265 / 15.444448 seconds; candidate cold times
+are 17.070636 / 17.061314 seconds. Baseline process warm medians are
+1.923335 / 1.925643 seconds; candidate medians are 2.024086 / 2.022240 seconds.
+Ratios of the two process medians are 1.077713 cold and 1.051273 warm, with
+1.101970 displaced and 1.050345 displaced-warm ratios. The candidate therefore
+regresses on this small complete endpoint despite its observed source reuse.
+The static stack reduction and preparation-count ratio must not be substituted
+for these endpoint results or used to claim a larger-size crossover.
+
+Keep the implementation default off and the PR experimental. Twelve-atom and
+larger complete endpoints for this consumer remain unmeasured. A future decision
+to revisit it needs profiling of the serial producer, component contraction and
+barrier costs, followed by complete endpoint qualification. Derivatives are
+unchanged; no combined gain with #1839/#1842 or
+any other source/GPU measurement is inferred.
+
+Exact raw endpoints, census input/probe, qualification logs, source/binary and
+cache receipts, and executable reproduction scripts are retained in the
+[reviewable evidence bundle](../../../benchmarks/results/wb97mv-shell-components-20261004/README.md).
+The bundle's offline check repeats all endpoint acceptance gates without running
+CUDA. The earlier local artifact paths retain the detailed failed SASS/logs too.
