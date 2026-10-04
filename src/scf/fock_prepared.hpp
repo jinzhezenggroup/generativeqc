@@ -99,6 +99,12 @@ class PreparedFockPlan {
                                         const std::vector<double>& beta = {}) const;
   FockEnergyDerivativeComponents energy_derivative_components(
       const std::vector<double>& density, const std::vector<double>& beta = {}) const;
+  /** Restricted CUDA-DF derivative components with an optional one-shot final
+   * occupied projection. A supplied lease is consumed by K' before J' can
+   * overwrite its scratch; unsupported compositions retain the ordinary path. */
+  FockEnergyDerivativeComponents energy_derivative_components(
+      const std::vector<double>& density, const std::vector<double>& beta,
+      const CudaDensityFittingOccupiedProjectionLease* occupied_projection) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */
