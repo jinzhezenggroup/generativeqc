@@ -70,6 +70,7 @@ PRECISION_OPERATOR_DIAGNOSTICS = 10
 PRECISION_OPERATOR_OCCUPATION_STABILIZATION = 11
 PRECISION_OPERATOR_COULOMB_RECURRENCE = 12
 PRECISION_OPERATOR_EXCHANGE_RECURRENCE = 13
+PRECISION_OPERATOR_NONLOCAL_CORRELATION = 14
 PRECISION_DTYPE_UNKNOWN = 0
 PRECISION_DTYPE_FP64 = 1
 PRECISION_DTYPE_FP32 = 2
@@ -398,6 +399,8 @@ class CorrelationDiagnostic(ctypes.Structure):
         ("ccsd_t_virtual_triples", ctypes.c_uint64),
         ("ccsd_t_workspace_bytes", ctypes.c_uint64),
         ("ccsd_t_equation_hash", ctypes.c_char * 65),
+        ("reference_execution_plan_reused", ctypes.c_int32),
+        ("reference_execution_plan_owned_device_bytes", ctypes.c_uint64),
     ]
 
 
