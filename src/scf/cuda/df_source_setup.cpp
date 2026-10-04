@@ -174,8 +174,8 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     // also builds resident four-center task tables, which this source never
     // uploads or replays and which grow rapidly with the shell count. Reuse
     // matrix packing to preserve AO/primitive ordering without those tables.
-    if (!pack_host_batch(combined, no_warm, host, false, true, false,
-                         ResidentPsssPolicy::Skip,\n HostBasisPacking::DfValues) ||
+    if (!pack_host_batch(combined, no_warm, host, false, true, false, ResidentPsssPolicy::Skip,
+                         HostBasisPacking::DfValues) ||
         host.nbf != cartesian_nbf + cartesian_naux + 1U) {
       detail = "bounded DF source Cartesian packing failed";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
