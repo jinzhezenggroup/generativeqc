@@ -158,7 +158,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
         ),
         "native_cuda_grid_route_sha256": (
-            "98b6763435fcd84c6306ea034c330a9864ecf4d33d0009031230f7b64e77b71e"
+            "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
         ),
         "native_grid_point_count_sha256": (
             "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
@@ -1743,6 +1743,24 @@ def test_grid_count_fails_closed_when_generated_layout_moves(
 
     with pytest.raises(RuntimeError, match="grid point-count contract changed"):
         qualify_capacity._grid_count_contract(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "anchor",
+    ["dft::MolecularGrid ks_molecular_grid(", "class KsPreparedCalculation"],
+)
+def test_grid_count_ignores_adjacent_native_helpers(
+    tmp_path: Path, anchor: str
+) -> None:
+    copy_contract_files(tmp_path, GRID_CONTRACT_FILES)
+    expected = qualify_capacity._grid_count_contract(tmp_path)
+    target = tmp_path / "src/methods/dft_method.cpp"
+    source = target.read_text(encoding="utf-8")
+    assert source.count(anchor) == 1
+    helper = "void unrelated_preparation_helper() { if (true) { return; } }\n\n"
+    target.write_text(source.replace(anchor, helper + anchor, 1), encoding="utf-8")
+
+    assert qualify_capacity._grid_count_contract(tmp_path) == expected
 
 
 def test_grid_count_fails_closed_when_native_backend_route_moves(

@@ -145,8 +145,10 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
                                     sizeof(DfPublicAoExpansion)});
       df_source_capacity::reserve_upload_metadata(host, capacity);
     }
-    // Reuse normalized basis packing, explicitly omitting SCF density and
-    // pair/quartet task construction. Public transforms are owned below.
+    // DF consumes only normalized basis metadata. The ordinary Direct packer
+    // also builds resident four-center task tables, which this source never
+    // uploads or replays and which grow rapidly with the shell count. Reuse
+    // matrix packing to preserve AO/primitive ordering without those tables.
     if (!pack_host_batch(combined, no_warm, host, false, true, false, ResidentPsssPolicy::Skip,
                          HostBasisPacking::DfValues) ||
         host.nbf != cartesian_nbf + cartesian_naux + 1U) {
