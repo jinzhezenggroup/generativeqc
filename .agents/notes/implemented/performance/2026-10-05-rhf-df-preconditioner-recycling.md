@@ -113,5 +113,21 @@ Keep both accelerators opt-in. Checkpoint amortization is the demonstrated
 large-endpoint improvement. Revisit this inverse only with a case that reduces
 exact actions enough to repay setup; revisit recycling for genuinely identical
 physical operators with different right-hand sides, not approximate frame reuse.
-The newer parent integration has separate build/small-force gates and pending
-complete endpoints; these frozen timings must not be relabeled as that version.
+The newer parent integrations have separate complete qualification; the frozen
+timings must not be relabeled as those versions.
+
+### Retained-RHF integration
+
+Source `5a805b274` passes build 2349, 77 host lifetime/admission cases in 2351,
+response and both independent small-force modes in 2352, shared Lambda/factor
+2354, complete cold/warm forces 2355 and report 2359. All force, residual and
+limited independent large FD gates pass. Maximum large force difference from
+the frozen reference is 3.615e-9 Eh/Bohr.
+
+Ethane cold/warm uses 17 / 16 exact J/K calls and 12 / 11 Arnoldi iterations;
+complete times are 1120.394947 / 1118.673403 s. Both have `z_recycled_guess=0`,
+so the warm frame's smaller iteration count is not a reuse benefit. Without a
+matched diagonal ablation of that frame it cannot establish stronger-inverse
+benefit either. Small water still hits (11 → 5 calls). Keep strict identity and
+both opt-in policies unchanged. Separate summaries and source manifests in the
+benchmark directory preserve the original and both integrated versions.

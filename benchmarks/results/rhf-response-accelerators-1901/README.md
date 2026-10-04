@@ -3,7 +3,7 @@
 Frozen production source `95c71862f`, one binary, Slurm2321 on n2 GPU
 `GPU-54595246-dbdc-a633-dc38-7bd8eea3831a` (RTX PRO 6000, driver595.91.07).
 Inputs are native molecular water7 (o=5,v=2,q=7) and ethane230 (o=9,v=221,q=488),
-DIIS8, Q tile8, derived canonical denominators and a64 GiB budget. Every row
+DIIS8, Q tile8, derived canonical denominators and a 64 GiB budget. Every row
 is a complete DF-CCSD(T) force endpoint on an exact conventional RHF reference.
 No supplied orbitals/amplitudes enter these comparisons.
 
@@ -115,7 +115,50 @@ Current parent integration is separate: build2333 and GPU2340 pass the same
 response/FD suites; common host2339 passes38 current admission/binding/lifetime
 cases. Current shared Lambda/factor and denominator-preconditioner regressions
 also pass in2348. Current complete cold/warm force2345 remains separate from
-the frozen timing comparison above until its retained report is complete.
+the frozen timing comparison above. Its completed report is retained as
+`prepared-provider-summary.json` with the original source-manifest checksum.
+
+### Prepared-provider integration
+
+Production `2a271629d`, complete force job 2345 and report 2347 pass all gates.
+This binary predates the later retained-RHF integration. Ethane cold/warm calls
+take 1106.050552 / 1183.02 s (see JSON for full precision); both use 17 exact J/K
+actions and reject recycled initial guesses. Maximum force differences from the
+frozen reference are 2.403e-9 / 1.914e-9 Eh/Bohr. Existing independent large
+two-coordinate/two-step FD re-audits pass. No timing ratio is taken against the
+old binary: provider changes and RHF variation are part of these endpoints.
+
+The latest branch also composes parent `c7486bf2e` and retained RHF ownership.
+That version has its own source manifest and qualification rather than inheriting
+these results. Both branches pass the expanded 77-case admission/lifetime suite
+in job 2351; its separate full-device and complete-endpoint results follow.
+
+### Retained-RHF integration
+
+Production `5a805b274084c22b16a1c92ecfbc516dead3b882` composes parent
+`c7486bf2e`. Build 2349, host 2351, response/independent small all-coordinate FD
+2352, shared Lambda/factor 2354 and complete force 2355 all pass. Report 2359
+passes every accuracy and existing independent large FD re-audit. Records are
+in `retained-reference-summary.json`, bound by the `v2-sources.sha256` checksum; source,
+compiler and policy files were hash-checked against the tested checkout.
+
+| Ethane230 | Exact J/K | Z iterations | Recycle hit | Orbital/nuclear s | Complete s | RHF s |
+| --- | ---: | ---: | --- | ---: | ---: | ---: |
+| Cold | 17 | 12 | no | 443.300133 | 1120.394947 | 131.935533 |
+| Warm | 16 | 11 | no | 424.329886 | 1118.673403 | 151.592693 |
+
+The warm call still rejects strict identity reuse. Its one fewer iteration and
+J/K action are **not** a recycling benefit: the new physical RHF frame is
+different and `z_recycled_guess=0`. No matched diagonal/stronger ablation exists
+on that warm frame, so it also does not establish a stronger-inverse advantage.
+Keep both optional choices opt-in. No timing ratio is taken across binaries or
+GPU allocations. Small water retains its identical-operator hit (11 → 5 calls).
+
+The maximum large force difference from the frozen reference is 3.615e-9
+Eh/Bohr, energy difference 5.685e-13 Eh and translation residual 1.626e-12.
+Original residual/stationarity and two-coordinate/two-step independent large FD
+gates pass. This remains a limited independent large derivative audit, not an
+all-coordinate one. No optional numerical or resource fallback occurs.
 
 Use CUDA12.9.1/sm120 Release, ccache, and finite n2
 `main --gres=gpu:pro6000:1` allocations, preserving Slurm device visibility:
@@ -131,3 +174,11 @@ The last command publishes `recycled.json.warm.json` for the second full call.
 Raw receipts remain at `n2:/data/jzzeng/cc-1901-20261005/endpoint-2321/`.
 Rationale is preserved in the checkpoint and DF-preconditioner/recycling Agent
 Notes under `.agents/notes/implemented/performance/2026-10-05-rhf-*.md`.
+
+The complete `current-sources.sha256` and `v2-sources.sha256` lists remain at
+`n2:/data/jzzeng/cc-1901-20261005/` and in ignored local qualification artifacts.
+Each summary retains their checksums, checked file counts, exact Git revision,
+pathspecs and deterministic reconstruction recipe. They can be rebuilt from
+existing Git history without retaining another copy of the repository-wide
+hash list in the PR. Binary/probe/input hashes and all numerical observations
+remain in the tracked summaries.

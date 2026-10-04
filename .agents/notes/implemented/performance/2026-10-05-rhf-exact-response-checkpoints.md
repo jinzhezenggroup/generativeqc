@@ -1,6 +1,6 @@
 # Decision: amortize intermediate exact-response residual actions
 
-Status: implemented; frozen complete endpoint qualified, newer parent integration pending
+Status: implemented; complete endpoint and retained-RHF integration qualified
 Date: 2026-10-05
 
 ## Diagnosis
@@ -83,3 +83,15 @@ shared Python response/recycling contracts are precedents. Reusing a subspace
 across fresh RHF endpoints may be rejected even at identical geometry when
 their canonical frames differ bitwise; no cold-endpoint benefit can be inferred
 from a same-reference second-RHS microbenchmark.
+
+## Retained-RHF integration qualification
+
+After parent `c7486bf2e`, source `5a805b274` passes build 2349, expanded host
+2351, response/independent small FD 2352, shared Lambda 2354, complete force 2355
+and report 2359. Cold/warm ethane force times are 1120.394947 / 1118.673403 s,
+with 17 / 16 exact J/K actions and 12 / 11 Arnoldi iterations. Both calls reject
+recycling; the warm frame's one fewer iteration cannot be attributed to reuse.
+There is no matched stronger/diagonal ablation of that frame. Maximum force
+difference from the frozen reference is 3.615e-9 Eh/Bohr and the original gates,
+including limited independent large FD, pass. Retained evidence distinguishes
+each binary and GPU and makes no cross-version timing ratio.
