@@ -185,9 +185,12 @@ ScfResult run_fock_strategy_cached(std::unique_ptr<PreparedFockPlan>& cache,
 
 /** Rebuild only the source overlap on the CPU and apply the shared SCF
  * ensemble-density guard (Hermiticity, metric occupations, electron/spin trace).
+ * A borrowed eigen callback may accelerate symmetric input admission; the
+ * shared guard retains its original near-symmetric reference fallback.
  * This does not assert target compatibility or target convergence. */
 void validate_hf_warm_density(const core::System& source, generativeqc_method method,
-                              const std::vector<double>& density);
+                              const std::vector<double>& density,
+                              const initial_guess::EigenOperation& eigen = {});
 
 /** Execute the existing CPU SCF solver with an explicitly resolved independent
  * J/K model. Iterations, final energy and analytic forces share one provider

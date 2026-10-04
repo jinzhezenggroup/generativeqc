@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -46,12 +47,12 @@ def force_resource_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("case", ("h2o", "nh3", "water2"))
+@pytest.mark.parametrize("case", ("h2o", "nh3", "water2", "methane"))
 def test_native_force_exact_cap_and_nested_live_allocations(
     force_resource_probe: Path, tmp_path: Path, case: str
 ) -> None:
     """Use physical converged states large enough to expose the omitted arenas."""
-    if case == "water2":
+    if case in ("water2", "methane"):
         records = json.loads(
             (
                 ROOT / "tests/reference_data/cc/gradients/water_clusters_ccsdt.json"
@@ -62,10 +63,16 @@ def test_native_force_exact_cap_and_nested_live_allocations(
             for row in records["rows"]
             if row["atoms"] == 6 and row["geometry"] == "original"
         )
+        if case == "methane":
+            atoms = json.loads(
+                (
+                    ROOT / "tests/reference_data/cc/gradients/ch4_degenerate.json"
+                ).read_text()
+            )["inputs"]
         elements = json.loads(
             (ROOT / "python/generativeqc/data/basis_pack.json").read_text()
         )["bases"]["sto-3g"]["elements"]
-        numbers = [{"H": 1, "O": 8}[z] for z, _ in atoms]
+        numbers = [{"H": 1, "C": 6, "O": 8}[z] for z, _ in atoms]
         inputs = {
             "atomic_numbers": numbers,
             "coordinates": [xyz for _, xyz in atoms],
@@ -103,6 +110,10 @@ def test_native_force_exact_cap_and_nested_live_allocations(
         capture_output=True,
         text=True,
         timeout=120,
+        env={
+            **os.environ,
+            "GENERATIVEQC_DF_PROGRESS_TRACE": str(tmp_path / "progress.jsonl"),
+        },
     )
     (tmp_path / "trace.json").write_text(result.stdout)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -114,6 +125,21 @@ def test_native_force_exact_cap_and_nested_live_allocations(
     # byte floor incorrectly rejects a successful memory optimization.
     assert record["triples_arena_bytes"] > 0
     assert record["largest_allocation"] >= record["triples_arena_bytes"]
+    assert (record["triples_fock_phase_bytes"] > 0) == bool(
+        record["full_triples_fock_response"]
+    )
+    if case == "methane":
+        assert record["full_triples_fock_response"] == 1
+    progress = [
+        json.loads(line)
+        for line in (tmp_path / "progress.jsonl").read_text().splitlines()
+    ]
+    curvatures = [
+        float(row["value"])
+        for row in progress
+        if row.get("key") == "minimum_orbital_curvature"
+    ]
+    assert curvatures and min(curvatures) > 1e-8
 
 
 CPP = r"""
@@ -264,6 +290,8 @@ int main(int argc,char** argv) {
     if(enlarged.peak_bytes-plan.peak_bytes !=
        (state.problem.foo.capacity()-old_capacity)*sizeof(double)) return 6;
     std::cout << "{\"nested_peak\":" << trace::peak
+              << ",\"full_triples_fock_response\":" << plan.full_triples_fock_response
+              << ",\"triples_fock_phase_bytes\":" << plan.triples_fock_phase_bytes
               << ",\"largest_allocation\":" << trace::largest
               << ",\"triples_arena_bytes\":" << triples_arena_bytes
               << ",\"source_reads\":" << force.raw_source_reads

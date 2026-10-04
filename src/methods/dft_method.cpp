@@ -696,6 +696,26 @@ dft::MolecularGrid ks_molecular_grid(const core::System& system, dft::GridSpec s
   return dft::MolecularGrid(system, spec);
 }
 
+scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
+    const core::System& system, const NativeKsExecutionPlan& execution_plan,
+    const scf::ResolvedFockBuild& strategy) {
+  // This method owns an integer restricted determinant. Fixed-density Fock
+  // callers do not acquire this promise from the same dimensions or system.
+  const auto& spec = strategy.spec;
+  if (execution_plan.spin_channels != 1 || execution_plan.range_exchange ||
+      strategy.backend != scf::FockBackend::Cuda || spec.spin != scf::FockSpin::Restricted ||
+      spec.derivative_order != 0 || !spec.coulomb.present || !spec.exchange.present ||
+      spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
+      spec.exchange.approximation != scf::FockApproximation::DensityFitted ||
+      spec.exchange.op != scf::FockOperator::FullRange)
+    return {};
+  const auto [alpha, beta] = scf::initial_guess::spin_occupations(system);
+  if (system.electron_count <= 0 || !alpha || alpha != beta || system.multiplicity != 1 ||
+      alpha > molecule::ao_count(system))
+    throw std::invalid_argument("KS projection reservation requires valid restricted occupations");
+  return {alpha};
+}
+
 class KsPreparedCalculation final : public PreparedCalculation {
  public:
   KsPreparedCalculation(Capabilities capabilities, core::System system,
@@ -716,7 +736,9 @@ class KsPreparedCalculation final : public PreparedCalculation {
               options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE
                   ? ks_direct_derivative_order(*options_.resolved_fock_build, backend)
                   : 0U,
-              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ? 0U : 1U),
+              options_.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ? 0U : 1U,
+              ks_fitted_projection_reservation(system_, execution_plan_,
+                                               *options_.resolved_fock_build)),
         basis_(system_),
         grid_(ks_molecular_grid(
             system_, grid, backend_, device,
@@ -1086,8 +1108,33 @@ class KsPreparedCalculation final : public PreparedCalculation {
 
     const std::vector<double> empty;
     scf::FockEnergyDerivativeComponents two;
+    std::optional<scf::CudaDfBorrowedFittedProjection> fitted_projection;
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_ && spins == 1 && strategy.spec.exchange.present) {
+      dft::CudaKsResidentFittedProjectionBinding lease;
+      std::string lease_detail;
+      const auto lease_status =
+          cuda_->resident_final_fitted_projection(expected, lease, lease_detail);
+      if (lease_status == GENERATIVEQC_STATUS_SUCCESS) {
+        if (!lease) {
+          detail = "CUDA KS returned an invalid final fitted projection lease";
+          return GENERATIVEQC_STATUS_INTERNAL_ERROR;
+        }
+        fitted_projection.emplace(scf::CudaDfBorrowedFittedProjection{
+            lease.device_id, lease.occupied_coefficients, lease.projection, lease.nbf, lease.naux,
+            lease.rank, lease.stream});
+      } else if (lease_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                 lease_status != GENERATIVEQC_STATUS_INVALID_ARGUMENT) {
+        detail = lease_detail;
+        return lease_status;
+      }
+    }
+#endif
     try {
-      two = fock_.energy_derivative_components(density[0], spins == 2 ? density[1] : empty);
+      two = fitted_projection
+                ? fock_.energy_derivative_components_with_fitted_projection(density[0], empty,
+                                                                            *fitted_projection)
+                : fock_.energy_derivative_components(density[0], spins == 2 ? density[1] : empty);
     } catch (const std::bad_alloc&) {
       detail = "density-fitted stationary response exceeded the prepared resource budget";
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
@@ -1842,11 +1889,19 @@ class KsPreparedBatch final : public PreparedBatch {
         throw std::invalid_argument("invalid KS seed dimensions or diagnostics");
       auto source = systems_[i];
       set_positions(source, state.coordinates);
+      scf::initial_guess::EigenOperation eigen;
+#if GENERATIVEQC_HAS_CUDA
+      if (auto* cuda = items_[i].plan ? items_[i].plan->cuda_plan() : nullptr)
+        eigen = cuda->seed_eigen_operation();
+#endif
       // This common validation reads only source S and checks the shared
-      // spin-density convention. It performs no HF Fock/energy evaluation.
+      // spin-density convention. An idle CUDA plan supplies the ordinary
+      // eigensolver without overwriting its final/warm state; source coordinates
+      // still determine S, including changed-geometry checkpoints. The shared
+      // validator preserves its legacy near-symmetric input fallback.
       scf::validate_hf_warm_density(
           source, unrestricted(execution_plan_) ? GENERATIVEQC_METHOD_UHF : GENERATIVEQC_METHOD_RHF,
-          state.density);
+          state.density, eigen);
     }
     // All source-metric validation precedes the no-throw commit. Missing
     // entries preserve neighbors, including their resident density ownership.

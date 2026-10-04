@@ -77,6 +77,8 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_native_gmres_tests tests/native/test_native_gmres.cpp)
+    generativeqc_native_test(generativeqc_cc_lambda_preconditioner_tests tests/native/test_cc_lambda_preconditioner.cpp)
+    generativeqc_native_test(generativeqc_triples_fock_response_tests tests/native/test_triples_fock_response.cpp)
     generativeqc_native_test(generativeqc_mp2_gradient_tests tests/native/test_mp2_gradient.cpp)
     generativeqc_native_test(generativeqc_posthf_rank2_tests tests/native/test_posthf_rank2_transform.cpp)
   endif()
@@ -86,6 +88,10 @@ macro(generativeqc_add_native_tests)
                        LIBRARIES CUDA::cudart)
     generativeqc_native_test(generativeqc_mp2_cuda_status_tests tests/native/test_mp2_cuda_status.cu
                        LIBRARIES CUDA::cudart CUDA::cublas SKIP_77)
+    generativeqc_native_test(generativeqc_triples_response_cuda_tests tests/native/test_triples_response_cuda.cu
+                       LIBRARIES CUDA::cudart SKIP_77)
+    target_include_directories(generativeqc_triples_response_cuda_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    add_dependencies(generativeqc_triples_response_cuda_tests generativeqc_rccsd_cpu_codegen)
   endif()
 
   generativeqc_native_test(generativeqc_scf_proposal_tests tests/native/test_scf_proposals.cpp)
@@ -275,11 +281,13 @@ macro(generativeqc_add_native_tests)
       GENERATIVEQC_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     set_target_properties(generativeqc_xc_point_cuda_tests PROPERTIES CUDA_STANDARD 20)
 
+    # The resident-grid regression and XC borrowed-grid validation use the
+    # CUDA quadrature owner; the host grid objects do not define those symbols.
     add_executable(generativeqc_dft_cuda_tests tests/native/test_dft_cuda.cu
-      src/dft/cuda_xc.cpp "${GENERATIVEQC_GRID_SOURCE}"
+      src/dft/cuda_xc.cpp src/dft/cuda_quadrature.cu "${GENERATIVEQC_GRID_SOURCE}"
       $<TARGET_OBJECTS:generativeqc_dft_grid_test_objects>
       $<TARGET_OBJECTS:generativeqc_dft_xc_test_objects>)
-    add_dependencies(generativeqc_dft_cuda_tests generativeqc_xc_cpu_codegen generativeqc_scf_array_cpu_codegen)
+    add_dependencies(generativeqc_dft_cuda_tests generativeqc_xc_cpu_codegen generativeqc_scf_array_cpu_codegen generativeqc_quadrature_codegen)
     target_include_directories(generativeqc_dft_cuda_tests PRIVATE
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft" "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -287,6 +295,8 @@ macro(generativeqc_add_native_tests)
     set_target_properties(generativeqc_dft_cuda_tests PROPERTIES CUDA_STANDARD 20)
     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
     add_test(NAME generativeqc_dft_cuda_matrix_tests COMMAND generativeqc_dft_cuda_tests --matrix-schedule)
+    add_test(NAME generativeqc_dft_cuda_local_ao_tests COMMAND generativeqc_dft_cuda_tests --local-ao)
+    set_tests_properties(generativeqc_dft_cuda_local_ao_tests PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(generativeqc_dft_cuda_matrix_tests PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(generativeqc_dft_cuda_tests PROPERTIES SKIP_RETURN_CODE 77)
     generativeqc_native_test(generativeqc_ks_cuda_tests tests/native/test_ks_cuda.cpp

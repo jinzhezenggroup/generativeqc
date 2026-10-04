@@ -1,11 +1,14 @@
 #include "cc/solver.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
+#include "cc/df_plan.hpp"
+#include "generated_df_ccsd_core_cpu.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "solver/diis.hpp"
 #include "solver/iteration_control.hpp"
@@ -49,7 +52,9 @@ double max_abs(const double* p, std::size_t n) {
 
 }  // namespace
 
-void validate_problem(const Problem& p) {
+void validate_problem(const Problem& p, bool allow_df_virtual) {
+  if (p.naux && !allow_df_virtual)
+    throw std::invalid_argument("DF virtual inputs require a factorized execution owner");
   if (!p.nocc || !p.nvir)
     throw std::invalid_argument("RCCSD requires occupied and virtual orbitals");
   const auto o = p.nocc, v = p.nvir;
@@ -66,10 +71,33 @@ void validate_problem(const Problem& p) {
   expect(p.ovov, oovv, "ovov");
   expect(p.ovvo, oovv, "ovvo");
   expect(p.oovv, oovv, "oovv");
-  expect(p.ovvv, checked_mul(o, checked_mul(vv, v)), "ovvv");
+  if (p.naux) {
+    expect(p.ovvv, 0, "ovvv must be empty for DF");
+    expect(p.vvvv, 0, "vvvv must be empty for DF");
+    expect(p.df_bov, checked_mul(p.naux, ov), "df_bov");
+    expect(p.df_bvv, checked_mul(p.naux, vv), "df_bvv");
+    if (!p.df_boo.empty()) {
+      expect(p.df_boo, checked_mul(p.naux, oo), "df_boo");
+      for (std::size_t q = 0; q < p.naux; ++q)
+        for (std::size_t i = 0; i < o; ++i)
+          for (std::size_t j = 0; j < i; ++j)
+            if (std::abs(p.df_boo[q * oo + i * o + j] - p.df_boo[q * oo + j * o + i]) > 1e-10)
+              throw std::invalid_argument("DF B_oo must preserve symmetric spatial-MO pairs");
+    }
+    for (std::size_t q = 0; q < p.naux; ++q)
+      for (std::size_t a = 0; a < v; ++a)
+        for (std::size_t b = 0; b < a; ++b)
+          if (std::abs(p.df_bvv[q * vv + a * v + b] - p.df_bvv[q * vv + b * v + a]) > 1e-10)
+            throw std::invalid_argument("DF B_vv must preserve symmetric spatial-MO pairs");
+  } else {
+    expect(p.df_bov, 0, "df_bov requires naux");
+    expect(p.df_bvv, 0, "df_bvv requires naux");
+    expect(p.df_boo, 0, "df_boo requires naux");
+    expect(p.ovvv, checked_mul(o, checked_mul(vv, v)), "ovvv");
+    expect(p.vvvv, checked_mul(vv, vv), "vvvv");
+  }
   expect(p.ovoo, checked_mul(ov, oo), "ovoo");
   expect(p.oooo, checked_mul(oo, oo), "oooo");
-  expect(p.vvvv, checked_mul(vv, vv), "vvvv");
   expect(p.d1, ov, "d1");
   expect(p.d2, oovv, "d2");
   expect(p.initial_t1, ov, "initial_t1");
@@ -92,38 +120,57 @@ void validate_options(const SolverOptions& o) {
 
 std::size_t problem_host_bytes(const Problem& p) {
   std::size_t result = 0;
-  const std::vector<double>* values[] = {&p.foo,  &p.fov,  &p.fvv,        &p.ovov,      &p.ovvo,
-                                         &p.oovv, &p.ovvv, &p.ovoo,       &p.oooo,      &p.vvvv,
-                                         &p.d1,   &p.d2,   &p.initial_t1, &p.initial_t2};
+  const std::vector<double>* values[] = {
+      &p.foo,  &p.fov,  &p.fvv, &p.ovov, &p.ovvo,       &p.oovv,       &p.ovvv,   &p.ovoo,
+      &p.oooo, &p.vvvv, &p.d1,  &p.d2,   &p.initial_t1, &p.initial_t2, &p.df_bov, &p.df_bvv};
   for (const auto* value : values) result = checked_add(result, bytes(value->capacity()));
+  result = checked_add(result, bytes(p.df_boo.capacity()));
   return result;
 }
 
 SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
-  validate_problem(p);
+  validate_problem(p, true);
   validate_options(options);
   const auto n1 = checked_mul(p.nocc, p.nvir);
   const auto n2 = checked_mul(checked_mul(p.nocc, p.nocc), checked_mul(p.nvir, p.nvir));
   const auto elements = checked_add(n1, n2);
-  const auto iteration_elements = generated::iteration_arena_elements(p.nocc, p.nvir);
-  const auto replay_elements = generated::replay_arena_elements(p.nocc, p.nvir);
-  std::size_t capacity = checked_add(p.reference_retained_bytes, problem_host_bytes(p));
-  capacity = checked_add(capacity, bytes(iteration_elements));
-  capacity = checked_add(capacity, bytes(replay_elements));
-  // Current, trial, error and a copied history vector coexist before trimming.
-  // DIIS additionally retains Gram/original augmented arrays while solve_linear
-  // owns its by-value matrix/RHS copies. These are numeric storage, not overhead.
-  capacity = checked_add(capacity, bytes(checked_mul(4 + 2 * options.diis_size, elements)));
-  if (options.diis_size) {
-    const std::size_t h = options.diis_size, n = h + 1;
-    const auto scratch = checked_add(
-        checked_mul(h, h), checked_add(checked_mul(2, checked_mul(n, n)), checked_mul(2, n)));
-    capacity = checked_add(capacity, bytes(scratch));
-  }
+  auto plan = p.naux
+                  ? df_iteration_plan(p.nocc, p.nvir, p.naux, false, options.df_auxiliary_reduction)
+                  : DFIterationPlan{};
+  const auto replay_elements = p.naux ? generated::dfcore::replay_arena_elements(p.nocc, p.nvir)
+                                      : generated::replay_arena_elements(p.nocc, p.nvir);
+  auto capacity_for = [&](const DFIterationPlan& choice) {
+    std::size_t capacity = checked_add(p.reference_retained_bytes, problem_host_bytes(p));
+    capacity = checked_add(
+        capacity,
+        bytes(p.naux ? choice.iteration : generated::iteration_arena_elements(p.nocc, p.nvir)));
+    capacity = checked_add(capacity, bytes(replay_elements));
+    capacity = checked_add(capacity, bytes(choice.auxiliary));
+    capacity = checked_add(capacity, bytes(choice.preparation));
+    capacity = checked_add(capacity, bytes(choice.accumulation));
+    // Current, trial, error and a copied history vector coexist before trimming.
+    // DIIS additionally retains Gram/original augmented arrays while solve_linear
+    // owns its by-value matrix/RHS copies. These are numeric storage, not overhead.
+    capacity = checked_add(capacity, bytes(checked_mul(4 + 2 * options.diis_size, elements)));
+    if (options.diis_size) {
+      const std::size_t h = options.diis_size, n = h + 1;
+      const auto scratch = checked_add(
+          checked_mul(h, h), checked_add(checked_mul(2, checked_mul(n, n)), checked_mul(2, n)));
+      capacity = checked_add(capacity, bytes(scratch));
+    }
+    return capacity;
+  };
+  if (plan.hoisted && capacity_for(plan) > options.max_bytes)
+    plan = df_iteration_plan(p.nocc, p.nvir, p.naux, false, false);
+  const auto capacity = capacity_for(plan);
   if (capacity > options.max_bytes)
     throw std::length_error("RCCSD CPU solve exceeds correlation memory budget");
 
-  std::vector<double> iteration_arena(iteration_elements), replay_arena(replay_elements);
+  std::vector<double> iteration_arena(p.naux ? plan.iteration
+                                             : generated::iteration_arena_elements(p.nocc, p.nvir)),
+      replay_arena(replay_elements);
+  std::vector<double> virtual_arena(plan.auxiliary), virtual_sum(plan.accumulation),
+      prepare_arena(plan.preparation);
   std::vector<double> current;
   current.reserve(elements);
   current.insert(current.end(), p.initial_t1.begin(), p.initial_t1.end());
@@ -135,6 +182,123 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   result.reason = "maximum RCCSD iterations reached";
   const auto solve_started = std::chrono::steady_clock::now();
 
+  // The same accumulation owner serves current/trial/replay amplitudes. Never
+  // reuse a correction after DIIS changes T, or count only a single Q slice.
+  auto df_inputs = [&](const generated::Inputs& in) {
+    std::fill(virtual_sum.begin(), virtual_sum.end(), 0.0);
+    generated::df::Inputs factors{};
+    factors.t1 = in.t1;
+    factors.t2 = in.t2;
+    for (std::size_t q = 0; q < p.naux; ++q) {
+      factors.bov = p.df_bov.data() + q * n1;
+      factors.bvv = p.df_bvv.data() + q * p.nvir * p.nvir;
+      const auto out = generated::df::run_virtual_cpu(p.nocc, p.nvir, factors, virtual_arena.data(),
+                                                      virtual_arena.size());
+      for (std::size_t k = 0; k < n1; ++k) virtual_sum[k] += out.singles[k];
+      for (std::size_t k = 0; k < n2; ++k) virtual_sum[n1 + k] += out.doubles[k];
+      ++result.diagnostic.df_auxiliary_slices;
+      result.diagnostic.df_virtual_operations += generated::df::virtual_cpu_operation_count;
+      result.diagnostic.df_accumulation_calls += 2;
+      result.diagnostic.df_contraction_terms =
+          checked_add(result.diagnostic.df_contraction_terms,
+                      generated::dfhoist::fallback_virtual_cpu_contraction_terms(p.nocc, p.nvir));
+    }
+    return generated::dfcore::Inputs{in.foo,
+                                     in.fov,
+                                     in.fvv,
+                                     in.ovov,
+                                     in.ovvo,
+                                     in.oovv,
+                                     in.ovoo,
+                                     in.oooo,
+                                     in.d1,
+                                     in.d2,
+                                     in.t1,
+                                     in.t2,
+                                     virtual_sum.data(),
+                                     virtual_sum.data() + n1};
+  };
+  auto run_iteration = [&](const generated::Inputs& in) -> generated::IterationOutputs {
+    if (!p.naux)
+      return generated::run_iteration_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
+                                          iteration_arena.size());
+    if (plan.hoisted) {
+      generated::dfhoist::Inputs fast{};
+      // The first two sums preserve the old singles/ladder layout so expanded
+      // convergence replay can reuse the same allocated accumulator.
+      static_cast<generated::dfcore::Inputs&>(fast) = {in.foo,
+                                                       in.fov,
+                                                       in.fvv,
+                                                       in.ovov,
+                                                       in.ovvo,
+                                                       in.oovv,
+                                                       in.ovoo,
+                                                       in.oooo,
+                                                       in.d1,
+                                                       in.d2,
+                                                       in.t1,
+                                                       in.t2,
+                                                       virtual_sum.data(),
+                                                       virtual_sum.data() + n1};
+      fast.df_singles_residual = virtual_sum.data();
+      fast.df_D05_vv_ladder = virtual_sum.data() + n1;
+      fast.df_Lvv = virtual_sum.data() + elements;
+      fast.df_Wvoov = fast.df_Lvv + p.nvir * p.nvir;
+      fast.df_Wvovo = fast.df_Wvoov + n2;
+      fast.df_Xv = fast.df_Wvovo + n2;
+      std::fill(virtual_sum.begin(), virtual_sum.end(), 0.0);
+      fast.df_tau = generated::dfhoist::run_prepare_cpu(p.nocc, p.nvir, fast, prepare_arena.data(),
+                                                        prepare_arena.size())
+                        .tau;
+      ++result.diagnostic.df_preparation_calls;
+      for (std::size_t q = 0; q < p.naux; ++q) {
+        fast.bov = p.df_bov.data() + q * n1;
+        fast.bvv = p.df_bvv.data() + q * p.nvir * p.nvir;
+        const auto row = generated::dfhoist::run_auxiliary_cpu(
+            p.nocc, p.nvir, fast, virtual_arena.data(), virtual_arena.size());
+        const std::array<const double*, 6> sources{row.singles, row.ladder, row.lvv,
+                                                   row.wvoov,   row.wvovo,  row.xv};
+        const std::array<std::size_t, 6> counts{n1, n2, p.nvir * p.nvir, n2, n2, n2};
+        std::size_t offset = 0;
+        for (std::size_t field = 0; field < counts.size(); ++field) {
+          for (std::size_t k = 0; k < counts[field]; ++k)
+            virtual_sum[offset + k] += sources[field][k];
+          offset += counts[field];
+        }
+        ++result.diagnostic.df_auxiliary_slices;
+        result.diagnostic.df_virtual_operations += generated::dfhoist::auxiliary_operation_count;
+        result.diagnostic.df_accumulation_calls += counts.size();
+      }
+      ++result.diagnostic.df_hoisted_evaluations;
+      result.diagnostic.df_contraction_terms = checked_add(
+          result.diagnostic.df_contraction_terms,
+          checked_add(plan.preparation_terms,
+                      checked_add(checked_mul(p.naux, plan.auxiliary_terms), plan.core_terms)));
+      const auto out = generated::dfhoist::run_iteration_cpu(
+          p.nocc, p.nvir, fast, iteration_arena.data(), iteration_arena.size());
+      return {out.energy, out.r1, out.r2, out.next_t1, out.next_t2};
+    }
+    const auto core = df_inputs(in);
+    const auto out = generated::dfcore::run_iteration_cpu(
+        p.nocc, p.nvir, core, iteration_arena.data(), iteration_arena.size());
+    result.diagnostic.df_contraction_terms =
+        checked_add(result.diagnostic.df_contraction_terms,
+                    generated::dfhoist::fallback_core_contraction_terms(p.nocc, p.nvir));
+    return {out.energy, out.r1, out.r2, out.next_t1, out.next_t2};
+  };
+  auto run_replay = [&](const generated::Inputs& in) -> generated::ReplayOutputs {
+    if (!p.naux)
+      return generated::run_replay_cpu(p.nocc, p.nvir, in, replay_arena.data(),
+                                       replay_arena.size());
+    const auto core = df_inputs(in);
+    const auto out = generated::dfcore::run_replay_cpu(p.nocc, p.nvir, core, replay_arena.data(),
+                                                       replay_arena.size());
+    result.diagnostic.df_contraction_terms =
+        checked_add(result.diagnostic.df_contraction_terms,
+                    generated::dfhoist::fallback_replay_contraction_terms(p.nocc, p.nvir));
+    return {out.energy, out.r1, out.r2};
+  };
+
   const unsigned iteration_budget = options.max_iterations == std::numeric_limits<unsigned>::max()
                                         ? options.max_iterations
                                         : options.max_iterations + 1;
@@ -143,8 +307,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
     try {
       auto in = inputs(p, current.data(), current.data() + n1);
       const auto iteration_started = std::chrono::steady_clock::now();
-      const auto out = generated::run_iteration_cpu(p.nocc, p.nvir, in, iteration_arena.data(),
-                                                    iteration_arena.size());
+      const auto out = run_iteration(in);
       result.diagnostic.iteration_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
               .count();
@@ -161,8 +324,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
       if (std::isfinite(previous) && delta <= options.energy_tolerance &&
           std::max(r1, r2) <= options.residual_tolerance) {
         const auto replay_started = std::chrono::steady_clock::now();
-        const auto replay =
-            generated::run_replay_cpu(p.nocc, p.nvir, in, replay_arena.data(), replay_arena.size());
+        const auto replay = run_replay(in);
         result.diagnostic.replay_seconds +=
             std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started)
                 .count();
@@ -190,8 +352,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
       ++result.diagnostic.update_calls;
       auto trial_in = inputs(p, trial.data(), trial.data() + n1);
       const auto trial_started = std::chrono::steady_clock::now();
-      const auto trial_out = generated::run_iteration_cpu(
-          p.nocc, p.nvir, trial_in, iteration_arena.data(), iteration_arena.size());
+      const auto trial_out = run_iteration(trial_in);
       result.diagnostic.iteration_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
       ++result.diagnostic.iteration_graph_calls;

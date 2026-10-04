@@ -161,6 +161,40 @@ generativeqc_status generativeqc_batch_get_ks_diagnostic(const generativeqc_batc
                                                history_capacity);
 }
 
+generativeqc_status generativeqc_batch_get_ks_ao_selection_diagnostic_v1(
+    const generativeqc_batch* batch, uint32_t index,
+    generativeqc_ks_ao_selection_diagnostic_v1* out) {
+  if (!batch || !out || index >= batch->ks_diagnostics.size())
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (!generativeqc::api::valid_descriptor(out)) return GENERATIVEQC_STATUS_ABI_MISMATCH;
+  std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
+  if (!batch->ks_diagnostics[index]) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  const auto& work = batch->ks_diagnostics[index]->cuda_ao_selection;
+  // CPU/host-unfused owners have no device XC submission evidence. Preserve
+  // unavailable rather than publishing their default-initialized zero counts.
+  if (!work.xc_evaluations) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  *out = {sizeof(*out),
+          GENERATIVEQC_ABI_VERSION,
+          work.requested,
+          work.selected,
+          work.tiles,
+          work.empty_tiles,
+          work.min_active,
+          work.max_active,
+          work.active_sum,
+          work.discovery_ao_jet_values,
+          work.point_ao_visits,
+          work.point_ao_square_sum,
+          work.dense_point_ao_square_sum,
+          work.discovery_d2h_bytes,
+          work.reserved_device_bytes,
+          work.host_peak_bytes,
+          work.xc_evaluations,
+          work.cutoff,
+          work.discovery_seconds};
+  return GENERATIVEQC_STATUS_SUCCESS;
+}
+
 generativeqc_status generativeqc_batch_get_ks_transport_diagnostic(
     const generativeqc_batch* batch, uint32_t index, generativeqc_ks_transport_diagnostic* out) {
   if (!batch || index >= batch->plan->size()) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -505,6 +539,13 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
   std::fill(batch->initial_guesses.begin(), batch->initial_guesses.end(), std::nullopt);
+  std::fill(batch->last_fock_builds.begin(), batch->last_fock_builds.end(), 0);
+  // Revoke host records before method invalidation or argument rejection can
+  // return. A failed replay must not expose diagnostics from the previous run.
+  std::fill(batch->precision.begin(), batch->precision.end(), std::nullopt);
+  std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(), std::nullopt);
+  std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
+  std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
   // Method-owned tokens must follow the same invalidation boundary as the
   // cached diagnostics, including malformed descriptors and output counts.
   try {
@@ -513,13 +554,6 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
   if (results == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  std::fill(batch->last_fock_builds.begin(), batch->last_fock_builds.end(), 0);
-  // Invalidate before validation/execution so rejected or throwing replays
-  // cannot expose a record from the previous run.
-  std::fill(batch->precision.begin(), batch->precision.end(), std::nullopt);
-  std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(), std::nullopt);
-  std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
-  std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
   const std::uint32_t system_count = generativeqc_batch_get_system_count(batch);
   if (result_count != system_count || ((inputs == nullptr) != (input_count == 0)) ||
       (inputs != nullptr && input_count != system_count)) {
