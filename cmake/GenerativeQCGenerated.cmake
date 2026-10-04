@@ -22,6 +22,14 @@ function(generativeqc_register_generated_sources)
   foreach(_generativeqc_output IN LISTS VGS_OUTPUTS)
     list(APPEND _generativeqc_depfile_targets --target "${_generativeqc_output}")
   endforeach()
+  set(_generativeqc_codegen_byproducts)
+  foreach(_generativeqc_byproduct IN LISTS VGS_BYPRODUCTS)
+    list(APPEND _generativeqc_codegen_byproducts --byproduct "${_generativeqc_byproduct}")
+  endforeach()
+  set(_generativeqc_codegen_dependencies)
+  foreach(_generativeqc_dependency IN LISTS VGS_DEPENDS)
+    list(APPEND _generativeqc_codegen_dependencies --dependency "${_generativeqc_dependency}")
+  endforeach()
 
   # CMake 3.27+ can tell Ninja that the explicit DEPENDS/DEPFILE edges fully
   # describe generated-source prerequisites. This avoids inheriting transitive
@@ -38,6 +46,8 @@ function(generativeqc_register_generated_sources)
     COMMAND "${Python3_EXECUTABLE}" "${_generativeqc_codegen_runner}"
             --depfile "${_generativeqc_depfile}"
             ${_generativeqc_depfile_targets}
+            ${_generativeqc_codegen_byproducts}
+            ${_generativeqc_codegen_dependencies}
             --source-root "${PROJECT_SOURCE_DIR}"
             "${VGS_GENERATOR}" ${VGS_ARGS}
     DEPENDS "${VGS_GENERATOR}" "${_generativeqc_codegen_runner}" ${VGS_DEPENDS}
