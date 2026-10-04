@@ -23,6 +23,11 @@ from generativeqc_compiler.tensor import (
     input_tensor,
     reduce_sum,
 )
+from generativeqc_compiler.tensor.cuda_cutensor import (
+    cutensor_contract,
+    cutensor_opportunities,
+    cutensor_provider_candidates,
+)
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
 from generativeqc_compiler.tensor.cuda_providers import (
     CubReductionProvider,
@@ -415,3 +420,86 @@ def test_cub_provider_accepts_explicit_header_evidence() -> None:
         TARGET.target_info, features=(("cub-block-reduce-header", True),)
     )
     assert CubReductionProvider().candidates(request, target)[0].status == "ready"
+
+
+
+def test_cutensor_opportunity_describes_existing_packed_gemm_without_promotion() -> None:
+    plan = plan_cuda(_gemm_program(packed=True), TARGET)
+    index = next(i for i, step in enumerate(plan.steps) if step.gemm == "packed")
+    contract = cutensor_contract(plan, index)
+
+    assert contract is not None
+    assert cutensor_opportunities(plan) == (contract,)
+    assert contract.a_extents == (7, 13)
+    assert contract.b_extents == (13, 11)
+    assert contract.c_extents == (11, 7)
+    assert contract.a_strides == (13, 1)
+    assert contract.b_strides == (11, 1)
+    assert contract.c_strides == (7, 1)
+    assert contract.alpha == 1.0
+    assert contract.flops == 2 * 7 * 11 * 13
+    assert contract.packing_bytes_avoided > 0
+
+    # Candidate discovery must not silently change the selected execution.
+    selected = tensor_lowering_diagnostics(plan)
+    assert "nvidia.cutensor" not in selected["providers"]
+
+
+def test_cutensor_provider_requires_explicit_availability_and_resource_bounds() -> None:
+    plan = plan_cuda(_gemm_program(packed=True), TARGET)
+    index = next(i for i, step in enumerate(plan.steps) if step.gemm == "packed")
+
+    unknown = cutensor_provider_candidates(plan, index)[0]
+    assert unknown.status == "unsupported"
+    assert "cutensor=True" in unknown.reason
+
+    capabilities = TargetCapabilities(
+        TARGET.target_info,
+        features=(
+            ("cutensor", True),
+            ("cutensor-provider-bytes", 96 << 20),
+            ("cutensor-workspace-bytes", 128 << 20),
+        ),
+    )
+    candidate = cutensor_provider_candidates(
+        plan, index, target_capabilities=capabilities
+    )[0]
+    assert candidate.status == "ready"
+    assert candidate.workspace_bytes == 128 << 20
+    assert candidate.provider_bytes == 96 << 20
+    assert candidate.providers[0].name == "nvidia.cutensor"
+    assert dict(candidate.request.semantics)["packing_bytes_avoided"] > 0
+
+    foreign = TargetCapabilities(
+        cuda_target_info("sm_120").target_info,
+        features=capabilities.features,
+    )
+    with pytest.raises(ValueError, match="planned target"):
+        cutensor_provider_candidates(plan, index, target_capabilities=foreign)
+
+
+@pytest.mark.parametrize(
+    "features",
+    [
+        (("cutensor", False),),
+        (("cutensor", True),),
+        (("cutensor", True), ("cutensor-workspace-bytes", 0)),
+        (
+            ("cutensor", True),
+            ("cutensor-workspace-bytes", 0),
+            ("cutensor-provider-bytes", True),
+        ),
+    ],
+)
+def test_cutensor_provider_fails_closed_without_typed_resource_evidence(
+    features: tuple[tuple[str, object], ...],
+) -> None:
+    plan = plan_cuda(_gemm_program(packed=True), TARGET)
+    index = next(i for i, step in enumerate(plan.steps) if step.gemm == "packed")
+    candidate = cutensor_provider_candidates(
+        plan,
+        index,
+        target_capabilities=TargetCapabilities(TARGET.target_info, features=features),
+    )[0]
+    assert candidate.status == "unsupported"
+    assert candidate.reason
