@@ -101,8 +101,7 @@ void local_ao_cases() {
         const auto dense_capability = cuda_xc_execution_capabilities(dense);
         require(dense_capability.local_ao_selection,
                 "physical FP64 XC layout lost local-AO selection capability");
-        require(dense_capability.mixed_density_contraction ==
-                    mixed_density_capability[functional],
+        require(dense_capability.mixed_density_contraction == mixed_density_capability[functional],
                 "dense XC mixed-density capability disagrees with the generated point program");
         Fixture local(basis, grid, functional, uks, 19, CudaXcAoPrecision::Fp64, false, 1.0, 1.0,
                       &full_maps);
