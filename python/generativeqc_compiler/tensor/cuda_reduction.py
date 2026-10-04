@@ -14,6 +14,7 @@ from math import prod
 from typing import Literal
 
 from .cuda_dtype import scalar_type
+from .cuda_plan import ELEMENTWISE
 
 ReductionProvider = Literal["generated", "cub"]
 REDUCTION_PROVIDERS: tuple[ReductionProvider, ...] = ("generated", "cub")
@@ -107,18 +108,74 @@ def cooperative_reduction_shared_bytes(plan: typing.Any, index: int) -> int:
     return plan.schedule.threads * accumulator.itemsize
 
 
-def _virtual_ancestors(plan: typing.Any, index: int) -> frozenset[int]:
-    """Return virtual producer steps recursively consumed by one plan step."""
+def _virtual_accesses(
+    plan: typing.Any, index: int
+) -> dict[int, tuple[typing.Any, ...]]:
+    """Prove equal logical accesses without implementing another index mapper.
 
-    ancestors: set[int] = set()
-    pending = list(plan.steps[index].inputs)
+    Equal canonical TensorIR reduction attributes and operand shapes imply equal
+    root accesses. Only flat-index-preserving primitives propagate that proof.
+    Other virtual primitives are opaque boundaries: their own value can be
+    shared, but an ancestor behind them has no proved access. Multiple distinct
+    or unproved paths to a producer exclude it, including a second occurrence
+    of the same operand with different einsum labels.
+    """
+
+    step = plan.steps[index]
+    node = step.node
+    if node.op == "reduce":
+        accesses = [("reduce", node.inputs[0].spec.shape, node.attrs["axes"])]
+    else:
+        topology = (
+            "einsum",
+            tuple(child.spec.shape for child in node.inputs),
+            node.attrs["labels"],
+            node.attrs["output"],
+        )
+        accesses = [(*topology, labels) for labels in node.attrs["labels"]]
+    pending: list[tuple[int, tuple[typing.Any, ...] | None]] = list(
+        zip(step.inputs, accesses, strict=True)
+    )
+    seen: dict[int, set[tuple[typing.Any, ...] | None]] = {}
+    while pending:
+        child, access = pending.pop()
+        if not plan.steps[child].virtual:
+            continue
+        paths = seen.setdefault(child, set())
+        if access in paths:
+            continue
+        paths.add(access)
+        producer = plan.steps[child]
+        preserved = producer.node.op in ELEMENTWISE or producer.node.op in (
+            "cast",
+            "reshape",
+        )
+        pending.extend(
+            (operand, access if preserved else None) for operand in producer.inputs
+        )
+    result = {}
+    for producer, paths in seen.items():
+        if len(paths) == 1:
+            access = next(iter(paths))
+            if access is not None:
+                result[producer] = access
+    return result
+
+
+def _independent_consumers(plan: typing.Any, steps: tuple[int, ...]) -> bool:
+    """Reject sibling groups with dependencies across any materialized boundary."""
+
+    members = set(steps)
+    pending = [child for index in steps for child in plan.steps[index].inputs]
+    seen: set[int] = set()
     while pending:
         child = pending.pop()
-        if child in ancestors or not plan.steps[child].virtual:
-            continue
-        ancestors.add(child)
-        pending.extend(plan.steps[child].inputs)
-    return frozenset(ancestors)
+        if child in members:
+            return False
+        if child not in seen:
+            seen.add(child)
+            pending.extend(plan.steps[child].inputs)
+    return True
 
 
 def streamed_reduction_fusion_groups(
@@ -129,20 +186,21 @@ def streamed_reduction_fusion_groups(
     This is a schedule fact only: it does not change lowering or claim that a
     persistent kernel exists. Grouping is deliberately conservative. Two
     reductions are grouped only when they use the active cooperative lowering,
-    have identical reduction/output/precision topology, and share at least one
-    virtual producer. Virtual producers with the same consumer set are
+    have matching proved accesses and precision, are independent siblings, and
+    share at least one virtual producer. Unproved mappings remain ungrouped.
+    Virtual producers with the same consumer set are
     collapsed into one deterministic group so the emitter can later consume a
     stable fusion identity without rediscovering graph relationships.
     """
 
     candidates: dict[
         tuple[int, tuple[int, ...], str, str],
-        list[tuple[int, frozenset[int]]],
+        list[tuple[int, dict[int, tuple[typing.Any, ...]]]],
     ] = {}
     for index, step in enumerate(plan.steps):
         if cooperative_reduction_provider(plan, index) is None:
             continue
-        ancestors = _virtual_ancestors(plan, index)
+        ancestors = _virtual_accesses(plan, index)
         if not ancestors:
             continue
         precision = plan.precision_by_node[step.node]
@@ -155,16 +213,21 @@ def streamed_reduction_fusion_groups(
         candidates.setdefault(signature, []).append((index, ancestors))
 
     groups: list[StreamedReductionFusionGroup] = []
+    independent: dict[tuple[int, ...], bool] = {}
     for signature, members in candidates.items():
-        producer_consumers: dict[int, set[int]] = {}
+        producer_consumers: dict[tuple[int, tuple[typing.Any, ...]], set[int]] = {}
         for index, ancestors in members:
-            for producer in ancestors:
-                producer_consumers.setdefault(producer, set()).add(index)
+            for producer, access in ancestors.items():
+                producer_consumers.setdefault((producer, access), set()).add(index)
 
         shared_by_steps: dict[tuple[int, ...], set[int]] = {}
-        for producer, consumers in producer_consumers.items():
+        for (producer, _), consumers in producer_consumers.items():
             steps = tuple(sorted(consumers))
             if len(steps) < 2:
+                continue
+            if steps not in independent:
+                independent[steps] = _independent_consumers(plan, steps)
+            if not independent[steps]:
                 continue
             shared_by_steps.setdefault(steps, set()).add(producer)
 
