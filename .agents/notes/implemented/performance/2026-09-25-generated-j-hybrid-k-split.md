@@ -74,6 +74,10 @@ generic K-only contraction without reopening Coulomb ownership.
 
 ## Revisit when
 
+The whole-request mixed-J fallback below is superseded by the
+[independent channel dispatch decision](../architecture/2026-10-05-independent-direct-channel-dispatch.md).
+The original rationale and evidence remain source-scoped.
+
 Revisit this split if generated exact-K shell consumers become available, mixed-J
 gains an equivalent generated arithmetic contract, or profiling shows the
 ordered generated-J plus generic-K sequence is slower than the combined generic

@@ -537,14 +537,16 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
           b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
-          p.heads + cls, nullptr, nullptr);
+          p.heads + cls, p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr,
+          nullptr);
       if (error != cudaSuccess) return error;
     }
     if (shared.class_mask & kNativeStreamingFockShellClassMask) {
       launch_bounded_direct_dddd_streaming_kernel(
           unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
           shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
-          shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr, nullptr);
+          shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr,
+          p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
     }
@@ -862,14 +864,15 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
     error = generated::launch_shell_class_streaming_fock(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
-        p.schwarz, p.density, p.coulomb, p.heads + cls, nullptr, nullptr);
+        p.schwarz, p.density, p.coulomb, p.heads + cls,
+        p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr, nullptr);
     if (error != cudaSuccess) return error;
   }
   if (p.value_class_mask & kNativeStreamingFockShellClassMask) {
     launch_bounded_direct_dddd_streaming_kernel(
         false, DirectScreeningPurpose::Fock, false, p.worker_blocks, 32, 0, p.stream, b, p.topology,
         p.screening, p.schwarz, p.density, p.active, p.coulomb, p.heads + kDdddShellClass, nullptr,
-        nullptr);
+        p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
   }
   return cudaGetLastError();
 }
