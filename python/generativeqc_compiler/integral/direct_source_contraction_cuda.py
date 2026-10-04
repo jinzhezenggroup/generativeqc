@@ -39,6 +39,19 @@ template <typename Scalar, bool PairedRanges, bool AllCenterGradient>
 using CartesianSourceResult = std::conditional_t<AllCenterGradient, CartesianQuartetGradient,
                                                 CartesianRangeResult<Scalar, PairedRanges>>;
 
+/** Preserve physical Cartesian normalization outside the reusable source. */
+__device__ inline double cartesian_component_normalization(
+    const DeviceBatch& batch, std::size_t i, std::size_t j, std::size_t k, std::size_t l) {
+  return batch.direct_ao_coefficients[i] * batch.direct_ao_coefficients[j] *
+         batch.direct_ao_coefficients[k] * batch.direct_ao_coefficients[l];
+}
+
+/** The tiled FP64 consumer retains the original left-to-right primitive weight. */
+__device__ inline double cartesian_component_primitive_weight(
+    double normalization, double a, double b, double c, double d) {
+  return normalization * a * b * c * d;
+}
+
 /**
  * Contract one quartet of normalized Cartesian source AOs.
  *

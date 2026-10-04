@@ -937,4 +937,8 @@ bool direct_shared_rsh_values_requested() noexcept {
   return cuda_policy::canonical_rsh_values_requested();
 }
 
+bool direct_component_values_requested() noexcept {
+  return cuda_policy::canonical_component_values_requested();
+}
+
 }  // namespace generativeqc::scf::cuda_execution

@@ -672,6 +672,68 @@ struct CartesianRangePair {
 template <typename Scalar, bool PairedRanges>
 using CartesianRangeResult = std::conditional_t<PairedRanges, CartesianRangePair<Scalar>, Scalar>;
 
+/** A bounded source shared by a tile of Cartesian components of one shell quartet.
+ * The native owner supplies CTA synchronization and lifetime. Preparing all
+ * component rows keeps the existing Hermite algebra; only their ownership
+ * changes. Full and range roots reuse the same auxiliary sequentially.
+ */
+template <unsigned Order>
+struct CartesianComponentSource {
+  static_assert(Order >= 5U && Order <= 8U);
+  ShellPairHermiteCoefficients<double, 3U, 3U> left[3], right[3];
+  CoulombAuxiliary<double, Order> auxiliary;
+  Vec3<double> product_p, product_q;
+  double rho, prefactor;
+};
+
+/** Prepare geometry and every component's Hermite rows exactly once per tile.
+ * No AO normalization or contraction coefficient is absorbed into this source;
+ * each component retains its own physical weight and primitive summation order.
+ */
+template <unsigned Order>
+__device__ inline void prepare_cartesian_component_geometry(
+    CartesianComponentSource<Order>& source, const unsigned* shell_angular,
+    const Vec3<double>* centers, const double* exponents) {
+  const double p = exponents[0] + exponents[1];
+  const double q = exponents[2] + exponents[3];
+  source.rho = p * q / (p + q);
+  source.prefactor = 2.0 * pow(kPi, 2.5) / (p * q * sqrt(p + q));
+  source.product_p = product_center(exponents[0], centers[0], exponents[1], centers[1]);
+  source.product_q = product_center(exponents[2], centers[2], exponents[3], centers[3]);
+  for (unsigned axis = 0; axis < 3U; ++axis) {
+    fill_shell_pair_hermite<3U, 3U>(
+        shell_angular[0], shell_angular[1], vec_axis(source.product_p, axis),
+        vec_axis(centers[0], axis), vec_axis(centers[1], axis), exponents[0], exponents[1],
+        source.left[axis]);
+    fill_shell_pair_hermite<3U, 3U>(
+        shell_angular[2], shell_angular[3], vec_axis(source.product_q, axis),
+        vec_axis(centers[2], axis), vec_axis(centers[3], axis), exponents[2], exponents[3],
+        source.right[axis]);
+  }
+}
+
+/** Retain independent Full/SR/LR moments, including the range owner's failures. */
+template <unsigned Order>
+__device__ inline bool prepare_cartesian_component_radial(
+    CartesianComponentSource<Order>& source, generativeqc::integrals::CoulombRange range,
+    double omega) {
+  if (range == generativeqc::integrals::CoulombRange::Full) {
+    fill_coulomb<Order>(source.rho, source.product_p, source.product_q, source.auxiliary);
+    return true;
+  }
+  return fill_range_coulomb<Order>(source.rho, source.product_p, source.product_q, range,
+                                   omega, source.auxiliary);
+}
+
+/** Consume immutable shared roots with the retained six-index sum order. */
+template <unsigned Order>
+__device__ inline double consume_cartesian_component(
+    const CartesianComponentSource<Order>& source, const Angular* angular) {
+  return source.prefactor * prepared_cartesian_contraction<Order>(
+      angular[0], angular[1], angular[2], angular[3], source.left, source.right,
+      source.auxiliary);
+}
+
 /** Evaluate the shared Hermite contraction with shell-bounded storage.
  * Radial identity changes only the Coulomb moments, not the Hermite bounds.
  * Dual geometry seeds also keep these bounds: they differentiate coefficients

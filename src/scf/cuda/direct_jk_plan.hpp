@@ -83,6 +83,19 @@ struct CudaDirectJkPlan {
    * If its charged workspace does not fit, the dense canonical source remains. */
   const std::int32_t* canonical_pair_order{};
   const std::uint64_t* canonical_row_prefix{};
+  /** Optional geometry-only shell-pair rows for component-source tiles.
+   * Their maxima are derived from the retained Cartesian AO Schwarz matrix.
+   * O(N_shell^2) sort/prefix storage is charged after every established owner;
+   * absence retains the original AO-row consumers. No AO-quartet list exists.
+   */
+  std::vector<std::array<std::size_t, 8>> component_pair_offsets;
+  const std::int32_t* component_pairs{};
+  const std::int32_t* component_pair_order{};
+  const std::uint64_t* component_row_prefix{};
+  /** Borrowed diagnostic counters: shell visits, common primitive preparations,
+   * radial preparations, primitive-component contractions. Null in production.
+   */
+  std::uint64_t* component_work_count{};
   /** Derivative-capable canonical plans may retain shell AO offsets/pairs in
    * batch so HF's one-electron kernel can borrow metadata and derivative scratch. */
   double *canonical_density{}, *canonical_coulomb{}, *canonical_exchange{};

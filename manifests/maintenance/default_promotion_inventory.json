@@ -551,6 +551,28 @@
       "evidence": [
         "note:.agents/notes/proposed/2026-10-04-scalar-all-center-gradients.md"
       ]
+    },
+    {
+      "id": "hf.canonical-shell-component-values",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_CANONICAL_COMPONENT_VALUES"
+      ],
+      "owner_issues": [
+        1598,
+        1787
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_jk_kernels.cu"
+      ],
+      "rationale": "Default-off orders 5-8 canonical values using conservative shell-pair rows and 128-component shared geometry/Hermite/radial tiles. Exact AO screening, separate outputs and bounded fallbacks remain; no derivative or speedup promotion. Explicit per-component recurrence experiments retain priority.",
+      "revisit_condition": "Independent full/LR/SR matrices with both spins, projections, masks, actual source/component work, tail and empty domains, budget rollback and GPU sanitizers; same-binary complete cold/warm/displaced endpoints and larger sizes before promotion.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-shell-component-value-consumer.md"
+      ]
     }
   ]
 }

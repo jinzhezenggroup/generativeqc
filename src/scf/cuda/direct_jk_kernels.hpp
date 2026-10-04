@@ -34,6 +34,15 @@ cudaError_t prepare_canonical_pair_order(cudaStream_t stream, DeviceBatch batch,
                                          std::int32_t* sorted_order, void* workspace,
                                          std::size_t workspace_bytes);
 
+/** Sort shell-pair AO-bound maxima using the same geometry-only row contract. */
+cudaError_t prepare_component_pair_order(cudaStream_t stream, DeviceBatch batch,
+                                         const std::int32_t* shell_pairs, const double* ao_bounds,
+                                         int pair_count, int segment_count,
+                                         const int* segment_offsets, double* input_keys,
+                                         std::int32_t* input_order, double* sorted_keys,
+                                         std::int32_t* sorted_order, void* workspace,
+                                         std::size_t workspace_bytes);
+
 /** Prefix only quartets admitted by the original product comparison.
  * The same-bucket triangle is defined in the sorted order, preserving symmetry.
  */
@@ -104,6 +113,22 @@ void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool car
                                 DirectCoulombRange exchange_range, double exchange_omega,
                                 double screening, const double* bounds, const double* density,
                                 double* coulomb, double* exchange, std::uint64_t* work_count);
+
+/** Tile Cartesian components of one screened shell quartet through shared roots.
+ * Orders 5--8 only. The final AO predicate and orbit scatter remain unchanged.
+ * A nonnull range_exchange requests joint full J/K + selected-range K; otherwise
+ * want_j/want_k follow the ordinary independent source seam. No allocation.
+ */
+void launch_component_jk_kernel(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
+                                unsigned angular_order, const std::int32_t* shell_pairs,
+                                CanonicalPairRows rows, std::size_t first_begin,
+                                std::size_t first_count, std::size_t second_begin,
+                                std::size_t second_count, bool same_bucket, bool want_j,
+                                bool want_k, bool unrestricted, DirectCoulombRange exchange_range,
+                                double omega, double screening, const double* bounds,
+                                const double* density, double* coulomb, double* exchange,
+                                double* range_exchange, std::uint64_t* work_count,
+                                std::uint64_t* component_work_count);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_derivative_kernel(
