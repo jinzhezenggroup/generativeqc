@@ -1,6 +1,7 @@
 #include "scf/fock_prepared.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <stdexcept>
@@ -441,8 +442,29 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
   if (eligible) {
     const auto& data = *impl_->fitted;
     const auto matrix = data.raw.nbf * data.raw.nbf;
-    if (density.size() == matrix && data.df_gradient_orbital && data.df_gradient_auxiliary &&
-        data.df_gradient_budget > 0) {
+    if (density.size() != matrix || !beta.empty())
+      throw std::invalid_argument("Fock provider density/spin layout mismatch");
+    for (double value : density)
+      if (!std::isfinite(value)) throw std::invalid_argument("nonfinite Fock provider input");
+    for (std::size_t i = 0; i < data.raw.nbf; ++i)
+      for (std::size_t j = 0; j < data.raw.nbf; ++j)
+        if (std::abs(density[i * data.raw.nbf + j] - density[j * data.raw.nbf + i]) > 1e-10)
+          throw std::invalid_argument("generated CUDA DF response requires symmetric densities");
+
+    auto derivative_spec = strategy.spec;
+    derivative_spec.derivative_order = 1;
+    const auto derivative_strategy =
+        resolve_fock_build(derivative_spec, strategy.backend, strategy.screening_tolerance,
+                           strategy.metric_relative_threshold);
+    if (!cuda_density_fitting_jk_plan_matches(impl_->cuda_df.get(), 0, data.raw.nbf, data.raw.naux,
+                                              derivative_strategy.metric_relative_threshold) ||
+        data.metric_relative_threshold != derivative_strategy.metric_relative_threshold)
+      throw std::invalid_argument("CUDA DF Fock item/dimensions/cutoff mismatch");
+    if (!data.df_gradient_orbital || !data.df_gradient_auxiliary || !data.df_gradient_budget ||
+        data.raw.ncoord != 3 * data.df_gradient_orbital->atoms.size())
+      throw std::invalid_argument("CUDA DF Fock source lacks matching generated derivative metadata");
+
+    {
       const auto execute = [&](FockBuildSpec spec,
                                const CudaDensityFittingOccupiedProjectionLease* lease) {
         std::vector<double> out(data.raw.ncoord);
@@ -467,15 +489,13 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
                                             std::vector<double>(data.raw.ncoord)};
       // K' must consume U=B*Cocc before any later DF response revokes/writes
       // the shared projection scratch. J' is independent and follows normally.
-      if (strategy.spec.exchange.present) {
-        auto exchange = strategy.spec;
-        exchange.derivative_order = 1;
+      if (derivative_spec.exchange.present) {
+        auto exchange = derivative_spec;
         exchange.coulomb.present = false;
         result.exchange = execute(exchange, occupied_projection);
       }
-      if (strategy.spec.coulomb.present) {
-        auto coulomb = strategy.spec;
-        coulomb.derivative_order = 1;
+      if (derivative_spec.coulomb.present) {
+        auto coulomb = derivative_spec;
         coulomb.exchange.present = false;
         result.coulomb = execute(coulomb, nullptr);
       }
