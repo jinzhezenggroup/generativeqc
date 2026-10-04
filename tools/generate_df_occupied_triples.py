@@ -19,6 +19,7 @@ from generativeqc_compiler.cc.occupied_triples import (
     inverse,
     moment_program,
     v_scalar_program,
+    w_fp32_candidate_program,
 )
 from generativeqc_compiler.cc.occupied_triples_fock import (
     moment_program as fock_moment_program,
@@ -26,6 +27,7 @@ from generativeqc_compiler.cc.occupied_triples_fock import (
 from generativeqc_compiler.cc.occupied_triples_fock import (
     resolvent_scalar_program,
 )
+from generativeqc_compiler.cc.occupied_triples_lowering import emit_w_portfolio
 from generativeqc_compiler.cc.occupied_triples_response import (
     energy_scalar_vjp,
     gap_vjp,
@@ -34,12 +36,18 @@ from generativeqc_compiler.cc.occupied_triples_response import (
     scaled_denominator_vjp,
 )
 from generativeqc_compiler.cc.triples import _LABELS, VP
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.tensor import describe_precision
 from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
+from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 from tools.generate_rccsd_native import _cuda_program, _required_function
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from generativeqc_compiler.tensor import Node, Program
 
 
@@ -56,12 +64,14 @@ def _call(program: Program, name: str, bindings: dict[str, str], output: str) ->
 
 def _gemm(
     node: Node,
-    bindings: dict[str, tuple[str, str | None]],
+    bindings: Mapping[str, tuple[str, str | None]],
     alpha: str,
     beta: str,
     *,
     output_pointer: str = "output",
     output_leading_dimension: str | None = None,
+    adapter: TensorLoweringAdapter | None = None,
+    descriptors: list[str] | None = None,
 ) -> str:
     """Derive a column-major call from a TensorIR product and strided views.
 
@@ -72,8 +82,13 @@ def _gemm(
     this contraction, since one cube can be [ab,c] in W1 and [a,bc] in W2.
     """
     g = gemm_contract(node)
-    if g is None or g.batch_labels or g.coefficient != 1 or g.dtype != "float64":
-        raise ValueError("occupied triples require unbatched unit FP64 products")
+    if (
+        g is None
+        or g.batch_labels
+        or g.coefficient != 1
+        or g.dtype not in ("float32", "float64")
+    ):
+        raise ValueError("occupied triples require unbatched unit real products")
     a, b, c, m, n, k = (
         g.a_labels,
         g.b_labels,
@@ -90,6 +105,10 @@ def _gemm(
         operand = raw_operand
         while operand.op == "add" and len(operand.inputs) == 1:
             scale *= Fraction(*operand.attrs["coefficients"][0])
+            operand = operand.inputs[0]
+        while operand.op == "cast":
+            if operand.attrs["dtype"] != g.dtype:
+                raise ValueError("occupied triples cast does not match GEMM precision")
             operand = operand.inputs[0]
         if operand.op != "input":
             raise ValueError(
@@ -125,6 +144,31 @@ def _gemm(
 
     lda = aa[1] or extent(k if a == m + k else m)
     ldb = bb[1] or extent(n if b == k + n else k)
+    if adapter is not None:
+        if descriptors is None or c != g.m_labels + g.n_labels:
+            raise ValueError("typed triples projection needs original input order")
+        slot = len(descriptors)
+        dimension = lambda index: {"occupied": "o", "virtual": "v", "auxiliary": "q"}[
+            index.space.kind
+        ]
+        descriptors.append(
+            contraction_initializer(
+                adapter,
+                node,
+                dimension,
+                transpose=(trans(a, m, k), trans(b, k, n)),
+                extents=("1", extent(m), extent(n), extent(k)),
+                coefficient=alpha,
+                row_axes=(
+                    len(m) if a == m + k else len(k),
+                    len(k) if b == k + n else len(n),
+                    len(m),
+                ),
+                leading_dimensions=(lda, ldb, output_leading_dimension or extent(n)),
+                beta=beta,
+            )
+        )
+        return f"table.execute({slot},o,v,q,context.stream,{aa[0]},{bb[0]},{output_pointer},context.error);"
     # Transpose the entire row-major product, reversing the two operands.
     return (
         f"gemm('{trans(b, k, n)}','{trans(a, m, k)}',"
@@ -475,13 +519,263 @@ def fock_cuda_source() -> str:
     return "\n".join(lines)
 
 
+def native_execution_header() -> str:
+    """Emit typed, prepared execution of the existing strict/mixed W region."""
+    panel, moments, mixed = (
+        df_panel_program(3, 4),
+        moment_program(2, 3),
+        w_fp32_candidate_program(2, 3),
+    )
+    panel_adapter, strict_adapter, mixed_adapter = map(
+        TensorLoweringAdapter, (panel, moments, mixed)
+    )
+    w, mixed_w = moments.outputs["w"], mixed.outputs["w"]
+    products = [value.inputs[0] for value in mixed_w.inputs]
+    coefficient = lambda pair: f"({pair[0]}.0/{pair[1]}.0)"
+    weights = w.attrs["coefficients"]
+    panel_descriptors: list[str] = []
+    strict_descriptors: list[str] = []
+    mixed_descriptors: list[str] = []
+    panel_call = _gemm(
+        panel.outputs["panel"],
+        {"bov_i": ("in.bov+i*v", "o*v"), "bvv": ("in.bvv", "v*v")},
+        "1.0",
+        "0.0",
+        adapter=panel_adapter,
+        descriptors=panel_descriptors,
+    )
+    strict_calls, mixed_calls = [], []
+    for slot, (left, right) in enumerate(
+        (
+            (
+                {"panel": ("panel", "v"), "t2_kj": ("in.t2+(k*o+j)*v*v", "v")},
+                {"panel": ("panel", "v"), "t2_kj": ("t2+(k*o+j)*v*v", "v")},
+            ),
+            (
+                {
+                    "ovoo_ij": ("in.ovoo+(i*v*o+j)*o", "o*o"),
+                    "t2_mk": ("in.t2+k*v*v", "o*v*v"),
+                },
+                {
+                    "ovoo_ij": ("ovoo+(i*v*o+j)*o", "o*o"),
+                    "t2_mk": ("t2+k*v*v", "o*v*v"),
+                },
+            ),
+        )
+    ):
+        strict_calls.append(
+            _gemm(
+                w.inputs[slot],
+                left,
+                coefficient(weights[slot]),
+                f"{slot}.0",
+                adapter=strict_adapter,
+                descriptors=strict_descriptors,
+            )
+        )
+        mixed_calls.append(
+            _gemm(
+                products[slot],
+                right,
+                "1.0",
+                "0.0",
+                output_pointer="scratch",
+                adapter=mixed_adapter,
+                descriptors=mixed_descriptors,
+            )
+        )
+        mixed_calls.append(
+            f"generativeqc_tensor::accumulate_fp32_into_fp64(context,scratch,output,v3,{coefficient(weights[slot])},{slot}.0,22);"
+        )
+    code_identity = canonical_hash(
+        {
+            "descriptors": [panel_descriptors, strict_descriptors, mixed_descriptors],
+            "calls": [panel_call, strict_calls, mixed_calls],
+            "schema": "prepared-w-v1",
+        }
+    )
+    return (
+        "\n".join(
+            [
+                "#ifdef __CUDACC__",
+                emit_w_portfolio(code_identity),
+                r"""
+struct WPlan {
+  std::size_t selected{};
+  runtime::NativeLoweringPrecision precision;
+  bool retained_incumbent{};
+  std::string_view schedule_identity;
+  std::size_t provider_bytes() const { return w_lowering_candidates[selected].provider_bytes; }
+  std::size_t storage_bytes(std::size_t o,std::size_t v,std::size_t panels) const {
+    if(precision.arithmetic.storage_dtype==runtime::PrecisionDtype::Fp64) return 0;
+    const auto v3=checked_product({v,v,v});
+    return checked_mul(checked_add(checked_add(checked_product({o,v,o,o}),checked_product({o,o,v,v})),
+                                  checked_mul(checked_add(panels,1),v3)),sizeof(float));
+  }
+};
+inline WPlan prepare_w_plan(runtime::PrecisionDirective admitted,bool library_available=true) {
+  const bool strict=admitted.is_strict_fp64();
+  if(admitted.math_mode!=runtime::kStrictPrecisionMathMode ||
+      (!strict && (admitted.storage_dtype!=runtime::PrecisionDtype::Fp32 ||
+                   admitted.compute_dtype!=runtime::PrecisionDtype::Fp32 ||
+                   admitted.accumulation_dtype!=runtime::PrecisionDtype::Fp32 ||
+                   admitted.qualification!="issue1764/df-triples-w-fp32-candidate-v1")))
+    throw std::invalid_argument("unqualified triples W arithmetic");
+  auto offers=w_lowering_candidates;
+  for(std::size_t i=0;i<offers.size();++i) {
+    if(strict && i>=2) offers[i].rejection="scientific owner did not admit this precision";
+    if(!library_available && i%2==0) offers[i].rejection="optional provider preparation unavailable";
+  }
+  const auto incumbent=(strict?0:2)+(library_available?0:1);
+  const auto selected=runtime::select_native_lowering(w_lowering_request,offers,w_lowering_target,
+                                                     w_lowering_compilation,1,incumbent);
+  return {selected.selected,w_lowering_precisions[offers[selected.selected].precision],selected.retained_incumbent,
+          strict ? "@STRICT_SCHEDULE@" : "@MIXED_SCHEDULE@"};
+}
+
+// Finite resource fallback order: retain precision with generated execution,
+// then restore strict precision. No method owner chooses a vendor or dtype.
+inline std::optional<WPlan> lower_resource_w_plan(const WPlan& plan) {
+  if(plan.selected%2==0) return prepare_w_plan(plan.precision.arithmetic,false);
+  if(!plan.precision.arithmetic.is_strict_fp64()) return prepare_w_plan(runtime::strict_fp64_precision(),false);
+  return std::nullopt;
+}
+
+/** Complete prepared W region. Native methods supply canonical inputs and
+ * borrowed storage; casts, matrix algorithms and FP64 publication live here.
+ * Tables/context are prepared once; repeated occupied tiles only bind views.
+ * The caller's tensor Context and arena must outlive this object. */
+class WExecution {
+ public:
+  static std::size_t host_bytes() {
+    return sizeof(WExecution)+tensor::PreparedContractions::storage_bytes(1)+
+           tensor::PreparedContractions::storage_bytes(2);
+  }
+  WExecution(WPlan plan,std::size_t o_,std::size_t v_,std::size_t q_,generativeqc_tensor::Context& context,
+             unsigned char* storage,std::size_t panels,std::size_t& fp64_calls,std::size_t& fp32_calls,
+             std::size_t& summands,std::size_t& casts)
+      : o(o_),v(v_),q(q_),v3(checked_product({v,v,v})),plan_(plan),casts_(&casts) {
+    if(plan_.selected%2) provider_.prepare_generated(context.stream);
+    else if(!provider_.prepare(context.stream)) {
+      provider_.prepare_generated(context.stream);
+      plan_=prepare_w_plan(plan.precision.arithmetic,false);
+    }
+    const auto algorithm=plan_.selected%2 ? tensor::ContractionAlgorithm::GeneratedOrdered
+                                        : tensor::ContractionAlgorithm::PedanticBlas;
+""",
+                "    panel_table_.add(o,v,q,{"
+                + ",".join(panel_descriptors)
+                + "},provider_,fp64_calls,summands,{algorithm});",
+                "    if(plan_.precision.arithmetic.storage_dtype==runtime::PrecisionDtype::Fp64) {",
+                "      w_table_.add(o,v,q,{"
+                + ",".join(strict_descriptors)
+                + "},provider_,fp64_calls,summands,{algorithm,algorithm});",
+                "      launch_=&WExecution::strict_w;",
+                "    } else {",
+                "      w_table_.add(o,v,q,{"
+                + ",".join(mixed_descriptors)
+                + "},provider_,fp32_calls,summands,{algorithm,algorithm});",
+                r"""
+      auto* cursor=reinterpret_cast<float*>(storage);
+      ovoo_=cursor;cursor+=checked_product({o,v,o,o});
+      t2_=cursor;cursor+=checked_product({o,o,v,v});
+      panels_=cursor;cursor+=checked_mul(panels,v3);
+      scratch_=cursor;
+      launch_=&WExecution::mixed_w;
+    }
+  }
+  const WPlan& plan() const noexcept { return plan_; }
+  std::size_t provider_bytes() const noexcept { return provider_.retained_bytes(); }
+  int provider_version() const noexcept { return provider_.provider_version(); }
+  int runtime_version() const noexcept { return provider_.runtime_version(); }
+  void initialize(generativeqc_tensor::Context& context,const Inputs& in) {
+    if(!ovoo_) return;
+    const auto a=checked_product({o,v,o,o}),b=checked_product({o,o,v,v});
+    generativeqc_tensor::convert_fp64_to_fp32(context,in.ovoo,ovoo_,a,20);
+    generativeqc_tensor::convert_fp64_to_fp32(context,in.t2,t2_,b,21);
+    *casts_=checked_add(*casts_,checked_add(a,b));
+  }
+  void build_panel(generativeqc_tensor::Context& context,const Inputs& in,std::size_t i,
+                   double* output,std::size_t slot) {
+    auto& table=panel_table_;
+""",
+                panel_call,
+                r"""
+    if(panels_) {
+      generativeqc_tensor::convert_fp64_to_fp32(context,output,panels_+slot*v3,v3,23);
+      *casts_=checked_add(*casts_,v3);
+    }
+  }
+  void build_w(generativeqc_tensor::Context& context,const Inputs& in,
+               std::size_t i,std::size_t j,std::size_t k,const double* panel,double* output,std::size_t slot) {
+    (this->*launch_)(context,in,i,j,k,panel,output,slot);
+  }
+ private:
+  void strict_w(generativeqc_tensor::Context& context,const Inputs& in,
+                std::size_t i,std::size_t j,std::size_t k,const double* panel,double* output,std::size_t) {
+    auto& table=w_table_;
+""",
+                *strict_calls,
+                r"""
+  }
+  void mixed_w(generativeqc_tensor::Context& context,const Inputs&,
+               std::size_t i,std::size_t j,std::size_t k,const double*,double* output,std::size_t slot) {
+    auto& table=w_table_;
+    const auto* ovoo=ovoo_;const auto* t2=t2_;const auto* panel=panels_+slot*v3;
+    auto* scratch=scratch_;
+""",
+                *mixed_calls,
+                r"""
+    *casts_=checked_add(*casts_,checked_mul(2,v3));
+  }
+  using Launcher=void(WExecution::*)(generativeqc_tensor::Context&,const Inputs&,
+      std::size_t,std::size_t,std::size_t,const double*,double*,std::size_t);
+  std::size_t o,v,q,v3;
+  WPlan plan_;
+  tensor::CudaContractionContext provider_;
+  tensor::PreparedContractions panel_table_,w_table_;
+  float *ovoo_{},*t2_{},*panels_{},*scratch_{};
+  std::size_t* casts_{};
+  Launcher launch_{};
+};
+#endif
+""",
+            ]
+        )
+        .replace("@STRICT_SCHEDULE@", describe_precision(moments).identity)
+        .replace("@MIXED_SCHEDULE@", describe_precision(mixed).identity)
+    )
+
+
 def header() -> str:
     panel = df_panel_program(3, 4)
     moments = moment_program(2, 3)
+    mixed_moments = w_fp32_candidate_program(2, 3)
+    mixed_schedule = describe_precision(mixed_moments)
     scalar, v_scalar = energy_scalar_program(), v_scalar_program()
     w = moments.outputs["w"]
+    mixed_w = mixed_moments.outputs["w"]
     if w.op != "add" or len(w.inputs) != 2:
         raise ValueError("occupied W seed must contain two audited products")
+    if mixed_w.op != "add" or len(mixed_w.inputs) != 2:
+        raise ValueError("mixed occupied W seed must retain the FP64 W sum")
+    mixed_products = []
+    for value in mixed_w.inputs:
+        if (
+            value.op != "cast"
+            or value.spec.dtype != "float64"
+            or len(value.inputs) != 1
+            or value.inputs[0].op != "einsum"
+            or value.inputs[0].spec.dtype != "float32"
+        ):
+            raise ValueError(
+                "mixed occupied W seed must cast two FP32 reductions to FP64"
+            )
+        mixed_products.append(value.inputs[0])
+    if mixed_w.attrs["coefficients"] != w.attrs["coefficients"]:
+        raise ValueError(
+            "mixed occupied W coefficients differ from the strict equation"
+        )
     weights = w.attrs["coefficients"]
     coefficient = lambda pair: f"({pair[0]}.0/{pair[1]}.0)"
     lines = [
@@ -492,6 +786,8 @@ def header() -> str:
         "#include <initializer_list>",
         '#include "posthf/capacity.hpp"',
         "#ifdef __CUDACC__",
+        '#include "tensor/cuda_contraction.cuh"',
+        '#include "runtime/lowering_binding.hpp"',
         "#define GQC_DF_TRIPLES_HD __host__ __device__",
         "#else",
         "#define GQC_DF_TRIPLES_HD",
@@ -502,6 +798,8 @@ def header() -> str:
         "  std::size_t n=1; for (auto x:xs) n=checked_mul(n,x); return n; }",
         f'inline constexpr const char* panel_hash="{panel.logical_hash}";',
         f'inline constexpr const char* moment_hash="{moments.logical_hash}";',
+        f'inline constexpr const char* w_fp32_precision_schedule_identity="{mixed_schedule.identity}";',
+        f'inline constexpr const char* w_fp32_precision_request_identity="{mixed_schedule.request_identity}";',
         f'inline constexpr const char* epilogue_hash="{scalar.logical_hash}";',
         "inline constexpr unsigned permutations[6][3]={"
         + ",".join("{" + ",".join(map(str, p)) + "}" for p in PERMUTATIONS)
@@ -535,6 +833,29 @@ def header() -> str:
             "1.0",
         ),
         "}",
+        "template<class Gemm,class Accumulate> void build_w_fp32(std::size_t o,std::size_t v,",
+        "  std::size_t i,std::size_t j,std::size_t k,const float* ovoo,const float* t2,",
+        "  const float* panel,float* scratch,double* output,Gemm&& gemm,Accumulate&& accumulate) {",
+        _gemm(
+            mixed_products[0],
+            {"panel": ("panel", "v"), "t2_kj": ("t2+(k*o+j)*v*v", "v")},
+            "1.0",
+            "0.0",
+            output_pointer="scratch",
+        ),
+        f"accumulate(scratch,checked_product({{v,v,v}}),{coefficient(weights[0])},0.0,output);",
+        _gemm(
+            mixed_products[1],
+            {
+                "ovoo_ij": ("ovoo+(i*v*o+j)*o", "o*o"),
+                "t2_mk": ("t2+k*v*v", "o*v*v"),
+            },
+            "1.0",
+            "0.0",
+            output_pointer="scratch",
+        ),
+        f"accumulate(scratch,checked_product({{v,v,v}}),{coefficient(weights[1])},1.0,output);",
+        "}",
     ]
     for program, name in ((v_scalar, "v_element"), (scalar, "energy_element")):
         lines.append(
@@ -546,6 +867,7 @@ def header() -> str:
             ).replace("inline bool ", "GQC_DF_TRIPLES_HD inline bool ")
         )
     lines += [
+        native_execution_header(),
         response_blas_header(),
         response_scalar_header(),
         fock_header(),

@@ -9,14 +9,17 @@
 #include "methods/rccsd_method.hpp"
 
 namespace generativeqc::methods::detail {
-/** Complete internal endpoint, on an unchanged conventional RHF reference with
- * a DF correlation Hamiltonian. Public capability promotion is separate. */
+/** Complete native endpoint on an unchanged conventional RHF reference with
+ * a DF correlation Hamiltonian. The public energy-only selector reuses this
+ * owner; public force promotion remains separate. */
 struct DFCCSDTResult {
   // If true, total_seconds includes a resource-refused precursor whose work
   // counters are unavailable; successful-primal counters are not endpoint totals.
   bool recycling_discarded_primal_attempt{};
   double energy{}, reference_energy{}, correlation_energy{}, triples_energy{};
   std::vector<double> forces;
+  Result method_result;
+  generativeqc_correlation_diagnostic correlation{};
   std::size_t numeric_capacity_bytes{}, source_weight_values{}, metric_weight_values{};
   double total_seconds{}, triples_seconds{}, lambda_seconds{}, source_response_seconds{},
       orbital_seconds{};

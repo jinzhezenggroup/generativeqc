@@ -1,0 +1,929 @@
+{
+  "decision": "rejected-no-demonstrated-endpoint-benefit",
+  "ordered_processes_not_causal_estimates": true,
+  "cases": {
+    "48": {
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phases": {
+        "cold": {
+          "control": {
+            "seconds": [
+              125.36796459555626
+            ],
+            "median_seconds": 125.36796459555626,
+            "iterations": [
+              25
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              125.99919246137142
+            ],
+            "median_seconds": 125.99919246137142,
+            "iterations": [
+              25
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              51.028874941170216
+            ],
+            "median_seconds": 51.028874941170216,
+            "iterations": [
+              43
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate_over_control": 1.0050350013087597,
+          "candidate_over_reference": 2.4691744155957274
+        },
+        "warm": {
+          "control": {
+            "seconds": [
+              11.230339881032705,
+              11.254058383405209,
+              11.086867090314627,
+              11.22592257335782,
+              11.158045947551727
+            ],
+            "median_seconds": 11.22592257335782,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              11.47819185256958,
+              11.130595192313194,
+              11.39559955894947,
+              11.307195015251637,
+              11.231354221701622
+            ],
+            "median_seconds": 11.307195015251637,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              5.94522263482213,
+              6.207182962447405,
+              5.910387117415667,
+              5.916296117007732,
+              7.273116201162338
+            ],
+            "median_seconds": 5.94522263482213,
+            "iterations": [
+              3,
+              3,
+              3,
+              3,
+              4
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate_over_control": 1.0072397116016725,
+          "candidate_over_reference": 1.901895977624718
+        },
+        "moved": {
+          "control": {
+            "seconds": [
+              55.30640276148915
+            ],
+            "median_seconds": 55.30640276148915,
+            "iterations": [
+              12
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              55.51048767194152
+            ],
+            "median_seconds": 55.51048767194152,
+            "iterations": [
+              12
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              47.61505137011409
+            ],
+            "median_seconds": 47.61505137011409,
+            "iterations": [
+              43
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate_over_control": 1.0036900774641317,
+          "candidate_over_reference": 1.1658180779950404
+        },
+        "moved-warm": {
+          "control": {
+            "seconds": [
+              11.915003627538681,
+              11.16198194026947,
+              11.076556380838156,
+              11.469948541373014,
+              11.025044932961464
+            ],
+            "median_seconds": 11.16198194026947,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              11.248954694718122,
+              11.1668591350317,
+              11.305143225938082,
+              11.364557091146708,
+              11.03461342677474
+            ],
+            "median_seconds": 11.248954694718122,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              3.9168032445013523,
+              3.974501509219408,
+              3.9090615920722485,
+              3.9289443530142307,
+              3.9122673720121384
+            ],
+            "median_seconds": 3.9168032445013523,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate_over_control": 1.0077918737831744,
+          "candidate_over_reference": 2.871973390675187
+        }
+      },
+      "comparisons": {
+        "control-reference": {
+          "pairings": 72,
+          "max_energy_error": 7.73070496506989e-12,
+          "max_forces_error": 2.685868194518548e-11
+        },
+        "candidate-reference": {
+          "pairings": 72,
+          "max_energy_error": 8.185452315956354e-12,
+          "max_forces_error": 2.6685764709100113e-11
+        },
+        "candidate-control": {
+          "pairings": 72,
+          "max_energy_error": 1.1368683772161603e-12,
+          "max_forces_error": 1.0837424707643706e-12
+        }
+      }
+    },
+    "96": {
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phases": {
+        "cold": {
+          "control": {
+            "seconds": [
+              273.22313122451305
+            ],
+            "median_seconds": 273.22313122451305,
+            "iterations": [
+              28
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              261.46337105333805
+            ],
+            "median_seconds": 261.46337105333805,
+            "iterations": [
+              26
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              87.61547619476914
+            ],
+            "median_seconds": 87.61547619476914,
+            "iterations": [
+              42
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate_over_control": 0.9569591340291326,
+          "candidate_over_reference": 2.984214460834581
+        },
+        "warm": {
+          "control": {
+            "seconds": [
+              32.474454153329134,
+              32.67792723700404,
+              32.53610686585307,
+              32.55499176681042,
+              32.5208148881793
+            ],
+            "median_seconds": 32.53610686585307,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              33.440832015126944,
+              32.84609595686197,
+              35.700179874897,
+              32.94644558429718,
+              36.374199494719505
+            ],
+            "median_seconds": 33.440832015126944,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              10.138083338737488,
+              13.65579716861248,
+              10.201079808175564,
+              10.116588771343231,
+              10.074752259999514
+            ],
+            "median_seconds": 10.138083338737488,
+            "iterations": [
+              1,
+              3,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate_over_control": 1.0278068040839696,
+          "candidate_over_reference": 3.2985359162860646
+        },
+        "moved": {
+          "control": {
+            "seconds": [
+              137.18802068009973
+            ],
+            "median_seconds": 137.18802068009973,
+            "iterations": [
+              13
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              138.39333895221353
+            ],
+            "median_seconds": 138.39333895221353,
+            "iterations": [
+              13
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              86.01609247550368
+            ],
+            "median_seconds": 86.01609247550368,
+            "iterations": [
+              43
+            ],
+            "fock_builds": [
+              null
+            ]
+          },
+          "candidate_over_control": 1.008785885721935,
+          "candidate_over_reference": 1.6089238068054095
+        },
+        "moved-warm": {
+          "control": {
+            "seconds": [
+              32.71476520225406,
+              32.45292665809393,
+              32.55717348307371,
+              32.52913327887654,
+              32.578209824860096
+            ],
+            "median_seconds": 32.55717348307371,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate": {
+            "seconds": [
+              33.067801263183355,
+              32.91534196212888,
+              36.55660839751363,
+              33.05744966864586,
+              36.63901971280575
+            ],
+            "median_seconds": 33.067801263183355,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "reference": {
+            "seconds": [
+              10.107371293008327,
+              10.144547902047634,
+              10.130906492471695,
+              10.103720799088478,
+              19.06954140216112
+            ],
+            "median_seconds": 10.130906492471695,
+            "iterations": [
+              1,
+              1,
+              1,
+              1,
+              6
+            ],
+            "fock_builds": [
+              null,
+              null,
+              null,
+              null,
+              null
+            ]
+          },
+          "candidate_over_control": 1.0156840329021535,
+          "candidate_over_reference": 3.2640515720637766
+        }
+      },
+      "comparisons": {
+        "control-reference": {
+          "pairings": 72,
+          "max_energy_error": 1.0595613275654614e-10,
+          "max_forces_error": 2.2460144855074304e-11
+        },
+        "candidate-reference": {
+          "pairings": 72,
+          "max_energy_error": 1.0504663805477321e-10,
+          "max_forces_error": 2.3884838551424536e-11
+        },
+        "candidate-control": {
+          "pairings": 72,
+          "max_energy_error": 2.2737367544323206e-12,
+          "max_forces_error": 2.851940905657102e-12
+        }
+      }
+    }
+  },
+  "census": {
+    "kind": "separate-intrusive-energy-only-work-census",
+    "source_identity": "cb81f4c481e5cadd85999a7ff791f93a95a61f9fcf7bb5917ba3c3bfffa849b8",
+    "job": 5779,
+    "timing_claim": null,
+    "force_claim": null,
+    "cases": {
+      "48": {
+        "independent_energy_pairings": 72,
+        "max_energy_error": 8.640199666842818e-12,
+        "max_physical_residual_rms": 1.370899640054489e-12,
+        "total_fock_builds": 47,
+        "geometries": [
+          {
+            "geometry": 0,
+            "fock_builds": [
+              25,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "admitted_per_build": [
+              {
+                "j_admitted": [
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365,
+                  32816365
+                ],
+                "k_admitted": [
+                  23948001,
+                  28296668,
+                  23586802,
+                  23007464,
+                  22910877,
+                  22921648,
+                  22899078,
+                  22802879,
+                  22789679,
+                  22775870,
+                  22776160,
+                  22776224,
+                  22776230,
+                  22776232,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236,
+                  22776236
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816365
+                ],
+                "k_admitted": [
+                  22776236
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816365
+                ],
+                "k_admitted": [
+                  22776236
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816365
+                ],
+                "k_admitted": [
+                  22776236
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816365
+                ],
+                "k_admitted": [
+                  22776236
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816365
+                ],
+                "k_admitted": [
+                  22776236
+                ]
+              }
+            ]
+          },
+          {
+            "geometry": 1,
+            "fock_builds": [
+              12,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "admitted_per_build": [
+              {
+                "j_admitted": [
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476,
+                  32816476
+                ],
+                "k_admitted": [
+                  22776334,
+                  22776358,
+                  22776360,
+                  22776358,
+                  22776358,
+                  22776356,
+                  22776357,
+                  22776357,
+                  22776357,
+                  22776357,
+                  22776357,
+                  22776357
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816476
+                ],
+                "k_admitted": [
+                  22776357
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816476
+                ],
+                "k_admitted": [
+                  22776357
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816476
+                ],
+                "k_admitted": [
+                  22776357
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816476
+                ],
+                "k_admitted": [
+                  22776357
+                ]
+              },
+              {
+                "j_admitted": [
+                  32816476
+                ],
+                "k_admitted": [
+                  22776357
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "96": {
+        "independent_energy_pairings": 72,
+        "max_energy_error": 1.0413714335300028e-10,
+        "max_physical_residual_rms": 9.518153955248393e-14,
+        "total_fock_builds": 50,
+        "geometries": [
+          {
+            "geometry": 0,
+            "fock_builds": [
+              26,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "admitted_per_build": [
+              {
+                "j_admitted": [
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104,
+                  142757104
+                ],
+                "k_admitted": [
+                  82161781,
+                  107893642,
+                  105928710,
+                  78318134,
+                  74652186,
+                  73584994,
+                  72450234,
+                  72129253,
+                  72135728,
+                  72124398,
+                  72118253,
+                  72116514,
+                  72116584,
+                  72116620,
+                  72116588,
+                  72116588,
+                  72116586,
+                  72116584,
+                  72116584,
+                  72116584,
+                  72116584,
+                  72116584,
+                  72116584,
+                  72116584,
+                  72116584,
+                  72116584
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757104
+                ],
+                "k_admitted": [
+                  72116584
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757104
+                ],
+                "k_admitted": [
+                  72116584
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757104
+                ],
+                "k_admitted": [
+                  72116584
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757104
+                ],
+                "k_admitted": [
+                  72116584
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757104
+                ],
+                "k_admitted": [
+                  72116584
+                ]
+              }
+            ]
+          },
+          {
+            "geometry": 1,
+            "fock_builds": [
+              14,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "admitted_per_build": [
+              {
+                "j_admitted": [
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340,
+                  142757340
+                ],
+                "k_admitted": [
+                  72116740,
+                  72116779,
+                  72116787,
+                  72116796,
+                  72116793,
+                  72116797,
+                  72116795,
+                  72116796,
+                  72116796,
+                  72116796,
+                  72116795,
+                  72116797,
+                  72116795,
+                  72116796
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757340
+                ],
+                "k_admitted": [
+                  72116796
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757340
+                ],
+                "k_admitted": [
+                  72116796
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757340
+                ],
+                "k_admitted": [
+                  72116796
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757340
+                ],
+                "k_admitted": [
+                  72116796
+                ]
+              },
+              {
+                "j_admitted": [
+                  142757340
+                ],
+                "k_admitted": [
+                  72116796
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
