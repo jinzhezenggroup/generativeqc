@@ -30,6 +30,16 @@ method-specific adjoint solver.
 
 ## Problem snapshot
 
+The native host/resident GMRES controllers force an exact candidate residual
+when the projected Hessenberg residual predicts convergence, at restart,
+breakdown or iteration exhaustion, and at the configured periodic interval.
+The projected norm only requests an exact action; it never accepts a solution.
+The native exact-RHF frame response defaults that interval to its restart size
+to amortize repeated J/K traversal. Its separate scalar-CUDA final residual
+and full frame stationarity audits remain mandatory. Setting
+`gmres.true_residual_every=1` retains per-iteration candidate auditing for
+comparisons and difficult numerical domains.
+
 `ResponseProblem` binds all scientific state before an operator or subspace is
 created:
 

@@ -27,6 +27,9 @@ struct GmresOptions {
   std::size_t max_workspace_bytes{64ULL << 20};
   unsigned reorthogonalize{2};
   double breakdown_tolerance{1e-14};
+  // Maximum iteration interval between full candidate-residual actions.
+  // Predicted convergence, restart, breakdown and exhaustion also force a
+  // fresh action. Only that true unpreconditioned residual can accept a solve.
   std::size_t true_residual_every{1};
   std::size_t stagnation_window{25};
   double stagnation_tolerance{1e-14};

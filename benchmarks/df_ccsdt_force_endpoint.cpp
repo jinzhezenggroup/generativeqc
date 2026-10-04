@@ -34,11 +34,11 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 11)
+    if (argc < 4 || argc > 12)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
-          "[CCSD_Q_BATCH_LIMIT [DERIVED_DENOMINATORS_0_OR_1]]]]]]]");
+          "[CCSD_Q_BATCH_LIMIT [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -53,6 +53,8 @@ int main(int argc, char** argv) {
     const auto diis_history = argc > 8 ? std::stoul(argv[8]) : 6;
     const auto ccsd_batch_limit = argc > 9 ? std::stoull(argv[9]) : 8;
     const bool derived_denominators = selector(10);
+    generativeqc::hf::RHFFrameResponseOptions response_options;
+    if (argc > 11) response_options.gmres.true_residual_every = std::stoull(argv[11]);
     if (diis_history == 1 || diis_history > 20)
       throw std::invalid_argument("invalid endpoint DIIS history");
     std::ifstream input(argv[1]);
@@ -91,7 +93,7 @@ int main(int argc, char** argv) {
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
         execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
-        batch_limit, ccsd_batch_limit, derived_denominators);
+        batch_limit, ccsd_batch_limit, derived_denominators, &response_options);
     std::ofstream output(argv[2]);
     if (!output) throw std::runtime_error("cannot open completed force output");
     output << std::setprecision(17) << "{\n";
@@ -153,6 +155,10 @@ int main(int argc, char** argv) {
     field("source_response_seconds", result.source_response_seconds);
     field("orbital_seconds", result.orbital_seconds);
     field("jk_actions", result.orbital.jk_actions);
+    field("z_iterations", result.orbital.orbital_response.iterations);
+    field("z_operator_actions", result.orbital.orbital_response.operator_actions);
+    field("z_preconditioner_actions", result.orbital.orbital_response.preconditioner_actions);
+    field("z_true_residual_interval", response_options.gmres.true_residual_every);
     field("hessian_elements", result.orbital.explicit_hessian_elements);
     field("source_weight_values", result.source_weight_values);
     field("metric_weight_values", result.metric_weight_values);

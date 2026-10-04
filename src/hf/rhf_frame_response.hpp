@@ -24,7 +24,13 @@ struct RHFFrameResponseOptions {
   std::size_t caller_bytes{};
   bool matrix_blas{true};
   bool relax_orbitals{true};
-  response::GmresOptions gmres{};
+  response::GmresOptions gmres = [] {
+    response::GmresOptions options;
+    // Each exact action traverses J/K. Intermediate candidate checks are
+    // amortized; convergence and the separate scalar audit still use exact J/K.
+    options.true_residual_every = options.restart;
+    return options;
+  }();
 };
 
 struct RHFFrameResponseResult {

@@ -260,8 +260,11 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
       transformed[column + 1] = -sine[column] * transformed_upper;
       ++iterations;
 
-      const bool checkpoint = broke_down || column + 1 == restart ||
-                              iterations == plan.options.max_iterations ||
+      // The small Hessenberg residual can request an exact check; it can never
+      // accept a solution. This lets expensive operators amortize intermediate
+      // checks without waiting until restart after predicted convergence.
+      const bool checkpoint = std::abs(transformed[column + 1]) <= target || broke_down ||
+                              column + 1 == restart || iterations == plan.options.max_iterations ||
                               iterations % plan.options.true_residual_every == 0;
       if (!checkpoint) continue;
       const std::size_t columns = column + 1;
