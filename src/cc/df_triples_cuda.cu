@@ -135,6 +135,73 @@ ResponseLayout response_layout(std::size_t o, std::size_t v, std::size_t q, std:
   return p;
 }
 
+struct FockLayout {
+  Layout value;
+  std::size_t foo{}, fvv{}, xl{}, yl{}, xr{}, yr{}, block{};
+  std::size_t capacity{}, pages{}, pairs{}, cubes{}, page_builds{}, page_pairs{};
+  std::size_t host_bytes{}, output_bytes{}, complete{};
+};
+FockLayout fock_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t capacity,
+                       std::size_t panels, std::size_t caller_bytes) {
+  FockLayout r;
+  r.value = layout(o, v, q, panels);
+  auto& p = r.value;
+  // Cross-page oo contracts a flattened complete virtual cube as BLAS k.
+  if (p.v3 > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+    throw std::length_error("DF triples Fock response exceeds BLAS indexing");
+  r.capacity = capacity;
+  r.pages = 1 + (o - 1) / capacity;
+  r.pairs = checked_mul(o, checked_add(o, 1)) / 2;
+  r.page_pairs = checked_mul(r.pages, checked_add(r.pages, 1)) / 2;
+  r.page_builds = checked_mul(r.pairs, r.page_pairs);
+  const auto tail = o - checked_mul(r.pages - 1, capacity);
+  const auto prefix = checked_mul(checked_mul(capacity, r.pages), r.pages - 1) / 2;
+  r.cubes = checked_mul(r.pairs, checked_add(prefix, checked_mul(tail, r.pages)));
+  // Charge the complete replay ledger before touching input pointers, including
+  // zero-padded cross-page products. Scalar evaluations are separately reported.
+  (void)checked_mul(r.cubes, p.v3);
+  const auto panel_work = checked_mul(checked_mul(3, r.cubes), checked_mul(q, p.v3));
+  const auto w_work =
+      checked_mul(checked_mul(6, r.cubes), checked_add(checked_mul(v, p.v3), checked_mul(o, p.v3)));
+  const auto vv_work = checked_mul(checked_mul(2, checked_mul(r.pairs, o)), checked_mul(v, p.v3));
+  const auto oo_work = checked_mul(checked_mul(2, r.page_builds),
+                                   checked_mul(checked_mul(capacity, capacity), p.v3));
+  (void)checked_add(checked_add(panel_work, w_work), checked_add(vv_work, oo_work));
+  auto cursor = p.arena;
+  r.foo = reserve(cursor, bytes(checked_mul(o, o)));
+  r.fvv = reserve(cursor, bytes(checked_mul(v, v)));
+  const auto page_bytes = bytes(checked_mul(capacity, p.v3));
+  r.xl = reserve(cursor, page_bytes);
+  r.yl = reserve(cursor, page_bytes);
+  // A full occupied page needs only one X/Y pair. Under a smaller budget the
+  // right pair is independently owned and reused across cross-page moments.
+  r.xr = r.pages == 1 ? r.xl : reserve(cursor, page_bytes);
+  r.yr = r.pages == 1 ? r.yl : reserve(cursor, page_bytes);
+  r.block = reserve(cursor, bytes(checked_mul(capacity, capacity)));
+  p.arena = align256(cursor);
+  p.total = checked_add(p.arena, provider_allowance);
+  for (auto size : p.sizes) r.host_bytes = checked_add(r.host_bytes, bytes(size));
+  r.output_bytes = bytes(checked_add(checked_mul(o, o), checked_mul(v, v)));
+  r.complete =
+      checked_add(caller_bytes, checked_add(p.total, checked_add(r.host_bytes, r.output_bytes)));
+  return r;
+}
+
+// A cross-page moment is already symmetric in its two factors. Scatter each
+// matrix block once and mirror only off-diagonal page pairs; discard padded rows.
+__global__ void scatter_fock_block(std::size_t o, std::size_t capacity, std::size_t left,
+                                   std::size_t right, const double* block, double* foo,
+                                   int* error) {
+  for (std::size_t flat = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+       flat < capacity * capacity; flat += std::size_t(blockDim.x) * gridDim.x) {
+    const auto i = left + flat / capacity, j = right + flat % capacity;
+    if (i >= o || j >= o) continue;
+    foo[i * o + j] = generativeqc_tensor::finite(foo[i * o + j] + block[flat], error, 10);
+    if (left != right)
+      foo[j * o + i] = generativeqc_tensor::finite(foo[j * o + i] + block[flat], error, 10);
+  }
+}
+
 // Audit only the logical output of a strided BLAS view. Padding can contain
 // unrelated valid tensor elements and is not part of this contraction's result.
 __global__ void audit_matrix(const double* c, std::size_t m, std::size_t n, std::size_t ldc,
@@ -510,6 +577,181 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
     result.scalar_response_evaluations = checked_mul(43, d.epilogue_points);
   }
   d.seconds = std::chrono::duration<double>(Clock::now() - started).count();
+  return result;
+}
+DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t q,
+                                       const double* bov, const double* bvv, const double* ovoo,
+                                       const double* ovov, const double* fov, const double* t1,
+                                       const double* t2, const double* eps_o, const double* eps_v,
+                                       double threshold, std::size_t max_bytes, int device,
+                                       std::size_t caller_bytes, std::size_t max_page_rows,
+                                       std::size_t max_panel_buffers) {
+  const auto started = Clock::now();
+  if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
+      !max_panel_buffers || max_panel_buffers > 3)
+    throw std::invalid_argument("invalid DF triples Fock dimensions, threshold or panel limit");
+  auto capacity = max_page_rows ? std::min(o, max_page_rows) : o;
+  auto r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes);
+  while (r.complete > max_bytes) {
+    // Prefer retaining more resolvent rows over extra cached integral panels:
+    // a full page eliminates every cross-occupied recomputation.
+    if (r.value.panel_capacity > 1) {
+      r = fock_layout(o, v, q, capacity, 1, caller_bytes);
+      if (r.complete <= max_bytes) break;
+    }
+    if (capacity == 1)
+      throw std::length_error("DF triples Fock response exceeds complete numeric budget");
+    --capacity;
+    r = fock_layout(o, v, q, capacity, max_panel_buffers, caller_bytes);
+  }
+  const auto& p = r.value;
+  const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
+  const double minimum = validate_inputs(o, v, q, p, host, threshold);
+  // Detached destinations and error status outlive the device owner's drain.
+  DFCudaFockResult result;
+  result.foo.resize(o * o);
+  result.fvv.resize(v * v);
+  int failed = 0;
+  {
+    runtime::CudaDeviceScope device_scope(device);
+    generativeqc_tensor::Context context;
+    cudaDeviceProp properties{};
+    generativeqc_tensor::cuda_check(cudaGetDeviceProperties(&properties, device));
+    context.prepare(device, properties.major, properties.minor, p.arena, p.error, p.library,
+                    blas_workspace, provider_allowance, true);
+    auto pointer = [&](std::size_t offset) {
+      return reinterpret_cast<double*>(context.arena + offset);
+    };
+    generated_df::Inputs in;
+    const std::array<const double**, 9> fields{&in.bov, &in.bvv, &in.ovoo,  &in.ovov, &in.fov,
+                                               &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
+    for (std::size_t x = 0; x < 9; ++x) {
+      *fields[x] = pointer(p.inputs[x]);
+      generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
+                                                      bytes(p.sizes[x]), cudaMemcpyHostToDevice,
+                                                      context.stream));
+    }
+    generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
+    generativeqc_tensor::cuda_check(
+        cudaMemsetAsync(pointer(r.foo), 0, bytes(o * o), context.stream));
+    generativeqc_tensor::cuda_check(
+        cudaMemsetAsync(pointer(r.fvv), 0, bytes(v * v), context.stream));
+    auto gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t kk, double alpha,
+                    const double* a, std::size_t lda, const double* b, std::size_t ldb, double beta,
+                    double* c, std::size_t ldc) {
+      generativeqc_tensor::blas_check(
+          cublasDgemm(context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
+                      tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, static_cast<int>(m),
+                      static_cast<int>(n), static_cast<int>(kk), &alpha, a, static_cast<int>(lda),
+                      b, static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
+      const auto count = checked_mul(m, n);
+      const auto blocks =
+          static_cast<unsigned>(std::min<std::size_t>(1 + (count - 1) / 256, 65535));
+      audit_matrix<<<blocks, 256, 0, context.stream>>>(c, m, n, ldc, context.error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
+      ++result.audit_kernels;
+      result.contraction_summands =
+          checked_add(result.contraction_summands, checked_mul(count, kk));
+    };
+    std::array<std::size_t, 3> identities;
+    identities.fill(std::numeric_limits<std::size_t>::max());
+    std::array<std::size_t, 3> ages{};
+    std::size_t epoch = 0;
+    auto panel_for = [&](std::size_t occupied) {
+      std::size_t slot = 0;
+      for (; slot < p.panel_capacity; ++slot)
+        if (identities[slot] == occupied) break;
+      if (slot == p.panel_capacity) {
+        slot = static_cast<std::size_t>(
+            std::min_element(ages.begin(), ages.begin() + p.panel_capacity) - ages.begin());
+        generated_df::build_panel(o, v, q, occupied, in, pointer(p.panels) + slot * p.v3, gemm);
+        ++result.panel_gemms;
+        identities[slot] = occupied;
+      }
+      ages[slot] = ++epoch;
+      return pointer(p.panels) + slot * p.v3;
+    };
+    auto page = [&](std::size_t start, std::size_t j, std::size_t k, double* x, double* y) {
+      ++result.page_builds;
+      const auto page_bytes = bytes(checked_mul(capacity, p.v3));
+      // Explicit padding protects oo tail products even when the right buffer
+      // was previously used for a full page in a different (j,k) pair.
+      generativeqc_tensor::cuda_check(cudaMemsetAsync(x, 0, page_bytes, context.stream));
+      generativeqc_tensor::cuda_check(cudaMemsetAsync(y, 0, page_bytes, context.stream));
+      for (std::size_t lane = 0; lane < capacity && start + lane < o; ++lane) {
+        const auto i = start + lane;
+        const std::array<std::size_t, 3> occupied{i, j, k};
+        for (std::size_t index = 0; index < 3; ++index) {
+          if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
+              occupied.begin() + index)
+            continue;
+          const auto* panel = panel_for(occupied[index]);
+          for (std::size_t perm = 0; perm < 6; ++perm) {
+            const auto* order = generated_df::permutations[perm];
+            if (occupied[order[0]] != occupied[index]) continue;
+            generated_df::build_w(o, v, occupied[order[0]], occupied[order[1]], occupied[order[2]],
+                                  in, panel, pointer(p.moments) + perm * p.v3, gemm);
+            result.w_gemms += 2;
+          }
+        }
+        generated_df::resolvent_tile(o, v, i, j, k, threshold, in, pointer(p.moments), p.blocks,
+                                     x + lane * p.v3, y + lane * p.v3, context.error,
+                                     context.stream);
+        ++result.vector_cubes;
+      }
+    };
+    const auto scatter_blocks =
+        static_cast<unsigned>(std::min<std::size_t>(1 + (capacity * capacity - 1) / 256, 65535));
+    for (std::size_t j = 0; j < o; ++j)
+      for (std::size_t k = 0; k <= j; ++k) {
+        const double weight = j == k ? 1.0 : 2.0;
+        for (std::size_t left = 0; left < o; left += capacity) {
+          page(left, j, k, pointer(r.xl), pointer(r.yl));
+          for (std::size_t lane = 0; lane < capacity && left + lane < o; ++lane) {
+            generated_df::fock_vv(v, capacity, pointer(r.xl) + lane * p.v3,
+                                  pointer(r.yl) + lane * p.v3, weight, pointer(r.fvv), gemm);
+            result.fock_gemms += 2;
+          }
+          for (std::size_t right = left; right < o; right += capacity) {
+            if (left != right) page(right, j, k, pointer(r.xr), pointer(r.yr));
+            generated_df::fock_oo(v, capacity, pointer(r.xl), pointer(left == right ? r.xl : r.xr),
+                                  pointer(r.yl), pointer(left == right ? r.yl : r.yr), weight,
+                                  pointer(r.block), gemm);
+            result.fock_gemms += 2;
+            scatter_fock_block<<<scatter_blocks, 256, 0, context.stream>>>(
+                o, capacity, left, right, pointer(r.block), pointer(r.foo), context.error);
+            generativeqc_tensor::cuda_check(cudaGetLastError());
+            ++result.scatter_kernels;
+          }
+        }
+      }
+    if (result.vector_cubes != r.cubes || result.page_builds != r.page_builds)
+      throw std::logic_error("DF triples Fock replay work mismatch");
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.foo.data(), pointer(r.foo), bytes(o * o),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(result.fvv.data(), pointer(r.fvv), bytes(v * v),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaMemcpyAsync(&failed, context.error, sizeof(int),
+                                                    cudaMemcpyDeviceToHost, context.stream));
+    generativeqc_tensor::cuda_check(cudaStreamSynchronize(context.stream));
+    if (failed)
+      throw std::runtime_error("nonfinite or unsafe generated DF triples Fock arithmetic");
+    result.provider_retained_bytes = context.metrics.provider_retained_bytes;
+  }
+  result.minimum_absolute_denominator = minimum;
+  result.numeric_capacity_bytes = r.complete;
+  result.borrowed_host_bytes = r.host_bytes;
+  result.workspace_bytes = p.total;
+  result.arena_bytes = p.arena;
+  result.page_capacity = capacity;
+  result.page_count = r.pages;
+  result.panel_capacity = p.panel_capacity;
+  result.occupied_pairs = r.pairs;
+  result.unique_vector_cubes = checked_mul(r.pairs, o);
+  result.scalar_evaluations = checked_mul(r.cubes, p.v3);
+  result.h2d_bytes = r.host_bytes;
+  result.d2h_bytes = checked_add(r.output_bytes, sizeof(int));
+  result.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;
 }
 }  // namespace generativeqc::cc::triples
