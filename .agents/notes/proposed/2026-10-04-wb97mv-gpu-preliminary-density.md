@@ -38,6 +38,39 @@ before measuring a combined cold benefit. The separate #1807 experiment's
 48-atom import reduction is not extrapolated to this 96-atom timer. The public
 CUDA energy-only source capacity and lifetime contract remains unimplemented.
 
+## Admission and resident-path union qualification
+
+The composition at frozen c472684c9 includes master fc7d5e2d8 and #1807.
+Its 1,356 native/compiler/runtime inputs produce source identity
+`e98f295881774f47b077432c61371d38b0d944bf10a7aac4daf79fe31b455f3b`
+and library SHA-256
+`151af02d58efcec1b9b4567921b12a232b42bc6b233fedcb730edb3b53861d87`.
+All 453 compiler commands use verified ccache with retained before/after stats.
+Finite n1 RTX 5090 Slurm 5713 passes three native executables, four independent
+admission/live-lease cases, and all seven independent complete E/F, displaced
+energy and stale-state cases in each of sparse and zero-force-cache modes.
+Both modes retain 66 successful native calls and 467 actual XC submissions.
+The source/archive/library/executable/script receipts are verified before GPU
+execution; an independent local verifier accepts the completed allocation.
+
+The preceding deployment attempt, Slurm 5712, incorrectly inherited n2's
+`/usr/bin/g++-11` path, absent on n1. It passed native/admission checks but failed
+all seven force cases before force JIT compilation. The corrected n1 environment
+uses its installed `/usr/bin/g++` and the existing shared ccache. Original
+failure logs, script hashes and corrected qualification are retained separately
+under ignored `.artifacts/masterfc7-admission-20261004/`; a deployment correction
+is not a numerical-method improvement.
+
+The new complete cold comparison uses this qualified frozen binary for both
+no-source and LDA-source controls. Each source phase now has a separate
+synchronized timer: Calculator construction, prepared-owner creation, energy
+solve, density/coordinate export, target import and owner destruction. Remaining
+metadata/checking time is an explicitly named bookkeeping residual. Their sum
+must equal the source lifecycle and be included in target preparation. Unrun
+phases and unavailable Fock-build counts remain null. This preserves the earlier
+combined timers as historical measurements rather than retrospectively splitting
+them. The new results are pending; no combined speed gain is yet inferred.
+
 ## Motivation and boundary
 
 The [cold-work investigation](2026-10-03-wb97mv-cold-scf-work.md) found that

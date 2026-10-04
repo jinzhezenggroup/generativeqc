@@ -231,3 +231,18 @@ source-bound device qualification will cover this composition. The completed
 b909 timings remain historical controls and are not relabeled as latest-master
 performance. The public CUDA preliminary-source capacity/lifecycle API remains
 a separate task; neither this merge nor GPU admission removes its requirements.
+
+Frozen source 705bee15d completes that qualification on n2 RTX PRO 6000,
+Slurm 2195. All 453 compiler commands invoke verified ccache. Source identity is
+`5c1598101f2c7669c550995b6b2027eba9cbfd45b332b62057e9b8ff9214cd5a`,
+with 1,353 manifest inputs and library SHA-256
+`49370ed777de1204906e3b8af33c530c5b02e4bb7902c3c38693d0f1c9f8670e`.
+The runner verifies the complete deployed archive, loaded library, native test
+executables and scripts before execution. All three native executables and all
+four new independent admission/live-lease cases pass. The complete selected
+Python run remains 29 passed, one failed, no skips; the unchanged PBE-UKS OH
+changed/fresh energies are -75.5833106509504 / -75.5833106653314 Eh at the
+original 1e-9 gate. This is the same previously reproduced baseline failure,
+not a newly measured PRO 6000 baseline. Raw exit 1 and `whole_suite_passed=false`
+remain explicit in the independently checked scoped receipt under ignored
+`.artifacts/masterfc7-20261004/`. No latest-composition timing gain is inferred.
