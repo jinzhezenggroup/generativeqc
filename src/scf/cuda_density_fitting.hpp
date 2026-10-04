@@ -36,30 +36,6 @@ struct CudaOccupiedDensityInput {
   DensityFactorIdentity expected{};
 };
 
-/** One-shot final occupied RI-K projection supplied by a method owner.
- *
- * occupied_coefficients must be the canonical AO factors that generated the
- * exact density associated with projection = B*Cocc. The caller binds that
- * proof to the current prepared DF owner through source identity and scratch
- * generation. The response revalidates device/stream/dimensions/generation
- * before consuming the lease; it never infers provenance from shape alone.
- */
-struct CudaDensityFittingOccupiedProjectionLease {
-  int device_id{-1};
-  void* stream{};
-  const void* source_identity{};
-  const double* occupied_coefficients{};
-  const double* projection{};
-  std::size_t nbf{}, naux{}, rank{};
-  std::uint64_t scratch_generation{};
-
-  explicit operator bool() const noexcept {
-    return device_id >= 0 && stream != nullptr && source_identity != nullptr &&
-           occupied_coefficients != nullptr && projection != nullptr && nbf != 0 && naux != 0 &&
-           rank != 0 && scratch_generation != 0;
-  }
-};
-
 /** Fixed-density K with exact witness/provenance validation per spin and item.
  * Empty/missing/stale inputs execute dense K. `selected` reports actual use;
  * this internal entry point never changes J or invents orbitals from D.
@@ -90,6 +66,24 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
  * compatibility plans report their host staging. No failure authorizes an
  * oracle retry; unresolved rank crossings fail transactionally.
  */
+/** Method-owned, token-validated borrow of the exact restricted final-K
+ * occupied factor and fitted projection U=B*C. The provider remains the owner;
+ * the synchronous response consumes this view before its scratch lease is
+ * revoked. This descriptor cannot authorize reuse by itself: the DF plan also
+ * checks device/stream/shape/storage identity at the execution boundary. */
+struct CudaDfBorrowedFittedProjection {
+  int device_id{-1};
+  const double* occupied_coefficients{};
+  const double* projection{};
+  std::size_t nbf{}, naux{}, rank{};
+  void* stream{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && occupied_coefficients != nullptr && projection != nullptr &&
+           nbf != 0 && naux != 0 && rank != 0 && stream != nullptr;
+  }
+};
+
 generativeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDensityFittingJkPlan* plan, std::size_t system, const core::System& orbital,
     const core::System& auxiliary, std::span<const double> raw_a, const std::vector<double>& metric,
@@ -97,7 +91,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::size_t maximum_bytes, std::size_t maximum_auxiliary_tile, std::vector<double>& derivative,
     std::string& detail, DfGradientResources* resources = nullptr,
     const CudaDfFinalStateToken* final_state = nullptr,
-    const CudaDensityFittingOccupiedProjectionLease* occupied_projection = nullptr);
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.

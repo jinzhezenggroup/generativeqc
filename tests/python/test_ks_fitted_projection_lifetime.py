@@ -132,12 +132,27 @@ struct CudaKsPlan {
     )
     unit += r"""
 int main(int argc, char** argv) {
-  assert(argc == 2);
+  assert(argc == 3);
   const std::string mode=argv[1];
   Owner owner;
   auto& source=owner.provider.source;
+  source.value_storage.pairs=std::string(argv[2]) == "packed-single" ? 1 : 0;
   source.revoke_projection_leases();
   source.completed_occupied_projection_rank=1;
+  if (mode == "no-capacity" || mode == "streamed" || mode == "truncated" ||
+      mode == "unexecuted") {
+    if (mode == "no-capacity") {
+      source.value_storage.rank_capacity=0;
+      source.auxiliary_tile=1;
+    }
+    if (mode == "streamed") source.streamed=true;
+    if (mode == "truncated") source.metric_full_rank[0]=false;
+    if (mode == "unexecuted") source.completed_occupied_projection_rank=0;
+    owner.capture_submission(true);
+    owner.retain_final_fitted_projection();
+    assert(!owner.final_fitted_projection_ready && launches == 0);
+    return 0;
+  }
   owner.capture_submission(true);
   if (mode == "interleaved") {
     source.revoke_projection_leases();
@@ -154,6 +169,7 @@ int main(int argc, char** argv) {
   std::string detail;
   assert(plan.resident_final_fitted_projection(token,binding,detail) == GENERATIVEQC_STATUS_SUCCESS);
   assert(binding && launches == 1);
+  assert(binding.occupied_coefficients == owner.proposal && binding.generation == token.generation);
   if (mode == "unchanged") return 0;
   if (mode == "new-state") {
     ++owner.final_generation;
@@ -212,56 +228,21 @@ int main(int argc, char** argv) {
         "new-state",
         "overflow",
         "interleaved",
+        "no-capacity",
+        "streamed",
+        "truncated",
+        "unexecuted",
     ],
 )
+@pytest.mark.parametrize("storage", ["dense", "packed-single"])
 def test_final_projection_rejects_replaced_scratch(
-    projection_probe: Path, mode: str
+    projection_probe: Path, mode: str, storage: str
 ) -> None:
     result = subprocess.run(
-        [str(projection_probe), mode],
+        [str(projection_probe), mode, storage],
         capture_output=True,
         text=True,
         timeout=10,
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_dft_df_force_consumes_projection_before_revoke() -> None:
-    """The method proof is revalidated by the prepared DF owner before K' consumes it."""
-    method = (ROOT / "src/methods/dft_method.cpp").read_text()
-    prepared = (ROOT / "src/scf/fock_prepared.cpp").read_text()
-    response = (ROOT / "src/scf/cuda/df_force_response.cpp").read_text()
-
-    owner = _definition(
-        method, "  generativeqc_status density_fitted_integral_gradient("
-    )
-    assert "resident_final_fitted_projection(expected" in owner
-    assert (
-        "prepared_cuda_occupied_projection_binding(fock_, resident_projection.rank)"
-        in owner
-    )
-    assert "fitted_projection ? &fitted_projection : nullptr" in owner
-
-    bridge = _definition(
-        prepared,
-        "FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(\n"
-        "    const std::vector<double>& density, const std::vector<double>& beta,\n"
-        "    const CudaDensityFittingOccupiedProjectionLease* occupied_projection)",
-    )
-    assert bridge.index(
-        "result.exchange = execute(exchange, occupied_projection)"
-    ) < bridge.index("result.coulomb = execute(coulomb, nullptr)")
-
-    consumer = _definition(
-        response,
-        "generativeqc_status execute_cuda_density_fitting_generated_force_response(",
-    )
-    proof = consumer.index(
-        "external fitted occupied projection differs from the prepared DF owner"
-    )
-    revoke = consumer.index("plan->revoke_projection_leases();")
-    assert proof < revoke
-    assert "lease.source_identity != plan" in consumer
-    assert "lease.scratch_generation != plan->projection_scratch_generation" in consumer
-    assert "streamed_factors.owner_identity ? nullptr" in consumer

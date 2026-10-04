@@ -241,7 +241,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     unsigned schedule, std::size_t maximum_bytes, std::size_t maximum_auxiliary_tile,
     std::vector<double>& derivative, std::string& detail, DfGradientResources* resources,
     const CudaDfFinalStateToken* final_state,
-    const CudaDensityFittingOccupiedProjectionLease* occupied_projection) {
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection) {
   if (resources) *resources = {};
   if (!plan || system >= plan->batch_size || molecule::ao_count(orbital) != plan->nbf ||
       molecule::ao_count(auxiliary) != plan->naux) {
@@ -301,8 +301,39 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     detail = "GENERATIVEQC_DF_OCCUPIED_RESPONSE_SOURCE requires auto, raw or fitted";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  const bool fitted_occupied_requested = occupied_source == "fitted";
-  if (fitted_occupied_requested &&
+  const char* projection_control = std::getenv("GENERATIVEQC_DF_FINAL_PROJECTION");
+  const std::string_view projection = projection_control ? projection_control : "auto";
+  if (projection != "auto" && projection != "off" && projection != "reuse") {
+    detail = "GENERATIVEQC_DF_FINAL_PROJECTION must be auto, off or reuse";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  const bool explicit_fitted_occupied = occupied_source == "fitted";
+  // The producer can retain complete dense/packed-two projections as well.
+  // This consumer borrows only single-B; unsupported storage keeps its exact
+  // ordinary response instead of turning an optional lease into an error.
+  const bool select_borrowed_projection =
+      borrowed_fitted_projection && projection != "off" && occupied_source != "raw" &&
+      space != "dense" && storage != "jk-scratch" && !host_weights &&
+      plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle;
+  bool borrowed_fitted_occupied = false;
+  if (select_borrowed_projection) {
+    const auto& borrowed = *borrowed_fitted_projection;
+    if (!borrowed || borrowed.device_id != plan->device_id ||
+        borrowed.stream != reinterpret_cast<void*>(plan->stream) || borrowed.nbf != plan->nbf ||
+        borrowed.naux != plan->naux || borrowed.rank > plan->value_storage.rank_capacity ||
+        plan->batch_size != 1 || system != 0 || terms.size() != 1 || plan->streamed ||
+        !plan->integral_source ||
+        plan->value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
+        !plan->metric_full_rank[0] || !plan->metric_response_valid[0] ||
+        plan->completed_occupied_projection_rank != borrowed.rank ||
+        borrowed.projection != plan->auxiliary_tile_values) {
+      detail = "borrowed fitted projection does not match the current DF provider";
+      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+    }
+    borrowed_fitted_occupied = true;
+  }
+  const bool fitted_occupied_requested = explicit_fitted_occupied || borrowed_fitted_occupied;
+  if (explicit_fitted_occupied &&
       (space != "occupied" || plan->streamed || !plan->integral_source ||
        plan->value_storage.pairs != DfPairStorage::SymmetricLowerSingle ||
        storage == "jk-scratch")) {
@@ -350,6 +381,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
         borrow = true;
     }
   }
+  if (borrowed_fitted_occupied) borrow = false;
   CudaDfResponseBuffers buffers;
   CudaDfPackedRawTensorView packed_raw;
   const char* raw_reuse_control = std::getenv("GENERATIVEQC_DF_RAW_REUSE");
@@ -432,12 +464,6 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
   // Packed scratch is not a dense all-Q allocation. Invalid/stale/corrected
   // factors retain the exact bounded raw loader instead of widening storage.
   if (packed_resident && (!buffers.occupied_response || !packed_raw.data)) borrow = false;
-  const char* projection_control = std::getenv("GENERATIVEQC_DF_FINAL_PROJECTION");
-  const std::string_view projection = projection_control ? projection_control : "auto";
-  if (projection != "auto" && projection != "off" && projection != "reuse") {
-    detail = "GENERATIVEQC_DF_FINAL_PROJECTION must be auto, off or reuse";
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  }
   // Automatic reuse shares the resident work/capacity policy above.
   // Full-rank M gives
   // G_raw = G_whitened M^(1/2); discarded directions cannot be recovered and
@@ -477,47 +503,6 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
       final_fitted_projection = plan->auxiliary_tile_values;
   }
 
-  // DFT owns its converged determinant separately from the DF-HF persistent
-  // SCF state. Accept that method-level proof only when it still names this
-  // exact projection scratch generation. Capture the immutable pointers before
-  // revocation; the shared stream orders response reads before any later writer.
-  CudaDfOccupiedResponseView external_fitted_factors;
-  if (occupied_projection) {
-    if (!*occupied_projection) {
-      detail = "invalid external fitted occupied projection lease";
-      return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-    }
-    const bool enabled_external_projection = projection != "off" && space != "dense" &&
-                                             storage != "jk-scratch" && occupied_source != "raw";
-    if (enabled_external_projection) {
-      const auto& lease = *occupied_projection;
-      const auto matrix = plan->nbf * plan->nbf;
-      if (system != 0 || plan->batch_size != 1 || terms.size() != 1 ||
-          terms[0].density.size() != matrix || lease.device_id != plan->device_id ||
-          lease.stream != reinterpret_cast<void*>(plan->stream) || lease.source_identity != plan ||
-          lease.projection != plan->auxiliary_tile_values || lease.nbf != plan->nbf ||
-          lease.naux != plan->naux || !lease.rank || lease.rank > plan->nbf ||
-          lease.rank != plan->completed_occupied_projection_rank ||
-          lease.scratch_generation != plan->projection_scratch_generation ||
-          lease.scratch_generation == std::numeric_limits<std::uint64_t>::max() || plan->streamed ||
-          !plan->integral_source || !plan->three_center ||
-          !df_packed_pairs(plan->value_storage.pairs) || !plan->metric_full_rank[0] ||
-          !plan->metric_response_valid[0] || lease.rank > plan->value_storage.rank_capacity ||
-          lease.rank > static_cast<std::size_t>(std::numeric_limits<int>::max()) / plan->naux) {
-        detail = "external fitted occupied projection differs from the prepared DF owner";
-        return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-      }
-      external_fitted_factors.factors[0] = {lease.occupied_coefficients, lease.rank, 2.0};
-      external_fitted_factors.nbf = plan->nbf;
-      external_fitted_factors.naux = plan->naux;
-      external_fitted_factors.owner_identity = plan->factor_basis_identity;
-      external_fitted_factors.final_fitted_occupied_projection = lease.projection;
-      // The streamed occupied bridge owns bounded response scratch. Do not
-      // simultaneously lend mutable J/K or packed-raw scratch into that bridge.
-      borrow = false;
-    }
-  }
-
   // A force attempt consumes the exclusive scratch lease. Repeated forces
   // without another final K, errors, and incompatible consumers all fall back.
   plan->revoke_projection_leases();
@@ -545,25 +530,40 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
                   plan->factor_basis_identity,
                   metric};
     }
-    CudaDfOccupiedResponseView streamed_factors = external_fitted_factors;
-    if (!streamed_factors.owner_identity && !borrow && plan->integral_source &&
+    CudaDfOccupiedResponseView streamed_factors;
+    if (!borrow && plan->integral_source &&
         (plan->streamed || (plan->value_storage.pairs == DfPairStorage::SymmetricLowerSingle &&
-                            space == "occupied")) &&
+                            (space == "occupied" || borrowed_fitted_occupied))) &&
         metric.full_rank && space != "dense") {
-      // Neither streamed nor single-factor values own raw A for response.
-      // Lend only validated canonical C; the bridge projects the physical
-      // source within its independent bounded response allowance. At large
-      // shapes that projection costs more than borrowing fitted B, so only
-      // streamed plans select it automatically.
-      const auto selected = select_occupied_response_factors(
-          *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
-      if (selected != GENERATIVEQC_STATUS_SUCCESS) return selected;
-      if (!streamed_factors.owner_identity && space == "occupied") {
+      // A method owner may lend the exact density-generating Cocc together with
+      // the final K producer's U=B*Cocc. It was token/scratch-validated immediately
+      // before this synchronous call; recheck provider storage above, then consume
+      // it before any response scratch can overwrite U.
+      if (borrowed_fitted_occupied) {
+        streamed_factors.factors[0] = {borrowed_fitted_projection->occupied_coefficients,
+                                       borrowed_fitted_projection->rank, 2.0};
+        streamed_factors.nbf = plan->nbf;
+        streamed_factors.naux = plan->naux;
+        streamed_factors.owner_identity = plan->factor_basis_identity;
+        streamed_factors.final_fitted_occupied_projection = borrowed_fitted_projection->projection;
+        runtime::cuda_trace::trace_counter("response_reused_final_fitted_projection", 1);
+        runtime::cuda_trace::trace_counter(
+            "response_reused_final_fitted_projection_bytes",
+            plan->nbf * plan->naux * borrowed_fitted_projection->rank * sizeof(double));
+      } else {
+        // Neither streamed nor single-factor values own raw A for response.
+        // Lend only validated canonical C; the bridge projects the physical
+        // source within its independent bounded response allowance.
+        const auto selected = select_occupied_response_factors(
+            *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
+        if (selected != GENERATIVEQC_STATUS_SUCCESS) return selected;
+      }
+      if (!borrowed_fitted_occupied && !streamed_factors.owner_identity && space == "occupied") {
         const auto corrected = select_corrected_occupied_response_factor(
             *plan, system, final_state, terms, maximum_bytes, streamed_factors, detail);
         if (corrected != GENERATIVEQC_STATUS_SUCCESS) return corrected;
       }
-      if (streamed_factors.owner_identity && final_fitted_projection &&
+      if (!borrowed_fitted_occupied && streamed_factors.owner_identity && final_fitted_projection &&
           streamed_factors.factors[0].rank == final_state->identity.occupied[0] &&
           streamed_factors.factors[0].density_scale == 2.0) {
         auto* state = static_cast<PersistentScfState*>(plan->persistent_scf_state);
@@ -586,15 +586,23 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     // Revoke its immutable view before submission, so an interrupted copy
     // cannot leave a previously valid cache available to the next force.
     if (borrow && !buffers.resident_raw.data && !packed_raw.data) plan->resident_raw_valid = false;
-    const auto* response_packed_raw =
-        streamed_factors.owner_identity ? nullptr : (packed_raw.data ? &packed_raw : nullptr);
     const auto status = execute_cuda_df_hf_gradient(
         plan->device_id, reinterpret_cast<void*>(plan->stream), plan->integral_source, system,
         orbital, auxiliary, raw_a, {}, {}, terms, plan->metric_relative_threshold, schedule,
         maximum_bytes, maximum_auxiliary_tile, derivative, detail, resources, &metric,
-        reinterpret_cast<void*>(plan->blas), borrow ? &buffers : nullptr, response_packed_raw,
-        whitened.data ? &whitened : nullptr,
+        reinterpret_cast<void*>(plan->blas), borrow ? &buffers : nullptr,
+        packed_raw.data ? &packed_raw : nullptr, whitened.data ? &whitened : nullptr,
         streamed_factors.owner_identity ? &streamed_factors : nullptr);
+    if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && borrowed_fitted_occupied &&
+        space == "auto" && occupied_source == "auto") {
+      // The optional all-Q occupied factors may exceed an allowance that still
+      // fits ordinary bounded panels. The failed bridge has drained/freed its
+      // arena, and the one-shot lease was already revoked above. Retry exactly
+      // once without it; explicit occupied/source diagnostics retain their gate.
+      return execute_cuda_density_fitting_generated_force_response(
+          plan, system, orbital, auxiliary, raw_a, raw_metric, terms, schedule, maximum_bytes,
+          maximum_auxiliary_tile, derivative, detail, resources, final_state, nullptr);
+    }
     if (status == GENERATIVEQC_STATUS_SUCCESS && borrow && matching_source &&
         plan->resident_exchange_enabled && plan->batch_size == 1 &&
         plan->nbf * plan->naux <= static_cast<std::size_t>(std::numeric_limits<int>::max()))

@@ -29,7 +29,9 @@ struct CudaKsResources {
 
 /** Counts owned transport, not an estimate from the iteration count. One-
  * electron provider setup includes its existing explicit host export; its
- * preparation diagnostics are reported separately by PreparedFockPlan. */
+ * preparation diagnostics are reported separately by PreparedFockPlan.
+ * Explicit seed spectral inputs count as setup H2D; their orbital frames
+ * count as matrix D2H and eigenvalues/status as scalar D2H. */
 struct CudaKsTransfers {
   std::uint64_t setup_h2d_bytes{}, density_h2d_bytes{}, scalar_d2h_bytes{}, matrix_d2h_bytes{};
   std::uint64_t final_state_d2h_bytes{}, final_state_reads{};
@@ -206,6 +208,12 @@ class CudaKsPlan {
                      bool export_density = true);
   /** Export only the last converged state for a changed-geometry rebuild. */
   std::vector<double> warm_density();
+  /** Borrow the ordinary GPU eigen provider for synchronous input admission.
+   * Only symmetric (null S/X) solves are supported while this owner is idle.
+   * Iteration-history scratch is reused without changing final/warm state.
+   * The callback must not outlive this plan; shared seed validation retains
+   * its existing reference fallback for legacy near-symmetric inputs. */
+  scf::initial_guess::EigenOperation seed_eigen_operation();
   /** Freeze replacement without disabling reuse of the last-good density. */
   void set_warm_start_updates(bool enabled) noexcept;
   /** Forget the seed without downloading or changing the current result. */

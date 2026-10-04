@@ -36,6 +36,16 @@ struct FockPreparationDiagnostic {
   std::vector<CudaDensityFittingMetricDiagnostic> fitted;
 };
 
+/** Optional capacity requested by a method with integral restricted occupations.
+ * This reserves single-B packed U scratch, not a density/factor identity or
+ * permission to borrow a completed projection. Generic callers leave it empty;
+ * execution must still establish exact Cocc/D and owner/generation provenance.
+ */
+struct FockOccupiedProjectionReservation {
+  std::size_t restricted_rank{};
+  bool operator==(const FockOccupiedProjectionReservation&) const = default;
+};
+
 /** Immutable geometry/semantic owner for the common Fock provider views.
  * CPU numerical sources use the existing reference integrals; CUDA uses
  * the existing direct evaluator and source-backed DF tile generator. The
@@ -54,7 +64,8 @@ class PreparedFockPlan {
                    ResolvedFockBuild strategy, int device_id = -1,
                    std::size_t device_budget_bytes = 0,
                    unsigned retained_direct_derivative_order = 0,
-                   unsigned retained_fitted_derivative_order = 0);
+                   unsigned retained_fitted_derivative_order = 0,
+                   FockOccupiedProjectionReservation projection_reservation = {});
   ~PreparedFockPlan();
   PreparedFockPlan(const PreparedFockPlan&) = delete;
   PreparedFockPlan& operator=(const PreparedFockPlan&) = delete;
@@ -99,12 +110,12 @@ class PreparedFockPlan {
                                         const std::vector<double>& beta = {}) const;
   FockEnergyDerivativeComponents energy_derivative_components(
       const std::vector<double>& density, const std::vector<double>& beta = {}) const;
-  /** Restricted CUDA-DF derivative components with an optional one-shot final
-   * occupied projection. A supplied lease is consumed by K' before J' can
-   * overwrite its scratch; unsupported compositions retain the ordinary path. */
-  FockEnergyDerivativeComponents energy_derivative_components(
+  /** CUDA-DF component response using a method-owned exact final-K Cocc/U lease.
+   * Exchange consumes the one-shot projection first; Coulomb then executes the
+   * ordinary exact response. CPU/non-fitted owners reject this internal path. */
+  FockEnergyDerivativeComponents energy_derivative_components_with_fitted_projection(
       const std::vector<double>& density, const std::vector<double>& beta,
-      const CudaDensityFittingOccupiedProjectionLease* occupied_projection) const;
+      const CudaDfBorrowedFittedProjection& projection) const;
   /** Execute a first derivative retained alongside a value-only prepared model.
    * The underlying provider is revalidated at derivative_order=1, preserving the
    * exact scientific approximation while keeping the SCF identity value-only. */
@@ -116,7 +127,8 @@ class PreparedFockPlan {
   bool matches(const core::System& orbital, const core::System* auxiliary,
                const ResolvedFockBuild& strategy, int device_id, std::size_t device_budget_bytes,
                unsigned minimum_direct_derivative_order = 0,
-               unsigned minimum_fitted_derivative_order = 0) const noexcept;
+               unsigned minimum_fitted_derivative_order = 0,
+               FockOccupiedProjectionReservation projection_reservation = {}) const noexcept;
 
  private:
   struct Impl;
