@@ -278,6 +278,46 @@ def test_collect_preserves_timeout_before_first_journal(
     assert point["engines"]["reference"]["status"] == "not_run"
 
 
+def test_collect_retains_complete_seed_cost_and_experimental_policy(
+    tmp_path: Path,
+) -> None:
+    """A compact publication must not lose costs or relabel opt-ins as defaults."""
+    directory = tmp_path / "3"
+    directory.mkdir()
+    reference = run()
+    reference_path = directory / "reference.json"
+    reference_path.write_text(json.dumps(reference))
+    native = copy.deepcopy(reference)
+    native.update(
+        reference_sha256=hashlib.sha256(reference_path.read_bytes()).hexdigest(),
+        native_experiment={
+            "preliminary_provider": "lda16",
+            "force_active_ao_cutoff": 1e-16,
+        },
+        preliminary_density={
+            "complete_source_seconds": 0.3,
+            "source_fock_builds": None,
+        },
+        target_prepare_seconds=0.2,
+        preliminary_wrapper_seconds=0.4,
+    )
+    (directory / "native.json").write_text(json.dumps(native))
+    for engine in ("reference", "native"):
+        (directory / f"{engine}.outcome").write_text('{"exit_code":0}')
+    point = collect(tmp_path, 3)
+    for key in (
+        "native_experiment",
+        "preliminary_density",
+        "target_prepare_seconds",
+        "preliminary_wrapper_seconds",
+    ):
+        assert point["engines"]["native"][key] == native[key]
+    figure([point], tmp_path, phase="cold", filename="cold.svg")
+    svg = (tmp_path / "cold.svg").read_text()
+    assert "experimental AO/seed policy" in svg
+    assert "Complete cold SCF" in svg
+
+
 def test_plot_keeps_variable_iteration_repeats(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
