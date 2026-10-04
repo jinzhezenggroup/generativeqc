@@ -13,6 +13,7 @@
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/topology.hpp"
+#include "scf/df_source_capacity.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -131,7 +132,9 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     }
     core::System item;
     item.atoms = orbital.atoms;
-    item.shells = orbital.shells;
+    item.shells.reserve(df_source_capacity::add(
+        df_source_capacity::add(orbital.shells.size(), auxiliary.shells.size()), 1));
+    item.shells.insert(item.shells.end(), orbital.shells.begin(), orbital.shells.end());
     item.shells.insert(item.shells.end(), auxiliary.shells.begin(), auxiliary.shells.end());
     item.shells.push_back({0, 0, {{0.0, 1.0}}});
     item.charge = orbital.charge;
@@ -149,11 +152,18 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   HostBatch host;
   std::vector<const std::vector<double>*> no_warm(batch_size, nullptr);
   try {
+    if (batch_size == 1) {
+      const auto capacity =
+          df_source_capacity::plan(orbital_systems.front(), auxiliary_systems.front(),
+                                   {sizeof(CudaDensityFittingIntegralSourceImpl), sizeof(HostBatch),
+                                    sizeof(DfPublicAoExpansion)});
+      df_source_capacity::reserve_upload_metadata(host, capacity);
+    }
     // DF consumes only normalized basis metadata. The ordinary Direct packer
     // also builds resident four-center task tables, which this source never
     // uploads or replays and which grow rapidly with the shell count. Reuse
     // matrix packing to preserve AO/primitive ordering without those tables.
-    if (!pack_host_batch(combined, no_warm, host, false, true) ||
+    if (!pack_host_batch(combined, no_warm, host, false, true, false, ResidentPsssPolicy::Skip) ||
         host.nbf != cartesian_nbf + cartesian_naux + 1U) {
       detail = "bounded DF source Cartesian packing failed";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -196,6 +206,8 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   candidate->batch.total_atoms = static_cast<std::int64_t>(host.atomic_numbers.size());
   candidate->batch.total_shells = static_cast<std::int64_t>(host.shell_atoms.size());
   try {
+    // Eighteen packed metadata uploads and two public-basis transforms.
+    candidate->allocations.reserve(20);
     candidate->host_atom_offsets = host.atom_offsets;
     candidate->orbital_identities.reserve(batch_size);
     candidate->auxiliary_identities.reserve(batch_size);
