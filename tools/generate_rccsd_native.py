@@ -11,7 +11,7 @@ import argparse
 import sys
 import typing
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -200,6 +200,65 @@ def _device_size(spec: TensorSpec) -> str:
     if not spec.indices:
         return "1"
     return "*".join(_dim(i) for i in spec.indices)
+
+
+def ordered_batch_accumulation(
+    program: Program,
+    name: str,
+    state_type: str,
+    output_type: str,
+    batch_expression: str,
+    fields: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Emit one fused consumer of typed Q-major outputs in their original order.
+
+    This shared primal/adjoint lowering never builds a Q subtotal: every output
+    lane starts from its retained accumulator, checks each individual addition,
+    and visits Q in increasing order. Thus tile boundaries cannot regroup the
+    reduction or hide overflow before a later cancelling contribution. Output
+    extents and optional Q strides come solely from the supplied TensorIR.
+    """
+    fields = fields or {key: key for key in program.outputs}
+    sizes, device_sizes, strides = {}, {}, {}
+    for key, field in fields.items():
+        spec = program.outputs[key].spec
+        batched = bool(spec.indices and spec.indices[0].space.kind == "batch")
+        if batched:
+            spec = replace(spec, indices=spec.indices[1:], symmetries=())
+        sizes[field], device_sizes[field] = _size(spec), _device_size(spec)
+        strides[field] = device_sizes[field] if batched else "0"
+    targets = ", ".join("double* target_" + field for field in fields.values())
+    declaration = (
+        f"void accumulate_{name}_cuda({state_type}& s, {output_type} values, {targets})"
+    )
+    lines = [
+        f"__global__ void accumulate_{name}_kernel({output_type} values,{targets},std::size_t o,std::size_t v,std::size_t q,int* error) {{",
+        "  std::size_t limit=0;",
+        *(f"  if ({size}>limit) limit={size};" for size in device_sizes.values()),
+        "  for(std::size_t x=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;x<limit;x+=std::size_t(blockDim.x)*gridDim.x){",
+    ]
+    for field in fields.values():
+        lines += [
+            f"    if(x<{device_sizes[field]}){{",
+            f"      double value=target_{field}[x];",
+            f"      for(std::size_t Q=0;Q<q;++Q) value=generativeqc_tensor::finite(value+values.{field}[Q*({strides[field]})+x],error,1);",
+            f"      target_{field}[x]=value; }}",
+        ]
+    lines += [
+        "  }",
+        "}",
+        declaration + " {",
+        "  const auto o=s.o,v=s.v;",
+        "  const auto count=std::max({" + ",".join(sizes.values()) + "});",
+        f"  accumulate_{name}_kernel<<<generativeqc_tensor::blocks(count,256),256,0,s.stream>>>(values,"
+        + ",".join("target_" + field for field in fields.values())
+        + ",o,v,"
+        + batch_expression
+        + ",s.error);",
+        "  generativeqc_tensor::cuda_check(cudaGetLastError());",
+        "}",
+    ]
+    return declaration, "\n".join(lines)
 
 
 def _fraction(value: tuple[int, int]) -> str:

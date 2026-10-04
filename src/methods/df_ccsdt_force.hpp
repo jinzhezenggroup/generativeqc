@@ -9,11 +9,14 @@
 #include "methods/rccsd_method.hpp"
 
 namespace generativeqc::methods::detail {
-/** Complete internal endpoint, on an unchanged conventional RHF reference with
- * a DF correlation Hamiltonian. Public capability promotion is separate. */
+/** Complete native endpoint on an unchanged conventional RHF reference with
+ * a DF correlation Hamiltonian. The public energy-only selector reuses this
+ * owner; public force promotion remains separate. */
 struct DFCCSDTResult {
   double energy{}, reference_energy{}, correlation_energy{}, triples_energy{};
   std::vector<double> forces;
+  Result method_result;
+  generativeqc_correlation_diagnostic correlation{};
   std::size_t numeric_capacity_bytes{}, source_weight_values{}, metric_weight_values{};
   double total_seconds{}, triples_seconds{}, lambda_seconds{}, source_response_seconds{},
       orbital_seconds{};
@@ -43,5 +46,6 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System
                                   bool with_triples = true, bool df_auxiliary_reduction = true,
                                   bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
                                   std::size_t lambda_batch_limit = 8,
+                                  std::size_t ccsd_batch_limit = 8,
                                   const hf::RHFFrameResponseOptions& frame_options = {});
 }  // namespace generativeqc::methods::detail

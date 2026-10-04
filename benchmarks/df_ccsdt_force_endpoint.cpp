@@ -1,6 +1,7 @@
 // Complete cold DF-CCSD(T) energy/force benchmark with explicit schedule selectors.
 // The input contains no orbitals, Fock matrix, factors or amplitudes from an oracle.
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -34,11 +35,12 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 12)
+    if (argc < 4 || argc > 13)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [ORBITAL_SCHWARZ "
-          "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]]");
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
+          "[ORBITAL_SCHWARZ "
+          "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -49,19 +51,29 @@ int main(int argc, char** argv) {
       return value == "1";
     };
     const bool matrix = selector(4), forces = selector(5), lambda_matrix = selector(6);
-    const std::size_t batch_limit = argc > 7 ? std::stoull(argv[7]) : 8;
-    // Preserve the established DIIS slot; response controls are appended.
-    // Reject partial integer parses rather than interpreting an old Schwarz token
-    // (for example, "0.0" or "2e-12") as a different DIIS history.
-    const std::string diis_argument = argc > 8 ? argv[8] : "6";
-    std::size_t diis_consumed = 0;
-    const auto diis_history = std::stoul(diis_argument, &diis_consumed);
-    if (diis_consumed != diis_argument.size() || diis_history == 1 || diis_history > 20)
+    const auto unsigned_argument = [&](int index, unsigned long long fallback) {
+      if (argc <= index) return fallback;
+      const std::string token = argv[index];
+      if (token.empty() || token.find_first_not_of("0123456789") != std::string::npos)
+        throw std::invalid_argument("invalid unsigned endpoint argument");
+      return std::stoull(token);
+    };
+    const std::size_t batch_limit = unsigned_argument(7, 8);
+    // Preserve the established DIIS and CCSD batch slots; append response controls.
+    const auto diis_history = unsigned_argument(8, 6);
+    if (diis_history == 1 || diis_history > 20)
       throw std::invalid_argument("invalid endpoint DIIS history");
+    const auto ccsd_batch_limit = unsigned_argument(9, 8);
     generativeqc::hf::RHFFrameResponseOptions frame_options;
-    frame_options.orbital_screening_tolerance = argc > 9 ? std::stod(argv[9]) : 0.0;
-    frame_options.profile_jk = argc > 10 && selector(10);
-    const std::string nuclear_selector = argc > 11 ? argv[11] : "2";
+    const std::string screening_argument = argc > 10 ? argv[10] : "0";
+    std::size_t screening_consumed = 0;
+    frame_options.orbital_screening_tolerance = std::stod(screening_argument, &screening_consumed);
+    if (screening_consumed != screening_argument.size() ||
+        !std::isfinite(frame_options.orbital_screening_tolerance) ||
+        frame_options.orbital_screening_tolerance < 0.0)
+      throw std::invalid_argument("invalid orbital screening threshold");
+    frame_options.profile_jk = argc > 11 && selector(11);
+    const std::string nuclear_selector = argc > 12 ? argv[12] : "2";
     if (nuclear_selector != "0" && nuclear_selector != "1" && nuclear_selector != "2")
       throw std::invalid_argument("invalid nuclear response selector");
     const auto nuclear_schedule = nuclear_selector[0] - '0';
@@ -103,7 +115,7 @@ int main(int argc, char** argv) {
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
         execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
-        batch_limit, frame_options);
+        batch_limit, ccsd_batch_limit, frame_options);
     std::ofstream output(argv[2]);
     if (!output) throw std::runtime_error("cannot open completed force output");
     output << std::setprecision(17) << "{\n";
@@ -133,6 +145,12 @@ int main(int argc, char** argv) {
     field("ccsd_gemm_summands", result.solver.df_gemm_summands);
     field("ccsd_packing_bytes", result.solver.df_packing_bytes);
     field("ccsd_provider_capacity", result.solver.df_provider_capacity_bytes);
+    field("ccsd_q_batch_size", result.solver.df_auxiliary_batch_size);
+    field("ccsd_q_tiles", result.solver.df_auxiliary_tiles);
+    field("ccsd_q_slices", result.solver.df_auxiliary_slices);
+    field("ccsd_q_operations", result.solver.df_virtual_operations);
+    field("ccsd_accumulation_calls", result.solver.df_accumulation_calls);
+    field("ccsd_accumulation_bytes", result.solver.df_accumulation_bytes);
     field("ccsd_contraction_terms", result.solver.df_contraction_terms);
     field("ccsd_evaluations", result.solver.iteration_graph_calls);
     field("ccsd_capacity", result.solver.numeric_capacity_bytes);

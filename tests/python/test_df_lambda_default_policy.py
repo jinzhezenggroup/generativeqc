@@ -1,5 +1,6 @@
 """Protect matrix Lambda defaults and explicit scalar fallback selection."""
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -20,6 +21,18 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         "DFCCSDTResult run_df_ccsdt_native("
         + header.split("DFCCSDTResult run_df_ccsdt_native(", 1)[1].split(");", 1)[0]
         + ");\n"
+    )
+    # Define the extracted overload itself. Maintaining a second hand-written
+    # signature silently turns new trailing selectors into an unresolved call.
+    definition = re.sub(r"\s*=\s*[^,)]+", "", declaration).strip().removesuffix(";")
+    definition = definition.replace(
+        "const generativeqc_method_descriptor&,",
+        "const generativeqc_method_descriptor& descriptor,",
+    )
+    definition += (
+        " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
+        "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
+        "ccsd_batch_limit}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -42,6 +55,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     source.write_text(
         r"""
 #include <array>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include "cc/lambda_response.hpp"
@@ -50,22 +64,19 @@ struct generativeqc_method_descriptor { unsigned ccsd_diis_history = 6; };
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace core { struct System {}; }
+namespace hf { struct RHFFrameResponseOptions; }
 namespace methods::detail {
 struct DFCCSDTResult {
   bool primal, forces, lambda;
   hf::RHFFrameResponseOptions frame;
   unsigned diis_history;
   bool reduction;
-  std::size_t batch_limit;
+  std::size_t batch_limit, ccsd_batch_limit;
 };
 """
         + declaration
+        + definition
         + r"""
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&,const core::System&,
-    const core::System&,const generativeqc_method_descriptor& descriptor,bool forces,bool,bool reduction,
-    bool primal,bool lambda,std::size_t batch_limit,const hf::RHFFrameResponseOptions& frame) {
-  return {primal,forces,lambda,frame,descriptor.ccsd_diis_history,reduction,batch_limit};
-}
 }}
 generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) {
   generativeqc::runtime::ExecutionContext execution;
@@ -103,11 +114,11 @@ int main() {
   explicit_frame.bilinear_derivative = true;
   explicit_frame.symmetric_polarization = false;
   auto explicit_scalar=run_df_ccsdt_native(context,system,system,descriptor,
-                                         true,true,true,false,false,8,explicit_frame);
+                                         true,true,true,false,false,8,3,explicit_frame);
   if(explicit_scalar.primal || explicit_scalar.lambda ||
      explicit_scalar.frame.orbital_screening_tolerance != 1e-7 ||
      !explicit_scalar.frame.profile_jk || !explicit_scalar.frame.bilinear_derivative ||
-     explicit_scalar.frame.symmetric_polarization) return 8;
+     explicit_scalar.frame.symmetric_polarization || explicit_scalar.ccsd_batch_limit != 3) return 8;
   const char* missing[]{"endpoint","input","output","1"};
   const char* matrix[]{"endpoint","input","output","1","1","1","1"};
   const char* scalar[]{"endpoint","input","output","1","1","1","0"};
@@ -116,21 +127,21 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 8 || !defaults.reduction) return 9;
+     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
   for(const char* schedule : {"0","1","2"}) {
     const char* selected[]{"endpoint","input","output","1","1","1","1","8",
-                           "6","1e-7","1",schedule};
-    const auto frame = select(12,selected).frame;
+                           "6","3","1e-7","1",schedule};
+    const auto frame = select(13,selected).frame;
     if(frame.orbital_screening_tolerance != 1e-7 || !frame.profile_jk ||
        frame.bilinear_derivative != (schedule[0] == '1') ||
        frame.symmetric_polarization != (schedule[0] == '2')) return 10;
   }
   const char* invalid_frame[]{"endpoint","input","output","1","1","1","1","8",
-                              "6","0","0","x"};
-  try { (void)select(12,invalid_frame);return 11; }
+                              "6","8","0","0","x"};
+  try { (void)select(13,invalid_frame);return 11; }
   catch(const std::invalid_argument&) {}
   // Every historical master DIIS choice retains its exact argument position.
   for(unsigned history = 0; history <= 20; ++history) {
@@ -140,7 +151,7 @@ int main() {
                            token.c_str()};
     const auto old = select(9,selected);
     if(old.diis_history != history || !default_frame(old.frame) || old.reduction ||
-       old.primal || old.forces || old.lambda || old.batch_limit != 3) return 12;
+       old.primal || old.forces || old.lambda || old.batch_limit != 3 || old.ccsd_batch_limit != 8) return 12;
   }
   // No numeric guessing: even an integer zero in argv[8] always means DIIS zero.
   // Fractional/scientific legacy screening tokens must not partially parse.
@@ -150,22 +161,42 @@ int main() {
     catch(const std::invalid_argument&) {}
   }
   const char* partial[]{"endpoint","input","output","1","1","1","1","8",
-                        "4","1e-7","0"};
-  for(int argc = 8; argc <= 11; ++argc) {
+                        "4","3","1e-7","0"};
+  for(int argc = 8; argc <= 12; ++argc) {
     const auto selected = select(argc,partial);
     if(selected.diis_history != (argc > 8 ? 4U : 6U) ||
-       selected.frame.orbital_screening_tolerance != (argc > 9 ? 1e-7 : 0.0) ||
+       selected.ccsd_batch_limit != (argc > 9 ? 3U : 8U) ||
+       selected.frame.orbital_screening_tolerance != (argc > 10 ? 1e-7 : 0.0) ||
        selected.frame.profile_jk || !selected.frame.symmetric_polarization ||
        selected.frame.bilinear_derivative) return 14;
   }
-  for(int index : {3,4,5,6,10,11}) {
+  for(int index : {3,4,5,6,11,12}) {
     const char* bad[]{"endpoint","input","output","1","1","1","1","8",
-                      "6","0","0","2"};
+                      "6","8","0","0","2"};
     bad[index] = "x";
-    try { (void)select(12,bad);return 15; }
+    try { (void)select(13,bad);return 15; }
     catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,13}) {
+  for(const char* batch : {"0","1","3","8","32"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8","6",batch};
+    const auto old = select(10,selected);
+    if(old.ccsd_batch_limit != std::stoull(batch) || !default_frame(old.frame) ||
+       old.diis_history != 6) return 17;
+  }
+  for(int index : {7,8,9}) {
+    for(const char* token : {"-1","+2","2.0","2e-12","8junk",""}) {
+      const char* bad[]{"endpoint","input","output","1","1","1","1","8","6","8"};
+      bad[index] = token;
+      try { (void)select(10,bad);return 18; }
+      catch(const std::invalid_argument&) {}
+    }
+  }
+  for(const char* token : {"nan","inf","-1e-7","1e-7junk",""}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8","6","8",token};
+    try { (void)select(11,bad);return 19; }
+    catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,14}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

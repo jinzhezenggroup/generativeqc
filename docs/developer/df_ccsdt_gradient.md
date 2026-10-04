@@ -15,6 +15,13 @@ Fock/integral block cotangents and Q-major `df_bov/df_bvv` cotangents. The latte
 cover the virtual residual only. Fresh primal replay and an independently
 expanded Lambda action retain the ordinary CC residual acceptance gates.
 
+Staged Lambda already batches its auxiliary primal, transpose and factor
+actions under its own complete budget. The residual owner reuses that Q-axis
+transform and the same generated ordered accumulation consumer. This does not
+change Lambda's program equations, Q order, scalar fallback or independent
+expanded audit; the residual and response owners select their tile capacities
+independently.
+
 `cc::triples::pullback_df_cuda` supplies all fixed-canonical-input (T)
 cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
 `fock_response_df_cuda` supplies same-space Fock matrices, including internal
@@ -158,15 +165,17 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
-and `DIIS_HISTORY` to six. `DIIS_HISTORY` retains argument position eight and
+`CCSD_Q_BATCH_LIMIT` to eight, and `DIIS_HISTORY` to six. `DIIS_HISTORY` retains argument position eight and
 accepts zero (disabled) or integers two through twenty. A decimal or scientific
 notation token in this position is rejected; it is never guessed to be a
-screening threshold. Response controls follow it: `ORBITAL_SCHWARZ` defaults to
-zero, `PROFILE_JK` to zero and `NUCLEAR` to two (symmetric polarization).
+screening threshold. `CCSD_Q_BATCH_LIMIT` retains position nine. Both batch
+limits require complete unsigned integer tokens. Response controls follow at
+positions ten through twelve: `ORBITAL_SCHWARZ` defaults to
+zero and requires a complete finite nonnegative number, `PROFILE_JK` to zero and `NUCLEAR` to two (symmetric polarization).
 `NUCLEAR=0` selects the legacy three-pass identity and `NUCLEAR=1` explicitly
 opts into the experimental canonical bilinear derivative.
 
@@ -174,10 +183,10 @@ For example, an exact force endpoint with the default six-vector DIIS history
 and explicit symmetric response is:
 
 ```sh
-./df-force-endpoint molecule.input force.json 1 1 1 1 8 6 0 0 2
+./df-force-endpoint molecule.input force.json 1 1 1 1 8 6 8 0 0 2
 ```
 
 Historical response benchmark receipts retain the CLI for their recorded source
 revision. When adapting such a command to the current executable, insert the
-DIIS history between the Q batch limit and the orbital screening threshold.
+DIIS history and CCSD Q batch limit before the orbital screening threshold.
 Do not rewrite retained receipt commands or imply that they used this layout.

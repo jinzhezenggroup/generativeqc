@@ -46,3 +46,17 @@ controls, malformed selectors, old fractional screening tokens and arity errors.
 
 A separately designed named-option CLI can provide an explicit versioned
 migration. Do not add heuristic positional compatibility.
+
+## Later landed Q-batch composition
+
+Master subsequently assigned argument nine to `CCSD_Q_BATCH_LIMIT` (default
+eight). The integrated endpoint preserves DIIS at eight and CCSD batch at nine,
+and appends response controls at ten through twelve. Both batch tokens and DIIS
+require complete unsigned integers; screening requires a complete finite
+nonnegative numeric token. No numeric-value or argument-count guessing is used.
+The function signature likewise retains the CCSD batch selector before the
+response options. The live extracted-signature fixture protects defaults, all
+DIIS histories, explicit batches, partial suffixes and malformed numeric inputs.
+Frozen source-bound receipts are unchanged. This extends the compatibility
+decision above; the nine-through-eleven layout described there was the preceding
+branch revision.
