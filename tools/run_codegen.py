@@ -8,6 +8,8 @@ import runpy
 import sys
 from pathlib import Path
 
+from codegen_source_cache import restore_codegen_outputs, store_codegen_outputs
+
 
 def _source_path(module: object) -> Path | None:
     """Return a module's source path when it was loaded from a file."""
@@ -89,15 +91,43 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--depfile", type=Path, required=True)
     parser.add_argument("--target", action="append", type=Path, required=True)
+    parser.add_argument("--byproduct", action="append", type=Path, default=[])
+    parser.add_argument("--dependency", action="append", type=Path, default=[])
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("generator", type=Path)
     parser.add_argument("generator_args", nargs=argparse.REMAINDER)
     args = parser.parse_args()
 
+    source_root = args.source_root.resolve()
     generator = args.generator.resolve()
+    targets = [path.resolve() for path in args.target]
+    byproducts = [path.resolve() for path in args.byproduct]
+    declared_dependencies = [path.resolve() for path in args.dependency]
+    cache_hit, dependencies = restore_codegen_outputs(
+        generator=generator,
+        arguments=args.generator_args,
+        targets=targets,
+        byproducts=byproducts,
+        declared_dependencies=declared_dependencies,
+        source_root=source_root,
+    )
+    if cache_hit:
+        _write_depfile(args.depfile.resolve(), targets, dependencies)
+        return
+
     _run_generator(generator, args.generator_args)
-    dependencies = _local_python_dependencies(args.source_root)
-    _write_depfile(args.depfile, args.target, dependencies)
+    dependencies = _local_python_dependencies(source_root)
+    _write_depfile(args.depfile.resolve(), targets, dependencies)
+    store_codegen_outputs(
+        generator=generator,
+        arguments=args.generator_args,
+        targets=targets,
+        byproducts=byproducts,
+        declared_dependencies=declared_dependencies,
+        dynamic_dependencies=dependencies,
+        runner=Path(__file__),
+        source_root=source_root,
+    )
 
 
 if __name__ == "__main__":
