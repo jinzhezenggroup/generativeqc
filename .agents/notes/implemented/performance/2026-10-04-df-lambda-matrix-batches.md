@@ -73,3 +73,51 @@ to large resident intermediates. Revisit batch size/cost selection using measure
 complete endpoints on each GPU, rather than importing another GPU's calibration.
 
 References: #1769, #1792, #1809, #1817, #1818; #1781/#1782/#1785 reviews retained.
+
+## Completed large endpoint evidence
+
+n2 Slurm 2198 used one frozen binary and one PRO 6000 UUID for matrix/scalar
+force calls and a separate cold energy-only call. Lambda/parameter response
+fell from 679.436 to 274.307 s (2.477x), with unchanged 21 iterations/42 actions.
+Complete force time fell from 1796.022 to 1352.053 s (raw 1.328x). Reference RHF
+also differed by 37.284 s; do not attribute that variation to Lambda. The
+standalone energy call took 307.998 s, including only 4.942 s for (T) energy.
+The force call's (T) energy/response phase took 110.515 s. Its source response
+took 3.685 s and exact orbital/nuclear response 668.622 s.
+
+Batch/program visits fell from 22448 to 3660 while auxiliary slices remained
+22448; expanded physical replay and independent audit still visit every Q.
+Semantic contraction summands fell from 6.535e13 to 6.401e13. For one transpose,
+the compiler-derived work only decreases 2.585%; asymptotic complexity is
+unchanged. Gains therefore come mainly from matrix execution and launch
+structure. Generated/packing/accumulation/audit kernels fell from 1454004 to
+372357, plus 78066 GEMM calls whose internal kernels are unknown. Complete
+numeric capacity rose from 5.102 to 6.433 GiB; this is not measured GPU peak.
+
+Both complete cold forces pass the independent 3e-7 Eh/bohr directional FD gate
+at h=1e-4 and 3e-5. The matrix errors are 2.60e-9 and 7.92e-9. The *additional*
+3e-9 cold scalar/matrix force sanity line failed (max 5.7838889233607915e-9).
+Job 2198 therefore exited nonzero after completing all endpoints. Retain that
+failure explicitly; total-energy agreement (2.84e-14 Eh) cannot erase it.
+The follow-up benchmark compares both complete Lambda/parameter solves with one
+shared physical Problem/T/triples seed, rather than attributing cold-force
+variation to an unproven cause or silently relaxing the line.
+
+The production branch was rebased onto #1818 at 7fb64d4c4. n2 job 2201 passes
+24 native/complete-force tests, and job 2204 completes the 230-AO force in
+1359.881 s with FD errors 4.24e-9 and 6.27e-9. Its different GPU is excluded
+from paired timing ratios. Frozen source patch, input, library identities,
+compiler polynomials and numerical records are retained under
+`benchmarks/results/df-lambda-gemm-20261004/`. Two upstream host probes were
+adapted to the current CC signatures and cuBLAS ownership; both pass. No
+production library changes were needed for those CI test adapters.
+
+Shared-state n2 job 2207 passes all 12 response arrays at the predeclared
+`atol=rtol=3e-10` gate. The largest absolute difference is 1.39e-17 and both
+independent expanded Lambda residuals are 6.11e-13. Matrix/scalar Lambda take
+274.363/679.254 s with the same 21 iterations/42 actions. This bounds the
+changed schedule difference at fixed inputs; the exact source of that
+small cold-force variation remains unlocalized. It is accepted here against
+the independent complete-force FD gates and shared-state comparison, while
+retaining the failed stricter cold-pair line and the separate outstanding
+large source-factor qualification. No extra node3 job was submitted.
