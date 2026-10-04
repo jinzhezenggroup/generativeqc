@@ -15,6 +15,7 @@ from generativeqc_compiler.common.provenance import (
     file_hash,
     toolchain_identity,
 )
+from generativeqc_compiler.tensor.cuda_cutlass import CUTLASS_FAMILY
 
 
 def test_native_cutlass_execution(tmp_path: Path) -> None:
@@ -81,6 +82,7 @@ def test_native_cutlass_execution(tmp_path: Path) -> None:
         )
         assert result.returncode == 0, result.stdout + result.stderr
         print(result.stdout, end="")
+    assert CUTLASS_FAMILY in result.stdout
     atomic_json(
         tmp_path / "qualified.json",
         {"artifact": artifact, "executable_sha256": file_hash(executable)},
