@@ -73,6 +73,7 @@ void check(double beta) {
   cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   {
     CudaCutensorContraction binding;
+    reject([&] { (void)binding.provenance(); });
     // The host allowance is an explicit qualification reservation; opaque
     // library host allocations are not exposed by the cuTENSOR query API.
     if (!binding.prepare(request, stream, 64ULL << 20, 256ULL << 20, 64ULL << 20))
@@ -80,6 +81,14 @@ void check(double beta) {
     if (binding.workspace_bytes() > (64ULL << 20) || !binding.provider_version() ||
         binding.prepare_calls() != 1)
       throw std::runtime_error("invalid prepared provenance");
+    const auto provenance = binding.provenance();
+    if (provenance.algorithm != CUTENSOR_ALGO_GETT || provenance.kernel_rank != 0 ||
+        provenance.provider_version != cutensorGetVersion() || !provenance.runtime_version ||
+        provenance.architecture != 120 || provenance.workspace_bytes != binding.workspace_bytes() ||
+        provenance.request.scientific_identity != request.scientific_identity ||
+        provenance.request.coefficient != request.coefficient || provenance.request.beta != beta ||
+        provenance.request.operands[0].strides != request.operands[0].strides)
+      throw std::runtime_error("prepared algorithm/layout provenance differs from execution");
     CudaContractionContext context;
     context.prepare_generated(stream);
     PreparedContractions shared;
@@ -97,6 +106,15 @@ void check(double beta) {
     shared.add(2, 5, 12, {request}, context, calls, summands,
                {ContractionAlgorithm::CutensorAffine}, reservation);
     const auto resources = shared.optional_resources();
+    std::size_t reported = 0;
+    shared.visit_optional_provenance([&](auto o, auto v, auto q, auto slot, const auto& facts) {
+      ++reported;
+      if (o != 2 || v != 5 || q != 12 || slot != 0 || facts.algorithm != provenance.algorithm ||
+          facts.kernel_rank != provenance.kernel_rank ||
+          facts.request.operands[2].strides != request.operands[2].strides)
+        throw std::runtime_error("shared provider lost plan provenance");
+    });
+    if (reported != 1) throw std::runtime_error("shared provider omitted plan provenance");
     if (resources.workspace_bytes > reservation.workspace_bytes ||
         resources.provider_bytes > reservation.provider_bytes ||
         resources.host_bytes != reservation.host_bytes ||
@@ -130,6 +148,9 @@ void check(double beta) {
       const auto direct_calls = std::size_t(std::min(replay + 1, 3));
       const auto shared_calls = std::size_t(std::max(replay - 2, 0));
       if (failed || binding.prepare_calls() != 1 || binding.calls() != direct_calls ||
+          binding.provenance().algorithm != provenance.algorithm ||
+          binding.provenance().kernel_rank != provenance.kernel_rank ||
+          binding.provenance().workspace_bytes != provenance.workspace_bytes ||
           calls != shared_calls || summands != shared_calls * request.affine_summands() ||
           shared.optional_resources().total_bytes(1) != resources.total_bytes(1))
         throw std::runtime_error("cuTENSOR replay performed preparation or failed");
@@ -154,11 +175,15 @@ void check(double beta) {
     cuda_check(cudaStreamSynchronize(stream));
     if (!failed) throw std::runtime_error("cuTENSOR nonfinite output was not audited");
     context.reset();
+    reject([&] { shared.visit_optional_provenance([](auto...) {}); });
     reject([&] { shared.execute(0, 2, 5, 12, stream, da, db, dc, error); });
     shared.release();
+    shared.visit_optional_provenance(
+        [](auto...) { throw std::runtime_error("released plan provenance"); });
     if (shared || shared.optional_resources().total_bytes(1))
       throw std::runtime_error("shared release retained a provider plan");
     binding.reset();
+    reject([&] { (void)binding.provenance(); });
     reject([&] { binding.execute(stream, da, db, dc, error); });
     if (binding.prepare(request, stream, 0, 0, 0) || binding.rejection().empty())
       throw std::runtime_error("missing host reservation did not retain rejection");

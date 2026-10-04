@@ -193,6 +193,16 @@ its resource assumptions or claiming a speedup. Validation/benchmark adapters us
 the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
 rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
+
+The native cuTENSOR executor fixes the GETT family and kernel rank zero at
+preparation, with JIT, cache and incremental autotuning disabled. Unsupported
+shapes reject preparation and retain the admitted fallback. cuTENSOR 2.8 does not
+expose the algorithm selected by `DEFAULT` through its plan-attribute API; this
+explicit policy permits truthful algorithm provenance. It is not a performance
+ranking or a globally unique binary kernel identifier. `provenance()` returns
+the resolved request, provider/runtime versions, architecture, queried workspace,
+algorithm and rank. The shared table exposes these records per variant/slot via
+`visit_optional_provenance`; released or stale bindings cannot report live plans.
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.
 
