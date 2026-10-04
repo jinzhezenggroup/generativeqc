@@ -298,7 +298,6 @@ def _validate_execution(
     device: typing.Any = 0,
     provider_peak_bytes: typing.Any = 0,
     triples_max_bytes: typing.Any = 256 << 20,
-    triples_precision: typing.Any = "fp64",
     vir_chunk_size: typing.Any = 1,
     triples_oracle: typing.Any = False,
     profile: typing.Any = False,
@@ -311,16 +310,7 @@ def _validate_execution(
         )
     if backend not in ("cpu", "cuda-resident"):
         raise ValueError("RCCSD(T) backend must be 'cpu' or 'cuda-resident'")
-    if backend == "cpu" and triples_precision != "fp64":
-        raise ValueError("mixed triples precision requires backend='cuda-resident'")
-    TriplesTileConfig(
-        1,
-        1,
-        vir_chunk_size,
-        triples_max_bytes,
-        device,
-        precision_mode=triples_precision,
-    )
+    TriplesTileConfig(1, 1, vir_chunk_size, triples_max_bytes, device)
     if type(provider_peak_bytes) is not int or provider_peak_bytes < 0:
         raise ValueError("provider_peak_bytes must be a nonnegative integer")
     if options is not None and not isinstance(options, SolverOptions):
@@ -348,7 +338,6 @@ def rccsd_t_energy(
     device: typing.Any = 0,
     provider_peak_bytes: typing.Any = 0,
     triples_max_bytes: typing.Any = 256 << 20,
-    triples_precision: typing.Any = "fp64",
     vir_chunk_size: typing.Any = 1,
     triples_oracle: typing.Any = False,
     profile: typing.Any = False,
@@ -369,10 +358,6 @@ def rccsd_t_energy(
     ``triples_max_bytes`` independently bounds each CUDA tile plan (not CPU
     workspace). The RCCSD convenience owner closes before triples uploads
     host replay inputs and final amplitudes; no device-pointer handoff is implied.
-    ``triples_precision="mixed-wv"`` is an explicit CUDA-resident experiment:
-    the generated W/V tensor body may use FP32 while denominator arithmetic,
-    final contractions/reduction and publication remain FP64. The default is
-    strict FP64 and this option does not imply AUTO/default promotion.
     """
 
     start = time.perf_counter()
@@ -384,7 +369,6 @@ def rccsd_t_energy(
         device=device,
         provider_peak_bytes=provider_peak_bytes,
         triples_max_bytes=triples_max_bytes,
-        triples_precision=triples_precision,
         vir_chunk_size=vir_chunk_size,
         triples_oracle=triples_oracle,
         profile=profile,
@@ -432,7 +416,6 @@ def rccsd_t_energy(
             vir_chunk_size=vir_chunk_size,
             max_bytes=triples_max_bytes,
             device=device,
-            precision_mode=triples_precision,
         )
         with CudaTriplesTiles(config, compiler, cache) as executor:
             triples = executor.run_tiles(arrays, oracle=triples_oracle, profile=profile)
@@ -456,7 +439,6 @@ def rccsd_t_energy(
             "triples_energy": et,
             "vir_chunk_size": vir_chunk_size,
             "triples_backend": triples_backend,
-            "triples_precision": triples_precision,
             "triples_inventory_hash": INVENTORY_HASH,
             "reference_energy": ccsd.reference_energy,
             "ccsd_correlation_energy": ecc,
@@ -477,7 +459,6 @@ def rccsd_t_energy(
         "triples_inventory_hash": INVENTORY_HASH,
         "ccsd_backend": backend,
         "triples_backend": triples_backend,
-        "triples_precision": triples_precision,
         "triples_evaluated": True,
         "vir_chunk_size": vir_chunk_size,
         "triples_peak_device_bytes": triples.peak_device_bytes,

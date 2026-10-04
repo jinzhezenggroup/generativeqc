@@ -154,12 +154,6 @@ def test_force_and_nonproduction_cuda_backend_are_rejected_before_execution() ->
         rccsd_t_energy(snapshot, provider, backend="cuda")
     with pytest.raises(ValueError, match="CudaCompilerAdapter"):
         rccsd_t_energy(snapshot, provider, backend="cuda-resident")
-    with pytest.raises(ValueError, match="mixed triples precision requires"):
-        rccsd_t_energy(snapshot, provider, backend="cpu", triples_precision="mixed-wv")
-    with pytest.raises(ValueError, match="precision_mode"):
-        api._validate_execution(
-            backend="cuda-resident", triples_precision="fp32-everything"
-        )
 
 
 def test_endpoint_artifact_records_components_and_identity(

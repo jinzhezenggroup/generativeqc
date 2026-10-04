@@ -19,7 +19,6 @@ from tools.generativeqc_cc.triples_tiles import (
     TriplesTileEnumerator,
     build_runtime_tile_triples_program,
     build_tile_triples_program,
-    lower_runtime_tile_triples_precision,
     runtime_tile_capacity,
     runtime_tile_control_batches,
     runtime_tile_controls,
@@ -306,90 +305,6 @@ def test_runtime_indexed_complete_tiled_reference(
     got = runtime_tile_triples_energy_tensorir(o, v, arrays, vir_chunk_size=chunk)
     expected = triples_energy(o, v, *arrays.values())
     np.testing.assert_allclose(got, expected, atol=1e-11, rtol=1e-10)
-
-
-def test_runtime_mixed_wv_precision_keeps_denominator_and_publication_fp64() -> None:
-    """The opt-in candidate lowers W/V work without weakening FP64 audits."""
-    from generativeqc_compiler.tensor import describe_precision
-
-    strict = build_runtime_tile_triples_program(2, 3, capacity=10)
-    mixed = lower_runtime_tile_triples_precision(strict, "mixed-wv")
-    schedule = describe_precision(mixed)
-
-    assert schedule.strict_audit_dtype == "float64"
-    assert schedule.request_identity is not None
-    assert schedule.source_equation == strict.logical_hash
-    assert mixed.outputs["triples_energy"].spec.dtype == "float64"
-    assert any(
-        node.op == "einsum"
-        and node.spec.dtype == "float32"
-        and len(node.spec.indices) == 4
-        for node in mixed.live_nodes
-    )
-    assert all(
-        node.spec.dtype == "float64"
-        for node in mixed.live_nodes
-        if node.op in ("divide", "reduce")
-    )
-    assert all(
-        node.spec.dtype == "float64"
-        for node in mixed.live_nodes
-        if node.op == "einsum" and len(node.spec.indices) == 1
-    )
-
-
-def test_runtime_mixed_wv_precision_matches_realistic_fp64_tensorir() -> None:
-    """NH3 fixture bounds the explicit FP32 W/V experiment before CUDA use."""
-    from generativeqc_compiler.tensor import execute as tensor_execute
-
-    feeds = _endpoint_feeds("nh3")
-    nocc, nvir = feeds[0], feeds[1]
-    arrays = dict(zip(INPUT_NAMES, feeds[2:], strict=True))
-    capacity = runtime_tile_capacity(nocc, nvir, nvir)
-    strict = build_runtime_tile_triples_program(nocc, nvir, capacity=capacity)
-    mixed = lower_runtime_tile_triples_precision(strict, "mixed-wv")
-    runtime_feeds = {
-        **runtime_tile_static_feeds(arrays),
-        **runtime_tile_controls(TileSpec(0, nvir, nvir), capacity),
-    }
-    expected = float(tensor_execute(strict, runtime_feeds).outputs["triples_energy"])
-    got = float(tensor_execute(mixed, runtime_feeds).outputs["triples_energy"])
-    assert np.isfinite(got)
-    np.testing.assert_allclose(got, expected, atol=2e-7, rtol=2e-4)
-
-
-def test_runtime_mixed_wv_cuda_plan_contains_fp32_gemm_and_fp64_final_work() -> None:
-    """Static CUDA planning proves the candidate reaches shared FP32 GEMM lowering."""
-    from generativeqc_compiler.common.cuda_target import cuda_target_info
-    from generativeqc_compiler.tensor.cuda_plan import plan_cuda
-
-    strict = build_runtime_tile_triples_program(2, 3, capacity=10)
-    mixed = lower_runtime_tile_triples_precision(strict, "mixed-wv")
-    plan = plan_cuda(mixed, cuda_target_info("sm_120"), max_bytes=2 << 30)
-
-    assert any(
-        step.node.op == "einsum"
-        and step.node.spec.dtype == "float32"
-        and step.gemm != "none"
-        for step in plan.steps
-    )
-    assert any(
-        step.node.op == "einsum"
-        and step.node.spec.dtype == "float64"
-        and len(step.node.spec.indices) == 1
-        for step in plan.steps
-    )
-    assert plan.precision_schedule.strict_audit_dtype == "float64"
-
-
-def test_runtime_triples_precision_mode_is_explicit_and_fail_closed() -> None:
-    from tools.generativeqc_cc.triples_cuda import TriplesTileConfig
-
-    assert TriplesTileConfig(2, 3, 1, 1 << 20).precision_mode == "fp64"
-    mixed = TriplesTileConfig(2, 3, 1, 1 << 20, precision_mode="mixed-wv")
-    assert mixed.precision_mode == "mixed-wv"
-    with pytest.raises(ValueError, match="precision_mode"):
-        TriplesTileConfig(2, 3, 1, 1 << 20, precision_mode="fp32-everything")
 
 
 def test_runtime_control_subbatches_preserve_triangular_order() -> None:

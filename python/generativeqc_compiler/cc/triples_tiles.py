@@ -21,7 +21,6 @@ from generativeqc_compiler.common.runtime_domain import RuntimeTaskDomain
 from generativeqc_compiler.tensor import (
     Index,
     IndexSpace,
-    PrecisionDirective,
     Program,
     TensorSpec,
     add,
@@ -30,7 +29,6 @@ from generativeqc_compiler.tensor import (
     einsum,
     gather,
     input_tensor,
-    lower_precision,
     multiply,
     reduce_sum,
     runtime_indexed_select,
@@ -60,64 +58,6 @@ from .triples import (
 # ---------------------------------------------------------------------------
 
 DESCRIPTION = "bounded triples tiles: vir chunk by a-range, occ full within each tile"
-
-RUNTIME_TRIPLES_PRECISION_MODES = frozenset(("fp64", "mixed-wv"))
-RUNTIME_TRIPLES_MIXED_QUALIFICATION = "ccsdt-runtime-wv-fp32-v1"
-
-
-def lower_runtime_tile_triples_precision(program: Program, mode: str) -> Program:
-    """Lower only the throughput-dominated runtime (T) W/V tensor body.
-
-    ``mixed-wv`` keeps the public inputs/outputs, orbital-energy denominator
-    construction, denominator division, final q-lane contractions and scalar
-    reduction in FP64. Only rank-four W/V numerator contractions and their
-    algebra are lowered to qualified FP32 through the shared TensorIR precision
-    machinery. This is an explicit experiment/promotion candidate, not AUTO.
-    """
-    if mode == "fp64":
-        return program
-    if mode != "mixed-wv":
-        raise ValueError(
-            "runtime triples precision must be one of "
-            + ", ".join(sorted(RUNTIME_TRIPLES_PRECISION_MODES))
-        )
-
-    names = program.debug_names
-
-    # Protect the complete denominator subgraph. The denominator is the
-    # second input to each standard-(T) divide; preserving all of its ancestors
-    # keeps orbital gaps and denominator safety arithmetic in FP64.
-    denominator_nodes = set()
-    stack = [
-        node.inputs[1]
-        for node in program.live_nodes
-        if node.op == "divide" and len(node.inputs) == 2
-    ]
-    while stack:
-        node = stack.pop()
-        if node in denominator_nodes:
-            continue
-        denominator_nodes.add(node)
-        stack.extend(node.inputs)
-
-    directives = {}
-    for node in program.live_nodes:
-        if (
-            node in denominator_nodes
-            or node.spec.dtype != "float64"
-            or len(node.spec.indices) != 4
-            or node.op not in ("einsum", "add", "transpose")
-        ):
-            continue
-        directives[names[node]] = PrecisionDirective(
-            storage_dtype="float32",
-            compute_dtype="float32",
-            accumulation_dtype="float32",
-            qualification=RUNTIME_TRIPLES_MIXED_QUALIFICATION,
-        )
-    if not directives:
-        raise ValueError("runtime triples mixed-wv schedule selected no W/V values")
-    return lower_precision(program, directives, strict_audit_dtype="float64")
 
 
 class TileSpec:
