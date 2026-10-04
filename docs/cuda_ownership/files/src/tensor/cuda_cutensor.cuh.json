@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_cutensor.cuh",
+  "reason": "Optional prepared cuTENSOR execution of compiler-owned affine contraction descriptors. Owns provider handles, workspace, lifecycle and logical finite audits; original TensorIR modes and precision remain authoritative.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

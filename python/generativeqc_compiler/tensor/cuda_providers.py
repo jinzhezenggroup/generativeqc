@@ -8,8 +8,6 @@ branches to scientific IR.
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from generativeqc_compiler.common.lowering_contract import CandidateExecution
 from generativeqc_compiler.common.lowering_provider import (
     LoweringCandidate,
@@ -23,7 +21,7 @@ from generativeqc_compiler.common.specialization import TargetCapabilities
 from .cuda_gemm import gemm_contract
 from .cuda_plan import TensorPlan
 from .cuda_reduction import cooperative_reduction_provider
-from .lowering import TensorLoweringAdapter
+from .lowering import TensorLoweringAdapter, plan_lowering_request
 
 GENERATED_CUDA_PROVIDER = ProviderDescriptor(
     name="generativeqc.generated_cuda",
@@ -163,50 +161,6 @@ def _cooperative_reduction_rejection(
     return None
 
 
-def _plan_request(
-    plan: TensorPlan, index: int, adapter: TensorLoweringAdapter
-) -> LoweringRequest:
-    """Bind the existing semantic node without encoding its selected provider."""
-    step = plan.steps[index]
-    node = step.node
-    if node.spec.dtype == "int64":
-        # Integer control operations have no floating precision variant yet.
-        return LoweringRequest(
-            consumer="tensor",
-            operation=node.op,
-            backend="cuda",
-            dtype="int64",
-            accumulation_dtype="int64",
-            shape=node.spec.shape,
-            semantics=(("program_hash", plan.program.logical_hash),),
-        )
-    request = adapter.request(
-        node,
-        backend="cuda",
-        layouts=tuple(plan.steps[child].layout for child in step.inputs)
-        + (step.layout,),
-    )
-    # The mathematical output is SSA, but the storage planner may donate a dead
-    # input allocation. Preserve that execution precondition at the boundary.
-    return replace(
-        request,
-        operands=tuple(
-            replace(layout, alias_group=f"arena:{plan.steps[owner].offset}")
-            if not plan.steps[owner].virtual
-            else layout
-            for layout, owner in zip(
-                request.operands, (*step.inputs, index), strict=True
-            )
-        ),
-        effects=(
-            (
-                "output",
-                "donated" if step.donated_from is not None else "fresh-ssa-value",
-            ),
-        ),
-    )
-
-
 def _numerical_mode(plan: TensorPlan, index: int) -> str:
     node = plan.steps[index].node
     value = plan.precision_by_node.get(node)
@@ -236,7 +190,7 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
         reduction_provider = cooperative_reduction_provider(plan, index)
         is_gemm = step.gemm != "none" and contract is not None
         uses_cublas = is_gemm and contract.k > 0
-        request = _plan_request(plan, index, adapter)
+        request = plan_lowering_request(plan, index, adapter)
         if uses_cublas:
             providers = (CUBLAS_PROVIDER, GENERATED_CUDA_PROVIDER)
             implementation = f"tensor-gemm-{step.gemm}"
@@ -298,7 +252,7 @@ def reduction_provider_candidates(
         raise TypeError("reduction provider candidates require a TensorPlan")
     if cooperative_reduction_provider(plan, index) is None:
         raise ValueError("step is not an eligible cooperative reduction")
-    request = _plan_request(plan, index, TensorLoweringAdapter(plan.program))
+    request = plan_lowering_request(plan, index, TensorLoweringAdapter(plan.program))
     target = TargetCapabilities(
         plan.target.target_info,
         features=tuple(
