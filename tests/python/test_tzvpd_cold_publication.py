@@ -66,7 +66,7 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
     )
     if mutation == "valid":
         assert checked.returncode == 0, checked.stderr
-        assert json.loads(checked.stdout)["accepted_endpoint_calls"] == 72
+        assert json.loads(checked.stdout)["accepted_endpoint_calls"] == 108
     else:
         assert checked.returncode != 0
         assert "accepted_endpoint_calls" not in checked.stdout

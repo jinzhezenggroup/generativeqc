@@ -7,22 +7,22 @@
   },
   "files": [
     {
-      "bytes": 80104,
+      "bytes": 119523,
       "path": "evidence.json",
       "role": "evidence",
-      "sha256": "902844e0b720f870536294ea4baa9efc75b2666dae53698881f370e9ce490bbf"
+      "sha256": "a2e3fdf72c6efe8b2eb7011e54c2983e246ed626bb8aec01da2a6f602e9a941a"
     },
     {
-      "bytes": 55490,
+      "bytes": 91017,
       "path": "samples.json.gz",
       "role": "samples",
-      "sha256": "79a57c989d25abee4caebd658ec9c56dde1aaa5562fecfc4ecd102da4ad16ff6"
+      "sha256": "fdc3474418213da9161d4d588ac1eb1f3fcb1d3cced0f9a07f038400f6620440"
     },
     {
-      "bytes": 25011,
+      "bytes": 40952,
       "path": "summary.json",
       "role": "summary",
-      "sha256": "da83e91ea2f9b26a3432a7d5b6f40eb1d5a63fb8ddcc0e57cdbcfd92c5e5699f"
+      "sha256": "e292164fe6735d38309cbefcc5297876b2e79a967a0e9734efaeb70fed7f4a7e"
     },
     {
       "bytes": 5169,
@@ -31,34 +31,16 @@
       "sha256": "563c735f2bf381d9471df0f13988006206c21d739d0c16e0b3d0742c2d5f52be"
     },
     {
-      "bytes": 19016,
+      "bytes": 20573,
       "path": "omol25.svg",
       "role": "summary",
-      "sha256": "e85cb44dba8796b8e60e520ea9b1efcf0f360aa12279e5a1913bda75e27fac27"
+      "sha256": "cb2bc6cf74289bf2a03a5070526b5ed2c1871ae9306d83ae055037d9f62fae0a"
     },
     {
-      "bytes": 18002,
+      "bytes": 21005,
       "path": "omol25-cold.svg",
       "role": "summary",
-      "sha256": "d468bf12475e8c3ccf9053aa5241318d4223b557d1d675de7f1b8ddef40bf488"
-    },
-    {
-      "bytes": 7763,
-      "path": "README.md",
-      "role": "summary",
-      "sha256": "08d019f37b7e54813836076b60841990b658273c87d1f9391041e92d95838a5f"
-    },
-    {
-      "bytes": 2836,
-      "path": "verify.py",
-      "role": "reproduction",
-      "sha256": "27b727417c0bc8d0818991a3447c17528d4235d7e48937d29ebedf2933ed0196"
-    },
-    {
-      "bytes": 4578,
-      "path": "validate-point.py",
-      "role": "reproduction",
-      "sha256": "14a2a6d2cfe23c50b2ecd86ffc6c963b7d86406a0f6c85515b40b1178aee1117"
+      "sha256": "06da3b16381b1dd6f8a4ab2dac3387a7a4982ddbdb9059584e521f29f478880f"
     }
   ],
   "reproduction": {
@@ -68,7 +50,7 @@
       "benchmarks.readme_omol25",
       "native",
       "--atoms",
-      "6",
+      "12",
       "--basis-file",
       "benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json",
       "--reference-full-fock",
