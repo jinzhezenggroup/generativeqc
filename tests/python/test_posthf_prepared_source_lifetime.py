@@ -58,7 +58,11 @@ std::size_t checked_add(std::size_t a,std::size_t b) {
 }
 }
 struct Problem { std::size_t reference_retained_bytes=100, provider_peak_bytes{}; };
-struct State { Problem problem; int df_source{}; };
+struct State {
+  Problem problem;
+  int df_source{};
+  std::unique_ptr<integrals::ElectronInteractionSource> reference_interaction_source;
+};
 struct Execution { int device_id() const { return 0; } };
 Problem build_problem(const integrals::ElectronInteractionSource& source,
                       int,int,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
