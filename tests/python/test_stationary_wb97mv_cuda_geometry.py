@@ -164,6 +164,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 compile_grid(compiler, tmp_path),
                 order=2,
                 tile_points=len(points),
+                # The global D matrices remain dense even for a short local
+                # map; the small-fixture 256 MiB default cannot admit 1856 AOs.
+                budget_bytes=(4 << 30) if large_basis else None,
                 active_ao_capacity=basis.nao
                 if selected is None
                 else max(1, len(selected)),
