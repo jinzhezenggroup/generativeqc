@@ -89,6 +89,50 @@ void local_ao_cases() {
     const AoBasis basis(molecule);
     const MolecularGrid grid(molecule, {1, 3, 3, 4, 3, 1e-12});
     require(basis.nao > 32, "local AO fixture must span scalar and tiled schedules");
+
+    // Local-AO legality belongs to the XC layout rather than a method name.
+    // Full maps keep the numerical domain exact while qualifying every native
+    // functional/spin family, including scaled PBE as a global-hybrid XC slice.
+    const auto full_maps = local_maps(grid.point_count(), 19, basis.nao, 0);
+    for (std::uint32_t functional : {0U, 1U, 2U, 3U, 4U})
+      for (bool uks : {false, true}) {
+        const auto dense = cuda_xc_layout(basis, grid, functional, uks, 19);
+        const auto dense_capability = cuda_xc_execution_capabilities(dense);
+        require(dense_capability.local_ao_selection,
+                "physical FP64 XC layout lost local-AO selection capability");
+        require(dense_capability.mixed_density_contraction == (functional <= 2U),
+                "dense XC mixed-density capability disagrees with the qualified owner");
+        Fixture local(basis, grid, functional, uks, 19, CudaXcAoPrecision::Fp64, false, 1.0, 1.0,
+                      &full_maps);
+        const auto local_capability = cuda_xc_execution_capabilities(local.layout);
+        require(!local_capability.local_ao_selection && !local_capability.mixed_density_contraction,
+                "local XC layout exposed recursive selection or unqualified mixed density");
+        compare(local, basis, grid, density(basis.nao, uks ? 2U : 1U));
+      }
+    for (bool uks : {false, true}) {
+      Fixture scaled_pbe(basis, grid, 1U, uks, 19, CudaXcAoPrecision::Fp64, false, 0.75, 1.0,
+                         &full_maps);
+      compare(scaled_pbe, basis, grid, density(basis.nao, uks ? 2U : 1U));
+    }
+    {
+      const auto response = cuda_xc_layout_shape(basis.natom, basis.nprimitive, basis.nao,
+                                                 grid.point_count(), 1U, false, 19, true);
+      const auto fp32_ao = cuda_xc_layout(basis, grid, 1U, false, 19,
+                                         CudaXcAoPrecision::Fp32ComputeFp64Storage);
+      require(!cuda_xc_execution_capabilities(response).local_ao_selection &&
+                  !cuda_xc_execution_capabilities(fp32_ao).local_ao_selection,
+              "response or FP32-AO layout incorrectly admitted local maps");
+      Fixture local_pbe(basis, grid, 1U, false, 19, CudaXcAoPrecision::Fp64, false, 1.0, 1.0,
+                        &full_maps);
+      bool mixed_rejected = false;
+      try {
+        local_pbe.submit(density(basis.nao, 1), CudaXcDensityPrecision::Fp32ComputeFp64Accumulate);
+      } catch (const std::invalid_argument&) {
+        mixed_rejected = true;
+      }
+      require(mixed_rejected, "local-AO density contraction was mixed without qualification");
+    }
+
     for (bool uks : {false, true})
       for (std::size_t tile : {7U, 19U})
         for (unsigned variant : {0U, 1U, 2U}) {

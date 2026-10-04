@@ -26,7 +26,8 @@ enum class CudaXcAoPrecision : std::uint8_t {
 
 /** Density-times-AO arithmetic. Mixed evaluates products in explicit RN FP32
  * while keeping storage, the long reduction, point XC, Vxc and scalar reductions FP64.
- * Mixed is qualified for LDA, PBE and r2SCAN; omegaB97M-V requires Fp64. */
+ * Dense mixed contraction is qualified for the current LDA/PBE/r2SCAN programs;
+ * local-AO layouts remain strict FP64 until independently qualified. */
 enum class CudaXcDensityPrecision : std::uint8_t {
   Fp64 = 0,
   Fp32ComputeFp64Accumulate = 1,
@@ -58,6 +59,24 @@ struct CudaXcLayout {
   bool local_ao{};
   std::size_t ao_map_entries{}, host_ao_map_bytes{};
 };
+
+/** Layout-owned execution facts consumed by higher-level schedulers. These
+ * facts deliberately exclude method names and unrelated Fock-provider policy:
+ * local-AO legality belongs to the physical XC layout, while density precision
+ * is a separate arithmetic capability. */
+struct CudaXcExecutionCapabilities {
+  bool local_ao_selection{}, mixed_density_contraction{};
+};
+
+inline CudaXcExecutionCapabilities cuda_xc_execution_capabilities(
+    const CudaXcLayout& layout) noexcept {
+  const bool physical =
+      !layout.response && layout.nao != 0 && layout.npoint != 0 && layout.tile_points != 0;
+  return {
+      physical && !layout.local_ao && layout.ao_precision == CudaXcAoPrecision::Fp64,
+      physical && !layout.local_ao && layout.functional <= 2U,
+  };
+}
 
 /** Explicit CSR maps for the immutable point-tile sequence. Every local map
  * is sorted, unique, and in range; empty tiles are legal. These indices define

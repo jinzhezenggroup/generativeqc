@@ -257,6 +257,15 @@ int main() {
     const bool density_mixed = family != SemilocalFamily::B3lyp;
     assert(automatic.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
            density_mixed);
+    const auto dense_execution =
+        resolve_cuda_ks_iteration_precision(automatic, false, true);
+    assert(dense_execution.mixed_coulomb && dense_execution.mixed_density == density_mixed);
+    const auto local_execution =
+        resolve_cuda_ks_iteration_precision(automatic, false, false);
+    assert(local_execution.mixed_coulomb && !local_execution.mixed_density);
+    const auto refinement =
+        resolve_cuda_ks_iteration_precision(automatic, true, true);
+    assert(!refinement.mixed_coulomb && !refinement.mixed_density);
     for (const auto region : {cuda_ks_precision_region::kExactExchange,
                               cuda_ks_precision_region::kTau,
                               cuda_ks_precision_region::kXcPointAlgebra,

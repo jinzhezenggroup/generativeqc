@@ -1309,6 +1309,83 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
             << " residual=" << result.dft_diagnostic.physical_residual << '\n';
 }
 
+
+void pbe0_auto_local_ao_composition_case() {
+  const char* previous = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
+  const std::string saved = previous ? previous : "";
+  const bool had_previous = previous != nullptr;
+
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-10;
+  options.density_tolerance = 1e-8;
+  options.max_iterations = 180;
+  options.semilocal_exchange_scale = 0.75;
+  options.semilocal_correlation_scale = 1.0;
+
+  const auto solve = [&](const core::System& system, int precision_mode, bool local,
+                         const std::vector<double>* seed = nullptr) {
+    require(::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", local ? "1" : "0", 1) == 0,
+            "could not select CUDA PBE0 local-AO qualification route");
+    const dft::AoBasis basis(system);
+    const dft::MolecularGrid grid(system, {1, 24, 12, 24, 3, 1e-12});
+    const scf::PreparedFockPlan gpu(
+        system, nullptr, exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
+    auto run_options = options;
+    run_options.precision_mode = precision_mode;
+    dft::CudaKsPlan plan(gpu, basis, grid, run_options, dft::SemilocalFamily::Pbe, 257);
+    return plan.run(seed, false, true);
+  };
+
+  const auto system = water();
+  const auto strict = solve(system, GENERATIVEQC_PRECISION_FP64, false);
+  const auto automatic = solve(system, GENERATIVEQC_PRECISION_AUTO, true);
+  require(strict.converged && automatic.converged &&
+              std::abs(strict.energy - automatic.energy) < 1e-8 &&
+              automatic.dft_diagnostic.cuda_ao_selection.selected &&
+              automatic.dft_diagnostic.cuda_ao_selection.discovery_ao_jet_values > 0,
+          "PBE0 AUTO local-AO composition changed the endpoint or skipped discovery");
+  require(automatic.precision.mixed_stage_fock_builds > 0 &&
+              automatic.precision.strict_refinement_applied &&
+              automatic.precision.refinement_iterations > 0 &&
+              automatic.precision.final_residual_audits == 1,
+          "PBE0 AUTO local-AO composition lost mixed J or strict refinement");
+
+  const auto operator_count = [&](scf::PrecisionOperatorKind kind,
+                                  scf::PrecisionArithmeticMode mode) {
+    std::uint64_t count = 0;
+    for (const auto& item : automatic.precision_work.operators)
+      if (item.kind == kind && item.arithmetic_mode == mode) count += item.count;
+    return count;
+  };
+  const auto strict_mode = scf::PrecisionArithmeticMode::Strict;
+  const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
+  require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) > 0 &&
+              operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) == 0 &&
+              operator_count(scf::PrecisionOperatorKind::ExchangeK, mixed_mode) == 0 &&
+              operator_count(scf::PrecisionOperatorKind::ExchangeK, strict_mode) > 0,
+          "PBE0 AUTO local-AO precision provenance does not match executed J/density/K arithmetic");
+
+  auto moved = system;
+  moved.atoms[1].position[2] += 0.07;
+  std::string detail;
+  require(molecule::validate_and_normalize(moved, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+  const auto moved_strict = solve(moved, GENERATIVEQC_PRECISION_FP64, false, &strict.density);
+  const auto moved_automatic = solve(moved, GENERATIVEQC_PRECISION_AUTO, true, &automatic.density);
+  require(moved_strict.converged && moved_automatic.converged &&
+              std::abs(moved_strict.energy - moved_automatic.energy) < 1e-8 &&
+              moved_automatic.dft_diagnostic.cuda_ao_selection.selected &&
+              moved_automatic.dft_diagnostic.cuda_ao_selection.discovery_ao_jet_values > 0,
+          "changed-geometry PBE0 AUTO owner reused or lost its local-AO discovery");
+
+  if (had_previous)
+    require(::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", saved.c_str(), 1) == 0,
+            "could not restore CUDA local-AO selection");
+  else
+    require(::unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO") == 0,
+            "could not restore CUDA local-AO selection");
+}
+
 void precision_work_census_case(bool restricted, int precision_mode) {
   const auto system = hydrogens(2, restricted);
   const dft::AoBasis basis(system);
@@ -1833,6 +1910,7 @@ int main() {
   try {
     prepared_cuda_fock_seam();
     registered_functional_code_seam();
+    pbe0_auto_local_ao_composition_case();
     precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO);
     precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO);
     // UKS avoids the optional strict-RKS device-chunk route even if the test
