@@ -36,9 +36,12 @@ supports changing it, and keep an explicit selector for matched fallback checks.
 
 ## Work and memory
 
-For N public AOs and A atoms, the old generic derivative consumer has three
-passes over 3A coordinates and ordered N^4 quartets (before weight/center skips).
-This is traversal work, not a count of primitive FLOPs. The new source has
+For N public AOs, the old generic derivative consumer visits 3 N^4 ordered
+quartets across the three polarization passes (before weight/center skips).
+It already uses three-axis Dual3 jets and reconstructs the last distinct atom;
+there is no additional 3A coordinate traversal factor in the current kernel.
+Its jet count is the sum of u-1 over nonzero-weight ordered quartets in each
+pass. This is traversal work, not a count of primitive FLOPs. The new source has
 M=Nc(Nc+1)/2 Cartesian AO pairs and M(M+1)/2 canonical pair pairs. For each
 nonzero-weight quartet with u distinct atoms, at most u-1 three-axis derivative
 jets are evaluated; the last atom follows by translation. Canonical storage is
