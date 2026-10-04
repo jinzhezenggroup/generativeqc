@@ -18,7 +18,8 @@ void rejected(F&& call) {
 }
 
 template <class T>
-void check(char ta, char tb, std::size_t batch) {
+void check(char ta, char tb, std::size_t batch, bool padded = false,
+           ContractionAlgorithm algorithm = ContractionAlgorithm::PedanticBlas) {
   constexpr std::size_t m = 3, n = 5, k = 7;
   constexpr auto dtype = std::is_same_v<T, double> ? PrecisionDtype::Fp64 : PrecisionDtype::Fp32;
   constexpr std::string_view identity =
@@ -44,9 +45,32 @@ void check(char ta, char tb, std::size_t batch) {
       n,
       k,
       -0.75};
-  std::vector<T> a(batch * m * k), b(batch * k * n), actual(batch * m * n), expected(actual.size());
-  for (std::size_t i = 0; i != a.size(); ++i) a[i] = T(int(i % 17) - 8) / 16;
-  for (std::size_t i = 0; i != b.size(); ++i) b[i] = T(int(i % 13) - 6) / 16;
+  const auto lda = (ta == 'N' ? k : m) + (padded ? 3 : 0),
+             ldb = (tb == 'N' ? n : k) + (padded ? 5 : 0), ldc = n + (padded ? 2 : 0);
+  if (padded) {
+    if (batch != 1) throw std::logic_error("strided batch outside this qualification");
+    for (std::size_t i = 0; i < 3; ++i) {
+      const auto ld = i == 0 ? lda : i == 1 ? ldb : ldc;
+      request.leading_dimensions[i] = ld;
+      request.operands[i].strides[1] = ld;
+      request.operands[i].strides[0] = request.operands[i].shape[1] * ld;
+    }
+    request.beta = 0.25;
+  }
+  const auto nan = std::numeric_limits<T>::quiet_NaN();
+  std::vector<T> a(request.operands[0].storage_elements(), nan),
+      b(request.operands[1].storage_elements(), nan),
+      actual(request.operands[2].storage_elements(), nan), expected(actual.size(), nan);
+  for (std::size_t q = 0; q < batch; ++q) {
+    for (std::size_t row = 0; row < (ta == 'N' ? m : k); ++row)
+      for (std::size_t col = 0; col < (ta == 'N' ? k : m); ++col)
+        a[q * m * k + row * lda + col] = T(int((row * 11 + col) % 17) - 8) / 16;
+    for (std::size_t row = 0; row < (tb == 'N' ? k : n); ++row)
+      for (std::size_t col = 0; col < (tb == 'N' ? n : k); ++col)
+        b[q * k * n + row * ldb + col] = T(int((row * 7 + col) % 13) - 6) / 16;
+    for (std::size_t row = 0; row < m; ++row)
+      for (std::size_t col = 0; col < n; ++col) actual[q * m * n + row * ldc + col] = 1;
+  }
   // Independent semantic i,j,k loops, explicitly indexing the physical views.
   // Dyadic data makes the expected products exactly representable in FP32 too.
   for (std::size_t q = 0; q != batch; ++q)
@@ -54,17 +78,20 @@ void check(char ta, char tb, std::size_t batch) {
       for (std::size_t j = 0; j != n; ++j) {
         double sum = 0;
         for (std::size_t x = 0; x != k; ++x)
-          sum += double(a[q * m * k + (ta == 'N' ? i * k + x : x * m + i)]) *
-                 double(b[q * k * n + (tb == 'N' ? x * n + j : j * k + x)]);
-        expected[q * m * n + i * n + j] = T(-0.75 * sum);
+          sum += double(a[q * m * k + (ta == 'N' ? i * lda + x : x * lda + i)]) *
+                 double(b[q * k * n + (tb == 'N' ? x * ldb + j : j * ldb + x)]);
+        expected[q * m * n + i * ldc + j] = T(-0.75 * sum + request.beta);
       }
   cudaStream_t stream{};
   cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   CudaContractionContext context;
-  if (!context.prepare(stream)) throw std::runtime_error("provider preparation failed");
+  if (algorithm == ContractionAlgorithm::GeneratedOrdered)
+    context.prepare_generated(stream);
+  else if (!context.prepare(stream))
+    throw std::runtime_error("provider preparation failed");
   PreparedContractions bindings;
   std::size_t calls{}, summands{};
-  bindings.add(m, n, batch, {request}, context, calls, summands);
+  bindings.add(m, n, batch, {request}, context, calls, summands, {algorithm});
   T *da{}, *db{}, *dc{};
   int* error{};
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&da), a.size() * sizeof(T)));
@@ -73,6 +100,8 @@ void check(char ta, char tb, std::size_t batch) {
   cuda_check(cudaMalloc(reinterpret_cast<void**>(&error), sizeof(int)));
   cuda_check(cudaMemcpyAsync(da, a.data(), a.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
   cuda_check(cudaMemcpyAsync(db, b.data(), b.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
+  cuda_check(cudaMemcpyAsync(dc, actual.data(), actual.size() * sizeof(T), cudaMemcpyHostToDevice,
+                             stream));
   cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
   auto run = [&] { bindings.execute(0, m, n, batch, stream, da, db, dc, error); };
   run();
@@ -81,7 +110,10 @@ void check(char ta, char tb, std::size_t batch) {
   int status{};
   cuda_check(cudaMemcpyAsync(&status, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
   cuda_check(cudaStreamSynchronize(stream));
-  if (status || actual != expected || calls != 1 || summands != batch * m * n * k)
+  bool equal = true;
+  for (std::size_t i = 0; i < actual.size(); ++i)
+    equal = equal && (std::isnan(expected[i]) ? std::isnan(actual[i]) : actual[i] == expected[i]);
+  if (status || !equal || calls != 1 || summands != batch * m * n * k)
     throw std::runtime_error("typed provider disagrees with independent matrix oracle");
   rejected([&] { bindings.execute(0, m, n, batch + 1, stream, da, db, dc, error); });
   rejected([&] { bindings.execute(0, m, n, batch, nullptr, da, db, dc, error); });
@@ -122,8 +154,15 @@ int main() {
     for (auto a : {'N', 'T'})
       for (auto b : {'N', 'T'})
         for (std::size_t batches : {1, 2}) {
-          check<float>(a, b, batches);
-          check<double>(a, b, batches);
+          for (auto algorithm :
+               {ContractionAlgorithm::PedanticBlas, ContractionAlgorithm::GeneratedOrdered}) {
+            check<float>(a, b, batches, false, algorithm);
+            check<double>(a, b, batches, false, algorithm);
+            if (batches == 1) {
+              check<float>(a, b, batches, true, algorithm);
+              check<double>(a, b, batches, true, algorithm);
+            }
+          }
         }
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

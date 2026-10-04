@@ -23,7 +23,7 @@ inline std::size_t contraction_product(std::size_t a, std::size_t b) {
 
 /** Runtime-shape projection of common.lowering_contract.OperandLayout.
  * Modes are the existing TensorIR einsum ordinals, not matrix axis names.
- * This first native adapter accepts dense input/output views only. Packing
+ * Dense batches and unbatched padded matrix views are supported. Other packing
  * remains explicit, budgeted TensorIR work outside this provider binding.
  */
 struct ContractionOperand {
@@ -58,6 +58,38 @@ struct ContractionOperand {
     for (std::size_t i = 0; i != rank; ++i) result = contraction_product(result, shape[i]);
     return result;
   }
+
+  /** A flattened row/column view with explicit padding between rows. Only
+   * this matrix cut may carry padding; inner axes retain their original order.
+   * This describes a borrowed view, without packing or allocating a tensor. */
+  static ContractionOperand matrix_view(std::initializer_list<int> labels,
+                                        std::initializer_list<std::size_t> extents,
+                                        PrecisionDtype dtype, std::size_t row_axes,
+                                        std::size_t leading_dimension) {
+    auto view = dense(labels, extents, dtype);
+    if (row_axes > view.rank) throw std::invalid_argument("invalid matrix view cut");
+    std::size_t columns = 1;
+    for (auto i = row_axes; i < view.rank; ++i)
+      columns = contraction_product(columns, view.shape[i]);
+    if (leading_dimension < columns) throw std::invalid_argument("overlapping native matrix rows");
+    auto stride = leading_dimension;
+    for (auto i = row_axes; i != 0; --i) {
+      view.strides[i - 1] = stride;
+      stride = contraction_product(stride, view.shape[i - 1]);
+    }
+    return view;
+  }
+
+  std::size_t storage_elements() const {
+    std::size_t last = 0;
+    for (std::size_t i = 0; i < rank; ++i) {
+      const auto offset = contraction_product(shape[i] - 1, strides[i]);
+      if (offset > std::numeric_limits<std::size_t>::max() - last - 1)
+        throw std::length_error("native contraction view address overflow");
+      last += offset;
+    }
+    return last + 1;
+  }
 };
 
 /** A compiler-owned einsum plus one admitted physical matrix implementation.
@@ -74,6 +106,16 @@ struct ContractionRequest {
   char a_trans{'N'}, b_trans{'N'};
   std::size_t batches{1}, m{}, n{}, k{};
   double coefficient{1};
+  // Zero leading dimensions preserve the dense AOT descriptor ABI. Explicit
+  // row strides currently support unbatched matrices; padding is never packed
+  // or read as scientific data. beta==0 must not read uninitialized output.
+  std::array<std::size_t, 3> leading_dimensions{};
+  double beta{};
+
+  std::size_t leading_dimension(std::size_t operand) const {
+    if (leading_dimensions[operand]) return leading_dimensions[operand];
+    return operand == 0 ? (a_trans == 'N' ? k : m) : operand == 1 ? (b_trans == 'N' ? n : k) : n;
+  }
 
   std::size_t output_elements() const {
     return contraction_product(batches, contraction_product(m, n));
@@ -90,15 +132,17 @@ struct ContractionRequest {
           identity.find_first_not_of("0123456789abcdef") != std::string_view::npos)
         throw std::invalid_argument("native contraction requires compiler identities");
     }
-    if (precision.math_mode != runtime::kStrictPrecisionMathMode ||
+    if ((precision.storage_dtype != PrecisionDtype::Fp64 &&
+         precision.storage_dtype != PrecisionDtype::Fp32) ||
+        precision.math_mode != runtime::kStrictPrecisionMathMode ||
         precision.storage_dtype != precision.compute_dtype ||
         precision.compute_dtype != precision.accumulation_dtype ||
         publication_dtype != precision.storage_dtype)
       throw std::invalid_argument(
           "native matrix candidate does not implement requested arithmetic");
     if (std::max({batches, m, n, k}) > std::size_t(std::numeric_limits<int>::max()) || !batches ||
-        !m || !n || !k || !std::isfinite(coefficient) || (a_trans != 'N' && a_trans != 'T') ||
-        (b_trans != 'N' && b_trans != 'T'))
+        !m || !n || !k || !std::isfinite(coefficient) || !std::isfinite(beta) ||
+        (a_trans != 'N' && a_trans != 'T') || (b_trans != 'N' && b_trans != 'T'))
       throw std::invalid_argument("native matrix candidate dimensions/coefficient are invalid");
     const std::array<std::size_t, 3> counts{contraction_product(batches, contraction_product(m, k)),
                                             contraction_product(batches, contraction_product(k, n)),
@@ -106,16 +150,33 @@ struct ContractionRequest {
     for (std::size_t i = 0; i != operands.size(); ++i) {
       if (operands[i].rank > ContractionOperand::kMaximumRank)
         throw std::invalid_argument("native contraction operand rank exceeds bound");
-      std::size_t stride = 1;
+      const auto columns = i == 0   ? (a_trans == 'N' ? k : m)
+                           : i == 1 ? (b_trans == 'N' ? n : k)
+                                    : n;
+      const auto ld = leading_dimension(i);
+      if (ld < columns || ld > std::size_t(std::numeric_limits<int>::max()) ||
+          (batches != 1 && ld != columns))
+        throw std::invalid_argument("native contraction leading dimension unsupported");
+      std::size_t stride = 1, extent = 1;
+      bool padded = false;
       for (auto axis = operands[i].rank; axis != 0; --axis) {
+        // A unit column axis may precede the matrix cut. Do not mistake that
+        // axis for a padded row merely because its extent product is one.
+        if (!padded && ld != columns && extent == columns && operands[i].strides[axis - 1] == ld) {
+          stride = ld;
+          padded = true;
+        }
         if (!operands[i].shape[axis - 1] || operands[i].strides[axis - 1] != stride)
-          throw std::invalid_argument("native matrix candidate requires explicit dense packing");
+          throw std::invalid_argument("native matrix strides differ from its semantic view");
         stride = contraction_product(stride, operands[i].shape[axis - 1]);
+        extent = contraction_product(extent, operands[i].shape[axis - 1]);
       }
+      if (ld != columns && !padded && counts[i] > columns)
+        throw std::invalid_argument("native matrix view omits its row padding");
       if (operands[i].dtype != precision.storage_dtype || operands[i].elements() != counts[i])
         throw std::invalid_argument("native matrix candidate does not match semantic operands");
-      const auto bytes =
-          contraction_product(counts[i], publication_dtype == PrecisionDtype::Fp64 ? 8 : 4);
+      const auto bytes = contraction_product(operands[i].storage_elements(),
+                                             publication_dtype == PrecisionDtype::Fp64 ? 8 : 4);
       if (bytes > std::size_t(std::numeric_limits<std::ptrdiff_t>::max()))
         throw std::length_error("native contraction address range overflow");
     }
