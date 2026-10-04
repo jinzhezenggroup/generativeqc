@@ -259,19 +259,19 @@ def test_wb97mv_auto_matches_fp64_cold_warm_and_moved(
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     from generativeqc import Calculator, GridSpec, KsOptions
 
-    common = dict(
-        method=method,
-        basis="sto-3g",
-        basis_representation="spherical",
-        device="cuda",
-        ks_options=KsOptions(
+    common = {
+        "method": method,
+        "basis": "sto-3g",
+        "basis_representation": "spherical",
+        "device": "cuda",
+        "ks_options": KsOptions(
             grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
         ),
-        energy_tolerance=1e-12,
-        density_tolerance=1e-10,
-        screening_tolerance=1e-14,
-        max_iterations=200,
-    )
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "screening_tolerance": 1e-14,
+        "max_iterations": 200,
+    }
     automatic = Calculator(**common, precision="auto")
     strict = Calculator(**common, precision="fp64")
     assert automatic.capabilities.supported_properties == frozenset(
