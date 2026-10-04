@@ -161,7 +161,9 @@ def test_integral_schedule_contract_uses_common_precision_identity() -> None:
     assert contract.profitability.precision_widened_accumulation_terms == 0
 
 
-def test_generated_fock_mixed_schedule_records_fp32_eri_product_fp64_accumulation() -> None:
+def test_generated_fock_mixed_schedule_records_fp32_eri_product_fp64_accumulation() -> (
+    None
+):
     strict = generated_fock_precision_schedule()
     assert strict.is_strict_fp64
 
