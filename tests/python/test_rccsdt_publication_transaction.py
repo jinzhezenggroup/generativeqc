@@ -22,8 +22,17 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
         pytest.skip("requires a host C++ compiler")
     source = (ROOT / "src/methods/rccsdt_method.cpp").read_text(encoding="utf-8")
     start = source.index("      auto diagnostic = state.diagnostic;")
-    stop = source.index("      return state.result;", start)
-    body = source[start:stop] + "      return state.result;\n"
+    stop = source.index("      return std::move(state.result);", start)
+    body = source[start:stop] + "      return std::move(state.result);\n"
+    reservation_start = source.index("      const auto phase_budget =")
+    reservation_stop = source.index(
+        "      run_with_rccsd_reference_source(", reservation_start
+    )
+    reservation = source[reservation_start:reservation_stop]
+    helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
+    helper = helper[
+        helper.index("template <class Operation>") : helper.index("\n}  // namespace")
+    ]
     directory = tmp_path_factory.mktemp("triples-publication")
     unit, executable = directory / "publication.cpp", directory / "publication"
     unit.write_text(
@@ -43,6 +52,7 @@ struct Diagnostic {
   double minimum_absolute_denominator{9}, ccsd_t_triples_energy{};
   double response_absolute_residual{}, response_relative_residual{};
   std::uint64_t numeric_capacity_bytes{}, correlation_owned_device_bytes{};
+  std::uint64_t reference_execution_plan_owned_device_bytes{};
   std::uint64_t ccsd_t_virtual_triples{}, ccsd_t_workspace_bytes{};
   std::uint64_t response_iterations{}, response_restarts{}, response_workspace_bytes{};
   std::uint64_t measured_response_workspace_peak_bytes{}, response_workspace_allocation_count{};
@@ -51,16 +61,24 @@ struct Diagnostic {
 };
 struct Result { double energy{}; std::vector<double> forces; };
 struct Performance { double triples_seconds{}; };
+int reclaims{};
+namespace integrals { struct ElectronInteractionSource {
+  std::size_t retained_numeric_bytes() const { return 17; }
+}; }
 struct State {
   Diagnostic diagnostic;
   Performance performance;
   Result result;
   struct { double total_energy{10}; } solved;
   std::optional<int> reference{1};
-  int problem{}, eps_o{}, eps_v{};
+  struct { std::size_t reference_retained_bytes{17}; } problem;
+  int eps_o{}, eps_v{};
   std::size_t budget{1024}, external_reservation_bytes{64};
+  std::size_t reference_execution_plan_bytes{}, reference_execution_plan_device_bytes{};
   double reference_energy_change{1e-11}, reference_density_rms{1e-12};
   std::size_t reference_iterations{8};
+  std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source =
+      std::make_shared<integrals::ElectronInteractionSource>();
 };
 int failure_mode{};
 bool cuda_mode{};
@@ -76,13 +94,21 @@ int capture(int, int, double energy_change, double density_rms, std::size_t iter
   return 42;
 }
 }
-namespace integrals { struct ElectronInteractionSource {}; }
 namespace posthf {
 struct RawSource : integrals::ElectronInteractionSource {
   explicit RawSource(int) {}
 };
 }
 namespace scf {
+struct CudaRhfBucketPlan {};
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete plan; }
+template<class Source> bool reclaim_rhf_cuda_reference_plan(CudaRhfBucketPlan**,Source& source) {
+  if(!source) return false;
+  if(source.use_count()!=1) throw std::logic_error("reclaimed live source alias");
+  source.reset(); ++reclaims; return true;
+}
 struct PreparedFockInteractionSourceView : integrals::ElectronInteractionSource {
   explicit PreparedFockInteractionSourceView(int) {}
 };
@@ -133,13 +159,15 @@ struct Execution {
   template<class... T> void observe_numeric_peak(T...) {}
 };
 std::size_t checked_add(std::size_t a,std::size_t b) { return a+b; }
+@HELPER@
 struct Owner {
+  CorrelatedCudaReferencePlan cuda_reference_plan_;
   Execution execution_;
   std::optional<Diagnostic> last_;
   std::optional<Performance> last_performance_;
   int system_{};
   int warm_state_{-7};
-  std::optional<int> cpu_exact_plan_{1};
+  std::optional<int> cpu_exact_plan_;
   struct { double ccsd_denominator_threshold{1e-10}; } descriptor_;
   Result run(bool compute_forces) {
     State state;
@@ -148,7 +176,8 @@ struct Owner {
     last_=state.diagnostic; // Retain the existing CC convergence diagnostic.
     const std::size_t retained=16, triples_virtual_count=7, triples_workspace_bytes=32;
     const double triples_energy=0.25, triples_minimum_denominator=2, triples_seconds=0.0;
-"""
+""".replace("@HELPER@", helper)
+        + reservation
         + body
         + r"""
   }
@@ -163,7 +192,7 @@ int main(int argc,char** argv) {
   Owner owner;
   try {
     const auto result=owner.run(failure_mode!=0);
-    if(expect_failure || !owner.last_ || result.energy!=10.25) return 1;
+    if(expect_failure || !owner.last_ || result.energy!=10.25 || reclaims!=1) return 1;
     if(owner.last_->ccsd_t_virtual_triples!=7) return 2;
     if(owner.warm_state_!=(warm_updates ? 42 : -7) || warm_captures!=(warm_updates ? 1 : 0))
       return 6;
@@ -174,7 +203,7 @@ int main(int argc,char** argv) {
         force_backend!=(cuda_mode ? 2 : 1)))
       return 3;
   } catch(const std::exception&) {
-    if(!expect_failure || !owner.last_) return 4;
+    if(!expect_failure || !owner.last_ || reclaims!=0) return 4;
     if(owner.warm_state_!=-7 || warm_captures!=(failure_mode==6 ? 1 : 0)) return 8;
     if(owner.last_->ccsd_t_virtual_triples!=0 || owner.last_->ccsd_t_triples_energy!=0 ||
        owner.last_->ccsd_t_equation_hash[0]!='\0') return 5;

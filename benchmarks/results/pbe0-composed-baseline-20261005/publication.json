@@ -1,0 +1,119 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Correctness passes all 144 same-geometry E/F comparisons. The composed baseline remains above the 1.25x exact-direct warm target; no default promotion.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 6221,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "41a4dbcab2ecd6571708cce61bdd4d24e9398b7564afd40ee8e91caa659eef57"
+    },
+    {
+      "bytes": 888,
+      "path": "check-source.py.txt",
+      "role": "reproduction",
+      "sha256": "f3ccdf1305d574f136b617cd5c6e4209c243000604ae24643695a7e2a8a70e49"
+    },
+    {
+      "bytes": 3090,
+      "path": "components-48.json.gz",
+      "role": "samples",
+      "sha256": "520f056451eb56c87e64223ece9c15874af008b71816a8c160ba90e686814e6e"
+    },
+    {
+      "bytes": 3541,
+      "path": "components-96.json.gz",
+      "role": "samples",
+      "sha256": "97208bdc450a703a570031da49af1a344aefe4ff15f630a8155cf780f45759da"
+    },
+    {
+      "bytes": 25586,
+      "path": "composed-48.json.gz",
+      "role": "samples",
+      "sha256": "0caf082dddbeaf7391bead176c2ebb3d99d030af291bf294ccbe66dd0b110eb7"
+    },
+    {
+      "bytes": 39036,
+      "path": "composed-96.json.gz",
+      "role": "samples",
+      "sha256": "2e524dac601c1c75ff905119c0d9c22c39f1e78438fd9d3383f2c6fcfcb00b8d"
+    },
+    {
+      "bytes": 79633,
+      "path": "composed-source.patch",
+      "role": "source-patch",
+      "sha256": "75291834ac4afd29c85c116510944308891e67aba1b0b0edf92c10f52548e4f9"
+    },
+    {
+      "bytes": 1487,
+      "path": "gpu-env-n1.sh.txt",
+      "role": "reproduction",
+      "sha256": "5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d"
+    },
+    {
+      "bytes": 849,
+      "path": "profile-components-n1.sh.txt",
+      "role": "reproduction",
+      "sha256": "f40f81f26669df754b2c9b9abec30f593cbdc6fe6cc1d87b9fbbcce2ab60dc5a"
+    },
+    {
+      "bytes": 4852,
+      "path": "profile-components.py.txt",
+      "role": "reproduction",
+      "sha256": "c794a63dc1df9ebf238146d19720e05b7567d4688372fc1577f3d41e6affe87c"
+    },
+    {
+      "bytes": 1961,
+      "path": "qualify-baseline-n1.sh.txt",
+      "role": "reproduction",
+      "sha256": "888341c42bd47c3bba33da26456331f848d2c6c128b6ff04dbd2784ca9cad813"
+    },
+    {
+      "bytes": 17960,
+      "path": "reference-48.json.gz",
+      "role": "samples",
+      "sha256": "95350fdd5ba25264a62813d25a4183839732b62df3a57d8b03cf79665135bfc4"
+    },
+    {
+      "bytes": 30977,
+      "path": "reference-96.json.gz",
+      "role": "samples",
+      "sha256": "e6b8b3866fc768b214c09b411c03e4a5c8583ddfbd1d3e18a48560dc5ac97553"
+    },
+    {
+      "bytes": 13866,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "9c5744cd552f2fd3dab6e2eb64fa7ae3a8fb224589926d07814a1ebfaf52b51c"
+    },
+    {
+      "bytes": 11113,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "2426d9cf16409bc3c2f6e3a44e8512374769e6263c0a2eddc9bc168a2da7a536"
+    },
+    {
+      "bytes": 25982,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "a1f06429f268aba19fd511281d498feea1ee7d5c4ca311ba3aff8635d2ea8f5c"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-composed-baseline-20261005/verify.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": false,
+    "reconstruction_base": "1de139fa59401802e07aa20730ec7e842195f4f4",
+    "reconstruction_scope": "All measured library/compiler/harness sources plus native AO discovery checks; unrelated historical notes and Python regression tests omitted. Reconstructed canonical source identity verified.",
+    "revision": "cd121e3af089b0d59f9cffaeff381b1ac01ffb31"
+  }
+}
