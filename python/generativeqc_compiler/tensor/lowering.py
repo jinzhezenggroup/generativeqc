@@ -8,7 +8,7 @@ generated reduction. The same adapter is usable by CPU and CUDA lowerers.
 from __future__ import annotations
 
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property
 from math import prod
 
@@ -28,6 +28,9 @@ from generativeqc_compiler.common.provenance import canonical_hash
 from .ir import Node
 from .precision import PrecisionSchedule, describe_precision
 from .program import Program, node_hashes
+
+if typing.TYPE_CHECKING:
+    from .cuda_plan import TensorPlan
 
 
 @dataclass(frozen=True)
@@ -219,4 +222,52 @@ def tensor_lowering_request(
         layouts=layouts,
         precisions=precisions,
         constraints=constraints,
+    )
+
+
+def plan_lowering_request(
+    plan: TensorPlan, index: int, adapter: TensorLoweringAdapter
+) -> LoweringRequest:
+    """Bind the existing node and arena views for every provider's candidate set.
+
+    Packing benefit, provider name and selected precision do not define a new
+    operation. Optional providers must reuse this request for planned sites.
+    """
+    step = plan.steps[index]
+    node = step.node
+    if node.spec.dtype == "int64":
+        # Integer control operations have no floating precision variant yet.
+        return LoweringRequest(
+            consumer="tensor",
+            operation=node.op,
+            backend="cuda",
+            dtype="int64",
+            accumulation_dtype="int64",
+            shape=node.spec.shape,
+            semantics=(("program_hash", plan.program.logical_hash),),
+        )
+    request = adapter.request(
+        node,
+        backend="cuda",
+        layouts=tuple(plan.steps[child].layout for child in step.inputs)
+        + (step.layout,),
+    )
+    # The mathematical output is SSA, but the storage planner may donate a dead
+    # input allocation. Preserve that execution precondition at the boundary.
+    return replace(
+        request,
+        operands=tuple(
+            replace(layout, alias_group=f"arena:{plan.steps[owner].offset}")
+            if not plan.steps[owner].virtual
+            else layout
+            for layout, owner in zip(
+                request.operands, (*step.inputs, index), strict=True
+            )
+        ),
+        effects=(
+            (
+                "output",
+                "donated" if step.donated_from is not None else "fresh-ssa-value",
+            ),
+        ),
     )
