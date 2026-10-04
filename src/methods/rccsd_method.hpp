@@ -36,7 +36,7 @@ RccsdNativeState run_rccsd_native_state(
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache = nullptr,
     const std::vector<double>* initial_density = nullptr, bool* warm_start_fallback = nullptr,
     std::size_t external_reservation_bytes = 0, const core::System* correlation_auxiliary = nullptr,
-    bool retain_df_response = false);
+    bool retain_df_response = false, bool df_matrix_gemm = true);
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(
     const Capabilities&, core::ContextState&, const core::System&,

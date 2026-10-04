@@ -55,6 +55,11 @@ COLUMNS = (
     "hoisted_evaluations",
     "preparation_calls",
     "contraction_terms",
+    "matrix_gemm",
+    "gemm_calls",
+    "gemm_summands",
+    "packing_bytes",
+    "provider_capacity",
 )
 
 
@@ -131,7 +136,7 @@ def solver_probe(
     compiler = nvcc if cuda else cxx
     assert compiler is not None
     subprocess.run(
-        [compiler, *objects, "-o", str(executable)],
+        [compiler, *objects, *(["-lcublas"] if cuda else []), "-o", str(executable)],
         check=True,
         capture_output=True,
         text=True,
@@ -168,11 +173,21 @@ def _stream(
     budget: int = 1 << 30,
     diis: int = 6,
     hoist: bool = True,
+    matrix: bool = True,
 ) -> bytes:
     o, v = arrays["t1"].shape
     q = len(arrays["bov"]) if df else 0
     header = np.array(
-        [o, v, q, budget, 100, diis, int(cuda) | (0 if hoist else 4)], dtype=np.uint64
+        [
+            o,
+            v,
+            q,
+            budget,
+            100,
+            diis,
+            int(cuda) | (0 if hoist else 4) | (0 if matrix else 8),
+        ],
+        dtype=np.uint64,
     )
     omitted = ("ovvv", "vvvv") if df else ("bov", "bvv")
     return header.tobytes() + b"".join(
@@ -277,6 +292,38 @@ def test_exact_memory_admission_and_symmetric_factor_gate(
         timeout=30,
     )
     assert process.returncode and b"symmetric" in process.stderr
+
+
+def test_matrix_schedule_matches_scalar_and_budget_fallback(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    if not solver_probe[1]:
+        pytest.skip("matrix provider is a CUDA execution option")
+    _, _, arrays = _case(2, 3, 4)
+    fast, t1, t2 = _run(solver_probe, arrays)
+    scalar, s1, s2 = _run(solver_probe, arrays, matrix=False)
+    assert fast["status"] == scalar["status"] == 0
+    assert fast["matrix_gemm"] == 1 and scalar["matrix_gemm"] == 0
+    assert 0 < fast["gemm_summands"] <= fast["contraction_terms"]
+    assert fast["gemm_calls"] > 0 and fast["packing_bytes"] > 0
+    assert fast["provider_capacity"] == 96 << 20
+    assert (
+        scalar["gemm_calls"]
+        == scalar["packing_bytes"]
+        == scalar["provider_capacity"]
+        == 0
+    )
+    np.testing.assert_allclose(fast["energy"], scalar["energy"], atol=2e-12, rtol=0)
+    np.testing.assert_allclose(t1, s1, atol=2e-11, rtol=0)
+    np.testing.assert_allclose(t2, s2, atol=2e-11, rtol=0)
+    admitted, _, _ = _run(solver_probe, arrays, budget=int(fast["capacity"]))
+    assert admitted["matrix_gemm"] == 1
+    for budget in (int(fast["capacity"]) - 1, int(scalar["capacity"])):
+        bounded, b1, b2 = _run(solver_probe, arrays, budget=budget)
+        assert bounded["matrix_gemm"] == 0 and bounded["hoisted_evaluations"] > 0
+        assert bounded["capacity"] <= budget
+        np.testing.assert_allclose(b1, s1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(b2, s2, atol=2e-11, rtol=0)
 
 
 @pytest.mark.parametrize("o,v,q", [(2, 3, 4), (4, 1, 1), (2, 6, 1)])

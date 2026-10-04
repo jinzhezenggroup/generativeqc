@@ -22,6 +22,7 @@ int main() {
     options.max_iterations = header[4];
     options.diis_size = header[5];
     options.df_auxiliary_reduction = !(header[6] & 4);
+    options.df_matrix_gemm = !(header[6] & 8);
     options.energy_tolerance = 1e-12;
     options.residual_tolerance = 1e-10;
     const auto o = p.nocc, v = p.nvir;
@@ -65,7 +66,9 @@ int main() {
               << d.replay_graph_calls << ' ' << d.df_auxiliary_slices << ' '
               << d.df_virtual_operations << ' ' << d.df_accumulation_calls << ' '
               << d.tensor_seconds << ' ' << d.df_hoisted_evaluations << ' '
-              << d.df_preparation_calls << ' ' << d.df_contraction_terms << '\n';
+              << d.df_preparation_calls << ' ' << d.df_contraction_terms << ' ' << d.df_matrix_gemm
+              << ' ' << d.df_gemm_calls << ' ' << d.df_gemm_summands << ' ' << d.df_packing_bytes
+              << ' ' << d.df_provider_capacity_bytes << '\n';
     for (double x : result.t1) std::cout << x << ' ';
     for (double x : result.t2) std::cout << x << ' ';
     std::cout << '\n' << result.reason << '\n';
