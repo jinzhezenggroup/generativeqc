@@ -1424,6 +1424,55 @@ def _packed_matrix_gemm(node: typing.Any) -> tuple[str, str, str, str, str] | No
     return ta, tb, extent(g.m_labels), extent(g.n_labels), extent(g.k_labels)
 
 
+def _packed_batched_matrix_gemm(
+    node: typing.Any,
+) -> tuple[str, str, str, str, str, str] | None:
+    """Recognize leading packed batches; every matrix has an explicit stride.
+
+    One-sided Q axes are folded into ordinary GEMMs by _packed_matrix_gemm.
+    Here Q must be shared by both operands and survive in the output.
+    """
+    if node.op != "einsum":
+        return None
+    g = gemm_contract(node)
+    if (
+        g is None
+        or not g.batch_labels
+        or not g.m_labels
+        or not g.n_labels
+        or not g.k_labels
+        or g.output_labels != g.c_order
+    ):
+        return None
+
+    def trans(labels: tuple, rows: tuple, cols: tuple) -> str | None:
+        if labels == g.batch_labels + rows + cols:
+            return "N"
+        if labels == g.batch_labels + cols + rows:
+            return "T"
+        return None
+
+    ta, tb = (
+        trans(g.a_labels, g.m_labels, g.k_labels),
+        trans(g.b_labels, g.k_labels, g.n_labels),
+    )
+    if ta is None or tb is None:
+        return None
+    dims = _label_dims(node)
+
+    def extent(labels: tuple) -> str:
+        return "checked_product({" + ",".join(dims[i] for i in labels) + "})"
+
+    return (
+        ta,
+        tb,
+        extent(g.batch_labels),
+        extent(g.m_labels),
+        extent(g.n_labels),
+        extent(g.k_labels),
+    )
+
+
 def _cuda_program(
     program: Program,
     prefix: str,
@@ -1436,6 +1485,7 @@ def _cuda_program(
     output_fields: tuple[str, ...] | None = None,
     reset_error: bool = True,
     matrix_gemm: str | None = None,
+    batched_matrix_gemm: str | None = None,
 ) -> str:
     names = _prepare_program(program)
     arena_plan = _arena_plan(program)
@@ -1443,7 +1493,8 @@ def _cuda_program(
     kernels = []
     for number, node in enumerate(_execution_nodes(program)):
         if node.op != "input" and not (
-            matrix_gemm and _packed_matrix_gemm(node) is not None
+            (matrix_gemm and _packed_matrix_gemm(node) is not None)
+            or (batched_matrix_gemm and _packed_batched_matrix_gemm(node) is not None)
         ):
             kernels.append(
                 _cuda_kernel(node, number, prefix, names, batch_dim=batch_dim)
@@ -1499,6 +1550,15 @@ def _cuda_program(
         lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         sources = [names[x._emit_index] for x in node.inputs]
         gemm = _packed_matrix_gemm(node) if matrix_gemm else None
+        batch_gemm = _packed_batched_matrix_gemm(node) if batched_matrix_gemm else None
+        if batch_gemm is not None:
+            ta, tb, batch, m, columns, k = batch_gemm
+            coefficient = _fraction(node.attrs["coefficient"])
+            lines.append(
+                f"  {batched_matrix_gemm}('{ta}','{tb}',{batch},{m},{columns},{k},{coefficient},"
+                f"{sources[0]},{sources[1]},{names[number]});"
+            )
+            continue
         if gemm is not None:
             ta, tb, m, columns, k = gemm
             coefficient = _fraction(node.attrs["coefficient"])

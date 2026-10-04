@@ -15,7 +15,7 @@ from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
 from generativeqc_compiler.tensor.ir import _infer, transpose
 
 
-def pack_df_contractions(program: Program) -> Program:
+def pack_df_contractions(program: Program, *, allow_batch: bool = False) -> Program:
     """Expose unbatched matrix products using explicit, budgeted transposes.
 
     Repeated indices, one-sided reductions, multi-operand contractions and
@@ -40,7 +40,7 @@ def pack_df_contractions(program: Program) -> Program:
         contract = gemm_contract(current)
         if (
             contract is None
-            or contract.batch_labels
+            or (contract.batch_labels and not allow_batch)
             or not contract.m_labels
             or not contract.n_labels
             or not contract.k_labels
