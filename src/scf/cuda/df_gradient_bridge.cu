@@ -183,13 +183,63 @@ struct HostBasis {
   std::vector<std::uint8_t> term_counts, term_angular;
   std::vector<double> term_coefficients, exponents, coefficients;
 };
+/** Live heap workspace of one ao_expansions call, separate from packed arrays.
+ * Cartesian shells retain one term per AO. The spherical d/f initializer lists
+ * overlap their term arrays with the returned copies. Spherical g reserves its
+ * AO/term vectors and retains one Cartesian-sized polynomial while filling them.
+ */
+std::size_t host_basis_expansion_bytes(unsigned angular,
+                                       generativeqc_basis_representation representation) {
+  if (angular > 4)
+    throw std::invalid_argument("generated DF gradient shell exceeds its admitted basis role");
+  const auto cartesian = molecule::cartesian_count(angular);
+  const auto components = cartesian * sizeof(molecule::CartesianComponent);
+  if (representation == GENERATIVEQC_BASIS_CARTESIAN || angular < 2)
+    return components +
+           cartesian * (sizeof(molecule::AoExpansion) + sizeof(molecule::CartesianExpansionTerm));
+  const auto spherical = 2 * angular + 1;
+  if (angular < 4)
+    return components + spherical * (sizeof(molecule::AoExpansion) +
+                                     2 * molecule::kMaximumAoExpansionTerms *
+                                         sizeof(molecule::CartesianExpansionTerm));
+  return components + cartesian * sizeof(double) +
+         spherical * (sizeof(molecule::AoExpansion) + molecule::kMaximumAuxiliaryAoExpansionTerms *
+                                                          sizeof(molecule::CartesianExpansionTerm));
+}
 HostBasis pack(const core::System& system, unsigned maximum_angular = 3,
                std::size_t expansion_terms = molecule::kMaximumAoExpansionTerms) {
   HostBasis h;
-  h.primitive_offsets.push_back(0);
+  // Admit exact capacities before packing. Geometric growth can temporarily
+  // retain both the old and new primitive arrays, exceeding a 2x logical bound
+  // even when the final capacities fit that bound.
+  const auto aos = molecule::ao_count(system), shells = system.shells.size();
+  const auto index_limit = static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max());
+  if ((!aos && shells) || aos > index_limit || shells > index_limit || !expansion_terms ||
+      aos > h.ao_shells.max_size() || aos > h.term_counts.max_size() ||
+      shells > h.shell_atoms.max_size() || shells >= h.primitive_offsets.max_size() ||
+      expansion_terms > h.term_coefficients.max_size() ||
+      aos > h.term_coefficients.max_size() / expansion_terms ||
+      expansion_terms > h.term_angular.max_size() / 3 ||
+      aos > h.term_angular.max_size() / 3 / expansion_terms)
+    throw std::length_error("DF gradient metadata dimensions exceed host capacity");
+  std::size_t primitives = 0;
   for (const auto& shell : system.shells) {
     if (shell.angular_momentum > maximum_angular || shell.atom_index >= system.atoms.size())
       throw std::invalid_argument("generated DF gradient shell exceeds its admitted basis role");
+    if (shell.primitives.size() > h.exponents.max_size() - primitives)
+      throw std::length_error("DF gradient primitives exceed host capacity");
+    primitives += shell.primitives.size();
+  }
+  h.shell_atoms.reserve(shells);
+  h.ao_shells.reserve(aos);
+  h.primitive_offsets.reserve(shells + 1);
+  h.term_counts.reserve(aos);
+  h.term_angular.reserve(3 * expansion_terms * aos);
+  h.term_coefficients.reserve(expansion_terms * aos);
+  h.exponents.reserve(primitives);
+  h.coefficients.reserve(primitives);
+  h.primitive_offsets.push_back(0);
+  for (const auto& shell : system.shells) {
     const auto si = static_cast<std::int32_t>(h.shell_atoms.size());
     h.shell_atoms.push_back(shell.atom_index);
     for (const auto& p : shell.primitives) {
@@ -508,13 +558,27 @@ CudaDfNuclearSink::CudaDfNuclearSink(int device, const core::System& orbital,
                          ? molecule::kMaximumAuxiliaryAoExpansionTerms
                          : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
+  std::size_t expansion_workspace = 0;
   for (const auto* system : {&orbital, &auxiliary})
-    for (const auto& shell : system->shells) primitives += shell.primitives.size();
-  const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
-                             sizeof(std::uint8_t) +
+    for (const auto& shell : system->shells) {
+      primitives += shell.primitives.size();
+      expansion_workspace = std::max(
+          expansion_workspace,
+          host_basis_expansion_bytes(shell.angular_momentum, system->basis_representation));
+    }
+  const long double per_ao = sizeof(std::int32_t) + sizeof(std::uint8_t) +
                              terms * (3 * sizeof(std::uint8_t) + sizeof(double));
-  const long double host_bound = 2 * (per_ao * (n + q) + 2 * sizeof(double) * primitives +
-                                      6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
+  // Eight metadata arrays per basis, positions and output. Reserve this table
+  // once so its growth cannot overlap the admitted host metadata allocation.
+  constexpr std::size_t device_allocations = 18;
+  // pack() reserves exact output sizes; only one shell's expansion workspace
+  // overlaps those arrays. Positions/result and the pointer table remain live
+  // while device uploads allocate, so all are admitted together.
+  const long double host_bound = per_ao * (n + q) + 2 * sizeof(double) * primitives +
+                                 (sizeof(std::int32_t) + sizeof(std::int64_t)) *
+                                     (orbital.shells.size() + auxiliary.shells.size()) +
+                                 6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t) +
+                                 expansion_workspace + device_allocations * sizeof(void*);
   if (host_bound >= maximum_bytes)
     throw std::length_error("DF nuclear sink metadata exceeds complete numeric budget");
   auto state = std::make_unique<Impl>(device);
@@ -524,6 +588,8 @@ CudaDfNuclearSink::CudaDfNuclearSink(int device, const core::System& orbital,
   // This bounds their overlap, rather than checking two separate maxima.
   state->arena = std::make_unique<Arena>(maximum_bytes - state->host_bound);
   auto& arena = *state->arena;
+  arena.pointers.reserve(device_allocations);
+  arena.stats.host_bytes += arena.pointers.capacity() * sizeof(void*);
   try {
     DeviceGuard restore;
     check(cudaSetDevice(device));
