@@ -211,16 +211,18 @@
         "degree": 17,
         "interval_width": 2.5,
         "roots": [
+          2,
           3,
-          4
+          4,
+          5
         ]
       },
       "generator": "tools/generate_rys_high_accuracy_tables.py",
-      "generator_sha256": "e91c2d80736d0d2dfbfa1d77075d99242754c97a7890744fc87599828af11929",
+      "generator_sha256": "087313bd716b49e01e111738304562b7838953381c9cf3a38a0971aa65d20e22",
       "input_identity_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
       "inputs": [],
       "outputs": {
-        "python/generativeqc_compiler/integral/rys_high_accuracy_data.py": "51f97cfdf2c750fff11a5f09b9435cb7d541c7153eea1826fe521ec248cae079"
+        "python/generativeqc_compiler/integral/rys_high_accuracy_data.py": "1ec410b10b761a38da92b040392399cd491a2426641b6a1a9559ec5c3474a1cb"
       }
     }
   },
