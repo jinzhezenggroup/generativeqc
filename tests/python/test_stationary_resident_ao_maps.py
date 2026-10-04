@@ -227,9 +227,7 @@ def test_resident_ao_policy_defaults_only_in_measured_domain(
     expected: float | None,
 ) -> None:
     assert (
-        runtime._resolve_resident_ao_cutoff(
-            atoms, selection, auto_qualified=qualified
-        )
+        runtime._resolve_resident_ao_cutoff(atoms, selection, auto_qualified=qualified)
         == expected
     )
 
