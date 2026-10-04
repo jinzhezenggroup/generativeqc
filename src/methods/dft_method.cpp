@@ -1071,9 +1071,41 @@ class KsPreparedCalculation final : public PreparedCalculation {
     }
 
     const std::vector<double> empty;
+    scf::CudaDensityFittingOccupiedProjectionLease fitted_projection;
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_ && spins == 1 && strategy.spec.exchange.present) {
+      dft::CudaKsResidentFittedProjectionBinding resident_projection;
+      std::string projection_detail;
+      if (cuda_->resident_final_fitted_projection(expected, resident_projection,
+                                                  projection_detail) ==
+          GENERATIVEQC_STATUS_SUCCESS) {
+        const auto prepared_projection =
+            scf::prepared_cuda_occupied_projection_binding(fock_, resident_projection.rank);
+        if (prepared_projection &&
+            prepared_projection.device_id == resident_projection.device_id &&
+            reinterpret_cast<void*>(prepared_projection.stream) == resident_projection.stream &&
+            prepared_projection.projection == resident_projection.projection &&
+            prepared_projection.nbf == resident_projection.nbf &&
+            prepared_projection.naux == resident_projection.naux &&
+            prepared_projection.rank == resident_projection.rank) {
+          fitted_projection = {prepared_projection.device_id,
+                               reinterpret_cast<void*>(prepared_projection.stream),
+                               prepared_projection.source_identity,
+                               resident_projection.occupied_coefficients,
+                               resident_projection.projection,
+                               prepared_projection.nbf,
+                               prepared_projection.naux,
+                               prepared_projection.rank,
+                               prepared_projection.scratch_generation};
+        }
+      }
+    }
+#endif
     scf::FockEnergyDerivativeComponents two;
     try {
-      two = fock_.energy_derivative_components(density[0], spins == 2 ? density[1] : empty);
+      two = fock_.energy_derivative_components(
+          density[0], spins == 2 ? density[1] : empty,
+          fitted_projection ? &fitted_projection : nullptr);
     } catch (const std::bad_alloc&) {
       detail = "density-fitted stationary response exceeded the prepared resource budget";
       return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
