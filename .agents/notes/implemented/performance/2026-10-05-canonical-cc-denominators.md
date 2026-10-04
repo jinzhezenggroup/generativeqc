@@ -81,6 +81,13 @@ two-step central-energy re-audit using existing2288 values. That audit does not
 qualify all large coordinates or benzene264. Full raw and normalized evidence:
 [`cc-derived-denominators-1904`](../../../../benchmarks/results/cc-derived-denominators-1904/README.md).
 
+A follow-up device-free CUDA-admission sentinel exposed a stale test harness:
+it extracted `validate_problem` without the newly called canonical validator.
+The harness now compiles the actual canonical validator and shared generated
+denominator expression, with ccache, before checking that invalid fields never
+reach the allocation owner. This follow-up passes on n2 through Slurm and
+changes no production source or endpoint results above.
+
 ## Revisit
 
 Retain explicit denominators in any measured domain where reconstruction loses.
