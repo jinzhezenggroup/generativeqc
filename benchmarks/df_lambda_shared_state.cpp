@@ -108,6 +108,8 @@ int main(int argc, char** argv) {
     const auto tbytes =
         capacity({&t.bov, &t.bvv, &t.ovoo, &t.ovov, &t.fov, &t.t1, &t.t2, &t.eps_o, &t.eps_v});
     generativeqc::cc::LambdaOptions options;
+    // This comparison deliberately qualifies the opt-in matrix schedule.
+    options.df_matrix_gemm = true;
     options.cc_tolerance = options.lambda_tolerance = 1e-9;
     options.gmres.absolute_tolerance = 1e-12;
     options.max_bytes = remainder(budget, tbytes);

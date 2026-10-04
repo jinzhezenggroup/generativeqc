@@ -17,6 +17,7 @@ PREFIX = r"""
 #include <stdexcept>
 #include <vector>
 int allocations=0, executions=0;
+bool retained_response=false;
 constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3, GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
 namespace core { struct System { bool df_supported=true; }; }
 namespace runtime {
@@ -73,8 +74,9 @@ Reference reference_options(const generativeqc_method_descriptor&,std::size_t) {
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,SolverOptions,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*,
-                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*, bool) {
+                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*, bool retain_df_response) {
   ++executions;
+  retained_response=retain_df_response;
   return {p != nullptr,0,{80}};
 }
 """
@@ -100,6 +102,21 @@ int main(int argc,char** argv) {
       return executions || allocations ? 10 : 0;
     }
   }
+  if (mode == 6) {
+    execution.cuda=true;
+    try {
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,true,true);
+      return 11;
+    } catch (const MethodError&) {
+      return executions || allocations || retained_response ? 12 : 0;
+    }
+  }
+  if (mode == 7) {
+    execution.cuda=true;
+    core::System auxiliary;
+    (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,true,true);
+    return !retained_response || executions != 1 || allocations || cache ? 13 : 0;
+  }
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
                                         nullptr,nullptr,0,nullptr,false,true);
@@ -107,7 +124,7 @@ int main(int argc,char** argv) {
     // CUDA source preparation belongs after native RHF, inside execution.
     const bool expect_cache = mode >= 4;
     if (result.cached != expect_cache) return 3;
-    if (allocations != (expect_cache ? 1 : 0) || executions != 1) return 4;
+    if (allocations != (expect_cache ? 1 : 0) || executions != 1 || retained_response) return 4;
     if (expect_cache) {
       auto* first=cache.get();
       result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true);
@@ -160,7 +177,7 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         text=True,
         timeout=30,
     )
-    for mode in range(6):
+    for mode in range(8):
         result = subprocess.run(
             [str(executable), str(mode)],
             capture_output=True,

@@ -48,6 +48,9 @@ struct Storage {
   cudaStream_t stream{};
   unsigned char* base{};
   ~Storage() {
+    // Releasing this owner's buffers must not hide another owner's provider
+    // allocation inside its before/after cudaMemGetInfo measurement.
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) (void)cudaStreamSynchronize(stream);
     if (blas) (void)cublasDestroy(blas);
     if (base) (void)cudaFree(base);
@@ -310,6 +313,7 @@ struct DFLambdaActions::Impl {
     auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
     if (allocation == cudaErrorMemoryAllocation && metrics.df_matrix_gemm) {
       (void)cudaGetLastError();
+      std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
       blas_check(cublasDestroy(storage.blas));
       storage.blas = nullptr;
       scalar_plan();

@@ -41,13 +41,13 @@ int main(int argc, char** argv) {
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
-    const auto selector = [&](int index) {
-      if (argc <= index) return true;
+    const auto selector = [&](int index, bool fallback = true) {
+      if (argc <= index) return fallback;
       const std::string value(argv[index]);
       if (value != "0" && value != "1") throw std::invalid_argument("invalid endpoint selector");
       return value == "1";
     };
-    const bool matrix = selector(4), forces = selector(5), lambda_matrix = selector(6);
+    const bool matrix = selector(4), forces = selector(5), lambda_matrix = selector(6, false);
     const std::size_t batch_limit = argc > 7 ? std::stoull(argv[7]) : 8;
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
