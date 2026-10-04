@@ -926,6 +926,9 @@ jobs:
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
             "${extra_args[@]}"
+      - name: Show post-test ccache statistics
+        if: always()
+        run: ccache --show-stats
       - name: Preserve transient benchmark/debug artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
