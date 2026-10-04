@@ -87,3 +87,29 @@ displaced complete E/F gates of 1e-8 Eh / 1e-7 Eh/Bohr remain required. Qualific
 must compare same-binary off/on cold and five warm samples, keep other force
 experiments off, and include a larger point before any default promotion.
 Cold speedup, warm speedup and GPU resource improvement are currently unknown.
+
+## Linked resource observation before endpoint qualification
+
+The n2 Release/sm_120 build completed with 453 ccache compiler commands. Its
+library SHA-256 is
+`1131222004b0736de9f8190a645fcd5e04dd7278f1869bdadc26d8b0c8b3e1a7`.
+The frozen implementation is `eeaca5df3950c4c433c117b8d1ff6fbe19ea204b`;
+this evidence-only follow-up changes no production source.
+
+Compared with the #1842 parent, cuobjdump reports 255 registers and mixed
+force-screened kernel STACK 90,696 -> 90,968 B. The order-7/8 diagnostic roots
+also retain 255 registers and slightly larger stacks. The reduced scalar
+auxiliary formula therefore did **not** become a smaller linked kernel frame:
+the AD and higher-order fallback consumers remain reachable. Standalone
+device-function rows with all-zero resource metadata are unavailable resource
+evidence, not zero-cost functions. Static resources do not measure actual
+spills, traffic, achieved occupancy or wall time. Receipts are under
+`.artifacts/scalar-center-gradient-20261004/receipts/linked-force-comparison.json`.
+
+Separately, #1841's first compact-class schedule is 26% slower on its indexed
+96-atom SVP full-range source endpoint despite smaller class stacks; its
+profile places cost in consumers rather than classifier/prefix/scatter. This
+is different-source/basis evidence, not a TZVPD timing prediction. Do not
+automatically compose that schedule, duplicate its classifier, or infer a win
+from reduced stack. This candidate must first establish actual derivative
+execution, independent GPU forces, sanitizers and full endpoint behavior.
