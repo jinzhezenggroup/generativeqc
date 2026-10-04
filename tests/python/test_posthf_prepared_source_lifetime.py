@@ -22,6 +22,7 @@ PREFIX = r"""
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <utility>
 int plan_live=0, view_live=0, raw_live=0;
 int source_failure=0;
 std::size_t plan_bytes=64;
@@ -32,6 +33,9 @@ struct ElectronInteractionSource {
 };
 }
 namespace scf {
+struct CudaRhfBucketPlan {};
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* p) noexcept { delete p; }
 namespace cuda_execution { struct CudaDfSourcePolicy {}; }
 struct PreparedFockPlan {
   PreparedFockPlan() { ++plan_live; }
@@ -58,11 +62,21 @@ std::size_t checked_add(std::size_t a,std::size_t b) {
   return a+b;
 }
 }
+struct SolverOptions { std::size_t max_bytes=4096; };
 struct Problem { std::size_t reference_retained_bytes=100, provider_peak_bytes{}; };
-struct State { Problem problem; int df_source{}; };
+struct State {
+  Problem problem;
+  int df_source{};
+  std::unique_ptr<integrals::ElectronInteractionSource> reference_interaction_source;
+};
+struct ResidentSource : integrals::ElectronInteractionSource {
+  explicit ResidentSource(std::unique_ptr<scf::PreparedFockPlan> owner) : plan(std::move(owner)) {}
+  std::size_t retained_numeric_bytes() const override { return plan_bytes; }
+  std::unique_ptr<scf::PreparedFockPlan> plan;
+};
 struct Execution { int device_id() const { return 0; } };
 Problem build_problem(const integrals::ElectronInteractionSource& source,
-                      int,int,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
+                      int,SolverOptions,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
                       int* retained_df_response,
                       const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy) {
   if (correlation_policy) throw std::logic_error("conventional lifetime fixture requires no policy");
@@ -102,8 +116,13 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cc_handoff = cc.split("    std::unique_ptr<posthf::RawSource> raw_source;", 1)[
         1
     ].split('    allocation_stage = "CC resident solve";', 1)[0]
+    helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
+    helper = helper[
+        helper.index("template <class Operation>") : helper.index("/** Method-layer")
+    ]
     program = (
         PREFIX
+        + helper
         + r"""
 int mp2_case(bool prepared,bool compute_forces) {
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
@@ -116,6 +135,7 @@ int mp2_case(bool prepared,bool compute_forces) {
 """
         + mp2_setup
         + r"""
+  prepare_source();
   if (!conventional_source) return 1;
   if (prepared && (raw_live || !plan_live || !view_live)) return 2;
   if (compute_forces) {
@@ -126,13 +146,20 @@ int mp2_case(bool prepared,bool compute_forces) {
   } else if (prepared && (!plan_live || raw_live)) return 4;
   return 0;
 }
-int cc_case(bool prepared,bool optional_cuda=false,int failure=0) {
+int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=false) {
   std::unique_ptr<scf::PreparedFockPlan> owner;
   if (prepared) owner=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=owner.get();
   auto* cuda_source_cache=&owner;
   State state;
-  int system=0, reference_value=0, solver_options=0, provider_work=0, provider_metrics=0;
+  if (borrowed) {
+    state.reference_interaction_source=std::make_unique<ResidentSource>(std::move(owner));
+    prepared_exact=nullptr;
+  }
+  int system=0, reference_value=0, provider_work=0, provider_metrics=0;
+  SolverOptions solver_options, correlation_options;
+  scf::CudaRhfBucketPlan** cuda_reference_plan=nullptr;
+  const auto retained_plan_bytes=[] { return std::size_t{0}; };
   const auto* reference=&reference_value;
   const int* correlation_auxiliary=nullptr;
   const bool retain_df_response=false;
@@ -163,7 +190,8 @@ int main(int argc,char** argv) {
     try { (void)cc_case(true); return 9; }
     catch (const std::overflow_error&) {}
   }
-  else result=cc_case(true,true,mode-7);
+  else if(mode<10) result=cc_case(true,true,mode-7);
+  else result=cc_case(true,true,mode-10,true);
   if (plan_live || view_live || raw_live) return 10;
   return result;
 }
@@ -192,7 +220,7 @@ int main(int argc,char** argv) {
 
 
 def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> None:
-    for mode in range(10):
+    for mode in range(13):
         process = subprocess.run(
             [str(source_probe), str(mode)],
             capture_output=True,
@@ -214,6 +242,7 @@ def test_device_interaction_source_defaults_fail_closed(tmp_path: Path) -> None:
 #include <array>
 #include <cstddef>
 #include <stdexcept>
+#include <utility>
 #include "integrals/electron_interaction_source.hpp"
 
 using generativeqc::integrals::DeviceInteractionTarget;

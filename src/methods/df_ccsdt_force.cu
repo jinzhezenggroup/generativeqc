@@ -54,8 +54,9 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     if (system.atoms[a].position != auxiliary.atoms[a].position ||
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
-  auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0,
-                                      &auxiliary, forces, df_matrix_gemm, ccsd_batch_limit);
+  auto state =
+      run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0,
+                             &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;

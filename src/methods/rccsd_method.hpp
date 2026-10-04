@@ -6,12 +6,17 @@
 #include "hf/reference.hpp"
 #include "methods/method.hpp"
 
+namespace generativeqc::integrals {
+class ElectronInteractionSource;
+}
 namespace generativeqc::scf {
 class PreparedFockPlan;
-}
+struct CudaRhfBucketPlan;
+}  // namespace generativeqc::scf
 namespace generativeqc::methods::detail {
 struct RccsdNativeState {
   std::shared_ptr<const hf::PhysicalReference> reference;
+  std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source;
   cc::Problem problem;
   cc::SolverResult solved;
   // Opt-in immutable DF source/frame owner, retained across CC response.
@@ -22,6 +27,9 @@ struct RccsdNativeState {
   Result result;
   std::size_t budget{};
   std::size_t external_reservation_bytes{};
+  // Full numeric reservation is separate from directly owned device telemetry.
+  std::size_t reference_execution_plan_bytes{};
+  std::size_t reference_execution_plan_device_bytes{};
   double reference_energy_change{};
   double reference_density_rms{};
   int reference_iterations{};
@@ -37,6 +45,7 @@ RccsdNativeState run_rccsd_native_state(
     const std::vector<double>* initial_density = nullptr, bool* warm_start_fallback = nullptr,
     std::size_t external_reservation_bytes = 0, const core::System* correlation_auxiliary = nullptr,
     bool retain_df_response = false, bool df_matrix_gemm = true,
+    scf::CudaRhfBucketPlan** cuda_reference_plan = nullptr,
     std::size_t df_auxiliary_batch_limit = 8);
 generativeqc_status validate_rccsd_system(generativeqc_method, const core::System&, std::string&);
 std::unique_ptr<PreparedCalculation> prepare_rccsd_calculation(

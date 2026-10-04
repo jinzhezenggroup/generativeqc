@@ -185,6 +185,18 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
         assert all(not item.warm_start_used for item in first.items)
         assert abs(first.items[0].energy - reference["total_energy"]) <= 2e-9
         assert all(item.correlation is not None for item in first.items)
+        if device == "cuda":
+            assert all(
+                not item.correlation.reference_execution_plan_reused
+                and item.correlation.reference_execution_plan_owned_device_bytes > 0
+                for item in first.items
+            )
+        else:
+            assert all(
+                not item.correlation.reference_execution_plan_reused
+                and item.correlation.reference_execution_plan_owned_device_bytes == 0
+                for item in first.items
+            )
         assert all(
             item.correlation.ccsd_replay_doubles_residual_max <= 1e-11
             for item in first.items
@@ -195,6 +207,11 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
             item.warm_start_used and not item.warm_start_fallback
             for item in forced.items
         )
+        if device == "cuda":
+            assert all(
+                item.correlation.reference_execution_plan_reused
+                for item in forced.items
+            )
         partial = prepared.execute([np.zeros((1, 3)), None])
         assert partial.failure_indices == (0,)
         assert partial.items[0].correlation is None
@@ -232,10 +249,17 @@ def test_public_rccsd_homogeneous_batch_repeats_and_isolates_partial_failure(
         assert changed.items[0].energy == pytest.approx(
             changed_reference.energy, abs=2e-9
         )
+        if device == "cuda":
+            assert changed.items[0].correlation.reference_execution_plan_reused
 
         prepared.clear_warm_starts()
         cleared = prepared.execute(strict=True)
         assert all(not item.warm_start_used for item in cleared.items)
+        if device == "cuda":
+            assert all(
+                item.correlation.reference_execution_plan_reused
+                for item in cleared.items
+            )
 
 
 def test_public_rccsd_checkpoint_restores_hf_warm_state(tmp_path: Path) -> None:
