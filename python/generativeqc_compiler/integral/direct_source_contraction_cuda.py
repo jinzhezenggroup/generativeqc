@@ -43,8 +43,8 @@ namespace generativeqc::scf::cuda_execution {
  * from the dominant direct Fock and force recurrences.
  */
 template <unsigned FirstShellAngular, unsigned SecondShellAngular, unsigned ThirdShellAngular,
-          unsigned FourthShellAngular, typename Scalar>
-__device__ inline Scalar contracted_eri_cartesian_source_shell_class(
+          unsigned FourthShellAngular, typename Scalar, bool PairedRanges = false>
+__device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cartesian_source_shell_class(
     const DeviceBatch& batch, std::int64_t ao_i, std::int64_t ao_j, std::int64_t ao_k,
     std::int64_t ao_l, std::int32_t shell_i, std::int32_t shell_j, std::int32_t shell_k,
     std::int32_t shell_l, std::int64_t derivative_coordinate,
@@ -78,7 +78,11 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
   const bool reachable_coulomb = (batch.direct_coulomb_reachable & source_role) != 0;
   const bool hermite_convolution = !std::is_same_v<Scalar, MixedPrecisionFloat> &&
       (batch.direct_hermite_convolution & source_role) != 0;
-  Scalar result = scalar<Scalar>(0.0);
+  CartesianRangeResult<Scalar, PairedRanges> result;
+  if constexpr (PairedRanges)
+    result = {scalar<Scalar>(0.0), scalar<Scalar>(0.0)};
+  else
+    result = scalar<Scalar>(0.0);
   for (std::int64_t a = batch.shell_primitive_offsets[shell_i];
        a < batch.shell_primitive_offsets[shell_i + 1]; ++a) {
     for (std::int64_t b = batch.shell_primitive_offsets[shell_j];
@@ -91,7 +95,18 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
                                            batch.primitive_coefficients[b] *
                                            batch.primitive_coefficients[c] *
                                            batch.primitive_coefficients[d];
-          if (range != generativeqc::integrals::CoulombRange::Full) {
+          if constexpr (PairedRanges) {
+            const auto values = primitive_eri_cartesian_shell_pairs<
+                FirstShellAngular, SecondShellAngular, ThirdShellAngular,
+                FourthShellAngular, Scalar, true>(
+                batch.primitive_exponents[a], first, angular_first,
+                batch.primitive_exponents[b], second, angular_second,
+                batch.primitive_exponents[c], third, angular_third,
+                batch.primitive_exponents[d], fourth, angular_fourth, range, omega,
+                reachable_coulomb, hermite_convolution);
+            result.full = result.full + weight * values.full;
+            result.selected = result.selected + weight * values.selected;
+          } else if (range != generativeqc::integrals::CoulombRange::Full) {
             result =
                 result +
                 weight * primitive_eri_cartesian_shell_pairs<FirstShellAngular, SecondShellAngular,
@@ -125,8 +140,8 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
 }
 
 /** Canonicalize one Cartesian source quartet to its exact shell class. */
-template <unsigned ShellClass, typename Scalar>
-__device__ inline Scalar contracted_eri_cartesian_source_shell_class(
+template <unsigned ShellClass, typename Scalar, bool PairedRanges = false>
+__device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cartesian_source_shell_class(
     const DeviceBatch& batch, std::int32_t system, std::int32_t i, std::int32_t j, std::int32_t k,
     std::int32_t l, std::int64_t derivative_coordinate,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
@@ -244,14 +259,14 @@ __device__ inline Scalar contracted_eri_cartesian_source_shell_class(
   }
 
   return contracted_eri_cartesian_source_shell_class<FirstShellAngular, SecondShellAngular,
-                                                     ThirdShellAngular, FourthShellAngular, Scalar>(
+                                                     ThirdShellAngular, FourthShellAngular, Scalar, PairedRanges>(
       batch, base + i, base + j, base + k, base + l, shell_i, shell_j, shell_k, shell_l,
       derivative_coordinate, range, omega);
 }
 
 /** Dispatch one angular-order task to its Cartesian source evaluator. */
-template <unsigned AngularOrder, typename Scalar>
-__device__ inline Scalar dispatch_contracted_eri_cartesian_source_shell_class(
+template <unsigned AngularOrder, typename Scalar, bool PairedRanges = false>
+__device__ inline CartesianRangeResult<Scalar, PairedRanges> dispatch_contracted_eri_cartesian_source_shell_class(
     unsigned runtime_shell_class, const DeviceBatch& batch, std::int32_t system, std::int32_t i,
     std::int32_t j, std::int32_t k, std::int32_t l, std::int64_t derivative_coordinate,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
@@ -260,7 +275,7 @@ __device__ inline Scalar dispatch_contracted_eri_cartesian_source_shell_class(
 #define GENERATIVEQC_DIRECT_SOURCE_SHELL_CLASS_CASE(ShellClass)                         \
   case ShellClass:                                                                \
     if constexpr (direct_shell_class_angular_order(ShellClass) == AngularOrder) { \
-      return contracted_eri_cartesian_source_shell_class<ShellClass, Scalar>(     \
+      return contracted_eri_cartesian_source_shell_class<ShellClass, Scalar, PairedRanges>(     \
           batch, system, i, j, k, l, derivative_coordinate, range, omega);         \
     }                                                                             \
     break
@@ -322,7 +337,10 @@ __device__ inline Scalar dispatch_contracted_eri_cartesian_source_shell_class(
     GENERATIVEQC_DIRECT_SOURCE_SHELL_CLASS_CASE(54);
   }
 #undef GENERATIVEQC_DIRECT_SOURCE_SHELL_CLASS_CASE
-  return scalar<Scalar>(0.0);
+  if constexpr (PairedRanges)
+    return {scalar<Scalar>(0.0), scalar<Scalar>(0.0)};
+  else
+    return scalar<Scalar>(0.0);
 }
 
 template <typename Scalar>

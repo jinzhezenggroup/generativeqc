@@ -538,3 +538,13 @@ included in complete endpoint cost.
 
 See the [device-validation decision](../../.agents/notes/implemented/performance/2026-09-16-device-final-validation.md)
 for ownership rationale, resource tradeoffs and qualification evidence.
+
+`GENERATIVEQC_CANONICAL_RSH_VALUES=shared` (or `1`) is a default-off canonical
+full J/K plus SR/LR K value experiment. Eligible strict-FP64 Cartesian sources
+share density preparation and one canonical traversal; generic orders >=5
+also share primitive geometry/Hermite preparation. Radial moments and all
+three source outputs remain separate. The extra two-spin Cartesian output
+matrix costs `2 * batch * cartesian_aos**2 * sizeof(double)` and is admitted
+after existing source/force owners within the same budget. Its absence retains
+the separate paths. This does not enable bounded through-f values, change
+force consumers, or establish an endpoint speedup.

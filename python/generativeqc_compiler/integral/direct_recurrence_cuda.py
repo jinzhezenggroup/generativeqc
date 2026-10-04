@@ -662,6 +662,15 @@ __device__ inline Scalar primitive_eri_order4(
 // Arithmetic/workspace order is preserved; host plans and queue policy remain native.
 namespace generativeqc::scf::cuda_execution {
 
+/** Two independent radial values sharing only their common preparation. */
+template <typename Scalar>
+struct CartesianRangePair {
+  Scalar full;
+  Scalar selected;
+};
+template <typename Scalar, bool PairedRanges>
+using CartesianRangeResult = std::conditional_t<PairedRanges, CartesianRangePair<Scalar>, Scalar>;
+
 /** Evaluate the shared Hermite contraction with shell-bounded storage.
  * Radial identity changes only the Coulomb moments, not the Hermite bounds.
  * Dual geometry seeds also keep these bounds: they differentiate coefficients
@@ -669,8 +678,8 @@ namespace generativeqc::scf::cuda_execution {
  * contraction and moment owners; no full-minus-long subtraction is introduced.
  */
 template <unsigned FirstShellAngular, unsigned SecondShellAngular, unsigned ThirdShellAngular,
-          unsigned FourthShellAngular, typename Scalar>
-__device__ inline Scalar primitive_eri_cartesian_shell_pairs(
+          unsigned FourthShellAngular, typename Scalar, bool PairedRanges = false>
+__device__ inline CartesianRangeResult<Scalar, PairedRanges> primitive_eri_cartesian_shell_pairs(
     double alpha, const Vec3<Scalar>& first, const Angular& angular_first, double beta,
     const Vec3<Scalar>& second, const Angular& angular_second, double gamma,
     const Vec3<Scalar>& third, const Angular& angular_third, double delta,
@@ -680,6 +689,8 @@ __device__ inline Scalar primitive_eri_cartesian_shell_pairs(
   constexpr unsigned MaximumAngular =
       FirstShellAngular + SecondShellAngular + ThirdShellAngular + FourthShellAngular;
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
+  static_assert(!PairedRanges || (MaximumAngular >= 5 && !std::is_same_v<Scalar, MixedPrecisionFloat>),
+                "Paired ranges retain low-order and mixed source owners");
   using Real = EvaluationReal<Scalar>;
   const Real alpha_value{alpha};
   const Real beta_value{beta};
@@ -704,10 +715,25 @@ __device__ inline Scalar primitive_eri_cartesian_shell_pairs(
         vec_axis(product_q, axis), vec_axis(third, axis), vec_axis(fourth, axis), gamma, delta,
         second_coefficients[axis]);
   }
-  return eri_cartesian_value<MaximumAngular>(p, q, rho, product_p, product_q, angular_first,
-                                             angular_second, angular_third, angular_fourth,
-                                             first_coefficients, second_coefficients, range, omega,
-                                             reachable_coulomb, hermite_convolution);
+  if constexpr (PairedRanges) {
+    // Geometry and Hermite coefficients are range-independent. Consume radial
+    // workspaces sequentially, keeping separate Full and requested-range
+    // moments and the established summation order inside each contraction.
+    const Scalar full = eri_cartesian_value<MaximumAngular>(
+        p, q, rho, product_p, product_q, angular_first, angular_second, angular_third,
+        angular_fourth, first_coefficients, second_coefficients,
+        generativeqc::integrals::CoulombRange::Full, 0.0, reachable_coulomb, hermite_convolution);
+    const Scalar selected = eri_cartesian_value<MaximumAngular>(
+        p, q, rho, product_p, product_q, angular_first, angular_second, angular_third,
+        angular_fourth, first_coefficients, second_coefficients, range, omega,
+        reachable_coulomb, hermite_convolution);
+    return {full, selected};
+  } else {
+    return eri_cartesian_value<MaximumAngular>(
+        p, q, rho, product_p, product_q, angular_first, angular_second, angular_third,
+        angular_fourth, first_coefficients, second_coefficients, range, omega,
+        reachable_coulomb, hermite_convolution);
+  }
 }
 
 /**

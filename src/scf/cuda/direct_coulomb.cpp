@@ -930,4 +930,8 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& p, bool unrestri
                                              range_beta_exchange, range, omega);
 }
 
+bool direct_shared_rsh_values_requested() noexcept {
+  return cuda_policy::canonical_rsh_values_requested();
+}
+
 }  // namespace generativeqc::scf::cuda_execution
