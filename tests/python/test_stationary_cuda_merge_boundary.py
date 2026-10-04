@@ -51,7 +51,9 @@ def test_phased_becke_policy_defaults_only_in_measured_large_domain(
 
 
 @pytest.mark.parametrize("selection", [0, 1, "auto"])
-def test_phased_becke_policy_rejects_non_boolean_explicit_values(selection) -> None:
+def test_phased_becke_policy_rejects_non_boolean_explicit_values(
+    selection: int | str,
+) -> None:
     from generativeqc import _stationary_cuda as runtime
 
     with pytest.raises(TypeError, match="boolean or None"):
