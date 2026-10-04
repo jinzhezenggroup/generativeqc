@@ -77,6 +77,40 @@ def solver_probe(
         pytest.skip("requires ccache and selected compilers")
     subprocess.run([cache, "--version"], check=True, capture_output=True)
     directory = tmp_path_factory.mktemp("df-solver-" + request.param)
+    # Endpoint qualification can exercise the frozen complete library instead
+    # of recompiling a standalone solver. The default keeps codegen coverage.
+    if cuda and os.environ.get("GENERATIVEQC_DF_CC_USE_LIBRARY") == "1":
+        library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
+        obj, executable = directory / "probe.o", directory / "solver-probe"
+        subprocess.run(
+            [
+                cache,
+                cxx,
+                "-std=c++20",
+                "-O2",
+                "-I" + str(ROOT / "src"),
+                "-c",
+                str(ROOT / "tests/native/df_cc_solver_probe.cpp"),
+                "-o",
+                str(obj),
+            ],
+            check=True,
+            capture_output=True,
+            env={**os.environ, "CCACHE_BASEDIR": str(ROOT)},
+        )
+        subprocess.run(
+            [
+                cxx,
+                str(obj),
+                str(library),
+                "-Wl,-rpath," + str(library.parent),
+                "-o",
+                str(executable),
+            ],
+            check=True,
+            capture_output=True,
+        )
+        return executable, cuda
     for name, producer in (
         ("generated_rccsd_cpu.hpp", conventional.cpu_header),
         ("generated_rccsd_cuda.cu", conventional.cuda_source),
