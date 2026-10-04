@@ -47,7 +47,13 @@ struct SourceDelete {
 };
 struct PlanDelete {
   void operator()(scf::CudaDensityFittingJkPlan* p) const noexcept {
+    if (!p) return;
+    // Retained response state can die after the forward/response device scope.
+    // The shared SCF release selects its device but does not restore the caller.
+    int previous = 0;
+    const bool restore = cudaGetDevice(&previous) == cudaSuccess;
     scf::destroy_cuda_density_fitting_jk_plan(p);
+    if (restore) (void)cudaSetDevice(previous);
   }
 };
 
