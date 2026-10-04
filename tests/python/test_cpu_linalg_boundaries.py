@@ -10,9 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def boundary_binary(
-    tmp_path_factory: pytest.TempPathFactory, native_cxx
-) -> Path:
+def boundary_binary(tmp_path_factory: pytest.TempPathFactory, native_cxx) -> Path:
     output = tmp_path_factory.mktemp("cpu-linalg") / "boundaries"
     native_cxx.build_executable(
         [
@@ -71,9 +69,7 @@ def test_cpu_linalg_boundary(boundary_binary: Path, mode: str) -> None:
 
 
 @pytest.fixture(scope="module")
-def probe_binary(
-    tmp_path_factory: pytest.TempPathFactory, native_cxx
-) -> Path:
+def probe_binary(tmp_path_factory: pytest.TempPathFactory, native_cxx) -> Path:
     output = tmp_path_factory.mktemp("cpu-probe") / "probe"
     native_cxx.build_executable(
         [

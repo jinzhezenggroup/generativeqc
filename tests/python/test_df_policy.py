@@ -1,7 +1,6 @@
 """Link the exact shared DF headers from independent consumer translation units."""
 
 import ctypes
-import subprocess
 import typing
 
 from generativeqc_compiler.integral.df_cuda import emit_df_values_cuda
