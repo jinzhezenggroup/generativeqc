@@ -126,8 +126,6 @@ def test_per_window_work_cap_cannot_be_disabled_with_whole_grid_guards() -> None
         ((32, 129, 4096), True),
         ((32, 128, 4097), True),
         ((128, 1024, 16384), True),
-        ((96, 1856, 16384), True),
-        ((128, 2048, 16384), True),
     ],
 )
 def test_native_owner_required_only_beyond_legacy_diagnostic_shape(
@@ -142,7 +140,7 @@ def test_native_owner_required_only_beyond_legacy_diagnostic_shape(
 
 
 @pytest.mark.parametrize(
-    "shape", [(129, 2048, 16384), (128, 2049, 16384), (128, 2048, 16385)]
+    "shape", [(129, 1024, 16384), (128, 1025, 16384), (128, 1024, 16385)]
 )
 def test_native_owner_caps_remain_fail_closed(shape: tuple[int, int, int]) -> None:
     with pytest.raises(ValueError, match="resource caps"):
@@ -182,8 +180,12 @@ def _geometry_loop(scope: dict[str, typing.Any]) -> None:
 @pytest.mark.parametrize("resident", [False, True])
 @pytest.mark.parametrize("profile", [False, True])
 @pytest.mark.parametrize("fail_at_drain", [None, 2])
+@pytest.mark.parametrize("selected", [None, (), (1, 4)])
 def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
-    resident: bool, profile: bool, fail_at_drain: int | None
+    resident: bool,
+    profile: bool,
+    fail_at_drain: int | None,
+    selected: tuple[int, ...] | None,
 ) -> None:
     points, tile = 1003, 64
     plan = plan_stationary_cuda_grid_work(
@@ -203,6 +205,14 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
     lease = SimpleNamespace(points=10000, weights=20000, atomic_weights=30000)
     seen, events = [], []
     active = False
+    mask = None if selected is None else np.asarray(selected, dtype=np.uintp)
+    selections = []
+
+    def select(owner: typing.Any, domain: str, begin: int, count: int) -> np.ndarray:
+        assert not active and domain == "order-two-grid"
+        assert owner is scope["ao"]
+        selections.append((begin, count))
+        return mask
 
     @contextmanager
     def task(*args: typing.Any, **kwargs: typing.Any) -> typing.Iterator[typing.Any]:
@@ -240,6 +250,7 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
     ) -> None:
         assert active and functional == 1 and points_per_atom == 17
         assert view[0] == lease.points + 24 * begin
+        assert view[2] is mask
         assert weighted == lease.weights + 8 * begin
         assert atomic == lease.atomic_weights + 8 * begin
         if profile:
@@ -265,6 +276,11 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
         "state": SimpleNamespace(_source=SimpleNamespace(atomic_weights=weights)),
         "resident_grid": lease if resident else None,
         "ao": SimpleNamespace(feature_task=task, feature_task_device_points=task),
+        "ao_maps": (
+            None
+            if selected is None
+            else SimpleNamespace(domain="order-two-grid", select=select)
+        ),
         "sources": SimpleNamespace(
             geometry=geometry,
             geometry_molecular_resident_weights=resident_geometry,
@@ -289,6 +305,7 @@ def test_actual_geometry_loop_preserves_offsets_and_stops_at_failed_window(
     ]
     assert events[-1] == "drain"
     assert events.count("drain") == (fail_at_drain or plan.chunk_count)
+    assert selections == (seen if resident and selected is not None else [])
 
 
 def _resource_preflight(basis: typing.Any, host_budget: int = 256 << 20) -> dict:
