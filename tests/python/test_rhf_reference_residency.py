@@ -168,6 +168,7 @@ int main(int argc,char** argv) {
   // falls inside the reference reconstruction gate; forcing the legacy final
   // rebuild must change only the work count, never the published reference.
   scf::ScfOptions qualification=options;
+  qualification.precision_mode=GENERATIVEQC_PRECISION_FP64;
   qualification.density_tolerance=5e-13;
   const auto qualification_expected=scf::run_rhf(system,qualification);
   require(qualification_expected.converged && qualification_expected.reference,
