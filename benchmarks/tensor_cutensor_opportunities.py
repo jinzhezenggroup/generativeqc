@@ -27,9 +27,7 @@ def program(kind: str, nocc: int, nvir: int):
             build_ccsd_program(nocc, nvir, form="shared", diagnostics=False)
         )
     if kind == "lambda-transpose":
-        return build_lambda_programs(
-            nocc, nvir, form="shared"
-        ).residual_vjp.program
+        return build_lambda_programs(nocc, nvir, form="shared").residual_vjp.program
     raise ValueError(f"unknown program {kind!r}")
 
 

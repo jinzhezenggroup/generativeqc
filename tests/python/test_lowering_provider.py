@@ -422,8 +422,9 @@ def test_cub_provider_accepts_explicit_header_evidence() -> None:
     assert CubReductionProvider().candidates(request, target)[0].status == "ready"
 
 
-
-def test_cutensor_opportunity_describes_existing_packed_gemm_without_promotion() -> None:
+def test_cutensor_opportunity_describes_existing_packed_gemm_without_promotion() -> (
+    None
+):
     plan = plan_cuda(_gemm_program(packed=True), TARGET)
     index = next(i for i, step in enumerate(plan.steps) if step.gemm == "packed")
     contract = cutensor_contract(plan, index)
