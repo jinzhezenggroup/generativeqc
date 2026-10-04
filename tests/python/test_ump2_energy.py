@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import typing
 from dataclasses import replace
 from itertools import product
-import typing
 
 import numpy as np
 import pytest
