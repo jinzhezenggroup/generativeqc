@@ -53,7 +53,7 @@ def test_order_two_value_shortcut_preserves_derivative_seeds() -> None:
         "Order2IntegralVector integral", shortcut
     )
     fallback = source.index(
-        "return contracted_eri_cartesian_source_shell_class<FirstShellAngular",
+        "const auto result = contracted_eri_cartesian_source_shell_class<",
         shortcut,
     )
     assert "derivative_coordinate, range, omega" in source[fallback:]

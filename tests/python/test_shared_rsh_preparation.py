@@ -54,6 +54,7 @@ def paired_primitive(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., 
     (folder / "paired.cuh").write_text(
         '#include "generated_direct_cartesian.cuh"\n'
         '#include "generated_direct_shell_pair_hermite.cuh"\n'
+        '#include "scf/cuda/direct_gradient_types.cuh"\n'
         "namespace generativeqc::scf::cuda_execution {\n" + emitted[begin:end] + "}\n"
     )
     dispatch = "\n".join(

@@ -73,6 +73,7 @@ unsigned reachable_policy=0;
 unsigned hermite_policy=0;
 unsigned direct_hermite_convolution_mode() { return hermite_policy; }
 unsigned direct_coulomb_reachable_mode() { return reachable_policy; }
+bool scalar_center_gradient_requested() { return false; }
 }
 namespace detail {
 using generativeqc::scf::detail::BoundedDirectHostSchedule;
@@ -98,6 +99,7 @@ struct DeviceBatch {
   std::size_t batch_size=1, total_shell_pairs=0, nbf=1, direct_nbf=1;
   unsigned direct_coulomb_reachable=0;
   unsigned direct_hermite_convolution=0;
+  bool direct_scalar_center_gradient=false;
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P

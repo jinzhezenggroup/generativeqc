@@ -295,8 +295,10 @@ __device__ inline void fill_shell_pair_hermite(
     unsigned maximum_i, unsigned maximum_j, Scalar product, Scalar center_a, Scalar center_b,
     double alpha, double beta,
     ShellPairHermiteCoefficients<Scalar, FirstAngular, SecondAngular>& coefficients) {
-  static_assert(FirstAngular <= kMaximumAngularMomentum);
-  static_assert(SecondAngular <= kMaximumAngularMomentum);
+  // Analytic primitive derivatives may raise one physical f component to g.
+  // This is a coefficient-workspace bound, not admission of physical g shells.
+  static_assert(FirstAngular <= kMaximumAngularMomentum + 1);
+  static_assert(SecondAngular <= kMaximumAngularMomentum + 1);
   for (unsigned item = 0;
        item < ShellPairHermiteCoefficients<Scalar, FirstAngular, SecondAngular>::kIDimension *
                   ShellPairHermiteCoefficients<Scalar, FirstAngular, SecondAngular>::kJDimension *

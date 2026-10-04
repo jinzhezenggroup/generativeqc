@@ -125,6 +125,25 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     const unsigned unique_center_count =
         direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
     double explicit_unique_gradient[4][3]{};
+    bool scalar_center_gradient = false;
+    if constexpr (AngularOrder == 7U || AngularOrder == 8U) {
+      if (batch.direct_scalar_center_gradient && unique_center_count > 1U) {
+        if (batch.direct_scalar_center_gradient_counts)
+          atomicAdd(batch.direct_scalar_center_gradient_counts + 2U * (AngularOrder - 7U), 1ULL);
+        const auto gradient = contracted_eri_scalar_center_gradient<AngularOrder>(
+            shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+            static_cast<std::int32_t>(k), static_cast<std::int32_t>(l));
+        // Slot gradients have been restored from shell-class canonicalization.
+        // Merge repeated physical centers before the existing final-atom recovery.
+        for (unsigned slot = 0; slot < 4U; ++slot) {
+          unsigned atom = 0;
+          while (unique_center_atoms[atom] != center_atoms[slot]) ++atom;
+          for (unsigned axis = 0; axis < 3U; ++axis)
+            explicit_unique_gradient[atom][axis] += gradient.center[slot][axis];
+        }
+        scalar_center_gradient = true;
+      }
+    }
     if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
       CartesianQuartetGradient explicit_gradient{};
       if constexpr (AngularOrder == 2) {
@@ -163,7 +182,11 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
       double derivative_x = 0.0;
       double derivative_y = 0.0;
       double derivative_z = 0.0;
-      if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
+      if (scalar_center_gradient) {
+        derivative_x = explicit_unique_gradient[center][0];
+        derivative_y = explicit_unique_gradient[center][1];
+        derivative_z = explicit_unique_gradient[center][2];
+      } else if constexpr (AngularOrder == 2U || (AngularOrder >= 4U && AngularOrder <= 6U)) {
         derivative_x = explicit_unique_gradient[center][0];
         derivative_y = explicit_unique_gradient[center][1];
         derivative_z = explicit_unique_gradient[center][2];
@@ -308,11 +331,28 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
       direct_force_unique_center_atoms(center_atoms, unique_center_atoms);
   if (unique_center_count <= 1U) return;
 
-  // Orders 4--6 share the compiler's all-center recurrence with one LR
-  // moment ladder per primitive/AO quartet, instead of repeating Dual3 for
-  // each unique atom. Short range and other orders keep their current owner.
+  // Orders 4--6 share the compiler's all-center Wick recurrence. The optional
+  // order-7/8 consumer instead shares scalar raised/lowered Hermite roots.
+  // Both avoid repeating the LR auxiliary per unique atom; SR retains its owner.
   double explicit_unique_gradient[4][3]{};
-  bool shared_long_range = false;
+  bool shared_center_gradient = false;
+  if constexpr (AngularOrder == 7U || AngularOrder == 8U) {
+    if (batch.direct_scalar_center_gradient &&
+        range == generativeqc::integrals::CoulombRange::Long) {
+      if (batch.direct_scalar_center_gradient_counts)
+        atomicAdd(batch.direct_scalar_center_gradient_counts + 2U * (AngularOrder - 7U) + 1U, 1ULL);
+      const auto gradient = contracted_eri_scalar_center_gradient<AngularOrder, PackagedShellClass>(
+          shell_class, batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+          static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), range, omega);
+      for (unsigned slot = 0; slot < 4U; ++slot) {
+        unsigned atom = 0;
+        while (unique_center_atoms[atom] != center_atoms[slot]) ++atom;
+        for (unsigned axis = 0; axis < 3U; ++axis)
+          explicit_unique_gradient[atom][axis] += gradient.center[slot][axis];
+      }
+      shared_center_gradient = true;
+    }
+  }
   if constexpr (AngularOrder >= 4U && AngularOrder <= 6U &&
                 (PackagedShellClass < 0 ||
                  PackagedRange == generativeqc::integrals::CoulombRange::Long)) {
@@ -339,7 +379,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
         for (unsigned axis = 0; axis < 3; ++axis)
           explicit_unique_gradient[atom][axis] += gradient.center[shell_center][axis];
       }
-      shared_long_range = true;
+      shared_center_gradient = true;
     }
   }
 
@@ -347,7 +387,7 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_rang
   for (unsigned center = 0; center + 1U < unique_center_count; ++center) {
     const std::int64_t coordinate = static_cast<std::int64_t>(unique_center_atoms[center]) * 3;
     Dual3 derivative{};
-    if (shared_long_range) {
+    if (shared_center_gradient) {
       derivative.derivative_x = explicit_unique_gradient[center][0];
       derivative.derivative_y = explicit_unique_gradient[center][1];
       derivative.derivative_z = explicit_unique_gradient[center][2];

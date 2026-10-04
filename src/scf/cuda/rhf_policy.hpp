@@ -258,6 +258,8 @@ bool bounded_schwarz_schedule_requested() noexcept;
 bool bounded_angular_force_requested() noexcept;
 /** Default-off canonical full/range value join, frozen by optional admission. */
 bool canonical_rsh_values_requested() noexcept;
+/** Default-off order-seven/eight all-center scalar gradient consumer. */
+bool scalar_center_gradient_requested() noexcept;
 /** Qualification only: evaluate the exact Cartesian Coulomb dependency domain. */
 unsigned direct_coulomb_reachable_mode() noexcept;
 /** Qualification only: 1=generic FP64 values, 2=derivatives, 3=both, 0=retained.

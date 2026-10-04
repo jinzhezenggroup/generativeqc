@@ -548,3 +548,14 @@ matrix costs `2 * batch * cartesian_aos**2 * sizeof(double)` and is admitted
 after existing source/force owners within the same budget. Its absence retains
 the separate paths. This does not enable bounded through-f values, change
 force consumers, or establish an endpoint speedup.
+
+`GENERATIVEQC_DIRECT_SCALAR_CENTER_GRADIENT=scalar` (or `1`) is a default-off
+order-7/8 full/LR force experiment. The compiler prepares one FP64 Coulomb
+auxiliary per primitive and contracts Gaussian raising/lowering coefficient
+views for all centers. Native queues, screening and separate force sources
+retain their existing owners. Prepared state freezes admission; an explicit
+force selection of the reachable/convolution experiments retains priority.
+Direct SR, other angular orders and the separate fused-RSH fallback remain on
+their prior consumers. This changes derivative arithmetic and requires the
+independent scalar-center native gate, sanitizers and complete endpoint evidence
+before promotion. It adds no retained device allocation or quartet list.

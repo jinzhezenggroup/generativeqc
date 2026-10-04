@@ -104,6 +104,43 @@ __device__ inline Scalar convolved_hermite_contraction(
   return value;
 }
 
+/** Contract a prepared radial auxiliary without repeating its recurrence.
+ * This is the retained six-index contraction and summation order. A derivative
+ * may supply raised/lowered coefficient views while sharing the same roots.
+ */
+template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
+          typename SecondCoefficients>
+__device__ inline Scalar prepared_cartesian_contraction(
+    const Angular& angular_first, const Angular& angular_second,
+    const Angular& angular_third, const Angular& angular_fourth,
+    const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
+    const CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
+  Scalar value = scalar<Scalar>(0.0);
+  for (unsigned t = 0; t <= angular_first.x + angular_second.x; ++t) {
+    for (unsigned u = 0; u <= angular_first.y + angular_second.y; ++u) {
+      for (unsigned v = 0; v <= angular_first.z + angular_second.z; ++v) {
+        const Scalar first_value = first_coefficients[0].at(angular_first.x, angular_second.x, t) *
+                                   first_coefficients[1].at(angular_first.y, angular_second.y, u) *
+                                   first_coefficients[2].at(angular_first.z, angular_second.z, v);
+        for (unsigned tau = 0; tau <= angular_third.x + angular_fourth.x; ++tau) {
+          for (unsigned nu = 0; nu <= angular_third.y + angular_fourth.y; ++nu) {
+            for (unsigned phi = 0; phi <= angular_third.z + angular_fourth.z; ++phi) {
+              const double sign = ((tau + nu + phi) & 1U) == 0 ? 1.0 : -1.0;
+              value =
+                  value + sign * first_value *
+                              second_coefficients[0].at(angular_third.x, angular_fourth.x, tau) *
+                              second_coefficients[1].at(angular_third.y, angular_fourth.y, nu) *
+                              second_coefficients[2].at(angular_third.z, angular_fourth.z, phi) *
+                              auxiliary.at(0, t + tau, u + nu, v + phi);
+            }
+          }
+        }
+      }
+    }
+  }
+  return value;
+}
+
 template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
           typename SecondCoefficients>
 __device__ inline __noinline__ Scalar eri_cartesian_value(
@@ -146,29 +183,9 @@ __device__ inline __noinline__ Scalar eri_cartesian_value(
       return prefactor * value;
     }
   }
-  Scalar value = scalar<Scalar>(0.0);
-  for (unsigned t = 0; t <= angular_first.x + angular_second.x; ++t) {
-    for (unsigned u = 0; u <= angular_first.y + angular_second.y; ++u) {
-      for (unsigned v = 0; v <= angular_first.z + angular_second.z; ++v) {
-        const Scalar first_value = first_coefficients[0].at(angular_first.x, angular_second.x, t) *
-                                   first_coefficients[1].at(angular_first.y, angular_second.y, u) *
-                                   first_coefficients[2].at(angular_first.z, angular_second.z, v);
-        for (unsigned tau = 0; tau <= angular_third.x + angular_fourth.x; ++tau) {
-          for (unsigned nu = 0; nu <= angular_third.y + angular_fourth.y; ++nu) {
-            for (unsigned phi = 0; phi <= angular_third.z + angular_fourth.z; ++phi) {
-              const double sign = ((tau + nu + phi) & 1U) == 0 ? 1.0 : -1.0;
-              value =
-                  value + sign * first_value *
-                              second_coefficients[0].at(angular_third.x, angular_fourth.x, tau) *
-                              second_coefficients[1].at(angular_third.y, angular_fourth.y, nu) *
-                              second_coefficients[2].at(angular_third.z, angular_fourth.z, phi) *
-                              auxiliary.at(0, t + tau, u + nu, v + phi);
-            }
-          }
-        }
-      }
-    }
-  }
+  const Scalar value = prepared_cartesian_contraction<MaximumAngular>(
+      angular_first, angular_second, angular_third, angular_fourth,
+      first_coefficients, second_coefficients, auxiliary);
   const EvaluationReal<Scalar> prefactor =
       EvaluationReal<Scalar>{2.0 * pow(kPi, 2.5)} / (p * q * qsqrt(p + q));
   return prefactor * value;
