@@ -755,25 +755,26 @@ __global__ void accumulate_totals(const double* point_totals, I count, double* t
 
 
 def emit_native_xc_point_dispatch() -> str:
-    """Resolve the finite native admission key without device work or allocation.
+    """Resolve finite point entries and their execution capabilities.
 
     Physical LDA/PBE/r²SCAN/B3LYP/omegaB97M-V, generated split global hybrids and
-    signed LDA/PBE response share the existing point ABI. Spin and AO precision do not
-    multiply the FP64 point entry set.
-    The native plan retains this launcher; unsupported keys fail before enqueue.
+    signed LDA/PBE response share the existing point ABI. The same emitted table
+    owns capability facts so runtime admission never infers them from functional
+    ordinals. Spin and AO precision remain validated layout data.
     """
+    consumers = (
+        (0, False, True, True),
+        (1, False, True, True),
+        (2, False, True, True),
+        (3, False, True, False),
+        (4, False, True, False),
+        (0, True, False, False),
+        (1, True, False, False),
+    )
     lines = [
         "CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response) {"
     ]
-    for functional, response in (
-        (0, False),
-        (1, False),
-        (2, False),
-        (3, False),
-        (4, False),
-        (0, True),
-        (1, True),
-    ):
+    for functional, response, _, _ in consumers:
         consumer = "true" if response else "false"
         lines.append(
             f"  if (functional == {functional}U && response == {consumer}) "
@@ -785,6 +786,25 @@ def emit_native_xc_point_dispatch() -> str:
             "    return generated::split_hybrid_is_mgga(functional)",
             "               ? &launch_split_hybrid_points<5>",
             "               : &launch_split_hybrid_points<4>;",
+            '  throw std::invalid_argument("unsupported CUDA XC point consumer");',
+            "}",
+            "",
+            "CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional,",
+            "                                                        bool response) {",
+        )
+    )
+    for functional, response, local_ao, mixed_density in consumers:
+        consumer = "true" if response else "false"
+        local = "true" if local_ao else "false"
+        mixed = "true" if mixed_density else "false"
+        lines.append(
+            f"  if (functional == {functional}U && response == {consumer}) "
+            f"return {{{local}, {mixed}}};"
+        )
+    lines.extend(
+        (
+            "  if (!response && generated::split_hybrid_registered(functional))",
+            "    return {false, false};",
             '  throw std::invalid_argument("unsupported CUDA XC point consumer");',
             "}",
         )
