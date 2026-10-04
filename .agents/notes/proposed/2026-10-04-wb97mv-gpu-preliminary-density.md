@@ -3,6 +3,41 @@
 Status: private complete-endpoint experiment; no public API/default promotion
 Date: 2026-10-04
 
+## Completed 96-atom control and resumed composition
+
+The previously submitted n1 RTX 5090 Slurm 5658 has completed both frozen
+678f7eb88/master837 variants. Its original verifier accepts all ten independent
+cold/priming/warm E/F pairs. Unseeded/LDA complete cold is
+3908.238625 / 2786.398065 s, with target iterations 24 / 15 and reference cold
+1822.589970 / 1825.246949 s. Native warm medians remain
+367.778438 / 367.586446 s versus reference 402.125205 / 403.480012 s.
+The observed 28.705% complete-cold reduction includes the whole source and
+does not establish cold superiority over the reference.
+
+The LDA source converges in 25 iterations and 25 recorded XC submissions;
+its Fock-build counter remains null. Construction/preparation/solve share one
+93.360954-s timer; export/import share another 177.873702-s timer. Complete
+source lifecycle is 271.253723 s, including destruction and bookkeeping whose
+individual times are unavailable. It transfers 4718592 density bytes and 2304
+coordinate bytes. Each source XC evaluation retains the full 768 AOs over
+768 tiles, with point-AO-square sum 115964116992. Those are contraction-domain
+counts, not FLOPs. Native preparation including this source costs 277.106615 s;
+the target's first complete E/F execution costs 2509.291451 s.
+
+Maximum errors across all pairs are below 1.137e-10 Eh / 4.204e-10 Eh/Bohr;
+all reference XC stays on GPU. Final raw reports and `matched96-verified.json`
+remain under `n1:/data/jzzeng/wb97m-seed96-master837-20261004/results/`. The old
+local in-progress copies and pending statements below do not supersede these
+completed receipts. Source identity d198acd7 and library fe826ad7 remain the
+measured identities; no other GPU or commit's improvement is added to them.
+
+Resumed work integrates master fc7d5e2d8 and #1807's GPU checkpoint-admission
+provider into the existing AO/indexed-force composition. The union requires
+its own source-bound build, admission/live-lease and complete E/F qualification
+before measuring a combined cold benefit. The separate #1807 experiment's
+48-atom import reduction is not extrapolated to this 96-atom timer. The public
+CUDA energy-only source capacity and lifetime contract remains unimplemented.
+
 ## Motivation and boundary
 
 The [cold-work investigation](2026-10-03-wb97mv-cold-scf-work.md) found that
