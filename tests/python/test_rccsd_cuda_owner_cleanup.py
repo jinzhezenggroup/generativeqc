@@ -35,7 +35,7 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
     # The callback is never executed by this ownership test; keep all provider
     # construction, configuration and cleanup calls in the extracted code.
     owner, replaced = re.subn(
-        r"audit_df_matrix<<<.*?>>>", "audit_df_matrix", owner, flags=re.DOTALL
+        r"audit_matrix<<<.*?>>>", "audit_matrix", owner, flags=re.DOTALL
     )
     assert replaced == 1
     support = (ROOT / "src/cc/cuda_solver_support.cuh").read_text()
@@ -92,7 +92,7 @@ int cublasDgemm(cublasHandle_t,int,int,int,int,int,const double*,const double*,i
                  const double*,int,const double*,double*,int) {
   throw std::logic_error("ownership test must not execute numerical callback");
 }
-void audit_df_matrix(const double*,std::size_t,int*) {
+void audit_matrix(const double*,std::size_t,int*) {
   throw std::logic_error("ownership test must not execute numerical callback");
 }
 void blas_check(int code) { if (code) throw std::runtime_error("injected CUDA failure"); }
@@ -123,7 +123,7 @@ int cudaFree(void* p) { delete[] static_cast<unsigned char*>(p); --allocations; 
 int cudaStreamDestroy(cudaStream_t p) { delete static_cast<int*>(p); --streams; return 0; }
 void cuda_check(int code) { if (code) throw std::runtime_error("injected CUDA failure"); }
 namespace generativeqc::cc {
-constexpr std::size_t kDFBlasProviderAllowance=96ULL<<20;
+constexpr std::size_t kCCBlasProviderAllowance=96ULL<<20;
 namespace generated {
 """
 GENERATED = r"""
@@ -169,8 +169,9 @@ int main() {
     calls = 0; fail_at = 0;
     int constructor_calls = 0;
     { generativeqc::cc::Owner good(p, options, 0); constructor_calls = calls;
-      saw_matrix = saw_matrix || good.plan.matrix_gemm;
-      if (handles != (good.plan.matrix_gemm ? 1 : 0)) return 10;
+      const bool matrix = good.conventional_matrix_gemm || good.plan.matrix_gemm;
+      saw_matrix = saw_matrix || matrix;
+      if (handles != (matrix ? 1 : 0)) return 10;
       const auto detached = (good.n1 + good.n2) * sizeof(double);
       if (good.diagnostic.numeric_capacity_bytes < 128 + good.layout.total + detached) {
         std::cerr << "CUDA detached result storage was not reserved\n"; return 8;
