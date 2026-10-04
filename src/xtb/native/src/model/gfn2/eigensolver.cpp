@@ -1330,23 +1330,27 @@ NumericalResult solve_system_unchecked(const EigensolverPlanData& data, std::siz
       double energy_weight = 0.0;
       if (!::generativeqc::xtb::generated::gfn2_energy_weight_tensor(
               weights[orbital], workspace.eigenvalues[orbital], energy_weight)) {
+        thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
         return NumericalResult::kDataFailure;
       }
       band_energy += energy_weight;
     }
     if (!form_density_column_major(backend, n, workspace.coefficients, weights,
                                    weighted_coefficients, workspace.densities)) {
+      thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
       return NumericalResult::kDataFailure;
     }
     for (std::size_t orbital = 0u; orbital < orbital_count; ++orbital) {
       if (!::generativeqc::xtb::generated::gfn2_energy_weight_tensor(
               weights[orbital], workspace.eigenvalues[orbital], weights[orbital])) {
+        thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
         return NumericalResult::kDataFailure;
       }
     }
     if (!form_density_column_major(backend, n, workspace.coefficients, weights,
                                    weighted_coefficients,
                                    workspace.energy_weighted_densities)) {
+      thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
       return NumericalResult::kDataFailure;
     }
   } else {
@@ -1359,6 +1363,7 @@ NumericalResult solve_system_unchecked(const EigensolverPlanData& data, std::siz
       for (std::size_t orbital = 0u; orbital < orbital_count; ++orbital) {
         if (!::generativeqc::xtb::generated::gfn2_energy_weight_tensor(
                 spin_occupations[orbital], spin_eigenvalues[orbital], weights[orbital])) {
+          thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
           return NumericalResult::kDataFailure;
         }
         band_energy += weights[orbital];
@@ -1366,11 +1371,13 @@ NumericalResult solve_system_unchecked(const EigensolverPlanData& data, std::siz
       if (!form_density_column_major(backend, n, workspace.coefficients + spin_matrix_offset,
                                      spin_occupations, weighted_coefficients,
                                      workspace.densities + spin_matrix_offset)) {
+        thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
         return NumericalResult::kDataFailure;
       }
       if (!form_density_column_major(backend, n, workspace.coefficients + spin_matrix_offset,
                                      weights, weighted_coefficients,
                                      workspace.energy_weighted_densities + spin_matrix_offset)) {
+        thermodynamics.system_statuses[system] = GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;
         return NumericalResult::kDataFailure;
       }
     }
