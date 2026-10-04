@@ -289,6 +289,8 @@ macro(generativeqc_add_native_tests)
     set_target_properties(generativeqc_dft_cuda_tests PROPERTIES CUDA_STANDARD 20)
     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
     add_test(NAME generativeqc_dft_cuda_matrix_tests COMMAND generativeqc_dft_cuda_tests --matrix-schedule)
+    add_test(NAME generativeqc_dft_cuda_local_ao_tests COMMAND generativeqc_dft_cuda_tests --local-ao)
+    set_tests_properties(generativeqc_dft_cuda_local_ao_tests PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(generativeqc_dft_cuda_matrix_tests PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(generativeqc_dft_cuda_tests PROPERTIES SKIP_RETURN_CODE 77)
     generativeqc_native_test(generativeqc_ks_cuda_tests tests/native/test_ks_cuda.cpp
