@@ -230,6 +230,15 @@ the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
 rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
 
+Streamed DF MO source response offers cuBLASLt alongside cuBLAS, cuTENSOR and
+generated execution for the same compiler region. `PreparedContractionRegion`
+reserves all eight simultaneous plans before source callbacks and reuses their
+cached algorithms for every row. Reservations are provider-specific; a partial
+optional preparation failure drains provisional plans before selecting the
+same-precision generated fallback. Diagnostics report the actual provider,
+version, preparation time, work and resource counts. No production cuBLASLt
+resource profile is installed, so ordinary selection retains the incumbent.
+
 The native cuTENSOR executor fixes the GETT family and kernel rank zero at
 preparation, with JIT, cache and incremental autotuning disabled. Unsupported
 shapes reject preparation and retain the admitted fallback. cuTENSOR 2.8 does not

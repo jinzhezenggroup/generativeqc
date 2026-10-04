@@ -197,6 +197,7 @@ struct ContractionProviderReservation {
 // Provider-layer qualification controls, absent from production builds and
 // method APIs. Negative means no injection; zero rejects the next preparation.
 inline thread_local ContractionProviderReservation cutensor_reservation_for_test;
+inline thread_local ContractionProviderReservation cublaslt_reservation_for_test;
 inline thread_local int cutensor_preparations_before_rejection_for_test = -1;
 inline thread_local int cublaslt_preparations_before_rejection_for_test = -1;
 #endif
@@ -216,6 +217,24 @@ inline ContractionProviderReservation qualified_cutensor_reservation() noexcept 
 inline std::size_t cutensor_provider_version() noexcept {
 #if GENERATIVEQC_HAS_CUTENSOR
   return cutensorGetVersion();
+#else
+  return 0;
+#endif
+}
+
+/** cuBLASLt remains unavailable to production selection without measured
+ * simultaneous host/cache/provider and lazy-execution resource bounds. */
+inline ContractionProviderReservation qualified_cublaslt_reservation() noexcept {
+#if GENERATIVEQC_HAS_CUBLASLT && defined(GENERATIVEQC_TEST_HOOKS)
+  return cublaslt_reservation_for_test;
+#else
+  return {};
+#endif
+}
+
+inline std::size_t cublaslt_provider_version() noexcept {
+#if GENERATIVEQC_HAS_CUBLASLT
+  return cublasLtGetVersion();
 #else
   return 0;
 #endif
