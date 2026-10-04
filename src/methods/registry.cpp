@@ -5,6 +5,7 @@
 
 #include "methods/dft_admission.hpp"
 #include "methods/dft_method.hpp"
+#include "methods/df_rccsdt_method.hpp"
 #include "methods/generated_method_manifest.hpp"
 #include "methods/hf_method.hpp"
 #include "methods/method.hpp"
@@ -60,6 +61,11 @@ constexpr MethodDefinition register_method(const generated::MethodManifestEntry&
       validate = detail::validate_rccsdt_system;
       prepare = detail::prepare_rccsdt_calculation;
       batch = detail::prepare_rccsdt_batch;
+      break;
+    case generated::PublicProvider::DfRccsdt:
+      validate = detail::validate_df_rccsdt_system;
+      prepare = detail::prepare_df_rccsdt_calculation;
+      batch = nullptr;
       break;
     case generated::PublicProvider::Dft:
       validate = detail::validate_dft_system;
