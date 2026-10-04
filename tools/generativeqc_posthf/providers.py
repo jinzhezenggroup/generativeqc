@@ -73,7 +73,7 @@ class ConventionalProvider:
             raise ValueError("cache policy must be pin or lru")
         if (
             snapshot.hamiltonian_id != "conventional-unscreened"
-            or getattr(snapshot, "screening_tolerance", 0.0) != 0
+            or snapshot.screening_tolerance != 0
         ):
             raise ValueError(
                 "conventional source implements only the unscreened Hamiltonian"
