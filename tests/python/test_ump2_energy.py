@@ -75,11 +75,7 @@ def _reference(
         if alpha_energies is None
         else alpha_energies
     )
-    eb = (
-        np.array([-1.02, 0.12, 0.57, 1.04])
-        if beta_energies is None
-        else beta_energies
-    )
+    eb = np.array([-1.02, 0.12, 0.57, 1.04]) if beta_energies is None else beta_energies
     oa = np.zeros(nbf)
     ob = np.zeros(nbf)
     oa[:alpha_occupied] = 1
@@ -188,9 +184,10 @@ def test_spin_resolved_tiles_match_independent_dense_contractions() -> None:
             rtol=2e-12,
         )
         assert abs(result.correlation_energy - sum(expected.values())) < 2e-12
-        assert abs(
-            result.energy - (reference.reference_energy + sum(expected.values()))
-        ) < 2e-12
+        assert (
+            abs(result.energy - (reference.reference_energy + sum(expected.values())))
+            < 2e-12
+        )
         assert result.numeric_capacity_bytes <= 256 << 20
         assert result.tile_count > 0
         assert result.equation_hashes
@@ -224,14 +221,13 @@ def test_restricted_limit_matches_existing_mp2_components() -> None:
         basis_hash=unrestricted.basis_hash,
         generation_id="restricted-limit",
     )
-    with PreparedUMP2Energy(unrestricted, source) as u, PreparedMP2Energy(
-        restricted, source
-    ) as r:
+    with (
+        PreparedUMP2Energy(unrestricted, source) as u,
+        PreparedMP2Energy(restricted, source) as r,
+    ):
         ur = u.execute()
         rr = r.execute()
-    np.testing.assert_allclose(
-        ur.alpha_beta, rr.opposite_spin, atol=2e-12, rtol=2e-12
-    )
+    np.testing.assert_allclose(ur.alpha_beta, rr.opposite_spin, atol=2e-12, rtol=2e-12)
     np.testing.assert_allclose(
         ur.alpha_alpha + ur.beta_beta,
         rr.same_spin,
@@ -266,9 +262,7 @@ def test_spin_swap_and_failure_boundaries() -> None:
         basis_hash=reference.basis_hash,
         generation_id="ump2-spin-swapped",
     )
-    swapped_result = PreparedUMP2Energy(
-        swapped, DenseSource(eri, swapped)
-    ).execute()
+    swapped_result = PreparedUMP2Energy(swapped, DenseSource(eri, swapped)).execute()
     np.testing.assert_allclose(
         original.alpha_alpha, swapped_result.beta_beta, atol=2e-12
     )
@@ -311,9 +305,7 @@ def test_denominator_and_reference_fail_closed_before_source_reads() -> None:
         PreparedUMP2Energy(close, source, denominator_threshold=1e-9)
     assert source.reads == 0
     with pytest.raises(NotImplementedError, match="forces/amplitudes"):
-        PreparedUMP2Energy(reference, source).execute(
-            properties=("energy", "forces")
-        )
+        PreparedUMP2Energy(reference, source).execute(properties=("energy", "forces"))
 
 
 def test_pyscf_open_shell_ump2_total_energy() -> None:

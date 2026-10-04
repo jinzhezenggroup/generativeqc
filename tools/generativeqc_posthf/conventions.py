@@ -47,7 +47,6 @@ class MOBlock:
             raise ValueError("MO index outside the reference snapshot")
 
 
-
 @dataclass(frozen=True)
 class SpinMOBlock:
     """Chemists-ERI MO slots with an explicit alpha/beta owner per axis."""
@@ -77,9 +76,11 @@ class SpinMOBlock:
             raise ValueError("MO index outside the unrestricted reference snapshot")
         for spin in set(self.spins):
             coefficients = getattr(snapshot, f"coefficients_{spin}", None)
-            if coefficients is None or coefficients.shape != (snapshot.nmo, snapshot.nmo):
+            if coefficients is None or coefficients.shape != (
+                snapshot.nmo,
+                snapshot.nmo,
+            ):
                 raise ValueError(f"reference lacks canonical {spin} coefficients")
-
 
 
 def ovov_to_ijab(ovov: typing.Any) -> typing.Any:

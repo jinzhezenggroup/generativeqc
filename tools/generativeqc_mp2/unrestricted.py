@@ -120,7 +120,9 @@ class PreparedUMP2Energy:
         if not isinstance(snapshot, UHFReferenceSnapshot):
             raise TypeError("UMP2 requires a validated UHFReferenceSnapshot")
         if snapshot.algorithm != "UHF":
-            raise ValueError("UMP2 accepts UHF references only; UKS is not an MP2 reference")
+            raise ValueError(
+                "UMP2 accepts UHF references only; UKS is not an MP2 reference"
+            )
         for name, value in (
             ("occupied_tile", occupied_tile),
             ("virtual_tile", virtual_tile),
@@ -264,9 +266,7 @@ class PreparedUMP2Energy:
                     g = self._read(block).transpose(0, 2, 1, 3)
                     feeds: dict[str, typing.Any] = {"g": g}
                     if left == right:
-                        exchange = SpinMOBlock(
-                            (i, b, j, a), (left, left, right, right)
-                        )
+                        exchange = SpinMOBlock((i, b, j, a), (left, left, right, right))
                         feeds["x"] = self._read(exchange).transpose(0, 2, 3, 1)
                     left_eps = getattr(self._snapshot, f"orbital_energies_{left}")
                     right_eps = getattr(self._snapshot, f"orbital_energies_{right}")
@@ -294,8 +294,7 @@ class PreparedUMP2Energy:
                 correlation = math.fsum(totals.values())
                 energy = self._snapshot.reference_energy + correlation
                 if not all(
-                    math.isfinite(v)
-                    for v in (*totals.values(), correlation, energy)
+                    math.isfinite(v) for v in (*totals.values(), correlation, energy)
                 ):
                     raise ValueError("nonfinite UMP2 accumulated energy")
                 result = UMP2EnergyResult(

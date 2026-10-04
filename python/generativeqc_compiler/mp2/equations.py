@@ -68,7 +68,6 @@ def energy_program(
     )
 
 
-
 def unrestricted_energy_program(
     shape: typing.Any,
     *,
