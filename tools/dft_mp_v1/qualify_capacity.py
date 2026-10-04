@@ -108,6 +108,7 @@ from generativeqc import _generated_methods as generated_methods
 from generativeqc._model_resolution import snapshot_basis
 from generativeqc._stationary_cuda import (
     COMPONENT_LABELS,
+    _resolve_phased_becke_policy,
     complete_rks_cuda_gradient_diagnostic,
 )
 from generativeqc.basis import BasisSet
@@ -302,7 +303,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "7b3e71ce4e3821ee697ce52c9770263858c094b90cf263e9a7507bcd8f9aee78"
+    "93c90107478ad20ff9d78231acfd4b13254a39278f2ae82a5dd5e22be29dc321"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -335,10 +336,13 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "4eb3b79fc917292e30090a52fff1329caefb6f7632ed26378bc0477a65f092b4"
+    "9e8c1c975551325a1b01ee4376a93c865dbaf98d9cb1d1736fc6107ef24530f9"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
+    "ae04ceaa389b148cb6d8f3a1316a4f23ebdbe698753efe1cf5ae81d96251ca42"
+)
+PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
+    "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
 )
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -359,7 +363,7 @@ NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
-    "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
+    "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
     "4e0dfc6c59fa2358a0cc8c1ca20f00853f294c5632b72089dfac6ab9360239d1"
@@ -402,7 +406,7 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
+    "d63c25b8993857082f2d6792bcd591b78a63cfde49a9be1fa69b11d7e3359649"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -435,7 +439,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "6a39db0e2971b776e54a056f1ca2e57c1637e7d5a85c0c6d605682ff92189399"
+    "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -446,7 +450,8 @@ SOURCE_RESOURCES_DEFINITION = (
     "plan_stationary_cuda_resources(atoms=na, aos=n, primitives=basis.nprimitive, "
     "points=tile_points, tasks=primitive_tile, spins=plan.spin_blocks, "
     "sources=len(source_names), target=target, budget_bytes=max_device_bytes - "
-    "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - native_geometry_reserve)"
+    "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - "
+    "native_geometry_reserve, phased_becke=_resolve_phased_becke_policy(na, None))"
 )
 SOURCE_BYTES_DEFINITION = "source_resources.allocation_bytes"
 HOST_BOUND_DEFINITION = (
@@ -691,6 +696,28 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     wrapper_digest = _source_node_sha256(source, wrappers[0])
     if wrapper_digest != STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA public wrapper contract changed")
+    phase_policies = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_resolve_phased_becke_policy"
+    ]
+    phase_thresholds = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "_AUTO_PHASED_BECKE_MIN_ATOMS"
+    ]
+    if (
+        len(phase_policies) != 1
+        or _source_node_sha256(source, phase_policies[0])
+        != PHASED_BECKE_POLICY_CONTRACT_SHA256
+        or len(phase_thresholds) != 1
+        or ast.unparse(phase_thresholds[0].value) != "48"
+    ):
+        raise RuntimeError("stationary CUDA phased Becke policy contract changed")
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     resource_owners = [
         node
@@ -766,6 +793,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "public_wrapper_sha256": wrapper_digest,
         "geometry_resources_sha256": resource_digest,
         "ordinary_tile_layout_sha256": STATIONARY_TILE_LAYOUT_CONTRACT_SHA256,
+        "phased_becke_policy_sha256": PHASED_BECKE_POLICY_CONTRACT_SHA256,
     }
     for label, (class_name, method_name, expected_digest) in page_methods.items():
         class_node = classes.get(class_name)
@@ -1141,6 +1169,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "ao_count": 128,
             "basis_primitive_count": 4096,
         },
+        "phased_becke_auto_min_atoms": 48,
         "native_integral_requirement_definition": NATIVE_REQUIREMENT_DEFINITION,
         "native_integral_host_reserve_definition": NATIVE_HOST_RESERVE_DEFINITION,
         "host_bound_total_definition": "host_bound + native_integral_host_reserve",
@@ -1514,6 +1543,7 @@ def _method_resources(
             minimum,
             limits["additional_device_bytes"] - grid_plan.peak_bytes - native_reserve,
         ),
+        phased_becke=_resolve_phased_becke_policy(atom_count, None),
     )
     source_bytes = resources.allocation_bytes
     device_bound = grid_plan.peak_bytes + source_bytes
@@ -1541,6 +1571,7 @@ def _method_resources(
             "stationary_geometry_lanes": resources.geometry_lanes,
             "stationary_geometry_scratch_bytes": resources.geometry_scratch_bytes,
             "stationary_center_geometry_bytes": resources.center_geometry_bytes,
+            "stationary_phased_becke_bytes": resources.phased_becke_bytes,
             "stationary_grid_device_peak_bound": device_bound,
             # The provider has not executed. Charge its reserved allowance,
             # rather than reporting the stationary/grid owners as the full peak.

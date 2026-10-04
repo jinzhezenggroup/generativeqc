@@ -185,7 +185,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
         ),
         "prepared_aot_selection_sha256": (
-            "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
+            "d63c25b8993857082f2d6792bcd591b78a63cfde49a9be1fa69b11d7e3359649"
         ),
     }
 
@@ -257,9 +257,10 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     result = report()
     cases = {item["id"]: item for item in result["cases"]}
 
+    assert result["admission_limits"]["phased_becke_auto_min_atoms"] == 48
     assert result["admission_limits"]["native_owner_capacity"] == {
         "atom_count": 128,
-        "ao_count": 1024,
+        "ao_count": 2048,
         "basis_primitive_count": 16384,
     }
     assert result["admission_limits"]["ao_task_fallback_capacity"] == {
@@ -284,18 +285,21 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "6a39db0e2971b776e54a056f1ca2e57c1637e7d5a85c0c6d605682ff92189399",
+        "geometry_resources_sha256": "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a",
         "public_wrapper_sha256": (
             "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
         ),
         "ordinary_tile_layout_sha256": (
             "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
         ),
+        "phased_becke_policy_sha256": (
+            "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
+        ),
         "ordinary_tile_resources_sha256": (
-            "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
+            "ae04ceaa389b148cb6d8f3a1316a4f23ebdbe698753efe1cf5ae81d96251ca42"
         ),
         "initializer_sha256": (
-            "7b3e71ce4e3821ee697ce52c9770263858c094b90cf263e9a7507bcd8f9aee78"
+            "93c90107478ad20ff9d78231acfd4b13254a39278f2ae82a5dd5e22be29dc321"
         ),
         "flush_sha256": (
             "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
@@ -331,13 +335,13 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "4eb3b79fc917292e30090a52fff1329caefb6f7632ed26378bc0477a65f092b4"
+            "9e8c1c975551325a1b01ee4376a93c865dbaf98d9cb1d1736fc6107ef24530f9"
         ),
         "native_owner_sha256": (
             "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
         ),
         "native_allocation_sha256": (
-            "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
+            "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
         ),
         "native_create_sha256": (
             "4e0dfc6c59fa2358a0cc8c1ca20f00853f294c5632b72089dfac6ab9360239d1"
@@ -638,7 +642,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         row for row in rows if row["id"] == "pbe/rks/water32/fp64_energy_forces"
     )
     assert water32["resource_requirements"]["additional_device_peak_bound"] == (
-        356_801_792 + 48 * (96 * 95 // 2) + 4_851_008
+        356_801_792 + 48 * (96 * 95 // 2) + 4_851_008 + 39_755_392
     )
     assert water32["resource_requirements"][
         "stationary_center_geometry_bytes"
@@ -659,6 +663,107 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         "missing packaged stationary CUDA artifact"
         in row["packaged_aot"]["binary_verification"]["detail"]
         for row in missing_rows
+    )
+
+
+@pytest.mark.parametrize("atoms", [24, 47, 48, 96])
+def test_method_resources_reserves_automatic_phased_becke_bytes(atoms: int) -> None:
+    """The dry report must charge the same optional storage as the endpoint."""
+    limits = qualify_capacity._source_limits(ROOT)
+    basis = SimpleNamespace(
+        natom=atoms,
+        nao=8 * atoms,
+        nprimitive=16 * atoms,
+        numeric_bytes=10_000,
+        packed=SimpleNamespace(size=1000),
+    )
+    memory, plan = qualify_capacity._method_resources(
+        basis, atom_count=atoms, functional=0, spin="unpolarized", limits=limits
+    )
+    points = limits["tile_points"]
+    pairs = atoms * (atoms - 1) // 2
+    phase_bytes = (
+        8 * (4 * pairs * points + (12 * atoms + 2) * points + pairs)
+        if atoms >= 48
+        else 0
+    )
+    base_bytes = qualify_capacity.stationary_cuda_allocation_bytes(
+        atoms=atoms,
+        aos=basis.nao,
+        primitives=basis.nprimitive,
+        points=points,
+        tasks=limits["primitive_tile"],
+        spins=plan.spin_blocks,
+        sources=len(qualify_capacity.stationary_runtime_sources(plan)),
+        geometry_lanes=points,
+        cache_center_geometry=True,
+    )
+    assert memory["stationary_source_bytes"] == base_bytes + phase_bytes
+    assert memory["stationary_phased_becke_bytes"] == phase_bytes
+    assert memory["stationary_geometry_lanes"] == points
+    assert memory["additional_device_peak_bound"] == (
+        memory["grid_tile_peak_bytes"]
+        + base_bytes
+        + phase_bytes
+        + memory["stationary_native_pair_reserve_bytes"]
+    )
+    assert memory["native_integral_device_budget"] == (
+        limits["additional_device_bytes"]
+        - memory["grid_tile_peak_bytes"]
+        - base_bytes
+        - phase_bytes
+    )
+
+
+@pytest.mark.parametrize("atoms", [48, 96])
+@pytest.mark.parametrize("spare", [-1, 0, 1])
+def test_method_resources_retains_exact_phase_budget_fallback(
+    atoms: int, spare: int
+) -> None:
+    limits = qualify_capacity._source_limits(ROOT)
+    basis = SimpleNamespace(
+        natom=atoms,
+        nao=8 * atoms,
+        nprimitive=16 * atoms,
+        numeric_bytes=10_000,
+        packed=SimpleNamespace(size=1000),
+    )
+    memory, plan = qualify_capacity._method_resources(
+        basis, atom_count=atoms, functional=0, spin="unpolarized", limits=limits
+    )
+    points = limits["tile_points"]
+    pairs = atoms * (atoms - 1) // 2
+    phase_bytes = 8 * (4 * pairs * points + (12 * atoms + 2) * points + pairs)
+    base_bytes = qualify_capacity.stationary_cuda_allocation_bytes(
+        atoms=atoms,
+        aos=basis.nao,
+        primitives=basis.nprimitive,
+        points=points,
+        tasks=limits["primitive_tile"],
+        spins=plan.spin_blocks,
+        sources=len(qualify_capacity.stationary_runtime_sources(plan)),
+        geometry_lanes=points,
+        cache_center_geometry=True,
+    )
+    limits["additional_device_bytes"] = (
+        memory["grid_tile_peak_bytes"]
+        + memory["stationary_native_integral_host_reserve_bytes"]
+        + base_bytes
+        + phase_bytes
+        + spare
+    )
+    bounded, _ = qualify_capacity._method_resources(
+        basis, atom_count=atoms, functional=0, spin="unpolarized", limits=limits
+    )
+    admitted_phase_bytes = phase_bytes if spare >= 0 else 0
+    assert bounded["stationary_source_bytes"] == base_bytes + admitted_phase_bytes
+    assert bounded["stationary_phased_becke_bytes"] == admitted_phase_bytes
+    assert bounded["stationary_geometry_lanes"] == points
+    assert bounded["stationary_center_geometry_bytes"] == 48 * pairs
+    assert bounded["additional_device_peak_bound"] <= limits["additional_device_bytes"]
+    assert (
+        bounded["stationary_native_pair_reserve_bytes"]
+        == memory["stationary_native_integral_host_reserve_bytes"]
     )
 
 
@@ -1288,8 +1393,18 @@ def test_native_finish_span_fails_closed_on_contract_drift(
         qualify_capacity._source_limits(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+            "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+        ),
+        ("n > 2048", "n > 2049"),
+    ],
+)
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
-    tmp_path: Path,
+    tmp_path: Path, old: str, new: str
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
@@ -1297,14 +1412,8 @@ def test_memory_bounds_fail_closed_when_native_allocation_moves(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na"
     assert old in native
-    target.write_text(
-        native.replace(
-            old, "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na", 1
-        ),
-        encoding="utf-8",
-    )
+    target.write_text(native.replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="native_allocation_sha256 contract changed"):
         qualify_capacity._source_limits(tmp_path)
@@ -2065,7 +2174,7 @@ def test_device_budget_requires_a_positive_minimum_remainder(
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2111,7 +2220,7 @@ def test_primitive_descriptor_budget_is_page_local_and_ordered_after_host() -> N
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2154,7 +2263,7 @@ def test_logical_primitive_metric_retains_uint64_range_gate() -> None:
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2294,7 +2403,7 @@ def current_admission_fixture() -> tuple[dict, dict, dict, dict]:
     "key,cap",
     [
         ("atom_count", 128),
-        ("ao_count_spherical", 1024),
+        ("ao_count_spherical", 2048),
         ("basis_primitive_count", 16384),
     ],
 )
@@ -2361,8 +2470,28 @@ def test_public_work_retains_representable_capacity(key: str, cap: int) -> None:
     assert [failure["gate"] for failure in failures] == ["grid_work_capacity"]
 
 
-def test_native_required_domain_never_admits_ao_descriptor_fallback_work() -> None:
+@pytest.mark.parametrize(
+    "key,cap,native_value",
+    [
+        ("atom_count", 32, 33),
+        ("ao_count_spherical", 128, 129),
+        ("ao_count_spherical", 128, 1024),
+        ("ao_count_spherical", 128, 1025),
+        ("ao_count_spherical", 128, 1856),
+        ("ao_count_spherical", 128, 2048),
+        ("basis_primitive_count", 4096, 4097),
+    ],
+)
+def test_native_required_domain_never_admits_ao_descriptor_fallback_work(
+    key: str, cap: int, native_value: int
+) -> None:
     limits, shape, requirements, memory = current_admission_fixture()
+    shape[key] = cap
+    assert not qualify_capacity.stationary_cuda_requires_native_integrals(
+        atoms=shape["atom_count"],
+        aos=shape["ao_count_spherical"],
+        primitives=shape["basis_primitive_count"],
+    )
     requirements["primitive_descriptor_peak_records"] = limits["primitive_records"] + 1
     assert [
         failure["gate"]
@@ -2372,7 +2501,12 @@ def test_native_required_domain_never_admits_ao_descriptor_fallback_work() -> No
     ] == ["primitive_descriptor_page_budget"]
     # The public larger-domain route must succeed through complete native sources
     # or fail at runtime; the unused AO descriptor page is not its capacity gate.
-    shape["ao_count_spherical"] = 129
+    shape[key] = native_value
+    assert qualify_capacity.stationary_cuda_requires_native_integrals(
+        atoms=shape["atom_count"],
+        aos=shape["ao_count_spherical"],
+        primitives=shape["basis_primitive_count"],
+    )
     assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
 
 
@@ -2421,7 +2555,7 @@ def test_logical_primitive_work_and_native_work_are_method_specific() -> None:
     "old,new",
     [
         ("STATIONARY_MAX_ATOMS = 128", "STATIONARY_MAX_ATOMS = 129"),
-        ("STATIONARY_MAX_AOS = 1024", "STATIONARY_MAX_AOS = 1025"),
+        ("STATIONARY_MAX_AOS = 2048", "STATIONARY_MAX_AOS = 2049"),
         ("STATIONARY_MAX_PRIMITIVES = 16384", "STATIONARY_MAX_PRIMITIVES = 16385"),
         (
             "return atoms > 32 or aos > 128 or primitives > 4096",
@@ -2520,6 +2654,27 @@ def test_current_endpoint_windows_native_requirement_and_reserve_fail_closed(
 
 
 @pytest.mark.parametrize(
+    "old,new",
+    [
+        ("_AUTO_PHASED_BECKE_MIN_ATOMS = 48", "_AUTO_PHASED_BECKE_MIN_ATOMS = 47"),
+        (
+            "return atoms >= _AUTO_PHASED_BECKE_MIN_ATOMS",
+            "return atoms > _AUTO_PHASED_BECKE_MIN_ATOMS",
+        ),
+        ("if selection is None:", "if selection is not None:"),
+    ],
+)
+def test_automatic_phased_becke_policy_changes_fail_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert source.count(old) == 1
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match="phased Becke policy contract changed"):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
     "old,new,message",
     [
         (
@@ -2531,6 +2686,11 @@ def test_current_endpoint_windows_native_requirement_and_reserve_fail_closed(
             "        active_ao_capacity=n,\n",
             "        active_ao_capacity=n // 2,\n",
             "grid-plan input definition changed",
+        ),
+        (
+            "        phased_becke=_resolve_phased_becke_policy(na, None),",
+            "        phased_becke=False,",
+            "source-resources definition changed",
         ),
         (
             "tile_points=tile_points, admit=admit_tile",
