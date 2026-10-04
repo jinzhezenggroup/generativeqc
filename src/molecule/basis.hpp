@@ -24,6 +24,9 @@ using AoExpansion = std::vector<CartesianExpansionTerm>;
 
 /** Maximum terms in the legacy through-f CUDA topology (CPU uses vectors). */
 inline constexpr std::size_t kMaximumAoExpansionTerms = 3;
+// Auxiliary spherical g has up to six Cartesian terms. Consumers must opt in
+// with matching metadata stride; the established s/p/d/f packing stays at three.
+inline constexpr std::size_t kMaximumAuxiliaryAoExpansionTerms = 6;
 
 /** Number of Cartesian functions in a shell of angular momentum `l`. */
 [[nodiscard]] constexpr std::size_t cartesian_count(unsigned l) noexcept {
