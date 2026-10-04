@@ -86,6 +86,12 @@ struct CudaDirectJkPlan {
   /** Derivative-capable canonical plans may retain shell AO offsets/pairs in
    * batch so HF's one-electron kernel can borrow metadata and derivative scratch. */
   double *canonical_density{}, *canonical_coulomb{}, *canonical_exchange{};
+  /** Optional two-spin Cartesian range-output matrix for a joint full/range
+   * value traversal. Allocated after existing owners, charged to the same
+   * budget, and absent on policy/budget/allocation fallback. Presence freezes
+   * admission; execution never rereads the environment or allocates storage.
+   */
+  double* canonical_range_exchange{};
   /** Borrowed test/profiler census: candidate quartets and radial evaluations.
    * Null in production. The observer owns storage and stream-ordered lifetime. */
   std::uint64_t* canonical_work_count{};

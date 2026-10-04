@@ -190,6 +190,26 @@
       ]
     },
     {
+      "id": "hf.direct-hermite-convolution",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py"
+      ],
+      "rationale": "Default-off Cartesian pair-axis convolution for generic strict-FP64 orders five and higher. Values and derivatives have separate explicit choices; primitive/AO admission and radial ownership are unchanged. Static contribution counts are not FLOPs or endpoint predictions.",
+      "revisit_condition": "Independent generated value/xyz-jet and full/LR molecular oracles, sanitizer, frozen policy/fallback checks, actual work and same-binary complete cold/warm/displaced/larger endpoint evidence before any promotion.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-hermite-axis-convolution.md"
+      ]
+    },
+    {
       "id": "hf.force-density-product-screening",
       "classification": "negative-evidence",
       "controls": [
@@ -511,6 +531,29 @@
         "issue:#1598",
         "pr:#1833",
         "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md"
+      ]
+    },
+    {
+      "id": "hf.canonical-shared-rsh-values",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_CANONICAL_RSH_VALUES"
+      ],
+      "owner_issues": [
+        1598,
+        1787
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py",
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_jk_kernels.cu"
+      ],
+      "rationale": "Default-off canonical full J/K and range K joint traversal with one density projection and common high-order primitive geometry/Hermite preparation. Separate radial values and independent outputs remain; an optional two-spin Cartesian range matrix is charged after existing owners. No cross-AO cooperative source tile or derivative gain is claimed.",
+      "revisit_condition": "Actual executed candidate/radial counts and independent full/SR/LR matrices, both spins, screened/dense domains, budgets and alias gates; device sanitizers and same-binary complete cold/warm/displaced/larger endpoint evidence.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-canonical-shared-rsh-values.md"
       ]
     }
   ]

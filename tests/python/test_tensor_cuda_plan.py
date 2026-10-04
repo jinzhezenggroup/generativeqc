@@ -13,11 +13,13 @@ from generativeqc_compiler.tensor import (
     add,
     analyze_complexity,
     broadcast,
+    cast,
     einsum,
     gather,
     input_tensor,
     multiply,
     reduce_sum,
+    reshape,
     runtime_indexed_select,
     transpose,
 )
@@ -31,7 +33,9 @@ from generativeqc_compiler.tensor.cuda_plan import (
 )
 from generativeqc_compiler.tensor.cuda_reduction import (
     cooperative_reduction_provider,
+    streamed_reduction_fusion_groups,
 )
+from generativeqc_compiler.tensor.cuda_search import estimate_schedule
 
 TARGET = cuda_target_info("sm_80")
 
@@ -254,6 +258,184 @@ def test_streamed_einsum_reduction_uses_block_parallel_reduction_axis() -> None:
     source = emit_cuda(plan)
     assert "for (I r = threadIdx.x; r < 64LL; r += blockDim.x)" in source
     assert "gemm(ctx," not in source
+
+
+def test_streamed_reduction_fusion_groups_expose_shared_virtual_work() -> None:
+    q = Index("q_shared", IndexSpace("stream_q_shared", "batch", 7))
+    k = Index("k_shared", IndexSpace("stream_k_shared", "batch", 64))
+    a = input_tensor("stream_a_shared", TensorSpec((q, k), role="input"))
+    b = input_tensor("stream_b_shared", TensorSpec((q, k), role="input"))
+    shared = multiply(a, b)
+    lane_a = einsum("qk,qk->q", shared, a)
+    lane_b = einsum("qk,qk->q", shared, b)
+    total_a = reduce_sum(lane_a, (0,))
+    total_b = reduce_sum(lane_b, (0,))
+
+    plan = plan_cuda(
+        Program({"total_a": total_a, "total_b": total_b}),
+        TARGET,
+        schedule=TensorSchedule(
+            stream_reductions=True,
+            streamed_gemm_reduction=True,
+        ),
+        reassociate_contractions=False,
+    )
+    shared_index = next(i for i, step in enumerate(plan.steps) if step.node is shared)
+    lane_indices = tuple(
+        sorted(
+            i
+            for i, step in enumerate(plan.steps)
+            if step.node is lane_a or step.node is lane_b
+        )
+    )
+
+    groups = streamed_reduction_fusion_groups(plan)
+    assert len(groups) == 1
+    group = groups[0]
+    assert group.steps == lane_indices
+    assert shared_index in group.shared_virtual_steps
+    assert group.reduction_extent == 64
+    assert group.output_shape == (7,)
+    assert group.dtype == "float64"
+    assert group.accumulation_dtype == "float64"
+
+    estimates = estimate_schedule(plan)
+    assert estimates["streamed_reduction_fusion_group_count"] == 1
+    assert estimates["streamed_reduction_fusion_groups"] == [group.to_payload()]
+
+
+def _streamed_fusion_inputs() -> tuple[typing.Any, typing.Any, typing.Any]:
+    axes = (
+        Index("q", IndexSpace("fusion_q", "batch", 64)),
+        Index("k", IndexSpace("fusion_k", "batch", 64)),
+    )
+    a = input_tensor("fusion_a", TensorSpec(axes, role="input"))
+    b = input_tensor("fusion_b", TensorSpec(axes, role="input"))
+    return a, b, multiply(a, b)
+
+
+def _streamed_fusion_plan(*lanes: typing.Any) -> typing.Any:
+    return plan_cuda(
+        Program({f"total_{i}": reduce_sum(lane, (0,)) for i, lane in enumerate(lanes)}),
+        TARGET,
+        schedule=TensorSchedule(
+            stream_reductions=True,
+            streamed_gemm_reduction=True,
+        ),
+        reassociate_contractions=False,
+    )
+
+
+@pytest.mark.parametrize("mapping", ["axes", "transpose", "einsum"])
+def test_streamed_fusion_rejects_different_producer_coordinates(mapping: str) -> None:
+    a, b, shared = _streamed_fusion_inputs()
+    if mapping == "axes":
+        lanes = reduce_sum(shared, (0,)), reduce_sum(shared, (1,))
+    elif mapping == "transpose":
+        lanes = reduce_sum(shared, (1,)), reduce_sum(transpose(shared, (1, 0)), (1,))
+    else:
+        lanes = einsum("qk,qk->q", shared, a), einsum("kq,kq->q", shared, b)
+    plan = _streamed_fusion_plan(*lanes)
+    assert next(step for step in plan.steps if step.node is shared).virtual
+    assert streamed_reduction_fusion_groups(plan) == ()
+
+
+@pytest.mark.parametrize("ambiguous", ["alias", "repeated_operand"])
+def test_streamed_fusion_rejects_ambiguous_paths_to_one_producer(
+    ambiguous: str,
+) -> None:
+    q = Index("q", IndexSpace("fusion_q", "batch", 7))
+    inner = IndexSpace("fusion_inner", "batch", 8)
+    axes = (q, Index("k", inner), Index("l", inner))
+    a = input_tensor("fusion_a", TensorSpec(axes, role="input"))
+    b = input_tensor("fusion_b", TensorSpec(axes, role="input"))
+    shared = multiply(a, b)
+    if ambiguous == "alias":
+        left = reduce_sum(multiply(shared, a), (1, 2))
+        right = reduce_sum(multiply(shared, transpose(shared, (0, 2, 1))), (1, 2))
+    else:
+        left = einsum("qkl,qlk->q", shared, a)
+        right = einsum("qkl,qlk->q", shared, shared)
+    plan = _streamed_fusion_plan(left, right)
+    assert next(step for step in plan.steps if step.node is shared).virtual
+    assert streamed_reduction_fusion_groups(plan) == ()
+
+
+@pytest.mark.parametrize("transitive", [False, True])
+def test_streamed_fusion_rejects_dependent_consumers(transitive: bool) -> None:
+    a, _, shared = _streamed_fusion_inputs()
+    left = einsum("qk,qk,q->q", shared, a, reduce_sum(a, (1,)))
+    dependency = multiply(left, left) if transitive else left
+    right = einsum("qk,qk,q->q", shared, a, dependency)
+    plan = _streamed_fusion_plan(left, right)
+    assert next(step for step in plan.steps if step.node is shared).virtual
+    # Both roots have identical canonical coordinate topology; only the
+    # dependency (including the materialized frontier) makes them incompatible.
+    assert left.attrs["labels"] == right.attrs["labels"]
+    assert left.attrs["output"] == right.attrs["output"]
+    assert streamed_reduction_fusion_groups(plan) == ()
+
+
+def test_streamed_fusion_proves_nested_pointwise_producers() -> None:
+    a, b, shared = _streamed_fusion_inputs()
+    left = reduce_sum(multiply(shared, a), (1,))
+    right = reduce_sum(add(multiply(shared, b), shared), (1,))
+    plan = _streamed_fusion_plan(left, right)
+    shared_index = next(i for i, step in enumerate(plan.steps) if step.node is shared)
+    groups = streamed_reduction_fusion_groups(plan)
+    assert len(groups) == 1
+    assert groups[0].shared_virtual_steps == (shared_index,)
+    assert {plan.steps[i].node for i in groups[0].steps} == {left, right}
+    # Diagnosing a prospective group must not change the plan or emitted source.
+    identity, source = plan.identity, emit_cuda(plan)
+    assert estimate_schedule(plan)["streamed_reduction_fusion_group_count"] == 1
+    assert (plan.identity, emit_cuda(plan)) == (identity, source)
+
+
+@pytest.mark.parametrize("view", ["cast", "reshape"])
+def test_streamed_fusion_preserves_flat_access_through_views(view: str) -> None:
+    a, b, shared = _streamed_fusion_inputs()
+    if view == "cast":
+        alias, left_operand, right_operand = (
+            cast(value, "float32") for value in (shared, a, b)
+        )
+        axes = (1,)
+    else:
+        inner = IndexSpace("fusion_split_inner", "batch", 8)
+        indices = (a.spec.indices[0], Index("k", inner), Index("l", inner))
+        alias, left_operand, right_operand = (
+            reshape(value, indices) for value in (shared, a, b)
+        )
+        axes = (1, 2)
+    plan = _streamed_fusion_plan(
+        reduce_sum(multiply(alias, left_operand), axes),
+        reduce_sum(multiply(alias, right_operand), axes),
+    )
+    expected = tuple(
+        i
+        for i, step in enumerate(plan.steps)
+        if step.node is shared or step.node is alias
+    )
+    assert len(expected) == 2
+    assert all(plan.steps[i].virtual for i in expected)
+    groups = streamed_reduction_fusion_groups(plan)
+    assert len(groups) == 1
+    assert groups[0].shared_virtual_steps == expected
+
+
+def test_streamed_fusion_keeps_unproved_alias_ancestors_opaque() -> None:
+    a, b, shared = _streamed_fusion_inputs()
+    alias = transpose(shared, (1, 0))
+    plan = _streamed_fusion_plan(
+        reduce_sum(multiply(alias, transpose(a, (1, 0))), (1,)),
+        reduce_sum(multiply(alias, transpose(b, (1, 0))), (1,)),
+    )
+    alias_index = next(i for i, step in enumerate(plan.steps) if step.node is alias)
+    shared_index = next(i for i, step in enumerate(plan.steps) if step.node is shared)
+    groups = streamed_reduction_fusion_groups(plan)
+    assert len(groups) == 1
+    assert groups[0].shared_virtual_steps == (alias_index,)
+    assert shared_index not in groups[0].shared_virtual_steps
 
 
 def test_streaming_reduction_stops_before_partial_source_consumption() -> None:

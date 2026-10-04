@@ -182,10 +182,10 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
         ),
         "cuda_force_method_sha256": (
-            "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
+            "3defc2e5e05b2fd1af16e82bda36fa479a41b7b7a15029a49fecf98090e9c95b"
         ),
         "prepared_aot_selection_sha256": (
-            "d63c25b8993857082f2d6792bcd591b78a63cfde49a9be1fa69b11d7e3359649"
+            "543a82fd68894b485deb025825efb2e93ae61a0942a2da6f0326ddbd5937da27"
         ),
     }
 
@@ -286,7 +286,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
         "geometry_resources_sha256": "7949d2b5f585c0f5cadeaa8a6f52426355821046b209422d0947835093eb0da4",
         "public_wrapper_sha256": (
-            "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
+            "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
         ),
         "ordinary_tile_layout_sha256": (
             "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -331,7 +331,13 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "f94b63e26682a0796fe28b145885c1d9bae20d4147b6bc2e7f6cd6b8fc0e8af3"
+            "859e55ed5e4e9f827133a50609f15aa54be67e8d84d9ddedf98c7fc4e33f8bf8"
+        ),
+        "ao_map_reserve_sha256": (
+            "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
+        ),
+        "resident_ao_cache_sha256": (
+            "5d920c55e7e77f4ec97799f99a221f3bf6954a103f1167b856a84657e2b650f9"
         ),
         "native_owner_sha256": (
             "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -1679,7 +1685,7 @@ def test_public_cuda_force_fails_closed_when_packaged_route_moves(
     copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
     target = tmp_path / "python/generativeqc/batch.py"
     source = target.read_text(encoding="utf-8")
-    old = "and not state._source.method_ir.full_range_exact_exchange"
+    old = "and not source.method_ir.full_range_exact_exchange"
     assert old in source
     target.write_text(source.replace(old, "and False", 1), encoding="utf-8")
 
