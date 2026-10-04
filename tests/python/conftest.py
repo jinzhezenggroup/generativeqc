@@ -6,13 +6,13 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
-    from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -135,11 +135,11 @@ class NativeCxx:
 
 
 @pytest.fixture(scope="session")
-def native_cxx(tmp_path_factory: pytest.TempPathFactory) -> NativeCxx:
+def native_cxx() -> NativeCxx:
     """Provide a required ccache-backed host compiler for native Python probes."""
     compiler = shutil.which(os.environ.get("CXX", "c++"))
     cache = shutil.which(os.environ.get("CCACHE", "ccache"))
     if compiler is None or cache is None:
         pytest.skip("native probe requires a host C++ compiler and ccache")
     subprocess.run([cache, "--version"], check=True, capture_output=True, text=True)
-    return NativeCxx(compiler, cache, tmp_path_factory.getbasetemp())
+    return NativeCxx(compiler, cache, Path(__file__).resolve().parents[2])
