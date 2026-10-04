@@ -19,7 +19,9 @@ from generativeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_multipole_hamiltonian_update_program,
     build_gfn2_multipole_integral_vjp_program,
     build_gfn2_population_update_program,
+    build_gfn2_restricted_population_publish_program,
     build_gfn2_scalar_hamiltonian_update_program,
+    build_gfn2_spin_population_publish_program,
     build_gfn2_scalar_integral_vjp_program,
     build_gfn2_weighted_coefficient_program,
 )
@@ -31,6 +33,8 @@ CORE_ENERGY_INPUTS = ("density", "h0", "accumulator")
 ENERGY_WEIGHT_INPUTS = ("occupation", "eigenvalue")
 WEIGHTED_COEFFICIENT_INPUTS = ("coefficient", "weight")
 DENSITY_UPDATE_INPUTS = ("weighted_coefficient", "coefficient", "accumulator")
+RESTRICTED_POPULATION_PUBLISH_INPUTS = ("electronic", "reference")
+SPIN_POPULATION_PUBLISH_INPUTS = ("alpha", "beta", "reference")
 SCALAR_HAMILTONIAN_INPUTS = (
     "overlap",
     "row_vat",
@@ -65,6 +69,12 @@ def native_header() -> str:
     )
     density_update = prepare_for_backend(
         build_gfn2_density_update_program(), backend="cpu"
+    )
+    restricted_publish = prepare_for_backend(
+        build_gfn2_restricted_population_publish_program(), backend="cpu"
+    )
+    spin_publish = prepare_for_backend(
+        build_gfn2_spin_population_publish_program(), backend="cpu"
     )
     scalar_h = prepare_for_backend(
         build_gfn2_scalar_hamiltonian_update_program(), backend="cpu"
@@ -110,6 +120,20 @@ def native_header() -> str:
             function_name="gfn2_density_update_tensor",
             input_order=DENSITY_UPDATE_INPUTS,
             output_order=("updated",),
+            ordered_native_sums=True,
+        ),
+        emit_scalar_cpp(
+            restricted_publish,
+            function_name="gfn2_restricted_population_publish_tensor",
+            input_order=RESTRICTED_POPULATION_PUBLISH_INPUTS,
+            output_order=("charge",),
+            ordered_native_sums=True,
+        ),
+        emit_scalar_cpp(
+            spin_publish,
+            function_name="gfn2_spin_population_publish_tensor",
+            input_order=SPIN_POPULATION_PUBLISH_INPUTS,
+            output_order=("charge", "magnetization"),
             ordered_native_sums=True,
         ),
         emit_scalar_cpp(
@@ -160,6 +184,10 @@ inline constexpr const char* gfn2_weighted_coefficient_logical_hash =
     "{weighted_coefficient.logical_hash}";
 inline constexpr const char* gfn2_density_update_logical_hash =
     "{density_update.logical_hash}";
+inline constexpr const char* gfn2_restricted_population_publish_logical_hash =
+    "{restricted_publish.logical_hash}";
+inline constexpr const char* gfn2_spin_population_publish_logical_hash =
+    "{spin_publish.logical_hash}";
 inline constexpr const char* gfn2_scalar_hamiltonian_update_logical_hash =
     "{scalar_h.logical_hash}";
 inline constexpr const char* gfn2_multipole_hamiltonian_update_logical_hash =

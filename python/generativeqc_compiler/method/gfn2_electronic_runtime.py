@@ -18,7 +18,7 @@ from .gfn2_electronic_contract import (
     GFN2_QUADRUPOLE_COMPONENTS,
 )
 
-GFN2_ELECTRONIC_RUNTIME_VERSION = "gfn2-electronic-runtime-ir-v3"
+GFN2_ELECTRONIC_RUNTIME_VERSION = "gfn2-electronic-runtime-ir-v4"
 
 
 def _input(name: str, *, differentiable: bool = False) -> Node:
@@ -112,6 +112,42 @@ def build_gfn2_density_update_program() -> Program:
             "kind": "gfn2-runtime-density-update",
             "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
             "source": "#505 Gfn2PopulationProgram",
+        },
+    )
+
+
+def build_gfn2_restricted_population_publish_program() -> Program:
+    """Add the reference shell occupation to one electronic population."""
+
+    electronic = _input("electronic")
+    reference = _input("reference")
+    charge = add(electronic, reference)
+    return Program(
+        {"charge": charge},
+        provenance={
+            "kind": "gfn2-runtime-restricted-population-publish",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "#505 Gfn2PopulationProgram",
+        },
+    )
+
+
+def build_gfn2_spin_population_publish_program() -> Program:
+    """Convert raw alpha/beta populations to charge and pinned magnetization."""
+
+    alpha = _input("alpha")
+    beta = _input("beta")
+    reference = _input("reference")
+    charge = add(alpha, beta)
+    charge = add(charge, reference)
+    magnetization = add(alpha, beta, coefficients=(1, -1))
+    return Program(
+        {"charge": charge, "magnetization": magnetization},
+        provenance={
+            "kind": "gfn2-runtime-spin-population-publish",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "#505 Gfn2PopulationProgram",
+            "magnetization": "raw_alpha-raw_beta=N_beta-N_alpha",
         },
     )
 
