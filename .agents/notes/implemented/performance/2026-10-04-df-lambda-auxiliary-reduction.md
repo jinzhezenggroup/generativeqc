@@ -123,6 +123,15 @@ changes concern range-separated force screening/roots; the CC, methods and
 compiler sources above are unchanged. Frozen measurements retain their exact
 source identity. Refreshed build/regression validation is recorded separately.
 
+The refreshed full CUDA build passes, with source identity
+430f47bb6283f48ca622779b6bd9f27d91b251954006eb0497d3efb5ebbf1a21
+and library SHA256
+dec82000d37453c38ac6c4277d7c7d3a4f4b46e76f7a7dea30de5d2f23a2ec41.
+RTX5090 job 12241 passes all 18 selected complete-force regressions in 382.79 s:
+the 12 independent DF gates and six conventional gates, including the 56-AO
+water cluster. These refreshed regression results are distinct from the
+frozen PRO6000 large-endpoint timing above.
+
 Per-action semantic contraction summands, excluding one-time primal staging:
 
 | o,v,q | Original | Reduced | Work ratio |
