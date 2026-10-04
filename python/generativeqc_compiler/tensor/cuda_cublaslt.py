@@ -9,6 +9,7 @@ its algorithm/workspace identity before any replay.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
+from math import prod
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.lowering_contract import (
@@ -69,16 +70,39 @@ class CublasLtMatmul:
         return canonical_hash(asdict(self))
 
 
+def _collapsed_axis(view: OperandLayout, modes: tuple[int, ...]) -> tuple[int, int]:
+    """Prove lexicographic flattening preserves every nonunit axis address.
+
+    Groups use the same semantic mode order in every operand. Equal dimension
+    products alone would incorrectly admit swapped reduction axes. Unit axes
+    have no observable stride and do not constrain the physical matrix cut.
+    """
+    assert view.strides is not None
+    extent, stride = 1, None
+    for mode in reversed(modes):
+        axis = view.modes.index(mode)
+        size, physical = view.shape[axis], view.strides[axis]
+        if size != 1:
+            if stride is None:
+                stride = physical
+            if physical != extent * stride:
+                raise ValueError("cuBLASLt mode group is not physically contiguous")
+        extent *= size
+    return extent, 1 if stride is None else stride
+
+
 def _matrix_layout(
-    view: OperandLayout, row: int, column: int, batch: int | None, batches: int
+    view: OperandLayout,
+    row: tuple[int, ...],
+    column: tuple[int, ...],
+    batch: tuple[int, ...],
+    batches: int,
 ) -> CublasLtMatrixLayout:
     """Prove the view is addressable without copying or overlapping batches."""
-    if view.strides is None or any(s <= 0 for s in view.strides):
+    if view.strides is None or any(s <= 0 or s > (1 << 63) - 1 for s in view.strides):
         raise ValueError("cuBLASLt requires materialized positive matrix strides")
-    sizes = dict(zip(view.modes, view.shape, strict=True))
-    strides = dict(zip(view.modes, view.strides, strict=True))
-    rows, columns = sizes[row], sizes[column]
-    rs, cs = strides[row], strides[column]
+    rows, rs = _collapsed_axis(view, row)
+    columns, cs = _collapsed_axis(view, column)
     # A unit axis has no observable stride. Resolve it deterministically without
     # rejecting equivalent dense or padded views emitted by the storage owner.
     if (columns == 1 or cs == 1) and (rows == 1 or rs >= columns):
@@ -87,7 +111,7 @@ def _matrix_layout(
         order, ld = "column", cs if columns > 1 else rows
     else:
         raise ValueError("cuBLASLt requires a native row/column matrix layout")
-    stride = strides[batch] if batch is not None else 0
+    stride = _collapsed_axis(view, batch)[1] if batch else 0
     span = (rows - 1) * rs + (columns - 1) * cs + 1
     if batches > 1 and stride < span:
         raise ValueError("cuBLASLt adapter requires nonoverlapping matrix batches")
@@ -97,11 +121,11 @@ def _matrix_layout(
 
 
 def cublaslt_matmul(request: LoweringRequest) -> CublasLtMatmul:
-    """Recognize rank-2/3 matmul while retaining the original einsum identity.
+    """Recognize affine matmul while retaining the original einsum identity.
 
-    Each matrix dimension must be one existing mode, with at most one shared
-    batch mode. Higher-rank grouping, one-sided reductions, diagonals, broadcast
-    and scientific symmetry require other candidates and are rejected explicitly.
+    M/N/K and batch may each group existing modes only when their ordered
+    strides prove a matrix view without packing. One-sided reductions,
+    diagonals, broadcast and scientific symmetry remain explicit rejections.
     """
     if request.backend != "cuda" or request.operation != "einsum":
         raise ValueError("cuBLASLt requires the canonical CUDA einsum request")
@@ -114,30 +138,37 @@ def cublaslt_matmul(request: LoweringRequest) -> CublasLtMatmul:
         raise ValueError("cuBLASLt adapter requires two reads and a fresh output")
     if c.alias_group is not None and c.alias_group in (a.alias_group, b.alias_group):
         raise ValueError("cuBLASLt adapter cannot overwrite a borrowed input")
+    sizes: dict[int, int] = {}
     for view in request.operands:
+        if len(view.modes) > 8:
+            raise ValueError("cuBLASLt operand exceeds the native rank bound of eight")
         if view.triangle != "full" or not view.shape or not all(view.shape):
             raise ValueError("cuBLASLt requires positive full matrix operands")
         if len(set(view.modes)) != len(view.modes):
             raise ValueError(
                 "cuBLASLt adapter does not implement repeated-mode diagonals"
             )
+        for mode, size in zip(view.modes, view.shape, strict=True):
+            if sizes.setdefault(mode, size) != size:
+                raise ValueError("cuBLASLt semantic mode extents disagree")
     am, bm, cm = (set(view.modes) for view in request.operands)
     batch, m, n, k = am & bm & cm, (am & cm) - bm, (bm & cm) - am, (am & bm) - cm
     if (
-        len(batch) > 1
-        or len(m) != 1
-        or len(n) != 1
-        or len(k) != 1
+        not m
+        or not n
+        or not k
         or am != batch | m | k
         or bm != batch | k | n
         or cm != batch | m | n
     ):
         raise ValueError(
-            "cuBLASLt adapter requires one M/N/K mode and at most one batch mode"
+            "cuBLASLt adapter requires M/N/K groups and shared batch modes"
         )
-    mi, ni, ki = next(iter(m)), next(iter(n)), next(iter(k))
-    bi = next(iter(batch)) if batch else None
-    batches = a.shape[a.modes.index(bi)] if bi is not None else 1
+    mi = tuple(mode for mode in c.modes if mode in m)
+    ni = tuple(mode for mode in c.modes if mode in n)
+    ki = tuple(mode for mode in a.modes if mode in k)
+    bi = tuple(mode for mode in c.modes if mode in batch)
+    batches = prod(sizes[mode] for mode in bi)
     return CublasLtMatmul(
         request.identity,
         batches,

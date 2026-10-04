@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from itertools import product
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -32,6 +33,10 @@ from generativeqc_compiler.tensor.cuda_cublaslt import (
 from generativeqc_compiler.tensor.cuda_cutensor import CutensorContractionProvider
 from generativeqc_compiler.tensor.cuda_plan import TensorPlan, plan_cuda
 from generativeqc_compiler.tensor.cuda_providers import resolved_lowering_candidates
+from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+
+if TYPE_CHECKING:
+    from generativeqc_compiler.common.lowering_provider import LoweringRequest
 
 TARGET = cuda_target_info("sm_120")
 CAPABILITIES = TargetCapabilities(
@@ -288,3 +293,102 @@ def test_target_version_and_noninteger_resource_evidence_reject() -> None:
                 cuda_target_info("sm_80").target_info
             ),
         )
+
+
+def _grouped_request(
+    equation: str, dtype: str = "float64", unit: bool = False
+) -> LoweringRequest:
+    """Use distinct semantic axes even where physical groups can be flattened."""
+    axes = {
+        label: Index(
+            label, IndexSpace(label, "batch", 1 if unit and label in "aceg" else size)
+        )
+        for label, size in zip("abcdefgh", (2, 3, 2, 5, 2, 7, 2, 2), strict=True)
+    }
+    operands = [
+        input_tensor(
+            f"input{i}",
+            TensorSpec(tuple(axes[x] for x in labels), dtype=dtype, role="input"),
+        )
+        for i, labels in enumerate(equation.split("->")[0].split(","))
+    ]
+    result = einsum(equation, *operands)
+    return TensorLoweringAdapter(Program({"result": result})).request(
+        result, backend="cuda"
+    )
+
+
+@pytest.mark.parametrize("dtype", ["float32", "float64"])
+@pytest.mark.parametrize("unit", [False, True])
+@pytest.mark.parametrize("prefix", ["", "gh"])
+def test_collapsed_modes_against_original_high_rank_einsum(
+    dtype: str, unit: bool, prefix: str
+) -> None:
+    for al, bl, cl in product(("abef", "efab"), ("efcd", "cdef"), ("abcd", "cdab")):
+        equation = f"{prefix}{al},{prefix}{bl}->{prefix}{cl}"
+        request = _grouped_request(equation, dtype, unit)
+        candidate = CublasLtMatmulProvider(version="12.9.1").candidates(
+            request, CAPABILITIES
+        )[0]
+        assert candidate.status == "ready", candidate.reason
+        assert candidate.request is request
+        recipe = cublaslt_matmul(request)
+        arrays = [
+            np.arange(np.prod(view.shape), dtype=dtype).reshape(view.shape) / 16
+            for view in request.operands[:2]
+        ]
+        expected = np.einsum(equation, *arrays)
+        actual = np.zeros(expected.shape, dtype=dtype)
+        matrix_views = []
+        for array, layout in zip((*arrays, actual), recipe.layouts, strict=True):
+            strides = (
+                (layout.leading_dimension, 1)
+                if layout.order == "row"
+                else (1, layout.leading_dimension)
+            )
+            matrix_views.append(
+                np.ndarray(
+                    (recipe.batches, layout.rows, layout.columns),
+                    dtype=dtype,
+                    buffer=array,
+                    strides=tuple(
+                        array.itemsize * stride
+                        for stride in (layout.batch_stride, *strides)
+                    ),
+                )
+            )
+        matrix_views[2][:] = matrix_views[0] @ matrix_views[1]
+        np.testing.assert_array_equal(actual, expected)
+
+
+@pytest.mark.parametrize(
+    "equation",
+    [
+        "abef,fecd->abcd",  # Reduction order differs between operands.
+        "aebf,efcd->abcd",  # A free group is interleaved with the reduction.
+        "ghabef,hgefcd->ghabcd",  # Equal-size batch axes have a different order.
+        "abef,efcd->acbd",  # Output row/column groups require a scatter.
+    ],
+)
+def test_noncontiguous_groups_are_explicit_rejections(equation: str) -> None:
+    request = _grouped_request(equation)
+    candidate = CublasLtMatmulProvider(version="12.9.1").candidates(
+        request, CAPABILITIES
+    )[0]
+    assert candidate.status == "unsupported" and candidate.request is request
+    assert candidate.reason is not None
+    assert "contiguous" in candidate.reason or "matrix strides" in candidate.reason
+
+
+def test_grouping_does_not_exceed_native_descriptor_rank() -> None:
+    request = _grouped_request("ghabef,ghefcd->ghabcd")
+    a, b, c = request.operands
+    assert a.strides is not None
+    a = replace(
+        a,
+        modes=(*a.modes, 20, 21, 22),
+        shape=(*a.shape, 1, 1, 1),
+        strides=(*a.strides, 1, 1, 1),
+    )
+    with pytest.raises(ValueError, match="native rank bound"):
+        cublaslt_matmul(replace(request, operands=(a, b, c)))
