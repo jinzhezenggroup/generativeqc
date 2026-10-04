@@ -31,6 +31,10 @@ std::size_t product(std::size_t a, std::size_t b) { return runtime::size_mul(a, 
 unsigned blocks(std::size_t elements) { return static_cast<unsigned>((elements + 127) / 128); }
 }  // namespace
 
+void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
+  batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_requested();
+}
+
 GeneratedCoulombPlan::~GeneratedCoulombPlan() {
   // The outer provider still owns this stream and all borrowed geometry.
   if (stream) (void)cudaStreamSynchronize(stream);
@@ -122,7 +126,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     return {};
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
-  plan->batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_requested();
+  configure_direct_coulomb_recurrence(plan->batch);
   plan->batch.total_shell_pairs = pairs;
   plan->stream = stream;
   plan->screening = screening;

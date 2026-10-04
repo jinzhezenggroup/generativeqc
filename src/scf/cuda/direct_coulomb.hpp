@@ -14,6 +14,11 @@ namespace generativeqc::scf::cuda_execution {
 
 struct ShellPairDensityBounds;
 
+/** Freeze source recurrence controls behind the shared preparation boundary.
+ * The canonical provider stays independent of the HF runtime policy header.
+ */
+void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
+
 /** Optional geometry owner for the generated pure-J consumer. It borrows the
  * direct provider's stream and public basis metadata, and owns bounded shell
  * topology, Cartesian transforms and scratch. No quartet list is materialized.
