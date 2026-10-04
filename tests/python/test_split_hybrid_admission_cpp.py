@@ -8,7 +8,7 @@ from tools.generate_xc_split_hybrid_registry import emit_registry
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_native_split_hybrid_descriptor_gate(tmp_path: Path, native_cxx) -> None:
+def test_native_split_hybrid_descriptor_gate(tmp_path: Path, native_cxx: object) -> None:
     (tmp_path / "generated_split_hybrid_registry.cuh").write_text(
         emit_registry(), encoding="utf-8"
     )
