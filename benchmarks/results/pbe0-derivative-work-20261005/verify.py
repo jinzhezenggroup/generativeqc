@@ -148,8 +148,11 @@ def angular_times(atoms: int) -> list[float]:
     events = read(f"angular/kernel-events-{atoms}.json")
     require(sorted(row["name"] for row in events) == sorted(row["Name"] for row in rows),
             "CSV kernel names differ from raw event projection")
-    raw_times = sorted(row["end_ns"] - row["start_ns"] for row in events)
-    require(raw_times == sorted(totals.values()), "CSV differs from raw profiler export")
+    # Bind each exact integer-nanosecond duration to its kernel name. Sorting
+    # preserves duplicate-event multiplicity while allowing export row reordering.
+    raw_pairs = sorted((row["name"], row["end_ns"] - row["start_ns"]) for row in events)
+    csv_pairs = sorted((row["Name"], int(row["Total Time (ns)"])) for row in rows)
+    require(raw_pairs == csv_pairs, "CSV kernel name/duration pairs differ from raw profiler export")
     return [totals[order] / 1e9 for order in range(13)]
 
 
