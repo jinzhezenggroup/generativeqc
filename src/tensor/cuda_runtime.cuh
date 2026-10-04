@@ -181,20 +181,28 @@ static __global__ void check_scale(float* values, I count, float scale, int* err
 
 // Row-major C = op(A) op(B) is column-major C^T = op(B)^T op(A)^T.
 // Arguments expose every transpose, leading dimension, stride and beta.
-inline void gemm(Context& context, char a_trans, char b_trans, int m, int n, int k, const double* a,
-                 const double* b, double* c, I a_stride, I b_stride, I c_stride, int batches,
-                 double beta) {
-  const double alpha = 1.0;
+// Borrow an already admitted provider handle. Ownership, workspace and stream
+// lifetime stay with the caller; all ordinary/batched row-major dispatch shares
+// this tensor adapter. No provider discovery or implicit allocation occurs here.
+inline void gemm(cublasHandle_t handle, char a_trans, char b_trans, int m, int n, int k,
+                 const double* a, const double* b, double* c, I a_stride, I b_stride, I c_stride,
+                 int batches, double alpha, double beta) {
   const auto ta = a_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
   const auto tb = b_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
   const int lda = a_trans == 'N' ? k : m;
   const int ldb = b_trans == 'N' ? n : k;
   if (batches == 1) {
-    blas_check(cublasDgemm(context.handle, tb, ta, n, m, k, &alpha, b, ldb, a, lda, &beta, c, n));
+    blas_check(cublasDgemm(handle, tb, ta, n, m, k, &alpha, b, ldb, a, lda, &beta, c, n));
   } else {
-    blas_check(cublasDgemmStridedBatched(context.handle, tb, ta, n, m, k, &alpha, b, ldb, b_stride,
-                                         a, lda, a_stride, &beta, c, n, c_stride, batches));
+    blas_check(cublasDgemmStridedBatched(handle, tb, ta, n, m, k, &alpha, b, ldb, b_stride, a, lda,
+                                         a_stride, &beta, c, n, c_stride, batches));
   }
+}
+inline void gemm(Context& context, char a_trans, char b_trans, int m, int n, int k, const double* a,
+                 const double* b, double* c, I a_stride, I b_stride, I c_stride, int batches,
+                 double beta) {
+  gemm(context.handle, a_trans, b_trans, m, n, k, a, b, c, a_stride, b_stride, c_stride, batches,
+       1.0, beta);
 }
 // FP32 callers select CUBLAS_PEDANTIC_MATH when preparing the plan.
 inline void gemm(Context& context, char a_trans, char b_trans, int m, int n, int k, const float* a,

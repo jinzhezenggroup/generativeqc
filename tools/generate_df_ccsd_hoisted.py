@@ -17,6 +17,7 @@ from generativeqc_compiler.cc.df_hoist import (
     AUXILIARY_OUTPUTS,
     build_df_auxiliary_reduction_programs,
 )
+from generativeqc_compiler.cc.df_lambda_matrix import matrix_program
 from generativeqc_compiler.tensor import Program
 
 from tools.generate_df_ccsd_core import INPUTS as CORE_INPUTS
@@ -25,9 +26,11 @@ from tools.generate_rccsd_native import (
     _cpu_function,
     _cuda_program,
     _label_dims,
+    _packed_batched_matrix_gemm,
     _packed_matrix_gemm,
     _required_function,
     _size,
+    ordered_batch_accumulation,
     with_jacobi_update,
 )
 
@@ -63,6 +66,30 @@ def programs() -> dict[str, Program]:
 def packed_programs() -> dict[str, Program]:
     """Explicit packing nodes remain visible to the existing arena allocator."""
     return {name: pack_df_contractions(program) for name, program in programs().items()}
+
+
+@cache
+def batched_auxiliary_program() -> Program:
+    """Reuse Lambda's Q lifting; the nonunit symbolic extent becomes runtime q."""
+    return matrix_program(programs()["auxiliary"], batch_size=3)
+
+
+def auxiliary_accumulation() -> tuple[str, str]:
+    """The six retained primal cuts share the adjoint's ordered Q consumer."""
+    return ordered_batch_accumulation(
+        batched_auxiliary_program(),
+        "auxiliary",
+        "CudaState",
+        "AuxiliaryOutputs",
+        "s.gemm?s.q:1",
+        dict(
+            zip(
+                OUTPUTS["auxiliary"][1],
+                ("lvv", "wvoov", "wvovo", "xv", "ladder", "singles"),
+                strict=True,
+            )
+        ),
+    )
 
 
 def contraction_query(program: Program, name: str, *, batch_dim: bool = False) -> str:
@@ -145,6 +172,35 @@ def cpu_header() -> str:
             + " && ".join(f"{dim} <= 2147483647ULL" for dim in dimensions or ("0",))
             + "; }",
         ]
+    # Q packing/broadcast arrays enter the same exact runtime liveness arena.
+    batched = batched_auxiliary_program()
+    dimensions = sorted(
+        {
+            dim
+            for node in batched.live_nodes
+            if (g := _packed_matrix_gemm(node) or _packed_batched_matrix_gemm(node))
+            is not None
+            for dim in g[2:]
+        }
+    )
+    lines += [
+        f'inline constexpr const char* auxiliary_batched_hash = "{batched.logical_hash}";',
+        f"inline constexpr std::size_t auxiliary_batched_operations = {sum(n.op != 'input' for n in batched.live_nodes)};",
+        _required_function(batched, "auxiliary_batched_arena_elements", batch_dim=True),
+        contraction_query(
+            batched, "auxiliary_batched_contraction_terms", batch_dim=True
+        ),
+        "inline bool auxiliary_batched_dimensions_fit(std::size_t o,std::size_t v,std::size_t q) { return "
+        + " && ".join(dim + "<=2147483647ULL" for dim in dimensions or ("0",))
+        + "; }",
+        "inline std::size_t auxiliary_batched_packing_elements(std::size_t o,std::size_t v,std::size_t q) { std::size_t total=0;",
+        *(
+            f"total=checked_add(total,{_size(n.spec)});"
+            for n in batched.live_nodes
+            if n.op in ("transpose", "broadcast")
+        ),
+        "return total; }",
+    ]
     # The old bounded schedule is retained for replay and resource/work fallback.
     from tools.generate_df_ccsd_core import programs as core_programs
     from tools.generate_df_ccsd_native import programs as virtual_programs
@@ -182,12 +238,15 @@ def cuda_header() -> str:
             "struct CudaState : dfcore::CudaState {",
             *[f"  const double* {name}{{}};" for name in EXTRA_INPUTS],
             "  double *prepare_arena{}, *auxiliary_arena{};",
+            "  std::size_t q{1};",
             "  // Optional row-major FP64 GEMM, beta=0; caller audits every result.",
             "  std::function<void(char,char,std::size_t,std::size_t,std::size_t,double,const double*,const double*,double*)> gemm;",
+            "  std::function<void(char,char,std::size_t,std::size_t,std::size_t,std::size_t,double,const double*,const double*,double*)> batched_gemm;",
             "};",
             "PreparedOutputs run_prepare_cuda(CudaState& state);",
             "AuxiliaryOutputs run_auxiliary_cuda(CudaState& state);",
             "DeviceIterationOutputs run_iteration_cuda(CudaState& state);",
+            auxiliary_accumulation()[0] + ";",
             "}  // namespace generativeqc::cc::generated::dfhoist",
             "",
         ]
@@ -197,6 +256,7 @@ def cuda_header() -> str:
 def cuda_source() -> str:
     """Emit an optional matrix schedule and retain the original scalar fallback."""
     lines = [
+        "#include <algorithm>",
         '#include "generated_df_ccsd_hoisted_cuda.cuh"',
         "namespace generativeqc::cc::generated::dfhoist {",
     ]
@@ -220,9 +280,29 @@ def cuda_source() -> str:
                     matrix_gemm=callback,
                 )
             )
-        lines.append(
-            f"{kind} run_{name}_cuda(CudaState& s) {{ return s.gemm ? run_{name}_packed(s) : run_{name}_scalar(s); }}"
-        )
+        if name == "auxiliary":
+            lines.append(
+                _cuda_program(
+                    batched_auxiliary_program(),
+                    "auxiliary_batched",
+                    kind,
+                    input_overrides={key: f"s.{key}" for key in INPUTS},
+                    arena_field="auxiliary_arena",
+                    output_fields=fields,
+                    reset_error=False,
+                    matrix_gemm="s.gemm",
+                    batched_matrix_gemm="s.batched_gemm",
+                    batch_dim=True,
+                )
+            )
+            lines.append(
+                f"{kind} run_{name}_cuda(CudaState& s) {{ if(s.gemm && s.q>1) return run_auxiliary_batched(s); return s.gemm ? run_{name}_packed(s) : run_{name}_scalar(s); }}"
+            )
+        else:
+            lines.append(
+                f"{kind} run_{name}_cuda(CudaState& s) {{ return s.gemm ? run_{name}_packed(s) : run_{name}_scalar(s); }}"
+            )
+    lines.append(auxiliary_accumulation()[1])
     return "\n".join(
         [*lines, "}  // namespace generativeqc::cc::generated::dfhoist", ""]
     )
