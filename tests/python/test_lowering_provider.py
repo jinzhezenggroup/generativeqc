@@ -356,8 +356,9 @@ def test_streamed_einsum_reuses_reduction_provider_contract() -> None:
     index = next(i for i, step in enumerate(plan.steps) if step.node is lane)
 
     candidates = reduction_provider_candidates(plan, index)
-    assert candidates[0].request.operation == "reduce"
-    assert candidates[0].request.shape == (7, 64)
+    assert candidates[0].request.operation == "einsum"
+    assert candidates[0].request.shape == (7,)
+    assert dict(candidates[0].request.semantics)["reduction_extent"] == 64
     assert candidates[0].implementation == "tensor-reduce-generated-cooperative"
 
     report = tensor_lowering_diagnostics(plan)
@@ -366,8 +367,8 @@ def test_streamed_einsum_reuses_reduction_provider_contract() -> None:
         for row in report["candidates"]
         if row["implementation"] == "tensor-reduce-generated-cooperative"
     )
-    assert selected["request"]["operation"] == "reduce"
-    assert selected["request"]["shape"] == [7, 64]
+    assert selected["request"]["operation"] == "einsum"
+    assert selected["request"]["shape"] == [7]
 
 
 def test_schedule_contract_carries_resolved_lowering_identity() -> None:

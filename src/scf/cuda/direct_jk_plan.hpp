@@ -15,19 +15,27 @@ namespace generativeqc::scf {
 /** Select resident value sources without changing the requested mathematics.
  * Generated J/K are exact FP64 full-range consumers on the same provider stream.
  * Through-f SR/LR K requires the explicit bounded value qualification opt-in;
- * mixed-J and missing optional capacity retain the canonical/generic source.
+ * Each channel retains its own fallback: mixed J does not change strict K's
+ * provider, and an uncovered exchange operator does not discard generated J.
  */
 struct DirectJkValueDispatch {
   bool generated_coulomb{}, generated_exchange{}, generic_coulomb{}, generic_exchange{};
+  bool canonical_coulomb{}, canonical_exchange{};
 };
-constexpr DirectJkValueDispatch direct_jk_value_dispatch(bool generated_coulomb_available,
-                                                         bool generated_exchange_available,
-                                                         bool want_coulomb, bool want_exchange,
-                                                         bool mixed_coulomb) noexcept {
+constexpr DirectJkValueDispatch direct_jk_value_dispatch(
+    bool generated_coulomb_available, bool generated_exchange_available, bool want_coulomb,
+    bool want_exchange, bool mixed_coulomb, bool canonical_available = false) noexcept {
   const bool generated_coulomb = generated_coulomb_available && want_coulomb && !mixed_coulomb;
-  const bool generated_exchange = generated_exchange_available && want_exchange && !mixed_coulomb;
-  return {generated_coulomb, generated_exchange, want_coulomb && !generated_coulomb,
-          want_exchange && !generated_exchange};
+  const bool generated_exchange = generated_exchange_available && want_exchange;
+  const bool canonical_coulomb =
+      canonical_available && want_coulomb && !generated_coulomb && !mixed_coulomb;
+  const bool canonical_exchange = canonical_available && want_exchange && !generated_exchange;
+  return {generated_coulomb,
+          generated_exchange,
+          want_coulomb && !generated_coulomb && !canonical_coulomb,
+          want_exchange && !generated_exchange && !canonical_exchange,
+          canonical_coulomb,
+          canonical_exchange};
 }
 constexpr DirectJkValueDispatch direct_jk_value_dispatch(bool generated_coulomb_available,
                                                          bool want_coulomb, bool want_exchange,

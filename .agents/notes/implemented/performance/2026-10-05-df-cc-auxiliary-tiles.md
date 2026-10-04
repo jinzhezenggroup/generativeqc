@@ -1,6 +1,6 @@
 # Decision: share bounded Q tiles between DF primal and Lambda consumers
 
-Status: implemented; GPU and complete endpoint qualification in progress
+Status: implemented; energy/force comparison qualified with explicit independent-audit scope
 Date: 2026-10-05
 
 ## Problem and existing work
@@ -76,13 +76,28 @@ The real generated consumer regression uses adversarial cancellation and early
 overflow followed by opposite-sign rows; it also guards unused output spans.
 CUDA solver comparisons cover Q=5 and limits 1/2/4/8, independent determinant
 replay, exact/one-byte-short capacity, scalar/resource fallback and sticky
-failures. Complete energy pairs and the same candidate's one-Q endpoint are
-running in job2284 after CUDA qualification. Complete small/large force pairs,
-two large finite-difference coordinates at the unchanged two step sizes, and
-independent all-coordinate small-water energy differences run in separate
-finite allocations (jobs2287/2288/2289). The two large coordinate checks cannot
-be relabeled as an all-coordinate independent force audit. No phase win or completed large-force
-qualification is claimed until those records pass.
+failures. Job2284 completed the alternating energy pairs and candidate one-Q
+endpoint. On that allocation's GPU, ethane230 CCSD median improved from
+172.451 to 147.615 seconds; candidate one-Q took 173.445 seconds. The complete
+native median improved from 335.380 to 289.083 seconds, but 21.476 seconds of
+that difference is unmodified RHF variation. It is not attributed to batching.
+The tile raises complete CCSD capacity by 1,071,527,424 bytes; bounded fallbacks
+remain. Semantic contraction summands are unchanged and packed GEMM summands
+slightly increase despite fewer launches. See
+`benchmarks/results/df-cc-auxiliary-tiles-1903/` for the nine observations,
+normalization of unavailable counters, numerical gates and reproduction.
+
+Job2289 passed independent all-coordinate small-water energy differences at
+both steps, retaining atol=rtol=3e-7. Jobs2287/2288 completed small/large force
+pairs and two large finite-difference coordinates at those steps. Large
+all-component baseline/candidate force difference is at most 5.620e-9 Eh/Bohr;
+the four large FD errors are below 3.062e-8. Candidate Lambda/Z/stationarity
+and translational gates pass. The large complete force pair is
+1391.235 -> 1349.685 seconds, with 24.401 seconds saved in CCSD and 17.740 seconds
+of unrelated RHF variation. Lambda and exact orbital-response times stay
+approximately 273/669 seconds. These records use separate GPU allocations
+and are never pooled to infer an energy/force split. The two large coordinate
+checks cannot be relabeled as an all-coordinate independent force audit.
 
 ## Revisit conditions
 
