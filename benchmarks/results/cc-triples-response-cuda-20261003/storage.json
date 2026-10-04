@@ -1,0 +1,56 @@
+{
+  "records": [
+    {
+      "encoding": "gzip",
+      "original_bytes": 2837,
+      "original_git_blob": "33af075f06c285e3b2b06d58f9fda77cbc6e78b9",
+      "original_path": "evidence.json",
+      "original_sha256": "c8711a1da03eb7f0b6dfe01d138a57113772c8d1e40488496b4e079a73d62966",
+      "stored_bytes": 1389,
+      "stored_path": "evidence.original.json.gz",
+      "stored_sha256": "8ffccc341b2720093d9f7a27544fb3fb43baf5e71bf67d84d1b084724e747bc9"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 152952,
+      "original_git_blob": "9106d0c49ea76986c0c965a2c64ef2d8fc9541e5",
+      "original_path": "records.json",
+      "original_sha256": "0d1d562b6676d2d81be44abff0566aa9d5aff60f624a77a94cf43b5b9cf0e520",
+      "stored_bytes": 33445,
+      "stored_path": "records.json.gz",
+      "stored_sha256": "f039d4e68c5f293a6c370b0cdcaa4e0cdf3d671f43d727b35757ad7e0a36d9a1"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 77644,
+      "original_git_blob": "71b5fd6c1a5948eab085f852e457f074abf2a870",
+      "original_path": "source.patch",
+      "original_sha256": "2af0d7b4e51ef785b1b6d9fc511e514d64f8a0e6010761cd40ddb29b8d98b95d",
+      "stored_bytes": 23139,
+      "stored_path": "source.patch.gz",
+      "stored_sha256": "10a0b8948d4ae146075bec6f4d783dd4c2d3f52c3e7701d275434b2f10a48601"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 11676,
+      "original_git_blob": "5f69e248e106a2543c17bcb25f05e2f9b7e64b60",
+      "original_path": "summary.json",
+      "original_sha256": "99e77da30f5c7151b82892defa89b4b9246d59426ed5385143026da5f6709c18",
+      "stored_bytes": 4879,
+      "stored_path": "summary.json.gz",
+      "stored_sha256": "fa424d901066cec0f7f9c33bb9638733ed5d505c7ccaef10da0dd3ba09f6a76c"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 25693,
+      "original_git_blob": "21edbb8278cb24d3995a5898f7de6e94af9b2afc",
+      "original_path": "work.json",
+      "original_sha256": "4af06ebaaa10538b1456b6275abc00b0469b35dfe2fb5537b5355886500a8a6b",
+      "stored_bytes": 9189,
+      "stored_path": "work.json.gz",
+      "stored_sha256": "6f2e4f84dee65dc3ab5d47095503878608be5496dc20ff502ffdbed69a87ea88"
+    }
+  ],
+  "schema": "generativeqc.cc-evidence-storage.v1",
+  "storage_source_revision": "5a5fa24e4442711e9ddee055a14686eb05da618c"
+}
