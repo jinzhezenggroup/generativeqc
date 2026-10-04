@@ -12,7 +12,16 @@ from _cc_owner_test_support import compile_owner
 from generativeqc_compiler.common.lowering_contract import LoweringConstraints
 from generativeqc_compiler.common.lowering_selection import select_lowering_binding
 from generativeqc_compiler.common.native_lowering import native_lowering_portfolio
-from test_joint_lowering import COMPILATION, LIBRARY, TARGET, _cost, _offer, _request
+from generativeqc_compiler.common.resources import MAX_BYTES
+from test_joint_lowering import (
+    COMPILATION,
+    LIBRARY,
+    TARGET,
+    _cost,
+    _offer,
+    _precision,
+    _request,
+)
 
 if typing.TYPE_CHECKING:
     from pathlib import Path
@@ -36,6 +45,21 @@ def test_native_selector_matches_canonical_compiler(tmp_path: Path) -> None:
     )
     cases.append((request, (strict, replace(mixed, cost=None)), 50))
     cases.append((request, (strict, replace(mixed, target=None)), 50))
+    cases.append(
+        (
+            request,
+            (
+                strict,
+                replace(
+                    mixed,
+                    status="unsupported",
+                    reason="no executable implementation",
+                    execution=None,
+                ),
+            ),
+            50,
+        )
+    )
     cases.append(
         (
             request,
@@ -129,8 +153,48 @@ def test_native_selector_matches_canonical_compiler(tmp_path: Path) -> None:
             ),
             "}",
         ]
+    # Semantic identity intentionally excludes admitted precision and effects.
+    # A candidate's positional index must never acquire another interpretation
+    # when a native caller combines separately emitted portfolios.
+    changed_precision = replace(
+        request,
+        precisions=(
+            _precision(),
+            _precision("float32", qualification="qualified-v8"),
+        ),
+    )
+    assert changed_precision.precisions[0].directive.storage_dtype == "float32"
+    crossed = (
+        changed_precision,
+        replace(request, effects=(("publication", "different-owner"),)),
+    )
+    for i, other in enumerate(crossed):
+        assert other.semantic_identity == request.semantic_identity
+        assert other.identity != request.identity
+        with pytest.raises(ValueError, match="same request"):
+            select_lowering_binding(other, TARGET, COMPILATION, (strict, mixed))
+        declarations.append(
+            native_lowering_portfolio(other, (), TARGET, COMPILATION, name=f"cross{i}")
+        )
+    boundary_candidates = (
+        replace(strict, workspace_bytes=MAX_BYTES),
+        replace(strict, provider_bytes=MAX_BYTES),
+    )
+    declarations.append(
+        native_lowering_portfolio(
+            request, boundary_candidates, TARGET, COMPILATION, name="boundary"
+        )
+    )
     checks += [
         "auto reject=[](const auto& action){try{action();}catch(const std::exception&){return true;}return false;};",
+        *(
+            f"if(!reject([&]{{select_native_lowering(cross{i}_request,portfolio0_candidates,portfolio0_target,portfolio0_compilation);}})) return {70 + i};"
+            for i in range(len(crossed))
+        ),
+        "auto wrong_index=portfolio0_candidates; wrong_index[0].precision=wrong_index[1].precision;",
+        "if(!reject([&]{select_native_lowering(portfolio0_request,wrong_index,portfolio0_target,portfolio0_compilation);})) return 72;",
+        "select_native_lowering(boundary_request,boundary_candidates,boundary_target,boundary_compilation);",
+        f"if(boundary_candidates[0].workspace_bytes!={MAX_BYTES}ULL || boundary_candidates[1].provider_bytes!={MAX_BYTES}ULL) return 73;",
         "if(!reject([&]{select_native_lowering(portfolio0_request,portfolio0_candidates,portfolio0_target,portfolio0_compilation,0);})) return 50;",
         'if(!reject([&]{select_native_lowering(portfolio0_request,portfolio0_candidates,"stale-target",portfolio0_compilation);} )) return 51;',
         "auto duplicate=portfolio0_candidates; duplicate[1]=duplicate[0];",
@@ -165,3 +229,18 @@ def test_native_selector_matches_canonical_compiler(tmp_path: Path) -> None:
     compile_owner(compiler, tmp_path, [source], binary)
     result = subprocess.run([str(binary)], capture_output=True, text=True, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("field", ["workspace_bytes", "provider_bytes"])
+@pytest.mark.parametrize("value", [MAX_BYTES + 1, 2**64])
+def test_native_emitter_rejects_unrepresentable_resources(
+    field: str, value: int
+) -> None:
+    request = _request()
+    candidate = _offer(request, **{field: value})
+    with pytest.raises(ValueError, match="candidate additional device bytes"):
+        select_lowering_binding(request, TARGET, COMPILATION, (candidate,))
+    with pytest.raises(ValueError, match="native lowering integer"):
+        native_lowering_portfolio(
+            request, (candidate,), TARGET, COMPILATION, name="overflow"
+        )

@@ -444,8 +444,9 @@ __global__ void shell_population_kernel(Gfn2MullikenDeviceBatch batch,
     __syncthreads();
   }
   if (threadIdx.x == 0 && system_is_valid(system_errors, system)) {
-    const double charge = reduction[0] + batch.reference_shell_occupations[shell];
-    if (!isfinite(charge)) {
+    double charge = 0.0;
+    if (!generativeqc::xtb::generated::gfn2_restricted_population_publish_cuda_tensor(
+            reduction[0], batch.reference_shell_occupations[shell], charge)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2MullikenDeviceError::kNonfiniteContraction);
     } else {
@@ -824,8 +825,9 @@ __global__ void spin_conversion_kernel(Gfn2MullikenDeviceBatch batch,
     const double alpha = workspace.qsh_scratch[qsh_begin + local_shell];
     const double reference = batch.reference_shell_occupations[shell_begin + local_shell];
     if (nspin == 1) {
-      const double charge = alpha + reference;
-      if (!isfinite(charge)) {
+      double charge = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_restricted_population_publish_cuda_tensor(
+              alpha, reference, charge)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2MullikenDeviceError::kNonfiniteSpinConversion);
       } else {
@@ -833,13 +835,10 @@ __global__ void spin_conversion_kernel(Gfn2MullikenDeviceBatch batch,
       }
     } else {
       const double beta = workspace.qsh_scratch[qsh_begin + shells + local_shell];
-      const double charge = alpha + beta + reference;
-      /*
-       * alpha/beta are negative electronic contractions (-N_alpha/-N_beta),
-       * so alpha - beta is the public m = N_beta - N_alpha convention.
-       */
-      const double magnetization = alpha - beta;
-      if (!isfinite(charge) || !isfinite(magnetization)) {
+      double charge = 0.0;
+      double magnetization = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_spin_population_publish_cuda_tensor(
+              alpha, beta, reference, charge, magnetization)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2MullikenDeviceError::kNonfiniteSpinConversion);
       } else {
@@ -858,10 +857,10 @@ __global__ void spin_conversion_kernel(Gfn2MullikenDeviceBatch batch,
             (qat_begin + atoms + local_atom) * kGfn2MullikenDipoleComponents + component;
         const double alpha = workspace.dipole_scratch[alpha_index];
         const double beta = workspace.dipole_scratch[beta_index];
-        const double charge = alpha + beta;
-        /* The contraction scratch carries the electronic minus sign. */
-        const double magnetization = alpha - beta;
-        if (!isfinite(charge) || !isfinite(magnetization)) {
+        double charge = 0.0;
+        double magnetization = 0.0;
+        if (!generativeqc::xtb::generated::gfn2_spin_population_publish_cuda_tensor(
+                alpha, beta, 0.0, charge, magnetization)) {
           record_system_error(system_errors, system, device_error,
                               Gfn2MullikenDeviceError::kNonfiniteSpinConversion);
         } else {
@@ -876,10 +875,10 @@ __global__ void spin_conversion_kernel(Gfn2MullikenDeviceBatch batch,
             (qat_begin + atoms + local_atom) * kGfn2MullikenQuadrupoleComponents + component;
         const double alpha = workspace.quadrupole_scratch[alpha_index];
         const double beta = workspace.quadrupole_scratch[beta_index];
-        const double charge = alpha + beta;
-        /* The contraction scratch carries the electronic minus sign. */
-        const double magnetization = alpha - beta;
-        if (!isfinite(charge) || !isfinite(magnetization)) {
+        double charge = 0.0;
+        double magnetization = 0.0;
+        if (!generativeqc::xtb::generated::gfn2_spin_population_publish_cuda_tensor(
+                alpha, beta, 0.0, charge, magnetization)) {
           record_system_error(system_errors, system, device_error,
                               Gfn2MullikenDeviceError::kNonfiniteSpinConversion);
         } else {
