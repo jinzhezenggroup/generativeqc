@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <string_view>
 
-#include "dft/semilocal_family.hpp"
+#include "dft/xc_capabilities.hpp"
 #include "generativeqc/generativeqc.h"
 #include "runtime/execution_precision.hpp"
 
@@ -23,11 +23,12 @@ inline constexpr std::string_view kFinalAudit = "dft.final_audit";
 /** Resolve method policy into the compiler-common native precision contract.
  *
  * This retains the existing #1636 admission boundary: AUTO may lower Direct J
- * and qualified LDA/PBE/r2SCAN density contractions, while exact exchange, tau,
- * XC point algebra/reductions and final audits remain strict FP64.
+ * and point programs whose density contraction is explicitly qualified, while
+ * exact exchange, tau, XC point algebra/reductions and final audits remain strict FP64.
  */
 inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
-    std::optional<generativeqc_precision_mode> mode, std::uint32_t functional, bool fitted_coulomb,
+    std::optional<generativeqc_precision_mode> mode,
+    const CudaXcFastPathCapabilities& xc_fast_paths, bool fitted_coulomb,
     bool nonlocal_correlation) {
   const bool automatic = mode && *mode == GENERATIVEQC_PRECISION_AUTO;
   if (mode && *mode != GENERATIVEQC_PRECISION_FP64 && !automatic)
@@ -38,9 +39,7 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
     throw std::invalid_argument("CUDA KS nonlocal composition currently requires strict FP64");
 
   const bool mixed_density =
-      automatic && (functional == semilocal_family_code(SemilocalFamily::Lda) ||
-                    functional == semilocal_family_code(SemilocalFamily::Pbe) ||
-                    functional == semilocal_family_code(SemilocalFamily::R2scan));
+      automatic && cuda_xc_capability_qualified(xc_fast_paths.mixed_density_precision);
 
   runtime::ExecutionPrecisionSchedule schedule;
   schedule.add_region(cuda_ks_precision_region::kCoulombJ,

@@ -10,6 +10,7 @@
 #include "dft/ao_grid.hpp"
 #include "dft/ao_selection_work.hpp"
 #include "dft/grid.hpp"
+#include "dft/xc_capabilities.hpp"
 #include "runtime/bounded_workspace.hpp"
 
 namespace generativeqc::dft {
@@ -26,7 +27,7 @@ enum class CudaXcAoPrecision : std::uint8_t {
 
 /** Density-times-AO arithmetic. Mixed evaluates products in explicit RN FP32
  * while keeping storage, the long reduction, point XC, Vxc and scalar reductions FP64.
- * Mixed is qualified for LDA, PBE and r2SCAN; omegaB97M-V requires Fp64. */
+ * Admission is carried by the resolved point-program capability census. */
 enum class CudaXcDensityPrecision : std::uint8_t {
   Fp64 = 0,
   Fp32ComputeFp64Accumulate = 1,
@@ -42,7 +43,7 @@ using CudaXcPointLauncher = void (*)(cudaStream_t, const double*, const double*,
 struct CudaXcLayout {
   std::size_t natom{}, nprimitive{}, nao{}, npoint{}, tile_points{}, spins{}, jets{};
   std::size_t work_jets{}, feature_terms{}, packed_elements{}, device_bytes{};
-  /** 0=LDA, 1=PBE, 2=r2SCAN, 4=omegaB97M-V semilocal. */
+  /** Stable point-program transport code; capabilities are resolved separately. */
   std::uint32_t functional{};
   /** Independent semilocal X/C weights resolved by MethodIR. Exact exchange is
    * owned by the prepared Fock provider and is never folded into these scales. */
@@ -57,6 +58,8 @@ struct CudaXcLayout {
    * by nao, never by the mean selected column count. */
   bool local_ao{};
   std::size_t ao_map_entries{}, host_ao_map_bytes{};
+  /** Immutable admission facts resolved from the point program, never its display name. */
+  CudaXcFastPathCapabilities fast_paths{};
 };
 
 /** Explicit CSR maps for the immutable point-tile sequence. Every local map
@@ -79,6 +82,8 @@ CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& de
  * Only physical FP64 execution is admitted; response retains its dense route.
  * No discovery, screening threshold, CUDA allocation or GPU work occurs here. */
 CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps);
+
+CudaXcFastPathCapabilities cuda_xc_fast_path_capabilities(std::uint32_t functional) noexcept;
 
 CudaXcLayout cuda_xc_layout(const AoBasis& basis, const MolecularGrid& grid,
                             std::uint32_t functional, bool unrestricted,

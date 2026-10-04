@@ -658,8 +658,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (options.precision_mode && *options.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
          *options.precision_mode != GENERATIVEQC_PRECISION_AUTO))
       throw std::invalid_argument("CUDA KS received an unsupported execution policy");
-    precision_schedule = resolve_cuda_ks_precision_schedule(
-        options.precision_mode, functional, fitted_coulomb, nonlocal_correlation != nullptr);
     if (nonlocal_correlation) {
       if (!is_semilocal_family(functional, SemilocalFamily::Pbe) &&
           !is_semilocal_family(functional, SemilocalFamily::Wb97mv))
@@ -720,6 +718,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
     xc_layout = cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
                                options.semilocal_exchange_scale,
                                options.semilocal_correlation_scale, borrow_resident_grid);
+    precision_schedule = resolve_cuda_ks_precision_schedule(
+        options.precision_mode, xc_layout.fast_paths, fitted_coulomb,
+        nonlocal_correlation != nullptr);
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     // Explicit qualification-only switch; the ordinary SCF default is dense.
@@ -926,7 +927,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.dft_diagnostic.occupations = occupations;
     output.dft_diagnostic.grid_points = xc_layout.npoint;
     output.dft_diagnostic.tile_points = xc_layout.tile_points;
-    output.dft_diagnostic.ao_order = is_semilocal_family(functional, SemilocalFamily::Lda) ? 0 : 1;
+    output.dft_diagnostic.ao_order = xc_layout.jets == 1 ? 0 : 1;
     // Scientific domain identity follows the functional, including B3LYP v2.
     output.dft_diagnostic.scf_domain_version =
         generated::split_hybrid_registered(functional)
@@ -1048,8 +1049,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   runtime::SolverRegionCudaBinding solver_region_binding() const {
-    const bool replay_functional = is_semilocal_family(functional, SemilocalFamily::Lda) ||
-                                   is_semilocal_family(functional, SemilocalFamily::Pbe);
+    const bool replay_point_program =
+        cuda_xc_capability_qualified(xc_layout.fast_paths.graph_replay);
     // CUDA-Graph replay remains limited to the semilocal body qualified by
     // #1437. Global-hybrid chunks may use the shared bounded SolverRegion
     // without capturing the exact-exchange provider.
@@ -1057,7 +1058,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !has_exchange && !has_range_correction && !nonlocal_correlation && !fitted_coulomb &&
         !precision_schedule.any_lower_precision() && options.semilocal_exchange_scale == 1.0 &&
         options.semilocal_correlation_scale == 1.0;
-    const bool replay = configured_replay_enabled() && replay_semilocal_only && replay_functional &&
+    const bool replay =
+        configured_replay_enabled() && replay_semilocal_only && replay_point_program &&
                         n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     auto graph = device_chunk_binding();
     graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";
