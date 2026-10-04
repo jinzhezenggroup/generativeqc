@@ -95,6 +95,17 @@ a successful host-only NVCC preflight before2216. No n3 jobs were submitted.
 Adjacent host gates: 133 pass. Compiler structure: 422 modules, zero errors.
 Changed Python files pass repository-pinned Ruff 0.16.9 checks and formatting.
 
+## Capacity-contract integration
+
+The DFT-MP qualifier pins the complete endpoint and prepared-owner source spans,
+so root-demand plumbing changes both hashes even though the frozen packaged
+route still retains its full primitive inventory. The reviewed prepared-owner
+change rejects pruned AOT/ECP/small-domain requests before artifact selection;
+it does not relax the no-runtime-compilation gate. Rebind these two spans while
+retaining exact-hash mutation rejection, all resource limits and packaged ABI
+numbering. A first capacity run caught the second, prepared-owner binding after
+the endpoint binding was updated; that failure is not scientific qualification.
+
 ## Revisit when
 
 A compiler-owned native coverage proof becomes available for small domains or
