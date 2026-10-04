@@ -110,6 +110,12 @@ selects generated execution; optional preparation rejection releases provisional
 plans before the same-precision fallback. The region cannot implement casts,
 mixed arithmetic, refinement or precision audits and refuses such obligations.
 
+`PreparedContractionRegion` in the tensor runtime owns context preparation,
+provider-specific lifecycle and transactional fallback. Method emitters provide
+the semantic portfolio, descriptor factory and resolved shape key. They do not
+emit provider-dependent setup branches. The shared owner checks descriptor count
+and its minimum binding reservation before accepting the prepared region.
+
 Source-response admission adds descriptor host storage and every simultaneous
 plan/provider/workspace reservation to its borrowed inputs and scratch. The
 physical source/metric wrapper removes only the exact borrowed overlap. The
