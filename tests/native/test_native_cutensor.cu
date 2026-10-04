@@ -82,9 +82,15 @@ void check(double beta) {
         binding.prepare_calls() != 1)
       throw std::runtime_error("invalid prepared provenance");
     const auto provenance = binding.provenance();
+    int device{};
+    cudaDeviceProp properties{};
+    cuda_check(cudaGetDevice(&device));
+    cuda_check(cudaGetDeviceProperties(&properties, device));
+    const int expected_architecture = 10 * properties.major + properties.minor;
     if (provenance.algorithm != CUTENSOR_ALGO_GETT || provenance.kernel_rank != 0 ||
         provenance.provider_version != cutensorGetVersion() || !provenance.runtime_version ||
-        provenance.architecture != 120 || provenance.workspace_bytes != binding.workspace_bytes() ||
+        provenance.architecture != expected_architecture ||
+        provenance.workspace_bytes != binding.workspace_bytes() ||
         provenance.request.scientific_identity != request.scientific_identity ||
         provenance.request.coefficient != request.coefficient || provenance.request.beta != beta ||
         provenance.request.operands[0].strides != request.operands[0].strides)
