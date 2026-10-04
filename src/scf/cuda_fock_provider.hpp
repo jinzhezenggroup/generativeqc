@@ -39,8 +39,10 @@ class CudaFockProviderView {
                         bool derivative) const;
   DirectJkMatrices build(FockBuildSpec spec, const std::vector<double>& density,
                          const std::vector<double>& beta) const;
-  std::vector<double> derivative(FockBuildSpec spec, const std::vector<double>& density,
-                                 const std::vector<double>& beta) const;
+  std::vector<double> derivative(
+      FockBuildSpec spec, const std::vector<double>& density, const std::vector<double>& beta,
+      const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr) const;
+  friend class PreparedFockPlan;
   CudaDirectJkPlan* exact_{};
   CudaDensityFittingJkPlan* fitted_{};
   const DensityFittingScfData* data_{};
