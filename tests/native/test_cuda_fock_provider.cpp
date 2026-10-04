@@ -1761,7 +1761,8 @@ void range_exchange_derivatives() {
 
 /** Four-center CPU displaced values qualify bounded LR accumulation.
  * d/p/s/s covers weighted low orders; d/p/p/s, d/d/p/s and d/d/p/p bind
- * distinct centers at total orders 4, 5 and 6. Repeated-center geometries
+ * distinct centers at total orders 4, 5 and 6. f/d/p/s covers orders 10/11;
+ * f/f/s/s gives order 12 two distinct f centers. Repeated-center geometries
  * bind different shells to one atom. Check every coordinate in both spins.
  */
 void shell_range_four_center_derivatives() {
@@ -1769,7 +1770,7 @@ void shell_range_four_center_derivatives() {
   for (const auto angular :
        {std::array<unsigned, 4>{2, 1, 0, 0}, std::array<unsigned, 4>{2, 1, 1, 0},
         std::array<unsigned, 4>{2, 2, 1, 0}, std::array<unsigned, 4>{2, 2, 1, 1},
-        std::array<unsigned, 4>{3, 2, 1, 0}}) {
+        std::array<unsigned, 4>{3, 2, 1, 0}, std::array<unsigned, 4>{3, 3, 0, 0}}) {
     for (const bool repeated_center : {false, true}) {
       generativeqc::core::System system;
       system.atoms = {{1, {0.1, -0.2, -0.8}},
@@ -1801,8 +1802,8 @@ void shell_range_four_center_derivatives() {
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
       DeviceMatrix device_a(a), device_b(b);
-      // Mixed f/d/p/s combinations include orders 10/11, absent from the
-      // s/f two-center fixture. Reuse each CPU derivative for both schedules.
+      // f/d/p/s covers orders 10/11; f/f/s/s admits multi-center order-12
+      // derivatives. Reuse each CPU derivative for both schedules.
       std::array<std::array<std::vector<double>, 2>, 2> scheduled, full_scheduled;
       for (unsigned schedule = 0; schedule < 2; ++schedule) {
         plan->generated_exchange->angular_force_opt_in = schedule != 0;

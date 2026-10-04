@@ -806,8 +806,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
         sizeof(host_all_spins) + sizeof(host_one);
-    // Conservatively retain the setup peak in the global owner ledger. No
-    // second independent pool hides map discovery from endpoint admission.
+    // Conservatively retain the setup peak in the owner's capacity report.
+    // This experiment's fixed host cap does not implement public host-budget
+    // admission: the Python resource planner currently rejects WB97M-V.
     if (admit_ao)
       resource.retained_host_numeric_bytes =
           sum(resource.retained_host_numeric_bytes, ao_selection_bound.host_peak_bytes);

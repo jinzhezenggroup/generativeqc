@@ -161,6 +161,22 @@ bool pack_host_batch(const std::vector<core::System>& systems,
       return false;
     }
     host.system_shell_offsets.push_back(static_cast<std::int64_t>(host.shell_atoms.size()));
+    if (matrix_direct && resident_psss == ResidentPsssPolicy::Skip) {
+      // The DF source knows its complete pair inventory before packing. Avoid
+      // old/new vector-buffer overlap that a construction preflight cannot
+      // infer from a final capacity sample. Other SCF packing modes are unchanged.
+      const auto shells = host.shell_atoms.size() - system_shell_begin;
+      std::size_t plus_one = 0, pairs = 0, total = 0, offsets = 0;
+      if (!runtime::checked_add(shells, 1, plus_one) ||
+          !runtime::checked_multiply(shells, plus_one, pairs) ||
+          !runtime::checked_add(host.shell_pair_first.size(), pairs / 2, total) ||
+          !runtime::checked_add(total, 1, offsets))
+        return false;
+      host.shell_pair_systems.reserve(total);
+      host.shell_pair_first.reserve(total);
+      host.shell_pair_second.reserve(total);
+      host.shell_pair_primitive_offsets.reserve(offsets);
+    }
     for (std::size_t first = system_shell_begin; first < host.shell_atoms.size(); ++first) {
       for (std::size_t second = system_shell_begin; second <= first; ++second) {
         host.shell_pair_systems.push_back(static_cast<std::int32_t>(system_index));

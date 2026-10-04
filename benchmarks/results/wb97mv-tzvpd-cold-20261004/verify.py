@@ -46,6 +46,12 @@ def verify(directory: Path) -> dict:
                 raise ValueError(
                     "point requires exactly reference, none and lda16 reports/outcomes"
                 )
+            if any(
+                type(report["protocol"]["atoms"]) is not int
+                or report["protocol"]["atoms"] != int(atoms)
+                for report in point["reports"].values()
+            ):
+                raise ValueError("atom-count label differs from endpoint protocol")
             # Publication labels are data, never workspace filenames. Only
             # local indices and the fixed protocol variants determine paths.
             target = Path(workspace) / str(index)

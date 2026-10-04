@@ -455,6 +455,21 @@ macro(generativeqc_register_host_generated_sources target)
     ARGS --output "${GENERATIVEQC_GFN2_SDQ_CPU_HEADER}"
     COMMENT "Generating compiler-owned GFN2 S/D/Q CPU primitive kernels")
 
+  # Shared post-HF source traversal is generated for both CPU and CUDA owners.
+  file(GLOB GENERATIVEQC_DF_MO_SOURCE_INPUTS CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/*.py")
+  set(GENERATIVEQC_DF_MO_SOURCE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/df_mo_source_generated.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_mo_source_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_mo_source.py"
+    OUTPUTS "${GENERATIVEQC_DF_MO_SOURCE_HEADER}"
+    DEPENDS ${GENERATIVEQC_DF_MO_SOURCE_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_mo_source.py"
+    ARGS --output "${GENERATIVEQC_DF_MO_SOURCE_HEADER}")
+
   set(GENERATIVEQC_RCCSD_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cpu.hpp")
   generativeqc_register_generated_sources(
@@ -487,6 +502,22 @@ macro(generativeqc_register_host_generated_sources target)
         "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_core.py"
       ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
   endforeach()
+
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_cc_source_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_cc_source.py"
+    OUTPUTS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cpu.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cu"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  if(GENERATIVEQC_ENABLE_CUDA)
+    target_sources(${target} PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cu")
+  endif()
 
   set(GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_triples_fock_response_cpu.hpp")

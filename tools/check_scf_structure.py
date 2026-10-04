@@ -56,6 +56,7 @@ CUDA_MODULES = {
     ),
 }
 CUDA_MODULES["cuda_df_source"] = (
+    "df_source_domain",
     "df_source",
     "df_source_setup",
     "df_source_internal",
@@ -101,6 +102,9 @@ CUDA_ALLOWED = {
 }
 CUDA_ALLOWED["cuda_df_source"] = (
     "runtime/cuda_component_trace.hpp",
+    # The CUDA-free construction planner shares checked metadata sizes only.
+    "scf/df_source_capacity.hpp",
+    "scf/cuda/df_source_domain.",
     "scf/cuda/df_source.",
     "scf/cuda/df_source_setup.",
     "scf/cuda/df_source_internal.",

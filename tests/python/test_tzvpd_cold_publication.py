@@ -33,6 +33,7 @@ PUBLICATION = (
         "validator-missing",
         "shadow-packages",
         "point-label",
+        "atom-mismatch",
         "report-label",
     ],
 )
@@ -61,6 +62,12 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
         reports["none"]["native_build"]["probe"]["source_identity"] = "wrong"
     elif mutation == "point-label":
         samples["points"][str(escaped)] = samples["points"].pop("6")
+    elif mutation == "atom-mismatch":
+        samples["points"]["7"] = samples["points"].pop("6")
+        summary_path = tmp_path / "summary.json"
+        summary = json.loads(summary_path.read_text())
+        summary["7"] = summary.pop("6")
+        summary_path.write_text(json.dumps(summary))
     elif mutation == "report-label":
         reports[str(escaped)] = reports["none"]
         samples["points"]["6"]["outcomes"][str(escaped)] = {"exit_code": 0}
