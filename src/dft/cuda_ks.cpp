@@ -1429,8 +1429,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const auto iteration_precision = resolve_cuda_ks_iteration_precision(
           precision_schedule, strict_refinement,
           cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
-      pending_mixed_coulomb = iteration_precision.mixed_coulomb;
-      pending_mixed_density = iteration_precision.mixed_density;
+      pending_mixed_coulomb =
+          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
+      pending_mixed_density =
+          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kDensityContraction);
       // Provider selection stays inside the prepared Fock facade. For a fitted
       // hybrid, the first cold/warm-seed build has no trusted canonical factor
       // and stays dense. After a successful proposal becomes the current density,

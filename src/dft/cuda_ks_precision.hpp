@@ -58,22 +58,18 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
   return schedule;
 }
 
-struct CudaKsIterationPrecision {
-  bool mixed_coulomb{}, mixed_density{};
-};
-
 /** Resolve the arithmetic actually executable by one physical iteration.
  * Schedule policy says what may be lowered; the consuming layout says what can
- * execute that lowering. Strict refinement overrides both. */
-inline CudaKsIterationPrecision resolve_cuda_ks_iteration_precision(
+ * execute that lowering. Keep the shared schedule, including qualification and
+ * audit metadata, through capability intersection. Strict refinement restores
+ * every region to FP64, including regions added by future compositions. */
+inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_iteration_precision(
     const runtime::ExecutionPrecisionSchedule& schedule, bool strict_refinement,
-    bool mixed_density_contraction_capability) noexcept {
-  const bool mixed_stage = schedule.any_lower_precision() && !strict_refinement;
-  return {
-      mixed_stage && schedule.uses_lower_precision(cuda_ks_precision_region::kCoulombJ),
-      mixed_stage && schedule.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) &&
-          mixed_density_contraction_capability,
-  };
+    bool mixed_density_contraction_capability) {
+  return schedule.filter_lower_precision([=](const runtime::PrecisionRegion& region) {
+    return !strict_refinement && (region.name != cuda_ks_precision_region::kDensityContraction ||
+                                  mixed_density_contraction_capability);
+  });
 }
 
 }  // namespace generativeqc::dft

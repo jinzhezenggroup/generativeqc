@@ -112,5 +112,11 @@ def test_iteration_path_intersects_schedule_with_xc_density_capability() -> None
     assert (
         "cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction" in block
     )
-    assert "pending_mixed_coulomb = iteration_precision.mixed_coulomb;" in block
-    assert "pending_mixed_density = iteration_precision.mixed_density;" in block
+    assert (
+        "iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ)"
+        in block
+    )
+    assert (
+        "iteration_precision.uses_lower_precision(cuda_ks_precision_region::kDensityContraction)"
+        in block
+    )
