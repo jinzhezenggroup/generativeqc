@@ -122,6 +122,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     return {};
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
+  plan->batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_requested();
   plan->batch.total_shell_pairs = pairs;
   plan->stream = stream;
   plan->screening = screening;

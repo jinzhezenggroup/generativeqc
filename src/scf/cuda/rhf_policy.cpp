@@ -452,6 +452,10 @@ bool bounded_angular_force_requested() noexcept {
   return selected("GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "angular");
 }
 
+bool direct_coulomb_reachable_requested() noexcept {
+  return selected("GENERATIVEQC_DIRECT_COULOMB_REACHABLE", "reachable");
+}
+
 bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }
 
 bool ppps_signature_bucketing_requested() noexcept {

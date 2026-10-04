@@ -256,6 +256,8 @@ bool force_density_product_screening_requested() noexcept;
 bool bounded_schwarz_schedule_requested() noexcept;
 /** Qualification only: partition force source evaluation by total angular order. */
 bool bounded_angular_force_requested() noexcept;
+/** Qualification only: evaluate the exact Cartesian Coulomb dependency domain. */
+bool direct_coulomb_reachable_requested() noexcept;
 bool resident_ppps_bra_requested() noexcept;
 bool ppps_signature_bucketing_requested() noexcept;
 bool psps_signature_bucketing_requested() noexcept;

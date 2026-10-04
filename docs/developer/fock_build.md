@@ -60,6 +60,16 @@ assume less integral work. The switch is recorded in resource and checkpoint
 identity; differing or missing historical policy needs explicit warm admission.
 See the [experiment and acceptance gates](../../.agents/notes/proposed/2026-10-04-tzvpd-angular-force-schedule.md).
 
+`GENERATIVEQC_DIRECT_COULOMB_REACHABLE=1` (or `reachable`) is a separate,
+**off-by-default** Cartesian-source experiment. The compiler passes each AO
+component's summed axis powers to the shared Coulomb recurrence, which evaluates
+only the exact dependency closure of the consumer's roots. Full/LR moments,
+screening, primitive counts and reserved auxiliary storage are unchanged. The
+policy is frozen when the native J/K provider is prepared and is included in
+resource/checkpoint identity. The public-AO fallback and specialized low-order
+workers retain their existing evaluation. Host arithmetic checks do not qualify
+CUDA execution or performance; see the [recurrence experiment](../../.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md).
+
 ## Public prepared API
 
 `FockPlan` owns normalized geometry, orbital/auxiliary data and native sources.

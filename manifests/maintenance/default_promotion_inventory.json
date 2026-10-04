@@ -168,6 +168,26 @@
       ]
     },
     {
+      "id": "hf.direct-coulomb-reachable",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_COULOMB_REACHABLE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/coulomb_auxiliary.cuh",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+      ],
+      "rationale": "Off-by-default exact Cartesian component dependency pruning. Primitive/AO counts and reserved auxiliary storage stay unchanged; recurrence state counts are not FLOPs or measured speedups.",
+      "revisit_condition": "Independent full/LR derivative, sanitizer, complete same-binary cold/warm/displaced and larger-size qualification with observed work must precede promotion.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md"
+      ]
+    },
+    {
       "id": "hf.force-density-product-screening",
       "classification": "negative-evidence",
       "controls": [
