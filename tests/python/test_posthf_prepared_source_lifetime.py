@@ -32,6 +32,7 @@ struct ElectronInteractionSource {
 };
 }
 namespace scf {
+namespace cuda_execution { struct CudaDfSourcePolicy {}; }
 struct PreparedFockPlan {
   PreparedFockPlan() { ++plan_live; }
   ~PreparedFockPlan() { if (view_live) std::abort(); --plan_live; }
@@ -62,7 +63,9 @@ struct State { Problem problem; int df_source{}; };
 struct Execution { int device_id() const { return 0; } };
 Problem build_problem(const integrals::ElectronInteractionSource& source,
                       int,int,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
-                      int* retained_df_response) {
+                      int* retained_df_response,
+                      const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy) {
+  if (correlation_policy) throw std::logic_error("conventional lifetime fixture requires no policy");
   if (correlation_auxiliary) throw std::logic_error("conventional lifetime fixture requires no auxiliary");
   if (retained_df_response) throw std::logic_error("conventional lifetime fixture must not retain DF response");
   // Real providers increment work before a source read may fail. Validate only
@@ -133,6 +136,7 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0) {
   const auto* reference=&reference_value;
   const int* correlation_auxiliary=nullptr;
   const bool retain_df_response=false;
+  const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy=nullptr;
   const bool cuda=optional_cuda || !prepared;
   source_failure=failure;
   Execution execution;
