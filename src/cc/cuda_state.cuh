@@ -3,9 +3,14 @@
 // no function here allocates, copies a tensor to the host, or owns a stream.
 #pragma once
 
+#include "../tensor/cuda_history.cuh"
 #include "../tensor/cuda_runtime.cuh"
 
 namespace generativeqc::cc {
+
+// Preserve the explicit resident-JIT adapter's dense-layout entry point. The
+// native ring and this compatibility name execute the same tensor primitive.
+using generativeqc_tensor::diis_combine_slice;
 
 // Dense histories use the same Euclidean metric as #148's packed coordinates
 // with orbit weights. Keeping both ijab and jiba does not change the metric.
@@ -24,18 +29,29 @@ inline void diis_gram(generativeqc_tensor::Context& context, const double* error
 // Status 1 asks the owner to discard the oldest history and retry; it never
 // silently promotes an unstable extrapolate to the next physical state.
 __global__ void diis_coefficients(const double* gram, int history, double* system,
-                                  double* coefficients, int* status) {
+                                  double* coefficients, int* status, int capacity = 0,
+                                  int first = 0) {
   if (blockIdx.x || threadIdx.x) return;
   // status=0: extrapolation ready; 1: ill-conditioned, drop oldest/retry;
   // 2: exact zero error Gram, keep the trial and retain history (CPU _DIIS semantics).
   *status = 1;
   if (history < 2 || history > 20) return;
+  // Small solve/pivot order remains chronological. Persistent Gram entries
+  // retain their physical stride when wrapping or retiring a dependent row.
+  if (!capacity) capacity = history;
+  const auto entry = [&](int row, int col) {
+    return gram[generativeqc_tensor::I(generativeqc_tensor::history_row(first, row, capacity)) *
+                    capacity +
+                generativeqc_tensor::history_row(first, col, capacity)];
+  };
   const int width = history + 1;
   double scale = 0.0;
-  for (int i = 0; i < history * history; ++i) {
-    if (!isfinite(gram[i])) return;
-    scale = fmax(scale, fabs(gram[i]));
-  }
+  for (int row = 0; row < history; ++row)
+    for (int col = 0; col < history; ++col) {
+      const double value = entry(row, col);
+      if (!isfinite(value)) return;
+      scale = fmax(scale, fabs(value));
+    }
   if (!(scale > 0.0)) {
     *status = 2;
     return;
@@ -43,10 +59,9 @@ __global__ void diis_coefficients(const double* gram, int history, double* syste
   for (int row = 0; row < width; ++row) {
     coefficients[row] = row == history ? -1.0 : 0.0;
     for (int col = 0; col < width; ++col) {
-      system[row * width + col] = row == history && col == history ? 0.0
-                                  : row == history || col == history
-                                      ? -1.0
-                                      : gram[row + history * col] / scale;
+      system[row * width + col] = row == history && col == history   ? 0.0
+                                  : row == history || col == history ? -1.0
+                                                                     : entry(col, row) / scale;
     }
   }
   for (int col = 0; col < width; ++col) {
@@ -96,11 +111,9 @@ __global__ void diis_combine(const double* vectors, const double* coefficients,
   }
 }
 
-// The physical max norm cannot be replaced by an update norm or DIIS error.
-// Two deterministic reductions avoid float atomics and keep nonfinite checks.
-// Compact a dense history by dropping its oldest row. Each lane owns one
-// element across every row, so the in-place left shift has no cross-lane
-// read/write dependency.
+// Compatibility for the separately prepared resident-JIT adapter, which still
+// exposes a dense chronological history ABI. The native RCCSD owner never
+// invokes this operation; its full-wrap and dependent retirement are metadata.
 __global__ void history_shift(double* values, generativeqc_tensor::I elements, int history) {
   if (!values || elements < 1 || history < 2 || history > 20) return;
   for (generativeqc_tensor::I i = generativeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -110,24 +123,8 @@ __global__ void history_shift(double* values, generativeqc_tensor::I elements, i
           values[generativeqc_tensor::I(row + 1) * elements + i];
 }
 
-// Apply one DIIS coefficient vector to a logical slice of each dense history
-// row while T1/T2 remain in separately pinned plan spans.
-__global__ void diis_combine_slice(const double* vectors, const double* coefficients,
-                                   generativeqc_tensor::I stride, generativeqc_tensor::I offset,
-                                   generativeqc_tensor::I count, int history, const int* status,
-                                   double* result, int* arithmetic_error) {
-  if (*status) return;
-  for (generativeqc_tensor::I i = generativeqc_tensor::I(blockIdx.x) * blockDim.x + threadIdx.x;
-       i < count; i += generativeqc_tensor::I(blockDim.x) * gridDim.x) {
-    double value = 0.0;
-    for (int row = 0; row < history; ++row)
-      value = __dadd_rn(
-          value,
-          __dmul_rn(coefficients[row], vectors[generativeqc_tensor::I(row) * stride + offset + i]));
-    result[i] = generativeqc_tensor::finite(value, arithmetic_error, 0);
-  }
-}
-
+// The physical max norm cannot be replaced by an update norm or DIIS error.
+// Two deterministic reductions avoid float atomics and keep nonfinite checks.
 __global__ void residual_partials(const double* residual, generativeqc_tensor::I count,
                                   double* partials, int* error) {
   __shared__ double shared[256];
