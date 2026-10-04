@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 from generativeqc_compiler.common.precision import (
     DTYPES,
     STRICT_MATH_MODE,
+    CastBoundary,
     ExecutionPrecisionSchedule,
     PrecisionDirective,
 )
@@ -77,41 +78,6 @@ class ValuePrecision:
             "accumulation_dtype": self.accumulation_dtype,
             "sensitivity": self.sensitivity,
             "math_mode": self.math_mode,
-        }
-
-
-@dataclass(frozen=True)
-class CastBoundary:
-    """One explicit SSA conversion and its unavoidable logical byte traffic."""
-
-    name: str
-    source_dtype: str
-    target_dtype: str
-    elements: int
-    read_bytes: int
-    write_bytes: int
-
-    def __post_init__(self) -> None:
-        _dtype(self.source_dtype, "cast source dtype")
-        _dtype(self.target_dtype, "cast target dtype")
-        for label in ("elements", "read_bytes", "write_bytes"):
-            checked_size(getattr(self, label), label)
-
-    @property
-    def simultaneous_bytes(self) -> int:
-        return checked_size(
-            self.read_bytes + self.write_bytes, "cast simultaneous bytes"
-        )
-
-    def to_payload(self) -> dict:
-        return {
-            "name": self.name,
-            "source_dtype": self.source_dtype,
-            "target_dtype": self.target_dtype,
-            "elements": self.elements,
-            "read_bytes": self.read_bytes,
-            "write_bytes": self.write_bytes,
-            "simultaneous_bytes": self.simultaneous_bytes,
         }
 
 

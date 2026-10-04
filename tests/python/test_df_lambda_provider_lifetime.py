@@ -18,6 +18,7 @@ PREFIX = r"""
 #include <cstddef>
 #include <future>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -53,6 +54,28 @@ void cuda_check(int code) { if (code) throw std::runtime_error("CUDA failure"); 
 void blas_check(int code) { if (code) throw std::runtime_error("BLAS failure"); }
 """
 
+PREFIX += r"""
+using cudaStreamCaptureStatus = int;
+constexpr int cudaStreamCaptureStatusNone=0, CUBLAS_STATUS_ALLOC_FAILED=3;
+constexpr int CUBLAS_POINTER_MODE_HOST=0, CUBLAS_PEDANTIC_MATH=0;
+int cudaStreamIsCapturing(cudaStream_t,int* p) { *p=0; return 0; }
+int cudaGetDevice(int* p) { *p=0; return 0; }
+int cudaSetDevice(int) { return 0; }
+int cudaMemGetInfo(std::size_t* free,std::size_t* total) { *free=*total=1ULL<<30; return 0; }
+int cublasCreate(cublasHandle_t* p) { *p=new int(1); ++handles; return 0; }
+int cublasSetStream(cublasHandle_t,cudaStream_t) { return 0; }
+int cublasSetPointerMode(cublasHandle_t,int) { return 0; }
+int cublasSetMathMode(cublasHandle_t,int) { return 0; }
+int cublasSetWorkspace(cublasHandle_t,void*,std::size_t) { return 0; }
+int cublasGetVersion(cublasHandle_t,int* p) { *p=120900; return 0; }
+int cudaRuntimeGetVersion(int* p) { *p=12090; return 0; }
+namespace generativeqc_tensor {
+using ::cuda_check;
+using ::blas_check;
+struct DeviceAllocationError : std::runtime_error { using std::runtime_error::runtime_error; };
+}
+"""
+
 DRIVER = r"""
 int main(int argc, char** argv) {
   if (argc != 2) return 10;
@@ -60,17 +83,17 @@ int main(int argc, char** argv) {
   std::promise<void> started;
   auto entered = started.get_future();
   auto release = released.get_future();
+  auto storage = std::make_unique<Storage>();
+  if (!storage->contractions.prepare(nullptr)) return 11;
   // A different owner's before/after cudaMemGetInfo interval is active. A
   // released old handle (or its arena) would hide some new provider storage.
   std::unique_lock<std::mutex> measurement(runtime::allocation_measurement_mutex);
   std::thread worker([&] {
     started.set_value();
     if (fallback) {
-      allocation_fallback();
+      allocation_fallback(*storage);
     } else {
-      Storage storage;
-      storage.blas = new int(1);
-      ++handles;
+      storage.reset();
     }
   });
   entered.wait();
@@ -78,6 +101,7 @@ int main(int argc, char** argv) {
       release.wait_for(std::chrono::milliseconds(100)) == std::future_status::ready;
   measurement.unlock();
   worker.join();
+  storage.reset();
   if (released_during_measurement) {
     std::cerr << "provider release escaped allocation measurement lock\n";
     return 1;
@@ -104,10 +128,7 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     # provider destruction, rather than a model of its ownership decisions.
     fallback = (
         r"""
-void allocation_fallback() {
-  Storage storage;
-  storage.blas = new int(1);
-  ++handles;
+void allocation_fallback(Storage& storage) {
   struct { bool df_matrix_gemm = true, df_auxiliary_reduction = true; } metrics;
   std::size_t cursor = 16, fallback_cursor = 4;
   auto capacity = [] {};
@@ -123,7 +144,21 @@ void allocation_fallback() {
     )
     folder = tmp_path_factory.mktemp("df-lambda-provider-lifetime")
     unit, obj, binary = folder / "probe.cpp", folder / "probe.o", folder / "probe"
-    unit.write_text(PREFIX + storage + fallback + DRIVER)
+    provider = (ROOT / "src/tensor/cuda_contraction.cuh").read_text()
+    provider = provider[
+        provider.index("class CudaContractionContext {") : provider.index(
+            "template <class T>"
+        )
+    ]
+    unit.write_text(
+        PREFIX
+        + "namespace generativeqc::tensor {\n"
+        + provider
+        + "}\nnamespace tensor = generativeqc::tensor;\n"
+        + storage
+        + fallback
+        + DRIVER
+    )
     subprocess.run(
         [
             cache,
