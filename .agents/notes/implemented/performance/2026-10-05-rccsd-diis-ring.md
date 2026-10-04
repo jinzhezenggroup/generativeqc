@@ -1,6 +1,6 @@
 # Decision: retain RCCSD DIIS histories and Gram entries by physical ring row
 
-Status: implemented; complete endpoint qualification pending
+Status: implemented; complete energy endpoint qualified
 Date: 2026-10-05
 
 ## Problem
@@ -64,17 +64,28 @@ The corrected constructor/asset checks passed in job2276 (three tests; one
 clang++-dependent test skipped). Baseline and candidate complete Release CUDA
 builds passed in jobs2273/2274. Job2277 passed all 14 enabled native DF CUDA
 solver cases, including independent determinant comparisons; its separate
-resident-JIT compatibility tests are still running. Job2279 passed 13 CPU
+resident-JIT compatibility tests also passed (four cases). Job2279 passed 13 CPU
 solver cases (one CUDA-provider-only case skipped), compiler/SCF/cross-method
 structure, default-promotion inventory, method metadata, native complexity and
 CUDA ownership checks.
 
-Complete same-allocation endpoint comparisons are in progress in job2280 on
-an n2 RTX PRO 6000 Blackwell, with independent processes, alternating baseline/
-candidate order, history eight, water7 and ethane230. No endpoint gain,
-tiny-domain promotion or issue completion is claimed from these tests alone.
-If the complete tiny endpoint favors the old schedule, retain a specifically
-bounded fallback with its evidence.
+Job2280 completed same-allocation comparisons on an n2 RTX PRO 6000 Blackwell,
+with independent processes, alternating baseline/candidate order, history eight,
+water7 and ethane230. The [compact record](../../../../benchmarks/results/rccsd-diis-ring-1900/README.md)
+retains every observation, source/library identities, inputs and reproduction.
+For ethane, measured median DIIS drops from 0.122595 to 0.062368 seconds, but
+complete CCSD remains 170.570 versus 170.575 seconds. Native total medians are
+310.186 versus 316.712 seconds, dominated by unmodified RHF variation; no
+complete-endpoint gain is established. The all-pair energy difference is below
+9e-13 Eh and every independent replay residual is below 5.317e-13. All five
+tiny DIIS observations improve, so no winning legacy tiny kernel domain was
+observed; tiny complete endpoint medians are indistinguishable at process-timer
+precision. There is no evidence-based tiny fallback to select in this domain.
+
+The entire baseline DIIS fraction is only 0.0395% of the large native endpoint.
+Further optimizing these dots cannot address the dominant CCSD/response cost.
+Retain this exact work/data-movement improvement as solver infrastructure and
+as preparation for packed histories, not as a headline molecular speedup.
 
 Revisit dot parallelism only with explicit deterministic/reduction-order
 qualification: changing the tree is a separate numerical change and should
