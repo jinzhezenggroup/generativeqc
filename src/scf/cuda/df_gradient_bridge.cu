@@ -24,6 +24,7 @@
 #include "scf/cuda/df_shell_derivatives.cuh"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_df_gradient.hpp"
+#include "scf/cuda_df_nuclear_sink.hpp"
 #include "scf/df_derivative_policy.hpp"
 
 namespace generativeqc::scf {
@@ -411,6 +412,158 @@ void trace_df_weight_histogram(const ShellMetadata& orbital, const ShellMetadata
       }
 }
 }  // namespace
+/** Borrowed-stream lifetime is independent of caller-owned response buffers. */
+struct CudaDfNuclearSink::Impl {
+  int device;
+  std::size_t host_bound{}, numeric_bytes{}, expansion_terms{};
+  bool closed{};
+  std::vector<double> result;
+  // Arena dies first, draining any outstanding D2H into result on exceptions.
+  std::unique_ptr<Arena> arena;
+  DfDerivativeBasisView orbital, auxiliary;
+  const double* positions{};
+  double* output{};
+  explicit Impl(int selected) : device(selected) {}
+  ~Impl() {
+    int previous = device;
+    (void)cudaGetDevice(&previous);
+    (void)cudaSetDevice(device);
+    arena.reset();
+    (void)cudaSetDevice(previous);
+  }
+};
+
+CudaDfNuclearSink::CudaDfNuclearSink(int device, const core::System& orbital,
+                                     const core::System& auxiliary, std::size_t maximum_bytes) {
+  const auto n = molecule::ao_count(orbital), q = molecule::ao_count(auxiliary),
+             atoms = orbital.atoms.size();
+  const auto limit = std::numeric_limits<std::size_t>::max() / sizeof(double);
+  const auto index_limit = static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max());
+  if (device < 0 || !maximum_bytes || !n || !q || !atoms || n > index_limit || q > index_limit ||
+      atoms > index_limit / 3 || atoms != auxiliary.atoms.size() || n > limit / n ||
+      q > limit / q || n * n > limit / q)
+    throw std::invalid_argument("invalid DF nuclear sink dimensions/budget");
+  for (std::size_t atom = 0; atom < atoms; ++atom)
+    if (orbital.atoms[atom].position != auxiliary.atoms[atom].position)
+      throw std::invalid_argument("DF nuclear sink requires matching physical atom coordinates");
+  const auto terms = std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
+                                 [](const auto& shell) { return shell.angular_momentum == 4; })
+                         ? molecule::kMaximumAuxiliaryAoExpansionTerms
+                         : molecule::kMaximumAoExpansionTerms;
+  long double primitives = 0;
+  for (const auto* system : {&orbital, &auxiliary})
+    for (const auto& shell : system->shells) primitives += shell.primitives.size();
+  const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
+                             sizeof(std::uint8_t) +
+                             terms * (3 * sizeof(std::uint8_t) + sizeof(double));
+  const long double host_bound = 2 * (per_ao * (n + q) + 2 * sizeof(double) * primitives +
+                                      6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
+  if (host_bound >= maximum_bytes)
+    throw std::length_error("DF nuclear sink metadata exceeds complete numeric budget");
+  auto state = std::make_unique<Impl>(device);
+  state->host_bound = static_cast<std::size_t>(host_bound);
+  state->expansion_terms = terms;
+  // Reserve the complete host setup bound before packing or device allocation.
+  // This bounds their overlap, rather than checking two separate maxima.
+  state->arena = std::make_unique<Arena>(maximum_bytes - state->host_bound);
+  auto& arena = *state->arena;
+  try {
+    DeviceGuard restore;
+    check(cudaSetDevice(device));
+    check(cudaStreamCreateWithFlags(&arena.stream, cudaStreamNonBlocking));
+    const auto host_o = pack(orbital, 3, terms), host_x = pack(auxiliary, 4, terms);
+    std::vector<double> positions(3 * atoms);
+    state->result.resize(positions.size());
+    for (std::size_t atom = 0; atom < atoms; ++atom)
+      std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
+                positions.begin() + 3 * atom);
+    state->orbital = arena.upload(host_o);
+    state->auxiliary = arena.upload(host_x);
+    state->positions = arena.upload(positions);
+    arena.stats.host_bytes += state->result.capacity() * sizeof(double);
+    if (arena.stats.host_bytes > state->host_bound) throw std::bad_alloc();
+    state->output = static_cast<double*>(arena.allocate(positions.size() * sizeof(double)));
+    // Synchronous setup leaves no metadata dependency on the producer stream,
+    // which is intentionally not borrowed until the first response callback.
+    check(cudaMemsetAsync(state->output, 0, positions.size() * sizeof(double), arena.stream));
+    check(cudaStreamSynchronize(arena.stream));
+    ++arena.stats.stream_synchronizations;
+    check(cudaStreamDestroy(arena.stream));
+    arena.stream = nullptr;
+    arena.owns_stream = false;
+    state->numeric_bytes = state->host_bound + arena.stats.device_bytes;
+  } catch (const CudaFailure& error) {
+    throw std::runtime_error(std::string("DF nuclear sink CUDA setup: ") +
+                             cudaGetErrorString(error.status));
+  }
+  implementation_ = std::move(state);
+}
+
+CudaDfNuclearSink::~CudaDfNuclearSink() = default;
+
+void CudaDfNuclearSink::consume(unsigned kind, runtime::StridedRange range, const double* weights,
+                                std::size_t count, void* producer_stream) {
+  auto& state = *implementation_;
+  auto& arena = *state.arena;
+  if (state.closed) throw std::logic_error("DF nuclear sink is already closed");
+  try {
+    const auto stream = reinterpret_cast<cudaStream_t>(producer_stream);
+    if (!stream || (arena.stream && arena.stream != stream))
+      throw std::invalid_argument("DF nuclear sink producer stream changed");
+    if (count > (std::numeric_limits<std::size_t>::max() - arena.stats.device_response_bytes) /
+                    sizeof(double))
+      throw std::length_error("DF nuclear sink response work count overflows");
+    DeviceGuard restore;
+    check(cudaSetDevice(state.device));
+    arena.stream = stream;
+    check(launch_df_derivative_tile(state.orbital, state.auxiliary, state.positions, kind, range,
+                                    count, weights, 0, state.output, stream, 0, 0, 1, false,
+                                    state.expansion_terms));
+    arena.stats.device_response_bytes += count * sizeof(double);
+    arena.stats.weight_tile_elements = std::max(arena.stats.weight_tile_elements, count);
+    ++arena.stats.tiles;
+    arena.stats.device_response = true;
+  } catch (const CudaFailure& error) {
+    state.closed = true;
+    throw std::runtime_error(std::string("DF nuclear sink CUDA consume: ") +
+                             cudaGetErrorString(error.status));
+  } catch (...) {
+    state.closed = true;
+    throw;
+  }
+}
+
+std::vector<double> CudaDfNuclearSink::finish() {
+  auto& state = *implementation_;
+  auto& arena = *state.arena;
+  if (state.closed || !arena.stream) throw std::logic_error("DF nuclear sink cannot publish");
+  state.closed = true;
+  try {
+    DeviceGuard restore;
+    check(cudaSetDevice(state.device));
+    check(cudaMemcpyAsync(state.result.data(), state.output, state.result.size() * sizeof(double),
+                          cudaMemcpyDeviceToHost, arena.stream));
+    check(cudaStreamSynchronize(arena.stream));
+    arena.completed = true;
+    arena.stats.device_to_host_bytes = state.result.size() * sizeof(double);
+    ++arena.stats.stream_synchronizations;
+    if (!std::all_of(state.result.begin(), state.result.end(),
+                     [](double x) { return std::isfinite(x); }))
+      throw std::runtime_error("nonfinite DF nuclear sink result");
+    return std::move(state.result);
+  } catch (const CudaFailure& error) {
+    throw std::runtime_error(std::string("DF nuclear sink CUDA finish: ") +
+                             cudaGetErrorString(error.status));
+  }
+}
+
+std::size_t CudaDfNuclearSink::numeric_capacity_bytes() const noexcept {
+  return implementation_->numeric_bytes;
+}
+DfGradientResources CudaDfNuclearSink::resources() const noexcept {
+  return implementation_->arena->stats;
+}
+
 generativeqc_status execute_cuda_df_gradient(
     int device, const core::System& orbital, const core::System& auxiliary,
     std::span<const double> bar_a, std::span<const double> bar_m, unsigned schedule,
