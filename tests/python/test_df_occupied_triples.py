@@ -239,6 +239,19 @@ def test_w_fp32_candidate_keeps_sensitive_triples_algebra_fp64(
     assert actual["w"].dtype == np.float64
 
 
+def test_generated_native_w_fp32_contract_uses_candidate_precision_identity() -> None:
+    candidate = w_fp32_candidate_program(2, 3)
+    schedule = describe_precision(candidate)
+    generated = header()
+    assert schedule.identity in generated
+    assert schedule.request_identity is not None
+    assert schedule.request_identity in generated
+    assert "build_w_fp32" in generated
+    assert "const float* ovoo" in generated
+    assert "const float* t2" in generated
+    assert "accumulate(scratch" in generated
+
+
 @pytest.fixture(scope="module")
 def native_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
     if not GPU:
@@ -291,6 +304,7 @@ def native_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
         ct.c_double,
         ct.c_size_t,
         ct.c_size_t,
+        ct.c_int,
         ct.POINTER(ct.c_double),
         ct.POINTER(ct.c_size_t),
         ct.c_void_p,
@@ -306,6 +320,8 @@ def run(
     budget: int = 1 << 30,
     panels: int = 3,
     threshold: float = 1e-10,
+    mixed: bool = False,
+    generated: bool = False,
 ) -> tuple:
     q, o, v = inputs[0].shape
     arrays = [np.ascontiguousarray(x) for x in inputs]
@@ -313,7 +329,7 @@ def run(
         *(x.ctypes.data_as(ct.POINTER(ct.c_double)) for x in arrays)
     )
     values = np.full(3, np.nan)
-    counts = np.zeros(14, dtype=np.uintp)
+    counts = np.zeros(24, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
@@ -323,6 +339,7 @@ def run(
         threshold,
         budget,
         panels,
+        int(mixed) + 2 * int(generated),
         values.ctypes.data_as(ct.POINTER(ct.c_double)),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
         error,
@@ -350,7 +367,8 @@ def test_native_energy_work_budget_fallback_and_repeatability(
     assert counts[10] == tiles * v**3
     assert counts[11] == counts[6] * q * v**3 + 6 * tiles * (v**4 + o * v**3)
     assert counts[12] == sum(x.nbytes for x in inputs) and counts[13] == 12
-    assert counts[4] <= 96 << 20 and counts[2] == counts[3] + (96 << 20)
+    assert counts[4] <= 96 << 20 and counts[23] > 0
+    assert counts[2] == counts[3] + (96 << 20) + counts[23]
     assert values[1] == pytest.approx(3 * (inputs[-1].min() - inputs[-2].max()))
     status, small_values, small_counts, error = run(native_probe, inputs, panels=1)
     assert status == 0, error
@@ -362,7 +380,17 @@ def test_native_energy_work_budget_fallback_and_repeatability(
     # At very small shapes the extra panels can occupy alignment padding and
     # require no additional bytes. Fallback is needed only when the plans differ.
     assert fallback[5] == (counts[5] if counts[2] == budget else 1)
-    status, unpublished, _, error = run(native_probe, inputs, budget=budget - 1)
+    status, low_values, low_counts, error = run(native_probe, inputs, budget=budget - 1)
+    assert status == 0, error
+    assert low_counts[20] == low_counts[22] == 1
+    assert low_counts[4] == 0
+    assert low_counts[2] == low_counts[3] + low_counts[23]
+    assert tuple(low_counts[17:20]) == (64, 64, 64)
+    np.testing.assert_allclose(low_values[0], want, atol=3e-12, rtol=3e-12)
+    # Without the optional library, only arena and prepared descriptor storage
+    # remain. Reject one byte below the smallest complete generated endpoint.
+    minimum = int(small_counts[3] + small_counts[23])
+    status, unpublished, _, error = run(native_probe, inputs, budget=minimum - 1)
     assert status != 0 and "budget" in error
     assert np.isnan(unpublished).all()
     status, repeated, _, error = run(native_probe, inputs)
@@ -380,6 +408,30 @@ def test_native_energy_work_budget_fallback_and_repeatability(
         )
         + "\n"
     )
+
+
+def test_native_w_fp32_matches_strict_and_reports_actual_precision(
+    native_probe: typing.Any,
+) -> None:
+    inputs, _ = case(2, 3, 4)
+    strict_status, strict_values, strict_counts, strict_error = run(
+        native_probe, inputs
+    )
+    mixed_status, mixed_values, mixed_counts, mixed_error = run(
+        native_probe, inputs, mixed=True
+    )
+    assert strict_status == 0, strict_error
+    assert mixed_status == 0, mixed_error
+    np.testing.assert_allclose(mixed_values[0], strict_values[0], atol=2e-7, rtol=2e-4)
+    assert strict_counts[15] == 0
+    assert strict_counts[14] == strict_counts[6] + strict_counts[7]
+    assert tuple(strict_counts[17:20]) == (64, 64, 64)
+    assert mixed_counts[14] == mixed_counts[6]
+    assert mixed_counts[15] == mixed_counts[7]
+    assert mixed_counts[15] > 0
+    assert mixed_counts[16] > 0
+    assert tuple(mixed_counts[17:20]) == (32, 32, 32)
+    assert mixed_counts[2] > strict_counts[2]
 
 
 @pytest.mark.parametrize("bad", ["nan", "pair", "gap", "threshold", "overflow"])
@@ -409,7 +461,7 @@ def test_dimension_and_complete_work_preflight_precedes_input_access(
     """Huge logical shapes must fail before dereferencing even null inputs."""
     pointers = (ct.POINTER(ct.c_double) * 9)()
     values = np.full(3, np.nan)
-    counts = np.full(14, 17, dtype=np.uintp)
+    counts = np.full(24, 17, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = native_probe(
         o,
@@ -419,6 +471,7 @@ def test_dimension_and_complete_work_preflight_precedes_input_access(
         1e-10,
         ct.c_size_t(-1).value,
         3,
+        0,
         values.ctypes.data_as(ct.POINTER(ct.c_double)),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
         error,
@@ -472,3 +525,51 @@ def test_native_pinned_independent_molecular_energies(
     status, values, _, error = run(native_probe, inputs)
     assert status == 0, error
     np.testing.assert_allclose(values[0], expected, atol=3e-12, rtol=3e-12)
+    mixed_status, mixed_values, mixed_counts, mixed_error = run(
+        native_probe, inputs, mixed=True
+    )
+    assert mixed_status == 0, mixed_error
+    np.testing.assert_allclose(mixed_values[0], expected, atol=2e-7, rtol=2e-4)
+    assert mixed_counts[15] > 0
+    assert tuple(mixed_counts[17:20]) == (32, 32, 32)
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_generated_provider_matches_independent_triples_endpoint(
+    native_probe: typing.Any, mixed: bool
+) -> None:
+    inputs, ovvv = case(3, 4, 5)
+    status, values, counts, error = run(
+        native_probe, inputs, mixed=mixed, generated=True
+    )
+    if status and "test hook unavailable" in error:
+        pytest.skip("requires library built with test hooks")
+    assert status == 0, error
+    np.testing.assert_allclose(
+        values[0],
+        reference(inputs, ovvv),
+        atol=2e-7 if mixed else 3e-12,
+        rtol=2e-4 if mixed else 3e-12,
+    )
+    assert counts[20] == counts[21] == 1
+    assert tuple(counts[17:20]) == ((32, 32, 32) if mixed else (64, 64, 64))
+
+
+def test_mixed_storage_budget_retains_strict_candidate(
+    native_probe: typing.Any,
+) -> None:
+    inputs, _ = case(3, 9, 5)
+    status, expected, strict, error = run(
+        native_probe, inputs, panels=1, generated=True
+    )
+    if status and "test hook unavailable" in error:
+        pytest.skip("requires library built with test hooks")
+    assert status == 0, error
+    status, values, actual, error = run(
+        native_probe, inputs, panels=1, mixed=True, budget=int(strict[2])
+    )
+    assert status == 0, error
+    assert actual[20] == actual[22] == 1
+    assert actual[2] <= strict[2]
+    assert tuple(actual[17:20]) == (64, 64, 64)
+    np.testing.assert_array_equal(values[:2], expected[:2])

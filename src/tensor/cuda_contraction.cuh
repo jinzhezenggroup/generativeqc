@@ -23,7 +23,7 @@ class CudaContractionContext {
   ~CudaContractionContext() { reset(); }
 
   bool prepare(cudaStream_t stream) {
-    if (handle_) throw std::logic_error("contraction context is already prepared");
+    if (handle_ || prepared_) throw std::logic_error("contraction context is already prepared");
     cudaStreamCaptureStatus capture{};
     generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
     if (capture != cudaStreamCaptureStatusNone)
@@ -48,11 +48,13 @@ class CudaContractionContext {
       generativeqc_tensor::blas_check(cublasGetVersion(handle_, &provider_version_));
       generativeqc_tensor::cuda_check(cudaRuntimeGetVersion(&runtime_version_));
       generativeqc_tensor::cuda_check(cudaMemGetInfo(&after, &total));
+      retained_bytes_ = before > after ? before - after : 0;
       if (before > after && before - after > kProviderAllowance) {
         release_locked();
         return false;
       }
       ++generation_;
+      prepared_ = true;
       return true;
     } catch (const generativeqc_tensor::DeviceAllocationError&) {
       release_locked();
@@ -62,6 +64,23 @@ class CudaContractionContext {
       reset_locked();
       throw;
     }
+  }
+
+  /** Bind the complete generated fallback on the same caller-owned stream.
+   * Used only during preparation after an optional provider is unavailable. */
+  void prepare_generated(cudaStream_t stream) {
+    if (handle_ || prepared_) throw std::logic_error("contraction context already prepared");
+    cudaStreamCaptureStatus capture{};
+    generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::logic_error("generated contraction preparation during capture");
+    generativeqc_tensor::cuda_check(cudaGetDevice(&device_));
+    stream_ = stream;
+    provider_version_ = 0;
+    generativeqc_tensor::cuda_check(cudaRuntimeGetVersion(&runtime_version_));
+    retained_bytes_ = 0;
+    prepared_ = true;
+    ++generation_;
   }
 
   void reset() noexcept {
@@ -79,6 +98,8 @@ class CudaContractionContext {
     }
     handle_ = nullptr;
     stream_ = nullptr;
+    prepared_ = false;
+    retained_bytes_ = 0;
     ++generation_;
   }
 
@@ -95,6 +116,8 @@ class CudaContractionContext {
     }
     handle_ = nullptr;
     stream_ = nullptr;
+    prepared_ = false;
+    retained_bytes_ = 0;
     ++generation_;
   }
 
@@ -104,19 +127,70 @@ class CudaContractionContext {
   int provider_version() const noexcept { return provider_version_; }
   int runtime_version() const noexcept { return runtime_version_; }
   std::size_t generation() const noexcept { return generation_; }
+  std::size_t retained_bytes() const noexcept { return retained_bytes_; }
+  bool prepared() const noexcept { return prepared_; }
 
  private:
   cublasHandle_t handle_{};
   cudaStream_t stream_{};
   int device_{}, provider_version_{}, runtime_version_{};
   std::size_t generation_{};
+  std::size_t retained_bytes_{};
+  bool prepared_{};
 };
 
 template <class T>
-static __global__ void audit_contraction(const T* values, std::size_t count, int* error) {
+static __global__ void audit_contraction(const T* values, std::size_t count, int* error,
+                                         std::size_t columns = 0,
+                                         std::size_t leading_dimension = 0) {
   for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
        i += std::size_t(blockDim.x) * gridDim.x)
-    if (!isfinite(values[i])) atomicCAS(error, 0, 1);
+    if (!isfinite(values[columns ? (i / columns) * leading_dimension + i % columns : i]))
+      atomicCAS(error, 0, 1);
+}
+
+/** Backend implementation identities, supplied only by compiler/provider
+ * preparation. Scientific request metadata never includes this choice. */
+enum class ContractionAlgorithm : std::uint8_t { PedanticBlas, GeneratedOrdered };
+
+template <class T>
+__device__ T contraction_multiply(T a, T b) {
+  if constexpr (std::is_same_v<T, double>)
+    return __dmul_rn(a, b);
+  else
+    return __fmul_rn(a, b);
+}
+template <class T>
+__device__ T contraction_add(T a, T b) {
+  if constexpr (std::is_same_v<T, double>)
+    return __dadd_rn(a, b);
+  else
+    return __fadd_rn(a, b);
+}
+
+/** Exact increasing-k matrix lowering of the validated semantic einsum.
+ * Padding is never visited. beta==0 never reads output; every scalar multiply
+ * and add has explicit RN semantics, including FP32 accumulation. */
+template <class T>
+static __global__ void generated_contraction(const T* a, const T* b, T* output, std::size_t count,
+                                             std::size_t m, std::size_t n, std::size_t k,
+                                             std::size_t lda, std::size_t ldb, std::size_t ldc,
+                                             bool ta, bool tb, T alpha, T beta, int* error) {
+  for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
+       i += std::size_t(blockDim.x) * gridDim.x) {
+    const auto batch = i / (m * n), row = i / n % m, col = i % n;
+    T value = 0;
+    for (std::size_t reduction = 0; reduction < k; ++reduction) {
+      const auto ai = batch * m * k + (ta ? reduction * lda + row : row * lda + reduction);
+      const auto bi = batch * k * n + (tb ? col * ldb + reduction : reduction * ldb + col);
+      value = contraction_add(value, contraction_multiply(a[ai], b[bi]));
+    }
+    const auto ci = batch * m * n + row * ldc + col;
+    value = contraction_multiply(alpha, value);
+    if (beta != T(0)) value = contraction_add(value, contraction_multiply(beta, output[ci]));
+    if (!isfinite(value)) atomicCAS(error, 0, 1);
+    output[ci] = value;
+  }
 }
 
 /** Prepared projection of the canonical compiler requests for one AOT stage.
@@ -134,13 +208,22 @@ class PreparedContractions {
   // descriptor copy live during construction. No cache grows during replay.
   static constexpr std::size_t storage_bytes(std::size_t requests, std::size_t variants = 1) {
     return sizeof(PreparedContractions) + 2 * sizeof(Variant) +
-           2 * variants * requests * sizeof(ContractionRequest);
+           2 * variants * requests * (sizeof(ContractionRequest) + sizeof(ContractionAlgorithm));
   }
 
   void add(std::size_t o, std::size_t v, std::size_t q, std::vector<ContractionRequest> requests,
-           CudaContractionContext& context, std::size_t& calls, std::size_t& summands) {
+           CudaContractionContext& context, std::size_t& calls, std::size_t& summands,
+           std::vector<ContractionAlgorithm> algorithms = {}) {
     if (variants_.size() == 2) throw std::length_error("native contraction batch variant bound");
-    if (!context.handle()) throw std::logic_error("native contraction provider is not prepared");
+    if (!context.prepared()) throw std::logic_error("native contraction provider is not prepared");
+    if (algorithms.empty()) algorithms.assign(requests.size(), ContractionAlgorithm::PedanticBlas);
+    if (algorithms.size() != requests.size() || algorithms.capacity() > algorithms.size())
+      throw std::invalid_argument("native contraction algorithm table bound");
+    for (auto algorithm : algorithms)
+      if ((algorithm != ContractionAlgorithm::PedanticBlas &&
+           algorithm != ContractionAlgorithm::GeneratedOrdered) ||
+          (algorithm == ContractionAlgorithm::PedanticBlas && !context.handle()))
+        throw std::invalid_argument("native contraction provider unavailable");
     cudaStreamCaptureStatus capture{};
     generativeqc_tensor::cuda_check(cudaStreamIsCapturing(context.stream(), &capture));
     if (capture != cudaStreamCaptureStatusNone)
@@ -158,7 +241,7 @@ class PreparedContractions {
     generation_ = context.generation();
     calls_ = &calls;
     summands_ = &summands;
-    variants_.push_back({o, v, q, std::move(requests)});
+    variants_.push_back({o, v, q, std::move(requests), std::move(algorithms)});
   }
 
   explicit operator bool() const noexcept { return !variants_.empty(); }
@@ -167,7 +250,7 @@ class PreparedContractions {
   void execute(std::size_t slot, std::size_t o, std::size_t v, std::size_t q, cudaStream_t stream,
                const T* a, const T* b, T* output, int* error) const {
     static_assert(std::is_same_v<T, double> || std::is_same_v<T, float>);
-    if (!context_ || !context_->handle() || generation_ != context_->generation() ||
+    if (!context_ || !context_->prepared() || generation_ != context_->generation() ||
         stream != context_->stream())
       throw std::logic_error("stale native contraction context; prepare again");
     cudaStreamCaptureStatus capture{};
@@ -192,41 +275,51 @@ class PreparedContractions {
       const auto r = reinterpret_cast<std::uintptr_t>(right);
       return l <= r ? r - l < left_bytes : l - r < right_bytes;
     };
-    if (overlaps(a, r.operands[0].elements() * sizeof(T), output,
-                 r.output_elements() * sizeof(T)) ||
-        overlaps(b, r.operands[1].elements() * sizeof(T), output, r.output_elements() * sizeof(T)))
+    if (overlaps(a, r.operands[0].storage_elements() * sizeof(T), output,
+                 r.operands[2].storage_elements() * sizeof(T)) ||
+        overlaps(b, r.operands[1].storage_elements() * sizeof(T), output,
+                 r.operands[2].storage_elements() * sizeof(T)))
       throw std::invalid_argument("native contraction output must not alias its inputs");
-    const T alpha = static_cast<T>(r.coefficient), beta = 0;
-    if (!std::isfinite(alpha))
+    const T alpha = static_cast<T>(r.coefficient), beta = static_cast<T>(r.beta);
+    if (!std::isfinite(alpha) || !std::isfinite(beta))
       throw std::invalid_argument("contraction coefficient is not representable");
     const auto ta = r.a_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
     const auto tb = r.b_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
     const auto m = int(r.m), n = int(r.n), k = int(r.k), batches = int(r.batches);
-    const int lda = r.a_trans == 'N' ? k : m, ldb = r.b_trans == 'N' ? n : k;
+    const int lda = int(r.leading_dimension(0)), ldb = int(r.leading_dimension(1)),
+              ldc = int(r.leading_dimension(2));
     // The matrix layout implements the original einsum: C^T = op(B)^T op(A)^T.
     // Batches are explicitly materialized by TensorIR, including broadcasts.
-    cublasStatus_t status;
-    if constexpr (std::is_same_v<T, double>) {
-      status = batches == 1 ? cublasDgemm(context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, a,
-                                          lda, &beta, output, n)
-                            : cublasDgemmStridedBatched(context_->handle(), tb, ta, n, m, k, &alpha,
-                                                        b, ldb, r.k * r.n, a, lda, r.m * r.k, &beta,
-                                                        output, n, r.m * r.n, batches);
+    if (selected->algorithms[slot] == ContractionAlgorithm::GeneratedOrdered) {
+      generated_contraction<<<generativeqc_tensor::blocks(r.output_elements(), 256), 256, 0,
+                              stream>>>(a, b, output, r.output_elements(), r.m, r.n, r.k, lda, ldb,
+                                        ldc, r.a_trans == 'T', r.b_trans == 'T', alpha, beta,
+                                        error);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
     } else {
-      status = batches == 1 ? cublasSgemm(context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, a,
-                                          lda, &beta, output, n)
-                            : cublasSgemmStridedBatched(context_->handle(), tb, ta, n, m, k, &alpha,
-                                                        b, ldb, r.k * r.n, a, lda, r.m * r.k, &beta,
-                                                        output, n, r.m * r.n, batches);
+      cublasStatus_t status;
+      if constexpr (std::is_same_v<T, double>) {
+        status = batches == 1 ? cublasDgemm(context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, a,
+                                            lda, &beta, output, ldc)
+                              : cublasDgemmStridedBatched(
+                                    context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, r.k * r.n,
+                                    a, lda, r.m * r.k, &beta, output, n, r.m * r.n, batches);
+      } else {
+        status = batches == 1 ? cublasSgemm(context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, a,
+                                            lda, &beta, output, ldc)
+                              : cublasSgemmStridedBatched(
+                                    context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, r.k * r.n,
+                                    a, lda, r.m * r.k, &beta, output, n, r.m * r.n, batches);
+      }
+      // Execution and arithmetic failures propagate. Only preparation-time OOM
+      // may change schedule; a failed enqueue must never silently replay work.
+      generativeqc_tensor::blas_check(status);
+      const auto count = r.output_elements();
+      audit_contraction<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(count),
+                                                      256),
+                          256, 0, stream>>>(output, count, error, r.n, ldc);
+      generativeqc_tensor::cuda_check(cudaGetLastError());
     }
-    // Execution and arithmetic failures propagate. Only preparation-time OOM
-    // may change schedule; a failed enqueue must never silently replay work.
-    generativeqc_tensor::blas_check(status);
-    const auto count = r.output_elements();
-    audit_contraction<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(count),
-                                                    256),
-                        256, 0, stream>>>(output, count, error);
-    generativeqc_tensor::cuda_check(cudaGetLastError());
     if (*calls_ == std::numeric_limits<std::size_t>::max() ||
         r.summands() > std::numeric_limits<std::size_t>::max() - *summands_)
       throw std::length_error("native contraction diagnostic counter overflow");
@@ -238,6 +331,7 @@ class PreparedContractions {
   struct Variant {
     std::size_t o, v, q;
     std::vector<ContractionRequest> requests;
+    std::vector<ContractionAlgorithm> algorithms;
   };
   std::vector<Variant> variants_;
   CudaContractionContext* context_{};

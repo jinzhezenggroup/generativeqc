@@ -151,3 +151,33 @@ qualification are still required before broad promotion. The pre-existing
 strict large-factor gates (`atol=rtol=3e-10`) are not qualified by small-molecule
 force agreement and must not be relaxed. See the
 [composition decision](../../.agents/notes/implemented/architecture/2026-10-04-complete-native-df-ccsdt-forces.md).
+
+## Native benchmark controls
+
+The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
+positional arguments (brackets denote optional trailing controls):
+
+```text
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]]
+```
+
+`MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
+and `DIIS_HISTORY` to six. `DIIS_HISTORY` retains argument position eight and
+accepts zero (disabled) or integers two through twenty. A decimal or scientific
+notation token in this position is rejected; it is never guessed to be a
+screening threshold. Response controls follow it: `ORBITAL_SCHWARZ` defaults to
+zero, `PROFILE_JK` to zero and `NUCLEAR` to two (symmetric polarization).
+`NUCLEAR=0` selects the legacy three-pass identity and `NUCLEAR=1` explicitly
+opts into the experimental canonical bilinear derivative.
+
+For example, an exact force endpoint with the default six-vector DIIS history
+and explicit symmetric response is:
+
+```sh
+./df-force-endpoint molecule.input force.json 1 1 1 1 8 6 0 0 2
+```
+
+Historical response benchmark receipts retain the CLI for their recorded source
+revision. When adapting such a command to the current executable, insert the
+DIIS history between the Q batch limit and the orbital screening threshold.
+Do not rewrite retained receipt commands or imply that they used this layout.

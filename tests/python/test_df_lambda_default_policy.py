@@ -23,11 +23,15 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
-        "const bool reduction ="
-        + endpoint.split("const bool reduction =", 1)[1].split(
-            "    std::ifstream input", 1
-        )[0]
+        "if (argc <"
+        + endpoint.split("if (argc <", 1)[1].split("    std::ifstream input", 1)[0]
     )
+    descriptor_diis = next(
+        line
+        for line in endpoint.splitlines()
+        if "descriptor.ccsd_diis_history =" in line
+    )
+    assert 'field("ccsd_diis_history", diis_history);' in endpoint
     endpoint_call = (
         "const auto result ="
         + endpoint.split("const auto result =", 1)[1].split(
@@ -42,7 +46,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
 #include <string>
 #include "cc/lambda_response.hpp"
 #include "hf/rhf_frame_response.hpp"
-struct generativeqc_method_descriptor {};
+struct generativeqc_method_descriptor { unsigned ccsd_diis_history = 6; };
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace core { struct System {}; }
@@ -50,14 +54,17 @@ namespace methods::detail {
 struct DFCCSDTResult {
   bool primal, forces, lambda;
   hf::RHFFrameResponseOptions frame;
+  unsigned diis_history;
+  bool reduction;
+  std::size_t batch_limit;
 };
 """
         + declaration
         + r"""
 DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&,const core::System&,
-    const core::System&,const generativeqc_method_descriptor&,bool forces,bool,bool,
-    bool primal,bool lambda,std::size_t,const hf::RHFFrameResponseOptions& frame) {
-  return {primal,forces,lambda,frame};
+    const core::System&,const generativeqc_method_descriptor& descriptor,bool forces,bool,bool reduction,
+    bool primal,bool lambda,std::size_t batch_limit,const hf::RHFFrameResponseOptions& frame) {
+  return {primal,forces,lambda,frame,descriptor.ccsd_diis_history,reduction,batch_limit};
 }
 }}
 generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) {
@@ -66,6 +73,8 @@ generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) 
   generativeqc_method_descriptor descriptor;
 """
         + selectors
+        + descriptor_diis
+        + "\n"
         + endpoint_call
         + r"""
   return result;
@@ -106,22 +115,60 @@ int main() {
   const auto defaults = select(4,missing);
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
-  if(!default_frame(defaults.frame)) return 9;
+  if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
+     defaults.batch_limit != 8 || !defaults.reduction) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
   for(const char* schedule : {"0","1","2"}) {
     const char* selected[]{"endpoint","input","output","1","1","1","1","8",
-                           "1e-7","1",schedule};
-    const auto frame = select(11,selected).frame;
+                           "6","1e-7","1",schedule};
+    const auto frame = select(12,selected).frame;
     if(frame.orbital_screening_tolerance != 1e-7 || !frame.profile_jk ||
        frame.bilinear_derivative != (schedule[0] == '1') ||
        frame.symmetric_polarization != (schedule[0] == '2')) return 10;
   }
   const char* invalid_frame[]{"endpoint","input","output","1","1","1","1","8",
-                              "0","0","x"};
-  try { (void)select(11,invalid_frame);return 11; }
+                              "6","0","0","x"};
+  try { (void)select(12,invalid_frame);return 11; }
   catch(const std::invalid_argument&) {}
+  // Every historical master DIIS choice retains its exact argument position.
+  for(unsigned history = 0; history <= 20; ++history) {
+    if(history == 1) continue;
+    const auto token = std::to_string(history);
+    const char* selected[]{"endpoint","input","output","0","0","0","0","3",
+                           token.c_str()};
+    const auto old = select(9,selected);
+    if(old.diis_history != history || !default_frame(old.frame) || old.reduction ||
+       old.primal || old.forces || old.lambda || old.batch_limit != 3) return 12;
+  }
+  // No numeric guessing: even an integer zero in argv[8] always means DIIS zero.
+  // Fractional/scientific legacy screening tokens must not partially parse.
+  for(const char* token : {"1","21","-2","0.0","0e-12","2e-12","2.0","6junk",""}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",token};
+    try { (void)select(9,bad);return 13; }
+    catch(const std::invalid_argument&) {}
+  }
+  const char* partial[]{"endpoint","input","output","1","1","1","1","8",
+                        "4","1e-7","0"};
+  for(int argc = 8; argc <= 11; ++argc) {
+    const auto selected = select(argc,partial);
+    if(selected.diis_history != (argc > 8 ? 4U : 6U) ||
+       selected.frame.orbital_screening_tolerance != (argc > 9 ? 1e-7 : 0.0) ||
+       selected.frame.profile_jk || !selected.frame.symmetric_polarization ||
+       selected.frame.bilinear_derivative) return 14;
+  }
+  for(int index : {3,4,5,6,10,11}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","0","0","2"};
+    bad[index] = "x";
+    try { (void)select(12,bad);return 15; }
+    catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,13}) {
+    try { (void)select(argc,nullptr);return 16; }
+    catch(const std::invalid_argument&) {}
+  }
 }
 """
     )

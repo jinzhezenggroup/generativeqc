@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
+from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
 
 GEOMETRY_MAX_LANES = 2048
 GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
@@ -225,6 +226,7 @@ class StationaryCudaResources:
     center_geometry_bytes: int
     becke_threads_per_point: int = 1
     becke_shared_bytes: int = 0
+    phased_becke_bytes: int = 0
 
 
 def plan_stationary_cuda_resources(
@@ -239,6 +241,7 @@ def plan_stationary_cuda_resources(
     target: CudaTargetInfo,
     budget_bytes: int,
     cooperative_becke: bool | None = None,
+    phased_becke: bool = False,
 ) -> StationaryCudaResources:
     """Choose up to one lane per point within the admitted owner's byte budget.
 
@@ -258,6 +261,8 @@ def plan_stationary_cuda_resources(
         )
     if type(cooperative_becke) is not bool:
         raise ValueError("cooperative Becke selection must be boolean")
+    if type(phased_becke) is not bool:
+        raise ValueError("phased Becke selection must be boolean")
     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:
         raise ValueError("stationary CUDA byte budget is not representable")
     minimum = stationary_cuda_allocation_bytes(
@@ -306,14 +311,31 @@ def plan_stationary_cuda_resources(
         <= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)
     ):
         becke_threads, shared_bytes = BECKE_COOPERATIVE_THREADS, required_shared
+    phase_bytes = 0
+    # Qualification-only opt-in. Preserve the lane count, integral reserve and
+    # bounded route; never evict a concurrent owner to admit a pair cache.
+    if (
+        phased_becke
+        and atoms > BECKE_RETAINED_MAX_ATOMS
+        and lanes == points
+        and center_bytes
+        and becke_threads > 1
+        and target.compute_capability == (12, 0)
+        and target.maximum_threads_per_block >= 128
+    ):
+        phase_plan = PhasedBeckePlan(atoms, points)
+        required = phase_plan.scratch_bytes + 8 * points + 8 * phase_plan.pairs
+        if required <= budget_bytes - allocation - center_bytes:
+            phase_bytes = required
     return StationaryCudaResources(
         lanes,
         threads,
         per_lane * lanes,
-        allocation + center_bytes,
+        allocation + center_bytes + phase_bytes,
         center_bytes,
         becke_threads,
         shared_bytes,
+        phase_bytes,
     )
 
 
