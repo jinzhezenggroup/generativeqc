@@ -314,7 +314,11 @@ def _validate_execution(
     if backend == "cpu" and triples_precision != "fp64":
         raise ValueError("mixed triples precision requires backend='cuda-resident'")
     TriplesTileConfig(
-        1, 1, vir_chunk_size, triples_max_bytes, device,
+        1,
+        1,
+        vir_chunk_size,
+        triples_max_bytes,
+        device,
         precision_mode=triples_precision,
     )
     if type(provider_peak_bytes) is not int or provider_peak_bytes < 0:
