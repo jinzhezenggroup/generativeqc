@@ -289,7 +289,7 @@ class Mp2Prepared final : public PreparedCalculation {
         last_->response_workspace_allocation_count =
             force_diagnostic->response.workspace_allocation_count;
         last_->derivative_workspace_bytes = force_diagnostic->derivative_workspace_bytes;
-        last_->planned_endpoint_peak_bytes = std::max(
+        last_->planned_endpoint_peak_bytes = std::max<std::uint64_t>(
             last_->numeric_capacity_bytes,
             posthf::checked_add(
                 posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity),

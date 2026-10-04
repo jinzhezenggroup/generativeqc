@@ -13,10 +13,14 @@ import json
 import math
 import statistics
 import time
-from pathlib import Path
 from typing import Any
 
 from generativeqc import Calculator
+
+try:
+    from benchmarks._retention import raw_output_path
+except ModuleNotFoundError:
+    from _retention import raw_output_path
 
 WATER = [
     ("O", (0.0, 0.0, 0.0)),
@@ -113,7 +117,7 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--forces", action="store_true")
     parser.add_argument("--budget-bytes", type=int, default=8 << 30)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error("--repeats must be positive")

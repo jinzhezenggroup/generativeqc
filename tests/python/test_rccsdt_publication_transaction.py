@@ -24,6 +24,15 @@ def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
     start = source.index("      auto diagnostic = state.diagnostic;")
     stop = source.index("      return state.result;", start)
     body = source[start:stop] + "      return state.result;\n"
+    reservation_start = source.index("      const auto phase_budget =")
+    reservation_stop = source.index(
+        "      run_with_cuda_reference_budget(", reservation_start
+    )
+    reservation = source[reservation_start:reservation_stop]
+    helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
+    helper = helper[
+        helper.index("template <class Operation>") : helper.index("\n}  // namespace")
+    ]
     directory = tmp_path_factory.mktemp("triples-publication")
     unit, executable = directory / "publication.cpp", directory / "publication"
     unit.write_text(
@@ -47,6 +56,7 @@ struct Diagnostic {
   std::uint64_t response_iterations{}, response_restarts{}, response_workspace_bytes{};
   std::uint64_t measured_response_workspace_peak_bytes{}, response_workspace_allocation_count{};
   std::uint64_t planned_endpoint_peak_bytes{}, force_provenance_flags{};
+  std::uint64_t reference_execution_plan_owned_device_bytes{};
   char ccsd_t_equation_hash[65]{}, response_operator_hash[65]{};
 };
 struct Result { double energy{}; std::vector<double> forces; };
@@ -59,6 +69,7 @@ struct State {
   std::optional<int> reference{1};
   int problem{}, eps_o{}, eps_v{};
   std::size_t budget{1024}, external_reservation_bytes{64};
+  std::size_t reference_execution_plan_bytes{}, reference_execution_plan_device_bytes{};
   double reference_energy_change{1e-11}, reference_density_rms{1e-12};
   std::size_t reference_iterations{8};
 };
@@ -83,10 +94,17 @@ struct RawSource : integrals::ElectronInteractionSource {
 };
 }
 namespace scf {
+struct CudaRhfBucketPlan {};
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete plan; }
 struct PreparedFockInteractionSourceView : integrals::ElectronInteractionSource {
   explicit PreparedFockInteractionSourceView(int) {}
 };
 }
+"""
+        + helper
+        + r"""
 namespace cc {
 namespace triples::generated { constexpr char inventory_hash[]="triples"; }
 struct Force {
@@ -140,6 +158,7 @@ struct Owner {
   int system_{};
   int warm_state_{-7};
   std::optional<int> cpu_exact_plan_{1};
+  CorrelatedCudaReferencePlan cuda_reference_plan_;
   struct { double ccsd_denominator_threshold{1e-10}; } descriptor_;
   Result run(bool compute_forces) {
     State state;
@@ -149,6 +168,7 @@ struct Owner {
     const std::size_t retained=16, triples_virtual_count=7, triples_workspace_bytes=32;
     const double triples_energy=0.25, triples_minimum_denominator=2, triples_seconds=0.0;
 """
+        + reservation
         + body
         + r"""
   }
