@@ -36,6 +36,30 @@ struct CudaOccupiedDensityInput {
   DensityFactorIdentity expected{};
 };
 
+/** One-shot final occupied RI-K projection supplied by a method owner.
+ *
+ * occupied_coefficients must be the canonical AO factors that generated the
+ * exact density associated with projection = B*Cocc. The caller binds that
+ * proof to the current prepared DF owner through source identity and scratch
+ * generation. The response revalidates device/stream/dimensions/generation
+ * before consuming the lease; it never infers provenance from shape alone.
+ */
+struct CudaDensityFittingOccupiedProjectionLease {
+  int device_id{-1};
+  void* stream{};
+  const void* source_identity{};
+  const double* occupied_coefficients{};
+  const double* projection{};
+  std::size_t nbf{}, naux{}, rank{};
+  std::uint64_t scratch_generation{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && stream != nullptr && source_identity != nullptr &&
+           occupied_coefficients != nullptr && projection != nullptr && nbf != 0 && naux != 0 &&
+           rank != 0 && scratch_generation != 0;
+  }
+};
+
 /** Fixed-density K with exact witness/provenance validation per spin and item.
  * Empty/missing/stale inputs execute dense K. `selected` reports actual use;
  * this internal entry point never changes J or invents orbitals from D.
@@ -72,7 +96,8 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
     std::span<const DensityFittingDensityResponse> terms, unsigned schedule,
     std::size_t maximum_bytes, std::size_t maximum_auxiliary_tile, std::vector<double>& derivative,
     std::string& detail, DfGradientResources* resources = nullptr,
-    const CudaDfFinalStateToken* final_state = nullptr);
+    const CudaDfFinalStateToken* final_state = nullptr,
+    const CudaDensityFittingOccupiedProjectionLease* occupied_projection = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.
