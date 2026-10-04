@@ -6,6 +6,10 @@ keep scientific equation identity separate from qualification identity.
 scope. Qualification references identify externally owned evidence; they do not
 prove numerical validity or permit bypassing method-level acceptance gates.
 
+The [shared lowering-provider contract](lowering_providers.md) compares admitted
+precision schedules jointly with provider, layout, fusion and complete phase costs.
+It reuses this precision mechanism and keeps execution choice below scientific IR.
+
 Generated JVP/VJP programs retain a `precision_parent_schedule_identity` in their
 provenance. `PrecisionSchedule.parent_schedule_identity` binds that fingerprint
 into plan and tuning-dedup identities. Repeated differentiation and precision

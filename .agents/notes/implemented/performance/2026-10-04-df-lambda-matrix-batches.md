@@ -143,3 +143,10 @@ require inventing a new warm endpoint. Retain matched scientific settings, work,
 complete timings and unchanged independent numerical gates. The one cold pair
 and fixed-state Lambda comparison above remain useful evidence for their stated
 domains, rather than an unrestricted default-promotion record.
+
+## Superseded default-policy decision
+
+The temporary explicit-selection decision above is superseded by
+[the matrix-default restoration](../compatibility/2026-10-04-df-lambda-matrix-default-restoration.md).
+The earlier review checkpoint is retained as historical rationale; it no longer
+describes the active defaults or shared-state probe selection.

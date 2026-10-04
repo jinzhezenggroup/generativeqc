@@ -10,6 +10,7 @@
 #include "integrals/electron_interaction_source.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
+#include "runtime/resource_usage.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
 #include "scf/cuda/topology.hpp"
@@ -73,13 +74,15 @@ class CudaRhfReferenceInteractionSource final : public integrals::ElectronIntera
         device_(plan_ ? plan_->resources.device_id_ : -1) {}
 
   ~CudaRhfReferenceInteractionSource() override {
-    if (device_ >= 0) (void)cudaSetDevice(device_);
-    for (const auto& use : uses_) {
-      if (use.event != nullptr) {
-        (void)cudaEventSynchronize(use.event);
-        (void)cudaEventDestroy(use.event);
-      }
-    }
+    // If the runtime cannot establish completion at all, keep the backing
+    // allocation alive rather than releasing storage still borrowed by a GPU.
+    if (!finish_uses()) (void)plan_.release();
+    for (const auto& use : uses_)
+      if (use.event != nullptr) (void)cudaEventDestroy(use.event);
+  }
+
+  CudaRhfBucketPlan* release_plan() const noexcept {
+    return finish_uses() ? plan_.release() : nullptr;
   }
 
   const core::System& orbital() const override { return system_; }
@@ -116,26 +119,53 @@ class CudaRhfReferenceInteractionSource final : public integrals::ElectronIntera
     if (cudaSetDevice(device_) != cudaSuccess)
       throw std::runtime_error("CUDA RHF reference source could not select its device");
     auto stream = static_cast<cudaStream_t>(target.stream);
-    cuda_execution::launch_copy_resident_eri_tile(stream, plan_->resources.reference_eri_, nbf_,
-                                                  begin, count, elements, target.values);
-    if (cudaPeekAtLastError() != cudaSuccess)
-      throw std::runtime_error("CUDA RHF reference interaction copy launch failed");
-    record_use(stream);
+    // All allocating bookkeeping precedes submission. Mark the use unfenced
+    // before launch so even a launch diagnostic or failed event re-record
+    // cannot leave a newer borrow hidden behind an older event generation.
+    auto& use = prepare_use(stream);
+    use.pending = true;
+    use.recorded = false;
+    try {
+      cuda_execution::launch_copy_resident_eri_tile(stream, plan_->resources.reference_eri_, nbf_,
+                                                    begin, count, elements, target.values);
+      if (cudaPeekAtLastError() != cudaSuccess)
+        throw std::runtime_error("CUDA RHF reference interaction copy launch failed");
+      if (cudaEventRecord(use.event, stream) != cudaSuccess)
+        throw std::runtime_error("CUDA RHF reference interaction event record failed");
+      use.recorded = true;
+    } catch (...) {
+      (void)finish_use(use);
+      throw;
+    }
   }
 
  private:
   struct StreamUse {
     cudaStream_t stream{};
     cudaEvent_t event{};
+    bool pending{};
+    bool recorded{};
   };
 
-  void record_use(cudaStream_t stream) const {
-    for (auto& use : uses_) {
-      if (use.stream != stream) continue;
-      if (cudaEventRecord(use.event, stream) != cudaSuccess)
-        throw std::runtime_error("CUDA RHF reference interaction event record failed");
-      return;
-    }
+  static bool finish_use(StreamUse& use) noexcept {
+    if (!use.pending) return true;
+    const bool complete = (use.recorded && cudaEventSynchronize(use.event) == cudaSuccess) ||
+                          cudaStreamSynchronize(use.stream) == cudaSuccess ||
+                          cudaDeviceSynchronize() == cudaSuccess;
+    if (complete) use.pending = false;
+    return complete;
+  }
+
+  bool finish_uses() const noexcept {
+    if (device_ < 0 || cudaSetDevice(device_) != cudaSuccess) return uses_.empty();
+    bool complete = true;
+    for (auto& use : uses_) complete = finish_use(use) && complete;
+    return complete;
+  }
+
+  StreamUse& prepare_use(cudaStream_t stream) const {
+    for (auto& use : uses_)
+      if (use.stream == stream) return use;
     cudaEvent_t event{};
     if (cudaEventCreateWithFlags(&event, cudaEventDisableTiming) != cudaSuccess)
       throw std::runtime_error("CUDA RHF reference interaction event allocation failed");
@@ -145,12 +175,11 @@ class CudaRhfReferenceInteractionSource final : public integrals::ElectronIntera
       (void)cudaEventDestroy(event);
       throw;
     }
-    if (cudaEventRecord(event, stream) != cudaSuccess)
-      throw std::runtime_error("CUDA RHF reference interaction event record failed");
+    return uses_.back();
   }
 
   core::System system_;
-  RhfPlanOwner plan_{nullptr, destroy_rhf_cuda_bucket_plan};
+  mutable RhfPlanOwner plan_{nullptr, destroy_rhf_cuda_bucket_plan};
   std::size_t retained_bytes_{};
   std::size_t nbf_{};
   int device_{-1};
@@ -170,14 +199,17 @@ ScfResult run_rhf_cuda(
     throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
   if (interaction_source) interaction_source->reset();
 
+  if (interaction_source) {
+    struct LocalPlan {
+      CudaRhfBucketPlan* plan{};
+      ~LocalPlan() { destroy_rhf_cuda_bucket_plan(plan); }
+    } owner;
+    return run_rhf_cuda_cached(&owner.plan, system, options, device_id, initial_density, nullptr,
+                               interaction_source);
+  }
   const std::vector<core::System> systems{system};
   const std::vector<const std::vector<double>*> initial_densities{initial_density};
-  CudaRhfBucketPlan* raw_plan = nullptr;
-  std::vector<RhfBucketItem> result =
-      interaction_source
-          ? run_rhf_cuda_bucket_cached(&raw_plan, systems, options, initial_densities, device_id)
-          : run_rhf_cuda_bucket(systems, options, initial_densities, device_id);
-  RhfPlanOwner plan(raw_plan, destroy_rhf_cuda_bucket_plan);
+  auto result = run_rhf_cuda_bucket(systems, options, initial_densities, device_id);
   if (result.empty()) throw std::runtime_error("CUDA RHF returned no result");
   const generativeqc_status status = result.front().status;
   if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
@@ -191,21 +223,87 @@ ScfResult run_rhf_cuda(
     throw std::runtime_error("CUDA RHF execution failed");
   }
 
+  return std::move(result.front().scf);
+}
+
+ScfResult run_rhf_cuda_cached(
+    CudaRhfBucketPlan** plan, const core::System& system, const ScfOptions& options, int device_id,
+    const std::vector<double>* initial_density, bool* execution_plan_reused,
+    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source) {
+  if (options.hooks || options.strict_initial_density)
+    throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
+  if (!plan) throw std::invalid_argument("CUDA RHF cached execution requires a plan owner");
+  if (execution_plan_reused) *execution_plan_reused = false;
+  if (interaction_source) interaction_source->reset();
+
+  const std::vector<core::System> systems{system};
+  const std::vector<const std::vector<double>*> initial_densities{initial_density};
+  std::vector<RhfBucketItem> result;
+  try {
+    result = run_rhf_cuda_bucket_cached(plan, systems, options, initial_densities, device_id);
+  } catch (...) {
+    destroy_rhf_cuda_bucket_plan(*plan);
+    *plan = nullptr;
+    throw;
+  }
+  if (result.empty()) {
+    destroy_rhf_cuda_bucket_plan(*plan);
+    *plan = nullptr;
+    throw std::runtime_error("CUDA RHF returned no result");
+  }
+  if (execution_plan_reused) *execution_plan_reused = result.front().execution_plan_reused;
+  const generativeqc_status status = result.front().status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    // A failed or nonconverged attempt must not publish a partially advanced
+    // executable owner. The method layer may retry cold with a fresh plan.
+    destroy_rhf_cuda_bucket_plan(*plan);
+    *plan = nullptr;
+  }
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT)
+    throw std::invalid_argument("CUDA RHF received invalid arguments");
+  if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+    throw Error(status, "CUDA RHF numerical endpoint is unavailable in this mode");
+  if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED)
+    throw std::runtime_error("CUDA RHF execution failed");
   ScfResult scf = std::move(result.front().scf);
   if (interaction_source && scf.converged && scf.reference &&
-      exact_reference_source_identity(plan.get(), system, options, device_id)) {
+      exact_reference_source_identity(*plan, system, options, device_id)) {
     try {
-      auto retained = hf_cuda_owned_device_bytes(plan.get());
-      retained = posthf::checked_add(retained, plan->resources.solver_host_workspace_bytes_);
-      retained = posthf::checked_add(retained, posthf::source_capacity(system));
       core::System source_system = system;
+      auto retained = posthf::checked_add(hf_cuda_retained_numeric_bytes(*plan),
+                                          posthf::source_capacity(source_system));
+      // The generic source allowance covers atoms/shells/primitive data, but
+      // this additional normalized system also owns its ECP scalar payload.
+      retained = posthf::checked_add(retained, runtime::vector_bytes(source_system.ecp_terms));
+      // The cached slot and the source are mutually exclusive owners. Moving
+      // out before publication also leaves allocation failure exception-safe.
+      RhfPlanOwner owner(std::exchange(*plan, nullptr), destroy_rhf_cuda_bucket_plan);
       *interaction_source = std::make_shared<CudaRhfReferenceInteractionSource>(
-          std::move(source_system), std::move(plan), retained);
+          std::move(source_system), std::move(owner), retained);
     } catch (const std::bad_alloc&) {
+      interaction_source->reset();
+    } catch (const std::length_error&) {
+      interaction_source->reset();
+    } catch (const std::overflow_error&) {
       interaction_source->reset();
     }
   }
   return scf;
+}
+
+bool reclaim_rhf_cuda_reference_plan(
+    CudaRhfBucketPlan** plan,
+    std::shared_ptr<const integrals::ElectronInteractionSource>& interaction_source) noexcept {
+  if (!plan || *plan || !interaction_source || interaction_source.use_count() != 1) return false;
+  const auto* source =
+      dynamic_cast<const CudaRhfReferenceInteractionSource*>(interaction_source.get());
+  if (!source) return false;
+  auto* released = source->release_plan();
+  if (!released) return false;
+  interaction_source.reset();
+  *plan = released;
+  return true;
 }
 
 ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, int device_id,

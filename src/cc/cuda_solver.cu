@@ -29,11 +29,9 @@
 namespace generativeqc::cc {
 namespace {
 
-using generativeqc_tensor::blas_check;
 using generativeqc_tensor::cuda_check;
-// Provider handle storage is admitted separately from the IR arenas. Explicit
-// zero workspace keeps GEMM from adding an unbounded implicit workspace.
-constexpr std::size_t kDFBlasProviderAllowance = 96ULL << 20;
+// Shared provider storage is charged separately from the compiler's IR arena.
+constexpr auto kDFBlasProviderAllowance = tensor::CudaContractionContext::kProviderAllowance;
 
 std::size_t checked_mul(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max() / a)
@@ -93,13 +91,6 @@ __global__ void accumulate_df(const double* values, std::size_t count, double* s
     sum[i] = generativeqc_tensor::finite(__dadd_rn(sum[i], values[i]), error, 0);
 }
 
-// Audit before any later kernel can overwrite or mask a nonfinite BLAS result.
-__global__ void audit_df_matrix(const double* values, std::size_t count, int* error) {
-  for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
-       i += std::size_t(blockDim.x) * gridDim.x)
-    if (!isfinite(values[i])) atomicExch(error, 1);
-}
-
 struct Layout {
   std::array<std::size_t, 14> inputs{};
   std::size_t iteration{}, replay{}, last_t1{}, last_t2{}, vectors{}, errors{};
@@ -120,7 +111,7 @@ struct Owner {
   int device{};
   cudaStream_t stream{};
   cudaEvent_t trial_begin{}, trial_end{};
-  cublasHandle_t blas{};
+  tensor::CudaContractionContext contractions;
   unsigned char* base{};
   Layout layout;
   generated::dfcore::CudaState state;
@@ -208,7 +199,9 @@ struct Owner {
       auto total = checked_add(
           checked_add(p.reference_retained_bytes, checked_add(problem_host_bytes(p), layout.total)),
           checked_mul(elements, sizeof(double)));
-      return plan.matrix_gemm ? checked_add(total, kDFBlasProviderAllowance) : total;
+      return plan.matrix_gemm ? checked_add(checked_add(total, kDFBlasProviderAllowance),
+                                            generated::dfhoist::contraction_host_bytes)
+                              : total;
     };
     auto combined = build_layout();
     const auto scalar_plan = [&]() {
@@ -234,29 +227,7 @@ struct Owner {
         cuda_check(cudaEventCreate(&trial_begin));
         cuda_check(cudaEventCreate(&trial_end));
       }
-      if (plan.matrix_gemm) {
-        std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
-        std::size_t before = 0, after = 0, total = 0;
-        cuda_check(cudaMemGetInfo(&before, &total));
-        const auto code = cublasCreate(&blas);
-        if (code == CUBLAS_STATUS_ALLOC_FAILED) {
-          if (blas) blas_check(cublasDestroy(blas));
-          blas = nullptr;
-          scalar_plan();
-        } else {
-          blas_check(code);
-          blas_check(cublasSetStream(blas, stream));
-          blas_check(cublasSetPointerMode(blas, CUBLAS_POINTER_MODE_HOST));
-          blas_check(cublasSetMathMode(blas, CUBLAS_PEDANTIC_MATH));
-          blas_check(cublasSetWorkspace(blas, nullptr, 0));
-          cuda_check(cudaMemGetInfo(&after, &total));
-          if (before > after && before - after > kDFBlasProviderAllowance) {
-            blas_check(cublasDestroy(blas));
-            blas = nullptr;
-            scalar_plan();
-          }
-        }
-      }
+      if (plan.matrix_gemm && !contractions.prepare(stream)) scalar_plan();
       auto allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
       if (allocation == cudaErrorMemoryAllocation && plan.matrix_gemm) {
         // Only optional-resource failure permits retry. Arithmetic and driver
@@ -265,8 +236,7 @@ struct Owner {
         {
           // A release can hide another owner's measured provider growth.
           std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
-          blas_check(cublasDestroy(blas));
-          blas = nullptr;
+          contractions.release_locked();
         }
         scalar_plan();
         allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
@@ -309,26 +279,12 @@ struct Owner {
         hoisted_state.prepare_arena = reinterpret_cast<double*>(base + layout.df_prepare);
         hoisted_state.auxiliary_arena = df_state.response_arena;
         if (plan.matrix_gemm) {
-          hoisted_state.gemm = [this](char ta, char tb, std::size_t m, std::size_t cols,
-                                      std::size_t k, double alpha, const double* a, const double* b,
-                                      double* output) {
-            if (std::max({m, cols, k}) > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-              throw std::length_error("DF matrix dimension exceeds provider integer range");
-            const double beta = 0.0;
-            // Row-major C=A*B is column-major C^T=B^T*A^T.
-            blas_check(cublasDgemm(blas, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-                                   ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, int(cols), int(m), int(k),
-                                   &alpha, b, int(tb == 'N' ? cols : k), a, int(ta == 'N' ? k : m),
-                                   &beta, output, int(cols)));
-            const auto count = checked_mul(m, cols);
-            audit_df_matrix<<<generativeqc_tensor::blocks(
-                                  static_cast<generativeqc_tensor::I>(count), 256),
-                              256, 0, stream>>>(output, count, state.error);
-            cuda_check(cudaGetLastError());
-            ++diagnostic.df_gemm_calls;
-            diagnostic.df_gemm_summands =
-                checked_add(diagnostic.df_gemm_summands, checked_mul(count, k));
-          };
+          // Symbolic TensorIR requests are resolved/prepared once at owner
+          // construction. Every iteration reuses these immutable bindings.
+          hoisted_state.o = p.nocc;
+          hoisted_state.v = p.nvir;
+          generated::dfhoist::prepare_contractions(
+              hoisted_state, contractions, diagnostic.df_gemm_calls, diagnostic.df_gemm_summands);
         }
       }
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
@@ -460,8 +416,7 @@ struct Owner {
     // Serialize every owned release against provider/graph allocation deltas.
     std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) cudaStreamSynchronize(stream);
-    if (blas) cublasDestroy(blas);
-    blas = nullptr;
+    contractions.reset_locked();
     if (trial_begin) cudaEventDestroy(trial_begin);
     if (trial_end) cudaEventDestroy(trial_end);
     trial_begin = nullptr;

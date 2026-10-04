@@ -318,6 +318,22 @@ ScfResult run_rhf_cuda(
     const std::vector<double>* initial_density = nullptr,
     std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source = nullptr);
 
+/** Single-system adapter over the caller-owned CUDA bucket plan. The optional
+ * flag reports executable-plan reuse only; it says nothing about warm-density
+ * or physical-reference reuse. An admitted interaction_source takes exclusive
+ * ownership and clears the caller's slot until explicit successful reclaim. */
+ScfResult run_rhf_cuda_cached(
+    CudaRhfBucketPlan** plan, const core::System& system, const ScfOptions& options, int device_id,
+    const std::vector<double>* initial_density = nullptr, bool* execution_plan_reused = nullptr,
+    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source = nullptr);
+
+/** Return an exclusively held resident source's executable to an empty cache
+ * only after its complete correlated endpoint succeeds. Drains consumer uses;
+ * no transfer occurs while another source owner exists or completion fails. */
+bool reclaim_rhf_cuda_reference_plan(
+    CudaRhfBucketPlan** plan,
+    std::shared_ptr<const integrals::ElectronInteractionSource>& interaction_source) noexcept;
+
 /** Execute UHF through the native CUDA scientific path. */
 ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, int device_id,
                        const std::vector<double>* initial_density = nullptr);

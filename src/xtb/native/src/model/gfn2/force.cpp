@@ -9,6 +9,7 @@
 #include <limits>
 
 #include "generated_gfn2_electronic_native.hpp"
+#include "generated_gfn2_scc_free_energy_native.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
 namespace {
@@ -469,10 +470,14 @@ generativeqc_xtb_status_t evaluate_restricted_gfn2_energy_forces_cpu(
     if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
       return status;
     }
+  }
+
+  if (d4 != nullptr) {
     for (std::int64_t system = 0; system < batch; ++system) {
-      const double updated =
-          workspace.energy_scratch[system] + workspace.component_energy_scratch[system];
-      if (!std::isfinite(updated)) {
+      double updated = 0.0;
+      if (!::generativeqc::xtb::generated::accumulate_gfn2_component_energy(
+              workspace.energy_scratch[system], workspace.component_energy_scratch[system],
+              updated)) {
         error = "restricted GFN2 D4 ATM energy accumulation overflowed";
         return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
       }

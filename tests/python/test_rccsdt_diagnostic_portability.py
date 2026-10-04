@@ -1,7 +1,6 @@
 """Public uint64 byte diagnostics need not share the platform size_t typedef."""
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -12,12 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("diagnostic_type", ("unsigned long", "unsigned long long"))
 def test_df_source_device_capacity_accepts_distinct_unsigned_types(
-    tmp_path: Path, diagnostic_type: str
+    tmp_path: Path, diagnostic_type: str, native_cxx: object
 ) -> None:
     """Compile the DF owner assignment with both LP64 uint64_t conventions."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     statement = re.search(
         r"metrics\.owned_device_bytes\s*=\s*std::max.*?;", source, re.DOTALL
@@ -40,23 +36,19 @@ int main() {{
     }}
 }}
 """)
-    subprocess.run(
-        [compiler, "-std=c++20", "-Wall", "-Werror", str(path), "-o", str(executable)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=("-std=c++20", "-Wall", "-Werror"),
+        compile_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
 @pytest.mark.parametrize("diagnostic_type", ("unsigned long", "unsigned long long"))
 def test_triples_capacity_maximum_accepts_distinct_unsigned_types(
-    tmp_path: Path, diagnostic_type: str
+    tmp_path: Path, diagnostic_type: str, native_cxx: object
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
     statement = re.search(
         r"diagnostic\.numeric_capacity_bytes\s*=\s*std::max.*?;", source, re.DOTALL
@@ -75,16 +67,19 @@ std::size_t checked_add(std::size_t a, std::size_t b) {{
 int main() {{
   struct {{ {diagnostic_type} numeric_capacity_bytes; }} diagnostic{{}};
   auto update_capacity = [&](std::size_t retained, std::size_t triples_workspace_bytes,
-                             std::size_t warm_reservation) {{
-    struct {{ std::size_t external_reservation_bytes; }} state{{warm_reservation}};
+                             std::size_t warm_reservation,
+                             std::size_t plan_reservation = 0) {{
+    struct {{ std::size_t external_reservation_bytes, reference_execution_plan_bytes; }}
+        state{{warm_reservation, plan_reservation}};
     {statement.group(0)}
   }};
   for (std::uint64_t old : {{0ULL, 0x100000010ULL}})
     for (std::size_t retained : {{std::size_t(0), std::size_t(0x100000020ULL)}})
-      for (std::size_t warm : {{std::size_t(0), std::size_t(0x100000030ULL)}}) {{
+      for (std::size_t warm : {{std::size_t(0), std::size_t(0x100000030ULL)}})
+        for (std::size_t plan : {{std::size_t(0), std::size_t(0x100000040ULL)}}) {{
         diagnostic.numeric_capacity_bytes=old;
-        update_capacity(retained, 31, warm);
-        const auto phase_capacity=retained+31+warm;
+        update_capacity(retained, 31, warm, plan);
+        const auto phase_capacity=retained+31+warm+plan;
         const auto expected=old > phase_capacity ? old : phase_capacity;
         if (diagnostic.numeric_capacity_bytes!=expected) return 1;
       }}
@@ -103,12 +98,76 @@ int main() {{
 """
     path, executable = tmp_path / "capacity.cpp", tmp_path / "capacity"
     path.write_text(harness)
-    compiled = subprocess.run(
-        [compiler, "-std=c++20", "-Wall", "-Werror", str(path), "-o", str(executable)],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=("-std=c++20", "-Wall", "-Werror"),
+        compile_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stderr
+    subprocess.run([str(executable)], check=True, timeout=10)
+
+
+@pytest.mark.parametrize("diagnostic_type", ("unsigned long", "unsigned long long"))
+def test_mp2_endpoint_maximum_accepts_distinct_unsigned_types(
+    tmp_path: Path, diagnostic_type: str, native_cxx: object
+) -> None:
+    source = (ROOT / "src/methods/mp2_method.cpp").read_text()
+    statement = re.search(
+        r"last_->planned_endpoint_peak_bytes\s*=\s*std::max.*?;", source, re.DOTALL
+    )
+    assert statement is not None
+    path, executable = tmp_path / "mp2_capacity.cpp", tmp_path / "mp2_capacity"
+    path.write_text(f"""
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <stdexcept>
+#include "posthf/capacity.hpp"
+namespace posthf = generativeqc::posthf;
+int main() {{
+  struct {{ {diagnostic_type} numeric_capacity_bytes, planned_endpoint_peak_bytes; }} diagnostic{{}};
+  auto* last_ = &diagnostic;
+  struct Force {{ std::size_t planned_endpoint_peak_bytes; }} force{{}};
+  auto* force_diagnostic = &force;
+  struct Plan {{
+    std::size_t bytes{{}};
+    std::size_t retained_numeric_bytes() const {{ return bytes; }}
+  }} cuda_reference_plan_;
+  const auto update = [&](std::size_t next, std::size_t warm_capacity, std::size_t retained) {{
+    force.planned_endpoint_peak_bytes = next;
+    cuda_reference_plan_.bytes = retained;
+    {statement.group(0)}
+  }};
+  for (std::uint64_t old : {{0ULL, 0x100000010ULL}})
+    for (std::size_t next : {{std::size_t(0), std::size_t(0x100000020ULL)}})
+      for (std::size_t retained : {{std::size_t(0), std::size_t(0x100000030ULL)}}) {{
+        diagnostic.numeric_capacity_bytes = old;
+        update(next, 31, retained);
+        const auto combined = next + 31 + retained;
+        if (diagnostic.planned_endpoint_peak_bytes != (old > combined ? old : combined)) return 1;
+      }}
+  diagnostic.planned_endpoint_peak_bytes = 17;
+  try {{
+    update(std::numeric_limits<std::int64_t>::max(), 1, 0);
+    return 2;
+  }} catch (const std::overflow_error&) {{
+    if (diagnostic.planned_endpoint_peak_bytes != 17) return 3;
+  }}
+}}
+""")
+    native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=(
+            "-std=c++20",
+            "-Wall",
+            "-Werror",
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(ROOT / "include"),
+        ),
+        compile_timeout=30,
+    )
     subprocess.run([str(executable)], check=True, timeout=10)

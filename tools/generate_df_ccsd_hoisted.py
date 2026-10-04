@@ -175,16 +175,22 @@ def cuda_header() -> str:
         [
             "// Generated DF auxiliary-reduction CUDA declarations; do not edit.",
             "#pragma once",
-            "#include <functional>",
+            '#include "tensor/cuda_contraction.cuh"',
             '#include "generated_df_ccsd_hoisted_cpu.hpp"',
             '#include "generated_df_ccsd_core_cuda.cuh"',
             "namespace generativeqc::cc::generated::dfhoist {",
             "struct CudaState : dfcore::CudaState {",
             *[f"  const double* {name}{{}};" for name in EXTRA_INPUTS],
             "  double *prepare_arena{}, *auxiliary_arena{};",
-            "  // Optional row-major FP64 GEMM, beta=0; caller audits every result.",
-            "  std::function<void(char,char,std::size_t,std::size_t,std::size_t,double,const double*,const double*,double*)> gemm;",
+            "  generativeqc::tensor::PreparedContractions prepare_contractions, auxiliary_contractions, iteration_contractions;",
             "};",
+            "inline constexpr std::size_t contraction_host_bytes = "
+            + "+".join(
+                f"generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(n) is not None for n in p.live_nodes)})"
+                for p in packed_programs().values()
+            )
+            + ";",
+            "void prepare_contractions(CudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t& calls,std::size_t& summands);",
             "PreparedOutputs run_prepare_cuda(CudaState& state);",
             "AuxiliaryOutputs run_auxiliary_cuda(CudaState& state);",
             "DeviceIterationOutputs run_iteration_cuda(CudaState& state);",
@@ -204,9 +210,9 @@ def cuda_source() -> str:
         kind, fields = OUTPUTS[name]
         if name == "iteration":
             kind = "DeviceIterationOutputs"
-        for suffix, p, callback in (
+        for suffix, p, binding in (
             ("scalar", program, None),
-            ("packed", packed_programs()[name], "s.gemm"),
+            ("packed", packed_programs()[name], f"s.{name}_contractions"),
         ):
             lines.append(
                 _cuda_program(
@@ -217,12 +223,17 @@ def cuda_source() -> str:
                     arena_field=f"{name}_arena",
                     output_fields=fields,
                     reset_error=False,
-                    matrix_gemm=callback,
+                    prepared_contractions=binding,
                 )
             )
         lines.append(
-            f"{kind} run_{name}_cuda(CudaState& s) {{ return s.gemm ? run_{name}_packed(s) : run_{name}_scalar(s); }}"
+            f"{kind} run_{name}_cuda(CudaState& s) {{ return s.{name}_contractions ? run_{name}_packed(s) : run_{name}_scalar(s); }}"
         )
+    lines += [
+        "void prepare_contractions(CudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){",
+        *(f"  bind_{name}_packed(s,context,1,calls,summands);" for name in programs()),
+        "}",
+    ]
     return "\n".join(
         [*lines, "}  // namespace generativeqc::cc::generated::dfhoist", ""]
     )
