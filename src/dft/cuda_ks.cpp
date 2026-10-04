@@ -14,6 +14,7 @@
 
 #include "dft/cuda_ks_kernels.hpp"
 #include "dft/cuda_ks_precision.hpp"
+#include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
