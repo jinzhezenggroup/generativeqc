@@ -68,33 +68,17 @@ def build_gfn2_scc_free_energy_program() -> Program:
     )
 
 
-def build_gfn2_scc_repulsion_energy_program() -> Program:
-    """Build the first terminal stage E_SCC + E_repulsion."""
+def build_gfn2_component_energy_accumulate_program() -> Program:
+    """Accumulate one enabled terminal energy component in caller-defined order."""
 
-    scc_free_energy = _input("scc_free_energy")
-    repulsion = _input("repulsion")
-    subtotal = add(scc_free_energy, repulsion)
+    current_energy = _input("current_energy")
+    component_energy = _input("component_energy")
+    updated = add(current_energy, component_energy)
     return Program(
-        {"scc_repulsion_energy": subtotal},
+        {"updated_energy": updated},
         provenance={
-            "kind": "gfn2-scc-repulsion-energy",
+            "kind": "gfn2-component-energy-accumulate",
             "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
-            "component_order": ["scc_free_energy", "repulsion"],
-        },
-    )
-
-
-def build_gfn2_total_energy_d4_program() -> Program:
-    """Add D4 ATM only when that component is enabled by the runtime."""
-
-    scc_repulsion_energy = _input("scc_repulsion_energy")
-    d4_atm = _input("d4_atm")
-    total = add(scc_repulsion_energy, d4_atm)
-    return Program(
-        {"total_energy": total},
-        provenance={
-            "kind": "gfn2-total-energy-d4",
-            "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
-            "component_order": ["scc_repulsion_energy", "d4_atm"],
+            "ordering": "caller-owned component schedule",
         },
     )

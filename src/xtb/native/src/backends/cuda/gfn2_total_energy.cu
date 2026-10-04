@@ -204,7 +204,7 @@ __global__ void compose_total_energy_kernel(Gfn2TotalEnergyDeviceBatch batch,
     }
   }
   double total = 0.0;
-  if (!generativeqc::xtb::generated::compose_gfn2_scc_repulsion_energy(
+  if (!generativeqc::xtb::generated::accumulate_gfn2_component_energy(
           scc, repulsion, total)) {
     record_system_error(system_errors, system, device_error,
                         Gfn2TotalEnergyDeviceError::kNonfiniteSccRepulsionSum);
@@ -212,7 +212,7 @@ __global__ void compose_total_energy_kernel(Gfn2TotalEnergyDeviceBatch batch,
   }
   if (component_enabled(batch.enabled_components, Gfn2TotalEnergyComponent::kD4Atm)) {
     double with_d4 = 0.0;
-    if (!generativeqc::xtb::generated::compose_gfn2_total_energy_d4(
+    if (!generativeqc::xtb::generated::accumulate_gfn2_component_energy(
             total, d4_atm, with_d4)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2TotalEnergyDeviceError::kNonfiniteTotalArithmetic);

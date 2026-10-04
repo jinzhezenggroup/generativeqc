@@ -436,7 +436,7 @@ generativeqc_xtb_status_t evaluate_restricted_gfn2_energy_forces_cpu(
     return status;
   }
 
-  std::fill_n(workspace.energy_scratch, static_cast<std::size_t>(batch), 0.0);
+  std::copy_n(input.scc_energies, static_cast<std::size_t>(batch), workspace.energy_scratch);
   double* repulsion_gradient = nullptr;
   if (force_requested) {
     if (!valid_scratch(workspace.total_gradient, workspace.coordinate_elements, coordinates) ||
@@ -472,23 +472,17 @@ generativeqc_xtb_status_t evaluate_restricted_gfn2_energy_forces_cpu(
     }
   }
 
-  for (std::int64_t system = 0; system < batch; ++system) {
-    double total_energy = 0.0;
-    if (!::generativeqc::xtb::generated::compose_gfn2_scc_repulsion_energy(
-            input.scc_energies[system], workspace.energy_scratch[system], total_energy)) {
-      error = "restricted GFN2 total energy or gradient overflowed";
-      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-    }
-    if (d4 != nullptr) {
-      double with_d4 = 0.0;
-      if (!::generativeqc::xtb::generated::compose_gfn2_total_energy_d4(
-              total_energy, workspace.component_energy_scratch[system], with_d4)) {
+  if (d4 != nullptr) {
+    for (std::int64_t system = 0; system < batch; ++system) {
+      double updated = 0.0;
+      if (!::generativeqc::xtb::generated::accumulate_gfn2_component_energy(
+              workspace.energy_scratch[system], workspace.component_energy_scratch[system],
+              updated)) {
         error = "restricted GFN2 D4 ATM energy accumulation overflowed";
         return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
       }
-      total_energy = with_d4;
+      workspace.energy_scratch[system] = updated;
     }
-    workspace.energy_scratch[system] = total_energy;
   }
 
   if (!force_requested) {
