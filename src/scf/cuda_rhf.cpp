@@ -3898,9 +3898,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       // F(P_{n+1}) once, and execute exactly the legacy finalization sequence.
       retained_reference_rejected = true;
       launch_copy_selected_matrices_kernel(
-          blocks_for(matrix_elements), threads, 0, resources.stream_,
-          static_cast<std::int32_t>(batch_size), 1, static_cast<std::int32_t>(nbf), active,
-          next_density, density);
+          blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
+          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
+          static_cast<std::int32_t>(nbf), active, next_density, density);
       cuda_error = launch_fock_builder(density, false, false);
       if (cuda_error == cudaSuccess) {
         ++post_scf_physical_fock_builds;
