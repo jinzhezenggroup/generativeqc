@@ -135,6 +135,18 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
   return out;
 }
 
+CudaXcExecutionCapabilities cuda_xc_execution_capabilities(const CudaXcLayout& layout) {
+  const auto program =
+      cuda_xc_detail::resolve_point_capabilities(layout.functional, layout.response);
+  const bool physical =
+      !layout.response && layout.nao != 0 && layout.npoint != 0 && layout.tile_points != 0;
+  return {
+      physical && !layout.local_ao && layout.ao_precision == CudaXcAoPrecision::Fp64 &&
+          program.local_ao_selection,
+      physical && !layout.local_ao && program.mixed_density_contraction,
+  };
+}
+
 CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps) {
   if (!cuda_xc_execution_capabilities(dense).local_ao_selection || dense.ao_map_entries ||
       dense.host_ao_map_bytes)

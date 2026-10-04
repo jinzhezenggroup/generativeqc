@@ -94,14 +94,16 @@ void local_ao_cases() {
     // Full maps keep the numerical domain exact while qualifying every native
     // functional/spin family, including scaled PBE as a global-hybrid XC slice.
     const auto full_maps = local_maps(grid.point_count(), 19, basis.nao, 0);
+    constexpr bool mixed_density_capability[] = {true, true, true, false, false};
     for (std::uint32_t functional : {0U, 1U, 2U, 3U, 4U})
       for (bool uks : {false, true}) {
         const auto dense = cuda_xc_layout(basis, grid, functional, uks, 19);
         const auto dense_capability = cuda_xc_execution_capabilities(dense);
         require(dense_capability.local_ao_selection,
                 "physical FP64 XC layout lost local-AO selection capability");
-        require(dense_capability.mixed_density_contraction == (functional <= 2U),
-                "dense XC mixed-density capability disagrees with the qualified owner");
+        require(dense_capability.mixed_density_contraction ==
+                    mixed_density_capability[functional],
+                "dense XC mixed-density capability disagrees with the generated point program");
         Fixture local(basis, grid, functional, uks, 19, CudaXcAoPrecision::Fp64, false, 1.0, 1.0,
                       &full_maps);
         const auto local_capability = cuda_xc_execution_capabilities(local.layout);

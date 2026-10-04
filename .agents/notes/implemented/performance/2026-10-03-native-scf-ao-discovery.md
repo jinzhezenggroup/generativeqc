@@ -203,8 +203,10 @@ and timing identities above remain separate from current integration checks.
 
 The CUDA KS owner now asks the XC layout for local-map and density-contraction
 capabilities instead of rejecting the experiment when any unrelated precision
-region is mixed. The iteration resolver intersects the requested component
-schedule with the actual consumer capability before publishing precision work.
+region is mixed. Those capabilities are emitted beside the resolved point
+program; the runtime no longer infers mixed-density support from functional-code
+ordering. The iteration resolver intersects the requested component schedule
+with the actual consumer capability before publishing precision work.
 Consequently PBE0 AUTO may execute mixed Direct J together with local-AO XC,
 while local density contraction, exact K, XC point algebra and final audit stay
 FP64. The work census records only arithmetic that actually executed.
