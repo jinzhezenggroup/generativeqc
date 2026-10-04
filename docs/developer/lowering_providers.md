@@ -94,8 +94,9 @@ Execution failures propagate without replaying partial work. This native table
 currently rejects graph capture explicitly: graph replay work accounting is not
 yet attached, so counting only capture enqueues would give incorrect diagnostics.
 
-This native slice executes the existing admitted homogeneous arithmetic through
-cuBLAS. The shared dispatcher supports FP32 and FP64 storage/compute/accumulation;
+The shared matrix executor supports cuBLAS and an ordered generated CUDA
+implementation, including padded views and affine output updates. Both support
+FP32 and FP64 storage/compute/accumulation;
 DF-CC and Lambda still request FP64. It does not yet execute the general
 `LoweringBinding` portfolio or perform joint native precision/provider selection.
 Mixed compute/accumulation, casts and refinement require a complete additional
@@ -103,6 +104,20 @@ candidate; the current adapter rejects them. The RHF frame-response callback,
 conventional RCCSD migration from #1868, DFT, triples precision, other provider
 families and complete endpoint qualification remain in
 #1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
+
+The same native descriptor also supports `validate_affine()` independently of
+the optional matrix recipe. `affine_contraction_initializer` emits original
+TensorIR modes with zero matrix dimensions to prevent accidental matrix dispatch.
+The optional `src/tensor/cuda_cutensor.cuh` provider consumes these affine fields
+and prepares a reusable homogeneous FP32/FP64 plan with explicit strides. It
+disables JIT, global plan caching and incremental autotuning; capture is rejected.
+Workspace is queried exactly and observed retained device storage is checked
+against a reservation. Opaque host allocations have no cuTENSOR query, so host
+bytes are an externally qualified reservation, not an exact measured footprint.
+This provider is not linked or selected by a production method by default.
+Production resource qualification and complete endpoint selection remain open.
+See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
+for validation and integration boundaries.
 
 The [decision note](../../.agents/notes/implemented/architecture/2026-10-04-joint-lowering-contract.md)
 records the compatibility and identity rationale.
