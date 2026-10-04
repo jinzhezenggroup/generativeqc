@@ -1,9 +1,10 @@
 """Precision schedules for generated direct-Fock execution.
 
-The existing mixed Fock kernel evaluates the ERI recurrence in FP32 while
-retaining density/Fock storage and accumulation in FP64.  This module records
-that execution choice in the same common contract used by TensorIR and DFT;
-it does not enable the route or decide its scientific promotion domain.
+The existing generated mixed Fock kernel evaluates both the ERI recurrence and
+the density-by-integral product in FP32, then widens the contribution for FP64
+Fock accumulation while retaining density/Fock storage in FP64.  This module
+records that execution choice in the same common contract used by TensorIR and
+DFT; it does not enable the route or decide its scientific promotion domain.
 """
 
 from __future__ import annotations
@@ -37,6 +38,15 @@ def generated_fock_precision_schedule(
                     storage_dtype="float32",
                     compute_dtype="float32",
                     accumulation_dtype="float32",
+                    qualification=qualification,
+                ),
+            ),
+            (
+                "density_integral_product",
+                PrecisionDirective(
+                    storage_dtype="float64",
+                    compute_dtype="float32",
+                    accumulation_dtype="float64",
                     qualification=qualification,
                 ),
             ),

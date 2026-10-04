@@ -21,6 +21,16 @@ namespace detail {
 response::LinearResponseProblem make_lambda_response_problem(std::size_t dimension,
                                                              response::LinearOperator apply);
 
+/** Fill the approximate -D Jacobian diagonal in packed Lambda coordinates.
+ * Coordinate weights cancel for a diagonal operator: do not multiply by the
+ * doubles orbit's sqrt(2). Return false for unsafe or pair-inconsistent input
+ * denominators so the caller can retain the unpreconditioned solve.
+ */
+bool fill_lambda_diagonal_preconditioner(const Problem& problem,
+                                         std::span<const std::size_t> representatives,
+                                         std::span<const std::size_t> partners,
+                                         double breakdown_tolerance, std::span<double> diagonal);
+
 }  // namespace detail
 
 struct LambdaOptions {
@@ -33,6 +43,17 @@ struct LambdaOptions {
     options.absolute_tolerance = 1e-11;
     return options;
   }();
+  // Right preconditioning changes only Krylov coordinates, never the physical
+  // Lambda operator or either residual gate. False retains the original path.
+  bool diagonal_preconditioning{true};
+  // Cache immutable DF primal cuts and reverse their reduced graph. Admission
+  // falls back to expanded Q actions when the complete cache does not fit.
+  bool df_auxiliary_reduction{true};
+  // Compiler-packed FP64 adjoints with bounded auxiliary batches. Optional
+  // matrix storage/provider allocation falls back to the scalar staged graph.
+  // Keep explicit selection until complete-endpoint promotion is qualified.
+  bool df_matrix_gemm{false};
+  std::size_t df_auxiliary_batch_limit{8};
 };
 
 struct LambdaDiagnostic {
@@ -49,6 +70,16 @@ struct LambdaDiagnostic {
   std::size_t d2h_bytes{};
   std::size_t synchronizations{};
   bool cuda_actions{};
+  bool diagonal_preconditioned{};
+  std::size_t preconditioner_actions{};
+  // Complete native DF actions, including primal and independent Lambda replay.
+  std::size_t df_auxiliary_slices{}, df_contraction_terms{}, df_generated_kernels{};
+  bool df_auxiliary_reduction{};
+  std::size_t df_preparation_calls{}, df_reduced_actions{};
+  bool df_matrix_gemm{};
+  std::size_t df_auxiliary_batch_size{1}, df_auxiliary_batches{};
+  std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_output_bytes{};
+  std::size_t df_provider_allowance_bytes{};
   const char* shared_program_hash{};
   const char* independent_program_hash{};
 };
@@ -84,6 +115,8 @@ LambdaResult solve_lambda_cpu_with_energy_source(const Problem& problem,
  * GMRES control and packed symmetry projection remain host-owned in this first
  * native residency slice. The generated scientific actions execute on the
  * selected CUDA device without a CPU response fallback.
+ * Explicit DF problems use retained-core plus complete auxiliary actions, with
+ * fresh physical replay and the same independent Lambda residual gates.
  */
 LambdaResult solve_lambda_cuda(const Problem& problem, const SolverResult& cc_result, int device,
                                const LambdaOptions& options = {});
@@ -96,13 +129,18 @@ LambdaResult solve_lambda_cuda_with_energy_source(const Problem& problem,
 /** Corrected Lambda plus fixed-orbital RCCSD parameter VJPs from one CUDA state.
  *
  * The converged Problem/T1/T2 inputs are staged once. Lambda RHS/J^T actions and
- * all ten parameter VJPs then reuse that device state. Host GMRES control remains
+ * all parameter VJPs then reuse that device state. DF problems return eight
+ * retained-block cotangents plus virtual-residual factor cotangents; their
+ * retained Gram/source pullback remains an upstream consumer. Host GMRES control remains
  * unchanged; parameter outputs are detached to host for the later Hamiltonian
  * response owner.
  */
 struct CudaFixedOrbitalResponseResult {
   LambdaResult lambda;
   std::vector<double> foo, fov, fvv, ovov, ovvo, oovv, ovvv, ovoo, oooo, vvvv;
+  // Virtual-residual factor cotangents; retained-block cotangents above still
+  // require their own Gram-product pullback before a complete source response.
+  std::vector<double> df_bov, df_bvv;
 };
 
 CudaFixedOrbitalResponseResult solve_lambda_parameter_response_cuda(

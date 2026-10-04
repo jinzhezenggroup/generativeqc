@@ -16,7 +16,7 @@
 namespace generativeqc::scf::cuda_df {
 generativeqc_status begin_scf_final_state_solve(CudaDensityFittingJkPlan& plan,
                                                 std::string& detail) {
-  plan.final_projection_token.reset();
+  plan.revoke_projection_leases();
   if (auto* state = static_cast<PersistentScfState*>(plan.persistent_scf_state)) {
     state->final_frames_available = false;
     state->warm_current.reset();
@@ -204,7 +204,7 @@ generativeqc_status try_cuda_density_fitting_final_rhf_jk(CudaDensityFittingJkPl
                                                           std::string& detail, bool download) {
   using namespace runtime::cuda_trace;
   used = false;
-  if (plan) plan->final_projection_token.reset();
+  if (plan) plan->revoke_projection_leases();
   const char* policy = std::getenv("GENERATIVEQC_DF_FINAL_EXCHANGE");
   if (policy && std::string(policy) != "auto" && std::string(policy) != "dense" &&
       std::string(policy) != "occupied") {

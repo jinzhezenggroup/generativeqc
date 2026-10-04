@@ -147,6 +147,48 @@
       ]
     },
     {
+      "id": "hf.bounded-angular-force",
+      "classification": "negative-evidence",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_BOUNDED_ANGULAR_FORCE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/direct_bounded_fallback.cu",
+        "src/scf/cuda/direct_coulomb.cpp"
+      ],
+      "rationale": "Same-binary RTX 5090 ABBA diagnostics regress complete TZVPD E/F warm by 29.15% at 3 atoms and 10.063% at 12 atoms despite passing independent numerical gates. Linked registers remain 254-255 and enumeration repeats thirteen times.",
+      "revisit_condition": "Only revisit with a materially different work/resource argument that removes the demonstrated tradeoff; do not retune or promote the unchanged thirteen-scan design.",
+      "evidence": [
+        "pr:#1761",
+        "docs:docs/developer/fock_build.md",
+        "note:.agents/notes/rejected/2026-10-04-tzvpd-angular-force-schedule.md"
+      ]
+    },
+    {
+      "id": "hf.direct-coulomb-reachable",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_COULOMB_REACHABLE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/coulomb_auxiliary.cuh",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+      ],
+      "rationale": "Off-by-default exact Cartesian component dependency pruning. Primitive/AO counts and reserved auxiliary storage stay unchanged; recurrence state counts are not FLOPs or measured speedups.",
+      "revisit_condition": "Independent full/LR derivative, sanitizer, complete same-binary cold/warm/displaced and larger-size qualification with observed work must precede promotion.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md"
+      ]
+    },
+    {
       "id": "hf.force-density-product-screening",
       "classification": "negative-evidence",
       "controls": [
@@ -310,12 +352,34 @@
       "sources": [
         "python/generativeqc/resources_hf.py"
       ],
-      "rationale": "DF force screening is explicitly off by default; arithmetic/work reduction alone has not established a complete force-endpoint promotion.",
+      "rationale": "The earlier SSS primitive force screen is explicitly off by default; its small measured complete-endpoint gain does not establish automatic promotion. Whole-shell Coulomb-norm screening is registered separately.",
       "revisit_condition": "Require changed-geometry force endpoints, resource accounting, and existing numerical gates before any nonzero automatic screening budget is admitted.",
       "evidence": [
         "issue:#406",
         "docs:docs/developer/df_tuning.md",
         "issue:#1598"
+      ]
+    },
+    {
+      "id": "df.shell-force-screening",
+      "classification": "already-default",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DF_SHELL_SCREEN_ABS"
+      ],
+      "owner_issues": [
+        406,
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/df_gradient_bridge.cu",
+        "python/generativeqc_compiler/integral/df_pair_screening.py"
+      ],
+      "rationale": "Qualified whole-shell Coulomb-norm screening defaults to a 1e-10 absolute force-component budget on the established sm_120 automatic shell domain. Complete 96-atom warm endpoints improve 27.4%; independent numerical, geometry, batch and constrained-panel checks pass. Generic and capacity-limited consumers retain strict evaluation. The earlier SSS primitive screen remains independently off.",
+      "revisit_condition": "Broaden the architecture or workload domain only with complete endpoint and resource evidence. Preserve explicit off, unchanged tile selection and strict optional-allocation fallback; forward B storage is unchanged.",
+      "evidence": [
+        "docs:docs/developer/df_tuning.md",
+        "benchmarks:benchmarks/results/df-source-screening-20261004/README.md"
       ]
     },
     {

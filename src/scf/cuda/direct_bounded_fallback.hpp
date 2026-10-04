@@ -8,6 +8,7 @@
 
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
+#include "scf/direct_block_domain.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -18,6 +19,19 @@ enum class DirectRangeOperator : std::uint32_t {
   RshSources = 3,
   FullSources = 4
 };
+
+/** Opt-in disjoint angular passes of the full-J/K or LR force source.
+ * Reuses the caller's cursor and bounded queue; repeats enumeration per order.
+ * Radial/source coefficients and exact screening remain owned by the existing
+ * generated consumers. No new storage is allocated by this launch seam. */
+cudaError_t launch_bounded_direct_angular_force_kernel(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening_tolerance, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* block_bounds, const double* system_bounds, const std::uint32_t* class_state,
+    const double* schwarz, const double* density, const std::uint8_t* active, double* output,
+    unsigned long long* cursor, DirectRangeOperator range, double omega, double coulomb_coefficient,
+    double exchange_coefficient, detail::BoundedDirectBlockDomain domain = {});
 
 /** Force-output fallback; purpose selects screening semantics, not the scientific output. */
 /** Method-neutral force variant. Coefficients multiply the Coulomb and exchange
@@ -32,7 +46,8 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     std::uint64_t enabled_mask, const std::uint32_t* bounded_generated_overflow,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
-    double coulomb_coefficient, double exchange_coefficient, bool separate_sources = false);
+    double coulomb_coefficient, double exchange_coefficient, bool separate_sources = false,
+    detail::BoundedDirectBlockDomain block_domain = {});
 
 /** Range-separated exchange derivative on the same bounded shell scheduler.
  * Full-range Schwarz bounds remain a conservative gate for SR/LR operators. */

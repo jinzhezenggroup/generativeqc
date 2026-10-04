@@ -22,7 +22,7 @@ class ElectronInteractionSource;
 namespace generativeqc::cc {
 
 /** Public conventional CCSD(T) force qualification; CCSD keeps its own limit. */
-inline constexpr std::size_t kRccsdtForceMaxAOs = 28;
+inline constexpr std::size_t kRccsdtForceMaxAOs = 56;
 
 /** Conservative simultaneous numeric peaks for the serialized force phases.
  * Every phase includes borrowed molecule/CC/reference inputs once and all earlier
@@ -31,6 +31,10 @@ inline constexpr std::size_t kRccsdtForceMaxAOs = 28;
  */
 struct RccsdtForcePlan {
   std::size_t retained_input_bytes{};
+  // Internal degeneracies require the complete triples Fock resolvent. Missing
+  // orbital metadata in a planning-only query admits this conservative case.
+  bool full_triples_fock_response{};
+  std::size_t triples_fock_phase_bytes{};
   std::size_t triples_phase_bytes{}, lambda_phase_bytes{}, parameter_phase_bytes{};
   std::size_t raw_phase_bytes{}, response_phase_bytes{}, derivative_phase_bytes{};
   std::size_t raw_provider_budget_bytes{};
@@ -78,6 +82,9 @@ struct RccsdtForceResult {
   // Together with complete endpoint time these locate work amplification at
   // larger dimensions without treating a single faster phase as a speedup.
   double triples_seconds{}, lambda_parameter_seconds{}, orbital_seconds{}, derivative_seconds{};
+  // Peak device capacity across the serialized triples and orbital owners.
+  // Transfer and synchronization counters below describe the orbital owner;
+  // triples transfers have their own completed-phase ledger fields.
   std::size_t response_owned_device_bytes{};
   std::size_t response_h2d_bytes{};
   std::size_t response_d2h_bytes{};
@@ -92,10 +99,10 @@ struct RccsdtForceResult {
  * composes generated CC/(T)/Hamiltonian adjoints and the shared RHF orbital
  * response, then reuses the generic conventional derivative consumer.  The
  * public domain is bounded to conventional all-electron references, through
- * 28 AOs for CCSD(T) and 12 AOs for CCSD. The CPU owner evaluates the complete
+ * 56 AOs for CCSD(T) and 12 AOs for CCSD. The CPU owner evaluates the complete
  * response and derivative on host. The CUDA owner runs generated Lambda,
- * parameter and Hamiltonian/orbital actions on device; GMRES control, triples
- * response and the final MO-to-AO weight pullback retain their host ownership.
+ * triples, parameter and Hamiltonian/orbital actions on device; GMRES control
+ * and the final MO-to-AO weight pullback retain their host ownership.
  * The final nuclear derivative contraction uses the CUDA consumer. DF, frozen-core, ECP
  * and open-shell variants remain separate capabilities. max_bytes is the complete numeric
  * allowance, including the borrowed molecule, physical reference, CC problem/amplitudes
@@ -127,7 +134,7 @@ RccsdtForceResult rccsdt_force_cpu(const core::System& system,
 
 /** Publish the qualified conventional RCCSD(T) force through a CUDA derivative consumer.
  *
- * Generated Lambda actions plus Hamiltonian/Fock/orbital TensorIR execute on
+ * Generated triples/Lambda actions plus Hamiltonian/Fock/orbital TensorIR execute on
  * CUDA in the promoted response path, while the physical Z/GMRES control flow
  * remains host-owned. device_id selects the CUDA response/derivative device;
  * derivative_stage_budget bounds each generated one-/two-electron derivative

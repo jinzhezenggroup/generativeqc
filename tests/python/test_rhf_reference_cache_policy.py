@@ -19,6 +19,7 @@ def test_reference_cache_preserves_bounded_fallback(tmp_path: Path) -> None:
 #include <limits>
 #include "scf/cuda/reference_eri_policy.hpp"
 using generativeqc::scf::cuda_execution::reference_eri_cache_bytes;
+using generativeqc::scf::cuda_execution::reference_quartet_direct;
 int main() {
   constexpr std::size_t required=123456, values=7*7*7*7, bytes=values*sizeof(double);
   if(reference_eri_cache_bytes(values,1,false,required,required+bytes)!=bytes) return 1;
@@ -32,6 +33,10 @@ int main() {
   constexpr std::size_t ceiling=256ULL<<20;
   if(reference_eri_cache_bytes(ceiling/8,1,false,0,maximum)!=ceiling) return 8;
   if(reference_eri_cache_bytes(ceiling/8+1,1,false,0,maximum)!=0) return 9;
+  if(reference_quartet_direct(0,2) || reference_quartet_direct(76,1)) return 10;
+  if(!reference_quartet_direct(77,1) || !reference_quartet_direct(maximum,0)) return 11;
+  if(!reference_quartet_direct(6,2) || !reference_quartet_direct(8,3)) return 12;
+  if(reference_quartet_direct(230,4)) return 13;
 }
 """)
     subprocess.run(

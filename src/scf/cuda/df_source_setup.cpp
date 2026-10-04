@@ -13,6 +13,7 @@
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/topology.hpp"
+#include "scf/df_source_capacity.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -22,6 +23,18 @@ bool cuda_df_shell_domain(const core::System& system, const char* role, std::str
   for (const auto& shell : system.shells) {
     if (shell.angular_momentum > 3U) {
       detail = std::string("CUDA DF ") + role + " shells beyond f (l > 3) are unsupported";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool cuda_df_value_domain(const core::System& orbital, const core::System& auxiliary,
+                          std::string& detail) {
+  if (!cuda_df_shell_domain(orbital, "orbital", detail)) return false;
+  for (const auto& shell : auxiliary.shells) {
+    if (shell.angular_momentum > 4U) {
+      detail = "CUDA DF auxiliary value shells beyond g (l > 4) are unsupported";
       return false;
     }
   }
@@ -49,7 +62,7 @@ std::vector<DfPublicAoExpansion> make_public_to_cartesian_transform(const core::
           return entry.component == components[component];
         });
         if (term == expansion.end() || term->coefficient == 0.0) continue;
-        if (packed.count == molecule::kMaximumAoExpansionTerms)
+        if (packed.count == kDfPublicAoExpansionTerms)
           throw std::invalid_argument("DF public AO expansion exceeds normalized basis bound");
         packed.cartesian[packed.count] = static_cast<std::int32_t>(cartesian_offset + component);
         packed.coefficients[packed.count++] = term->coefficient;
@@ -82,8 +95,7 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   *source = nullptr;
   const std::size_t batch_size = orbital_systems.size();
   for (std::size_t system = 0; system < batch_size; ++system) {
-    if (!cuda_df_shell_domain(auxiliary_systems[system], "auxiliary", detail) ||
-        !cuda_df_shell_domain(orbital_systems[system], "orbital", detail)) {
+    if (!cuda_df_value_domain(orbital_systems[system], auxiliary_systems[system], detail)) {
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
@@ -131,7 +143,9 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     }
     core::System item;
     item.atoms = orbital.atoms;
-    item.shells = orbital.shells;
+    item.shells.reserve(df_source_capacity::add(
+        df_source_capacity::add(orbital.shells.size(), auxiliary.shells.size()), 1));
+    item.shells.insert(item.shells.end(), orbital.shells.begin(), orbital.shells.end());
     item.shells.insert(item.shells.end(), auxiliary.shells.begin(), auxiliary.shells.end());
     item.shells.push_back({0, 0, {{0.0, 1.0}}});
     item.charge = orbital.charge;
@@ -149,11 +163,19 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   HostBatch host;
   std::vector<const std::vector<double>*> no_warm(batch_size, nullptr);
   try {
+    if (batch_size == 1) {
+      const auto capacity =
+          df_source_capacity::plan(orbital_systems.front(), auxiliary_systems.front(),
+                                   {sizeof(CudaDensityFittingIntegralSourceImpl), sizeof(HostBatch),
+                                    sizeof(DfPublicAoExpansion)});
+      df_source_capacity::reserve_upload_metadata(host, capacity);
+    }
     // DF consumes only normalized basis metadata. The ordinary Direct packer
     // also builds resident four-center task tables, which this source never
     // uploads or replays and which grow rapidly with the shell count. Reuse
     // matrix packing to preserve AO/primitive ordering without those tables.
-    if (!pack_host_batch(combined, no_warm, host, false, true) ||
+    if (!pack_host_batch(combined, no_warm, host, false, true, false, ResidentPsssPolicy::Skip,
+                         HostBasisPacking::DfValues) ||
         host.nbf != cartesian_nbf + cartesian_naux + 1U) {
       detail = "bounded DF source Cartesian packing failed";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
@@ -184,6 +206,15 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     detail = "GENERATIVEQC_DF_VALUE_MATH must be auto, generic, polynomial rys or candidate";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  // Freeze the angular domain with this immutable basis owner. Auxiliary g
+  // retains its explicit value lowering and the separate F11 response policy.
+  for (const auto& auxiliary : auxiliary_systems)
+    for (const auto& shell : auxiliary.shells)
+      candidate->has_auxiliary_g |= shell.angular_momentum == 4U;
+  if (candidate->has_auxiliary_g && candidate->value_math != 0U) {
+    detail = "g auxiliary DF values require the generic generated math policy";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
   candidate->batch_size = batch_size;
   candidate->public_nbf = public_nbf;
   candidate->public_naux = public_naux;
@@ -196,6 +227,8 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   candidate->batch.total_atoms = static_cast<std::int64_t>(host.atomic_numbers.size());
   candidate->batch.total_shells = static_cast<std::int64_t>(host.shell_atoms.size());
   try {
+    // Eighteen packed metadata uploads and two public-basis transforms.
+    candidate->allocations.reserve(20);
     candidate->host_atom_offsets = host.atom_offsets;
     candidate->orbital_identities.reserve(batch_size);
     candidate->auxiliary_identities.reserve(batch_size);

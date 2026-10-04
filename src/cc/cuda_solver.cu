@@ -16,14 +16,24 @@
 
 #include "cc/cuda_solver_support.cuh"
 #include "cc/cuda_state.cuh"
+#include "cc/df_plan.hpp"
+#include "generated_df_ccsd_core_cpu.hpp"
+#include "generated_df_ccsd_core_cuda.cuh"
+#include "generated_df_ccsd_cuda.cuh"
+#include "generated_df_ccsd_hoisted_cuda.cuh"
 #include "generated_rccsd_cpu.hpp"
+#include "runtime/allocation_measurement.hpp"
 #include "tensor/cuda_error.hpp"
 #include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::cc {
 namespace {
 
+using generativeqc_tensor::blas_check;
 using generativeqc_tensor::cuda_check;
+// Provider handle storage is admitted separately from the IR arenas. Explicit
+// zero workspace keeps GEMM from adding an unbounded implicit workspace.
+constexpr std::size_t kDFBlasProviderAllowance = 96ULL << 20;
 
 std::size_t checked_mul(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max() / a)
@@ -75,11 +85,27 @@ __global__ void gram_kernel(const double* errors, std::size_t elements, int hist
   }
 }
 
+// A Q slice is consumed before its borrowed action arena is reused. Preserve
+// the first arithmetic failure across every slice and the subsequent core.
+__global__ void accumulate_df(const double* values, std::size_t count, double* sum, int* error) {
+  for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
+       i += std::size_t(blockDim.x) * gridDim.x)
+    sum[i] = generativeqc_tensor::finite(__dadd_rn(sum[i], values[i]), error, 0);
+}
+
+// Audit before any later kernel can overwrite or mask a nonfinite BLAS result.
+__global__ void audit_df_matrix(const double* values, std::size_t count, int* error) {
+  for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
+       i += std::size_t(blockDim.x) * gridDim.x)
+    if (!isfinite(values[i])) atomicExch(error, 1);
+}
+
 struct Layout {
   std::array<std::size_t, 14> inputs{};
   std::size_t iteration{}, replay{}, last_t1{}, last_t2{}, vectors{}, errors{};
   std::size_t gram{}, system{}, coefficients{}, r1_partials{}, r2_partials{}, scalars{};
   std::size_t status{}, generated_error{}, arithmetic{}, total{};
+  std::size_t df_bov{}, df_bvv{}, df_arena{}, df_sum{}, df_prepare{};
 };
 
 std::size_t reserve(Layout& layout, std::size_t& cursor, std::size_t bytes) {
@@ -94,9 +120,15 @@ struct Owner {
   int device{};
   cudaStream_t stream{};
   cudaEvent_t trial_begin{}, trial_end{};
+  cublasHandle_t blas{};
   unsigned char* base{};
   Layout layout;
-  generated::CudaState state;
+  generated::dfcore::CudaState state;
+  generated::df::CudaState df_state;
+  generated::dfhoist::CudaState hoisted_state;
+  DFIterationPlan plan;
+  double *df_bov{}, *df_bvv{}, *df_sum{};
+  std::size_t naux{};
   double *last_t1{}, *last_t2{}, *vectors{}, *errors{}, *gram{}, *system{}, *coefficients{};
   double *r1_partials{}, *r2_partials{}, *scalars{};
   int *status{}, *arithmetic{};
@@ -110,48 +142,90 @@ struct Owner {
         n1(checked_mul(p.nocc, p.nvir)),
         n2(checked_mul(checked_mul(p.nocc, p.nocc), checked_mul(p.nvir, p.nvir))),
         elements(checked_add(n1, n2)) {
+    naux = p.naux;
+    // The compiler derives each flattened dimension from contraction labels;
+    // neither tensor rank nor o*v alone bounds the provider's signed extents.
+    const bool matrix_dimensions_fit =
+        !naux || (generated::dfhoist::prepare_packed_dimensions_fit(p.nocc, p.nvir) &&
+                  generated::dfhoist::auxiliary_packed_dimensions_fit(p.nocc, p.nvir) &&
+                  generated::dfhoist::iteration_packed_dimensions_fit(p.nocc, p.nvir));
+    if (naux)
+      plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction,
+                               options.df_matrix_gemm && matrix_dimensions_fit);
     const std::array<const std::vector<double>*, 14> host = {
         &p.foo,  &p.fov,  &p.fvv,  &p.ovov, &p.ovvo, &p.oovv,       &p.ovvv,
         &p.ovoo, &p.oooo, &p.vvvv, &p.d1,   &p.d2,   &p.initial_t1, &p.initial_t2};
-    std::size_t cursor = 0;
-    for (std::size_t i = 0; i < host.size(); ++i)
-      layout.inputs[i] = reserve(layout, cursor, checked_mul(host[i]->size(), sizeof(double)));
-    layout.iteration =
-        reserve(layout, cursor,
-                checked_mul(generated::iteration_arena_elements(p.nocc, p.nvir), sizeof(double)));
-    layout.replay =
-        reserve(layout, cursor,
-                checked_mul(generated::replay_arena_elements(p.nocc, p.nvir), sizeof(double)));
-    layout.last_t1 = reserve(layout, cursor, checked_mul(n1, sizeof(double)));
-    layout.last_t2 = reserve(layout, cursor, checked_mul(n2, sizeof(double)));
-    layout.vectors = reserve(layout, cursor,
-                             checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
-    layout.errors = reserve(layout, cursor,
-                            checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
-    layout.gram =
-        reserve(layout, cursor,
-                checked_mul(checked_mul(options.diis_size, options.diis_size), sizeof(double)));
-    layout.system = reserve(
-        layout, cursor,
-        checked_mul(checked_mul(options.diis_size + 1, options.diis_size + 1), sizeof(double)));
-    layout.coefficients =
-        reserve(layout, cursor, checked_mul(options.diis_size + 1, sizeof(double)));
-    partial1 = std::min<std::size_t>((n1 + 255) / 256, 65535);
-    partial2 = std::min<std::size_t>((n2 + 255) / 256, 65535);
-    layout.r1_partials = reserve(layout, cursor, checked_mul(partial1, sizeof(double)));
-    layout.r2_partials = reserve(layout, cursor, checked_mul(partial2, sizeof(double)));
-    layout.scalars = reserve(layout, cursor, 2 * sizeof(double));
-    // Pack the generated-tensor error beside DIIS status so separating
-    // generated and DIIS arithmetic state does not increase the aligned arena.
-    layout.status = reserve(layout, cursor, 2 * sizeof(int));
-    layout.generated_error = checked_add(layout.status, sizeof(int));
-    layout.arithmetic = reserve(layout, cursor, sizeof(int));
-    layout.total = align256(cursor);
+    auto build_layout = [&]() {
+      layout = {};
+      std::size_t cursor = 0;
+      for (std::size_t i = 0; i < host.size(); ++i)
+        layout.inputs[i] = reserve(layout, cursor, checked_mul(host[i]->size(), sizeof(double)));
+      layout.iteration = reserve(
+          layout, cursor,
+          checked_mul(naux ? plan.iteration : generated::iteration_arena_elements(p.nocc, p.nvir),
+                      sizeof(double)));
+      layout.replay =
+          reserve(layout, cursor,
+                  checked_mul(naux ? generated::dfcore::replay_arena_elements(p.nocc, p.nvir)
+                                   : generated::replay_arena_elements(p.nocc, p.nvir),
+                              sizeof(double)));
+      if (naux) {
+        layout.df_bov = reserve(layout, cursor, checked_mul(p.df_bov.size(), sizeof(double)));
+        layout.df_bvv = reserve(layout, cursor, checked_mul(p.df_bvv.size(), sizeof(double)));
+        layout.df_arena = reserve(layout, cursor, checked_mul(plan.auxiliary, sizeof(double)));
+        layout.df_sum = reserve(layout, cursor, checked_mul(plan.accumulation, sizeof(double)));
+        if (plan.hoisted)
+          layout.df_prepare =
+              reserve(layout, cursor, checked_mul(plan.preparation, sizeof(double)));
+      }
+      layout.last_t1 = reserve(layout, cursor, checked_mul(n1, sizeof(double)));
+      layout.last_t2 = reserve(layout, cursor, checked_mul(n2, sizeof(double)));
+      layout.vectors = reserve(
+          layout, cursor, checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
+      layout.errors = reserve(
+          layout, cursor, checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
+      layout.gram =
+          reserve(layout, cursor,
+                  checked_mul(checked_mul(options.diis_size, options.diis_size), sizeof(double)));
+      layout.system = reserve(
+          layout, cursor,
+          checked_mul(checked_mul(options.diis_size + 1, options.diis_size + 1), sizeof(double)));
+      layout.coefficients =
+          reserve(layout, cursor, checked_mul(options.diis_size + 1, sizeof(double)));
+      partial1 = std::min<std::size_t>((n1 + 255) / 256, 65535);
+      partial2 = std::min<std::size_t>((n2 + 255) / 256, 65535);
+      layout.r1_partials = reserve(layout, cursor, checked_mul(partial1, sizeof(double)));
+      layout.r2_partials = reserve(layout, cursor, checked_mul(partial2, sizeof(double)));
+      layout.scalars = reserve(layout, cursor, 2 * sizeof(double));
+      // Pack the generated-tensor error beside DIIS status so separating
+      // generated and DIIS arithmetic state does not increase the aligned arena.
+      layout.status = reserve(layout, cursor, 2 * sizeof(int));
+      layout.generated_error = checked_add(layout.status, sizeof(int));
+      layout.arithmetic = reserve(layout, cursor, sizeof(int));
+      layout.total = align256(cursor);
 
-    // Final detached host amplitudes coexist with this resident device arena.
-    const auto combined = checked_add(
-        checked_add(p.reference_retained_bytes, checked_add(problem_host_bytes(p), layout.total)),
-        checked_mul(elements, sizeof(double)));
+      // Final detached host amplitudes coexist with this resident device arena.
+      auto total = checked_add(
+          checked_add(p.reference_retained_bytes, checked_add(problem_host_bytes(p), layout.total)),
+          checked_mul(elements, sizeof(double)));
+      return plan.matrix_gemm ? checked_add(total, kDFBlasProviderAllowance) : total;
+    };
+    auto combined = build_layout();
+    const auto scalar_plan = [&]() {
+      plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
+      combined = build_layout();
+      if (plan.hoisted && combined > options.max_bytes) {
+        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
+        combined = build_layout();
+      }
+      if (combined > options.max_bytes)
+        throw std::length_error("RCCSD CUDA scalar fallback exceeds correlation memory budget");
+    };
+    if (plan.matrix_gemm && combined > options.max_bytes) scalar_plan();
+    if (plan.hoisted && combined > options.max_bytes) {
+      plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
+      combined = build_layout();
+    }
     if (combined > options.max_bytes)
       throw std::length_error("RCCSD CUDA resident state exceeds correlation memory budget");
     try {
@@ -160,7 +234,44 @@ struct Owner {
         cuda_check(cudaEventCreate(&trial_begin));
         cuda_check(cudaEventCreate(&trial_end));
       }
-      cuda_check(cudaMalloc(reinterpret_cast<void**>(&base), layout.total));
+      if (plan.matrix_gemm) {
+        std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+        std::size_t before = 0, after = 0, total = 0;
+        cuda_check(cudaMemGetInfo(&before, &total));
+        const auto code = cublasCreate(&blas);
+        if (code == CUBLAS_STATUS_ALLOC_FAILED) {
+          if (blas) blas_check(cublasDestroy(blas));
+          blas = nullptr;
+          scalar_plan();
+        } else {
+          blas_check(code);
+          blas_check(cublasSetStream(blas, stream));
+          blas_check(cublasSetPointerMode(blas, CUBLAS_POINTER_MODE_HOST));
+          blas_check(cublasSetMathMode(blas, CUBLAS_PEDANTIC_MATH));
+          blas_check(cublasSetWorkspace(blas, nullptr, 0));
+          cuda_check(cudaMemGetInfo(&after, &total));
+          if (before > after && before - after > kDFBlasProviderAllowance) {
+            blas_check(cublasDestroy(blas));
+            blas = nullptr;
+            scalar_plan();
+          }
+        }
+      }
+      auto allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+      if (allocation == cudaErrorMemoryAllocation && plan.matrix_gemm) {
+        // Only optional-resource failure permits retry. Arithmetic and driver
+        // failures are propagated, and a retry never changes the equations.
+        (void)cudaGetLastError();
+        {
+          // A release can hide another owner's measured provider growth.
+          std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+          blas_check(cublasDestroy(blas));
+          blas = nullptr;
+        }
+        scalar_plan();
+        allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+      }
+      cuda_check(allocation);
 
       std::array<double**, 14> fields = {
           &state.foo,  &state.fov,  &state.fvv,  &state.ovov, &state.ovvo, &state.oovv, &state.ovvv,
@@ -179,6 +290,47 @@ struct Owner {
       state.iteration_arena = reinterpret_cast<double*>(base + layout.iteration);
       state.replay_arena = reinterpret_cast<double*>(base + layout.replay);
       state.error = reinterpret_cast<int*>(base + layout.generated_error);
+      if (naux) {
+        df_bov = reinterpret_cast<double*>(base + layout.df_bov);
+        df_bvv = reinterpret_cast<double*>(base + layout.df_bvv);
+        df_sum = reinterpret_cast<double*>(base + layout.df_sum);
+        cuda_check(cudaMemcpyAsync(df_bov, p.df_bov.data(), p.df_bov.size() * sizeof(double),
+                                   cudaMemcpyHostToDevice, stream));
+        cuda_check(cudaMemcpyAsync(df_bvv, p.df_bvv.data(), p.df_bvv.size() * sizeof(double),
+                                   cudaMemcpyHostToDevice, stream));
+        diagnostic.setup_h2d_bytes += (p.df_bov.size() + p.df_bvv.size()) * sizeof(double);
+        state.df_virtual_singles = df_sum;
+        state.df_virtual_doubles = df_sum + n1;
+        df_state.o = p.nocc;
+        df_state.v = p.nvir;
+        df_state.stream = stream;
+        df_state.error = state.error;
+        df_state.response_arena = reinterpret_cast<double*>(base + layout.df_arena);
+        hoisted_state.prepare_arena = reinterpret_cast<double*>(base + layout.df_prepare);
+        hoisted_state.auxiliary_arena = df_state.response_arena;
+        if (plan.matrix_gemm) {
+          hoisted_state.gemm = [this](char ta, char tb, std::size_t m, std::size_t cols,
+                                      std::size_t k, double alpha, const double* a, const double* b,
+                                      double* output) {
+            if (std::max({m, cols, k}) > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+              throw std::length_error("DF matrix dimension exceeds provider integer range");
+            const double beta = 0.0;
+            // Row-major C=A*B is column-major C^T=B^T*A^T.
+            blas_check(cublasDgemm(blas, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
+                                   ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, int(cols), int(m), int(k),
+                                   &alpha, b, int(tb == 'N' ? cols : k), a, int(ta == 'N' ? k : m),
+                                   &beta, output, int(cols)));
+            const auto count = checked_mul(m, cols);
+            audit_df_matrix<<<generativeqc_tensor::blocks(
+                                  static_cast<generativeqc_tensor::I>(count), 256),
+                              256, 0, stream>>>(output, count, state.error);
+            cuda_check(cudaGetLastError());
+            ++diagnostic.df_gemm_calls;
+            diagnostic.df_gemm_summands =
+                checked_add(diagnostic.df_gemm_summands, checked_mul(count, k));
+          };
+        }
+      }
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
       last_t2 = reinterpret_cast<double*>(base + layout.last_t2);
       vectors = reinterpret_cast<double*>(base + layout.vectors);
@@ -197,7 +349,10 @@ struct Owner {
                                  stream));
       cuda_check(cudaStreamSynchronize(stream));
       ++diagnostic.synchronizations;
-      diagnostic.owned_device_bytes = layout.total;
+      diagnostic.df_matrix_gemm = plan.matrix_gemm;
+      diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kDFBlasProviderAllowance : 0;
+      diagnostic.owned_device_bytes =
+          checked_add(layout.total, diagnostic.df_provider_capacity_bytes);
       diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, combined);
     } catch (...) {
       cleanup();
@@ -207,8 +362,106 @@ struct Owner {
 
   ~Owner() { cleanup(); }
 
+  void virtual_corrections() {
+    cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream));
+    cuda_check(cudaMemsetAsync(df_sum, 0, elements * sizeof(double), stream));
+    df_state.t1 = state.t1;
+    df_state.t2 = state.t2;
+    for (std::size_t q = 0; q < naux; ++q) {
+      df_state.bov = df_bov + q * n1;
+      df_state.bvv = df_bvv + q * state.v * state.v;
+      const auto out = generated::df::run_virtual_accumulate_cuda(df_state);
+      accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n1), 256),
+                      256, 0, stream>>>(out.singles, n1, df_sum, state.error);
+      accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n2), 256),
+                      256, 0, stream>>>(out.doubles, n2, df_sum + n1, state.error);
+      ++diagnostic.df_auxiliary_slices;
+      diagnostic.df_virtual_operations += generated::df::virtual_cuda_operation_count;
+      diagnostic.df_accumulation_calls += 2;
+      diagnostic.df_contraction_terms = checked_add(
+          diagnostic.df_contraction_terms,
+          generated::dfhoist::fallback_virtual_cuda_contraction_terms(state.o, state.v));
+    }
+    cuda_check(cudaGetLastError());
+  }
+
+  generated::DeviceIterationOutputs iteration() {
+    if (!naux) return generated::run_iteration_cuda(state);
+    if (plan.hoisted) {
+      cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream));
+      cuda_check(cudaMemsetAsync(df_sum, 0, plan.accumulation * sizeof(double), stream));
+      // Copy borrowed core state; the dedicated preparation arena must survive
+      // every Q action and cannot alias its frequently overwritten scratch.
+      static_cast<generated::dfcore::CudaState&>(hoisted_state) = state;
+      hoisted_state.df_singles_residual = df_sum;
+      hoisted_state.df_D05_vv_ladder = df_sum + n1;
+      hoisted_state.df_Lvv = df_sum + elements;
+      hoisted_state.df_Wvoov = hoisted_state.df_Lvv + state.v * state.v;
+      hoisted_state.df_Wvovo = hoisted_state.df_Wvoov + n2;
+      hoisted_state.df_Xv = hoisted_state.df_Wvovo + n2;
+      hoisted_state.df_tau = generated::dfhoist::run_prepare_cuda(hoisted_state).tau;
+      ++diagnostic.df_preparation_calls;
+      for (std::size_t q = 0; q < naux; ++q) {
+        hoisted_state.bov = df_bov + q * n1;
+        hoisted_state.bvv = df_bvv + q * state.v * state.v;
+        const auto row = generated::dfhoist::run_auxiliary_cuda(hoisted_state);
+        const std::array<const double*, 6> sources{row.singles, row.ladder, row.lvv,
+                                                   row.wvoov,   row.wvovo,  row.xv};
+        const std::array<std::size_t, 6> counts{n1, n2, state.v * state.v, n2, n2, n2};
+        std::size_t offset = 0;
+        for (std::size_t field = 0; field < counts.size(); ++field) {
+          accumulate_df<<<generativeqc_tensor::blocks(
+                              static_cast<generativeqc_tensor::I>(counts[field]), 256),
+                          256, 0, stream>>>(sources[field], counts[field], df_sum + offset,
+                                            state.error);
+          offset += counts[field];
+        }
+        ++diagnostic.df_auxiliary_slices;
+        diagnostic.df_virtual_operations += plan.matrix_gemm
+                                                ? generated::dfhoist::auxiliary_packed_operations
+                                                : generated::dfhoist::auxiliary_operation_count;
+        diagnostic.df_accumulation_calls += counts.size();
+      }
+      cuda_check(cudaGetLastError());
+      ++diagnostic.df_hoisted_evaluations;
+      if (plan.matrix_gemm) {
+        // Every explicit transpose reads and writes its full tensor once.
+        const auto packed = checked_add(
+            generated::dfhoist::prepare_packing_elements(state.o, state.v),
+            checked_add(
+                checked_mul(naux, generated::dfhoist::auxiliary_packing_elements(state.o, state.v)),
+                generated::dfhoist::iteration_packing_elements(state.o, state.v)));
+        diagnostic.df_packing_bytes =
+            checked_add(diagnostic.df_packing_bytes, checked_mul(packed, 2 * sizeof(double)));
+      }
+      diagnostic.df_contraction_terms = checked_add(
+          diagnostic.df_contraction_terms,
+          checked_add(plan.preparation_terms,
+                      checked_add(checked_mul(naux, plan.auxiliary_terms), plan.core_terms)));
+      return generated::dfhoist::run_iteration_cuda(hoisted_state);
+    }
+    virtual_corrections();
+    diagnostic.df_contraction_terms =
+        checked_add(diagnostic.df_contraction_terms,
+                    generated::dfhoist::fallback_core_contraction_terms(state.o, state.v));
+    return generated::dfcore::run_iteration_cuda(state);
+  }
+
+  generated::DeviceReplayOutputs replay() {
+    if (!naux) return generated::run_replay_cuda(state);
+    virtual_corrections();
+    diagnostic.df_contraction_terms =
+        checked_add(diagnostic.df_contraction_terms,
+                    generated::dfhoist::fallback_replay_contraction_terms(state.o, state.v));
+    return generated::dfcore::run_replay_cuda(state);
+  }
+
   void cleanup() noexcept {
+    // Serialize every owned release against provider/graph allocation deltas.
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) cudaStreamSynchronize(stream);
+    if (blas) cublasDestroy(blas);
+    blas = nullptr;
     if (trial_begin) cudaEventDestroy(trial_begin);
     if (trial_end) cudaEventDestroy(trial_end);
     trial_begin = nullptr;
@@ -374,7 +627,7 @@ bool run_diis(Owner& s, const SolverOptions& options,
 }  // namespace
 
 SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int device) {
-  validate_problem(p);
+  validate_problem(p, true);
   validate_options(options);
   Owner owner(p, options, device);
   SolverResult result;
@@ -395,7 +648,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         output = carried_output;
         has_carried_output = false;
       } else {
-        output = generated::run_iteration_cuda(owner.state);
+        output = owner.iteration();
         ++owner.diagnostic.iteration_graph_calls;
       }
       const auto status = owner.read_status(output);
@@ -413,7 +666,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       if (std::isfinite(previous) && delta <= options.energy_tolerance &&
           std::max(status[1], status[2]) <= options.residual_tolerance) {
         const auto replay_started = std::chrono::steady_clock::now();
-        const auto replay = generated::run_replay_cuda(owner.state);
+        const auto replay = owner.replay();
         const auto replay_status = owner.read_status(replay);
         owner.diagnostic.replay_seconds +=
             std::chrono::duration<double>(std::chrono::steady_clock::now() - replay_started)
@@ -438,7 +691,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       if (options.diis_size) {
         const auto trial_diis_started = std::chrono::steady_clock::now();
         cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
-        const auto trial = generated::run_iteration_cuda(owner.state);
+        const auto trial = owner.iteration();
         cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
         ++owner.diagnostic.iteration_graph_calls;
         const bool diis_modified_state = run_diis(owner, options, trial);

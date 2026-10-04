@@ -25,10 +25,11 @@ std::uint64_t enabled_shell_class_mask() noexcept { return 0; }
 
 std::uint64_t enabled_fock_shell_class_mask() noexcept { return 0; }
 
-std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept { return 0; }
-
-// A generic-only build has no compiled shell class eligible for streaming.
+// AOT-disabled builds have no fused streaming kernel to prefer. Keep this
+// query defined so the generic CUDA RHF caller can load and select its fallback.
 std::uint64_t preferred_streaming_fock_shell_class_mask() noexcept { return 0; }
+
+std::uint64_t enabled_mixed_fock_shell_class_mask() noexcept { return 0; }
 
 cudaError_t launch_shell_class(unsigned, cudaStream_t, bool, unsigned, const void*,
                                const std::uint32_t*, const std::int64_t*, const void*,

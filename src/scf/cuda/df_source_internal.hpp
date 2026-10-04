@@ -9,6 +9,7 @@
 
 #include "molecule/basis_geometry_identity.hpp"
 #include "runtime/resource_cuda.cuh"
+#include "scf/cuda/df_source_domain.hpp"
 #include "scf/cuda/df_source_kernels.hpp"
 #include "scf/cuda/metadata_upload.hpp"
 #include "scf/cuda/packed_basis.hpp"
@@ -30,7 +31,9 @@ struct CudaDensityFittingIntegralSourceImpl {
   // Freeze the generated schedule so a warm plan never mixes mapping policies.
   unsigned value_mapping{};
   unsigned raw_value_mapping{};
-  unsigned value_math{};  // Frozen with mapping; unsupported angular classes use generic Rys.
+  unsigned value_math{};   // Frozen with mapping; only qualified generated math for auxiliary g.
+  bool has_auxiliary_g{};  // Immutable basis domain; auxiliary g uses explicit polynomial
+                           // value/response lowering.
   std::size_t batch_size{};
   std::size_t public_nbf{};
   std::size_t public_naux{};
@@ -57,9 +60,6 @@ struct CudaDensityFittingIntegralSourceImpl {
     for (void* pointer : allocations) (void)runtime::resource_cuda_free(pointer);
   }
 };
-
-/** Reject unsupported physical shells before packing either source or exported tensors. */
-bool cuda_df_shell_domain(const core::System& system, const char* role, std::string& detail);
 
 /** Build a source transactionally and return its current metric; ownership transfers only on
  * success. */

@@ -1,87 +1,119 @@
 # DF-CCSD(T) analytic-gradient composition
 
-Status: issue #158 slice A1. This slice implements and validates the reusable
-reverse edge from whitened MO three-index factors to raw DF sources. It does not
-claim a complete DF-CCSD(T) force.
-
-## Dependency graph
-
-The first supported method remains the #157 correlation-only DF Hamiltonian:
+The native internal components target the correlation-only DF Hamiltonian:
 conventional all-electron RHF supplies the reference Fock/orbitals, while the
-correlation two-electron interaction is density fitted.
+correlation two-electron interaction is density fitted. The internal
+`methods::detail::run_df_ccsdt_native` composes a complete energy/force endpoint.
+Small-molecule force qualification is available; public registration and
+hundreds-AO qualification remain separate.
+
+## Correlation response
+
+`solve_lambda_parameter_response_cuda` differentiates the retained RCCSD core
+and every auxiliary slice of the virtual residual. It returns retained
+Fock/integral block cotangents and Q-major `df_bov/df_bvv` cotangents. The latter
+cover the virtual residual only. Fresh primal replay and an independently
+expanded Lambda action retain the ordinary CC residual acceptance gates.
+
+`cc::triples::pullback_df_cuda` supplies all fixed-canonical-input (T)
+cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
+`fock_response_df_cuda` supplies same-space Fock matrices, including internal
+occupied/virtual degeneracies. These matrices **replace** the epsilon-diagonal
+sources; adding both would count denominator response twice.
+
+`pullback_df_factors_cuda` combines retained Gram-block and virtual-factor
+cotangents. Compressed Bov includes both ov/vo sectors, so full symmetric
+embedding assigns half to each. `pullback_df_source_cuda` then reverses the
+original retained molecular source:
 
 ```text
-E_DF-CCSD(T)
-  |
-  +-- converged T1/T2 -------------------------- #157
-  +-- CCSD Lambda / residual response --------- #158 future A2
-  +-- standard-(T) + corrected Lambda --------- #158 future A3
-  +-- orbital / overlap response -------------- reuse #155 machinery
-  |
-  v
-cotangents for the exact DF B blocks used by the energy/residual equations
-  |
-  v
-B[Q,p,q] = sum_P A_MO[P,p,q] W[P,Q]
-A_MO[P,p,q] = sum_mn C[m,p] C[n,q] A[m,n,P]
+B[p,q,Q] = sum_P A_MO[p,q,P] W[P,Q]
+A_MO[p,q,P] = sum_mn C[m,p] C[n,q] A[m,n,P]
 W = M^(-1/2)
-  |
-  +-- bar_A ------------------------------------ #143 derivative consumer
-  +-- bar_M -- fixed-rank spectral VJP -------- #466/#656/#657
 ```
 
-Every source is counted once. The conventional-RHF reference/Fock branch remains
-separate from the correlation-DF branch and must later be composed before a
-public force is published.
-## Slice A1 boundary
+The original metric/source owner and immutable frame must remain alive and the
+nonzero source identity must match. The common fixed-rank spectral VJP retains
+retained/discarded subspace motion and rejects unresolved cutoff crossings.
+Raw A cotangents address full, unit-weight `[mu,nu,P]` entries, with no triangular
+doubling. All callbacks are provisional until the entire reverse call succeeds.
 
-`tools.generativeqc_cc.pullback_df_three_index` accepts one or more cotangents for
-specific B blocks and returns physical raw three-center and metric weights.
+`scf::CudaDfNuclearSink` consumes raw A rows and the metric cotangent directly on
+the producer stream. It visits all nuclear centers without materializing a
+coordinate-indexed derivative tensor. Setup is persistent; consume performs no
+allocation, copy or synchronization. The producer owns its stream and must
+outlive the sink. Call `finish()` only after successful producer completion.
+The caller must bind the exact original orbital/auxiliary geometry and basis.
 
-The implementation deliberately reuses
-`SymmetricMatrixFunctionSpec(..., function="inverse_sqrt")` for the metric
-pullback. It therefore inherits the shared fixed-effective-rank rule, including
-retained/discarded subspace mixing, branch-gap diagnostics, and rejection at an
-unresolved cutoff. There is no CC-specific metric inverse formula.
+## Conventional-reference response
 
-For one block, with `bar_B` supplied by the upstream CC/(T)/Lambda graph,
+`hf::rhf_frame_response_cuda` accepts the complete full-MO Fock cotangent and
+AO frame cotangent. Compiler-owned matrix maps derive the closed-shell density,
+Fock projection, unrestricted frame reverse map, symmetric metric/Pulay
+transport and orbital tangent through the shared TensorIR AD machinery.
 
-```text
-bar_A_MO[P,p,q] = sum_Q W[P,Q] bar_B[Q,p,q]
-bar_W[P,Q]      = sum_pq A_MO[P,p,q] bar_B[Q,p,q]
-bar_A[m,n,P]    = sum_pq C[m,p] C[n,q] bar_A_MO[P,p,q]
-bar_M           = D(M^(-1/2))^*[bar_W]
-```
+The physical action remains `G(D)=J(D)-K(D)/2` from the unscreened exact CUDA
+provider. It is used for both forward tangent and reverse density response;
+substituting DF J/K here changes the method. A single provider stream owns the
+matrix maps and resident signed density actions. Optional BLAS executes packed
+matrix products with sticky finite audits; the same-arena scalar CUDA schedule
+remains available.
 
-Multiple B blocks accumulate into the same `bar_A` and `bar_M`. Because raw
-three-center and metric sources are symmetric physical objects, their
-cotangents are projected to the corresponding symmetric source spaces exactly
-once before publication.
-## Validation
+GMRES applies the orbital operator on demand. Neither a full MO ERI nor a dense
+`(occupied*virtual)^2` Hessian is constructed. The final Z residual is recomputed
+with the scalar CUDA lowering, followed by full frame stationarity after the
+Z seed is subtracted. Same-space stationarity never divides same-space gaps.
+An occupied/virtual gap and residual checks qualify the local solve; they do
+**not** certify global RHF stability or the minimum Hessian eigenvalue.
 
-The focused tests cover three distinct properties:
+The reference nuclear branch contracts AO hcore and Pulay weights with existing
+CUDA derivative providers. Its two-electron source `P:G'(D)` uses the bounded
+polarization identity `E2'(D+P)-E2'(D)-E2'(P)`, with `E2(D)=D:G(D)/2`. Three
+passes are independent of the orbital-response dimension. The result is an
+**electronic gradient**: the final method must add the correlation-source and
+nuclear-repulsion gradients, then negate once to publish forces.
 
-1. A small same-Hamiltonian dense four-index functional
-   `g_DF[p,q,r,s] = sum_Q B[Q,p,q] B[Q,r,s]` is differentiated through B and
-   then through A/M. The returned `bar_A` and `bar_M` match a complete central
-   finite difference that perturbs both raw A and M on a fixed rank branch.
-2. Independent `B_ov` and `B_vv` cotangents accumulated in one call reproduce
-   the sum of separate pullbacks.
-3. An eigenvalue exactly on the metric threshold is rejected, and the logical
-   memory guard fails before the pullback executes when the budget is too small.
+## Complete native owner and qualification
 
-The dense four-index object exists only inside the tiny validation objective; the
-production pullback itself never reconstructs `g_DF`.
+The complete owner starts from normalized orbital/auxiliary geometry, computes
+a fresh exact CUDA RHF reference and native DF-CCSD amplitudes, then composes the
+triples, corrected-Lambda, factor/source and reference branches above. Forces
+retain the original source/frame across the CC solve. Energy-only execution
+releases that state and evaluates the same Hamiltonian without response.
 
-## Remaining #158 work
+Each phase charges all other live owners to its admission. The nuclear sink
+uses the same immutable geometry/basis arguments as the source producer, and
+the source identity must match. After successful source reverse and sink drain,
+the owner releases completed CC/amplitude/factor/source buffers before the
+exact-reference Z/Pulay phase. Nuclear repulsion is added once through the shared
+ionic-gradient assembly, followed by a single sign conversion. Errors publish
+no partial energy/force result. An optional CCSD-only mode omits triples for
+separate closure validation.
 
-Slice A2 must generate cotangents of the factorized #157 RCCSD residual/energy
-equations with TensorIR AD, including all retained smaller four-index blocks and
-the factorized `ovvv/vvvv` path. Slice A3 must add the standard-(T) numerator,
-denominator, direct-triples, and corrected-Lambda response on the same DF
-Hamiltonian.
+The internal interfaces admit complete numeric payloads before execution;
+outer callers must charge all other live owners. Matrix response reports zero
+explicit Hessian elements, J/K actions, derivative passes, generated contraction
+summands, BLAS calls and matrix-owner transfers. Integral-provider setup and
+nuclear-consumer transfers are separate; these counters are not a complete
+endpoint traffic ledger.
 
-After those cotangents exist, slice B composes the conventional-reference
-orbital/Pulay response and fixed-rank diagnostics. Slice C connects `bar_A` and
-`bar_M` to the existing generated fused derivative consumer, qualifies
-resident/streamed execution, and performs complete nuclear finite differences.
+Relevant validation modules include `test_df_cc_lambda.py`,
+`test_df_source_metric_response.py`, `test_df_nuclear_sink.py`,
+`test_rhf_frame_response.py`, `test_rhf_frame_response_codegen.py` and
+`test_rhf_frame_response_cuda.py`. Real-GPU tests require finite Slurm allocation.
+The RHF module checks independent forces and nonzero-Z molecular energy finite
+differences with both scalar and BLAS schedules.
+
+`test_df_complete_force.py` compares complete native CCSD/CCSD(T) energies and
+forces with independent libcint/PySCF correlation-only DF Hamiltonians. It
+includes nonzero triples, two-step energy directions, every water coordinate,
+native energy/force consistency, auxiliary g in both representations, fixed-rank
+duplicate-auxiliary metrics, translation and failure publication. PySCF and its
+tiny dense ERIs are test oracles only. Set `GENERATIVEQC_DF_COMPLETE_FORCE_TEST=1`
+and `GENERATIVEQC_DF_COMPLETE_FORCE_PROBE` for the native validation seam.
+
+Cold hundreds-AO force timings, independent force gates and complete work/traffic
+qualification are still required before broad promotion. The pre-existing
+strict large-factor gates (`atol=rtol=3e-10`) are not qualified by small-molecule
+force agreement and must not be relaxed. See the
+[composition decision](../../.agents/notes/implemented/architecture/2026-10-04-complete-native-df-ccsdt-forces.md).

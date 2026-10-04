@@ -14,7 +14,7 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     if compiler is None:
         pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
-    begin = source.index("GeneratedCoulombPlan::~GeneratedCoulombPlan()")
+    begin = source.index("void configure_direct_coulomb_recurrence(")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
     preparation = source[begin:end]
     get_limit = "*n=100000; return cudaSuccess;"
@@ -38,7 +38,7 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cpp, binary = directory / "probe.cpp", directory / "probe"
     cpp.write_text(stubs + preparation + DRIVER)
     subprocess.run(
-        [compiler, "-std=c++17", str(cpp), "-o", str(binary)],
+        [compiler, "-std=c++17", "-I", str(ROOT / "src"), str(cpp), "-o", str(binary)],
         check=True,
         capture_output=True,
         text=True,
@@ -48,9 +48,14 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.mark.parametrize("kind", [1, 2, 3], ids=["oom", "cuda-error", "logic-error"])
+@pytest.mark.parametrize("reachable", [False, True])
 def test_stack_reservation_oom_falls_back_but_other_failures_propagate(
-    stack_probe: Path, kind: int
+    stack_probe: Path, kind: int, reachable: bool
 ) -> None:
     # The shared driver also checks stream fencing, no leaked allocations,
     # and successful fresh preparation after each rejected optional owner.
-    subprocess.run([str(stack_probe), "6", str(kind)], check=True, timeout=10)
+    subprocess.run(
+        [str(stack_probe), "6", str(kind), str(int(reachable))],
+        check=True,
+        timeout=10,
+    )

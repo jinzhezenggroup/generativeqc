@@ -67,6 +67,19 @@ generated helpers and forbid the retired local formula bodies. Existing GFN2
 CPU/CUDA numerical and real-device CI remain the executable acceptance gate for
 this source identity.
 
+The generated density helpers reject nonfinite intermediate arithmetic before
+the solver's final array checks. Every such data-failure exit must record
+`EIGENSOLVER_FAILED` for that system: the batch caller intentionally continues
+after a data failure and commits numerical staging only when the per-system
+status is `SUCCESS`. Returning only the internal data-failure enum could reuse
+a previous successful status and publish stale wavefunction/thermodynamic data.
+The compiled regression in `test_gfn2_fused_electronic_codegen.py` runs the actual
+solver and batch publication with an injected LAPACK/BLAS provider, first stages
+a successful solve, then checks restricted and unrestricted arithmetic overflow
+without publishing the previous values. This host regression does not qualify
+an external linear-algebra provider or NVIDIA execution. CuMetal excludes the
+native GFN2 CUDA target; the NVIDIA runtime/reference gate remains unrun locally.
+
 ## Consequences
 
 The remaining GFN2 native files may still contain substantial
