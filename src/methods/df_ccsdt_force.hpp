@@ -29,11 +29,13 @@ struct DFCCSDTResult {
  * are requested, and consumes it before either input geometry can change.
  * Energy-only calls share the same scientific Hamiltonian and solver gates.
  * The optional CCSD-only mode omits triples and is an independent closure gate.
+ * Disabling df_auxiliary_reduction retains expanded Lambda actions for matched
+ * endpoint validation; it changes only the response schedule, not the method.
  * All phase bounds charge simultaneously live owners; no CPU integral/CC
  * reference fallback or four-index full MO Hamiltonian is used.
  */
 DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System& orbital,
                                   const core::System& auxiliary,
                                   const generativeqc_method_descriptor&, bool forces = true,
-                                  bool with_triples = true);
+                                  bool with_triples = true, bool df_auxiliary_reduction = true);
 }  // namespace generativeqc::methods::detail

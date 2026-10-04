@@ -461,6 +461,9 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
     "scf/cuda/arena.",
     "scf/cuda/topology.",
     "scf/cuda/rhf_policy.",
+    # #1792 shares this pure topology/budget policy with reference export;
+    # the bucket still cannot depend on the reference-export implementation.
+    "scf/cuda/reference_eri_policy.hpp",
     "scf/cuda/direct_constants.",
     "scf/cuda/checked_layout.",
     "scf/cuda/direct_tile_validation.",

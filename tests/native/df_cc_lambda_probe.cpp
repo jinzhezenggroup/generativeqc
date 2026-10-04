@@ -52,6 +52,7 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     generativeqc::cc::LambdaOptions response;
     response.max_bytes = budget;
     response.gmres.absolute_tolerance = 1e-12;
+    response.df_auxiliary_reduction = !(mode & 4);
     const auto result =
         (mode & 2) ? generativeqc::cc::solve_lambda_parameter_response_cuda_with_energy_source(
                          p, cc, {source1, n1}, {source2, n2}, 0, response)
@@ -70,10 +71,19 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                            d.lambda_residual_norm,
                            d.independent_residual_norm,
                            d.independent_residual_max};
-    const std::size_t work[]{d.iterations,          d.operator_actions,    d.numeric_capacity_bytes,
-                             d.owned_device_bytes,  d.h2d_bytes,           d.d2h_bytes,
-                             d.synchronizations,    d.df_auxiliary_slices, d.df_contraction_terms,
-                             d.df_generated_kernels};
+    const std::size_t work[]{d.iterations,
+                             d.operator_actions,
+                             d.numeric_capacity_bytes,
+                             d.owned_device_bytes,
+                             d.h2d_bytes,
+                             d.d2h_bytes,
+                             d.synchronizations,
+                             d.df_auxiliary_slices,
+                             d.df_contraction_terms,
+                             d.df_generated_kernels,
+                             std::size_t(d.df_auxiliary_reduction),
+                             d.df_preparation_calls,
+                             d.df_reduced_actions};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;
