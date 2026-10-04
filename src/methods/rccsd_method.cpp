@@ -196,7 +196,8 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
                           const hf::PhysicalReference& ref, const cc::SolverOptions& options,
                           bool cuda, int device, posthf::ProviderWork& provider_work,
                           generativeqc_tensor::Metrics& provider_metrics,
-                          const core::System* correlation_auxiliary = nullptr) {
+                          const core::System* correlation_auxiliary = nullptr,
+                          cc::DFSourceResult* retained_df_response = nullptr) {
   // A failed optional source may already have performed real work. Preserve
   // cumulative diagnostics, but validate the compiler schedule for this attempt.
   const auto initial_work = provider_work;
@@ -261,9 +262,15 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
     const auto caller_bytes =
         posthf::checked_add(posthf::checked_mul(caller_elements, sizeof(double)),
                             posthf::source_capacity(source.orbital()));
-    auto fitted = cc::build_df_source_cuda(source.orbital(), *correlation_auxiliary, ref,
-                                           options.max_bytes, 1e-10, device, caller_bytes);
+    auto fitted =
+        cc::build_df_source_cuda(source.orbital(), *correlation_auxiliary, ref, options.max_bytes,
+                                 1e-10, device, caller_bytes, retained_df_response != nullptr);
     attach_df_source(p, std::move(fitted), provider_work, provider_metrics);
+    if (retained_df_response) {
+      p.reference_retained_bytes =
+          posthf::checked_add(p.reference_retained_bytes, fitted.retained_source_bytes);
+      *retained_df_response = std::move(fitted);
+    }
     // RawSource is released before solve, but both caller systems and the
     // split orbital spectrum remain live beside the detached RHF reference.
     p.reference_retained_bytes = posthf::checked_add(
@@ -393,7 +400,7 @@ RccsdNativeState execute_rccsd_prepared(
     std::size_t reference_capacity, scf::PreparedFockPlan* prepared_exact,
     const std::vector<double>* initial_density, bool* warm_start_fallback,
     std::unique_ptr<scf::PreparedFockPlan>* cuda_source_cache,
-    const core::System* correlation_auxiliary = nullptr) {
+    const core::System* correlation_auxiliary = nullptr, bool retain_df_response = false) {
   const char* allocation_stage = "HF reference";
   try {
     const bool cuda = execution.cuda_requested();
@@ -503,7 +510,8 @@ RccsdNativeState execute_rccsd_prepared(
     }
     const auto build = [&] {
       return build_problem(*source, *reference, solver_options, cuda, execution.device_id(),
-                           provider_work, provider_metrics, correlation_auxiliary);
+                           provider_work, provider_metrics, correlation_auxiliary,
+                           retain_df_response ? &state.df_source : nullptr);
     };
     const auto retire_optional_source = [&] {
       if (!cuda || !cuda_source_cache || !*cuda_source_cache) return false;
@@ -966,8 +974,12 @@ RccsdNativeState run_rccsd_native_state(
     const generativeqc_method_descriptor& descriptor,
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache,
     const std::vector<double>* initial_density, bool* warm_start_fallback,
-    std::size_t external_reservation_bytes, const core::System* correlation_auxiliary) {
+    std::size_t external_reservation_bytes, const core::System* correlation_auxiliary,
+    bool retain_df_response) {
   validate_descriptor(descriptor, execution);
+  if (retain_df_response && !correlation_auxiliary)
+    throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                      "DF response retention requires an auxiliary source");
   if (correlation_auxiliary && !execution.cuda_requested())
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native molecular DF-CC source requires CUDA");
@@ -1013,9 +1025,10 @@ RccsdNativeState run_rccsd_native_state(
     }
     prepared_exact = prepared_exact_cache->get();
   }
-  auto state = execute_rccsd_prepared(
-      execution, system, reference, solver_options, reference_capacity, prepared_exact,
-      initial_density, warm_start_fallback, prepared_exact_cache, correlation_auxiliary);
+  auto state =
+      execute_rccsd_prepared(execution, system, reference, solver_options, reference_capacity,
+                             prepared_exact, initial_density, warm_start_fallback,
+                             prepared_exact_cache, correlation_auxiliary, retain_df_response);
   state.external_reservation_bytes = external_reservation_bytes;
   state.diagnostic.numeric_capacity_bytes =
       posthf::checked_add(state.diagnostic.numeric_capacity_bytes, external_reservation_bytes);
