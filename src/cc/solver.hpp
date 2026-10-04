@@ -16,6 +16,10 @@ struct SolverOptions {
   double damping{};
   double level_shift{};
   std::size_t max_bytes{256ULL << 20};
+  // Direct FP64 matrix contractions for eligible conventional CUDA residual terms.
+  // Admission falls back to the generated scalar schedule when provider resources
+  // do not fit the caller's complete correlation budget.
+  bool conventional_matrix_gemm{true};
   // Internal DF scheduling control; dense/conventional paths are unaffected.
   // Admission retains the bounded original schedule when work or storage wins.
   bool df_auxiliary_reduction{true};
@@ -69,6 +73,9 @@ struct SolverDiagnostic {
   std::size_t diis_gram_calls{};
   std::size_t diis_coefficient_calls{};
   std::size_t diis_combine_calls{};
+  bool conventional_matrix_gemm{};
+  std::size_t conventional_gemm_calls{}, conventional_gemm_summands{};
+  std::size_t conventional_provider_capacity_bytes{};
   // Complete auxiliary work, including trial evaluations and independent replay.
   std::size_t df_auxiliary_slices{};
   std::size_t df_virtual_operations{};
