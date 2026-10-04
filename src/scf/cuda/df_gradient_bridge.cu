@@ -125,13 +125,13 @@ struct HostBasis {
   std::vector<std::uint8_t> term_counts, term_angular;
   std::vector<double> term_coefficients, exponents, coefficients;
 };
-HostBasis pack(const core::System& system) {
+HostBasis pack(const core::System& system, unsigned maximum_angular = 3,
+               std::size_t expansion_terms = molecule::kMaximumAoExpansionTerms) {
   HostBasis h;
   h.primitive_offsets.push_back(0);
   for (const auto& shell : system.shells) {
-    if (shell.angular_momentum > 3 || shell.atom_index >= system.atoms.size())
-      throw std::invalid_argument(
-          "generated DF gradients require valid orbital/auxiliary s/p/d/f shells");
+    if (shell.angular_momentum > maximum_angular || shell.atom_index >= system.atoms.size())
+      throw std::invalid_argument("generated DF gradient shell exceeds its admitted basis role");
     const auto si = static_cast<std::int32_t>(h.shell_atoms.size());
     h.shell_atoms.push_back(shell.atom_index);
     for (const auto& p : shell.primitives) {
@@ -142,8 +142,10 @@ HostBasis pack(const core::System& system) {
     for (const auto& expansion :
          molecule::ao_expansions(shell.angular_momentum, system.basis_representation)) {
       h.ao_shells.push_back(si);
+      if (expansion.size() > expansion_terms)
+        throw std::invalid_argument("DF gradient AO expansion exceeds its metadata stride");
       h.term_counts.push_back(expansion.size());
-      for (std::size_t term = 0; term < molecule::kMaximumAoExpansionTerms; ++term) {
+      for (std::size_t term = 0; term < expansion_terms; ++term) {
         if (term < expansion.size()) {
           const auto& item = expansion[term];
           for (auto power : item.component) h.term_angular.push_back(power);
@@ -440,13 +442,18 @@ generativeqc_status execute_cuda_df_gradient(
       detail = "DF response weights must be finite";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
+  const auto expansion_terms =
+      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum == 4; })
+          ? molecule::kMaximumAuxiliaryAoExpansionTerms
+          : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
     for (const auto& shell : system->shells) primitives += shell.primitives.size();
   // Conservative geometric-capacity bound before creating any metadata vectors.
-  constexpr long double per_ao =
-      2 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint8_t) +
-      molecule::kMaximumAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
+  const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
+                             sizeof(std::uint8_t) +
+                             expansion_terms * (3 * sizeof(std::uint8_t) + sizeof(double));
   const long double host_bound = 2 * (per_ao * (n + a) + 2 * sizeof(double) * primitives +
                                       6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
@@ -454,7 +461,8 @@ generativeqc_status execute_cuda_df_gradient(
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
-    const auto host_o = pack(orbital), host_a = pack(auxiliary);
+    const auto host_o = pack(orbital, 3, expansion_terms),
+               host_a = pack(auxiliary, 4, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
@@ -487,7 +495,7 @@ generativeqc_status execute_cuda_df_gradient(
         arena.stats.response_host_to_device_bytes += count * sizeof(double);
         ++arena.stats.uploads;
         check(launch_df_derivative_tile(o, x, r, kind, {begin, 1, 1, 1}, count, weights, schedule,
-                                        output, arena.stream));
+                                        output, arena.stream, 0, 0, 1, false, expansion_terms));
         ++arena.stats.tiles;
       }
     }
@@ -559,12 +567,17 @@ generativeqc_status execute_cuda_df_gradient_tile(
     detail = "DF response weight tile exceeds its full tensor";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
+  const auto expansion_terms =
+      std::any_of(auxiliary.shells.begin(), auxiliary.shells.end(),
+                  [](const auto& shell) { return shell.angular_momentum == 4; })
+          ? molecule::kMaximumAuxiliaryAoExpansionTerms
+          : molecule::kMaximumAoExpansionTerms;
   long double primitives = 0;
   for (const auto* system : {&orbital, &auxiliary})
     for (const auto& shell : system->shells) primitives += shell.primitives.size();
-  constexpr long double per_ao =
-      2 * sizeof(std::int32_t) + sizeof(std::int64_t) + sizeof(std::uint8_t) +
-      molecule::kMaximumAoExpansionTerms * (3 * sizeof(std::uint8_t) + sizeof(double));
+  const long double per_ao = 2 * sizeof(std::int32_t) + sizeof(std::int64_t) +
+                             sizeof(std::uint8_t) +
+                             expansion_terms * (3 * sizeof(std::uint8_t) + sizeof(double));
   const long double host_bound = 2 * (per_ao * (n + a) + 2 * sizeof(double) * primitives +
                                       6 * sizeof(double) * atoms + 2 * sizeof(std::int64_t));
   if (host_bound > maximum_bytes) {
@@ -572,7 +585,8 @@ generativeqc_status execute_cuda_df_gradient_tile(
     return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   }
   try {
-    const auto host_o = pack(orbital), host_a = pack(auxiliary);
+    const auto host_o = pack(orbital, 3, expansion_terms),
+               host_a = pack(auxiliary, 4, expansion_terms);
     std::vector<double> positions(3 * atoms), result(3 * atoms);
     for (std::size_t atom = 0; atom < atoms; ++atom)
       std::copy(orbital.atoms[atom].position.begin(), orbital.atoms[atom].position.end(),
@@ -595,7 +609,7 @@ generativeqc_status execute_cuda_df_gradient_tile(
     arena.stats.weight_tile_elements = weights.size();
     arena.stats.uploads += 1;
     check(launch_df_derivative_tile(o, x, r, kind, range, weights.size(), device_weights, schedule,
-                                    output, arena.stream));
+                                    output, arena.stream, 0, 0, 1, false, expansion_terms));
     arena.stats.tiles = 1;
     check(cudaMemcpyAsync(result.data(), output, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, arena.stream));
