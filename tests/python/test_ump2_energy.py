@@ -11,6 +11,8 @@ import pytest
 from generativeqc_compiler.mp2.equations import unrestricted_energy_program
 
 from tools.generativeqc_mp2 import PreparedMP2Energy, PreparedUMP2Energy
+from tools.generativeqc_posthf.conventions import SpinMOBlock
+from tools.generativeqc_posthf.providers import ConventionalProvider
 from tools.generativeqc_posthf.reference import ReferenceSnapshot
 from tools.generativeqc_response.uhf import UHFReferenceSnapshot
 
@@ -201,6 +203,38 @@ def test_spin_resolved_tiles_match_independent_dense_contractions() -> None:
     assert source.reads > 0
 
 
+def test_provider_cache_separates_spin_owners_at_identical_mo_indices() -> None:
+    reference = _reference()
+    eri = _eri()
+    source = DenseSource(eri, reference)
+    slots = ((0,), (2,), (0,), (3,))
+    blocks = [
+        SpinMOBlock(slots, spins)
+        for spins in (
+            ("alpha",) * 4,
+            ("beta",) * 4,
+            ("alpha", "alpha", "beta", "beta"),
+        )
+    ]
+    with ConventionalProvider(reference, source) as provider:
+        values = []
+        for block in blocks:
+            columns = [
+                getattr(reference, f"coefficients_{spin}")[:, indices[0]]
+                for spin, indices in zip(block.spins, block.slots)
+            ]
+            expected = np.einsum("uvwx,u,v,w,x->", eri, *columns)
+            values.append(provider.get(block).to_host())
+            np.testing.assert_allclose(values[-1].item(), expected, atol=2e-12)
+        assert len({value.item() for value in values}) == len(blocks)
+        reads = source.reads
+        for block, value in zip(blocks, values):
+            assert provider.get(block).values is value
+        assert source.reads == reads
+        assert provider.statistics["transformations"] == len(blocks)
+        assert provider.statistics["hits"] == len(blocks)
+
+
 def test_restricted_limit_matches_existing_mp2_components() -> None:
     coefficients = _orthogonal(1823, 4)
     energies = np.array([-1.1, -0.5, 0.35, 0.92])
@@ -313,6 +347,41 @@ def test_denominator_and_reference_fail_closed_before_source_reads() -> None:
     assert source.reads == 0
     with pytest.raises(NotImplementedError, match="forces/amplitudes"):
         PreparedUMP2Energy(reference, source).execute(properties=("energy", "forces"))
+
+
+def test_empty_spin_channels_still_validate_and_budget_the_reference_source() -> None:
+    reference = _reference(alpha_occupied=4, beta_occupied=0)
+    source = DenseSource(_eri(), reference)
+    with PreparedUMP2Energy(reference, source) as probe:
+        required = probe.numeric_capacity_bytes
+        assert required >= reference.numeric_bytes + source.numeric_bytes
+    with pytest.raises(MemoryError, match="UMP2 needs"):
+        PreparedUMP2Energy(reference, source, budget_bytes=required - 1)
+    with pytest.raises(ValueError, match="axis_tile"):
+        PreparedUMP2Energy(reference, source, axis_tile=0)
+    source.geometry_hash = "mismatched-geometry"
+    with pytest.raises(ValueError, match="does not match"):
+        PreparedUMP2Energy(reference, source)
+    source.geometry_hash = reference.geometry_hash
+    with PreparedUMP2Energy(reference, source, budget_bytes=required) as prepared:
+        result = prepared.execute()
+        assert result.energy == reference.reference_energy
+        assert result.correlation_energy == 0.0
+        assert result.tile_count == 0
+        assert prepared.state == "ready" and prepared.last_result is result
+    assert source.reads == 0
+
+
+def test_far_denominator_overflow_rejects_before_source_reads() -> None:
+    reference = _reference(
+        alpha_coefficients=np.eye(4),
+        beta_coefficients=np.eye(4),
+        alpha_energies=np.array([-1e308, -1.0, 1.0, 2.0]),
+    )
+    source = DenseSource(_eri(), reference)
+    with pytest.raises(ValueError, match="nonfinite UMP2 denominator extrema"):
+        PreparedUMP2Energy(reference, source)
+    assert source.reads == 0
 
 
 def test_pyscf_open_shell_ump2_total_energy() -> None:

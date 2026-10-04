@@ -5,8 +5,19 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace generativeqc::runtime::cuda_gaussian_products {
+
+// Policies may retain FP64 weight residuals without changing traversal.
+template <class Policy, class = void>
+struct WeightType {
+  using type = double;
+};
+template <class Policy>
+struct WeightType<Policy, std::void_t<typename Policy::Weight>> {
+  using type = typename Policy::Weight;
+};
 
 /** Borrowed normalized AO expansions. All views use the same atom index space.
  * Radial coefficients and sparse Cartesian coefficients already include their
@@ -39,6 +50,7 @@ struct Factor {
  */
 template <class Policy, unsigned Rank, std::size_t TermCapacity>
 struct Product {
+  using Weight = typename WeightType<Policy>::type;
   const Factor (&factors)[Rank];
   std::int32_t shells[Rank], atoms[Rank];
   std::int64_t primitive[Rank];
@@ -49,7 +61,7 @@ struct Product {
   unsigned owner{}, lane, lanes;
 
   template <unsigned Slot = 0>
-  __device__ void terms(double weight) {
+  __device__ void terms(Weight weight) {
     if constexpr (Slot == Rank) {
       Policy::template accumulate<Rank>(result, exponents, centers, angular, weight);
     } else {
@@ -73,7 +85,7 @@ struct Product {
         // A cooperative lane loads arithmetic inputs only for products it
         // owns. Loading them while enumerating every other lane's products
         // needlessly extends live ranges and inflates per-thread stack state.
-        double weight = 1.0;
+        Weight weight = 1.0;
 #pragma unroll
         for (unsigned slot = 0; slot < Rank; ++slot) {
           exponents[slot] = factors[slot].view->exponents[primitive[slot]];

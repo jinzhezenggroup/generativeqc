@@ -360,6 +360,7 @@ generativeqc_status create_cuda_direct_jk_plan(
     plan->coordinate_elements = coord_elements;
     plan->coordinates_per_item = coordinates;
     plan->screening_tolerance = screening_tolerance;
+    configure_direct_coulomb_recurrence(plan->batch);
     plan->batch.batch_size = static_cast<std::int32_t>(systems.size());
     plan->batch.nbf = static_cast<std::int32_t>(host.nbf);
     plan->batch.direct_nbf = static_cast<std::int32_t>(host.direct_nbf);

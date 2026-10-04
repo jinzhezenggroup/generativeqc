@@ -72,11 +72,17 @@ def denominator_check_ump2(snapshot: typing.Any, threshold: typing.Any) -> float
                     - np.min(ei[list(left_vir)])
                     - np.min(ej[list(right_vir)])
                 )
+                smallest = (
+                    np.min(ei[list(left_occ)])
+                    + np.min(ej[list(right_occ)])
+                    - np.max(ei[list(left_vir)])
+                    - np.max(ej[list(right_vir)])
+                )
             except FloatingPointError as exc:
                 raise ValueError(
                     f"nonfinite UMP2 denominator extrema in {channel}"
                 ) from exc
-        if not np.isfinite(largest):
+        if not all(np.isfinite(value) for value in (largest, smallest)):
             raise ValueError(f"nonfinite UMP2 denominator extrema in {channel}")
         if largest >= 0:
             raise ValueError(
@@ -144,7 +150,10 @@ class PreparedUMP2Energy:
         )
         self._ot, self._vt = occupied_tile, virtual_tile
         self._programs: dict[tuple[str, tuple[int, int, int, int]], typing.Any] = {}
-        self._capacity = 0
+        # Even a reference with no active excitation channels must validate the
+        # source and charge its resident buffers through the shared planner.
+        empty = SpinMOBlock(((),) * 4, ("alpha",) * 4)
+        self._capacity = self._provider.plan(empty).peak_bytes
         self._state, self._last_result = "prepared", None
 
         for channel, left, right in (

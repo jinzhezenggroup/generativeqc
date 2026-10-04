@@ -49,6 +49,28 @@ balance, not the dense worst-case scaling. Sparse-density cases can be slower;
 this switch is a qualification control, not a universal speedup or default
 promotion. See the [schedule decision](../../.agents/notes/implemented/performance/2026-10-03-schwarz-indexed-independent-force-domain.md).
 
+`GENERATIVEQC_BOUNDED_ANGULAR_FORCE=1` (or `angular`) separately opts full-range
+J/K and omega=0.3 LR force sources into thirteen total-angular-order passes.
+It is **off by default** and changes neither the recurrence nor the screening
+gates. Full-range passes retain the selected indexed/triangular domain; LR keeps
+its existing triangular domain. Cursor/output storage is reused on the owning
+stream, while shell enumeration is repeated per order. The purpose is to qualify
+the tradeoff between compiled kernel resources and repeated scanning, not to
+assume less integral work. The switch is recorded in resource and checkpoint
+identity; differing or missing historical policy needs explicit warm admission.
+The retained diagnostic has negative endpoint evidence and is not a promotion
+candidate; see the [rejected experiment](../../.agents/notes/rejected/2026-10-04-tzvpd-angular-force-schedule.md).
+
+`GENERATIVEQC_DIRECT_COULOMB_REACHABLE=1` (or `reachable`) is a separate,
+**off-by-default** Cartesian-source experiment. The compiler passes each AO
+component's summed axis powers to the shared Coulomb recurrence, which evaluates
+only the exact dependency closure of the consumer's roots. Full/LR moments,
+screening, primitive counts and reserved auxiliary storage are unchanged. The
+policy is frozen when the native J/K provider is prepared and is included in
+resource/checkpoint identity. The public-AO fallback and specialized low-order
+workers retain their existing evaluation. Host arithmetic checks do not qualify
+CUDA execution or performance; see the [recurrence experiment](../../.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md).
+
 ## Public prepared API
 
 `FockPlan` owns normalized geometry, orbital/auxiliary data and native sources.

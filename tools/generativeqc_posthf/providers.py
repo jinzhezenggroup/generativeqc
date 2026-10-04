@@ -123,12 +123,10 @@ class ConventionalProvider:
                 raise MemoryError(
                     f"MO block needs {plan.peak_bytes} numeric bytes, budget is {self.budget_bytes}"
                 )
-            key = (
-                self.snapshot.identity,
-                self.source.identity,
-                block.slots,
-                getattr(block, "spins", None),
-            )
+            key = (self.snapshot.identity, self.source.identity, block.slots)
+            spins = getattr(block, "spins", None)
+            if spins is not None:
+                key += (spins,)
             if key in self._cache:
                 self._cache.move_to_end(key)
                 self.statistics["hits"] += 1
@@ -161,7 +159,6 @@ class ConventionalProvider:
                 )
             self.statistics["peak_bytes"] = max(self.statistics["peak_bytes"], peak)
             setup = time.perf_counter()
-            spins = getattr(block, "spins", None)
             matrices = (
                 [self.snapshot.coefficients] * 4
                 if spins is None
