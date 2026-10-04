@@ -295,7 +295,7 @@ def native_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
         capture_output=True,
     )
     dll = ct.CDLL(str(output))
-    call = dll.df_triples_probe
+    call = dll.df_triples_probe_v2
     call.argtypes = [
         ct.c_size_t,
         ct.c_size_t,
@@ -307,6 +307,7 @@ def native_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
         ct.c_int,
         ct.POINTER(ct.c_double),
         ct.POINTER(ct.c_size_t),
+        ct.c_size_t,
         ct.c_void_p,
         ct.c_size_t,
     ]
@@ -322,6 +323,8 @@ def run(
     threshold: float = 1e-10,
     mixed: bool = False,
     generated: bool = False,
+    cutensor: bool = False,
+    reject_cutensor: bool = False,
 ) -> tuple:
     q, o, v = inputs[0].shape
     arrays = [np.ascontiguousarray(x) for x in inputs]
@@ -329,7 +332,7 @@ def run(
         *(x.ctypes.data_as(ct.POINTER(ct.c_double)) for x in arrays)
     )
     values = np.full(3, np.nan)
-    counts = np.zeros(24, dtype=np.uintp)
+    counts = np.zeros(26, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
@@ -339,13 +342,38 @@ def run(
         threshold,
         budget,
         panels,
-        int(mixed) + 2 * int(generated),
+        int(mixed) + 2 * int(generated) + 4 * int(cutensor) + 8 * int(reject_cutensor),
         values.ctypes.data_as(ct.POINTER(ct.c_double)),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        len(counts),
         error,
         len(error),
     )
     return status, values, counts, error.value.decode()
+
+
+def test_native_probe_rejects_short_diagnostic_buffer(native_probe: typing.Any) -> None:
+    """The benchmark/probe ABI rejects old output capacities before any work."""
+    values = np.full(3, np.nan)
+    counts = np.full(1, 17, dtype=np.uintp)
+    error = ct.create_string_buffer(2048)
+    status = native_probe(
+        1,
+        1,
+        1,
+        None,
+        1e-10,
+        1 << 30,
+        1,
+        0,
+        values.ctypes.data_as(ct.POINTER(ct.c_double)),
+        counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        len(counts),
+        error,
+        len(error),
+    )
+    assert status != 0 and b"diagnostic buffer" in error.value
+    assert np.isnan(values).all() and counts[0] == 17
 
 
 @pytest.mark.parametrize(
@@ -461,7 +489,7 @@ def test_dimension_and_complete_work_preflight_precedes_input_access(
     """Huge logical shapes must fail before dereferencing even null inputs."""
     pointers = (ct.POINTER(ct.c_double) * 9)()
     values = np.full(3, np.nan)
-    counts = np.full(24, 17, dtype=np.uintp)
+    counts = np.full(26, 17, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = native_probe(
         o,
@@ -474,6 +502,7 @@ def test_dimension_and_complete_work_preflight_precedes_input_access(
         0,
         values.ctypes.data_as(ct.POINTER(ct.c_double)),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        len(counts),
         error,
         len(error),
     )
@@ -491,14 +520,17 @@ def test_dimension_and_complete_work_preflight_precedes_input_access(
         ("ch4", -1.555665872715297e-04),
     ],
 )
+@pytest.mark.parametrize("cutensor", [False, True])
 def test_native_pinned_independent_molecular_energies(
-    native_probe: typing.Any, name: str, expected: float
+    native_probe: typing.Any, name: str, expected: float, cutensor: bool
 ) -> None:
     """Exact Gram factors of committed ERIs reproduce pinned PySCF 2.14.0 (T).
 
     This factorization is test-only: the native production owner receives DF
     factors, and neither imports PySCF nor factors a dense four-index tensor.
     """
+    if cutensor and os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1":
+        pytest.skip("requires explicit optional cuTENSOR qualification")
     with np.load(ROOT / "tests/reference_data/cc/endpoints" / f"{name}.npz") as z:
         eps, occ, c, f, g, t1, t2 = (
             z[key] for key in ("eps", "occ", "C", "F", "g", "t1", "t2")
@@ -522,16 +554,101 @@ def test_native_pinned_independent_molecular_energies(
         eps[:o],
         eps[o:],
     ]
-    status, values, _, error = run(native_probe, inputs)
+    status, values, counts, error = run(
+        native_probe, inputs, cutensor=cutensor, budget=2 << 30
+    )
     assert status == 0, error
     np.testing.assert_allclose(values[0], expected, atol=3e-12, rtol=3e-12)
     mixed_status, mixed_values, mixed_counts, mixed_error = run(
-        native_probe, inputs, mixed=True
+        native_probe, inputs, mixed=True, cutensor=cutensor, budget=2 << 30
     )
     assert mixed_status == 0, mixed_error
     np.testing.assert_allclose(mixed_values[0], expected, atol=2e-7, rtol=2e-4)
     assert mixed_counts[15] > 0
     assert tuple(mixed_counts[17:20]) == (32, 32, 32)
+    assert counts[24] == mixed_counts[24] == int(cutensor)
+
+
+@pytest.mark.parametrize("mixed", [False, True])
+def test_cutensor_complete_endpoint_resources_and_transactional_fallback(
+    native_probe: typing.Any, mixed: bool, tmp_path: Path
+) -> None:
+    """Real method execution, not just a microkernel: admission, casts, panels,
+    W, denominators, reductions, transfer, stream drain and cleanup all run.
+    Test-only scores select the provider without asserting a performance win.
+    """
+    if os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1":
+        pytest.skip("requires explicit optional cuTENSOR qualification")
+    inputs, ovvv = case(3, 4, 5)
+    want = reference(inputs, ovvv)
+    timings, work = [], []
+    for _ in range(3):
+        status, values, counts, error = run(
+            native_probe, inputs, mixed=mixed, cutensor=True, budget=2 << 30
+        )
+        assert status == 0, error
+        np.testing.assert_allclose(
+            values[0],
+            want,
+            atol=2e-7 if mixed else 3e-12,
+            rtol=2e-4 if mixed else 3e-12,
+        )
+        assert counts[24] == 1 and counts[25] >= 20800
+        assert counts[21] == counts[22] == 0
+        assert counts[2] == counts[3] + (3 * 320 << 20) + counts[23]
+        assert counts[23] >= 3 * 64 << 20
+        assert counts[11] == counts[6] * 5 * 4**3 + 60 * (4**4 + 3 * 4**3)
+        assert tuple(counts[17:20]) == ((32, 32, 32) if mixed else (64, 64, 64))
+        assert values[2] > 0
+        timings.append(float(values[2]))
+        work.append(counts.tolist())
+    (tmp_path / "complete_endpoint.json").write_text(
+        json.dumps(
+            {
+                "precision": "mixed" if mixed else "strict",
+                "seconds": timings,
+                "work": work,
+                "scope": "whole endpoint with per-call preparation and cleanup",
+                "selection": "synthetic test-only scores, no speedup claim",
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+    status, expected, generated, error = run(
+        native_probe, inputs, mixed=mixed, generated=True, panels=1
+    )
+    assert status == 0, error
+    # The optional provider's simultaneous reservations do not fit. Retain the
+    # same precision via generated execution, without preparing any library.
+    status, values, bounded, error = run(
+        native_probe,
+        inputs,
+        mixed=mixed,
+        cutensor=True,
+        panels=1,
+        budget=int(generated[2]),
+    )
+    assert status == 0, error
+    assert bounded[20] == bounded[22] == 1 and bounded[24] == 0
+    assert bounded[2] <= generated[2]
+    np.testing.assert_array_equal(values[:2], expected[:2])
+    # Reject the third plan after the panel and first W plan have been prepared.
+    # The partial W table and the already published panel table both drain before
+    # the generated retry; no method work has been enqueued yet.
+    status, values, fallback, error = run(
+        native_probe,
+        inputs,
+        mixed=mixed,
+        cutensor=True,
+        reject_cutensor=True,
+        budget=2 << 30,
+        panels=1,
+    )
+    assert status == 0, error
+    assert fallback[20] == fallback[22] == 1 and fallback[24] == 0
+    np.testing.assert_array_equal(values[:2], expected[:2])
+    np.testing.assert_array_equal(fallback[6:20], generated[6:20])
 
 
 @pytest.mark.parametrize("mixed", [False, True])
