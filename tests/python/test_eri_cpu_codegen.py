@@ -128,7 +128,7 @@ def test_deterministic_bounded_host_emission(generated_source: str) -> None:
 def compiled_evaluator(
     generated_source: str,
     tmp_path_factory: pytest.TempPathFactory,
-    native_cxx,
+    native_cxx: object,
 ) -> ctypes.CDLL:
     directory = tmp_path_factory.mktemp("eri_cpu")
     (directory / "generated_eri_cpu.hpp").write_text(generated_source)
@@ -397,7 +397,7 @@ def test_all_ordered_spd_components_match_independent_libcint(
 
 
 def test_native_ao_component_indices_reuse_generated_authority(
-    generated_source: str, tmp_path: Path, native_cxx
+    generated_source: str, tmp_path: Path, native_cxx: object
 ) -> None:
     """Run the actual AO construction/preparation against generated metadata.
 
