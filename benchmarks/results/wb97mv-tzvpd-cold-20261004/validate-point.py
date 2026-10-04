@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 from statistics import median
 
+_ROOT = Path(__file__).resolve().parents[3]
+sys.path[:0] = [str(_ROOT), str(_ROOT / "python")]
+
 from tools.render_omol25_benchmarks import validate
 
 

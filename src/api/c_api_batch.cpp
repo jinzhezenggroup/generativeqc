@@ -539,6 +539,13 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
   std::lock_guard<std::recursive_mutex> context_lock(batch->context->mutex);
   std::fill(batch->precision_work.begin(), batch->precision_work.end(), std::nullopt);
   std::fill(batch->initial_guesses.begin(), batch->initial_guesses.end(), std::nullopt);
+  std::fill(batch->last_fock_builds.begin(), batch->last_fock_builds.end(), 0);
+  // Revoke host records before method invalidation or argument rejection can
+  // return. A failed replay must not expose diagnostics from the previous run.
+  std::fill(batch->precision.begin(), batch->precision.end(), std::nullopt);
+  std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(), std::nullopt);
+  std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
+  std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
   // Method-owned tokens must follow the same invalidation boundary as the
   // cached diagnostics, including malformed descriptors and output counts.
   try {
@@ -547,13 +554,6 @@ generativeqc_status generativeqc_batch_execute(generativeqc_batch* batch,
     return generativeqc::api::map_exception(&batch->context->last_detail);
   }
   if (results == nullptr) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  std::fill(batch->last_fock_builds.begin(), batch->last_fock_builds.end(), 0);
-  // Invalidate before validation/execution so rejected or throwing replays
-  // cannot expose a record from the previous run.
-  std::fill(batch->precision.begin(), batch->precision.end(), std::nullopt);
-  std::fill(batch->incremental_direct_jk.begin(), batch->incremental_direct_jk.end(), std::nullopt);
-  std::fill(batch->scf_diagnostics.begin(), batch->scf_diagnostics.end(), std::nullopt);
-  std::fill(batch->ks_diagnostics.begin(), batch->ks_diagnostics.end(), std::nullopt);
   const std::uint32_t system_count = generativeqc_batch_get_system_count(batch);
   if (result_count != system_count || ((inputs == nullptr) != (input_count == 0)) ||
       (inputs != nullptr && input_count != system_count)) {

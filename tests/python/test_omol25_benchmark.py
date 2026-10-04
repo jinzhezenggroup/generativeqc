@@ -312,6 +312,7 @@ def test_collect_retains_complete_seed_cost_and_experimental_policy(
         "preliminary_wrapper_seconds",
     ):
         assert point["engines"]["native"][key] == native[key]
+    pytest.importorskip("matplotlib")
     figure([point], tmp_path, phase="cold", filename="cold.svg")
     svg = (tmp_path / "cold.svg").read_text()
     assert "experimental AO/seed policy" in svg

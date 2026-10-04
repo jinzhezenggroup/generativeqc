@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,9 @@ PUBLICATION = (
         "source",
         "validator-replaced",
         "validator-missing",
+        "shadow-packages",
+        "point-label",
+        "report-label",
     ],
 )
 def test_live_tzvpd_publication_checks_all_calls_under_optimization(
@@ -40,6 +44,7 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
     samples_path = tmp_path / "samples.json.gz"
     samples = json.loads(gzip.decompress(samples_path.read_bytes()))
     reports = samples["points"]["6"]["reports"]
+    escaped = tmp_path / "outside-workspace"
     if mutation in {"force", "force-forged"}:
         reports["lda16"]["records"][-1]["forces"][0][0] += 1e-3
     elif mutation == "lifecycle":
@@ -54,12 +59,24 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
         )
     elif mutation == "source":
         reports["none"]["native_build"]["probe"]["source_identity"] = "wrong"
+    elif mutation == "point-label":
+        samples["points"][str(escaped)] = samples["points"].pop("6")
+    elif mutation == "report-label":
+        reports[str(escaped)] = reports["none"]
+        samples["points"]["6"]["outcomes"][str(escaped)] = {"exit_code": 0}
     if mutation in {"validator-replaced", "force-forged"}:
         (tmp_path / "validate-point.py").write_text(
             "raise RuntimeError('bundle code ran')\n"
         )
     elif mutation == "validator-missing":
         (tmp_path / "validate-point.py").unlink()
+    elif mutation == "shadow-packages":
+        for package in ("tools", "benchmarks"):
+            shadow = tmp_path / package
+            shadow.mkdir()
+            (shadow / "__init__.py").write_text(
+                "raise RuntimeError('external package ran')\n"
+            )
     samples_path.write_bytes(gzip.compress(json.dumps(samples).encode(), mtime=0))
     evidence_path = tmp_path / "evidence.json"
     evidence = json.loads(evidence_path.read_text())
@@ -80,14 +97,27 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
         text=True,
         check=False,
         timeout=30,
+        cwd=tmp_path,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(tmp_path) if mutation == "shadow-packages" else "",
+        },
     )
-    if mutation in {"valid", "validator-replaced", "validator-missing"}:
+    if mutation in {
+        "valid",
+        "validator-replaced",
+        "validator-missing",
+        "shadow-packages",
+    }:
         assert checked.returncode == 0, checked.stderr
         assert json.loads(checked.stdout)["accepted_endpoint_calls"] == 108
     else:
         assert checked.returncode != 0
         assert "accepted_endpoint_calls" not in checked.stdout
         assert "bundle code ran" not in checked.stderr
+    assert not escaped.exists()
+    assert not escaped.with_suffix(".json").exists()
+    assert not escaped.with_suffix(".outcome").exists()
 
 
 @pytest.mark.parametrize(
@@ -128,6 +158,8 @@ def test_standalone_point_rejects_invalid_durations(
         text=True,
         check=False,
         timeout=30,
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": ""},
     )
     assert checked.returncode != 0
     label = (
