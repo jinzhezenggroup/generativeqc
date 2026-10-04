@@ -70,3 +70,9 @@ input. The previous static provenance and fallback tests remain intact.
 If fresh snapshots still cannot keep the complete compile/resource job within
 its finite budget, inspect the per-stage work before changing job layout.
 Do not skip a required resource compile or infer passing CI from a timeout.
+
+## Follow-up
+
+The [independent CUDA resource budget decision](2026-10-04-split-cuda-ci-resource-budget.md)
+records a later cold-path timeout and splits production/resource jobs while
+preserving this note's source-aware refresh and successful-master trust policy.
