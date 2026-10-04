@@ -53,12 +53,12 @@ counts range over 21--43 / 28--67 / 36--102 / 45--147 across component powers.
 These are exact static state counts, **not FLOPs, screened molecular work,
 kernel durations or endpoint speedups**. No GPU calibration is used.
 
-For actually evaluated component/primitive instances q, auxiliary assignments
-change from `sum_q S(L_q)` to `sum_q S_r(X_q,Y_q,Z_q)`, and zero stores disappear
-only for the selected dependency domain. The scalar arithmetic of every retained
-state and its order remain identical. The shell/primitive/AO admissions, radial
-moment ladder and Hermite/component contractions do not change. Their actual
-counts remain null until an attributable runtime census is available. Cold
+For actually evaluated component/primitive instances q, recurrence assignments
+change from `sum_q S(L_q)` to `sum_q S_r(X_q,Y_q,Z_q)`, and the explicit zeroing
+loop is skipped for the selected dependency domain. The scalar arithmetic of
+every retained state and its order remain identical. The shell/primitive/AO
+admissions, radial moment ladder and Hermite/component contractions do not change.
+Their actual counts remain null until an attributable runtime census is available. Cold
 repeats value work over SCF iterations, so it can benefit from this source
 change even though a force-only schedule cannot remove that cost.
 
@@ -66,14 +66,21 @@ change even though a force-only schedule cannot remove that cost.
 
 The initial candidate preserves the original packed simplex and index formula:
 `8*S(L)` bytes for FP64 values and `32*S(L)` for Dual3, before other workspaces.
-No new persistent GPU allocation is introduced. Fewer stores do not prove
-smaller compiler stack, less measured traffic or better occupancy. A compact
-layout is deliberately deferred to avoid combining recurrence and indexing
+No new persistent GPU allocation is introduced. Fewer source-level assignments
+do not prove smaller compiler stack, less measured traffic or better occupancy.
+A compact layout is deliberately deferred to avoid combining recurrence and indexing
 changes. Component bounds may also add branches/registers, so a loss is possible.
 
 Every retained recurrence operand has an earlier assignment in the existing
-z/y/x evaluation order. Unused storage is deliberately not read or initialized.
-Tests poison it with NaNs and check exact writes as well as every consumed root.
+z/y/x evaluation order. Unused storage is deliberately not read. The local
+auxiliary's `double`, `Dual` and `Dual3` arrays have no implicit zero initialization,
+so their unused cells remain uninitialized on the selected path. In contrast,
+`MixedPrecisionFloat` default construction initializes every array element to
+zero even when the explicit loop is skipped. Actual zero-store elimination,
+stack traffic and generated CUDA instructions require compiler/device evidence;
+the source-level assignment counts do not establish them.
+Tests poison the auxiliary storage with NaNs and check exact writes as well as
+every consumed root.
 Malformed or unselected bounds retain the full simplex, preventing unsigned
 loop underflow. SR uses its own moments, never subtraction of full/LR sources.
 At fixed exponents/omega the Dual/Dual3 geometry seeds differentiate the same
