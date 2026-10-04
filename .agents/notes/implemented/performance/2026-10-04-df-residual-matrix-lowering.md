@@ -1,6 +1,6 @@
 # Decision: expose bounded DF residual contractions as FP64 matrices
 
-Status: implemented; native qualification pending
+Status: implemented; large endpoint qualification pending
 Date: 2026-10-04
 
 ## Problem
@@ -51,7 +51,29 @@ the independent expanded residual within 2e-12. Runtime work and rank checks
 cover (9,221) and (21,243); these are compiler checks, not large-device timings.
 Native solver tests compare amplitudes and energy with the scalar schedule and
 determinant oracle, and exercise exact-budget fallback and sticky overflow.
-Native and complete force qualification is pending at this checkpoint.
+RTX5090 Slurm job 12236 passes all 14 CUDA solver tests in 13.02 s, including
+the exact-budget matrix-to-scalar fallback and all sticky-overflow cases.
+Job 12238 passes all 12 complete-force tests in 31.09 s, including independent
+energy finite differences and every water coordinate. Frozen-library test mode
+links the probe to the same full library as the endpoint benchmark; the default
+fixture retains standalone code-generation coverage.
+
+On PRO6000 job 2197, scalar/matrix complete water forces differ by at most
+3.5527e-15. Matched large energy and complete-force runs are still in progress.
+Frozen library SHA256 is
+a92445a75857471438c9a752554a27a32964abc09bbc02b7e680ff5d6c9d7539;
+build source identity is
+a28ce46d0ba8b65868503b20e51c977e2b9dfb7e8985a090ee55a848c1931bd3.
+
+The compiler/runtime queries give the following per-residual figures. Arena
+bytes include preparation, auxiliary, accumulation and core, but exclude
+inputs, replay, DIIS, retained host state and the provider allowance; they are
+not complete endpoint capacities.
+
+| o,v,q | Scalar summands | Matrix summands | Scalar arena bytes | Matrix arena bytes |
+| --- | ---: | ---: | ---: | ---: |
+| 9,221,488 | 1,037,733,074,263 | 1,036,644,261,850 | 895,480,896 | 1,150,009,248 |
+| 21,243,666 | 11,836,059,199,641 | 11,828,905,472,340 | 5,919,537,792 | 7,604,262,624 |
 
 Packing adds data movement and may lose on small shapes. No speedup is claimed
 until matched complete endpoints pass. This changes execution only: exact RHF
