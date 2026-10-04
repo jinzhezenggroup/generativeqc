@@ -2,6 +2,7 @@
 // electronic value, amplitude, adjoint and nuclear contraction is native CUDA.
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 
 #include "methods/df_ccsdt_force.hpp"
@@ -30,8 +31,13 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     descriptor.ccsd_energy_tolerance = 1e-12;
     descriptor.ccsd_residual_tolerance = 1e-10;
     descriptor.correlation_memory_budget_bytes = budget;
-    const auto result = methods::detail::run_df_ccsdt_native(
-        execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples);
+    const auto* selected = std::getenv("GENERATIVEQC_TEST_PACKED_CC_HISTORY");
+    const bool packed = selected && std::string(selected) == "1";
+    const auto result =
+        methods::detail::run_df_ccsdt_native(execution, raw.orbital(), raw.auxiliary(), descriptor,
+                                             forces, triples, true, true, true, 8, 8, true, packed);
+    if (packed && !result.solver.packed_diis)
+      throw std::runtime_error("packed history qualification did not exercise packed storage");
     const double scalars[]{result.energy,
                            result.reference_energy,
                            result.correlation_energy,

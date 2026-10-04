@@ -44,5 +44,5 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System
                                   bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
                                   std::size_t lambda_batch_limit = 8,
                                   std::size_t ccsd_batch_limit = 8,
-                                  bool derived_denominators = true);
+                                  bool derived_denominators = true, bool packed_diis = false);
 }  // namespace generativeqc::methods::detail

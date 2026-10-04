@@ -394,6 +394,13 @@ def canonical_denominators_cpp() -> str:
     )
 
 
+def restricted_pairs_cpp() -> str:
+    """Shared storage-only permutation/metric contract, separate from CC equations."""
+    from generativeqc_compiler.cc.pair_coordinates import cpp_coordinates
+
+    return cpp_coordinates()
+
+
 def _canonical_d2_consumer(node: typing.Any) -> bool:
     """Only the declared Jacobi d2 input admits the canonical input view."""
     return (
@@ -1050,6 +1057,7 @@ def cpu_header() -> str:
             "#include <limits>",
             "#include <stdexcept>",
             canonical_denominators_cpp(),
+            restricted_pairs_cpp(),
             "namespace generativeqc::cc::generated {",
             _scaled_bilinear_cpp(),
             'inline std::size_t checked_add(std::size_t a,std::size_t b){if(b>std::numeric_limits<std::size_t>::max()-a)throw std::length_error("RCCSD size overflow");return a+b;}',

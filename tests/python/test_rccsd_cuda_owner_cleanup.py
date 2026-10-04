@@ -64,6 +64,7 @@ PREFIX = r"""
 #include <functional>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstring>
 #include <iostream>
 #include <limits>
@@ -118,6 +119,10 @@ int cudaMalloc(void** p, std::size_t bytes) {
 int cudaMemcpyAsync(void* d, const void* s, std::size_t n, int, cudaStream_t) {
   if (const int error = step()) return error;
   std::memcpy(d, s, n); return 0;
+}
+int cudaMemsetAsync(void* d, int value, std::size_t n, cudaStream_t) {
+  if (const int error=step()) return error;
+  std::memset(d,value,n); return 0;
 }
 """
 
@@ -177,8 +182,10 @@ int main() {
   for (const unsigned naux : {0U, 2U}) {
   p.naux = naux; p.df_bov.assign(naux, 0.1); p.df_bvv.assign(naux, 0.1);
   for (const unsigned history : {0U, 1U, 6U}) {
+  for (const bool packed : {false, true}) {
     generativeqc::cc::SolverOptions options;
     options.diis_size = history;
+    options.packed_diis = packed;
     calls = 0; fail_at = 0;
     int constructor_calls = 0;
     { generativeqc::cc::Owner good(p, options, 0); constructor_calls = calls;
@@ -213,6 +220,7 @@ int main() {
               << constructor_calls << '\n';
   }
   }
+  }
   if (!saw_matrix) return 11;
   // Allocation rejection exercises the actual production retry chain: a Q
   // tile may lose its arena while the admitted matrix provider stays usable.
@@ -233,5 +241,20 @@ int main() {
     if (retry.plan.matrix_gemm || retry.plan.auxiliary_batch_size != 1) return 15;
   }
   if (streams || events || allocations || handles || device != 7) return 16;
+  for (const int refusal : {0,1,2}) {
+    calls=fail_at=0;
+    generativeqc::cc::SolverOptions options;
+    options.packed_diis=true;
+    { generativeqc::cc::Owner owner(p,options,0);
+      if (!owner.packed) return 17;
+      if (refusal==1) options.max_bytes=owner.non_history_capacity;
+      if (refusal==2) arena_alloc_failures=1;
+      owner.refuse_packed_history(options);
+      if (owner.packed || !owner.diagnostic.packed_diis_refused) return 18;
+      if ((owner.history.capacity()==0)!=(refusal!=0)) return 19;
+      if (allocations != (refusal ? 1 : 2)) return 20;
+    }
+    if (streams || events || allocations || handles || device != 7) return 21;
+  }
 }
 """

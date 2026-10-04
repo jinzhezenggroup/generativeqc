@@ -27,6 +27,9 @@ struct SolverOptions {
   // Native canonical CUDA construction may retain the small spectrum instead
   // of a full doubles denominator. Supplied Problems stay explicit by default.
   bool derived_denominators{true};
+  // Internal storage option, initially opt-in. Supplied asymmetric initial
+  // amplitudes use full history; iteration rounding is independently gated.
+  bool packed_diis{false};
 };
 
 enum class DenominatorRepresentation { Explicit, CanonicalSpectrum };
@@ -91,6 +94,10 @@ struct SolverDiagnostic {
   // no tensor bytes. Dot/combine terms are scalar summands, not hardware FLOPs.
   std::size_t diis_history_insert_bytes{}, diis_history_shift_bytes{};
   std::size_t diis_residual_dot_terms{}, diis_gram_updates{}, diis_combine_terms{};
+  bool packed_diis{}, packed_diis_refused{}, diis_disabled_after_packing_refusal{};
+  std::size_t diis_history_capacity_bytes{}, diis_conversion_bytes{}, diis_metric_weight_terms{};
+  std::size_t diis_pack_calls{};
+  double diis_maximum_pair_asymmetry{};
   // Complete auxiliary work, including trial evaluations and independent replay.
   std::size_t df_auxiliary_slices{};
   std::size_t df_virtual_operations{};

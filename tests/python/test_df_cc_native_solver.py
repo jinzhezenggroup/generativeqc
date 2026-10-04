@@ -19,8 +19,13 @@ from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_generated_auxiliary_accumulation_preserves_order(tmp_path: Path) -> None:
-    """Execute the real generated consumer with cancellation and early overflow."""
+@pytest.mark.parametrize(
+    "consumer", ["test_df_auxiliary_accumulation.cu", "test_cuda_pair_history.cu"]
+)
+def test_generated_auxiliary_accumulation_preserves_order(
+    tmp_path: Path, consumer: str
+) -> None:
+    """Execute generated/storage consumers against independent full tensors."""
     if (
         os.environ.get("GENERATIVEQC_DF_CC_CUDA_TEST") != "1"
         or os.environ.get("GENERATIVEQC_DF_CC_USE_LIBRARY") != "1"
@@ -42,7 +47,7 @@ def test_generated_auxiliary_accumulation_preserves_order(tmp_path: Path) -> Non
             "-I" + str(ROOT / "include"),
             "-I" + str(library.parent / "generated"),
             "-c",
-            str(ROOT / "tests/native/test_df_auxiliary_accumulation.cu"),
+            str(ROOT / "tests/native" / consumer),
             "-o",
             str(obj),
         ],
@@ -116,6 +121,14 @@ COLUMNS = (
     "accumulation_bytes",
     "denominator_identity",
     "derived_d2_iteration_evaluations",
+    "packed_diis",
+    "packed_diis_refused",
+    "diis_disabled_after_packing_refusal",
+    "diis_history_capacity_bytes",
+    "diis_conversion_bytes",
+    "diis_metric_weight_terms",
+    "diis_pack_calls",
+    "diis_maximum_pair_asymmetry",
 )
 
 
@@ -267,6 +280,7 @@ def _stream(
     batch_limit: int = 8,
     canonical_eps: np.ndarray | None = None,
     level_shift: float = 0.0,
+    packed_diis: bool = False,
     max_iterations: int = 100,
 ) -> bytes:
     o, v = arrays["t1"].shape
@@ -283,6 +297,7 @@ def _stream(
             | (0 if hoist else 4)
             | (0 if matrix else 8)
             | (16 if canonical_eps is not None else 0)
+            | (32 if packed_diis else 0)
             | (batch_limit << 8),
         ],
         dtype=np.uint64,
@@ -383,6 +398,77 @@ def test_canonical_capacity_admits_previously_rejected_problem(
         assert rejected.returncode and b"budget" in rejected.stderr
 
 
+@pytest.mark.parametrize(
+    "df,hoist,matrix", [(False, False, False), (True, False, False), (True, True, True)]
+)
+def test_packed_history_preserves_trajectories_and_physical_oracle(
+    solver_probe: tuple[Path, bool], df: bool, hoist: bool, matrix: bool
+) -> None:
+    if not solver_probe[1]:
+        pytest.skip("packed storage is a CUDA consumer")
+    fock, g, arrays = _case(2, 3, 5)
+    schedule = {"df": df, "hoist": hoist, "matrix": matrix, "diis": 8}
+    for limit in (1, 2, 3, 4, 100):
+        full, f1, f2 = _run(solver_probe, arrays, max_iterations=limit, **schedule)
+        packed, p1, p2 = _run(
+            solver_probe, arrays, max_iterations=limit, packed_diis=True, **schedule
+        )
+        assert packed["packed_diis"] and not packed["packed_diis_refused"]
+        assert full["status"] == packed["status"]
+        assert full["iterations"] == packed["iterations"]
+        np.testing.assert_allclose(full["energy"], packed["energy"], atol=2e-12, rtol=0)
+        np.testing.assert_allclose(f1, p1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(f2, p2, atol=2e-11, rtol=0)
+        assert packed["device_bytes"] < full["device_bytes"]
+    energy, r1, r2 = DeterminantOracle(fock, g, 2).evaluate_full(p1, p2)
+    np.testing.assert_allclose(packed["energy"], energy, atol=2e-12, rtol=0)
+    assert max(np.max(np.abs(r1)), np.max(np.abs(r2))) <= 1e-10
+
+
+def test_packed_history_capacity_and_asymmetry_fallback(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    if not solver_probe[1]:
+        pytest.skip("packed storage is a CUDA consumer")
+    _, _, arrays = _case(2, 6, 1)
+    schedule = {"hoist": False, "matrix": False, "diis": 8}
+    full, _, _ = _run(solver_probe, arrays, **schedule)
+    packed, _, _ = _run(solver_probe, arrays, packed_diis=True, **schedule)
+    assert packed["capacity"] < full["capacity"]
+    assert packed["diis_history_capacity_bytes"] < full["diis_history_capacity_bytes"]
+    budget = packed["capacity"]
+    exact, _, _ = _run(
+        solver_probe, arrays, packed_diis=True, budget=budget, **schedule
+    )
+    assert exact["status"] == 0
+    for selected, amount in ((True, budget - 1), (False, budget)):
+        p = subprocess.run(
+            [str(solver_probe[0])],
+            input=_stream(
+                arrays, True, packed_diis=selected, budget=amount, **schedule
+            ),
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        assert p.returncode and b"budget" in p.stderr
+    for initial in (True, False):
+        changed = {k: v.copy() for k, v in arrays.items()}
+        if initial:
+            # Even a one-ULP supplied asymmetry must preserve the explicit input.
+            changed["t2"][0, 1, 0, 1] = np.nextafter(changed["t2"][0, 1, 0, 1], 1.0)
+        else:
+            # Arbitrary supplied denominators can break symmetry in the first
+            # update despite symmetric initial amplitudes: runtime refusal.
+            changed["d2"][0, 1, 0, 1] *= 1.1
+        expected, e1, e2 = _run(solver_probe, changed, **schedule)
+        actual, a1, a2 = _run(solver_probe, changed, packed_diis=True, **schedule)
+        assert actual["packed_diis_refused"] and not actual["packed_diis"]
+        assert actual["status"] == expected["status"] == 0
+        np.testing.assert_allclose(a1, e1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(a2, e2, atol=2e-11, rtol=0)
+
+
 def _run(
     probe: tuple[Path, bool], arrays: dict[str, np.ndarray], **kwargs: object
 ) -> tuple[dict[str, float], np.ndarray, np.ndarray]:
@@ -396,7 +482,9 @@ def _run(
     )
     lines = process.stdout.decode().splitlines()
     status = {
-        key: float(value) if key in ("energy", "r1", "r2", "seconds") else int(value)
+        key: float(value)
+        if key in ("energy", "r1", "r2", "seconds", "diis_maximum_pair_asymmetry")
+        else int(value)
         for key, value in zip(COLUMNS, lines[0].split(), strict=True)
     }
     values = np.fromstring(lines[1], sep=" ")

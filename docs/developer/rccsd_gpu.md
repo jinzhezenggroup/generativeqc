@@ -91,6 +91,32 @@ from physical contraction summands. The full planner charges the remaining
 spectrum and all ordinary solver/response storage. Endpoint measurements must
 decide whether the bandwidth/arithmetic trade helps a given scale.
 
+## Native symmetry-packed DIIS storage
+
+The native `SolverOptions::packed_diis` option stores restricted doubles in
+simultaneous-pair permutation orbits inside DIIS amplitude/error histories.
+It is opt-in. For `m=ov`, the compiler-owned mapping has `m(m+1)/2` doubles
+coordinates, with metric weight one on fixed points and two on paired points.
+Weighted Gram rows preserve the full physical-coordinate inner product;
+extrapolation writes directly to the ordinary full tensor. CC equations,
+current/last/residual arrays and public outputs remain in their existing layout.
+
+Supplied initial doubles must be bitwise symmetric before packing is admitted.
+During iteration, both members are checked against
+`64*epsilon_FP64*(1+max(abs(first),abs(second)))`; only that bounded rounding
+orbit may be averaged. Identical values bypass averaging, preserving subnormals.
+Larger asymmetry releases the packed histories and restarts full-layout DIIS.
+If the full history is over budget or its optional allocation fails, bounded
+Jacobi continuation remains subject to the original convergence/replay gates.
+Arithmetic/CUDA failures are not converted into symmetry refusal.
+
+The planner charges the separate histories, one metric byte per packed
+coordinate, scalar audits and all simultaneous full arrays. Diagnostics expose
+history peak capacity, packing calls, maximum observed iteration asymmetry,
+conversion logical bytes and weighted-metric terms. These are not measured
+memory-bus traffic or total endpoint FLOPs. Full-layout history remains selectable
+for numerical audits and performance comparisons.
+
 ## B: resident single-system solver
 
 `tools.generativeqc_cc.resident_solver.PreparedResidentCCSD` now binds the existing
