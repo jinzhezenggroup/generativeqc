@@ -80,8 +80,11 @@ def emit_df_values_cuda() -> str:
     # Constructing the inventory validates every mathematical root count before
     # writing executable code, including the otherwise easily omitted ss/sp end.
     df_program_inventory()
+    # DF metric/orbital transforms can amplify the default degree-13 table's
+    # primitive error. Use the common strict coefficients without changing
+    # quadrature, recurrence, screening, or other Direct consumers' defaults.
     tables = "\n".join(
-        emitter(symbol_prefix=f"df_rys{n}")
+        emitter(symbol_prefix=f"df_rys{n}", high_accuracy=True)
         for n, emitter in enumerate(
             (
                 emit_rys2_roots_cuda,
