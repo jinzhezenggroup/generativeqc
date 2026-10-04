@@ -415,19 +415,12 @@ RccsdNativeState execute_rccsd_prepared(
     }
     const auto reference_started = std::chrono::steady_clock::now();
     bool reference_plan_reused = false;
-    bool reference_plan_observed = false;
-    const auto observe_reference_plan = [&](bool reused) {
-      if (!reference_plan_observed) {
-        reference_plan_reused = reused;
-        reference_plan_observed = true;
-      }
-    };
     const auto run_reference = [&](const std::vector<double>* seed) {
       if (prepared_exact) {
         auto prepared_options = reference_options;
         prepared_options.resolved_fock_build = prepared_exact->strategy();
         auto result = scf::run_prepared_fock_strategy(*prepared_exact, prepared_options, seed);
-        observe_reference_plan(false);
+        reference_plan_reused = false;
         return result;
       }
       if (cuda && cuda_reference_plan) {
@@ -435,16 +428,16 @@ RccsdNativeState execute_rccsd_prepared(
         try {
           auto result = scf::run_rhf_cuda_cached(cuda_reference_plan, system, reference_options,
                                                  execution.device_id(), seed, &attempt_reused);
-          observe_reference_plan(attempt_reused);
+          reference_plan_reused = attempt_reused;
           return result;
         } catch (...) {
-          observe_reference_plan(attempt_reused);
+          reference_plan_reused = false;
           throw;
         }
       }
       auto result = cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed)
                          : scf::run_rhf(system, reference_options, seed);
-      observe_reference_plan(false);
+      reference_plan_reused = false;
       return result;
     };
     scf::ScfResult hf;

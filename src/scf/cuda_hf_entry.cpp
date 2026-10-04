@@ -43,6 +43,8 @@ ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan** plan, const core::System& syst
                               bool* execution_plan_reused) {
   if (options.hooks || options.strict_initial_density)
     throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
+  if (!plan) throw std::invalid_argument("CUDA RHF cached execution requires a plan owner");
+  if (execution_plan_reused) *execution_plan_reused = false;
 
   const std::vector<core::System> systems{system};
   const std::vector<const std::vector<double>*> initial_densities{initial_density};

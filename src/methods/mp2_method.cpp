@@ -105,13 +105,6 @@ class Mp2Prepared final : public PreparedCalculation {
 #endif
       scf::PreparedFockPlan* prepared_exact = nullptr;
       bool reference_plan_reused = false;
-      bool reference_plan_observed = false;
-      const auto observe_reference_plan = [&](bool reused) {
-        if (!reference_plan_observed) {
-          reference_plan_reused = reused;
-          reference_plan_observed = true;
-        }
-      };
       const auto run_reference = [&](const std::vector<double>* seed) {
         scf::ScfResult candidate;
         if (!density_fitted_ && !cuda) {
@@ -125,14 +118,14 @@ class Mp2Prepared final : public PreparedCalculation {
           auto execution = reference_options;
           execution.resolved_fock_build = prepared_exact->strategy();
           candidate = scf::run_prepared_fock_strategy(*prepared_exact, execution, seed);
-          observe_reference_plan(false);
+          reference_plan_reused = false;
         } else if (density_fitted_) {
           candidate =
               fitted_cuda_
                   ? scf::run_rhf_density_fitting_cuda(system_, *auxiliary_, reference_options,
                                                       context_.device_id, seed)
                   : scf::run_rhf_density_fitting(system_, *auxiliary_, reference_options, seed);
-          observe_reference_plan(false);
+          reference_plan_reused = false;
         } else {
           bool attempt_reused = false;
           try {
@@ -140,10 +133,10 @@ class Mp2Prepared final : public PreparedCalculation {
                 scf::run_rhf_cuda_cached(cuda_reference_plan_.slot(), system_, reference_options,
                                          context_.device_id, seed, &attempt_reused);
           } catch (...) {
-            observe_reference_plan(attempt_reused);
+            reference_plan_reused = false;
             throw;
           }
-          observe_reference_plan(attempt_reused);
+          reference_plan_reused = attempt_reused;
         }
         return candidate;
       };
