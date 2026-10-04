@@ -2,6 +2,7 @@
 
 Status: implemented
 Date: 2026-10-04
+Agent: dot
 
 ## Problem
 
@@ -68,5 +69,9 @@ speedup claim is made until an allocated-GPU run is retained.
 - #933
 - #926
 
-Original author attribution: ChatGPT
-Model: GPT-5.6 Sol
+## Subsequent capacity correction
+
+The device-only downstream reservation and exact-budget compatibility described
+above are superseded by
+[complete retained capacity and bounded retirement](2026-10-04-correlated-plan-capacity-fallback.md).
+The independent scientific warm-state and executable-owner lifetimes remain.

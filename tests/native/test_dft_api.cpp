@@ -260,6 +260,11 @@ void ks_option_semantic_plan() {
   require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
                                            &calculation) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
           "semantic range exchange accepted an inconsistent K coefficient");
+  exchange[0].fock_coefficient = -0.1;
+  exchange[1].omega = 0.31;
+  require(generativeqc_calculation_prepare(fixture.context, fixture.system, &method,
+                                           &calculation) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+          "semantic range exchange accepted mismatched SR/LR omega");
 }
 
 void automatic_libxc_semilocal_plan() {
@@ -1143,6 +1148,105 @@ int main() {
         generativeqc_calculation_destroy(cuda_calculation);
         generativeqc_system_destroy(cuda_system);
       }
+      struct RshEndpoint {
+        generativeqc_method carrier;
+        bool unrestricted;
+      };
+      // The semantic graph owns RSH eligibility. Exercise the exact same
+      // PBE-SR/LR graph through two historical carrier IDs for each spin.
+      const std::array<RshEndpoint, 4> rsh_endpoints{{
+          {GENERATIVEQC_METHOD_LDA_RKS, false},
+          {GENERATIVEQC_METHOD_PBE_RKS, false},
+          {GENERATIVEQC_METHOD_LDA_UKS, true},
+          {GENERATIVEQC_METHOD_PBE_UKS, true},
+      }};
+      for (const auto& endpoint : rsh_endpoints) {
+        const auto charge = endpoint.unrestricted ? 1 : 0;
+        const auto multiplicity = endpoint.unrestricted ? 2 : 1;
+        Fixture cpu_fixture(GENERATIVEQC_BACKEND_CPU_REFERENCE, charge, multiplicity);
+        generativeqc_system* cuda_system =
+            Fixture::create_system(cuda_context, charge, multiplicity);
+        method = lda_method();
+        method.method = endpoint.carrier;
+
+        const std::array<generativeqc_ks_semilocal_component, 2> components{{
+            {"GGA_X_PBE", 1.0},
+            {"GGA_C_PBE", 1.0},
+        }};
+        const double divisor = endpoint.unrestricted ? 1.0 : 2.0;
+        std::array<generativeqc_ks_exchange_term, 2> exchange{{
+            {GENERATIVEQC_KS_EXCHANGE_SHORT_RANGE, 0.2, 0.3, -0.2 / divisor},
+            {GENERATIVEQC_KS_EXCHANGE_LONG_RANGE, 0.8, 0.3, -0.8 / divisor},
+        }};
+        generativeqc_ks_options rsh_options{};
+        rsh_options.struct_size = sizeof(rsh_options);
+        rsh_options.abi_version = GENERATIVEQC_ABI_VERSION;
+        rsh_options.scf_domain = "semilocal-scaled-v1/pbe-spin-c2-1e-18";
+        rsh_options.grid_version = 1;
+        rsh_options.radial_points = 64;
+        rsh_options.angular_polar = 12;
+        rsh_options.angular_azimuth = 24;
+        rsh_options.partition_iterations = 3;
+        rsh_options.coincident_tolerance = 1e-12;
+        rsh_options.tile_points = 256;
+        rsh_options.xc_execution_schedule = GENERATIVEQC_XC_EXECUTION_DEVICE_FUSED;
+        rsh_options.spin_channels = endpoint.unrestricted ? 2 : 1;
+        rsh_options.semilocal_components = components.data();
+        rsh_options.semilocal_component_count = components.size();
+        rsh_options.exchange_terms = exchange.data();
+        rsh_options.exchange_term_count = exchange.size();
+        method.ks_options = &rsh_options;
+
+        generativeqc_calculation *cpu_calculation = nullptr, *cuda_calculation = nullptr;
+        const auto cpu_prepare = generativeqc_calculation_prepare(
+            cpu_fixture.context, cpu_fixture.system, &method, &cpu_calculation);
+        const auto cuda_prepare =
+            generativeqc_calculation_prepare(cuda_context, cuda_system, &method, &cuda_calculation);
+        const char* cuda_prepare_detail = generativeqc_context_get_last_detail(cuda_context);
+        require(cpu_prepare == GENERATIVEQC_STATUS_SUCCESS &&
+                    cuda_prepare == GENERATIVEQC_STATUS_SUCCESS && cpu_calculation &&
+                    cuda_calculation,
+                ("generic RSH CPU/CUDA preparation failed: carrier=" +
+                 std::to_string(endpoint.carrier) +
+                 " CUDA detail=" + (cuda_prepare_detail ? cuda_prepare_detail : ""))
+                    .c_str());
+
+        auto cpu_result = unconverged, cuda_result = unconverged;
+        const auto cpu_status = generativeqc_calculation_execute(cpu_calculation, &cpu_result);
+        const auto cuda_status = generativeqc_calculation_execute(cuda_calculation, &cuda_result);
+        const char* cuda_detail = generativeqc_context_get_last_detail(cuda_context);
+        require(cpu_status == GENERATIVEQC_STATUS_SUCCESS &&
+                    cuda_status == GENERATIVEQC_STATUS_SUCCESS && cpu_result.converged &&
+                    cuda_result.converged &&
+                    cuda_result.executed_backend == GENERATIVEQC_BACKEND_CUDA &&
+                    cuda_result.density_rms < 1e-9 &&
+                    std::abs(cuda_result.energy - cpu_result.energy) < 1e-10,
+                ("generic RSH CUDA endpoint differs from CPU: carrier=" +
+                 std::to_string(endpoint.carrier) + " CPU status=" + std::to_string(cpu_status) +
+                 " CUDA status=" + std::to_string(cuda_status) +
+                 " detail=" + (cuda_detail ? cuda_detail : ""))
+                    .c_str());
+        const auto cold = cuda_result;
+        require(generativeqc_calculation_execute(cuda_calculation, &cuda_result) ==
+                        GENERATIVEQC_STATUS_SUCCESS &&
+                    cuda_result.converged && cuda_result.iterations <= cold.iterations &&
+                    std::abs(cuda_result.energy - cold.energy) < 1e-11,
+                "generic RSH compatible CUDA replay changed the endpoint");
+
+        auto df_method = method;
+        df_method.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_CUDA;
+        generativeqc_calculation* rejected = nullptr;
+        require(
+            generativeqc_calculation_prepare(cuda_context, cuda_system, &df_method, &rejected) ==
+                    GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                rejected == nullptr,
+            "generic CUDA RSH silently admitted density fitting");
+
+        generativeqc_calculation_destroy(cpu_calculation);
+        generativeqc_calculation_destroy(cuda_calculation);
+        generativeqc_system_destroy(cuda_system);
+      }
+
       struct SplitHybridEndpoint {
         generativeqc_method method;
         bool unrestricted;

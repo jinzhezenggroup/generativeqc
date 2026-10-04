@@ -32,7 +32,8 @@ unsigned blocks(std::size_t elements) { return static_cast<unsigned>((elements +
 }  // namespace
 
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
-  batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_requested();
+  batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_mode();
+  batch.direct_hermite_convolution = cuda_policy::direct_hermite_convolution_mode();
 }
 
 GeneratedCoulombPlan::~GeneratedCoulombPlan() {
@@ -927,6 +928,10 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& p, bool unrestri
   if (error != cudaSuccess) return error;
   return enqueue_generated_exchange_prepared(p, unrestricted, range_alpha_exchange,
                                              range_beta_exchange, range, omega);
+}
+
+bool direct_shared_rsh_values_requested() noexcept {
+  return cuda_policy::canonical_rsh_values_requested();
 }
 
 }  // namespace generativeqc::scf::cuda_execution

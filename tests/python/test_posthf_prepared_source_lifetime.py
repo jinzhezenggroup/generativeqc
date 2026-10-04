@@ -22,6 +22,7 @@ PREFIX = r"""
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <utility>
 int plan_live=0, view_live=0, raw_live=0;
 int source_failure=0;
 std::size_t plan_bytes=64;
@@ -32,6 +33,10 @@ struct ElectronInteractionSource {
 };
 }
 namespace scf {
+struct CudaRhfBucketPlan {};
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* p) noexcept { delete p; }
+namespace cuda_execution { struct CudaDfSourcePolicy {}; }
 struct PreparedFockPlan {
   PreparedFockPlan() { ++plan_live; }
   ~PreparedFockPlan() { if (view_live) std::abort(); --plan_live; }
@@ -57,12 +62,15 @@ std::size_t checked_add(std::size_t a,std::size_t b) {
   return a+b;
 }
 }
+struct SolverOptions { std::size_t max_bytes=4096; };
 struct Problem { std::size_t reference_retained_bytes=100, provider_peak_bytes{}; };
 struct State { Problem problem; int df_source{}; };
 struct Execution { int device_id() const { return 0; } };
 Problem build_problem(const integrals::ElectronInteractionSource& source,
-                      int,int,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
-                      int* retained_df_response) {
+                      int,SolverOptions,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
+                      int* retained_df_response,
+                      const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy) {
+  if (correlation_policy) throw std::logic_error("conventional lifetime fixture requires no policy");
   if (correlation_auxiliary) throw std::logic_error("conventional lifetime fixture requires no auxiliary");
   if (retained_df_response) throw std::logic_error("conventional lifetime fixture must not retain DF response");
   // Real providers increment work before a source read may fail. Validate only
@@ -99,8 +107,13 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     cc_handoff = cc.split("    std::unique_ptr<posthf::RawSource> raw_source;", 1)[
         1
     ].split('    allocation_stage = "CC resident solve";', 1)[0]
+    helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
+    helper = helper[
+        helper.index("template <class Operation>") : helper.index("/** Method-layer")
+    ]
     program = (
         PREFIX
+        + helper
         + r"""
 int mp2_case(bool prepared,bool compute_forces) {
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
@@ -113,6 +126,7 @@ int mp2_case(bool prepared,bool compute_forces) {
 """
         + mp2_setup
         + r"""
+  prepare_source();
   if (!conventional_source) return 1;
   if (prepared && (raw_live || !plan_live || !view_live)) return 2;
   if (compute_forces) {
@@ -129,10 +143,14 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0) {
   auto* prepared_exact=owner.get();
   auto* cuda_source_cache=&owner;
   State state;
-  int system=0, reference_value=0, solver_options=0, provider_work=0, provider_metrics=0;
+  int system=0, reference_value=0, provider_work=0, provider_metrics=0;
+  SolverOptions solver_options, correlation_options;
+  scf::CudaRhfBucketPlan** cuda_reference_plan=nullptr;
+  const auto retained_plan_bytes=[] { return std::size_t{0}; };
   const auto* reference=&reference_value;
   const int* correlation_auxiliary=nullptr;
   const bool retain_df_response=false;
+  const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy=nullptr;
   const bool cuda=optional_cuda || !prepared;
   source_failure=failure;
   Execution execution;
@@ -210,6 +228,7 @@ def test_device_interaction_source_defaults_fail_closed(tmp_path: Path) -> None:
 #include <array>
 #include <cstddef>
 #include <stdexcept>
+#include <utility>
 #include "integrals/electron_interaction_source.hpp"
 
 using generativeqc::integrals::DeviceInteractionTarget;

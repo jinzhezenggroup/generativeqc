@@ -130,10 +130,6 @@ class RccsdtPrepared final : public PreparedCalculation {
       retained = checked_add(
           retained,
           checked_mul(state.solved.t1.capacity() + state.solved.t2.capacity(), sizeof(double)));
-      if (retained >= state.budget)
-        throw std::length_error(
-            "RCCSD(T) retained CC state exhausts the correlation memory budget");
-
       const double denominator_threshold =
           descriptor_.ccsd_denominator_threshold ? descriptor_.ccsd_denominator_threshold : 1e-10;
       double triples_energy = 0.0;
@@ -142,32 +138,48 @@ class RccsdtPrepared final : public PreparedCalculation {
       std::size_t triples_workspace_bytes = 0;
 
       const auto triples_started = std::chrono::steady_clock::now();
-      if (execution_.cuda_requested()) {
+      const auto phase_budget = checked_add(state.budget, state.reference_execution_plan_bytes);
+      const auto update_reference_reservation = [&](std::size_t budget) {
+        state.budget = budget;
+        state.reference_execution_plan_bytes = cuda_reference_plan_.retained_numeric_bytes();
+        state.reference_execution_plan_device_bytes = cuda_reference_plan_.owned_device_bytes();
+        state.diagnostic.reference_execution_plan_owned_device_bytes =
+            state.reference_execution_plan_device_bytes;
+      };
+      run_with_cuda_reference_budget(
+          cuda_reference_plan_.slot(), phase_budget, [&](std::size_t budget) {
+            update_reference_reservation(budget);
+            if (retained >= budget)
+              throw std::length_error(
+                  "RCCSD(T) retained CC state exhausts the correlation memory budget");
+            if (execution_.cuda_requested()) {
 #if GENERATIVEQC_HAS_CUDA
-        const auto triples = cc::triples::evaluate_cuda(
-            state.problem.nocc, state.problem.nvir, state.problem.ovvv.data(),
-            state.problem.ovoo.data(), state.problem.ovov.data(), state.problem.fov.data(),
-            state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
-            denominator_threshold, state.budget - retained, execution_.device_id());
-        triples_energy = triples.energy;
-        triples_minimum_denominator = triples.minimum_absolute_denominator;
-        triples_virtual_count = triples.virtual_triples;
-        triples_workspace_bytes = triples.workspace_bytes;
+              const auto triples = cc::triples::evaluate_cuda(
+                  state.problem.nocc, state.problem.nvir, state.problem.ovvv.data(),
+                  state.problem.ovoo.data(), state.problem.ovov.data(), state.problem.fov.data(),
+                  state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(),
+                  state.eps_v.data(), denominator_threshold, state.budget - retained,
+                  execution_.device_id());
+              triples_energy = triples.energy;
+              triples_minimum_denominator = triples.minimum_absolute_denominator;
+              triples_virtual_count = triples.virtual_triples;
+              triples_workspace_bytes = triples.workspace_bytes;
 #else
         throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                           "native RCCSD(T) CUDA owner is not compiled in this library");
 #endif
-      } else {
-        const auto triples = cc::triples::generated::evaluate(
-            state.problem.nocc, state.problem.nvir, state.problem.ovvv.data(),
-            state.problem.ovoo.data(), state.problem.ovov.data(), state.problem.fov.data(),
-            state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(), state.eps_v.data(),
-            denominator_threshold, state.budget - retained);
-        triples_energy = triples.energy;
-        triples_minimum_denominator = triples.minimum_absolute_denominator;
-        triples_virtual_count = triples.virtual_triples;
-        triples_workspace_bytes = triples.workspace_bytes;
-      }
+            } else {
+              const auto triples = cc::triples::generated::evaluate(
+                  state.problem.nocc, state.problem.nvir, state.problem.ovvv.data(),
+                  state.problem.ovoo.data(), state.problem.ovov.data(), state.problem.fov.data(),
+                  state.solved.t1.data(), state.solved.t2.data(), state.eps_o.data(),
+                  state.eps_v.data(), denominator_threshold, state.budget - retained);
+              triples_energy = triples.energy;
+              triples_minimum_denominator = triples.minimum_absolute_denominator;
+              triples_virtual_count = triples.virtual_triples;
+              triples_workspace_bytes = triples.workspace_bytes;
+            }
+          });
 
       const double triples_seconds =
           std::chrono::duration<double>(std::chrono::steady_clock::now() - triples_started).count();
@@ -191,7 +203,7 @@ class RccsdtPrepared final : public PreparedCalculation {
                                           triples_workspace_bytes);
         execution_.observe_numeric_peak(
             runtime::ExecutionMemorySpace::Device,
-            checked_add(state.reference_execution_plan_bytes, triples_workspace_bytes));
+            checked_add(state.reference_execution_plan_device_bytes, triples_workspace_bytes));
       } else {
         execution_.observe_workspace_peak(runtime::ExecutionMemorySpace::Host,
                                           triples_workspace_bytes);
@@ -213,22 +225,29 @@ class RccsdtPrepared final : public PreparedCalculation {
         if (cpu_exact_plan_) {
           force_prepared_source.emplace(*cpu_exact_plan_);
           force_source = &*force_prepared_source;
-        } else {
-          force_raw_source = std::make_unique<posthf::RawSource>(system_);
-          force_source = force_raw_source.get();
         }
 
         constexpr std::size_t kCudaDerivativeStageBudget = 64ULL << 20;
-        auto force =
-            execution_.cuda_requested()
-                ? cc::rccsdt_force_cuda(system_, *force_source, *state.reference, state.problem,
-                                        state.solved, state.eps_o, state.eps_v, state.budget,
-                                        execution_.device_id(),
-                                        std::min(state.budget, kCudaDerivativeStageBudget),
-                                        force_denominator_threshold)
-                : cc::rccsdt_force_cpu(system_, *force_source, *state.reference, state.problem,
-                                       state.solved, state.eps_o, state.eps_v, state.budget,
-                                       force_denominator_threshold);
+        auto force = run_with_cuda_reference_budget(
+            cuda_reference_plan_.slot(), phase_budget, [&](std::size_t budget) {
+              if (!force_source) {
+                force_raw_source = std::make_unique<posthf::RawSource>(system_);
+                force_source = force_raw_source.get();
+              }
+              update_reference_reservation(budget);
+              return execution_.cuda_requested()
+                         ? cc::rccsdt_force_cuda(system_, *force_source, *state.reference,
+                                                 state.problem, state.solved, state.eps_o,
+                                                 state.eps_v, state.budget, execution_.device_id(),
+                                                 std::min(state.budget, kCudaDerivativeStageBudget),
+                                                 force_denominator_threshold)
+                         : cc::rccsdt_force_cpu(system_, *force_source, *state.reference,
+                                                state.problem, state.solved, state.eps_o,
+                                                state.eps_v, state.budget,
+                                                force_denominator_threshold);
+            });
+        diagnostic.reference_execution_plan_owned_device_bytes =
+            state.reference_execution_plan_device_bytes;
         if (execution_.cuda_requested()) {
           if (!force.lambda.cuda_actions || !force.lambda.owned_device_bytes)
             throw std::runtime_error(
@@ -236,12 +255,12 @@ class RccsdtPrepared final : public PreparedCalculation {
           if (!force.cuda_response_actions || !force.response_owned_device_bytes)
             throw std::runtime_error(
                 "RCCSD(T) CUDA force replayed Hamiltonian/orbital response on host");
-          execution_.observe_numeric_peak(
-              runtime::ExecutionMemorySpace::Device,
-              checked_add(state.reference_execution_plan_bytes, force.lambda.owned_device_bytes));
-          execution_.observe_numeric_peak(
-              runtime::ExecutionMemorySpace::Device,
-              checked_add(state.reference_execution_plan_bytes, force.response_owned_device_bytes));
+          execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
+                                          checked_add(state.reference_execution_plan_device_bytes,
+                                                      force.lambda.owned_device_bytes));
+          execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
+                                          checked_add(state.reference_execution_plan_device_bytes,
+                                                      force.response_owned_device_bytes));
           diagnostic.correlation_owned_device_bytes =
               std::max<std::uint64_t>(diagnostic.correlation_owned_device_bytes,
                                       std::max<std::uint64_t>(force.lambda.owned_device_bytes,

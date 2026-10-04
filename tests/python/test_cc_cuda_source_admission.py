@@ -59,7 +59,11 @@ def test_cuda_reference_finishes_before_optional_source(tmp_path: Path) -> None:
     # Execute the production reference and source-preparation prefix. Correlated
     # kernels are outside this probe; their existing source-lifetime test remains.
     body += "return {bool(prepared_exact), source_preparation_peak}; } catch (...) { throw; } }\n"
-    _run(tmp_path, PREFIX + retained + body + MAIN)
+    helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
+    helper = helper[
+        helper.index("template <class Operation>") : helper.index("/** Method-layer")
+    ]
+    _run(tmp_path, PREFIX + helper + retained + body + MAIN)
 
 
 def test_provider_schedule_checks_attempt_deltas(tmp_path: Path) -> None:
@@ -138,11 +142,14 @@ int main() {
 PREFIX = r"""
 #include <chrono>
 #include <memory>
+#include <utility>
 #include <vector>
 #include "hf/reference.hpp"
 #include "methods/correlated_cuda_source.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 int live=0,native_calls=0,host_calls=0,allocations=0;
+int source_attempts=0;
 int warm_failure=0;
 bool converged=true,fail_source=false;
 std::size_t given_budget=0;
@@ -168,11 +175,17 @@ int resolve_fock_build(FockSpec spec,FockBackend,double) {
 struct ScfOptions {int resolved_fock_build=0;};
 struct CudaRhfBucketPlan {};
 std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexcept {
+  return plan ? 64 : 0;
+}
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete plan; }
 struct PreparedFockPlan {
   PreparedFockPlan() {++live;}
   PreparedFockPlan(const core::System&,std::nullptr_t,int,int,std::size_t budget) {
     if (!native_calls || live) throw std::runtime_error("source preceded native reference");
     given_budget=budget;
+    std::vector<double> partial_storage(16);
+    ++source_attempts;
     if (fail_source) throw std::bad_alloc();
     ++live; ++allocations;
   }
@@ -249,6 +262,29 @@ int main() {
     }
     cache.reset();
     if (live) return 6;
+  }
+  // An admitted constructor attempt may allocate and unwind before failing.
+  // Its complete conservative bound still includes the simultaneous RHF plan.
+  // A rejected estimate never starts construction and contributes no peak.
+  const auto source_plan=methods::detail::plan_correlated_cuda_source(
+      2,2,1,2,2,2,0,scf::cuda_execution::kResidentPsssThreads,
+      posthf::source_capacity(system),
+      methods::detail::retained_reference_bytes(*scf::physical().reference),8192,1<<20);
+  if (!source_plan.admitted) return 9;
+  for (int mode=0;mode<3;++mode) {
+    auto* plan=new scf::CudaRhfBucketPlan;
+    native_calls=host_calls=allocations=source_attempts=0;
+    given_budget=0; converged=true; warm_failure=0; fail_source=mode==1;
+    solver.max_bytes=source_plan.peak_bytes+64-(mode==2);
+    auto result=methods::detail::execute_rccsd_prepared(
+        execution,system,reference,solver,0,nullptr,nullptr,nullptr,&cache,
+        nullptr,false,nullptr,&plan);
+    if (result.peak!=(mode==2 ? 0 : source_plan.peak_bytes+64)) return 10;
+    if (source_attempts!=(mode==2 ? 0 : 1) || allocations!=(mode==0)) return 11;
+    if (result.prepared!=(mode==0) || !plan || native_calls!=1) return 12;
+    cache.reset();
+    scf::destroy_rhf_cuda_bucket_plan(plan);
+    if (live) return 13;
   }
   execution.cuda=false; converged=true; fail_source=false;
   cache=std::make_unique<scf::PreparedFockPlan>(); native_calls=host_calls=0;

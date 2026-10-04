@@ -14,6 +14,11 @@
 #include "tensor/cuda_error.hpp"
 
 namespace generativeqc::scf::reference_detail {
+class PhysicalReferenceValidationError : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 inline std::size_t free_bytes(cudaStream_t stream) {
   generativeqc_tensor::cuda_check(cudaStreamSynchronize(stream));
   std::size_t available = 0, total = 0;
@@ -146,7 +151,14 @@ inline generativeqc_status download(cudaStream_t stream, std::size_t n, std::siz
   }
   ref->energy = scalars[0];
   if (!std::isfinite(ref->energy)) throw std::runtime_error("nonfinite CUDA RHF energy");
-  validate_physical_reference(*ref);
+  try {
+    validate_physical_reference(*ref);
+  } catch (const std::runtime_error& error) {
+    // Numerical/canonical validation is recoverable by the CUDA RHF owner: it
+    // can advance to the projected density and rebuild once. Transport,
+    // allocation and shape failures remain distinct and propagate unchanged.
+    throw PhysicalReferenceValidationError(error.what());
+  }
   ref->numeric_capacity_bytes = capacity;
   result.energy = ref->energy;
   result.iterations = count;

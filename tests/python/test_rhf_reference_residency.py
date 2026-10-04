@@ -90,11 +90,21 @@ def test_reference_residency_preserves_physical_frame_and_fallback(
     assert record["tight_peak"] == record["minimum_budget"]
     assert record["allocation_rejections"] == 1
     assert record["live_after_release"] == 0
+    assert record["cold_reuse_post_scf_fock_builds"] == 0
+    assert record["warm_reuse_post_scf_fock_builds"] == 0
+    assert record["changed_reuse_post_scf_fock_builds"] == 0
+    assert record["forced_post_scf_fock_builds"] == 1
+    assert record["cold_reuse_skipped_final_fock_builds"] == 1
+    assert record["forced_skipped_final_fock_builds"] == 0
+    assert (
+        record["forced_total_fock_builds"] == record["cold_reuse_total_fock_builds"] + 1
+    )
 
 
 CPP = r"""
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -119,8 +129,8 @@ struct Owner {
   ~Owner() { scf::destroy_rhf_cuda_bucket_plan(plan); }
 };
 scf::ScfResult solve(Owner& owner, const core::System& system, const scf::ScfOptions& options,
-                     bool expected_reuse=false) {
-  auto rows=scf::run_rhf_cuda_bucket_cached(&owner.plan,{system},options,{nullptr},0);
+                     bool expected_reuse=false, const std::vector<double>* seed=nullptr) {
+  auto rows=scf::run_rhf_cuda_bucket_cached(&owner.plan,{system},options,{seed},0);
   require(rows.size()==1 && rows[0].status==GENERATIVEQC_STATUS_SUCCESS,
           "CUDA reference endpoint failed");
   require(rows[0].execution_plan_reused==expected_reuse,
@@ -156,6 +166,66 @@ int main(int argc,char** argv) {
   options.reference_memory_budget_bytes=512ULL<<20;
   const auto expected=scf::run_rhf(system,options);
   require(expected.converged && expected.reference,"independent CPU reference");
+
+  // Qualify the retained-Fock reference path independently from optional ERI
+  // residency. The retained P_n/F(P_n) candidate still passes the independent
+  // reference reconstruction/canonicality validator before publication; forcing
+  // the legacy final rebuild must change only the work count, never the state.
+  scf::ScfOptions qualification=options;
+  qualification.precision_mode=GENERATIVEQC_PRECISION_FP64;
+  qualification.density_tolerance=5e-13;
+  const auto qualification_expected=scf::run_rhf(system,qualification);
+  require(qualification_expected.converged && qualification_expected.reference,
+          "strict CPU qualification reference");
+  unsetenv("GENERATIVEQC_FINAL_FOCK_REBUILD");
+  Owner reusable;
+  const auto cold_reuse=solve(reusable,system,qualification);
+  compare(cold_reuse,qualification_expected);
+  require(cold_reuse.precision.operator_work_counters_valid!=0,
+          "strict reference work counters are not valid");
+  require(cold_reuse.precision.post_scf_fock_builds==0 &&
+              cold_reuse.precision.skipped_final_fock_builds==1,
+          "cold strict reference did not reuse its converged Fock");
+  require(cold_reuse.reference->commutator_residual<=1e-8 &&
+              cold_reuse.reference->canonical_density_drift<=1e-8 &&
+              cold_reuse.reference->eigen_residual<=1e-8,
+          "reused reference failed an independent physical-state gate");
+
+  const auto warm_seed=cold_reuse.reference->density;
+  const auto warm_reuse=solve(reusable,system,qualification,true,&warm_seed);
+  compare(warm_reuse,qualification_expected);
+  require(warm_reuse.precision.post_scf_fock_builds==0 &&
+              warm_reuse.precision.skipped_final_fock_builds==1,
+          "warm strict reference did not reuse its converged Fock");
+
+  auto displaced=system;
+  displaced.atoms[1].position[2]+=0.01;
+  require(molecule::validate_and_normalize(displaced,detail)==GENERATIVEQC_STATUS_SUCCESS,
+          "qualification changed-geometry normalization");
+  const auto displaced_expected=scf::run_rhf(displaced,qualification);
+  const auto changed_reuse=solve(reusable,displaced,qualification,true);
+  compare(changed_reuse,displaced_expected);
+  require(changed_reuse.precision.post_scf_fock_builds==0 &&
+              changed_reuse.precision.skipped_final_fock_builds==1,
+          "changed-geometry strict reference did not reuse its current-geometry Fock");
+
+  setenv("GENERATIVEQC_FINAL_FOCK_REBUILD","1",1);
+  Owner forced_owner;
+  const auto forced=solve(forced_owner,system,qualification);
+  unsetenv("GENERATIVEQC_FINAL_FOCK_REBUILD");
+  compare(forced,qualification_expected);
+  compare(forced,cold_reuse);
+  require(forced.precision.operator_work_counters_valid!=0 &&
+              forced.precision.post_scf_fock_builds==1 &&
+              forced.precision.skipped_final_fock_builds==0,
+          "forced reference rebuild did not report one final physical Fock build");
+  const auto cold_reuse_total_fock_builds=
+      cold_reuse.precision.strict_stage_fock_builds+cold_reuse.precision.post_scf_fock_builds;
+  const auto forced_total_fock_builds=
+      forced.precision.strict_stage_fock_builds+forced.precision.post_scf_fock_builds;
+  require(forced_total_fock_builds==cold_reuse_total_fock_builds+1,
+          "forced/reused reference Fock-build accounting differs by more than the final build");
+
   std::size_t resident=0,minimum=0,owned=0;
   {
     Owner roomy;const auto result=solve(roomy,system,options);compare(result,expected);
@@ -239,7 +309,15 @@ int main(int argc,char** argv) {
   }
   std::cout<<"{\"resident_bytes\":"<<resident<<",\"minimum_budget\":"<<minimum
            <<",\"tight_peak\":"<<tight_peak<<",\"allocation_rejections\":"<<ledger->rejected
-           <<",\"live_after_release\":"<<ledger->live<<"}\n";
+           <<",\"live_after_release\":"<<ledger->live
+           <<",\"cold_reuse_post_scf_fock_builds\":"<<cold_reuse.precision.post_scf_fock_builds
+           <<",\"warm_reuse_post_scf_fock_builds\":"<<warm_reuse.precision.post_scf_fock_builds
+           <<",\"changed_reuse_post_scf_fock_builds\":"<<changed_reuse.precision.post_scf_fock_builds
+           <<",\"forced_post_scf_fock_builds\":"<<forced.precision.post_scf_fock_builds
+           <<",\"cold_reuse_skipped_final_fock_builds\":"<<cold_reuse.precision.skipped_final_fock_builds
+           <<",\"forced_skipped_final_fock_builds\":"<<forced.precision.skipped_final_fock_builds
+           <<",\"cold_reuse_total_fock_builds\":"<<cold_reuse_total_fock_builds
+           <<",\"forced_total_fock_builds\":"<<forced_total_fock_builds<<"}\n";
  } catch(const std::exception& e) {std::cerr<<e.what()<<'\n';return 1;}
 }
 """

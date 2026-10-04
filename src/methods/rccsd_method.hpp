@@ -23,7 +23,9 @@ struct RccsdNativeState {
   Result result;
   std::size_t budget{};
   std::size_t external_reservation_bytes{};
+  // Full numeric reservation is separate from directly owned device telemetry.
   std::size_t reference_execution_plan_bytes{};
+  std::size_t reference_execution_plan_device_bytes{};
   double reference_energy_change{};
   double reference_density_rms{};
   int reference_iterations{};

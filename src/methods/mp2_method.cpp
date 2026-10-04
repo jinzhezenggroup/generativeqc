@@ -83,7 +83,7 @@ class Mp2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
                           "MP2 warm state and reference exceed numeric memory budget");
       const auto phase_budget = budget_ - warm_capacity;
-      const auto reference_capacity = posthf::checked_add(reference_capacity_, warm_capacity);
+      auto reference_capacity = posthf::checked_add(reference_capacity_, warm_capacity);
       auto reference_options = options_;
       reference_options.reference_memory_budget_bytes = phase_budget;
       const auto* initial_density = initial_state ? &initial_state->density : nullptr;
@@ -164,12 +164,10 @@ class Mp2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
                           "HF did not converge; no MP2 energy evaluated");
 
-      const auto reference_plan_bytes =
-          !density_fitted_ && cuda ? cuda_reference_plan_.owned_device_bytes() : 0;
-      if (reference_plan_bytes >= phase_budget)
-        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
-                          "retained CUDA RHF plan exhausts MP2 numeric memory budget");
-      const auto correlation_budget = phase_budget - reference_plan_bytes;
+      reference_capacity =
+          std::max(reference_capacity,
+                   posthf::checked_add(hf.reference->numeric_capacity_bytes, warm_capacity));
+      auto* reference_plan = !density_fitted_ && cuda ? cuda_reference_plan_.slot() : nullptr;
 
       if (retained_warm_state) {
         // Preserve #1701: CUDA exports its immutable reference density, while
@@ -190,26 +188,40 @@ class Mp2Prepared final : public PreparedCalculation {
       hf.density.clear();
       hf.density.shrink_to_fit();
       std::unique_ptr<posthf::RawSource> raw_source;
-      if (!prepared_exact || density_fitted_)
-        raw_source =
-            std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
       std::optional<scf::PreparedFockInteractionSourceView> prepared_source;
-      const integrals::ElectronInteractionSource* conventional_source = raw_source.get();
+      const integrals::ElectronInteractionSource* conventional_source = nullptr;
       if (prepared_exact) {
         prepared_source.emplace(*prepared_exact);
         conventional_source = &*prepared_source;
       }
-      const auto corr =
-          density_fitted_
-              ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
-                                           options_.density_fitting_relative_threshold, 8,
-                                           fitted_cuda_, context_.device_id)
-              : mp2::conventional_energy(ref, *conventional_source, correlation_budget, threshold_,
-                                         8, cuda, context_.device_id);
+      const auto prepare_source = [&] {
+        if ((!prepared_exact || density_fitted_) && !raw_source) {
+          raw_source =
+              std::make_unique<posthf::RawSource>(system_, auxiliary_ ? &*auxiliary_ : nullptr);
+          conventional_source = raw_source.get();
+        }
+      };
+      const auto corr = run_with_cuda_reference_budget(
+          reference_plan, phase_budget, [&](std::size_t correlation_budget) {
+            prepare_source();
+            return density_fitted_
+                       ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget,
+                                                    threshold_,
+                                                    options_.density_fitting_relative_threshold, 8,
+                                                    fitted_cuda_, context_.device_id)
+                       : mp2::conventional_energy(ref, *conventional_source, correlation_budget,
+                                                  threshold_, 8, cuda, context_.device_id);
+          });
+      // Preserve this completed phase's simultaneous peak if force admission
+      // subsequently retires the optional reference executable.
+      const auto energy_capacity =
+          posthf::checked_add(posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity),
+                              cuda_reference_plan_.retained_numeric_bytes());
       Result result;
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
       std::optional<mp2::ConventionalForceResult> force_diagnostic;
+      const bool force_started_with_reference_plan = cuda_reference_plan_.get() != nullptr;
       if (compute_forces) {
         // The compatibility force planner does not borrow the prepared ERIs.
         // Retire its view before its owner and create RawSource only afterward.
@@ -223,17 +235,20 @@ class Mp2Prepared final : public PreparedCalculation {
         response_options.absolute_tolerance = 1e-12;
         response_options.restart = 30;
         response_options.max_iterations = 200;
-        response_options.max_workspace_bytes = correlation_budget;
-        force_diagnostic =
-            density_fitted_
-                ? mp2::density_fitted_force_cpu(ref, *raw_source, correlation_budget, threshold_,
-                                                options_.density_fitting_relative_threshold, 1e-10,
-                                                response_options)
-                : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, correlation_budget,
-                                                       threshold_, 1e-10, response_options,
-                                                       context_.device_id)
-                        : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
-                                                      threshold_, 1e-10, response_options));
+        force_diagnostic = run_with_cuda_reference_budget(
+            reference_plan, phase_budget, [&](std::size_t correlation_budget) {
+              response_options.max_workspace_bytes = correlation_budget;
+              return density_fitted_
+                         ? mp2::density_fitted_force_cpu(
+                               ref, *raw_source, correlation_budget, threshold_,
+                               options_.density_fitting_relative_threshold, 1e-10, response_options)
+                         : (cuda
+                                ? mp2::conventional_force_cuda(ref, *raw_source, correlation_budget,
+                                                               threshold_, 1e-10, response_options,
+                                                               context_.device_id)
+                                : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
+                                                              threshold_, 1e-10, response_options));
+            });
         result.forces = force_diagnostic->forces;
       }
       result.convergence = {hf.iterations, hf.energy_change, ref.commutator_residual, true};
@@ -248,14 +263,12 @@ class Mp2Prepared final : public PreparedCalculation {
       diagnostic.same_spin_energy = corr.same_spin;
       diagnostic.minimum_absolute_denominator = corr.minimum_denominator;
       diagnostic.reference_residual = ref.commutator_residual;
-      diagnostic.numeric_capacity_bytes = std::max(
-          reference_capacity,
-          posthf::checked_add(posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity),
-                              reference_plan_bytes));
+      diagnostic.numeric_capacity_bytes = std::max(reference_capacity, energy_capacity);
       diagnostic.energy_tile_count = corr.tiles;
       diagnostic.mo_host_staging = executed_cuda && !density_fitted_ ? 1 : 0;
       diagnostic.reference_execution_plan_reused = reference_plan_reused ? 1 : 0;
-      diagnostic.reference_execution_plan_owned_device_bytes = reference_plan_bytes;
+      diagnostic.reference_execution_plan_owned_device_bytes =
+          cuda_reference_plan_.owned_device_bytes();
       last_ = diagnostic;
       last_->correlation_owned_device_bytes = corr.metrics.owned_device_bytes;
       last_->correlation_provider_retained_bytes = corr.metrics.provider_retained_bytes;
@@ -277,14 +290,15 @@ class Mp2Prepared final : public PreparedCalculation {
             force_diagnostic->response.workspace_allocation_count;
         last_->derivative_workspace_bytes = force_diagnostic->derivative_workspace_bytes;
         last_->planned_endpoint_peak_bytes = std::max(
-            reference_capacity,
+            last_->numeric_capacity_bytes,
             posthf::checked_add(
                 posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity),
-                reference_plan_bytes));
+                cuda_reference_plan_.retained_numeric_bytes()));
         // External warm/plan reservations are not part of the force allocator
         // telemetry. Keep the whole-endpoint measurement unknown when either
-        // owner remains live beside the force phase.
-        last_->measured_endpoint_peak_bytes = warm_capacity || reference_plan_bytes
+        // owner was live beside the force phase, including a failed attempt
+        // that retired the plan before the successful force retry.
+        last_->measured_endpoint_peak_bytes = warm_capacity || force_started_with_reference_plan
                                                   ? 0
                                                   : force_diagnostic->measured_endpoint_peak_bytes;
         last_->numeric_capacity_bytes =
