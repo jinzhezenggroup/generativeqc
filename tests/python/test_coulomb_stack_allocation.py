@@ -1,6 +1,5 @@
 """An optional recurrence-stack reservation must share the allocation fallback."""
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -9,10 +8,9 @@ from test_coulomb_optional_allocation import DRIVER, ROOT, STUBS
 
 
 @pytest.fixture(scope="module")
-def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
+def stack_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx
+) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     begin = source.index("void configure_direct_coulomb_recurrence(")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
@@ -37,12 +35,11 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("coulomb-stack-allocation")
     cpp, binary = directory / "probe.cpp", directory / "probe"
     cpp.write_text(stubs + preparation + DRIVER)
-    subprocess.run(
-        [compiler, "-std=c++17", "-I", str(ROOT / "src"), str(cpp), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=("-std=c++17", "-I", str(ROOT / "src")),
+        compile_timeout=30,
     )
     return binary
 
