@@ -60,18 +60,26 @@ __device__ inline __noinline__ Scalar eri_cartesian_value(
     const Angular& angular_second, const Angular& angular_third, const Angular& angular_fourth,
     const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
-    double omega = 0.0) {
+    double omega = 0.0, bool reachable_coulomb = false) {
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
   CoulombAuxiliary<Scalar, MaximumAngular> auxiliary;
+  // The compiler consumer knows the exact AO-component roots. The shared
+  // recurrence keeps their dependency closure, including Dual geometry jets;
+  // this selection does not change the primitive/AO screening domain.
+  const CoulombComponentDomain domain{
+      angular_first.x + angular_second.x + angular_third.x + angular_fourth.x,
+      angular_first.y + angular_second.y + angular_third.y + angular_fourth.y,
+      angular_first.z + angular_second.z + angular_third.z + angular_fourth.z,
+      reachable_coulomb};
   if constexpr (!std::is_same_v<Scalar, MixedPrecisionFloat>) {
     if (range == generativeqc::integrals::CoulombRange::Full)
-      fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary);
+      fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
     else if (!fill_range_coulomb<MaximumAngular>(rho, product_p, product_q, range, omega,
-                                                 auxiliary))
+                                                 auxiliary, domain))
       return scalar<Scalar>(NAN);
   } else {
     if (range != generativeqc::integrals::CoulombRange::Full) return scalar<Scalar>(NAN);
-    fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary);
+    fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
   }
 
   Scalar value = scalar<Scalar>(0.0);

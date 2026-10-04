@@ -22,7 +22,9 @@ BASIS = SimpleNamespace(
 )
 
 
-def _plan(**options: object) -> CompositeStationaryCudaResources:
+def _plan(
+    basis: SimpleNamespace = BASIS, **options: object
+) -> CompositeStationaryCudaResources:
     defaults = {
         "grid_points": 589_824,
         "spins": 1,
@@ -34,13 +36,13 @@ def _plan(**options: object) -> CompositeStationaryCudaResources:
     }
     defaults.update(options)
     return plan_composite_stationary_cuda_resources(
-        BASIS,
+        basis,
         grid_plan=lambda points: plan_tiles(
-            BASIS,
+            basis,
             backend="cuda",
             order=2,
             tile_points=points,
-            active_ao_capacity=BASIS.nao,
+            active_ao_capacity=basis.nao,
             budget_bytes=defaults["max_device_bytes"],
         ),
         **defaults,
@@ -81,6 +83,57 @@ def test_small_grid_and_target_shared_memory_keep_bounded_fallbacks() -> None:
 def test_full_grid_nonlocal_storage_is_not_shrunk_to_fit_a_tile() -> None:
     with pytest.raises(ValueError, match="no admitted"):
         _plan(nonlocal_bytes=2 << 30)
+
+
+def test_full_tzvpd_96_requires_explicit_complete_capacity() -> None:
+    """Metadata from the unmodified offline H/O snapshot, not padded SVP.
+
+    The nonlocal size is the native dry query for 2359296 points and a 256
+    pair tile. Reducing the AO tile cannot evade the complete live inventory.
+    These are capacity bounds, not measured peaks or performance estimates.
+    """
+    basis = SimpleNamespace(
+        nao=1856,
+        natom=96,
+        nprimitive=1184,
+        shells=(None,) * 768,
+        numeric_bytes=564224,
+        packed=SimpleNamespace(size=32352),
+    )
+    options = {"grid_points": 2_359_296, "nonlocal_bytes": 434_257_940}
+    with pytest.raises(ValueError, match="no admitted"):
+        _plan(basis, **options)
+    selected = _plan(basis, **options, max_device_bytes=4 << 30, max_host_bytes=4 << 30)
+    assert selected.grid.tile_points == 1024
+    assert selected.native_bytes == 885_850_112
+    assert 3 << 30 < selected.device_bound <= 4 << 30
+    assert 3 << 30 < selected.host_bound <= 4 << 30
+    # Full-grid storage and the native reserve remain charged at one point.
+    smallest = _plan(
+        basis,
+        **options,
+        tile_points=1,
+        max_device_bytes=4 << 30,
+        max_host_bytes=4 << 30,
+    )
+    for scope in ("device", "host"):
+        # The optional center-pair cache can be dropped before rejecting a
+        # device allowance. Test the mandatory floor, not a cache preference.
+        optional = (
+            2 * smallest.sources.center_geometry_bytes if scope == "device" else 0
+        )
+        with pytest.raises(ValueError, match="no admitted"):
+            _plan(
+                basis,
+                **options,
+                **{
+                    "max_device_bytes": 4 << 30,
+                    "max_host_bytes": 4 << 30,
+                    f"max_{scope}_bytes": getattr(smallest, f"{scope}_bound")
+                    - optional
+                    - 1,
+                },
+            )
 
 
 def test_sub_256_tiles_remain_available_under_a_smaller_total_budget() -> None:

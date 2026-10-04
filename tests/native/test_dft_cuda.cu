@@ -176,8 +176,8 @@ void resident_grid_borrow_case(const generativeqc::core::System& molecule, const
       cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, false);
   const auto borrowed_layout =
       cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
-  // XC owns only xyz + partitioned weights. The shared molecular owner also
-  // retains atomic weights, which were never part of this XC allocation.
+  // XC owns xyz plus partitioned weights. The shared grid additionally owns
+  // atomic weights, which were never part of the XC allocation being retired.
   require(borrowed_layout.borrowed_grid &&
               owned_layout.device_bytes ==
                   borrowed_layout.device_bytes + 4 * grid.point_count() * sizeof(double),

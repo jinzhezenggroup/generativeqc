@@ -12,7 +12,7 @@ import hashlib
 import json
 import os
 from contextlib import nullcontext
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
@@ -78,6 +78,7 @@ def source_hashes() -> dict[str, str]:
         "python/generativeqc_compiler/method/stationary_composite_resources.py",
         "python/generativeqc/_stationary_composite_cuda.py",
         "benchmarks/readme_omol25.py",
+        "benchmarks/ks_preliminary_density.py",
         "benchmarks/readme_pbe0.py",
         "benchmarks/readme_wb97mv.py",
         "benchmarks/compare_df_direct_endpoint.py",
@@ -238,9 +239,35 @@ def reference_xc_backend(engine: Any, *, spin: int = 0) -> dict[str, Any]:
     return record
 
 
+def force_execution_options(
+    *,
+    active_ao: bool,
+    max_device_bytes: int | None = None,
+    max_host_bytes: int | None = None,
+) -> dict[str, Any]:
+    """Explicit benchmark-only force allowances, additional to the SCF owner.
+
+    Larger AO domains can exceed the production consumer's default allowance.
+    An override still goes through complete composite admission and is retained
+    in the report; it neither changes the science nor promotes a public default.
+    Omitted limits preserve the consumer's defaults exactly.
+    """
+    options: dict[str, Any] = {}
+    for name, value in (
+        ("max_device_bytes", max_device_bytes),
+        ("max_host_bytes", max_host_bytes),
+    ):
+        if value is not None:
+            if type(value) is not int or not 0 < value <= 1 << 40:
+                raise ValueError(f"force {name} must be an integer in [1,2**40]")
+            options[name] = value
+    if active_ao:
+        options.update(active_ao_cutoff=1e-16, active_ao_cache_bytes=64 << 20)
+    return options
+
+
 def main(benchmark: EndpointSpec = OMOL25) -> None:
-    """Run one independent engine with shared inputs and no production switches."""
-    """Journal every phase before GPU work, including failures and timeouts."""
+    """Journal complete independent endpoints, including experimental cold seeds."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("engine", choices=("reference", "native"))
     parser.add_argument("--atoms", type=int, choices=SIZES, required=True)
@@ -248,6 +275,28 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
     parser.add_argument("--grid", type=int, nargs=3, default=(48, 16, 32))
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--reference", type=Path)
+    parser.add_argument("--reference-full-fock", action="store_true")
+    parser.add_argument(
+        "--preliminary-provider",
+        choices=("none", "lda16", "pbe16"),
+        default="none",
+        help="Benchmark-only same-basis GPU density; its entire lifecycle counts as cold",
+    )
+    parser.add_argument(
+        "--force-active-ao",
+        action="store_true",
+        help="Opt into the separately qualified force AO maps (cutoff 1e-16)",
+    )
+    parser.add_argument(
+        "--force-max-device-bytes",
+        type=int,
+        help="Explicit additional composite-force device allowance; excludes SCF storage",
+    )
+    parser.add_argument(
+        "--force-max-host-bytes",
+        type=int,
+        help="Explicit additional composite-force host allowance; excludes SCF storage",
+    )
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID"):
@@ -256,6 +305,24 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         parser.error("repeats and grid dimensions must be positive")
     if args.engine == "native" and args.reference is None:
         parser.error("native execution requires the independent --reference JSON")
+    try:
+        force_options = force_execution_options(
+            active_ao=args.force_active_ao,
+            max_device_bytes=args.force_max_device_bytes,
+            max_host_bytes=args.force_max_host_bytes,
+        )
+    except ValueError as error:
+        parser.error(str(error))
+    if args.engine == "reference" and (
+        args.preliminary_provider != "none" or force_options
+    ):
+        parser.error("seed and force AO experiments apply only to the native engine")
+    if not benchmark.has_vv10 and (
+        args.preliminary_provider != "none" or force_options
+    ):
+        parser.error("these experimental policies are qualified only for WB97M-V")
+    if args.reference_full_fock:
+        benchmark = replace(benchmark, reference_full_fock=True)
 
     import cupy as cp
     from generativeqc import Calculator, GridSpec, KsOptions
@@ -287,6 +354,19 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         "protocol": scientific,
         "records": [],
         "source_file_sha256": source_hashes(),
+        "native_experiment": {
+            "preliminary_provider": args.preliminary_provider,
+            "force_active_ao_cutoff": 1e-16 if args.force_active_ao else None,
+            "force_active_ao_cache_bytes": 64 << 20 if args.force_active_ao else None,
+            "force_max_device_bytes": args.force_max_device_bytes,
+            "force_max_host_bytes": args.force_max_host_bytes,
+            "public_initialization_policy": False,
+        },
+        "native_schedule_settings": {
+            name: value
+            for name, value in sorted(os.environ.items())
+            if name.startswith("GENERATIVEQC_") and name != "GENERATIVEQC_LIBRARY"
+        },
         "native_schedule_policy": "automatic-generated-SPD/canonical-through-f"
         if benchmark.has_vv10
         else "automatic-generated-SPD",
@@ -323,6 +403,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
             raise RuntimeError(f"independent energy/force gate failed: {row['phase']}")
 
     owner = None
+    restore_force = None
     try:
         save("setup")
         geometries = scientific["geometries_bohr"]
@@ -434,6 +515,22 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         baseline,
                     )
         else:
+            from benchmarks.ks_preliminary_density import prepare_seed, read_ao_work
+
+            if force_options:
+                from generativeqc._stationary_composite_cuda import (
+                    PreparedCompositeStationaryCudaGradient,
+                )
+
+                # Scoped benchmark opt-in; the production planner keeps its
+                # full-AO fallback and no default is changed by this experiment.
+                restore_force = PreparedCompositeStationaryCudaGradient.execute
+
+                def active_force(self: Any, *values: Any, **kwargs: Any) -> Any:
+                    kwargs.update(force_options)
+                    return restore_force(self, *values, **kwargs)
+
+                PreparedCompositeStationaryCudaGradient.execute = active_force
             save("native/calculator")
             calc = Calculator(
                 method=benchmark.native_method,
@@ -483,6 +580,17 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
             owner._public_dft_cuda_force = observed_force
             cp.cuda.Stream.null.synchronize()
             prepare_seconds = perf_counter() - started
+            save("cold/preliminary-density")
+            cp.cuda.Stream.null.synchronize()
+            started = perf_counter()
+            record["preliminary_density"] = prepare_seed(
+                owner, geometries[0], args.preliminary_provider
+            )
+            cp.cuda.Stream.null.synchronize()
+            seed_seconds = perf_counter() - started
+            record["target_prepare_seconds"] = prepare_seconds
+            record["preliminary_wrapper_seconds"] = seed_seconds
+            prepare_seconds += seed_seconds
             for geometry_index in range(2):
                 baseline = next(
                     row
@@ -532,6 +640,11 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         "seconds": seconds,
                         "prepare_seconds": prepare,
                         "complete_seconds": seconds + prepare,
+                        "native_scf_ao_work": (
+                            read_ao_work(owner)
+                            if item.status == 0 and item.converged
+                            else None
+                        ),
                         "native_force_components": (
                             normalize_force_work(force_work)
                             if force_work is not None
@@ -554,6 +667,8 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         save(record.get("stage", "setup"))
         raise
     finally:
+        if restore_force is not None:
+            PreparedCompositeStationaryCudaGradient.execute = restore_force
         if owner is not None:
             owner.close()
 
