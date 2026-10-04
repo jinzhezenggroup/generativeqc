@@ -82,7 +82,6 @@ int main() {
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
 
 
-
 def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
     root = Path(__file__).resolve().parents[2]
     cpu = (root / "src/xtb/native/src/model/gfn2/eigensolver.cpp").read_text()
@@ -94,7 +93,6 @@ def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
     assert "gfn2_energy_weight_cuda_tensor(" in cuda
     assert "fma(density_left, second, density)" not in cuda
     assert "fma(weighted_left, second, weighted_density)" not in cuda
-
 
 
 def test_gfn2_mulliken_publication_consumers_use_generated_transforms() -> None:

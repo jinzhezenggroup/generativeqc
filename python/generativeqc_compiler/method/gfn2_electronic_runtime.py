@@ -66,7 +66,6 @@ def build_gfn2_core_energy_update_program() -> Program:
     )
 
 
-
 def build_gfn2_energy_weight_program() -> Program:
     """One orbital energy weight, f * epsilon, shared by CPU/CUDA schedules."""
 
@@ -150,6 +149,7 @@ def build_gfn2_spin_population_publish_program() -> Program:
             "magnetization": "raw_alpha-raw_beta=N_beta-N_alpha",
         },
     )
+
 
 def build_gfn2_scalar_hamiltonian_update_program() -> Program:
     """One overlap/scalar-potential Hamiltonian update."""

@@ -21,8 +21,8 @@ from generativeqc_compiler.method.gfn2_electronic_runtime import (
     build_gfn2_population_update_program,
     build_gfn2_restricted_population_publish_program,
     build_gfn2_scalar_hamiltonian_update_program,
-    build_gfn2_spin_population_publish_program,
     build_gfn2_scalar_integral_vjp_program,
+    build_gfn2_spin_population_publish_program,
     build_gfn2_weighted_coefficient_program,
 )
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
