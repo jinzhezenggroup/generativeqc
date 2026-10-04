@@ -188,7 +188,8 @@ the entire solve, including convergence replay. Summand counts exclude
 elementwise operations and are not hardware FLOPs or timing predictions.
 
 Conventional admission rejects the DF representation unless an owner explicitly
-opts in. Existing Lambda, triples and force consumers remain conventional.
+opts in. Existing molecular Lambda, triples and force consumers remain conventional;
+the separate internal DF triples energy owner is described below.
 This internal supplied-Hamiltonian solver does not register a public DF
 Calculator endpoint. Its qualification is
 `tests/python/test_df_cc_native_solver.py`. The supplied-Hamiltonian solver is
@@ -199,6 +200,49 @@ AO factors consumed by the independent oracle before the symmetric MO transform;
 stored full MO factors are not substituted for the oracle's packed source.
 Complete hundreds-AO native CCSD(T) energy and forces still require the remaining
 source/response owners.
+
+## Internal native DF triples energy
+
+`cc::triples::evaluate_df_cuda` evaluates standard closed-shell FP64 `(T)` from
+supplied Q-major `B_ov/B_vv`, retained `ovoo/ovov`, Fov, T1/T2 and orbital
+energies. It requires physically symmetric Bvv pairs and a canonical occupied/
+virtual gap above the denominator threshold. It is an internal phase API;
+public molecular descriptors and response consumers do not select it yet.
+
+The compiler owns the panel and moment TensorIR in `cc/occupied_triples.py`.
+`tools/generate_df_occupied_triples.py` derives direct BLAS products from the
+shared GEMM contract and emits a fused scalar epilogue using the shared emitter.
+For each `i>=j>=k`, the owner builds six W cubes with twelve GEMMs and computes
+V elements inside the epilogue. All six occupied permutations are retained,
+including repeats divided by the occupied 6/2/1 multiplicity. The virtual domain
+is the full cube: the six original virtual rows have equal complete sums after
+dummy-index relabeling. Folding this virtual cube independently, or keeping only
+one occupied permutation, changes the energy.
+
+One to three occupied integral panels replace full `ovvv`; six W cubes replace
+full T3. Let `T=o(o+1)(o+2)/6` and `P` be the actual panel-build count. Complete
+contraction work is `P Q v^3 + 6 T (v^4 + o v^3)` scalar summands; the epilogue
+visits `T v^3` points. Standard triples retain seventh-order leading work.
+Diagnostics separately report panel/moment GEMMs, epilogue/reduction kernels,
+transfers, and admitted/observed storage; summands are not hardware FLOPs.
+
+The owner uploads inputs once and orders every panel producer, W consumer,
+epilogue and reuse on one owned stream. The numeric budget includes staged
+inputs, panels, moments, reductions, a 4-MiB BLAS workspace and a conservative
+96-MiB provider allowance. If the requested panel count does not fit, admission
+retries with one panel; an infeasible one-panel plan fails before allocation.
+The caller separately charges retained molecular/CC state. Result timing spans
+validation, allocation, uploads, computation, readback, drain and destruction.
+Any input, budget or device-arithmetic failure leaves results unpublished.
+
+`tests/python/test_df_occupied_triples.py` covers the domain rewrite on CPU and,
+with `GENERATIVEQC_DF_TRIPLES_CUDA_TEST=1` plus `GENERATIVEQC_LIBRARY`, real CUDA
+energy, work, exact-budget/fallback, repeatability and failure behavior. Real-GPU
+checks run in finite Slurm allocations. `benchmarks/df_triples_native_probe.py`
+compares large supplied states with the independent oracle; its timings cover
+the complete triples phase, excluding RHF, source construction, CCSD and forces.
+See the [decision note](../../.agents/notes/implemented/performance/2026-10-03-df-occupied-triples.md)
+for the algebraic rationale and qualification evidence.
 
 ## Internal native CUDA molecular source
 
@@ -247,8 +291,9 @@ includes the caller/reference, source setup, metric owner, transform/packing
 arenas and host outputs. An overflow-checked construction query admits system
 copies, packed metadata, transform scratch and both host/device metric storage
 before device selection or source construction. The source reserves its upload
-metadata and ownership arrays; its legacy pair arrays are reserved before
-packing, and unused resident task tables are skipped. The reported setup ledger
+metadata and ownership arrays. Metadata-only DF value packing skips pair/warm
+payloads and unused resident task tables; the construction bound retains
+conservative legacy allowances. The reported setup ledger
 is checked against that bound before downstream allocation/publication.
 Device capacity includes the shared owner's lazy SCF
 reservations: it is a conservative bound, not a measured physical peak.
@@ -256,7 +301,8 @@ reservations: it is a conservative bound, not a measured physical peak.
 `tests/python/test_df_cc_source_admission.py` checks the real admission prefix
 without CUDA and counts simultaneous host allocations during source packing.
 It covers insufficient construction budget, the exact bound, one byte below,
-overflow, varied shell/primitive inputs and bounded g-expansion scratch. The
+overflow, varied shell/primitive inputs and Cartesian/spherical auxiliary-g
+packing with bounded expansion scratch. The
 numeric budget excludes allocator and driver overhead; the small expansion
 scratch allowance covers the supported libstdc++/libc++ vector growth policy.
 
