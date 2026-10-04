@@ -193,3 +193,41 @@ source/test file against the archived commit, the native manifest, library,
 native executables and qualification-script hashes. The completed evidence is
 under ignored `.artifacts/masterf88-20261004/`; it establishes current-composition
 admission qualification, not a passing whole Python suite or an endpoint speedup.
+
+## Completed frozen baseline comparison
+
+Slurm 1430 has now completed both 48-atom variants successfully. The original
+independent verifier accepts all five cold/priming/warm E/F pairs for each
+variant, with every reference XC component on GPU. The actual master-b909
+baseline has complete cold 911.838916 s (52.944932 s preparation and
+858.893984 s first E/F execution), versus 897.029193 s for candidate
+622af6871 (37.789973 s preparation and 859.239220 s first E/F execution).
+Both target solves take 15 iterations. Baseline/candidate warm medians are
+151.485277 / 151.512390 s; no warm improvement is claimed.
+
+The source lifecycle is 51.875090 / 36.728837 s. Construction, preparation and
+solve remain one timer, 36.301326 / 36.362070 s, with 25 source iterations.
+Source Fock-build counts remain unavailable. Export takes 0.001129 / 0.001107 s;
+import takes 15.569886 / 0.362802 s. Destruction and other source bookkeeping
+are included in the lifecycle total but not separately timed. These values
+support a measured import reduction and an observed 1.624% complete-cold
+reduction, not a 43-fold endpoint improvement. The ordered single-cold controls
+still need reverse-order repetition before claiming a stable general gain.
+The original one-CPU/5-GB allocation and eight configured BLAS/OMP threads remain
+part of this evidence; do not combine it with the earlier eight-CPU controls.
+
+The 3-atom import does not improve (0.001499 / 0.001984 s), while complete cold
+is 10.791685 / 10.755986 s. Keep the small negative component result. All four
+3/48-atom reports, all-repeat errors, original verifier receipts and Slurm exit
+status are retained under `.artifacts/cold-admission-20261004/`. This completed
+checkpoint supersedes the pending baseline statements above without changing
+their source/library identities or substituting them into the README curve.
+
+## Latest-master qualification boundary
+
+The resumed work integrates master fc7d5e2d8, including the private VV10 phase
+storage change and the offline CUDA timing model. A new ccache build and
+source-bound device qualification will cover this composition. The completed
+b909 timings remain historical controls and are not relabeled as latest-master
+performance. The public CUDA preliminary-source capacity/lifecycle API remains
+a separate task; neither this merge nor GPU admission removes its requirements.
