@@ -1,18 +1,29 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <vector>
 
 namespace generativeqc::cc::triples {
+
+enum class DFTriplesPrecision : std::uint8_t {
+  Fp64 = 0,
+  WFp32 = 1,
+};
 
 /** Complete standalone DF (T) evaluation, including staged inputs and BLAS allowance. */
 struct DFCudaResult {
   double energy{};
   double minimum_absolute_denominator{};
   double seconds{};
+  DFTriplesPrecision precision{DFTriplesPrecision::Fp64};
+  std::uint32_t w_storage_bits{64}, w_compute_bits{64}, w_accumulation_bits{64};
+  std::string precision_schedule_identity;
   std::size_t virtual_triples{}, occupied_tiles{};
   std::size_t workspace_bytes{}, arena_bytes{}, provider_retained_bytes{};
   std::size_t panel_capacity{}, panel_gemms{}, moment_gemms{};
+  std::size_t fp64_gemms{}, fp32_gemms{}, precision_cast_elements{};
   std::size_t epilogue_kernels{}, reduction_kernels{}, epilogue_points{};
   std::size_t contraction_summands{}, h2d_bytes{}, d2h_bytes{};
 };
@@ -50,6 +61,9 @@ struct DFCudaFockResult {
  * publication. Tight budgets fall back to one panel without changing equations.
  * max_bytes covers this owner's numeric storage plus the bounded BLAS allowance;
  * callers composing endpoints separately charge their retained host/CC state.
+ * WFp32 lowers only the compiler-qualified W reductions to FP32. W assembly,
+ * V, denominators, energy epilogue and final reductions remain FP64, and the
+ * result records the resolved compiler precision-schedule identity.
  */
 #if GENERATIVEQC_HAS_CUDA
 DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const double* bov,
@@ -57,7 +71,8 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
                               const double* fov, const double* t1, const double* t2,
                               const double* eps_o, const double* eps_v,
                               double denominator_threshold, std::size_t max_bytes, int device,
-                              std::size_t max_panel_buffers = 3);
+                              std::size_t max_panel_buffers = 3,
+                              DFTriplesPrecision precision = DFTriplesPrecision::Fp64);
 /** Differentiate the complete occupied-tile energy on CUDA.
  * Includes both the original energy and all nine input cotangents, staged once.
  * Complete admission charges borrowed host input values, detached outputs,
