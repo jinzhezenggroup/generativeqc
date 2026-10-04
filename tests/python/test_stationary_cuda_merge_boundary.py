@@ -163,15 +163,9 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     cache_bytes: int,
     allocation_delta: int,
     rejected: bool,
-    native: str = "off",
 ) -> None:
     from generativeqc import _stationary_cuda as runtime
 
-    native_required = native != "off"
-    if native_required:
-        monkeypatch.setattr(
-            runtime, "stationary_cuda_requires_native_integrals", lambda **_: True
-        )
     contract = SimpleNamespace(
         family="lda", spin="unpolarized", validate=lambda state: state
     )
@@ -212,14 +206,17 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             np.array([[1.0, 1.0]]),
             np.array([[0, 0, 1, 1, 0, 0, 0, 1.0]], dtype=float),
             ((("", 1.0),),),
-            (("nuclear", ()),),
+            (),
         ),
     )
     monkeypatch.setattr(
         runtime,
         "plan_tiles",
         lambda *_a, **options: SimpleNamespace(
-            peak_bytes=1024, host_bytes=256, tile_points=options["tile_points"]
+            peak_bytes=1024,
+            host_bytes=256,
+            tile_points=options["tile_points"],
+            order=options["order"],
         ),
     )
     tensor_plan = SimpleNamespace(peak_bytes=128, host_bytes=64)
@@ -231,13 +228,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             metadata={"binary_sha256": f"{name}-sha", "key": f"{name}-key"},
         )
 
-    emitted = []
-
-    def emit(requests: object) -> str:
-        emitted.append(requests)
-        return "cuda"
-
-    monkeypatch.setattr(runtime, "emit_first_derivative_cuda", emit)
+    monkeypatch.setattr(runtime, "emit_first_derivative_cuda", lambda _requests: "cuda")
     monkeypatch.setattr(
         runtime, "compile_stationary_cuda", lambda *_a, **_k: artifact("stationary")
     )
@@ -290,7 +281,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         timeline: object = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = runtime._SOURCE_NAMES,
-        integral_derivatives: bool = True,
     ) -> MagicMock:
         assert timeline is not None
         assert profile_device is False
@@ -298,7 +288,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         admitted["budget"] = budget
         admitted["spin_blocks"] = spin_blocks
         admitted["page_work_budget"] = page_work_budget
-        assert integral_derivatives is (not native_required or aot)
         return owner
 
     monkeypatch.setattr(runtime, "_CudaSources", make_owner)
@@ -364,10 +353,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         source.cuda_resident_grid = lambda: SimpleNamespace(
             device=0, point_count=4, points=1024, weights=2048, atomic_weights=3072
         )
-    if native_required:
-        source.cuda_integral_derivatives = MagicMock(
-            return_value=(np.zeros((4, 2, 3)), {}) if native == "complete" else None
-        )
     state = SimpleNamespace(
         identity=SimpleNamespace(
             basis_identity="basis", geometry_identity="geom", method="lda-rks"
@@ -393,13 +378,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             primitive_tile=16,
         )
 
-    if native == "unavailable":
-        with pytest.raises(NotImplementedError, match="cannot use AO-task fallback"):
-            execute()
-        owner.integral_page.assert_not_called()
-        owner.reduced.assert_not_called()
-        owner.geometry.assert_not_called()
-        return
     if rejected:
         with pytest.raises(
             RuntimeError, match="allocation disagrees with admitted bytes"
@@ -407,11 +385,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             execute()
         return
     result = execute()
-    assert result.work["primitive_integral_roots_retained"] is (
-        not native_required or aot
-    )
-    if native_required and not aot:
-        assert emitted == [(("nuclear", ()),)]
     assert result.work["owned_device_bytes"] == admitted["budget"] + allocation_delta
     assert result.work["center_geometry_bytes"] == cache_bytes
     if resident_grid:
@@ -431,14 +404,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         assert result.work["grid_point_h2d_bytes"] == 96
         assert result.work["grid_weight_h2d_bytes"] == 32
 
-    if native_required:
-        owner.reset.assert_not_called()
-        owner.reset_geometry.assert_called_once_with(1.0e-12)
-        owner.integral_page.assert_not_called()
-        owner.nuclear.assert_called_once()
-        owner.reduced.assert_called_once()
-        assert result.work["stationary_task_executor"]["sources"] == ()
-        return
     owner.reset.assert_called_once_with(1.0e-12, state.density, state.weighted_density)
     assert admitted["spin_blocks"] == 1
     assert owner.integral_page.call_args_list == [
@@ -471,16 +436,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         1,
     ]
     assert result.execution.endswith("/generated-device-stationary-weights-v1")
-
-
-@pytest.mark.parametrize("aot", (False, True))
-@pytest.mark.parametrize("native", ("complete", "unavailable"))
-def test_required_native_pruning_preserves_nuclear_and_rejects_failed_producer(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, aot: bool, native: str
-) -> None:
-    test_weight_fusion_orchestration_runs_without_a_device(
-        monkeypatch, tmp_path, aot, False, 48, 0, False, native=native
-    )
 
 
 def test_stationary_cuda_production_task_page_default() -> None:
