@@ -12,6 +12,13 @@ from tools.check_vendor_boundaries import MANIFEST, audit_vendor_boundaries
 if typing.TYPE_CHECKING:
     from pathlib import Path
 
+GLOBAL_NAMESPACE_REFERENCES = (
+    "using namespace ::cub;",
+    "namespace backend = ::cutlass;",
+    "using \nnamespace \t:: \ncute;",
+    "namespace backend=\t:: \ncub;",
+)
+
 
 def _fixture(
     root: Path,
@@ -63,6 +70,7 @@ def test_repository_inventory_is_complete() -> None:
         "cute::gemm(a, b);",
         "using namespace cub;",
         "namespace backend = cutlass;",
+        *GLOBAL_NAMESPACE_REFERENCES,
     ],
 )
 def test_new_native_files_are_not_exempt(tmp_path: Path, expression: str) -> None:
@@ -108,6 +116,46 @@ def test_generator_fragments_cannot_hide_submissions(tmp_path: Path, path: str) 
         'lines = ["// open comment", f"cublasDgemm({handle});", "cublasSgemm(h);"]'
     )
     assert "cublasSgemm" in audit_vendor_boundaries(tmp_path)["errors"][0]
+
+
+@pytest.mark.parametrize("expression", GLOBAL_NAMESPACE_REFERENCES)
+@pytest.mark.parametrize(
+    "path",
+    [
+        "python/generativeqc_compiler/method/new.py",
+        "tools/generate_new.py",
+    ],
+)
+def test_generator_global_namespaces_are_not_exempt(
+    tmp_path: Path, path: str, expression: str
+) -> None:
+    _fixture(tmp_path, "cublasDgemm(h);")
+    new = tmp_path / path
+    new.parent.mkdir(parents=True)
+    new.write_text(f"lines = [{expression!r}]")
+    errors = audit_vendor_boundaries(tmp_path)["errors"]
+    assert len(errors) == 1 and "unclassified vendor references" in errors[0]
+
+
+def test_similar_global_namespace_names_are_not_vendor_references(
+    tmp_path: Path,
+) -> None:
+    _fixture(
+        tmp_path,
+        """
+namespace cub_helpers {}
+namespace cutlass_helpers {}
+namespace cute_helpers {}
+using namespace ::cub_helpers;
+namespace backend = ::cutlass_helpers;
+using namespace ::cute_helpers;
+// using namespace ::cub;
+/* namespace backend = ::cutlass; */
+const char* diagnostic = "using namespace ::cute;";
+cublasDgemm(h);
+""",
+    )
+    assert audit_vendor_boundaries(tmp_path)["errors"] == []
 
 
 def test_native_comments_strings_includes_and_digit_separators(tmp_path: Path) -> None:

@@ -37,8 +37,8 @@ VENDOR = re.compile(
     r"\b(?:cublas(?:Lt)?[A-Z]\w*|cusolver(?:Dn|Sp|Rf)[A-Z]\w*|cusolverGet\w*"
     r"|cutensor(?:Mg)?[A-Z]\w*|cusparse[A-Z]\w*|nccl[A-Z]\w*)\b"
     r"|\b(?:cub|cutlass|cute)\s*::\s*[A-Za-z_]\w*"
-    r"|\busing\s+namespace\s+(?:cub|cutlass|cute)\b"
-    r"|\bnamespace\s+\w+\s*=\s*(?:cub|cutlass|cute)\b"
+    r"|\busing\s+namespace\s+(?:::\s*)?(?:cub|cutlass|cute)\b"
+    r"|\bnamespace\s+\w+\s*=\s*(?:::\s*)?(?:cub|cutlass|cute)\b"
 )
 
 
