@@ -100,6 +100,14 @@ The common registry charges module bytes as retained cache storage and enforces
 precision, resource, determinism and capture obligations. Missing facts retain
 unsupported evidence; unknown costs cannot promote a default. Registry offers
 are preparation eligibility, not a loader or region integration.
+`PreparedContractions` can bind CUTLASS alongside the other execution families
+when supplied with an actual artifact digest and per-plan host/module bounds.
+It exposes resolved AOT provenance and counts the canonical affine work on replay.
+Unpublished plans are drained on failure; their module charges transfer to the
+table before destruction. `optional_resources().cache_bytes` includes previous
+attempts and survives `release()`. The enclosing owner must preserve this charge
+across fallback and table destruction if it keeps using the CUDA context. Shared
+region selection does not yet offer CUTLASS, and no production profile is installed.
 Native CMake builds can enable the optional header dependency with
 `GENERATIVEQC_ENABLE_CUTLASS=ON` and
 `GENERATIVEQC_CUTLASS_ROOT=/path/to/cutlass-3.9.2`. The option defaults to OFF;

@@ -90,6 +90,18 @@ void check(char ta, char tb, std::size_t batch, bool padded = false,
   else if (!context.prepare(stream))
     throw std::runtime_error("provider preparation failed");
   PreparedContractions bindings;
+#if !GENERATIVEQC_HAS_CUTLASS
+  bool cutlass_unavailable{};
+  try {
+    std::size_t unused_calls{}, unused_summands{};
+    bindings.add(m, n, batch, {request}, context, unused_calls, unused_summands,
+                 {ContractionAlgorithm::CutlassAot});
+  } catch (const ContractionPreparationUnavailable&) {
+    cutlass_unavailable = true;
+  }
+  if (!cutlass_unavailable || bindings || bindings.optional_resources().cache_bytes)
+    throw std::runtime_error("disabled CUTLASS did not preserve the complete fallback");
+#endif
   std::size_t calls{}, summands{};
 #if !GENERATIVEQC_HAS_CUTENSOR
   try {

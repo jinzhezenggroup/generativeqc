@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 
-#include "tensor/cuda_cutlass.cuh"
+#include "tensor/cuda_contraction.cuh"
 using namespace generativeqc::tensor;
 using generativeqc_tensor::cuda_check;
 static std::string_view artifact;
@@ -210,6 +210,115 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     for (std::size_t i = 0; i < actual.size(); ++i)
       if (std::isnan(expected[i]) ? !std::isnan(actual[i]) : actual[i] != expected[i])
         throw std::runtime_error("CUTLASS default-stream publication differs");
+    {
+      CudaContractionContext context;
+      context.prepare_generated(stream);
+      PreparedContractions table;
+      std::size_t calls{}, summands{};
+      const ContractionProviderReservation reservation{0, 0, 1 << 20, 256ULL << 20};
+      const auto add = [&](std::size_t key, std::size_t count) {
+        table.add(key, n, batches, std::vector<ContractionRequest>(count, request), context, calls,
+                  summands,
+                  std::vector<ContractionAlgorithm>(count, ContractionAlgorithm::CutlassAot),
+                  reservation, artifact);
+      };
+#if defined(GENERATIVEQC_TEST_HOOKS)
+      // A soft rejection of plan two releases plan one but cannot reclaim its
+      // CUDA modules. No executable variant or partial semantic work survives.
+      cutlass_preparations_before_rejection_for_test = 1;
+      bool rejected{};
+      try {
+        add(m, 2);
+      } catch (const ContractionPreparationUnavailable&) {
+        rejected = true;
+      }
+      cutlass_preparations_before_rejection_for_test = -1;
+      if (!rejected || table || table.optional_resources().cache_bytes != reservation.cache_bytes ||
+          table.optional_resources().host_bytes || calls || summands)
+        throw std::runtime_error("CUTLASS shared partial preparation accounting");
+      table.release();
+      // A loader exception stays a hard failure, with its charge transferred
+      // before the unpublished native plan is destroyed.
+      cutlass_fail_after_module_load_for_test = true;
+      bool hard_failure{};
+      try {
+        add(m, 1);
+      } catch (const ContractionPreparationUnavailable&) {
+        throw std::runtime_error("CUTLASS loader failure became a soft fallback");
+      } catch (const std::runtime_error&) {
+        hard_failure = true;
+      }
+      cutlass_fail_after_module_load_for_test = false;
+      if (!hard_failure || table ||
+          table.optional_resources().cache_bytes != 2 * reservation.cache_bytes)
+        throw std::runtime_error("CUTLASS shared failed loader accounting");
+#endif
+      const auto prior_cache = table.optional_resources().cache_bytes;
+      add(m, 1);
+      add(m + 1, 1);
+      std::size_t records{};
+      table.visit_aot_provenance([&](auto o, auto v, auto q, auto slot, const auto& record) {
+        if ((o != m && o != m + 1) || v != n || q != batches || slot ||
+            std::string_view(record.artifact_identity.data(), 64) != artifact)
+          throw std::runtime_error("CUTLASS shared provenance changed");
+        ++records;
+      });
+      for (auto key : {m, m + 1}) {
+        cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
+        cuda_check(cudaMemcpyAsync(dc, initial.data(), initial.size() * sizeof(T),
+                                   cudaMemcpyHostToDevice, stream));
+        table.execute(0, key, n, batches, stream, da, db, dc, error);
+        cuda_check(cudaMemcpyAsync(actual.data(), dc, actual.size() * sizeof(T),
+                                   cudaMemcpyDeviceToHost, stream));
+        cuda_check(cudaStreamSynchronize(stream));
+        for (std::size_t i = 0; i < actual.size(); ++i)
+          if (std::isnan(expected[i]) ? !std::isnan(actual[i]) : actual[i] != expected[i])
+            throw std::runtime_error("CUTLASS shared execution differs from affine oracle");
+      }
+      const auto resources = table.optional_resources();
+      if (records != 2 || calls != 2 || summands != 2 * request.affine_summands() ||
+          resources.cache_bytes != prior_cache + 2 * reservation.cache_bytes ||
+          !resources.host_bytes || resources.host_bytes > 2 * reservation.host_bytes ||
+          resources.workspace_bytes || resources.provider_bytes)
+        throw std::runtime_error("CUTLASS shared replay/resource accounting");
+      table.release();
+      if (table.optional_resources().host_bytes ||
+          table.optional_resources().cache_bytes != resources.cache_bytes)
+        throw std::runtime_error("CUTLASS shared release reclaimed module charge");
+      rejects([&] { table.execute(0, m, n, batches, stream, da, db, dc, error); });
+      if (!grouped && batches == 1 && !(transposes & 4)) {
+        // These same views also admit the complete scalar matrix traversal.
+        // Rebind a mixed table after release without dropping prior cache cost.
+        auto matrix = request;
+        matrix.a_trans = transposes & 1 ? 'T' : 'N';
+        matrix.b_trans = transposes & 2 ? 'T' : 'N';
+        matrix.m = m;
+        matrix.n = n;
+        matrix.k = k;
+        matrix.batches = 1;
+        for (std::size_t i = 0; i < 3; ++i)
+          matrix.leading_dimensions[i] = matrix.operands[i].strides[0];
+        table.add(m, n, 1, {matrix, matrix}, context, calls, summands,
+                  {ContractionAlgorithm::GeneratedOrdered, ContractionAlgorithm::CutlassAot},
+                  reservation, artifact);
+        for (std::size_t slot = 0; slot < 2; ++slot) {
+          cuda_check(cudaMemcpyAsync(dc, initial.data(), initial.size() * sizeof(T),
+                                     cudaMemcpyHostToDevice, stream));
+          table.execute(slot, m, n, 1, stream, da, db, dc, error);
+          cuda_check(cudaMemcpyAsync(actual.data(), dc, actual.size() * sizeof(T),
+                                     cudaMemcpyDeviceToHost, stream));
+          cuda_check(cudaStreamSynchronize(stream));
+          for (std::size_t i = 0; i < actual.size(); ++i)
+            if (std::isnan(expected[i]) ? !std::isnan(actual[i]) : actual[i] != expected[i])
+              throw std::runtime_error("CUTLASS mixed table differs from affine oracle");
+        }
+        if (calls != 4 || summands != 4 * request.affine_summands() ||
+            table.optional_resources().cache_bytes !=
+                resources.cache_bytes + reservation.cache_bytes)
+          throw std::runtime_error("CUTLASS mixed table work/cache accounting");
+        table.release();
+      }
+    }
     cuda_check(cudaFree(error));
     cuda_check(cudaFree(ra));
     cuda_check(cudaFree(rb));
