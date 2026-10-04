@@ -39,6 +39,7 @@ def test_generated_auxiliary_accumulation_preserves_order(tmp_path: Path) -> Non
             "-O2",
             "-arch=sm_120",
             "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
             "-I" + str(library.parent / "generated"),
             "-c",
             str(ROOT / "tests/native/test_df_auxiliary_accumulation.cu"),
@@ -53,7 +54,9 @@ def test_generated_auxiliary_accumulation_preserves_order(tmp_path: Path) -> Non
         [
             compiler,
             str(obj),
-            str(library),
+            "-L" + str(library.parent),
+            "-lgenerativeqc",
+            "-arch=sm_120",
             "-Xlinker",
             "-rpath=" + str(library.parent),
             "-o",

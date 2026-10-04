@@ -65,12 +65,23 @@ one-Q allocation and provider failures. It also passed 13 CPU solver cases
 default-promotion inventory, metadata and ownership checks. No node3 build or
 compute job was submitted.
 
+The full CUDA Release build passed in job2281. Job2283 passed 18 real-device
+solver cases; the new isolated accumulation probe initially lacked a public
+include path, then its nvcc link needed `-lgenerativeqc` rather than a versioned
+`.so.0.1.0` filename. These test-driver fixes changed no production code.
+Job2286 passed the corrected generated-consumer test (eight adversarial cases)
+and all 18 selected native Lambda/factor response gates.
+
 The real generated consumer regression uses adversarial cancellation and early
 overflow followed by opposite-sign rows; it also guards unused output spans.
 CUDA solver comparisons cover Q=5 and limits 1/2/4/8, independent determinant
 replay, exact/one-byte-short capacity, scalar/resource fallback and sticky
 failures. Complete energy pairs and the same candidate's one-Q endpoint are
-queued after CUDA qualification. No phase win or completed large-force
+running in job2284 after CUDA qualification. Complete small/large force pairs,
+two large finite-difference coordinates at the unchanged two step sizes, and
+independent all-coordinate small-water energy differences run in separate
+finite allocations (jobs2287/2288/2289). The two large coordinate checks cannot
+be relabeled as an all-coordinate independent force audit. No phase win or completed large-force
 qualification is claimed until those records pass.
 
 ## Revisit conditions
