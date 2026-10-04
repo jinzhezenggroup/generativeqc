@@ -4,11 +4,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from test_coulomb_optional_allocation import DRIVER, ROOT, STUBS, compile_cached_probe
+from test_coulomb_optional_allocation import DRIVER, ROOT, STUBS
 
 
 @pytest.fixture(scope="module")
-def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def stack_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     begin = source.index("void configure_direct_coulomb_recurrence(")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
@@ -33,7 +33,13 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("coulomb-stack-allocation")
     cpp, binary = directory / "probe.cpp", directory / "probe"
     cpp.write_text(stubs + preparation + DRIVER)
-    compile_cached_probe(cpp, binary)
+    native_cxx.build_executable(
+        [cpp],
+        binary,
+        compile_args=("-std=c++17", "-I", str(ROOT / "src")),
+        compile_timeout=30,
+        link_timeout=30,
+    )
     return binary
 
 
