@@ -178,12 +178,21 @@ jobs:
       # Generated AOT objects are much larger than ordinary CPU objects, so
       # give the CUDA cache enough room while staying within the repo quota.
       CCACHE_MAXSIZE: 3G
+      GENERATIVEQC_CODEGEN_CACHE: ${{ github.workspace }}/.cache/generativeqc-codegen
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Restore generated-source codegen cache
+        id: cuda_codegen_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/generativeqc-codegen
+          key: codegen-source-cuda-v1-${{ github.sha }}
+          restore-keys: |
+            codegen-source-cuda-v1-
       - name: Add NVIDIA CUDA repository
         run: |
           curl --fail --silent --show-error --location --output cuda-keyring.deb \
@@ -369,6 +378,12 @@ jobs:
           python3 -m pytest -q \
             tests/python/test_cuda_ao_radial_reuse.py::test_emitted_ao_cuda_compiles_with_specialized_resources \
             --basetemp build/ao-radial-compile
+      - name: Save generated-source codegen cache
+        if: github.event_name != 'merge_group' && steps.cuda_codegen_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/generativeqc-codegen
+          key: ${{ steps.cuda_codegen_cache.outputs.cache-primary-key }}
       # Merge-group refs are ephemeral, so saving actions/cache there cannot
       # accelerate the next queue group. Stable PR/master refs still benefit.
       - name: Save CUDA ccache immediately after build
