@@ -13,14 +13,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.cc.occupied_triples import (
+    DF_TRIPLES_W_FP32_QUALIFICATION,
     PERMUTATIONS,
     df_panel_program,
     energy_scalar_program,
     moment_program,
+    w_fp32_candidate_program,
 )
 from generativeqc_compiler.cc.triples import _LABELS, VP, triples_energy
-from generativeqc_compiler.tensor import execute
+from generativeqc_compiler.tensor import describe_precision, execute
+from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
 from tools.generate_df_occupied_triples import header
 
@@ -178,6 +182,61 @@ def test_panel_and_each_moment_match_source_index_loops(o: int, v: int, q: int) 
                 atol=2e-15,
                 rtol=2e-15,
             )
+
+
+@pytest.mark.parametrize("o,v,q", [(2, 3, 4), (3, 4, 5)])
+def test_w_fp32_candidate_keeps_sensitive_triples_algebra_fp64(
+    o: int, v: int, q: int
+) -> None:
+    inputs, _ = case(o, v, q)
+    _, _, ovoo, ovov, fov, t1, t2, _, _ = inputs
+    panel = execute(
+        df_panel_program(v, q), {"bov_i": inputs[0][:, 0], "bvv": inputs[1]}
+    ).outputs["panel"]
+    feeds = {
+        "panel": panel,
+        "t2_kj": t2[0, 0],
+        "ovoo_ij": ovoo[0, :, 0],
+        "t2_mk": t2[:, 0],
+        "ovov_ij": ovov[0, :, 0],
+        "t1_k": t1[0],
+        "t2_ij": t2[0, 0],
+        "fov_k": fov[0],
+    }
+    strict = moment_program(o, v)
+    candidate = w_fp32_candidate_program(o, v)
+    schedule = describe_precision(candidate)
+    einsums = [value for value in schedule.values if value.op == "einsum"]
+    lowered = [value for value in einsums if value.compute_dtype == "float32"]
+    retained = [value for value in einsums if value.compute_dtype == "float64"]
+    assert len(lowered) == 2 and len(retained) == 2
+    assert all(
+        (value.storage_dtype, value.compute_dtype, value.accumulation_dtype)
+        == ("float32", "float32", "float32")
+        for value in lowered
+    )
+    assert all(
+        (value.storage_dtype, value.compute_dtype, value.accumulation_dtype)
+        == ("float64", "float64", "float64")
+        for value in retained
+    )
+    assert schedule.strict_audit_dtype == "float64"
+    assert schedule.request_identity is not None
+    assert {qualification for _, qualification in schedule.qualification_scope} == {
+        DF_TRIPLES_W_FP32_QUALIFICATION
+    }
+    fp32_steps = [
+        step
+        for step in plan_cuda(candidate, cuda_target_info("sm_120")).steps
+        if step.node.op == "einsum" and step.node.spec.dtype == "float32"
+    ]
+    assert len(fp32_steps) == 2
+    assert all(step.gemm != "none" for step in fp32_steps)
+    actual = execute(candidate, feeds).outputs
+    expected = execute(strict, feeds).outputs
+    np.testing.assert_array_equal(actual["v"], expected["v"])
+    np.testing.assert_allclose(actual["w"], expected["w"], atol=2e-7, rtol=2e-6)
+    assert actual["w"].dtype == np.float64
 
 
 @pytest.fixture(scope="module")

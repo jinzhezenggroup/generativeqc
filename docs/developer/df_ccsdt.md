@@ -226,6 +226,15 @@ visits `T v^3` points. Standard triples retain seventh-order leading work.
 Diagnostics separately report panel/moment GEMMs, epilogue/reduction kernels,
 transfers, and admitted/observed storage; summands are not hardware FLOPs.
 
+#1764 now has an explicit compiler-owned first precision candidate:
+`w_fp32_candidate_program` lowers only the two reduction-heavy W contractions
+inside each occupied moment to FP32 storage/compute/accumulation. The surrounding
+W sum, V algebra, denominator checks, energy epilogue, reductions and published
+outputs remain FP64, and the precision schedule records strict FP64 as the audit
+dtype. This candidate is not selected by the native endpoint yet and carries no
+performance/default claim; complete endpoint numerical and device evidence remain
+required before a runtime owner may promote it.
+
 The owner uploads inputs once and orders every panel producer, W consumer,
 epilogue and reuse on one owned stream. The numeric budget includes staged
 inputs, panels, moments, reductions, a 4-MiB BLAS workspace and a conservative
