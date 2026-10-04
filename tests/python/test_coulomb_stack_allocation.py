@@ -8,7 +8,7 @@ from test_coulomb_optional_allocation import DRIVER, ROOT, STUBS
 
 
 @pytest.fixture(scope="module")
-def stack_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx) -> Path:
+def stack_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Path:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     begin = source.index("void configure_direct_coulomb_recurrence(")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
