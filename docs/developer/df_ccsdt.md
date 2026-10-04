@@ -288,10 +288,23 @@ projection. Transform temporaries are released before packing; the full MO
 factor tensor is released before block scratch is allocated. Failure drains
 work before owners are destroyed and publishes no partial result. Admission
 includes the caller/reference, source setup, metric owner, transform/packing
-arenas and host outputs. The existing source factory reports setup capacity
-after construction, so that phase is checked and released before downstream
-allocation/publication. Device capacity includes the shared owner's lazy SCF
+arenas and host outputs. An overflow-checked construction query admits system
+copies, packed metadata, transform scratch and both host/device metric storage
+before device selection or source construction. The source reserves its upload
+metadata and ownership arrays. Metadata-only DF value packing skips pair/warm
+payloads and unused resident task tables; the construction bound retains
+conservative legacy allowances. The reported setup ledger
+is checked against that bound before downstream allocation/publication.
+Device capacity includes the shared owner's lazy SCF
 reservations: it is a conservative bound, not a measured physical peak.
+
+`tests/python/test_df_cc_source_admission.py` checks the real admission prefix
+without CUDA and counts simultaneous host allocations during source packing.
+It covers insufficient construction budget, the exact bound, one byte below,
+overflow, varied shell/primitive inputs and Cartesian/spherical auxiliary-g
+packing with bounded expansion scratch. The
+numeric budget excludes allocator and driver overhead; the small expansion
+scratch allowance covers the supported libstdc++/libc++ vector growth policy.
 
 `tests/python/test_df_cc_molecular_source.py` is enabled with
 `GENERATIVEQC_DF_CC_SOURCE_CUDA_TEST=1` inside a finite Slurm GPU allocation.
