@@ -96,3 +96,33 @@ Node3 is excluded from builds and GPU jobs. CPU/CUDA compilation uses verified
 ccache on n2; device qualification uses finite Slurm on permitted nodes. Earlier
 #1839/#1842 observations and #1845's 3-atom regression retain their own source
 and GPU identities and are not added to this unmeasured candidate.
+
+## First linked-resource observation
+
+The frozen implementation is `8283c4f42338ba48a3c3f444c3308bafaffce734`, with
+production source identity
+`b3fe154ee64a20a81e0bf092e234f86a1f440a5e44f87cddb21dd1591d471793`.
+The n2 sm120 build completes with 453 verified ccache compiler commands. Its
+library SHA-256 is
+`fc54990ccda8be7d5274885ca2eda8e5e8f03b342f020c10a025bb8feed49a95`.
+The retained cache-stat window contains 408 hits and 45 misses; no cache was
+cleared or disabled.
+
+`cuobjdump --dump-resource-usage` on this linked library reports all sixteen
+component kernel variants (four orders, two spins, separate/joint ranges).
+Their static stacks are 512 B/thread, registers are 155/156/162/160 at
+orders 5/6/7/8, and shared storage is 8,241/8,913/9,873/11,193 B/CTA. The
+same library's corresponding canonical Cartesian kernels report static stacks
+of 4,136/6,200/7,160/9,064 B/thread and 174--185 registers, with no explicit
+shared storage. This comparison uses one linked binary, not another board's
+calibration. Reported LOCAL=0 does not establish zero dynamic local-memory
+traffic or spills, and these static resources do not establish achieved
+occupancy or endpoint speedup.
+
+Exact build/cache receipts, binary hashes, raw resource text and the strict
+sixteen-variant extraction are retained under
+`.artifacts/shell-component-values-20261004/receipts/`. The extracted source
+workspace formula above excludes native/compiler storage and consequently is
+smaller than the linked shared-storage result. Finite n1 Slurm 5753 begins
+independent device/sanitizer qualification of the verified deployment; its
+completion and complete-endpoint results are still pending.
