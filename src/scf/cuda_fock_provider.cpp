@@ -84,9 +84,9 @@ DirectJkMatrices CudaFockProviderView::build(FockBuildSpec spec, const std::vect
   checked(status, detail);
   return out;
 }
-std::vector<double> CudaFockProviderView::derivative(FockBuildSpec spec,
-                                                     const std::vector<double>& density,
-                                                     const std::vector<double>& beta) const {
+std::vector<double> CudaFockProviderView::derivative(
+    FockBuildSpec spec, const std::vector<double>& density, const std::vector<double>& beta,
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection) const {
   std::vector<double> out(ncoord());
   std::string detail;
   if (exact_) {
@@ -120,7 +120,8 @@ std::vector<double> CudaFockProviderView::derivative(FockBuildSpec spec,
   checked(execute_cuda_density_fitting_generated_force_response(
               fitted_, item_, *data_->df_gradient_orbital, *data_->df_gradient_auxiliary,
               data_->raw.three_center, data_->raw.metric, terms, data_->df_gradient_mapping,
-              data_->df_gradient_budget - staging, 0, out, detail),
+              data_->df_gradient_budget - staging, 0, out, detail, nullptr, nullptr,
+              borrowed_fitted_projection),
           detail);
   if (out.size() != ncoord()) throw std::runtime_error("CUDA DF response coordinate mismatch");
   return out;
