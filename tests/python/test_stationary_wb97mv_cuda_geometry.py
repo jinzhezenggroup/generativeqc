@@ -154,6 +154,10 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
                 1,
                 (256 if large_basis else 16) << 20,
                 spin_blocks=plan.spin_blocks,
+                # Through-f forces borrow the prepared native integral owner.
+                # This isolated slice must not build the SPD-only diagnostic
+                # primitive descriptors (nor any AO^4 inventory).
+                integral_derivatives=not large_basis,
             ) as sources,
             CudaGrid(
                 basis,
