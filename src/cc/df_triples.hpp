@@ -1,8 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <string>
 #include <vector>
 
 namespace generativeqc::cc::triples {
@@ -19,7 +19,7 @@ struct DFCudaResult {
   double seconds{};
   DFTriplesPrecision precision{DFTriplesPrecision::Fp64};
   std::uint32_t w_storage_bits{64}, w_compute_bits{64}, w_accumulation_bits{64};
-  std::string precision_schedule_identity;
+  std::array<char, 65> precision_schedule_identity{};
   std::size_t virtual_triples{}, occupied_tiles{};
   std::size_t workspace_bytes{}, arena_bytes{}, provider_retained_bytes{};
   std::size_t panel_capacity{}, panel_gemms{}, moment_gemms{};
