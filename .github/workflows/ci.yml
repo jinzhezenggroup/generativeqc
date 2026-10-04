@@ -831,6 +831,15 @@ jobs:
             tests/python/test_one_electron_cpu_codegen.py
             tests/python/test_cc_solver.py
             tests/python/test_cc_lambda_solver.py
+            # These compiler/code-generation audits dominated core-a on the
+            # 2026-10-04 routine PR run (~347s derivative AOT audit, ~199s
+            # deterministic ERI CPU emission, plus native CC codegen). Keep
+            # them off the broad core parity split and co-locate them with the
+            # existing compiler-heavy shard.
+            tests/python/test_derivative_aot_audit.py
+            tests/python/test_eri_cpu_codegen.py
+            tests/python/test_rccsdt_native_codegen_dependencies.py
+            tests/python/test_df_cc_native_codegen.py
           )
           case "${{ matrix.shard }}" in
             core-a|core-b)
@@ -929,6 +938,10 @@ jobs:
                 tests/python/test_one_electron_derivatives.py
                 tests/python/test_range_separation.py
                 tests/python/test_second_derivatives_inputs.py
+                tests/python/test_derivative_aot_audit.py
+                tests/python/test_eri_cpu_codegen.py
+                tests/python/test_rccsdt_native_codegen_dependencies.py
+                tests/python/test_df_cc_native_codegen.py
               )
               ;;
             *)
