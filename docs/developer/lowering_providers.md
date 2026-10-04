@@ -105,8 +105,13 @@ when supplied with an actual artifact digest and per-plan host/module bounds.
 It exposes resolved AOT provenance and counts the canonical affine work on replay.
 Unpublished plans are drained on failure; their module charges transfer to the
 table before destruction. `optional_resources().cache_bytes` includes previous
-attempts and survives `release()`. The enclosing owner must preserve this charge
-across fallback and table destruction if it keeps using the CUDA context. Shared
+attempts and survives `release()`. A hard failure after module loading begins
+quarantines the table: new admission, existing replay and provenance binding are
+unavailable, including after release. `retained_cache_quarantined()` distinguishes
+that state; its cache bytes are only the known charge floor, not a measured bound
+on all retained memory. There is no table-local reset. The enclosing owner must
+preserve both charge and quarantine across table destruction while it keeps using
+the CUDA context; replacing the table cannot requalify an unknown overrun. Shared
 region selection does not yet offer CUTLASS, and no production profile is installed.
 Native CMake builds can enable the optional header dependency with
 `GENERATIVEQC_ENABLE_CUTLASS=ON` and
