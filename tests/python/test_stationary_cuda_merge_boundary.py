@@ -281,10 +281,14 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         timeline: object = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = runtime._SOURCE_NAMES,
+        integral_derivatives: bool,
     ) -> MagicMock:
         assert timeline is not None
         assert profile_device is False
         assert source_names == runtime._SOURCE_NAMES
+        # This fixture has no resident native derivative provider, so the
+        # generated owner must retain its integral derivative preparation.
+        assert integral_derivatives is True
         admitted["budget"] = budget
         admitted["spin_blocks"] = spin_blocks
         admitted["page_work_budget"] = page_work_budget
