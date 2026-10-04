@@ -445,6 +445,30 @@
         "cublasSgemmStridedBatched": 1
       }
     },
+    "src/tensor/cuda_cutensor.cuh": {
+      "classification": "provider",
+      "contract": "src/tensor/native_contraction.hpp",
+      "reason": "Shared optional affine contraction provider consumes canonical ContractionRequest semantics and owns cuTENSOR descriptors, preparation, workspace, replay auditing and checked release; scientific consumers do not submit vendor calls.",
+      "references": {
+        "cutensorContract": 1,
+        "cutensorCreate": 1,
+        "cutensorCreateContraction": 1,
+        "cutensorCreatePlan": 1,
+        "cutensorCreatePlanPreference": 1,
+        "cutensorCreateTensorDescriptor": 1,
+        "cutensorDestroy": 1,
+        "cutensorDestroyOperationDescriptor": 1,
+        "cutensorDestroyPlan": 1,
+        "cutensorDestroyPlanPreference": 1,
+        "cutensorDestroyTensorDescriptor": 1,
+        "cutensorGetErrorString": 1,
+        "cutensorGetVersion": 1,
+        "cutensorHandleResizePlanCache": 1,
+        "cutensorOperationDescriptorGetAttribute": 1,
+        "cutensorPlanGetAttribute": 1,
+        "cutensorPlanPreferenceSetAttribute": 2
+      }
+    },
     "src/tensor/cuda_runtime.cuh": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",

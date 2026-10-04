@@ -31,7 +31,12 @@ def test_public_cuda_force_routing_has_no_method_name_special_case() -> None:
     body = BATCH[begin:end]
     assert "requires_composite_stationary_cuda(state)" in body
     assert "PreparedCompositeStationaryCudaGradient" in body
+    assert "resolve_force_active_ao_policy(workload)" in body
+    assert "active_ao_cutoff=decision.cutoff" in body
+    assert '"resident_ao_cutoff": decision.cutoff' in body
     assert "wb97m" not in body.lower()
+    assert "pbe0" not in body.lower()
+    assert "b3lyp" not in body.lower()
 
 
 def test_composite_route_is_selected_from_compiler_source_inventory() -> None:
