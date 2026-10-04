@@ -310,8 +310,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     program = prelude + domain + transform + factory + FACTORY_END + helpers + prefix
     program += (
         "check_status(source_status, detail);\n"
-        "(void)started; (void)stage; (void)work; return result;\n}\n"
-        + MAIN
+        "(void)started; (void)stage; (void)work; return result;\n}\n" + MAIN
     )
     path = directory / "admission.cpp"
     path.write_text(program)
