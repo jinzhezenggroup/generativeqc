@@ -17,7 +17,7 @@ PREFIX = r"""
 #include <stdexcept>
 #include <vector>
 int allocations=0, executions=0;
-constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3;
+constexpr int GENERATIVEQC_BACKEND_CPU_REFERENCE=1, GENERATIVEQC_STATUS_OUT_OF_MEMORY=2, GENERATIVEQC_STATUS_NOT_IMPLEMENTED=3, GENERATIVEQC_STATUS_INVALID_ARGUMENT=4;
 namespace core { struct System { bool df_supported=true; }; }
 namespace runtime {
 struct ExecutionContext {
@@ -67,12 +67,13 @@ void validate_descriptor(const generativeqc_method_descriptor& d,const runtime::
   if (!d.valid) throw std::invalid_argument("invalid descriptor");
 }
 std::size_t correlation_budget(const generativeqc_method_descriptor& d) { return d.budget; }
-int cc_options(const generativeqc_method_descriptor&,std::size_t) { return 0; }
+struct SolverOptions { bool df_matrix_gemm=true; };
+SolverOptions cc_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 Reference reference_options(const generativeqc_method_descriptor&,std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
-                                      Reference,int,std::size_t,scf::PreparedFockPlan* p,
+                                      Reference,SolverOptions,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*,
-                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*) {
+                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*, bool) {
   ++executions;
   return {p != nullptr,0,{80}};
 }
@@ -93,7 +94,7 @@ int main(int argc,char** argv) {
     execution.cuda=true;
     core::System auxiliary; auxiliary.df_supported=false;
     try {
-      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary);
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,true);
       return 9;
     } catch (const MethodError&) {
       return executions || allocations ? 10 : 0;
@@ -101,7 +102,7 @@ int main(int argc,char** argv) {
   }
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
-                                        nullptr,nullptr,0,nullptr);
+                                        nullptr,nullptr,0,nullptr,false,true);
     if (mode < 2) return 2;
     // CUDA source preparation belongs after native RHF, inside execution.
     const bool expect_cache = mode >= 4;
@@ -109,10 +110,10 @@ int main(int argc,char** argv) {
     if (allocations != (expect_cache ? 1 : 0) || executions != 1) return 4;
     if (expect_cache) {
       auto* first=cache.get();
-      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr);
+      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true);
       if (!result.cached || cache.get()!=first || allocations!=1 || executions!=2) return 5;
       descriptor.budget=79;
-      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr); return 6; }
+      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true); return 6; }
       catch (const MethodError&) {}
       if (cache.get()!=first || allocations!=1 || executions!=2) return 7;
     }
@@ -124,9 +125,10 @@ int main(int argc,char** argv) {
 
 
 def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler and ccache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     start = source.index("RccsdNativeState run_rccsd_native_state(")
     end = source.index("\ngenerativeqc_status validate_rccsd_system", start)
@@ -135,13 +137,15 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
     path.write_text(program)
     compiled = subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-O0",
             "-DGENERATIVEQC_HAS_CUDA=1",
+            "-c",
             str(path),
             "-o",
-            str(executable),
+            str(path.with_suffix(".o")),
         ],
         capture_output=True,
         text=True,
@@ -149,6 +153,13 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         check=False,
     )
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    subprocess.run(
+        [compiler, str(path.with_suffix(".o")), "-o", str(executable)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
     for mode in range(6):
         result = subprocess.run(
             [str(executable), str(mode)],
