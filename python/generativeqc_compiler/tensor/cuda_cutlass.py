@@ -80,6 +80,14 @@ class CutlassAotProvider:
             columns = output.columns if output.order == "row" else output.rows
             if recipe.batches > 65535 or (columns + 63) // 64 > 65535:
                 raise ValueError("CUTLASS AOT family exceeds its CUDA grid bound")
+            # Match the native family's signed-int intermediate bounds. CUTLASS
+            # rounds kernel M/K by its fixed tiles; column output swaps M/N.
+            rows = output.rows if output.order == "row" else output.columns
+            int_max = (1 << 31) - 1
+            if rows > int_max - 32 or recipe.layouts[0].columns > int_max - 8:
+                raise ValueError(
+                    "CUTLASS AOT family exceeds its signed kernel tile bound"
+                )
         except ValueError as error:
             reason = str(error)
         bounds = {
@@ -189,5 +197,9 @@ def cutlass_provider_candidates(
     return collect_lowering_candidates(
         request,
         target,
-        (CutlassAotProvider(version=version if type(version) is str else None),),
+        (
+            CutlassAotProvider(
+                version=version if type(version) is str and version.strip() else None
+            ),
+        ),
     )

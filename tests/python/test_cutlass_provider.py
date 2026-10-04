@@ -228,3 +228,52 @@ def test_missing_family_version_and_target_geometry_reject() -> None:
                 replace(TARGET.target, architecture="other")
             ),
         )
+
+
+@pytest.mark.parametrize("version", ["", " ", "\t\n", False, 0])
+def test_malformed_version_facts_retain_unsupported_offer(
+    version: str | bool | int,
+) -> None:
+    plan, index = _plan()
+    original = cutlass_provider_candidates(plan, index)[0].request
+    features = dict(TARGET.features)
+    features["cutlass-version"] = version
+    offer = cutlass_provider_candidates(
+        plan,
+        index,
+        target_capabilities=replace(TARGET, features=tuple(features.items())),
+    )[0]
+    assert offer.status == "unsupported"
+    assert offer.reason == "CUTLASS requires a matching explicit header version"
+    assert offer.request == original
+    assert offer.providers == (CutlassAotProvider().descriptor,)
+
+
+@pytest.mark.parametrize("output", ["mn", "nm"])
+@pytest.mark.parametrize("axis,padding", [("kernel-m", 32), ("k", 8)])
+@pytest.mark.parametrize("excess", [0, 1])
+def test_signed_tile_bound_matches_native_family(
+    output: str, axis: str, padding: int, excess: int
+) -> None:
+    # Symbolic dimensions need no tensor allocation. Keep both output axes
+    # nonunit so the shared proof observes the output transpose.
+    sizes = {"m": 2, "k": 1, "n": 2}
+    dimension = "k" if axis == "k" else "m" if output == "mn" else "n"
+    sizes[dimension] = (1 << 31) - 1 - padding + excess
+    axes = {
+        name: Index(name, IndexSpace(name, "batch", size))
+        for name, size in sizes.items()
+    }
+    a = input_tensor("a", TensorSpec((axes["m"], axes["k"]), role="input"))
+    b = input_tensor("b", TensorSpec((axes["k"], axes["n"]), role="input"))
+    node = einsum("mk,kn->" + output, a, b)
+    request = TensorLoweringAdapter(Program({"out": node})).request(
+        node, backend="cuda"
+    )
+    offer = collect_lowering_candidates(
+        request, TARGET, (CutlassAotProvider(version="3.9.2"),)
+    )[0]
+    assert offer.request is request
+    assert offer.status == ("unsupported" if excess else "ready")
+    if excess:
+        assert offer.reason == "CUTLASS AOT family exceeds its signed kernel tile bound"
