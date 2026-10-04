@@ -18,6 +18,7 @@ struct DFCCSDTResult {
   double total_seconds{}, triples_seconds{}, lambda_seconds{}, source_response_seconds{},
       orbital_seconds{};
   CcPerformanceDiagnostic primal;
+  cc::SolverDiagnostic solver;
   cc::LambdaDiagnostic lambda;
   hf::RHFFrameResponseResult orbital;
   cc::triples::DFCudaResult triples;
@@ -31,11 +32,14 @@ struct DFCCSDTResult {
  * The optional CCSD-only mode omits triples and is an independent closure gate.
  * Disabling df_auxiliary_reduction retains expanded Lambda actions for matched
  * endpoint validation; it changes only the response schedule, not the method.
+ * Disabling df_matrix_gemm selects the scalar DF residual for matched energy
+ * and force endpoint comparisons with the same compiled library.
  * All phase bounds charge simultaneously live owners; no CPU integral/CC
  * reference fallback or four-index full MO Hamiltonian is used.
  */
 DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System& orbital,
                                   const core::System& auxiliary,
                                   const generativeqc_method_descriptor&, bool forces = true,
-                                  bool with_triples = true, bool df_auxiliary_reduction = true);
+                                  bool with_triples = true, bool df_auxiliary_reduction = true,
+                                  bool df_matrix_gemm = true);
 }  // namespace generativeqc::methods::detail

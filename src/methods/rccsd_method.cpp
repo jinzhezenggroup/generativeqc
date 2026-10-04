@@ -975,7 +975,7 @@ RccsdNativeState run_rccsd_native_state(
     std::unique_ptr<scf::PreparedFockPlan>* prepared_exact_cache,
     const std::vector<double>* initial_density, bool* warm_start_fallback,
     std::size_t external_reservation_bytes, const core::System* correlation_auxiliary,
-    bool retain_df_response) {
+    bool retain_df_response, bool df_matrix_gemm) {
   validate_descriptor(descriptor, execution);
   if (retain_df_response && !correlation_auxiliary)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
@@ -996,6 +996,7 @@ RccsdNativeState run_rccsd_native_state(
                       "RCCSD warm state exhausts correlation memory budget");
   const auto phase_budget = budget - external_reservation_bytes;
   auto solver_options = cc_options(descriptor, phase_budget);
+  solver_options.df_matrix_gemm = df_matrix_gemm;
   auto reference = reference_options(descriptor, phase_budget);
   const auto auxiliary_reference_bytes =
       correlation_auxiliary ? posthf::source_capacity(*correlation_auxiliary) : 0;
