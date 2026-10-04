@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_df_rccsdt_manifest_is_distinct_energy_only_method() -> None:
     payload = json.loads((ROOT / "manifests/public_methods.json").read_text())
-    row = next(method for method in payload["methods"] if method["name"] == "df-rccsd(t)")
+    row = next(
+        method for method in payload["methods"] if method["name"] == "df-rccsd(t)"
+    )
     assert row == {
         "name": "df-rccsd(t)",
         "symbol": "DF_RCCSD_T",
@@ -32,7 +34,9 @@ def test_df_rccsdt_public_owner_stays_force_fail_closed() -> None:
         in source
     )
     assert "public DF-RCCSD(T) forces remain unqualified" in source
-    assert "descriptor_.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE" in source
+    assert (
+        "descriptor_.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE" in source
+    )
     assert "descriptor_.density_fitting_auxiliary_basis = nullptr" in source
 
 

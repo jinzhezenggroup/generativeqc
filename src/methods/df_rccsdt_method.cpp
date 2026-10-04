@@ -47,8 +47,7 @@ void validate_descriptor(const generativeqc_method_descriptor& descriptor,
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "DF-RCCSD(T) requires screening_tolerance=0");
   if (descriptor.precision_mode != GENERATIVEQC_PRECISION_FP64)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "DF-RCCSD(T) requires FP64 precision");
+    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "DF-RCCSD(T) requires FP64 precision");
   if (descriptor.ccsd_frozen_core != 0)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "DF-RCCSD(T) frozen-core references are not implemented");
@@ -99,9 +98,8 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     last_correlation_.reset();
     last_performance_.reset();
     if (compute_forces)
-      throw MethodError(
-          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "public DF-RCCSD(T) forces remain unqualified; request energy only (#158)");
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "public DF-RCCSD(T) forces remain unqualified; request energy only (#158)");
 #if GENERATIVEQC_HAS_CUDA
     auto native = run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, false);
     native.primal.triples_seconds = native.triples_seconds;
@@ -128,8 +126,7 @@ class DfRccsdtPrepared final : public PreparedCalculation {
 }  // namespace
 
 generativeqc_status validate_df_rccsdt_system(generativeqc_method method,
-                                              const core::System& system,
-                                              std::string& detail) {
+                                              const core::System& system, std::string& detail) {
   return validate_rccsd_system(method, system, detail);
 }
 

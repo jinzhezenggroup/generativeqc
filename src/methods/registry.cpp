@@ -3,9 +3,9 @@
 #include <string>
 #include <utility>
 
+#include "methods/df_rccsdt_method.hpp"
 #include "methods/dft_admission.hpp"
 #include "methods/dft_method.hpp"
-#include "methods/df_rccsdt_method.hpp"
 #include "methods/generated_method_manifest.hpp"
 #include "methods/hf_method.hpp"
 #include "methods/method.hpp"
