@@ -34,9 +34,7 @@ def test_cold_constructor_receives_requested_profile(
         plan=SimpleNamespace(spin_blocks=1),
         profile_device=profile_device,
         integral_derivatives=integral_derivatives,
-        primitive_demand=SimpleNamespace(
-            integral_derivatives=integral_derivatives
-        ),
+        primitive_demand=SimpleNamespace(integral_derivatives=integral_derivatives),
     )
 
     def construct(
