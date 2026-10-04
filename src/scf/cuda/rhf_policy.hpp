@@ -254,6 +254,9 @@ bool force_density_product_screening_requested() noexcept;
 
 /** Diagnostic only until complete independent-source endpoints are qualified. */
 bool bounded_schwarz_schedule_requested() noexcept;
+
+/** Qualification-only full-range force grouping; mixed traversal remains default. */
+bool homogeneous_bounded_force_requested() noexcept;
 bool resident_ppps_bra_requested() noexcept;
 bool ppps_signature_bucketing_requested() noexcept;
 bool psps_signature_bucketing_requested() noexcept;

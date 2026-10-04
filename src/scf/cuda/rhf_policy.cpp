@@ -448,6 +448,10 @@ bool bounded_schwarz_schedule_requested() noexcept {
   return selected("GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE", "indexed");
 }
 
+bool homogeneous_bounded_force_requested() noexcept {
+  return selected("GENERATIVEQC_BOUNDED_FORCE_SCHEDULE", "homogeneous");
+}
+
 bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }
 
 bool ppps_signature_bucketing_requested() noexcept {

@@ -34,7 +34,7 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources = false,
-    detail::BoundedDirectBlockDomain block_domain = {});
+    detail::BoundedDirectBlockDomain block_domain = {}, int angular_pass = -1);
 
 /** Range-separated exchange derivative on the same bounded shell scheduler.
  * Full-range Schwarz bounds remain a conservative gate for SR/LR operators. */

@@ -6,6 +6,7 @@
 #include <numeric>
 #include <stdexcept>
 
+#include "generated_direct_bounded_force_schedule.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_target_info.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -664,13 +665,25 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
   if (error != cudaSuccess) return error;
   if (coulomb_coefficient != 0.0 || exchange_coefficient != 0.0) {
-    launch_bounded_shell_energy_derivative(
-        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
-        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
-        p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
-        p.force_cursor, coulomb_coefficient, exchange_coefficient, p.bounded_block_domain);
-    error = cudaGetLastError();
-    if (error != cudaSuccess) return error;
+    const bool homogeneous = cuda_policy::homogeneous_bounded_force_requested();
+    const auto passes = homogeneous ? kHomogeneousBoundedForcePasses.size() : 1U;
+    for (std::size_t pass = 0; pass < passes; ++pass) {
+      // Reuse the owned cursor only after the previous pass on this stream.
+      // heads is overflow metadata read by workers, not spare cursor storage.
+      if (pass != 0) {
+        error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+        if (error != cudaSuccess) return error;
+      }
+      const int angular_pass = homogeneous ? kHomogeneousBoundedForcePasses[pass] : -1;
+      launch_bounded_shell_energy_derivative(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
+          p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
+          exchange_coefficient, p.bounded_block_domain, angular_pass);
+      error = cudaGetLastError();
+      if (error != cudaSuccess) return error;
+    }
   }
   error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, shared.stream);

@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.integral.direct_bounded_force_schedule import (
+    emit_direct_bounded_force_schedule_header,
+)
 from generativeqc_compiler.integral.lowering.fock_accumulation import (
     emit_direct_force_density_coefficient,
 )
@@ -39,6 +42,9 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         bodies.append(_extract_function(source, symbol))
     body = "\n".join(bodies)
     folder = tmp_path_factory.mktemp("direct-shell-host-lifetime")
+    (folder / "generated_direct_bounded_force_schedule.hpp").write_text(
+        emit_direct_bounded_force_schedule_header()
+    )
     (folder / "cuda_runtime.h").write_text(
         "#pragma once\n#define __device__\n#define __forceinline__ inline\n"
     )
@@ -84,6 +90,34 @@ def host_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_pending_downloads_outlive_early_returns_and_exceptions(
     host_lifetime_probe: Path, route: str, failed_step: int, throw_error: bool
 ) -> None:
+    result = subprocess.run(
+        [str(host_lifetime_probe), str(failed_step), str(int(throw_error)), route],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("throw_error", [False, True])
+@pytest.mark.parametrize(
+    "route,failed_step",
+    [
+        (route, step)
+        for route, count in (("full_range", 16), ("rsh_split", 22), ("rsh_zero", 16))
+        for step in range(count)
+    ],
+)
+def test_homogeneous_cursor_resets_and_failures(
+    host_lifetime_probe: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    route: str,
+    failed_step: int,
+    throw_error: bool,
+) -> None:
+    """Every pass resets the owned cursor and any failure drains before publication."""
+    monkeypatch.setenv("GENERATIVEQC_BOUNDED_FORCE_SCHEDULE", "homogeneous")
     result = subprocess.run(
         [str(host_lifetime_probe), str(failed_step), str(int(throw_error)), route],
         capture_output=True,
@@ -154,6 +188,7 @@ PREFIX = r"""
 #include <utility>
 #include <tuple>
 #include <vector>
+#include "generated_direct_bounded_force_schedule.hpp"
 #include "scf/cuda/direct_eri_symmetry.cuh"
 #include "scf/cuda/matrix_index.cuh"
 using cudaError_t = int;
@@ -163,7 +198,7 @@ int step=0, fail_step=0, syncs=0; bool throw_error=false;
 unsigned source_count=2, submitted_copies=0;
 bool tracking=false, pending=false, freed_pending=false;
 void* watched[32]{}; unsigned watched_count=0; bool split=false;
-bool density_fixture=false; unsigned range_calls=0;
+bool density_fixture=false; unsigned range_calls=0, full_calls=0;
 void* operator new(std::size_t n) {
   void* p=std::malloc(n);
   if(!p) throw std::bad_alloc();
@@ -206,6 +241,12 @@ int cudaStreamSynchronize(cudaStream_t) {
   pending=false; copy_count=0; return cudaSuccess;
 }
 namespace generativeqc::scf::cuda_execution {
+namespace cuda_policy {
+bool homogeneous_bounded_force_requested() {
+  const auto* value=std::getenv("GENERATIVEQC_BOUNDED_FORCE_SCHEDULE");
+  return value && std::strcmp(value,"homogeneous")==0;
+}
+}
 namespace detail { constexpr unsigned kDirectQuartetShellClassCount=1; }
 enum class DirectCoulombRange { Short, Long };
 struct Batch { int total_atoms=1; };
@@ -233,6 +274,14 @@ int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const do
 // mistakes in the host decomposition, without evaluating any integral kernel.
 template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... args) {
   const auto values=std::make_tuple(args...);
+  const bool homogeneous=cuda_policy::homogeneous_bounded_force_requested();
+  const int pass=std::get<19>(values);
+  const auto expected_pass=homogeneous ? kHomogeneousBoundedForcePasses[full_calls] : -1;
+  if(pass!=expected_pass || *std::get<15>(values)!=0)
+    throw std::runtime_error("pass order or cursor reset changed");
+  ++full_calls;
+  *std::get<15>(values)=999;
+  const double share=homogeneous ? 0.2 : 1.0;
   auto* force=std::get<14>(values);
   const auto* density=std::get<12>(values);
   const double j=density_fixture ? direct_force_density_coefficient_scaled<true>(
@@ -240,8 +289,8 @@ template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... ar
   const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
       2,0,0,density,1,1,0,0,0.0,std::get<17>(values)) : std::get<17>(values);
   for(unsigned i=0;i<3;++i) {
-    force[i]=-j*(1+i);
-    force[3+i]=-k*(10+i);
+    force[i]+=-share*j*(1+i);
+    force[3+i]+=-share*k*(10+i);
   }
 }
 template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
@@ -290,7 +339,7 @@ int main(int argc,char** argv) {
   GeneratedExchangePlan plan{&shared,true,&pair,&bound,force,&cursor,&head};
   std::vector<double> output{99.0};
   const auto execute = [&]() {
-    submitted_copies=0; range_calls=0;
+    submitted_copies=0; range_calls=0; full_calls=0;
     return source_count==2
         ? execute_generated_full_range_energy_derivatives(
             plan,false,&density,nullptr,1.0,-0.5,output)

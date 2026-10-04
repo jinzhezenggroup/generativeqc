@@ -123,7 +123,8 @@ void launch_canonical_rsh_derivative_kernel(cudaStream_t stream, DeviceBatch bat
 
 /** Provider-facing shell derivative seam. Queue/numerical ownership remains in
  * the Direct consumer layer; host source owners borrow only this launch ABI.
- * Output owns two total_atoms*3 channels, weighted Coulomb then exchange. */
+ * Output owns two total_atoms*3 channels, weighted Coulomb then exchange.
+ * angular_pass is a compiler-generated pass tag; -1 retains the mixed traversal. */
 void launch_bounded_shell_energy_derivative(
     bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell_pair_bounds,
@@ -132,7 +133,7 @@ void launch_bounded_shell_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain = {});
+    detail::BoundedDirectBlockDomain block_domain = {}, int angular_pass = -1);
 
 /** SR/LR exchange derivative through the same bounded shell scheduler.
  * The full-range Schwarz/density bounds remain conservative for both ranges. */

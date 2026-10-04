@@ -809,6 +809,20 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF high-order pair-gradient helper")
 
+  set(GENERATIVEQC_DIRECT_BOUNDED_FORCE_SCHEDULE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_bounded_force_schedule.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_direct_bounded_force_schedule_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_bounded_force_schedule.py"
+    OUTPUTS "${GENERATIVEQC_DIRECT_BOUNDED_FORCE_SCHEDULE_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_bounded_force_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/cuda_schedule.py"
+    ARGS --output "${GENERATIVEQC_DIRECT_BOUNDED_FORCE_SCHEDULE_HEADER}"
+    COMMENT "Generating compiler-owned bounded force pass policy")
+
   set(GENERATIVEQC_DIRECT_SOURCE_CONTRACTION_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_source_contraction.cuh")
   generativeqc_register_generated_sources(
