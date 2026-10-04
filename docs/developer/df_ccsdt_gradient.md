@@ -15,6 +15,13 @@ Fock/integral block cotangents and Q-major `df_bov/df_bvv` cotangents. The latte
 cover the virtual residual only. Fresh primal replay and an independently
 expanded Lambda action retain the ordinary CC residual acceptance gates.
 
+Staged Lambda already batches its auxiliary primal, transpose and factor
+actions under its own complete budget. The residual owner reuses that Q-axis
+transform and the same generated ordered accumulation consumer. This does not
+change Lambda's program equations, Q order, scalar fallback or independent
+expanded audit; the residual and response owners select their tile capacities
+independently.
+
 `cc::triples::pullback_df_cuda` supplies all fixed-canonical-input (T)
 cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
 `fock_response_df_cuda` supplies same-space Fock matrices, including internal

@@ -181,10 +181,32 @@ struct Owner {
           checked_add(p.reference_retained_bytes, checked_add(problem_host_bytes(p), layout.total)),
           checked_mul(elements, sizeof(double)));
       return plan.matrix_gemm ? checked_add(checked_add(total, kDFBlasProviderAllowance),
-                                            generated::dfhoist::contraction_host_bytes)
+                                            generated::dfhoist::contraction_host_bytes(
+                                                plan.auxiliary_batch_size > 1
+                                                    ? 1 + (naux % plan.auxiliary_batch_size > 1)
+                                                    : 0))
                               : total;
     };
     auto combined = build_layout();
+    if (plan.matrix_gemm) {
+      const auto one_q = plan;
+      // Trial plans are pure capacity queries. Failed/overflowing optional
+      // tiles cannot consume the one-Q arena or weaken the complete budget.
+      for (auto batch = std::min(naux, options.df_auxiliary_batch_limit); batch > 1; batch /= 2) {
+        try {
+          if (!generated::dfhoist::auxiliary_batched_dimensions_fit(p.nocc, p.nvir, batch))
+            continue;
+          plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, true,
+                                   batch);
+          combined = build_layout();
+          if (combined <= options.max_bytes) break;
+        } catch (const std::length_error&) {
+          // Only optional extent/capacity overflow rejects a larger tile.
+        }
+        plan = one_q;
+        combined = build_layout();
+      }
+    }
     const auto scalar_plan = [&]() {
       plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
       combined = build_layout();
@@ -210,6 +232,14 @@ struct Owner {
       }
       if (plan.matrix_gemm && !contractions.prepare(stream)) scalar_plan();
       auto allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+      if (allocation == cudaErrorMemoryAllocation && plan.auxiliary_batch_size > 1) {
+        (void)cudaGetLastError();
+        // The same admitted provider can execute one-Q work without the
+        // optional batched outputs. Retry before abandoning matrix execution.
+        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, true);
+        combined = build_layout();
+        allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+      }
       if (allocation == cudaErrorMemoryAllocation && plan.matrix_gemm) {
         // Only optional-resource failure permits retry. Arithmetic and driver
         // failures are propagated, and a retry never changes the equations.
@@ -265,7 +295,9 @@ struct Owner {
           hoisted_state.o = p.nocc;
           hoisted_state.v = p.nvir;
           generated::dfhoist::prepare_contractions(
-              hoisted_state, contractions, diagnostic.df_gemm_calls, diagnostic.df_gemm_summands);
+              hoisted_state, contractions, plan.auxiliary_batch_size,
+              naux % plan.auxiliary_batch_size, diagnostic.df_gemm_calls,
+              diagnostic.df_gemm_summands);
         }
       }
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
@@ -287,6 +319,7 @@ struct Owner {
       cuda_check(cudaStreamSynchronize(stream));
       ++diagnostic.synchronizations;
       diagnostic.df_matrix_gemm = plan.matrix_gemm;
+      diagnostic.df_auxiliary_batch_size = plan.auxiliary_batch_size;
       diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kDFBlasProviderAllowance : 0;
       diagnostic.owned_device_bytes =
           checked_add(layout.total, diagnostic.df_provider_capacity_bytes);
@@ -313,8 +346,11 @@ struct Owner {
       accumulate_df<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(n2), 256),
                       256, 0, stream>>>(out.doubles, n2, df_sum + n1, state.error);
       ++diagnostic.df_auxiliary_slices;
+      ++diagnostic.df_auxiliary_tiles;
       diagnostic.df_virtual_operations += generated::df::virtual_cuda_operation_count;
       diagnostic.df_accumulation_calls += 2;
+      diagnostic.df_accumulation_bytes =
+          checked_add(diagnostic.df_accumulation_bytes, checked_mul(elements, 3 * sizeof(double)));
       diagnostic.df_contraction_terms = checked_add(
           diagnostic.df_contraction_terms,
           generated::dfhoist::fallback_virtual_cuda_contraction_terms(state.o, state.v));
@@ -338,43 +374,54 @@ struct Owner {
       hoisted_state.df_Xv = hoisted_state.df_Wvovo + n2;
       hoisted_state.df_tau = generated::dfhoist::run_prepare_cuda(hoisted_state).tau;
       ++diagnostic.df_preparation_calls;
-      for (std::size_t q = 0; q < naux; ++q) {
+      for (std::size_t q = 0; q < naux; q += plan.auxiliary_batch_size) {
+        const auto batch = std::min(plan.auxiliary_batch_size, naux - q);
+        hoisted_state.q = batch;
         hoisted_state.bov = df_bov + q * n1;
         hoisted_state.bvv = df_bvv + q * state.v * state.v;
         const auto row = generated::dfhoist::run_auxiliary_cuda(hoisted_state);
-        const std::array<const double*, 6> sources{row.singles, row.ladder, row.lvv,
-                                                   row.wvoov,   row.wvovo,  row.xv};
-        const std::array<std::size_t, 6> counts{n1, n2, state.v * state.v, n2, n2, n2};
-        std::size_t offset = 0;
-        for (std::size_t field = 0; field < counts.size(); ++field) {
-          accumulate_df<<<generativeqc_tensor::blocks(
-                              static_cast<generativeqc_tensor::I>(counts[field]), 256),
-                          256, 0, stream>>>(sources[field], counts[field], df_sum + offset,
-                                            state.error);
-          offset += counts[field];
+        // These read-only core views alias mutable, owner-retained cut storage.
+        generated::dfhoist::accumulate_auxiliary_cuda(
+            hoisted_state, row, const_cast<double*>(hoisted_state.df_Lvv),
+            const_cast<double*>(hoisted_state.df_Wvoov),
+            const_cast<double*>(hoisted_state.df_Wvovo), const_cast<double*>(hoisted_state.df_Xv),
+            df_sum + n1, df_sum);
+        diagnostic.df_auxiliary_slices += batch;
+        ++diagnostic.df_auxiliary_tiles;
+        diagnostic.df_virtual_operations +=
+            batch > 1          ? generated::dfhoist::auxiliary_batched_operations
+            : plan.matrix_gemm ? generated::dfhoist::auxiliary_packed_operations
+                               : generated::dfhoist::auxiliary_operation_count;
+        ++diagnostic.df_accumulation_calls;
+        diagnostic.df_accumulation_bytes =
+            checked_add(diagnostic.df_accumulation_bytes,
+                        checked_mul(checked_mul(batch + 2, plan.accumulation), sizeof(double)));
+        diagnostic.df_contraction_terms = checked_add(
+            diagnostic.df_contraction_terms,
+            batch > 1
+                ? generated::dfhoist::auxiliary_batched_contraction_terms(state.o, state.v, batch)
+                : plan.auxiliary_terms);
+        if (plan.matrix_gemm) {
+          const auto packing =
+              batch > 1
+                  ? generated::dfhoist::auxiliary_batched_packing_elements(state.o, state.v, batch)
+                  : generated::dfhoist::auxiliary_packing_elements(state.o, state.v);
+          diagnostic.df_packing_bytes =
+              checked_add(diagnostic.df_packing_bytes, checked_mul(packing, 2 * sizeof(double)));
         }
-        ++diagnostic.df_auxiliary_slices;
-        diagnostic.df_virtual_operations += plan.matrix_gemm
-                                                ? generated::dfhoist::auxiliary_packed_operations
-                                                : generated::dfhoist::auxiliary_operation_count;
-        diagnostic.df_accumulation_calls += counts.size();
       }
       cuda_check(cudaGetLastError());
       ++diagnostic.df_hoisted_evaluations;
       if (plan.matrix_gemm) {
         // Every explicit transpose reads and writes its full tensor once.
-        const auto packed = checked_add(
-            generated::dfhoist::prepare_packing_elements(state.o, state.v),
-            checked_add(
-                checked_mul(naux, generated::dfhoist::auxiliary_packing_elements(state.o, state.v)),
-                generated::dfhoist::iteration_packing_elements(state.o, state.v)));
+        const auto packed =
+            checked_add(generated::dfhoist::prepare_packing_elements(state.o, state.v),
+                        generated::dfhoist::iteration_packing_elements(state.o, state.v));
         diagnostic.df_packing_bytes =
             checked_add(diagnostic.df_packing_bytes, checked_mul(packed, 2 * sizeof(double)));
       }
       diagnostic.df_contraction_terms = checked_add(
-          diagnostic.df_contraction_terms,
-          checked_add(plan.preparation_terms,
-                      checked_add(checked_mul(naux, plan.auxiliary_terms), plan.core_terms)));
+          diagnostic.df_contraction_terms, checked_add(plan.preparation_terms, plan.core_terms));
       return generated::dfhoist::run_iteration_cuda(hoisted_state);
     }
     virtual_corrections();
