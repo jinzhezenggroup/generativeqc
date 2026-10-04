@@ -319,4 +319,3 @@ int main() {
     )
     assert compiled.returncode == 0, compiled.stderr
     subprocess.run([str(executable)], check=True, timeout=10)
-

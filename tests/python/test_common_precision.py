@@ -36,15 +36,21 @@ from generativeqc_compiler.tensor import (
     PrecisionDirective as TensorPrecisionDirective,
 )
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_native_execution_precision_contract_matches_common_identity_vocabulary() -> None:
+def test_native_execution_precision_contract_matches_common_identity_vocabulary() -> (
+    None
+):
     source = (ROOT / "src/runtime/execution_precision.hpp").read_text(encoding="utf-8")
     assert f'"{PRECISION_SCHEDULE_SCHEMA}"' in source
     assert f'"{STRICT_MATH_MODE}"' in source
-    for field in ("storage_dtype", "compute_dtype", "accumulation_dtype", "qualification"):
+    for field in (
+        "storage_dtype",
+        "compute_dtype",
+        "accumulation_dtype",
+        "qualification",
+    ):
         assert field in source
 
 

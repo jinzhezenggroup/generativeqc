@@ -1,5 +1,4 @@
 #include "dft/cuda_ks.hpp"
-#include "dft/cuda_ks_precision.hpp"
 
 #include <algorithm>
 #include <array>
@@ -14,6 +13,7 @@
 #include <type_traits>
 
 #include "dft/cuda_ks_kernels.hpp"
+#include "dft/cuda_ks_precision.hpp"
 #include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
@@ -1427,12 +1427,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     try {
       std::string detail;
       const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
-      pending_mixed_coulomb =
-          mixed_stage &&
-          precision_schedule.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
-      pending_mixed_density =
-          mixed_stage &&
-          precision_schedule.uses_lower_precision(cuda_ks_precision_region::kDensityContraction);
+      pending_mixed_coulomb = mixed_stage && precision_schedule.uses_lower_precision(
+                                                 cuda_ks_precision_region::kCoulombJ);
+      pending_mixed_density = mixed_stage && precision_schedule.uses_lower_precision(
+                                                 cuda_ks_precision_region::kDensityContraction);
       // Provider selection stays inside the prepared Fock facade. For a fitted
       // hybrid, the first cold/warm-seed build has no trusted canonical factor
       // and stays dense. After a successful proposal becomes the current density,

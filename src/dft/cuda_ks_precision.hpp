@@ -43,15 +43,14 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
                     functional == semilocal_family_code(SemilocalFamily::R2scan));
 
   runtime::ExecutionPrecisionSchedule schedule;
-  schedule.add_region(
-      cuda_ks_precision_region::kCoulombJ,
-      automatic ? runtime::fp32_compute_fp64_accumulation("dft.cuda.auto/coulomb-j-v1")
-                : runtime::strict_fp64_precision());
-  schedule.add_region(
-      cuda_ks_precision_region::kDensityContraction,
-      mixed_density
-          ? runtime::fp32_compute_fp64_accumulation("dft.cuda.auto/density-contraction-v1")
-          : runtime::strict_fp64_precision());
+  schedule.add_region(cuda_ks_precision_region::kCoulombJ,
+                      automatic
+                          ? runtime::fp32_compute_fp64_accumulation("dft.cuda.auto/coulomb-j-v1")
+                          : runtime::strict_fp64_precision());
+  schedule.add_region(cuda_ks_precision_region::kDensityContraction,
+                      mixed_density ? runtime::fp32_compute_fp64_accumulation(
+                                          "dft.cuda.auto/density-contraction-v1")
+                                    : runtime::strict_fp64_precision());
   schedule.add_region(cuda_ks_precision_region::kExactExchange, runtime::strict_fp64_precision());
   schedule.add_region(cuda_ks_precision_region::kTau, runtime::strict_fp64_precision());
   schedule.add_region(cuda_ks_precision_region::kXcPointAlgebra, runtime::strict_fp64_precision());
