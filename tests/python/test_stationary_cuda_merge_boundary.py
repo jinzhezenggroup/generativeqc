@@ -219,7 +219,10 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         runtime,
         "plan_tiles",
         lambda *_a, **options: SimpleNamespace(
-            peak_bytes=1024, host_bytes=256, tile_points=options["tile_points"]
+            peak_bytes=1024,
+            host_bytes=256,
+            tile_points=options["tile_points"],
+            order=options["order"],
         ),
     )
     tensor_plan = SimpleNamespace(peak_bytes=128, host_bytes=64)
