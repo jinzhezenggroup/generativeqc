@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import numpy as np
 import pytest
-from generativeqc import _dft_gradient, _stationary_cuda
+from generativeqc import _dft_gradient, _native, _stationary_cuda
 from generativeqc._snapshot_grid_cache import SnapshotGridCache
 from generativeqc.batch import PreparedBatch
 from generativeqc_compiler import dft
@@ -139,6 +139,7 @@ def test_public_aot_force_does_not_probe_nvcc(
 ) -> None:
     class Basis:
         shells = ()
+        natom, nao = 2, 2
 
         def __enter__(self) -> object:
             return self
@@ -153,7 +154,13 @@ def test_public_aot_force_does_not_probe_nvcc(
         method_ir=resolve_method("PBE"),
         close=Mock(),
     )
-    state = SimpleNamespace(_source=source)
+    # Supply the force-policy workload metadata used before AOT admission;
+    # compiler discovery remains forbidden by the explicit failing callback.
+    state = SimpleNamespace(
+        _source=source,
+        identity=SimpleNamespace(ingredients=("rho", "sigma"), spin="unpolarized"),
+        grid=SimpleNamespace(points=np.zeros((1, 3))),
+    )
     monkeypatch.setattr(
         _dft_gradient.StationaryKsState, "from_native", lambda *args, **kwargs: state
     )
@@ -176,6 +183,7 @@ def test_public_aot_force_does_not_probe_nvcc(
         _calculator=SimpleNamespace(
             _basis=object(),
             _representation_name="cartesian",
+            _density_fitting_mode=_native.DENSITY_FITTING_NONE,
             _capabilities=SimpleNamespace(supported_properties={"energy", "forces"}),
         ),
         _stationary_cuda_execution=None,
@@ -202,6 +210,7 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
 ) -> None:
     class Basis:
         shells = (SimpleNamespace(angular_momentum=2),)
+        natom, nao = 2, 5
 
         def __enter__(self) -> object:
             return self
@@ -216,7 +225,11 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
         method_ir=resolve_method("PBE"),
         close=Mock(),
     )
-    state = SimpleNamespace(_source=source)
+    state = SimpleNamespace(
+        _source=source,
+        identity=SimpleNamespace(ingredients=("rho", "sigma"), spin="unpolarized"),
+        grid=SimpleNamespace(points=np.zeros((1, 3))),
+    )
     monkeypatch.setattr(
         _dft_gradient.StationaryKsState, "from_native", lambda *args, **kwargs: state
     )
@@ -236,6 +249,7 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
         _calculator=SimpleNamespace(
             _basis=object(),
             _representation_name="spherical",
+            _density_fitting_mode=_native.DENSITY_FITTING_NONE,
             _capabilities=SimpleNamespace(supported_properties={"energy", "forces"}),
         ),
         _stationary_cuda_execution=None,

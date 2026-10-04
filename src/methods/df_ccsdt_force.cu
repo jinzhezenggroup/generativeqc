@@ -65,6 +65,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   result.energy = state.solved.total_energy;
   result.primal = state.performance;
   result.solver = state.solved.diagnostic;
+  result.method_result = state.result;
+  result.correlation = state.diagnostic;
   result.numeric_capacity_bytes = state.diagnostic.numeric_capacity_bytes;
   const auto budget = state.budget;
   const auto device = execution.device_id();
@@ -111,6 +113,15 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     result.energy += result.triples_energy;
   }
   result.triples_seconds = elapsed(phase);
+  result.method_result.energy = result.energy;
+  result.correlation.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  result.correlation.ccsd_t_triples_energy = result.triples_energy;
+  result.correlation.ccsd_t_virtual_triples = result.triples.virtual_triples;
+  result.correlation.ccsd_t_workspace_bytes = result.triples.workspace_bytes;
+  if (with_triples)
+    result.correlation.minimum_absolute_denominator =
+        std::min(result.correlation.minimum_absolute_denominator,
+                 result.triples.minimum_absolute_denominator);
   if (!forces) {
     result.total_seconds = elapsed(started);
     return result;
@@ -252,6 +263,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     value = -value;
     if (!std::isfinite(value)) throw std::runtime_error("nonfinite complete DF CCSD(T) force");
   }
+  result.method_result.forces = result.forces;
   result.total_seconds = elapsed(started);
   return result;
 }
