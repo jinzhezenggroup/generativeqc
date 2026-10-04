@@ -21,6 +21,8 @@ struct SolverOptions {
   bool df_auxiliary_reduction{true};
   // Optional compiler-packed FP64 matrix contractions, with scalar fallback.
   bool df_matrix_gemm{true};
+  // Shape/budget admission may choose a smaller Q tile, including one slice.
+  std::size_t df_auxiliary_batch_limit{8};
 };
 
 struct Problem {
@@ -87,6 +89,7 @@ struct SolverDiagnostic {
   bool df_matrix_gemm{};
   std::size_t df_gemm_calls{}, df_gemm_summands{}, df_packing_bytes{};
   std::size_t df_provider_capacity_bytes{};
+  std::size_t df_auxiliary_batch_size{1}, df_auxiliary_tiles{}, df_accumulation_bytes{};
   double tensor_seconds{};
   double iteration_seconds{};
   double replay_seconds{};

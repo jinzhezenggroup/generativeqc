@@ -118,7 +118,12 @@ struct Owner {
   Contractions contractions;
   void *trial_begin{}, *trial_end{};
   unsigned char *base=reinterpret_cast<unsigned char*>(3);
-  struct { bool matrix_gemm=true; } plan;
+  struct Plan { bool matrix_gemm=true; std::size_t auxiliary_batch_size=1; } plan;
+  struct { std::size_t nocc=1,nvir=1; } p;
+  struct { bool df_auxiliary_reduction=true; } options;
+  std::size_t naux=1,combined=0;
+  Plan df_iteration_plan(std::size_t,std::size_t,std::size_t,bool,bool,bool) { return {}; }
+  std::size_t build_layout() { return layout.total; }
   bool conventional_prepared=false;
   struct { std::size_t total=1024; } layout;
   int replans=0;

@@ -185,8 +185,25 @@ fallback for qualification. Convergence always uses the original expanded
 virtual actions and `tools/generate_df_ccsd_core.py` replay, independently of the
 primary schedule.
 
+CUDA matrix execution lifts the auxiliary-dependent primal DAG into bounded
+Q tiles using the same compiler transform as staged Lambda. Amplitude-only
+inputs stay shared; explicit transposes/broadcasts and every Q-dependent output
+enter the liveness arena. `SolverOptions::df_auxiliary_batch_limit` caps the
+tile (default eight); admission halves larger candidates until the complete
+owner budget and provider dimension limits fit. A limit of one retains the
+matrix one-Q schedule. Allocation rejection retries one-Q before the existing
+scalar fallback. Independent expanded replay remains one-Q.
+
+One generated kernel accumulates all six primal cuts per tile. For each output
+element it starts from the retained sum and adds each Q contribution in the
+original ascending order, checking every addition. It does not form a tile
+subtotal or use atomic sums. Primal and Lambda consumers share this lowering;
+factor cotangents remain separate Q rows. The existing tensor adapter executes
+ordinary/strided products with the owner's admitted provider handle. It adds no
+method-local provider discovery or new scientific equations.
+
 Complete solver admission includes resident factors, accumulated corrections,
-both core arenas, one-slice scratch, preparation and accumulated intermediates,
+both core arenas, selected Q-tile scratch, preparation and accumulated intermediates,
 DIIS and retained/final host arrays. CUDA
 uploads factors once; borrowed action outputs are consumed on the same stream
 before scratch reuse. A sticky arithmetic flag spans all Q slices and the
@@ -194,6 +211,12 @@ core. Diagnostics report auxiliary slices, virtual operations, accumulation
 calls, prepared/hoisted evaluations and exact scalar contraction summands across
 the entire solve, including convergence replay. Summand counts exclude
 elementwise operations and are not hardware FLOPs or timing predictions.
+CUDA also reports the selected tile size, actual tile count including one-Q
+replay, and accumulation read/write bytes. For a tile with `b` rows and `C`
+retained cut elements, accumulation visits `(b+2)*C*sizeof(double)` logical
+bytes (Q inputs and one accumulator read/write), not measured physical traffic.
+Packing traffic is recorded separately. Queries and counters account for a
+partial final tile without charging unevaluated padded Q rows.
 
 Conventional admission rejects the DF representation unless an owner explicitly
 opts in. Native CUDA Lambda accepts the factorized representation as described
