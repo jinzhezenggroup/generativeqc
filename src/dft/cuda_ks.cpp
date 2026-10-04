@@ -33,6 +33,7 @@
 #include "scf/eigensolver_workspace.hpp"
 #include "scf/initial_guess/density.hpp"
 #include "scf/reference/mean_field.hpp"
+#include "scf/solver/eigen_frame.hpp"
 #include "scf/solver/proposal_control.hpp"
 #include "xc_cpu_generated.hpp"
 
@@ -440,6 +441,70 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (cursor != static_cast<double*>(storage) + doubles)
       throw std::logic_error("resident VV10 KS arena partition mismatch");
     return product(doubles, sizeof(double));
+  }
+
+  scf::reference::EigenResult seed_eigen(const scf::reference::Matrix& input,
+                                         std::size_t dimension) {
+    runtime::host_trace::Region trace("cuda_ks_seed_eigen", n);
+    if (dimension != n || input.size() != matrix || is_active || is_pending)
+      throw std::invalid_argument("CUDA KS seed eigen operation requires its idle AO owner");
+    for (std::size_t row = 0; row < n; ++row) {
+      for (std::size_t column = 0; column < n; ++column) {
+        const auto a = input[row * n + column], b = input[column * n + row];
+        if (!std::isfinite(a) ||
+            std::abs(a - b) > 1e-12 * std::max({1.0, std::abs(a), std::abs(b)}))
+          throw std::invalid_argument("CUDA KS seed eigen input must be finite and symmetric");
+      }
+    }
+    current_device();
+    cudaStreamCaptureStatus capture{};
+    check(cudaStreamIsCapturing(stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::invalid_argument("CUDA KS seed admission requires an ordinary stream");
+
+    // Every begin() discards DIIS history before submitting work. These two
+    // charged history buffers are therefore dead while idle, unlike tmp1/tmp2
+    // which can back a live stationary D/W lease. Keep all final coefficients,
+    // eigenvalues, density, warm state and generation tokens untouched, even
+    // when validation rejects the imported checkpoint.
+    scf::reference::EigenResult frame;
+    frame.values.resize(n);
+    frame.vectors.resize(matrix);
+    int info{};
+    try {
+      check(cudaMemcpyAsync(fock_history, input.data(), matrix * sizeof(double),
+                            cudaMemcpyHostToDevice, stream));
+      check(eigensolver->launch(1, fock_history, residual_history, eigenvalues, solver_info,
+                                final_enabled),
+            "CUDA KS seed eigensolver launch failed");
+      check(cudaMemcpyAsync(frame.vectors.data(), fock_history, matrix * sizeof(double),
+                            cudaMemcpyDeviceToHost, stream));
+      check(cudaMemcpyAsync(frame.values.data(), eigenvalues, n * sizeof(double),
+                            cudaMemcpyDeviceToHost, stream));
+      check(cudaMemcpyAsync(&info, solver_info, sizeof(info), cudaMemcpyDeviceToHost, stream));
+      check(cudaStreamSynchronize(stream));
+    } catch (...) {
+      // Input/output buffers belong to this synchronous call. Drain queued
+      // copies before their host storage or a stack-backed status can expire.
+      (void)cudaStreamSynchronize(stream);
+      throw;
+    }
+    movement.setup_h2d_bytes += matrix * sizeof(double);
+    movement.matrix_d2h_bytes += matrix * sizeof(double);
+    movement.scalar_d2h_bytes += n * sizeof(double) + sizeof(info);
+    ++movement.synchronizations;
+    if (info) throw std::runtime_error("CUDA KS seed eigensolver did not converge");
+    // The solver emits column-major orbitals; the common admission algebra
+    // uses row-major C[ao, orbital]. Symmetric input needs no packing copy.
+    for (std::size_t row = 0; row < n; ++row)
+      for (std::size_t column = row + 1; column < n; ++column)
+        std::swap(frame.vectors[row * n + column], frame.vectors[column * n + row]);
+    scf::solver::EigenFrameDiagnostic diagnostic;
+    std::string detail;
+    if (!scf::solver::validate_eigen_frame(input, nullptr, frame.values, frame.vectors, n,
+                                           diagnostic, detail))
+      throw std::runtime_error(detail);
+    return frame;
   }
 
   std::vector<double> seed(const std::vector<double>* input) const {
@@ -1853,6 +1918,14 @@ std::vector<double> CudaKsPlan::warm_density() {
   if (impl_->is_pending)
     throw std::logic_error("cannot export warm state during a pending iteration");
   return impl_->warm_ready ? impl_->download(impl_->warm) : std::vector<double>{};
+}
+scf::initial_guess::EigenOperation CudaKsPlan::seed_eigen_operation() {
+  return [this](const auto& matrix, const auto* overlap, const auto* orthogonalizer,
+                std::size_t dimension) {
+    if (overlap || orthogonalizer)
+      throw std::invalid_argument("CUDA KS seed eigen operation accepts symmetric solves only");
+    return impl_->seed_eigen(matrix, dimension);
+  };
 }
 void CudaKsPlan::set_warm_start_updates(bool enabled) noexcept { impl_->warm_updates = enabled; }
 void CudaKsPlan::clear_warm_start() noexcept { impl_->clear_warm_state(); }
