@@ -92,8 +92,17 @@ custom/inner/cluster configuration, version, target and exact queried workspace.
 Logical output audits preserve sticky errors and ignore row/batch padding.
 Capture is rejected. The opaque host and global heuristic-cache footprint still
 needs external qualification; cache capacity is reported without changing global
-policy. Standalone native qualification uses explicit test reservations. No
-production portfolio execution or measured default promotion is connected yet.
+policy. Native qualification uses explicit test reservations.
+`PreparedContractions` accepts cuBLASLt plans alongside generated, cuBLAS and
+cuTENSOR bindings. Enable this optional capability with
+`GENERATIVEQC_ENABLE_CUBLASLT=ON` on NVIDIA CUDA; it defaults to OFF. The build
+propagates the provider macro and link dependency together to internal consumers.
+All optional plans for a shape prepare transactionally, including cleanup across
+different providers. Admission charges the simultaneous per-plan reservations
+and descriptor/pointer tables. cuBLASLt provenance is available by shape/slot via
+`visit_matmul_provenance`, with the same context-generation checks as execution.
+No scientific region portfolio selects cuBLASLt by default yet; qualified
+resource profiles and complete endpoint evidence remain required.
 
 `tensor.lowering.TensorLoweringAdapter` projects existing TensorIR nodes for CPU
 or CUDA consumers. It resolves program-wide precision and node hashes once per
