@@ -194,6 +194,7 @@ def run(
     *,
     df: bool = True,
     source: bool = False,
+    reduction: bool = True,
     budget: int = 1 << 30,
 ) -> tuple:
     o, v = arrays["t1"].shape
@@ -220,13 +221,13 @@ def run(
     result = [np.full(shape, np.nan) for shape in shapes]
     outputs = (dp * len(result))(*(x.ctypes.data_as(dp) for x in result))
     values = np.full(6, np.nan)
-    counts = np.zeros(10, dtype=np.uintp)
+    counts = np.zeros(13, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
         v,
         q,
-        int(df) + 2 * int(source),
+        int(df) + 2 * int(source) + 4 * int(not reduction),
         budget,
         ptrs,
         *(x.ctypes.data_as(dp) for x in seeds),
@@ -256,9 +257,11 @@ def test_native_df_lambda_and_parameters_match_complete_integral_path(
     for actual, expected in zip(result[:12], dense[:12], strict=True):
         np.testing.assert_allclose(actual, expected, atol=3e-10, rtol=3e-10)
     assert np.max(values[1:]) < 1e-9
-    # Every Q appears once in the primal replay, each GMRES action, the
-    # independent transpose audit, and final factor publication.
-    assert counts[7] == (counts[1] + 3) * len(arrays["bov"])
+    # Staging adds one complete Q traversal, amortized over all GMRES actions.
+    # Replay, the independent transpose audit and final factors still visit Q.
+    assert counts[7] == (counts[1] + 3 + counts[11]) * len(arrays["bov"])
+    assert counts[10] == counts[11] == 1
+    assert counts[12] == counts[1]
     assert counts[8] > 0 and counts[9] > 0
     # Compare virtual-factor cotangents to an independent explicit Gram chain.
     bov, bvv = arrays["bov"], arrays["bvv"]
@@ -330,7 +333,18 @@ def test_failed_native_response_has_no_publication(probe: typing.Any) -> None:
     assert status == 0, error
     for actual, expected in zip(exact, reference, strict=True):
         np.testing.assert_array_equal(actual, expected)
-    for refused in (1, budget - 1):
+    status, fallback, _, old_counts, error = run(probe, arrays, reduction=False)
+    assert status == 0, error
+    assert old_counts[10] == old_counts[11] == old_counts[12] == 0
+    assert old_counts[2] < budget
+    # One byte below optional cache admission must keep the bounded old path.
+    for allowed in (budget - 1, int(old_counts[2])):
+        status, actual, _, actual_counts, error = run(probe, arrays, budget=allowed)
+        assert status == 0, error
+        assert actual_counts[10] == 0
+        for value, expected in zip(actual, fallback, strict=True):
+            np.testing.assert_array_equal(value, expected)
+    for refused in (1, int(old_counts[2]) - 1):
         status, result, values, _, error = run(probe, arrays, budget=refused)
         assert status != 0 and "DF Lambda" in error and "budget" in error
         assert np.isnan(values).all() and all(np.isnan(x).all() for x in result)
