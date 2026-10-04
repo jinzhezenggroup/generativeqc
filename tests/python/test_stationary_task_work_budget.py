@@ -61,7 +61,13 @@ def test_native_task_budget_is_per_page_not_cumulative(
         resolve_method(method), StationaryMeanField(SCF_POINT_MODEL)
     )
     layout = _runtime_layout_cuda(plan).replace("__host__ __device__", "")
-    source.write_text(PREAMBLE + layout + "\n".join(pieces) + MAIN)
+    source.write_text(
+        PREAMBLE
+        + layout
+        + "using namespace generativeqc_stationary_cuda;\n"
+        + "\n".join(pieces)
+        + MAIN
+    )
     binary = tmp_path / "admission"
     subprocess.run(
         [compiler, "-std=c++17", "-O2", str(source), "-o", str(binary)],
@@ -95,6 +101,8 @@ def test_task_metrics_are_reported_per_execution() -> None:
         "becke_pair_state_evaluations": 18,
         "becke_threads_per_point": 32,
         "becke_shared_bytes": 4240,
+        "phased_becke_bytes": 4096,
+        "phased_becke_batches": 4,
     }
     after = {
         "owned_device_bytes": 1024,
@@ -112,6 +120,8 @@ def test_task_metrics_are_reported_per_execution() -> None:
         "becke_pair_state_evaluations": 39,
         "becke_threads_per_point": 32,
         "becke_shared_bytes": 4240,
+        "phased_becke_bytes": 4096,
+        "phased_becke_batches": 7,
     }
 
     delta = runtime._metric_delta(after, before)
@@ -126,6 +136,10 @@ def test_task_metrics_are_reported_per_execution() -> None:
     assert delta["becke_pair_state_evaluations"] == 21
     assert delta["becke_threads_per_point"] == 32
     assert delta["becke_shared_bytes"] == 4240
+    assert delta["phased_becke_bytes"] == 4096
+    assert delta["phased_becke_batches"] == 3
+    del after["phased_becke_batches"]
+    assert "phased_becke_batches" not in runtime._metric_delta(after, before)
 
 
 PREAMBLE = r"""
@@ -138,6 +152,11 @@ PREAMBLE = r"""
 using std::size_t;
 namespace generativeqc_stationary_cuda {}
 namespace generativeqc_grid_adjoint { struct CenterPair; }
+namespace generativeqc::runtime {
+template <class Element> struct OwnedCudaBuffer {
+  explicit operator bool() const { return false; }
+};
+}
 constexpr size_t task_stride=9;
 using cudaEvent_t = void*;
 using cudaStream_t = void*;
