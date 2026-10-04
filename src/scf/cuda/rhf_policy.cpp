@@ -445,7 +445,11 @@ bool force_density_product_screening_requested() noexcept {
 }
 
 bool bounded_schwarz_schedule_requested() noexcept {
-  return selected("GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE", "indexed");
+  const char* selection = std::getenv("GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE");
+  if (selection == nullptr) return true;
+  if (std::strcmp(selection, "0") == 0 || std::strcmp(selection, "none") == 0) return false;
+  return std::strcmp(selection, "1") == 0 || std::strcmp(selection, "indexed") == 0 ||
+         std::strcmp(selection, "auto") == 0;
 }
 
 bool bounded_angular_force_requested() noexcept {

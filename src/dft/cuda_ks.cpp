@@ -289,10 +289,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   bool complete_precision_inventory_domain() const noexcept {
     // Version-1 detailed census covers the ordinary host-controlled CUDA-KS
-    // schedule with device-resident semilocal XC. Device chunks have a separate
-    // replay owner, host-unfused XC has CPU arithmetic, and nonlocal correlation
-    // needs its own operator identity before any of them can be certified.
-    return !device_chunk_mode && !nonlocal_correlation &&
+    // schedule with device-resident semilocal XC and, when present, the
+    // device-resident nonlocal owner. Device chunks have a separate replay owner
+    // and host-unfused XC/nonlocal work has arithmetic outside this census.
+    return !device_chunk_mode && (!nonlocal_correlation || device_nonlocal) &&
            options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
   }
 
@@ -346,6 +346,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                 scf::PrecisionArithmeticMode::Strict, exchange_builds);
       record_precision_operator(scf::PrecisionOperatorKind::Xc, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
+      if (nonlocal_correlation)
+        record_precision_operator(scf::PrecisionOperatorKind::NonlocalCorrelation,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
@@ -722,17 +725,22 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                options.semilocal_correlation_scale, borrow_resident_grid);
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
-    // Explicit qualification-only switch; the ordinary SCF default is dense.
+    // Automatic local-AO requests use the XC owner's execution capability.
+    // Keep 0 as a debugging opt-out and 1 as a fail-closed explicit request.
+    // Capability describes legal execution, not endpoint profitability.
     // Fixed geometry maps belong to this owner, so a coordinate/grid rebuild
     // necessarily reruns discovery rather than reusing a pointer-based mask.
     const char* ao_selection = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
-    const bool select_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
-    if (ao_selection && !select_ao && std::strcmp(ao_selection, "0") != 0)
+    const bool disable_ao = ao_selection && std::strcmp(ao_selection, "0") == 0;
+    const bool request_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
+    if (ao_selection && !disable_ao && !request_ao)
       throw std::invalid_argument("GENERATIVEQC_CUDA_KS_ACTIVE_AO accepts only 0 or 1");
-    if (select_ao &&
-        (host_unfused || !cuda_xc_execution_capabilities(xc_layout).local_ao_selection))
+    const bool capable_local_ao =
+        !host_unfused && cuda_xc_execution_capabilities(xc_layout).local_ao_selection;
+    if (request_ao && !capable_local_ao)
       throw std::invalid_argument(
-          "experimental local SCF AO maps require a device-fused physical FP64 XC layout");
+          "local SCF AO maps require a device-fused physical FP64 XC layout");
+    const bool select_ao = !disable_ao && capable_local_ao;
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);

@@ -1,0 +1,1420 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "endpoint",
+  "subject": "Rejected shared J/K density transform with separate intrusive shell-task census",
+  "inputs_hash": "0f7fc0cd2694a2e2d08b85a6fe88dd0c1573efc2cd08704237efbb88635ad94b",
+  "revision": "5f957d696a8786d5fb0eb319145289bea9225c34",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "35a26a50a7e794b2b21ac9b5210fdc6af4d7b93bbf5dc37d28831b68951bf316",
+    "schedule": "44c72bb454c1d1183e29c8aa02e921e76369a5af8fdc115fed4ffb71b44dc154"
+  },
+  "hash_reasons": {
+    "equation": "Full per-size scientific protocols are retained; no standalone equation serialization was captured.",
+    "ir": "Source reconstruction binds compiler and native owners; no standalone IR serialization was retained."
+  },
+  "device": {
+    "name": "NVIDIA GeForce RTX 5090",
+    "official_profile": "sm_120",
+    "major": 12,
+    "minor": 0,
+    "warp_size": 32,
+    "maximum_threads_per_block": 1024,
+    "maximum_threads_per_sm": 1536,
+    "maximum_blocks_per_sm": 24,
+    "registers_per_sm": 65536,
+    "maximum_registers_per_thread": 255,
+    "sm_count": 170,
+    "shared_memory_per_block": 49152,
+    "shared_memory_per_block_optin": 101376,
+    "shared_memory_per_sm": 102400,
+    "runtime_version": 12090,
+    "driver_version": 13000,
+    "toolkit_version": 12090,
+    "release_build": 1,
+    "fast_compile": 0,
+    "portable": 0
+  },
+  "toolchain": {
+    "nvcc": {
+      "path": "/group/software/cuda-12.9.1/bin/nvcc",
+      "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "ptxas": {
+      "path": "/group/software/cuda-12.9.1/bin/ptxas",
+      "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "cuobjdump": {
+      "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+      "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+    },
+    "host_cxx": {
+      "path": "/data/jzzeng/qc-1892-composed-shared-density-20261005/.artifacts/bin/c++",
+      "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    }
+  },
+  "settings": {
+    "device": "cuda",
+    "fast_compile": false,
+    "comparison_kind": "solver",
+    "target_ratio": 1.25,
+    "policy": {
+      "name": "local-indexed-phased",
+      "indexed_force_requested": true,
+      "resident_ao_cutoff": 1e-16,
+      "resident_ao_cache_bytes": 16777216,
+      "phased_becke_requested": true,
+      "scf_active_ao_requested": true
+    },
+    "default_promotion": false,
+    "census_scope": "Separate intrusive energy-only solves; admissions are not primitive recurrences.",
+    "clean_endpoint_fock_counts": null,
+    "timing_order": "control/candidate at 48; candidate/control at 96; no causal estimate"
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": null,
+    "device": "NVIDIA GeForce RTX 5090",
+    "host": "node1",
+    "slurm_jobs": [
+      5779,
+      5785
+    ]
+  },
+  "stages": {
+    "representation": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    },
+    "source": {
+      "status": "pass",
+      "reason": null,
+      "source_identity": "35a26a50a7e794b2b21ac9b5210fdc6af4d7b93bbf5dc37d28831b68951bf316",
+      "control_identity": "cb81f4c481e5cadd85999a7ff791f93a95a61f9fcf7bb5917ba3c3bfffa849b8",
+      "reconstruction_patches": [
+        "../pbe0-composed-baseline-20261005/composed-source.patch",
+        "control-source.patch",
+        "candidate-source.patch"
+      ]
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": null,
+      "library_sha256": "5cf7ed0ffe1c871930f95c02bb3704b005cdd996b1d917c1a454d311e94843aa"
+    },
+    "numerical": {
+      "status": "pass",
+      "reason": null,
+      "native_reference_pairings": 288,
+      "control_candidate_pairings": 144,
+      "census_energy_pairings": 144,
+      "energy_atol": 1e-08,
+      "force_atol": 1e-07
+    },
+    "endpoint": {
+      "status": "pass",
+      "reason": null,
+      "native_samples": 48,
+      "reference_samples": 24,
+      "phases": [
+        "cold",
+        "warm",
+        "moved",
+        "moved-warm"
+      ]
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "Rejected prototype; no selector/default change."
+    }
+  },
+  "timings": [
+    {
+      "selection": "baseline",
+      "seconds": 125.36796459555626,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "cold",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 25,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.230339881032705,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.254058383405209,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.086867090314627,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.22592257335782,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.158045947551727,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 55.30640276148915,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 12,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.915003627538681,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.16198194026947,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.076556380838156,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.469948541373014,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 11.025044932961464,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "control",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 125.99919246137142,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "cold",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 25,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.47819185256958,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.130595192313194,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.39559955894947,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.307195015251637,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.231354221701622,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 55.51048767194152,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 12,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.248954694718122,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.1668591350317,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.305143225938082,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.364557091146708,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 11.03461342677474,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "candidate",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 51.028874941170216,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "cold",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 43,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 5.94522263482213,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 3,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 6.207182962447405,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 3,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 5.910387117415667,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 3,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 5.916296117007732,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 3,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 7.273116201162338,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 4,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 47.61505137011409,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 43,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.9168032445013523,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.974501509219408,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.9090615920722485,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.9289443530142307,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 3.9122673720121384,
+      "workload": "energy-plus-force",
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "phase": "moved-warm",
+      "atoms": 48,
+      "arm": "reference",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 273.22313122451305,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "cold",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 28,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.474454153329134,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.67792723700404,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.53610686585307,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.55499176681042,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.5208148881793,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 137.18802068009973,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 13,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.71476520225406,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.45292665809393,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.55717348307371,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.52913327887654,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 32.578209824860096,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "control",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 261.46337105333805,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "cold",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 26,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 33.440832015126944,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 32.84609595686197,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 35.700179874897,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 32.94644558429718,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 36.374199494719505,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 138.39333895221353,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 13,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 33.067801263183355,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 32.91534196212888,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 36.55660839751363,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 33.05744966864586,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "candidate",
+      "seconds": 36.63901971280575,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "candidate",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 87.61547619476914,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "cold",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 42,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.138083338737488,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 13.65579716861248,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 3,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.201079808175564,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.116588771343231,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.074752259999514,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 0
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 86.01609247550368,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 43,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.107371293008327,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 0,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.144547902047634,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 1,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.130906492471695,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 2,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 10.103720799088478,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 3,
+      "diagnostics": {
+        "iterations": 1,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    },
+    {
+      "selection": "baseline",
+      "seconds": 19.06954140216112,
+      "workload": "energy-plus-force",
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "phase": "moved-warm",
+      "atoms": 96,
+      "arm": "reference",
+      "repeat": 4,
+      "diagnostics": {
+        "iterations": 6,
+        "fock_builds": null,
+        "geometry": 1
+      }
+    }
+  ],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Per-endpoint work-plan bounds retained; allocator peak was not measured."
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "Cold endpoint includes setup; no separate clean whole-build duration captured."
+  },
+  "residuals": {},
+  "block_errors": {
+    "48-control-reference-energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 7.73070496506989e-12,
+      "max_scaled_error": 0.000773070496506989,
+      "rms_error": 6.009173615341444e-12,
+      "shape": [
+        72
+      ]
+    },
+    "48-control-reference-forces": {
+      "passed": true,
+      "atol": 1e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.685868194518548e-11,
+      "max_scaled_error": 0.0002685868194518548,
+      "rms_error": 7.304920023851457e-12,
+      "shape": [
+        72,
+        48,
+        3
+      ]
+    },
+    "48-candidate-reference-energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 8.185452315956354e-12,
+      "max_scaled_error": 0.0008185452315956354,
+      "rms_error": 6.614494361874143e-12,
+      "shape": [
+        72
+      ]
+    },
+    "48-candidate-reference-forces": {
+      "passed": true,
+      "atol": 1e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.6685764709100113e-11,
+      "max_scaled_error": 0.0002668576470910011,
+      "rms_error": 7.302786361871647e-12,
+      "shape": [
+        72,
+        48,
+        3
+      ]
+    },
+    "48-candidate-control-energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 1.1368683772161603e-12,
+      "max_scaled_error": 0.00011368683772161603,
+      "rms_error": 6.956709721136962e-13,
+      "shape": [
+        72
+      ]
+    },
+    "48-candidate-control-forces": {
+      "passed": true,
+      "atol": 1e-07,
+      "rtol": 0,
+      "max_absolute_error": 1.0837424707643706e-12,
+      "max_scaled_error": 1.0837424707643706e-05,
+      "rms_error": 2.568297127447406e-13,
+      "shape": [
+        72,
+        48,
+        3
+      ]
+    },
+    "96-control-reference-energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 1.0595613275654614e-10,
+      "max_scaled_error": 0.010595613275654614,
+      "rms_error": 9.60572378213942e-11,
+      "shape": [
+        72
+      ]
+    },
+    "96-control-reference-forces": {
+      "passed": true,
+      "atol": 1e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.2460144855074304e-11,
+      "max_scaled_error": 0.00022460144855074304,
+      "rms_error": 8.517726013111196e-12,
+      "shape": [
+        72,
+        96,
+        3
+      ]
+    },
+    "96-candidate-reference-energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 1.0504663805477321e-10,
+      "max_scaled_error": 0.010504663805477321,
+      "rms_error": 9.49609912968697e-11,
+      "shape": [
+        72
+      ]
+    },
+    "96-candidate-reference-forces": {
+      "passed": true,
+      "atol": 1e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.3884838551424536e-11,
+      "max_scaled_error": 0.00023884838551424536,
+      "rms_error": 8.467836347377105e-12,
+      "shape": [
+        72,
+        96,
+        3
+      ]
+    },
+    "96-candidate-control-energy": {
+      "passed": true,
+      "atol": 1e-08,
+      "rtol": 0,
+      "max_absolute_error": 2.2737367544323206e-12,
+      "max_scaled_error": 0.00022737367544323206,
+      "rms_error": 1.2817459207999312e-12,
+      "shape": [
+        72
+      ]
+    },
+    "96-candidate-control-forces": {
+      "passed": true,
+      "atol": 1e-07,
+      "rtol": 0,
+      "max_absolute_error": 2.851940905657102e-12,
+      "max_scaled_error": 2.851940905657102e-05,
+      "rms_error": 6.164572101100648e-13,
+      "shape": [
+        72,
+        96,
+        3
+      ]
+    }
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Endpoint iterations and historical null Fock counts retained. Separate census actual builds are never substituted for missing clean-endpoint work.",
+  "attachments": [
+    {
+      "path": "candidate-48.json.gz",
+      "sha256": "62d33e55a62b9a9ad29de2311d2e020adcd55ea5c0a1c8a005338840d9a7f11b",
+      "kind": "complete-endpoint"
+    },
+    {
+      "path": "candidate-96.json.gz",
+      "sha256": "f076589734ebd51f453f404f5f73b422836908a6282a802d42d4b8875c1a0a50",
+      "kind": "complete-endpoint"
+    },
+    {
+      "path": "census/work-48.jsonl.gz",
+      "sha256": "bab73cf94ce9cb0f9cb128bd949cd31ccb9b69da97a751c94f802592961ec714",
+      "kind": "intrusive-work-census"
+    },
+    {
+      "path": "census/work-96.jsonl.gz",
+      "sha256": "c56e6014fbb389ab41969cb9c1084bcb39a50c14dd6d15d020b07c53a72981f8",
+      "kind": "intrusive-work-census"
+    },
+    {
+      "path": "control-48.json.gz",
+      "sha256": "17b005c0ffd3ebeee30dd35ac5a56bfc972d657489446b4153915ae98ea329ed",
+      "kind": "complete-endpoint"
+    },
+    {
+      "path": "control-96.json.gz",
+      "sha256": "60c7b76e5c6cfeb63d0b583ce3bf2c3ebd8b230ad15112323fc234f238bc3ee0",
+      "kind": "complete-endpoint"
+    },
+    {
+      "path": "reference-48.json.gz",
+      "sha256": "accd459a866bbc404e984a7c4b9e8440add8768ccfdf68f78eb67a3a7752e186",
+      "kind": "complete-endpoint"
+    },
+    {
+      "path": "reference-96.json.gz",
+      "sha256": "35f8be7a51aa64492159781c040e4b2458040e44038a4e50ad612e4fcbbc8355",
+      "kind": "complete-endpoint"
+    }
+  ],
+  "performance": {
+    "status": "fail",
+    "reason": "Warm and moved-warm candidate medians do not improve either size; cold 96 changes iteration count. No demonstrated complete-endpoint benefit."
+  }
+}

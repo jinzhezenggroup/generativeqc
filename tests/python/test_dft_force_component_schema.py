@@ -70,6 +70,51 @@ def test_stationary_timeline_normalizes_without_zero_filling_missing_components(
     assert set(record["wall_seconds"]) == set(COMPONENTS)
 
 
+@pytest.mark.parametrize("present", (False, True))
+def test_optional_becke_metrics_survive_endpoint_normalization(present: bool) -> None:
+    """Retain native execution evidence without fabricating old-ABI counters."""
+    metrics = {
+        "becke_pair_state_evaluations": 1171968,
+        "phased_becke_batches": 2,
+        "phased_becke_bytes": 39755392,
+    }
+    counts = normalize_force_work(metrics if present else {})["work_counts"]
+    for name in ("becke_pair_state_evaluations", "phased_becke_batches"):
+        if present:
+            assert counts["observed"][name] == metrics[name]
+        else:
+            assert name not in counts["observed"]
+    if present:
+        assert counts["capacity"]["phased_becke_bytes"] == metrics["phased_becke_bytes"]
+    else:
+        assert "phased_becke_bytes" not in counts["capacity"]
+    assert counts["executed"] == {}
+
+
+@pytest.mark.parametrize(
+    "phases",
+    (
+        {"prepared_stationary_integral_derivatives": 0.6},
+        {"direct_shell_integral_derivatives": 0.2},
+        {
+            "prepared_stationary_integral_derivatives": 0.6,
+            "direct_shell_integral_derivatives": 0.2,
+            "primitive_derivative_reduction_sync": 0.1,
+        },
+        {},
+    ),
+)
+def test_native_integral_wall_phases_are_not_lost(phases: dict[str, float]) -> None:
+    """Count exclusive attempted/fallback phases, not only the old AO-task timer."""
+    record = normalize_force_work({"timeline": {"exclusive_wall_seconds": phases}})
+    observed = record["wall_seconds"]["stationary_integral_derivatives"]
+    if phases:
+        assert observed == pytest.approx(sum(phases.values()))
+    else:
+        assert observed is None
+    assert record["source_exclusive_wall_seconds"] == phases
+
+
 def test_composite_component_seconds_use_method_neutral_route_name() -> None:
     work = {
         "execution": "cuda-complete-composite",

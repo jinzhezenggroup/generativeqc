@@ -43,6 +43,7 @@ from generativeqc_compiler.tensor.cuda_inline import (
 from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
 
 from .spec import SemilocalXCPrimitive, resolve_method
+from .stationary_becke_phased import emit_stationary_phased_becke_cuda
 from .stationary_gradient import (
     SCF_POINT_MODEL,
     StationaryGradientPlan,
@@ -523,7 +524,8 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
                                 const double* raw, const double* external,
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
-                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
+                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
+                                double* phase_seeds = nullptr) {
   // Lanes remain point workers. A whole block cooperates on one worker's panel.
   const size_t lane = blockIdx.x;
   if (lane >= geometry_lanes) return;
@@ -602,6 +604,10 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
             grad[3 * na + 3 * owner + axis] += ao_gradient[3 * ao_index + axis];
       // Every reader must finish before Becke overwrites the aliased panel.
       __syncthreads();
+    }
+    if (phase_seeds) {
+      if (threadIdx.x == 0) phase_seeds[p] = control.seed;
+      continue;
     }
     const bool valid = na <= stationary_becke_retained_max_atoms
         ? generativeqc_grid_adjoint::contract_point_cooperative(
@@ -1434,6 +1440,7 @@ def emit_stationary_wrapper_cuda(
         + ";\n"
         + "}\n"
         + _runtime_layout_cuda(plan)
+        + emit_stationary_phased_becke_cuda()
         + '#include "dft/stationary_gradient_cuda.cuh"\n'
         + emit_stationary_scientific_kernels(plan)
     )
