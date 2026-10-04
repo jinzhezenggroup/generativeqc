@@ -2376,9 +2376,12 @@ def _stationary_resident_ao_cache(
     )
     owner = None if prepared is None else prepared._resident_ao_maps
     if owner is None or prepared._resident_ao_map_key != key:
+        # Drop both references before constructing a replacement: its discovery
+        # staging must not coexist with the old maps under a one-cache allowance.
         if prepared is not None:
             prepared._resident_ao_maps = None
             prepared._resident_ao_map_key = None
+        owner = None
         owner = ResidentAoMapCache(
             grid, domain, cutoff=cutoff, budget_bytes=budget_bytes
         )

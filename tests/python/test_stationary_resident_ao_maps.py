@@ -4,6 +4,7 @@ import ast
 import inspect
 import sys
 import typing
+import weakref
 from dataclasses import dataclass
 from types import ModuleType, SimpleNamespace
 
@@ -141,6 +142,35 @@ def test_map_replay_rebuilds_for_every_changed_binding(
     else:
         grid.geometry_generation += 1
     assert _cache(bindings) is not first
+
+
+@pytest.mark.parametrize("construction_fails", [False, True])
+def test_old_map_is_released_before_replacement_allocation(
+    bindings: typing.Any, monkeypatch: pytest.MonkeyPatch, construction_fails: bool
+) -> None:
+    """A changed domain cannot transiently retain two cache allowances."""
+    previous = weakref.ref(_cache(bindings))
+    assert previous() is not None
+    bindings[2].identity.geometry_identity = "changed"
+    module = sys.modules["generativeqc._resident_ao_maps"]
+    cache_type = module.ResidentAoMapCache
+
+    def replacement(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        assert previous() is None
+        assert bindings[0]._resident_ao_maps is None
+        assert bindings[0]._resident_ao_map_key is None
+        if construction_fails:
+            raise MemoryError("replacement staging exhausted")
+        return cache_type(*args, **kwargs)
+
+    monkeypatch.setattr(module, "ResidentAoMapCache", replacement)
+    if construction_fails:
+        with pytest.raises(MemoryError, match="replacement staging"):
+            _cache(bindings)
+        assert bindings[0]._resident_ao_maps is None
+        assert bindings[0]._resident_ao_map_key is None
+    else:
+        assert _cache(bindings).domain.geometry_identity == "changed"
 
 
 def test_changed_grid_owner_cannot_reuse_same_pointer_domain(
