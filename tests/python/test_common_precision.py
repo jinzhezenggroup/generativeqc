@@ -161,7 +161,7 @@ def test_integral_schedule_contract_uses_common_precision_identity() -> None:
     assert contract.profitability.precision_widened_accumulation_terms == 0
 
 
-def test_generated_fock_mixed_schedule_records_fp32_eri_fp64_accumulation() -> None:
+def test_generated_fock_mixed_schedule_records_fp32_eri_product_fp64_accumulation() -> None:
     strict = generated_fock_precision_schedule()
     assert strict.is_strict_fp64
 
@@ -175,7 +175,13 @@ def test_generated_fock_mixed_schedule_records_fp32_eri_fp64_accumulation() -> N
     regions = dict(mixed.regions)
     assert regions["eri_recurrence"].compute_dtype == "float32"
     assert regions["eri_recurrence"].accumulation_dtype == "float32"
+    product = regions["density_integral_product"]
+    assert product.storage_dtype == "float64"
+    assert product.compute_dtype == "float32"
+    assert product.accumulation_dtype == "float64"
+    assert product.qualification == "scf-mixed-fock-qualified-domain"
     assert regions["fock_accumulation"].storage_dtype == "float64"
+    assert regions["fock_accumulation"].compute_dtype == "float64"
     assert regions["fock_accumulation"].accumulation_dtype == "float64"
     assert mixed.strict_audit_dtype == "float64"
     assert not mixed.is_strict_fp64
