@@ -8,20 +8,23 @@ from .df_derivatives import axis_polynomial, build_df_derivative_ir
 from .ir_serialization import integral_to_payload
 
 
-def df_derivative_inventory() -> typing.Any:
+def df_derivative_inventory(*, auxiliary_g: bool = False) -> typing.Any:
     """Separate the external-response contract from native tiling decisions."""
     return {
         "schema": "generativeqc.df_derivatives",
         "version": 1,
         "precision": "fp64",
-        "maximum_boys_order": 10,
+        "maximum_boys_order": 11 if auxiliary_g else 10,
         "lowering": "gaussian_moment_polynomials",
         "programs": [
             integral_to_payload(
                 build_df_derivative_ir(family, angular, weighted=weighted)
             )
-            for family, count in (("coulomb_metric", 2), ("three_center_eri", 3))
-            for angular in product(range(4), repeat=count)
+            for family, extents in (
+                ("coulomb_metric", (5 if auxiliary_g else 4,) * 2),
+                ("three_center_eri", (4, 4, 5 if auxiliary_g else 4)),
+            )
+            for angular in product(*(range(size) for size in extents))
             for weighted in (False, True)
         ],
     }
@@ -112,13 +115,16 @@ __device__ double dot(unsigned da,const double* a,unsigned db,const double* b,
 """
 
 
-def emit_df_derivatives_cuda() -> typing.Any:
+def emit_df_derivatives_cuda(*, auxiliary_g: bool = False) -> typing.Any:
     """Share base axis moments and Boys values across all independent centers.
 
     The derivative of an unnormalized basis factor is
     2*alpha*g_(a+1) - a*g_(a-1). This is applied to the same moment DAG as the
     value generator, at generation time. A branch owns at most eleven scalar
     coefficients; the runtime holds bounded coefficient arrays, never AD state.
+    The explicit auxiliary-g variant shares this algebra but owns twelve slots,
+    F_11 and role-checked internal raising. It is emitted into a separate
+    namespace; requesting it does not promote any public force capability.
     """
     prefix = r"""// Generated DF metric/three-center first derivatives.
 #ifndef GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH
@@ -138,13 +144,16 @@ __device__ __noinline__ void axis_polynomial(unsigned a,unsigned b,unsigned c,
   switch(a*20U+b*4U+c) {
 """
     lines = [prefix.replace("__DF_BOYS__", emit_df_boys_cuda())]
-    for a, b, c in product(range(5), range(5), range(4)):
-        if a == b == 4:
+    for a, b, c in product(
+        range(6 if auxiliary_g else 5), range(5), range(5 if auxiliary_g else 4)
+    ):
+        if a == b == 4 or (a == 5 and b != 0):
             continue
-        graph, roots = axis_polynomial(a, b, c)
+        graph, roots = axis_polynomial(a, b, c, auxiliary_g_derivative=auxiliary_g)
         emitter = CudaEmitter(graph, {})
         emitter.emit(roots)
-        lines += [f"    case {a * 20 + b * 4 + c}U: {{", *emitter.lines]
+        key = a * 25 + b * 5 + c if auxiliary_g else a * 20 + b * 4 + c
+        lines += [f"    case {key}U: {{", *emitter.lines]
         lines += [
             f"      out[{i}]={emitter.reference(root)};" for i, root in enumerate(roots)
         ]
@@ -214,15 +223,34 @@ __device__ __forceinline__ Response three_center(double alpha,Vec3 A,Angular a,
     ]
     # Raw and weighted consumers compile this same definition in separate TUs.
     # Device functions need internal linkage, including their NVCC host stubs.
-    return (
+    source = (
         "\n".join(lines)
         .replace("__DF_POLYNOMIAL_DOT__", emit_df_polynomial_dot_cuda())
         .replace("__DF_GEOMETRY_PREPARATION__", emit_df_geometry_cuda())
         .replace("__device__", "static __device__")
     )
+    if auxiliary_g:
+        source = (
+            source.replace(
+                "GENERATIVEQC_GENERATED_DF_DERIVATIVES",
+                "GENERATIVEQC_GENERATED_DF_AUXILIARY_G_DERIVATIVES",
+            )
+            .replace("generated_df_derivatives", "generated_df_auxiliary_g_derivatives")
+            .replace("a*20U+b*4U+c", "a*25U+b*5U+c")
+            # Resize declarations only: out[11] is a real coefficient,
+            # not a storage bound, in the newly admitted F_11 branches.
+            .replace("f[11]", "f[12]")
+            .replace("base[3][11]", "base[3][12]")
+            .replace("raised[11],lowered[11]", "raised[12],lowered[12]")
+            .replace(
+                "order(a)>3 || order(b)>3 || order(c)>3",
+                "order(a)>(metric?4U:3U) || order(b)>3 || order(c)>4",
+            )
+        )
+    return source
 
 
-def emit_df_derivatives_cpu() -> str:
+def emit_df_derivatives_cpu(*, auxiliary_g: bool = False) -> str:
     """Lower the same generated DF derivative algebra to ordinary host C++.
 
     Keep one scientific expression source for CUDA and CPU.  The CUDA emitter
@@ -230,7 +258,12 @@ def emit_df_derivatives_cpu() -> str:
     device-only qualifiers/includes without changing any generated arithmetic.
     """
 
-    source = emit_df_derivatives_cuda()
+    source = emit_df_derivatives_cuda(auxiliary_g=auxiliary_g)
+    if auxiliary_g:
+        source = source.replace(
+            "GENERATIVEQC_GENERATED_DF_AUXILIARY_G_DERIVATIVES_CUH",
+            "GENERATIVEQC_GENERATED_DF_AUXILIARY_G_DERIVATIVES_CPU_HPP",
+        )
     source = source.replace(
         "GENERATIVEQC_GENERATED_DF_DERIVATIVES_CUH",
         "GENERATIVEQC_GENERATED_DF_DERIVATIVES_CPU_HPP",
