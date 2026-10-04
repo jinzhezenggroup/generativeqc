@@ -58,3 +58,15 @@ changing the general bucket arena lifetime and admission contract. Revisit that
 when other consumers need the same shared metadata owner.
 
 References: #1500 source reuse; #1503 warm-state lifetime; stacked on #1818.
+
+## Rebased qualification
+
+After #1818 advanced to `7fb64d4c4`, rebase head `5359795d8` was rebuilt with
+ccache. n2 PRO 6000 Slurm job 2201 repeated all 38 public RCCSD(T)/DF endpoint
+checks; job 2203 ran the detached-source test under memcheck (passed, zero
+errors). The standalone probe uses the system C++ compiler on n2; its Conda
+compiler sysroot could not resolve the library's `hypot@GLIBC_2.35` symbol.
+This was a test-link environment issue, not an executed numerical failure.
+Rebased library SHA256:
+`cb0484b5afd11dd8f9fb546ffd6f4dfb0a05eff2e571fd3395b07140c93bf105`.
+All five host lifetime/admission tests and repository hooks passed again.
