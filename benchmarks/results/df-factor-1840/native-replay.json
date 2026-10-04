@@ -1,0 +1,203 @@
+{
+  "job": "2268",
+  "cuda_visible_devices": "0",
+  "hostname": "node2",
+  "library_sha256": "368f16fd2410b3c9a241e310918346a1bc1565309f5fc278928eaa1b35766216",
+  "frozen_frame_sha256": "ee7ca5b08f2dbe5b2b268649e7f9c718299edb0be0a8d59672e3b7042024c50d",
+  "corrected_reference_sha256": "cb66df98e25968f03a92e46742d596c35475d376a8e9fe3e60b343a16cfeea62",
+  "capture_source_sha256": "6f9c248e9df2b17a9b7eafe3a8e933d594a1037600f2b097069338d62accaa80",
+  "original_atol": 3e-10,
+  "original_rtol": 3e-10,
+  "gates": {
+    "Boo": {
+      "max_abs": 1.7520512818336442e-11,
+      "index": [
+        251,
+        0,
+        1
+      ],
+      "actual": 0.07741306270486673,
+      "reference": 0.07741306272238724,
+      "failures": 0,
+      "max_scaled": 0.05420549593754364
+    },
+    "Bov": {
+      "max_abs": 2.6626704313637006e-11,
+      "index": [
+        7,
+        1,
+        220
+      ],
+      "actual": 0.0005557555679150915,
+      "reference": 0.0005557555412883872,
+      "failures": 0,
+      "max_scaled": 0.08870638198212248
+    },
+    "Bvv": {
+      "max_abs": 8.557535192618704e-11,
+      "index": [
+        251,
+        108,
+        154
+      ],
+      "actual": 0.00272949840749178,
+      "reference": 0.002729498321916428,
+      "failures": 0,
+      "max_scaled": 0.28447469987136353
+    },
+    "ovov": {
+      "max_abs": 1.2029982045247412e-13,
+      "index": [
+        1,
+        220,
+        6,
+        111
+      ],
+      "actual": -0.0003351229793089178,
+      "reference": -0.0003351229794292176,
+      "failures": 0,
+      "max_scaled": 0.00040086506241418177
+    },
+    "ovvo": {
+      "max_abs": 1.2029982045247412e-13,
+      "index": [
+        1,
+        220,
+        111,
+        6
+      ],
+      "actual": -0.0003351229793089178,
+      "reference": -0.0003351229794292176,
+      "failures": 0,
+      "max_scaled": 0.00040086506241418177
+    },
+    "oovv": {
+      "max_abs": 1.3680723220943491e-12,
+      "index": [
+        0,
+        0,
+        157,
+        157
+      ],
+      "actual": 0.42252212538141937,
+      "reference": 0.4225221253800513,
+      "failures": 0,
+      "max_scaled": 0.0032565244024104034
+    },
+    "ovoo": {
+      "max_abs": 2.350867648326192e-13,
+      "index": [
+        6,
+        46,
+        6,
+        6
+      ],
+      "actual": -5.166302574634702e-14,
+      "reference": -2.867497905789662e-13,
+      "failures": 0,
+      "max_scaled": 0.0007836225494418392
+    },
+    "oooo": {
+      "max_abs": 1.149302875091962e-12,
+      "index": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "actual": 1.9235384830930569,
+      "reference": 1.9235384830919076,
+      "failures": 0,
+      "max_scaled": 0.0024224888041144478
+    }
+  },
+  "unprojected_factor_gates": {
+    "Bov": {
+      "max_abs": 2.6824410748194083e-11,
+      "index": [
+        7,
+        1,
+        220
+      ],
+      "actual": 0.0005557555681108481,
+      "reference": 0.0005557555412864373,
+      "failures": 0,
+      "max_scaled": 0.0893650373792595
+    },
+    "Bvv": {
+      "max_abs": 8.831619506891042e-11,
+      "index": [
+        251,
+        108,
+        154
+      ],
+      "actual": 0.0027294984123838535,
+      "reference": 0.0027294983240676585,
+      "failures": 0,
+      "max_scaled": 0.2935859744710795
+    }
+  },
+  "original_reference_failures": {
+    "Bov": {
+      "max_abs": 7.991624907405931e-10,
+      "index": [
+        7,
+        6,
+        133
+      ],
+      "actual": -0.0017394080745744638,
+      "reference": -0.0017394088737369545,
+      "failures": 44,
+      "max_scaled": 2.659249447049632
+    },
+    "Bvv": {
+      "max_abs": 5.8848537890388714e-08,
+      "index": [
+        8,
+        65,
+        133
+      ],
+      "actual": 0.0018239348532103593,
+      "reference": 0.001823876004672469,
+      "failures": 985960,
+      "max_scaled": 195.8046695296045
+    }
+  },
+  "metric_rank": 488,
+  "metric_absolute_cutoff": 1.087578826627117e-07,
+  "budget": 68719476736,
+  "counts": [
+    1194388199,
+    295044808,
+    230,
+    25815200,
+    232,
+    5,
+    24472809600,
+    5873584104,
+    423200,
+    295044808,
+    3810304,
+    488
+  ],
+  "capture_counts": [
+    1,
+    230,
+    230,
+    488,
+    1,
+    413043200,
+    230
+  ],
+  "instrumented_seconds": 4.188014470972121,
+  "timing_is_not_a_benchmark": true,
+  "phase_seconds": [
+    0.069236598,
+    0.329073557,
+    3.315259684,
+    0.17368189,
+    4.147870629
+  ],
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-54595246-dbdc-a633-dc38-7bd8eea3831a, 595.91.07\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-4b4be14f-ec84-6736-a7d8-968d62900c72, 595.91.07\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-cacd0aaf-c80f-41eb-d7a2-4c3a5970f282, 595.91.07\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition, GPU-1979d573-6626-6718-5e52-11741b0a9575, 595.91.07\n",
+  "accepted": true
+}

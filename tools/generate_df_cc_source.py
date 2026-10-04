@@ -119,7 +119,8 @@ def cpu_header() -> str:
             f"  p.largest_block=std::max(p.largest_block,{name}_elements(o,v));",
         ]
     lines += [
-        "  p.transform_bytes=checked_mul(sizeof(double),checked_add(checked_mul(2,p.source_values),checked_add(p.row_values,p.matrix_values)));",
+        "  // Two streamed raw-row components; large MO intermediates remain single FP64 arrays.",
+        "  p.transform_bytes=checked_mul(sizeof(double),checked_add(checked_mul(2,p.source_values),checked_add(checked_mul(2,p.row_values),p.matrix_values)));",
         "  p.packing_bytes=checked_add(sizeof(int),checked_mul(sizeof(double),checked_add(p.source_values,p.packing_values)));",
         "  p.blocks_bytes=checked_add(sizeof(int),checked_mul(sizeof(double),checked_add(p.packing_values,checked_add(p.largest_block,p.output_values))));",
         "  return p;",
