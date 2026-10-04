@@ -51,8 +51,7 @@ struct LambdaOptions {
   bool df_auxiliary_reduction{true};
   // Compiler-packed FP64 adjoints with bounded auxiliary batches. Optional
   // matrix storage/provider allocation falls back to the scalar staged graph.
-  // Keep explicit selection until complete-endpoint promotion is qualified.
-  bool df_matrix_gemm{false};
+  bool df_matrix_gemm{true};
   std::size_t df_auxiliary_batch_limit{8};
 };
 
