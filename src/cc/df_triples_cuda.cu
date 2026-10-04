@@ -10,6 +10,15 @@
 #include "posthf/capacity.hpp"
 #include "tensor/cuda_runtime.cuh"
 
+#if defined(GENERATIVEQC_TEST_HOOKS)
+namespace {
+thread_local bool reject_w_library_for_test = false;
+}
+extern "C" void df_triples_reject_library_for_test_v1(bool reject) {
+  reject_w_library_for_test = reject;
+}
+#endif
+
 namespace generativeqc::cc::triples {
 namespace {
 using posthf::checked_add;
@@ -29,11 +38,15 @@ std::size_t reserve(std::size_t& cursor, std::size_t n) {
 struct Layout {
   std::array<std::size_t, 9> sizes{}, inputs{};
   std::size_t panels{}, moments{}, partials{}, energies{}, energy{}, error{}, library{};
+  std::size_t execution_storage{};
   std::size_t arena{}, total{}, panel_capacity{}, v3{}, tiles{};
   unsigned blocks{};
 };
 
-Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels) {
+Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
+              std::size_t execution_bytes = 0, std::size_t host_binding_bytes = 0,
+              std::size_t execution_provider_bytes = provider_allowance,
+              std::size_t library_bytes = blas_workspace) {
   const auto oo = checked_mul(o, o), vv = checked_mul(v, v), ov = checked_mul(o, v);
   const auto ovv = checked_mul(o, vv);
   // Check every dimension and physical leading dimension before reading inputs
@@ -64,13 +77,14 @@ Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels) {
   for (std::size_t x = 0; x < p.sizes.size(); ++x) p.inputs[x] = reserve(cursor, bytes(p.sizes[x]));
   p.panels = reserve(cursor, bytes(checked_mul(p.panel_capacity, p.v3)));
   p.moments = reserve(cursor, bytes(checked_mul(6, p.v3)));
+  p.execution_storage = reserve(cursor, execution_bytes);
   p.partials = reserve(cursor, bytes(p.blocks));
   p.energies = reserve(cursor, bytes(p.tiles));
   p.energy = reserve(cursor, sizeof(double));
   p.error = reserve(cursor, sizeof(int));
-  p.library = reserve(cursor, blas_workspace);
+  p.library = reserve(cursor, library_bytes);
   p.arena = align256(cursor);
-  p.total = checked_add(p.arena, provider_allowance);
+  p.total = checked_add(checked_add(p.arena, execution_provider_bytes), host_binding_bytes);
   return p;
 }
 
@@ -258,27 +272,70 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
                               const double* bvv, const double* ovoo, const double* ovov,
                               const double* fov, const double* t1, const double* t2,
                               const double* eps_o, const double* eps_v, double threshold,
-                              std::size_t max_bytes, int device, std::size_t max_panel_buffers) {
+                              std::size_t max_bytes, int device, std::size_t max_panel_buffers,
+                              runtime::PrecisionDirective admitted_w) {
   const auto started = Clock::now();
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
     throw std::invalid_argument("invalid DF triples dimensions, threshold or panel limit");
-  auto p = layout(o, v, q, max_panel_buffers);
-  if (p.total > max_bytes) p = layout(o, v, q, 1);
+  bool library_available = true;
+#if defined(GENERATIVEQC_TEST_HOOKS)
+  library_available = !reject_w_library_for_test;
+#endif
+  auto execution_plan = generated_df::prepare_w_plan(admitted_w, library_available);
+  const auto planned_layout = [&](std::size_t panels) {
+    return layout(o, v, q, panels, execution_plan.storage_bytes(o, v, std::min(o, panels)),
+                  generated_df::WExecution::host_bytes(), execution_plan.provider_bytes(), 0);
+  };
+  auto p = planned_layout(max_panel_buffers);
+  if (p.total > max_bytes) p = planned_layout(1);
+  const bool resource_fallback = p.total > max_bytes;
+  while (p.total > max_bytes) {
+    const auto fallback = generated_df::lower_resource_w_plan(execution_plan);
+    if (!fallback) break;
+    execution_plan = *fallback;
+    p = planned_layout(max_panel_buffers);
+    if (p.total > max_bytes) p = planned_layout(1);
+  }
   if (p.total > max_bytes) throw std::length_error("DF triples exceed numeric memory budget");
   const std::array<const double*, 9> host{bov, bvv, ovoo, ovov, fov, t1, t2, eps_o, eps_v};
   const double minimum = validate_inputs(o, v, q, p, host, threshold);
 
   // Borrowed D2H destinations outlive Context's exception-path stream drain.
   DFCudaResult result;
+  result.resource_fallback = resource_fallback;
+  result.host_binding_bytes = generated_df::WExecution::host_bytes();
   int failed = 0;
   {
     runtime::CudaDeviceScope device_scope(device);
     generativeqc_tensor::Context context;
     cudaDeviceProp properties{};
     generativeqc_tensor::cuda_check(cudaGetDeviceProperties(&properties, device));
-    context.prepare(device, properties.major, properties.minor, p.arena, p.error, p.library,
-                    blas_workspace, provider_allowance, true);
+    context.prepare(device, properties.major, properties.minor, p.arena, p.error, p.library, 0, 0,
+                    false);
+    generated_df::WExecution execution(execution_plan, o, v, q, context,
+                                       context.arena + p.execution_storage, p.panel_capacity,
+                                       result.fp64_gemms, result.fp32_gemms,
+                                       result.contraction_summands, result.precision_cast_elements);
+    const auto& selected = execution.plan();
+    result.precision = selected.precision.arithmetic;
+    result.w_contraction_storage_bits =
+        result.precision.storage_dtype == runtime::PrecisionDtype::Fp64 ? 64 : 32;
+    result.w_contraction_compute_bits =
+        result.precision.compute_dtype == runtime::PrecisionDtype::Fp64 ? 64 : 32;
+    result.w_contraction_accumulation_bits =
+        result.precision.accumulation_dtype == runtime::PrecisionDtype::Fp64 ? 64 : 32;
+    const auto& candidate = generated_df::w_lowering_candidates[selected.selected];
+    result.w_scientific_identity = generated_df::w_lowering_request.scientific_identity;
+    result.w_semantic_identity = generated_df::w_lowering_request.semantic_identity;
+    result.w_candidate_identity = candidate.identity;
+    result.w_provider = candidate.provider;
+    result.w_algorithm = candidate.algorithm;
+    result.retained_incumbent = selected.retained_incumbent;
+    result.w_provider_version = execution.provider_version();
+    result.cuda_runtime_version = execution.runtime_version();
+    result.w_precision_identity = selected.precision.identity;
+    result.w_codegen_precision_schedule_identity = selected.schedule_identity;
     generated_df::Inputs in;
     const std::array<const double**, 9> fields{&in.bov, &in.bvv, &in.ovoo,  &in.ovov, &in.fov,
                                                &in.t1,  &in.t2,  &in.eps_o, &in.eps_v};
@@ -295,34 +352,24 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     auto* partials = reinterpret_cast<double*>(context.arena + p.partials);
     auto* energies = reinterpret_cast<double*>(context.arena + p.energies);
     auto* energy = reinterpret_cast<double*>(context.arena + p.energy);
-    auto gemm = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t k, double alpha,
-                    const double* a, std::size_t lda, const double* b, std::size_t ldb, double beta,
-                    double* c, std::size_t ldc) {
-      generativeqc_tensor::blas_check(
-          cublasDgemm(context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-                      tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, static_cast<int>(m),
-                      static_cast<int>(n), static_cast<int>(k), &alpha, a, static_cast<int>(lda), b,
-                      static_cast<int>(ldb), &beta, c, static_cast<int>(ldc)));
-      result.contraction_summands =
-          checked_add(result.contraction_summands, checked_mul(checked_mul(m, n), k));
-    };
+    execution.initialize(context, in);
     std::array<std::size_t, 3> identities;
     identities.fill(std::numeric_limits<std::size_t>::max());
     std::array<std::size_t, 3> ages{};
     std::size_t epoch = 0, tile = 0;
-    auto panel_for = [&](std::size_t occupied) {
+    auto panel_slot_for = [&](std::size_t occupied) {
       std::size_t slot = 0;
       for (; slot < p.panel_capacity; ++slot)
         if (identities[slot] == occupied) break;
       if (slot == p.panel_capacity) {
         slot = static_cast<std::size_t>(
             std::min_element(ages.begin(), ages.begin() + p.panel_capacity) - ages.begin());
-        generated_df::build_panel(o, v, q, occupied, in, panels + slot * p.v3, gemm);
+        execution.build_panel(context, in, occupied, panels + slot * p.v3, slot);
         ++result.panel_gemms;
         identities[slot] = occupied;
       }
       ages[slot] = ++epoch;
-      return panels + slot * p.v3;
+      return slot;
     };
     for (std::size_t i = 0; i < o; ++i)
       for (std::size_t j = 0; j <= i; ++j)
@@ -335,13 +382,13 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
             if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
                 occupied.begin() + index)
               continue;
-            const auto* panel = panel_for(occupied[index]);
+            const auto slot = panel_slot_for(occupied[index]);
+            const auto* panel = panels + slot * p.v3;
             for (std::size_t permutation = 0; permutation < 6; ++permutation) {
               const auto* order = generated_df::permutations[permutation];
               if (occupied[order[0]] != occupied[index]) continue;
-              generated_df::build_w(o, v, occupied[order[0]], occupied[order[1]],
-                                    occupied[order[2]], in, panel, moments + permutation * p.v3,
-                                    gemm);
+              execution.build_w(context, in, occupied[order[0]], occupied[order[1]],
+                                occupied[order[2]], panel, moments + permutation * p.v3, slot);
               result.moment_gemms += 2;
             }
           }
@@ -371,7 +418,7 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     result.epilogue_points = checked_mul(p.tiles, p.v3);
     result.workspace_bytes = p.total;
     result.arena_bytes = p.arena;
-    result.provider_retained_bytes = context.metrics.provider_retained_bytes;
+    result.provider_retained_bytes = execution.provider_bytes();
     result.panel_capacity = p.panel_capacity;
     result.d2h_bytes = sizeof(double) + sizeof(int);
   }  // Drain/destroy the stream, buffers and BLAS provider inside endpoint timing.
