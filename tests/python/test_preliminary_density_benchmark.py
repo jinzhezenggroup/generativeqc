@@ -10,6 +10,30 @@ import pytest
 from generativeqc import load_basis
 
 from benchmarks import ks_preliminary_density as seed
+from benchmarks.readme_omol25 import force_execution_options
+
+
+def test_force_capacity_overrides_preserve_omitted_defaults_and_dense_fallback() -> (
+    None
+):
+    assert force_execution_options(active_ao=False) == {}
+    assert force_execution_options(active_ao=False, max_device_bytes=4 << 30) == {
+        "max_device_bytes": 4 << 30
+    }
+    assert force_execution_options(active_ao=True, max_host_bytes=4 << 30) == {
+        "max_host_bytes": 4 << 30,
+        "active_ao_cutoff": 1e-16,
+        "active_ao_cache_bytes": 64 << 20,
+    }
+
+
+@pytest.mark.parametrize("field", ["max_device_bytes", "max_host_bytes"])
+@pytest.mark.parametrize("invalid", [0, -1, True, 1.5, (1 << 40) + 1])
+def test_force_capacity_override_rejects_invalid_before_gpu_work(
+    field: str, invalid: object
+) -> None:
+    with pytest.raises(ValueError, match="force .* must be an integer"):
+        force_execution_options(active_ao=False, **{field: invalid})
 
 
 def target() -> SimpleNamespace:

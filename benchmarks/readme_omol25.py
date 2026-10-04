@@ -239,6 +239,33 @@ def reference_xc_backend(engine: Any, *, spin: int = 0) -> dict[str, Any]:
     return record
 
 
+def force_execution_options(
+    *,
+    active_ao: bool,
+    max_device_bytes: int | None = None,
+    max_host_bytes: int | None = None,
+) -> dict[str, Any]:
+    """Explicit benchmark-only force allowances, additional to the SCF owner.
+
+    Larger AO domains can exceed the production consumer's default allowance.
+    An override still goes through complete composite admission and is retained
+    in the report; it neither changes the science nor promotes a public default.
+    Omitted limits preserve the consumer's defaults exactly.
+    """
+    options: dict[str, Any] = {}
+    for name, value in (
+        ("max_device_bytes", max_device_bytes),
+        ("max_host_bytes", max_host_bytes),
+    ):
+        if value is not None:
+            if type(value) is not int or not 0 < value <= 1 << 40:
+                raise ValueError(f"force {name} must be an integer in [1,2**40]")
+            options[name] = value
+    if active_ao:
+        options.update(active_ao_cutoff=1e-16, active_ao_cache_bytes=64 << 20)
+    return options
+
+
 def main(benchmark: EndpointSpec = OMOL25) -> None:
     """Journal complete independent endpoints, including experimental cold seeds."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -260,6 +287,16 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         action="store_true",
         help="Opt into the separately qualified force AO maps (cutoff 1e-16)",
     )
+    parser.add_argument(
+        "--force-max-device-bytes",
+        type=int,
+        help="Explicit additional composite-force device allowance; excludes SCF storage",
+    )
+    parser.add_argument(
+        "--force-max-host-bytes",
+        type=int,
+        help="Explicit additional composite-force host allowance; excludes SCF storage",
+    )
     parser.add_argument("--output", type=raw_output_path, required=True)
     args = parser.parse_args()
     if not os.environ.get("SLURM_JOB_ID"):
@@ -268,12 +305,20 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         parser.error("repeats and grid dimensions must be positive")
     if args.engine == "native" and args.reference is None:
         parser.error("native execution requires the independent --reference JSON")
+    try:
+        force_options = force_execution_options(
+            active_ao=args.force_active_ao,
+            max_device_bytes=args.force_max_device_bytes,
+            max_host_bytes=args.force_max_host_bytes,
+        )
+    except ValueError as error:
+        parser.error(str(error))
     if args.engine == "reference" and (
-        args.preliminary_provider != "none" or args.force_active_ao
+        args.preliminary_provider != "none" or force_options
     ):
         parser.error("seed and force AO experiments apply only to the native engine")
     if not benchmark.has_vv10 and (
-        args.preliminary_provider != "none" or args.force_active_ao
+        args.preliminary_provider != "none" or force_options
     ):
         parser.error("these experimental policies are qualified only for WB97M-V")
     if args.reference_full_fock:
@@ -313,6 +358,8 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
             "preliminary_provider": args.preliminary_provider,
             "force_active_ao_cutoff": 1e-16 if args.force_active_ao else None,
             "force_active_ao_cache_bytes": 64 << 20 if args.force_active_ao else None,
+            "force_max_device_bytes": args.force_max_device_bytes,
+            "force_max_host_bytes": args.force_max_host_bytes,
             "public_initialization_policy": False,
         },
         "native_schedule_settings": {
@@ -470,7 +517,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
         else:
             from benchmarks.ks_preliminary_density import prepare_seed, read_ao_work
 
-            if args.force_active_ao:
+            if force_options:
                 from generativeqc._stationary_composite_cuda import (
                     PreparedCompositeStationaryCudaGradient,
                 )
@@ -480,9 +527,7 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                 restore_force = PreparedCompositeStationaryCudaGradient.execute
 
                 def active_force(self: Any, *values: Any, **kwargs: Any) -> Any:
-                    kwargs.update(
-                        active_ao_cutoff=1e-16, active_ao_cache_bytes=64 << 20
-                    )
+                    kwargs.update(force_options)
                     return restore_force(self, *values, **kwargs)
 
                 PreparedCompositeStationaryCudaGradient.execute = active_force
