@@ -51,18 +51,26 @@ __global__ void accumulate(const double* source, std::size_t count, double* targ
 
 using Query = std::size_t (*)(std::size_t, std::size_t);
 using Runner = generated::DeviceParameterOutput (*)(generated_response::CudaState&);
+using StagedRunner = generated::DeviceParameterOutput (*)(generated_response::StagedCudaState&);
 struct Parameter {
   std::string_view name;
   Query arena, work;
   std::size_t operations;
   Runner run;
+  Query staged_arena, staged_work;
+  std::size_t staged_operations;
+  StagedRunner staged_run;
 };
-#define GQC_DF_PARAMETER(name)                                    \
-  Parameter {                                                     \
-    #name, generated_response::parameter_##name##_arena_elements, \
-        generated_response::parameter_##name##_contraction_terms, \
-        generated_response::parameter_##name##_operations,        \
-        generated_response::run_parameter_##name##_cuda           \
+#define GQC_DF_PARAMETER(name)                                           \
+  Parameter {                                                            \
+    #name, generated_response::parameter_##name##_arena_elements,        \
+        generated_response::parameter_##name##_contraction_terms,        \
+        generated_response::parameter_##name##_operations,               \
+        generated_response::run_parameter_##name##_cuda,                 \
+        generated_response::staged_parameter_##name##_arena_elements,    \
+        generated_response::staged_parameter_##name##_contraction_terms, \
+        generated_response::staged_parameter_##name##_operations,        \
+        generated_response::run_staged_parameter_##name##_cuda           \
   }
 const std::array parameters{GQC_DF_PARAMETER(foo),  GQC_DF_PARAMETER(fov),  GQC_DF_PARAMETER(fvv),
                             GQC_DF_PARAMETER(ovov), GQC_DF_PARAMETER(ovvo), GQC_DF_PARAMETER(oovv),
@@ -75,9 +83,13 @@ struct DFLambdaActions::Impl {
   Storage storage;
   generated_response::CudaState state;
   generated_virtual::CudaState auxiliary;
+  generated_response::StagedCudaState staged;
   std::size_t q{}, n1{}, n2{}, vv{};
   const double *bov{}, *bvv{};
   double *sum1{}, *sum2{};
+  double *tau{}, *tau_seed{};
+  std::array<double*, 6> cuts{}, cut_seeds{};
+  std::array<std::size_t, 6> cut_sizes{};
   LambdaDiagnostic metrics;
   bool parameters_admitted{};
 
@@ -139,12 +151,63 @@ struct DFLambdaActions::Impl {
         outputs = checked_add(outputs, values->size());
       host_bytes = checked_add(host_bytes, bytes(outputs));
     }
-    metrics.numeric_capacity_bytes = checked_add(host_bytes, metrics.owned_device_bytes);
+    const auto fallback_cursor = cursor;
+    std::size_t staged_arena = arena, tau_offset = 0, tau_seed_offset = 0;
+    std::array<std::size_t, 6> cut_offsets{}, seed_offsets{};
+    cut_sizes = {vv, n2, n2, n2, n2, n1};
+    if (options.df_auxiliary_reduction) {
+      // All cached cuts belong to this immutable Problem/T owner. The original
+      // arena remains available for expanded physical replay and Lambda audit.
+      const auto before = checked_add(
+          generated_response::transpose_contraction_terms(o, v),
+          checked_mul(q, generated_response::virtual_amplitude_vjp_contraction_terms(o, v)));
+      const auto after = checked_add(
+          generated_response::staged_core_contraction_terms(o, v),
+          checked_add(checked_mul(q, generated_response::staged_auxiliary_contraction_terms(o, v)),
+                      generated_response::staged_prepare_contraction_terms(o, v)));
+      auto candidate = cursor;
+      auto staged_scratch =
+          std::max({generated_response::staged_primal_prepare_arena_elements(o, v),
+                    generated_response::staged_primal_auxiliary_arena_elements(o, v),
+                    generated_response::staged_core_arena_elements(o, v),
+                    generated_response::staged_auxiliary_arena_elements(o, v),
+                    generated_response::staged_prepare_arena_elements(o, v)});
+      if (with_parameters) {
+        staged_scratch =
+            std::max(staged_scratch, generated_response::staged_factors_arena_elements(o, v));
+        for (const auto& item : parameters)
+          staged_scratch = std::max(staged_scratch, item.staged_arena(o, v));
+      }
+      if (staged_scratch > scratch) staged_arena = reserve(candidate, bytes(staged_scratch));
+      tau_offset = reserve(candidate, bytes(n2));
+      tau_seed_offset = reserve(candidate, bytes(n2));
+      for (std::size_t x = 0; x < cuts.size(); ++x) {
+        cut_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
+        seed_offsets[x] = reserve(candidate, bytes(cut_sizes[x]));
+      }
+      if (after < before && checked_add(host_bytes, candidate) <= options.max_bytes) {
+        metrics.df_auxiliary_reduction = true;
+        cursor = candidate;
+      }
+    }
+    metrics.owned_device_bytes = cursor;
+    metrics.numeric_capacity_bytes = checked_add(host_bytes, cursor);
     if (metrics.numeric_capacity_bytes > options.max_bytes)
       throw std::length_error("DF Lambda complete numeric storage exceeds budget");
     parameters_admitted = with_parameters;
     cuda_check(cudaStreamCreateWithFlags(&storage.stream, cudaStreamNonBlocking));
-    cuda_check(cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor));
+    auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    if (allocation == cudaErrorMemoryAllocation && metrics.df_auxiliary_reduction) {
+      // Optional retention is not a prerequisite for scientifically identical
+      // bounded actions. Retry only allocation failure, never arithmetic errors.
+      (void)cudaGetLastError();
+      metrics.df_auxiliary_reduction = false;
+      cursor = fallback_cursor;
+      metrics.owned_device_bytes = cursor;
+      metrics.numeric_capacity_bytes = checked_add(host_bytes, cursor);
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    }
+    cuda_check(allocation);
     auto at = [&](std::size_t offset) { return reinterpret_cast<double*>(storage.base + offset); };
     const std::array<double**, 14> fields{
         &state.foo,  &state.fov,  &state.fvv,  &state.ovov, &state.ovvo, &state.oovv, &state.ovvv,
@@ -176,9 +239,31 @@ struct DFLambdaActions::Impl {
     auxiliary.t2 = state.t2;
     auxiliary.bar_df_virtual_singles = state.bar_singles_residual;
     auxiliary.bar_df_virtual_doubles = state.bar_doubles_residual;
-    cuda_check(cudaStreamSynchronize(storage.stream));
-    ++metrics.synchronizations;
-    metrics.shared_program_hash = generated_response::operator_hash;
+    if (metrics.df_auxiliary_reduction) {
+      static_cast<generated_response::CudaState&>(staged) = state;
+      staged.response_arena = at(staged_arena);
+      tau = at(tau_offset);
+      tau_seed = at(tau_seed_offset);
+      staged.df_tau = tau;
+      staged.bar_df_tau = tau_seed;
+      const std::array<const double**, 6> values{
+          &staged.df_Lvv, &staged.df_Wvoov,         &staged.df_Wvovo,
+          &staged.df_Xv,  &staged.df_D05_vv_ladder, &staged.df_singles_residual};
+      const std::array<const double**, 6> seeds{
+          &staged.bar_df_Lvv, &staged.bar_df_Wvoov,         &staged.bar_df_Wvovo,
+          &staged.bar_df_Xv,  &staged.bar_df_D05_vv_ladder, &staged.bar_df_singles_residual};
+      for (std::size_t x = 0; x < cuts.size(); ++x) {
+        *values[x] = cuts[x] = at(cut_offsets[x]);
+        *seeds[x] = cut_seeds[x] = at(seed_offsets[x]);
+      }
+      prepare_cuts();
+    } else {
+      cuda_check(cudaStreamSynchronize(storage.stream));
+      ++metrics.synchronizations;
+    }
+    metrics.shared_program_hash = metrics.df_auxiliary_reduction
+                                      ? generated_response::staged_operator_hash
+                                      : generated_response::operator_hash;
     metrics.independent_program_hash = generated_response::independent_operator_hash;
     metrics.cuda_actions = true;
   }
@@ -213,7 +298,69 @@ struct DFLambdaActions::Impl {
   void select(std::size_t index) {
     auxiliary.bov = bov + index * n1;
     auxiliary.bvv = bvv + index * vv;
+    staged.bov = auxiliary.bov;
+    staged.bvv = auxiliary.bvv;
     ++metrics.df_auxiliary_slices;
+  }
+  void add_buffer(const double* source, std::size_t count, double* target) {
+    accumulate<<<generativeqc_tensor::blocks(count, 256), 256, 0, storage.stream>>>(
+        source, count, target, state.error);
+    cuda_check(cudaGetLastError());
+    ++metrics.df_generated_kernels;
+  }
+  void copy_buffer(const double* source, std::size_t count, double* target) {
+    cuda_check(
+        cudaMemcpyAsync(target, source, bytes(count), cudaMemcpyDeviceToDevice, storage.stream));
+  }
+  void prepare_cuts() {
+    clear_error();
+    const auto prepared = generated_response::run_staged_primal_prepare_cuda(staged);
+    copy_buffer(prepared.df_tau, n2, tau);
+    record(generated_response::staged_primal_prepare_contraction_terms,
+           generated_response::staged_primal_prepare_operations);
+    for (std::size_t x = 0; x < cuts.size(); ++x)
+      cuda_check(cudaMemsetAsync(cuts[x], 0, bytes(cut_sizes[x]), storage.stream));
+    for (std::size_t Q = 0; Q < q; ++Q) {
+      select(Q);
+      const auto out = generated_response::run_staged_primal_auxiliary_cuda(staged);
+      const std::array sources{out.df_Lvv, out.df_Wvoov,         out.df_Wvovo,
+                               out.df_Xv,  out.df_D05_vv_ladder, out.df_singles_residual};
+      for (std::size_t x = 0; x < cuts.size(); ++x) add_buffer(sources[x], cut_sizes[x], cuts[x]);
+      record(generated_response::staged_primal_auxiliary_contraction_terms,
+             generated_response::staged_primal_auxiliary_operations);
+    }
+    ++metrics.df_preparation_calls;
+    finish();
+  }
+  void core_seeds() {
+    const auto out = generated_response::run_staged_core_cuda(staged);
+    // Borrowed adjoints must survive reuse of the graph arena by every Q VJP.
+    const std::array sources{out.bar_df_Lvv, out.bar_df_Wvoov,         out.bar_df_Wvovo,
+                             out.bar_df_Xv,  out.bar_df_D05_vv_ladder, out.bar_df_singles_residual};
+    for (std::size_t x = 0; x < cuts.size(); ++x)
+      copy_buffer(sources[x], cut_sizes[x], cut_seeds[x]);
+    copy_buffer(out.bar_t1, n1, sum1);
+    copy_buffer(out.bar_t2, n2, sum2);
+    record(generated_response::staged_core_contraction_terms,
+           generated_response::staged_core_operations);
+  }
+  void reduced_transpose() {
+    core_seeds();
+    cuda_check(cudaMemsetAsync(tau_seed, 0, bytes(n2), storage.stream));
+    for (std::size_t Q = 0; Q < q; ++Q) {
+      select(Q);
+      const auto out = generated_response::run_staged_auxiliary_cuda(staged);
+      // Direct T2 dependence coexists with the tau cut; accumulate BOTH paths.
+      add(out.bar_t1, out.bar_t2);
+      add_buffer(out.bar_df_tau, n2, tau_seed);
+      record(generated_response::staged_auxiliary_contraction_terms,
+             generated_response::staged_auxiliary_operations);
+    }
+    const auto out = generated_response::run_staged_prepare_cuda(staged);
+    add(out.bar_t1, out.bar_t2);
+    record(generated_response::staged_prepare_contraction_terms,
+           generated_response::staged_prepare_operations);
+    ++metrics.df_reduced_actions;
   }
   void add(const double* one, const double* two) {
     accumulate<<<generativeqc_tensor::blocks(n1, 256), 256, 0, storage.stream>>>(one, n1, sum1,
@@ -288,6 +435,12 @@ void DFLambdaActions::transpose(bool independent, std::span<const double> one,
   s.clear_error();
   s.upload(s.state.bar_singles_residual, one.data(), s.n1);
   s.upload(s.state.bar_doubles_residual, two.data(), s.n2);
+  if (s.metrics.df_auxiliary_reduction && !independent) {
+    s.reduced_transpose();
+    s.output(s.sum1, s.sum2, out_one, out_two);
+    fence.complete();
+    return;
+  }
   const auto core = independent ? generated_response::run_independent_transpose_cuda(s.state)
                                 : generated_response::run_transpose_cuda(s.state);
   s.record(independent ? generated_response::independent_transpose_contraction_terms
@@ -343,8 +496,10 @@ std::vector<double> DFLambdaActions::parameter(std::string_view name, std::size_
   std::vector<double> values(count);
   Fence fence{s.storage.stream};
   s.clear_error();
-  const auto out = found->run(s.state);
-  s.record(found->work, found->operations);
+  const auto out =
+      s.metrics.df_auxiliary_reduction ? found->staged_run(s.staged) : found->run(s.state);
+  s.record(s.metrics.df_auxiliary_reduction ? found->staged_work : found->work,
+           s.metrics.df_auxiliary_reduction ? found->staged_operations : found->operations);
   s.download(values.data(), out.values, count);
   s.finish();
   fence.complete();
@@ -358,8 +513,17 @@ std::pair<std::vector<double>, std::vector<double>> DFLambdaActions::virtual_fac
       std::vector<double>(checked_mul(s.q, s.n1)), std::vector<double>(checked_mul(s.q, s.vv))};
   Fence fence{s.storage.stream};
   s.clear_error();
+  if (s.metrics.df_auxiliary_reduction) s.core_seeds();
   for (std::size_t Q = 0; Q < s.q; ++Q) {
     s.select(Q);
+    if (s.metrics.df_auxiliary_reduction) {
+      const auto out = generated_response::run_staged_factors_cuda(s.staged);
+      s.record(generated_response::staged_factors_contraction_terms,
+               generated_response::staged_factors_operations);
+      s.download(result.first.data() + Q * s.n1, out.bar_bov, s.n1);
+      s.download(result.second.data() + Q * s.vv, out.bar_bvv, s.vv);
+      continue;
+    }
     const auto out = generated_virtual::run_factor_vjp_accumulate_cuda(s.auxiliary);
     s.record(generated_response::virtual_factor_vjp_contraction_terms,
              generated_virtual::factor_vjp_cuda_operation_count);

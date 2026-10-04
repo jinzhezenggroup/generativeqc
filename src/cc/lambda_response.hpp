@@ -46,6 +46,9 @@ struct LambdaOptions {
   // Right preconditioning changes only Krylov coordinates, never the physical
   // Lambda operator or either residual gate. False retains the original path.
   bool diagonal_preconditioning{true};
+  // Cache immutable DF primal cuts and reverse their reduced graph. Admission
+  // falls back to expanded Q actions when the complete cache does not fit.
+  bool df_auxiliary_reduction{true};
 };
 
 struct LambdaDiagnostic {
@@ -66,6 +69,8 @@ struct LambdaDiagnostic {
   std::size_t preconditioner_actions{};
   // Complete native DF actions, including primal and independent Lambda replay.
   std::size_t df_auxiliary_slices{}, df_contraction_terms{}, df_generated_kernels{};
+  bool df_auxiliary_reduction{};
+  std::size_t df_preparation_calls{}, df_reduced_actions{};
   const char* shared_program_hash{};
   const char* independent_program_hash{};
 };
