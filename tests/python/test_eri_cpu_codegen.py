@@ -130,8 +130,9 @@ def compiled_evaluator(
     generated_source: str, tmp_path_factory: pytest.TempPathFactory
 ) -> ctypes.CDLL:
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("compiled ERI gate requires a C++ compiler")
+    launcher = shutil.which("ccache")
+    if compiler is None or launcher is None:
+        pytest.skip("compiled ERI gate requires a C++ compiler and ccache")
     directory = tmp_path_factory.mktemp("eri_cpu")
     (directory / "generated_eri_cpu.hpp").write_text(generated_source)
     source = directory / "probe.cpp"
@@ -225,6 +226,7 @@ def compiled_evaluator(
     library = directory / "probe.so"
     subprocess.run(
         [
+            launcher,
             compiler,
             "-std=c++20",
             "-O2",
