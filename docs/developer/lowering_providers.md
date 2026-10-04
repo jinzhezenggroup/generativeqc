@@ -76,10 +76,33 @@ consume this adapter, including the actual planned layouts and donation aliases.
 Legacy diagnostic-only requests retain their v1 payload. Typed extended requests
 and candidates use v2 payloads.
 
-The native SCF/DFT, CC/post-HF and GFN production callsite migration, provider
-handle preparation, cuTENSOR and cuBLASLt/CUTLASS registration, and endpoint
-qualification remain in #1886/#1887/#1888/#1889/#1890. This contract does not claim
-those migrations or enable a new scientific precision domain.
+DF-CC iteration and Lambda CUDA matrix schedules now emit typed native
+contraction descriptors through `tensor.native_lowering`. Each descriptor keeps
+the canonical request's scientific, semantic-template and precision identities,
+original einsum labels, runtime operand extents/strides and the physical matrix
+recipe. Representative AOT hashes identify templates; they are not hashes of
+resolved runtime shapes. The native validator checks collapsed matrix axes
+against the semantic labels, including batches and transposes.
+
+`src/tensor/cuda_contraction.cuh` owns preparation, provider resources and typed
+execution. Each stage pre-binds its full and tail batch shapes outside iteration;
+replay checks dtype, shape, device, stream and context generation. The owner
+charges descriptor host storage and the existing conservative provider allowance,
+retains explicit scalar schedule fallback on preparation/allocation failure, and
+audits every matrix result before another kernel can mask a nonfinite value.
+Execution failures propagate without replaying partial work. This native table
+currently rejects graph capture explicitly: graph replay work accounting is not
+yet attached, so counting only capture enqueues would give incorrect diagnostics.
+
+This native slice executes the existing admitted homogeneous arithmetic through
+cuBLAS. The shared dispatcher supports FP32 and FP64 storage/compute/accumulation;
+DF-CC and Lambda still request FP64. It does not yet execute the general
+`LoweringBinding` portfolio or perform joint native precision/provider selection.
+Mixed compute/accumulation, casts and refinement require a complete additional
+candidate; the current adapter rejects them. The RHF frame-response callback,
+conventional RCCSD migration from #1868, DFT, triples precision, other provider
+families and complete endpoint qualification remain in
+#1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
 
 The [decision note](../../.agents/notes/implemented/architecture/2026-10-04-joint-lowering-contract.md)
 records the compatibility and identity rationale.
