@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("diagnostic_type", ("unsigned long", "unsigned long long"))
 def test_df_source_device_capacity_accepts_distinct_unsigned_types(
-    tmp_path: Path, diagnostic_type: str, native_cxx
+    tmp_path: Path, diagnostic_type: str, native_cxx: object
 ) -> None:
     """Compile the DF owner assignment with both LP64 uint64_t conventions."""
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
@@ -47,7 +47,7 @@ int main() {{
 
 @pytest.mark.parametrize("diagnostic_type", ("unsigned long", "unsigned long long"))
 def test_triples_capacity_maximum_accepts_distinct_unsigned_types(
-    tmp_path: Path, diagnostic_type: str, native_cxx
+    tmp_path: Path, diagnostic_type: str, native_cxx: object
 ) -> None:
     source = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
     statement = re.search(
