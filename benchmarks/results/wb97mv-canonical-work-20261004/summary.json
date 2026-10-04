@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "scope": "resident canonical value work census; not endpoint timing",
+  "node": "n1",
+  "job": "5748",
+  "frozen_commit": "591a5395193f9874aa2c7aac9067e2a940e70e63",
+  "source_identity": "5cac4ce02d4527c30728ead85ed089ab28bd6f28f3e019c4f564e22a794f6a3a",
+  "library_sha256": "b05b345c564273e5ece11123b91b0af45cc9de7ebe38243c0792736c985183e4",
+  "probe_sha256": "fe20249dc189dd07da3a27546efc197ce0a952e3af601128b2faa9019dd7d41a",
+  "probe_binary_sha256": "f946b5a93fc665ab9174860ed723a9291fcedcc20b7a718b729f43564043cc66",
+  "basis": "def2-TZVPD",
+  "census": {
+    "atoms": 12,
+    "public_aos": 232,
+    "cartesian_aos": 256,
+    "shells": 96,
+    "actual_candidates": 407065289,
+    "actual_radial_evaluations": 407065289,
+    "lr_actual_candidates": 407065289,
+    "lr_actual_radial_evaluations": 407065289,
+    "flops": null,
+    "orders": [
+      {
+        "order": 0,
+        "candidates": 510202,
+        "admitted_ao_quartets": 510202,
+        "primitive_product_extent": 3603599,
+        "unique_shell_quartets": 510202,
+        "shell_primitive_product_extent": 3603599,
+        "warp_shell_groups": 510202,
+        "warp_primitive_product_extent": 3603599,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          1092,
+          38081,
+          218941,
+          252088
+        ]
+      },
+      {
+        "order": 1,
+        "candidates": 4195946,
+        "admitted_ao_quartets": 4195946,
+        "primitive_product_extent": 23555110,
+        "unique_shell_quartets": 1408663,
+        "shell_primitive_product_extent": 7939809,
+        "warp_shell_groups": 4195930,
+        "warp_primitive_product_extent": 23552230,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          6912,
+          283931,
+          1767147,
+          2137956
+        ]
+      },
+      {
+        "order": 2,
+        "candidates": 16086862,
+        "admitted_ao_quartets": 16086862,
+        "primitive_product_extent": 72067593,
+        "unique_shell_quartets": 1989176,
+        "shell_primitive_product_extent": 8992369,
+        "warp_shell_groups": 14742961,
+        "warp_primitive_product_extent": 64567264,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          28512,
+          1115755,
+          6787824,
+          8154771
+        ]
+      },
+      {
+        "order": 3,
+        "candidates": 38524301,
+        "admitted_ao_quartets": 38524301,
+        "primitive_product_extent": 137786137,
+        "unique_shell_quartets": 1912989,
+        "shell_primitive_product_extent": 6932751,
+        "warp_shell_groups": 33866134,
+        "warp_primitive_product_extent": 117699464,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          79776,
+          2914592,
+          16614573,
+          18915360
+        ]
+      },
+      {
+        "order": 4,
+        "candidates": 65128282,
+        "admitted_ao_quartets": 65128282,
+        "primitive_product_extent": 185747720,
+        "unique_shell_quartets": 1394456,
+        "shell_primitive_product_extent": 4070414,
+        "warp_shell_groups": 54100412,
+        "warp_primitive_product_extent": 149675230,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          175344,
+          5701169,
+          29129024,
+          30122745
+        ]
+      },
+      {
+        "order": 5,
+        "candidates": 82584777,
+        "admitted_ao_quartets": 82584777,
+        "primitive_product_extent": 190329945,
+        "unique_shell_quartets": 800252,
+        "shell_primitive_product_extent": 1903027,
+        "warp_shell_groups": 66151442,
+        "warp_primitive_product_extent": 147276388,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          304272,
+          8773910,
+          38869977,
+          34636618
+        ]
+      },
+      {
+        "order": 6,
+        "candidates": 80687571,
+        "admitted_ao_quartets": 80687571,
+        "primitive_product_extent": 152533106,
+        "unique_shell_quartets": 371275,
+        "shell_primitive_product_extent": 727829,
+        "warp_shell_groups": 61570452,
+        "warp_primitive_product_extent": 111797310,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          425868,
+          10787008,
+          40255188,
+          29219507
+        ]
+      },
+      {
+        "order": 7,
+        "candidates": 61299736,
+        "admitted_ao_quartets": 61299736,
+        "primitive_product_extent": 96761495,
+        "unique_shell_quartets": 140155,
+        "shell_primitive_product_extent": 230328,
+        "warp_shell_groups": 44696002,
+        "warp_primitive_product_extent": 67624259,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          471024,
+          10487366,
+          32260503,
+          18080843
+        ]
+      },
+      {
+        "order": 8,
+        "candidates": 35957158,
+        "admitted_ao_quartets": 35957158,
+        "primitive_product_extent": 48371977,
+        "unique_shell_quartets": 42986,
+        "shell_primitive_product_extent": 60344,
+        "warp_shell_groups": 22287454,
+        "warp_primitive_product_extent": 28726861,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          409584,
+          7981744,
+          19584119,
+          7981711
+        ]
+      },
+      {
+        "order": 9,
+        "candidates": 15939546,
+        "admitted_ao_quartets": 15939546,
+        "primitive_product_extent": 18809748,
+        "unique_shell_quartets": 10448,
+        "shell_primitive_product_extent": 12660,
+        "warp_shell_groups": 8596033,
+        "warp_primitive_product_extent": 9847424,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          270240,
+          4595855,
+          8625439,
+          2448012
+        ]
+      },
+      {
+        "order": 10,
+        "candidates": 5027515,
+        "admitted_ao_quartets": 5027515,
+        "primitive_product_extent": 5344507,
+        "unique_shell_quartets": 2027,
+        "shell_primitive_product_extent": 2231,
+        "warp_shell_groups": 1904301,
+        "warp_primitive_product_extent": 2008839,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          129180,
+          1873073,
+          2550057,
+          475205
+        ]
+      },
+      {
+        "order": 11,
+        "candidates": 1022668,
+        "admitted_ao_quartets": 1022668,
+        "primitive_product_extent": 1022668,
+        "unique_shell_quartets": 258,
+        "shell_primitive_product_extent": 258,
+        "warp_shell_groups": 254188,
+        "warp_primitive_product_extent": 254188,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          39600,
+          470614,
+          460438,
+          52016
+        ]
+      },
+      {
+        "order": 12,
+        "candidates": 100725,
+        "admitted_ao_quartets": 100725,
+        "primitive_product_extent": 100725,
+        "unique_shell_quartets": 28,
+        "shell_primitive_product_extent": 28,
+        "warp_shell_groups": 13215,
+        "warp_primitive_product_extent": 13215,
+        "ao_quartets_by_unique_atoms": [
+          0,
+          6160,
+          55973,
+          33830,
+          4762
+        ]
+      }
+    ]
+  },
+  "aggregates": {
+    "all": {
+      "candidates": 407065289,
+      "admitted_ao_quartets": 407065289,
+      "primitive_product_extent": 936034330,
+      "unique_shell_quartets": 8582915,
+      "shell_primitive_product_extent": 34475647,
+      "warp_shell_groups": 312888726,
+      "warp_primitive_product_extent": 726646271,
+      "shell_preparation_reuse_bound": 27.15059502726664,
+      "current_warp_preparation_reuse_bound": 1.288156792866828
+    },
+    "orders5-8": {
+      "candidates": 260529242,
+      "admitted_ao_quartets": 260529242,
+      "primitive_product_extent": 487996523,
+      "unique_shell_quartets": 1354668,
+      "shell_primitive_product_extent": 2921528,
+      "warp_shell_groups": 194705350,
+      "warp_primitive_product_extent": 355424818,
+      "shell_preparation_reuse_bound": 167.03468972400745,
+      "current_warp_preparation_reuse_bound": 1.372995070366752
+    }
+  },
+  "flops": null,
+  "force_work": null,
+  "dynamic_traffic": null,
+  "complete_endpoint_seconds": null,
+  "speedup": null,
+  "evidence_sha256": "8c66ae91f2dc297680c4428c7de249df1e6e55f567f9fc1fdbcb336614e62ed4",
+  "failed_attempts": {
+    "5746": "Host-vector J/K calls the independent public-AO kernel and does not write the canonical counter. Its uninitialized borrowed counter cannot establish a census.",
+    "5747": "The resident enqueue rejected the HF helper default derivative_order=1. The corrected probe explicitly requests derivative_order=0 and preserves the dimension guard."
+  }
+}

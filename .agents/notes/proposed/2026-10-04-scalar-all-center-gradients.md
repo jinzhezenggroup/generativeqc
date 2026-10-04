@@ -88,6 +88,18 @@ must compare same-binary off/on cold and five warm samples, keep other force
 experiments off, and include a larger point before any default promotion.
 Cold speedup, warm speedup and GPU resource improvement are currently unknown.
 
+The frozen implementation has now passed the retained canonical-value and
+range-force GPU regressions, the through-f response regression, and its
+independent scalar-force gate on n1 RTX 5090 Slurm 5744. The actual alternative
+consumer counts are order7/full = 37,008, order7/LR = 37,008, order8/full =
+54,960 and order8/LR = 54,960. These count contracted derivatives in the
+qualification fixtures, not the molecular workload or FLOPs. Compute Sanitizer
+memcheck and initcheck repeat that gate with zero errors, and all eight selected
+checkpoint policy cases pass. Complete off/on cold/warm/displaced measurements
+are now admitted and running; endpoint results remain pending. Raw logs
+and the Slurm, source and binary receipts are retained under
+`.artifacts/scalar-center-gradient-20261004/qualification/5744/`.
+
 ## Linked resource observation before endpoint qualification
 
 The n2 Release/sm_120 build completed with 453 ccache compiler commands. Its
