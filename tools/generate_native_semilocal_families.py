@@ -12,7 +12,19 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
 PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
-SCHEMA = "generativeqc.native-semilocal-families.v1"
+SCHEMA = "generativeqc.native-semilocal-families.v2"
+FAST_PATH_FIELDS = (
+    "component_scaling",
+    "mixed_ao_precision",
+    "mixed_density_precision",
+    "response",
+    "graph_replay",
+)
+FAST_PATH_STATUS_CPP = {
+    "unavailable": "CudaXcCapability::Unavailable",
+    "qualification-required": "CudaXcCapability::QualificationRequired",
+    "qualified": "CudaXcCapability::Qualified",
+}
 
 
 def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
@@ -33,6 +45,12 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
     allowed_exchange = {"none", "any", "canonical"}
     allowed_stationary_kernels = {"lda", "pbe", "r2scan", "composed", "wb97mv"}
     for item in families:
+        fast_paths = item.get("cuda_fast_paths")
+        if not isinstance(fast_paths, dict) or set(fast_paths) != set(FAST_PATH_FIELDS):
+            raise ValueError("native semilocal CUDA fast-path capability census is incomplete")
+        for field in FAST_PATH_FIELDS:
+            if fast_paths[field] not in FAST_PATH_STATUS_CPP:
+                raise ValueError(f"unsupported CUDA fast-path status for {field}")
         components = item.get("components")
         if not isinstance(components, list) or not 1 <= len(components) <= 4:
             raise ValueError("native semilocal family requires 1-4 components")
@@ -70,6 +88,12 @@ def _cpp_number(value: str) -> str:
     return repr(float(Fraction(value)))
 
 
+def cpp_fast_path_capabilities(item: dict[str, Any]) -> str:
+    return ", ".join(
+        FAST_PATH_STATUS_CPP[item["cuda_fast_paths"][field]] for field in FAST_PATH_FIELDS
+    )
+
+
 def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
     families = load_manifest() if families is None else families
     enum_rows = "\n".join(f"  {item['symbol']} = {item['code']}," for item in families)
@@ -94,6 +118,7 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
                     f"     {'true' if item['requires_gradient'] else 'false'},",
                     f"     {'true' if item['requires_tau'] else 'false'},",
                     f"     {'true' if item['stationary_ecp_gradient'] else 'false'},",
+                    f"     {{{cpp_fast_path_capabilities(item)}}},",
                     f"     {{{ids_cpp}}},",
                     f"     {{{coeffs_cpp}}},",
                     f"     {len(component_ids)}U,",
@@ -118,6 +143,8 @@ def emit_cpp(families: tuple[dict[str, Any], ...] | None = None) -> str:
 #include <cstdint>
 #include <stdexcept>
 
+#include "dft/xc_capabilities.hpp"
+
 namespace generativeqc::dft {{
 
 /** Native curated semilocal execution identity shared by CPU and CUDA KS.
@@ -138,6 +165,7 @@ struct SemilocalFamilyMetadata {{
   bool requires_gradient;
   bool requires_tau;
   bool stationary_ecp_gradient;
+  CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
   std::uint32_t component_count;
@@ -145,9 +173,11 @@ struct SemilocalFamilyMetadata {{
   bool component_coefficients_are_native_scales;
 }};
 
+// clang-format off
 inline constexpr std::array<SemilocalFamilyMetadata, {len(families)}> kSemilocalFamilyMetadata{{{{
 {record_text}
 }}}};
+// clang-format on
 
 constexpr std::uint32_t semilocal_family_code(SemilocalFamily family) noexcept {{
   return static_cast<std::uint32_t>(family);

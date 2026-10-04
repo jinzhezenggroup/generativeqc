@@ -23,6 +23,19 @@ MGGA_CODE_BASE = 0x20000
 PYTHON_OUTPUT = (
     ROOT / "python" / "generativeqc_compiler" / "xc" / "_generated_split_hybrids.py"
 )
+SPLIT_HYBRID_FAST_PATH_STATUSES = (
+    "unavailable",
+    "qualification-required",
+    "qualification-required",
+    "unavailable",
+    "qualification-required",
+)
+
+
+def split_hybrid_fast_path_statuses(entry: dict[str, object]) -> tuple[str, ...]:
+    if entry.get("family") not in {"gga", "mgga"}:
+        raise MapleImportError("unsupported split-hybrid CUDA point-program family")
+    return SPLIT_HYBRID_FAST_PATH_STATUSES
 
 
 def _manifest_methods(path: Path = MANIFEST) -> tuple[str, ...]:
@@ -101,6 +114,17 @@ def registry_entries(path: Path = MANIFEST) -> tuple[dict[str, object], ...]:
 
 def emit_registry(path: Path = MANIFEST) -> str:
     entries = registry_entries(path)
+    status_cpp = {
+        "unavailable": "Unavailable",
+        "qualification-required": "QualificationRequired",
+        "qualified": "Qualified",
+    }
+    split_fast_paths = split_hybrid_fast_path_statuses(entries[0])
+    if any(split_hybrid_fast_path_statuses(entry) != split_fast_paths for entry in entries[1:]):
+        raise MapleImportError("split-hybrid CUDA point programs disagree on fast-path status")
+    split_fast_path_cpp = ",\n".join(
+        f"          CudaXcCapability::{status_cpp[status]}" for status in split_fast_paths
+    )
     code_constants = "\n".join(
         f"inline constexpr std::uint32_t k{entry['type_name'].removesuffix('DeviceValue')}FunctionalCode = "
         f"0x{entry['code']:x}U;"
@@ -169,6 +193,7 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "// Generated from manifests/cuda_split_hybrids.json; do not edit.",
             "#pragma once",
             "#include <cstdint>",
+            '#include "dft/xc_capabilities.hpp"',
             "#if !defined(__CUDA_ARCH__)",
             "#include <string_view>",
             "#endif",
@@ -207,6 +232,13 @@ def emit_registry(path: Path = MANIFEST) -> str:
             "    default:",
             "      return false;",
             "  }",
+            "}",
+            "inline constexpr CudaXcFastPathCapabilities split_hybrid_fast_path_capabilities(",
+            "    std::uint32_t functional) noexcept {",
+            "  if (!split_hybrid_registered(functional)) return {};",
+            "  return {",
+            split_fast_path_cpp,
+            "  };",
             "}",
             "struct SplitHybridComposition {",
             "  std::uint32_t exact_exchange_numerator{};",
