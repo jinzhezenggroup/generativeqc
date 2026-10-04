@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call
@@ -28,6 +29,33 @@ def test_qualified_mgga_reaches_native_state_admission(
             state, None, compiler=None, cache=tmp_path / "not-created"
         )
     assert not (tmp_path / "not-created").exists()
+
+
+@pytest.mark.parametrize(
+    ("atoms", "selection", "expected"),
+    [
+        (24, None, False),
+        (47, None, False),
+        (48, None, True),
+        (96, None, True),
+        (24, True, True),
+        (96, False, False),
+    ],
+)
+def test_phased_becke_policy_defaults_only_in_measured_large_domain(
+    atoms: int, selection: bool | None, expected: bool
+) -> None:
+    from generativeqc import _stationary_cuda as runtime
+
+    assert runtime._resolve_phased_becke_policy(atoms, selection) is expected
+
+
+@pytest.mark.parametrize("selection", [0, 1, "auto"])
+def test_phased_becke_policy_rejects_non_boolean_explicit_values(selection) -> None:
+    from generativeqc import _stationary_cuda as runtime
+
+    with pytest.raises(TypeError, match="boolean or None"):
+        runtime._resolve_phased_becke_policy(96, selection)
 
 
 def test_source_owner_validates_spin_storage_and_packs_ao_indices(
@@ -163,15 +191,26 @@ def test_weight_fusion_orchestration_runs_without_a_device(
     cache_bytes: int,
     allocation_delta: int,
     rejected: bool,
-    native: str = "off",
+    phase_case: str = "disabled",
 ) -> None:
     from generativeqc import _stationary_cuda as runtime
 
-    native_required = native != "off"
-    if native_required:
-        monkeypatch.setattr(
-            runtime, "stationary_cuda_requires_native_integrals", lambda **_: True
+    planned_phase_bytes = 1024 if phase_case != "disabled" else 0
+    actual_phase_bytes = 1024 if phase_case == "retained" else 0
+    if phase_case == "mismatch":
+        actual_phase_bytes = 1023
+    allocation_delta += actual_phase_bytes - planned_phase_bytes
+    original_plan = runtime.plan_stationary_cuda_resources
+
+    def phase_plan(**arguments: object) -> object:
+        planned = original_plan(**arguments)
+        return replace(
+            planned,
+            phased_becke_bytes=planned_phase_bytes,
+            allocation_bytes=planned.allocation_bytes + planned_phase_bytes,
         )
+
+    monkeypatch.setattr(runtime, "plan_stationary_cuda_resources", phase_plan)
     contract = SimpleNamespace(
         family="lda", spin="unpolarized", validate=lambda state: state
     )
@@ -212,7 +251,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             np.array([[1.0, 1.0]]),
             np.array([[0, 0, 1, 1, 0, 0, 0, 1.0]], dtype=float),
             ((("", 1.0),),),
-            (("nuclear", ()),),
+            (),
         ),
     )
     monkeypatch.setattr(
@@ -231,13 +270,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             metadata={"binary_sha256": f"{name}-sha", "key": f"{name}-key"},
         )
 
-    emitted = []
-
-    def emit(requests: object) -> str:
-        emitted.append(requests)
-        return "cuda"
-
-    monkeypatch.setattr(runtime, "emit_first_derivative_cuda", emit)
+    monkeypatch.setattr(runtime, "emit_first_derivative_cuda", lambda _requests: "cuda")
     monkeypatch.setattr(
         runtime, "compile_stationary_cuda", lambda *_a, **_k: artifact("stationary")
     )
@@ -268,6 +301,7 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
     owner = MagicMock()
     owner.__enter__.return_value = owner
+    owner.phased_becke_supported = phase_case != "old-abi"
     owner.borrowed_streams = set()
     owner.finish.return_value = {
         name: np.zeros((2, 3)) for name in runtime._SOURCE_NAMES
@@ -290,7 +324,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         timeline: object = None,
         profile_device: bool = False,
         source_names: tuple[str, ...] = runtime._SOURCE_NAMES,
-        integral_derivatives: bool = True,
     ) -> MagicMock:
         assert timeline is not None
         assert profile_device is False
@@ -298,13 +331,17 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         admitted["budget"] = budget
         admitted["spin_blocks"] = spin_blocks
         admitted["page_work_budget"] = page_work_budget
-        assert integral_derivatives is (not native_required or aot)
         return owner
 
     monkeypatch.setattr(runtime, "_CudaSources", make_owner)
     owner.metrics.side_effect = lambda: {
         "owned_device_bytes": admitted["budget"] + allocation_delta,
         "center_geometry_bytes": cache_bytes,
+        **(
+            {"phased_becke_bytes": actual_phase_bytes}
+            if phase_case not in ("old-abi", "missing-supported", "disabled")
+            else {}
+        ),
         "h2d_bytes": 0,
         "d2h_bytes": 0,
         "launches": 1,
@@ -364,10 +401,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         source.cuda_resident_grid = lambda: SimpleNamespace(
             device=0, point_count=4, points=1024, weights=2048, atomic_weights=3072
         )
-    if native_required:
-        source.cuda_integral_derivatives = MagicMock(
-            return_value=(np.zeros((4, 2, 3)), {}) if native == "complete" else None
-        )
     state = SimpleNamespace(
         identity=SimpleNamespace(
             basis_identity="basis", geometry_identity="geom", method="lda-rks"
@@ -393,25 +426,16 @@ def test_weight_fusion_orchestration_runs_without_a_device(
             primitive_tile=16,
         )
 
-    if native == "unavailable":
-        with pytest.raises(NotImplementedError, match="cannot use AO-task fallback"):
-            execute()
-        owner.integral_page.assert_not_called()
-        owner.reduced.assert_not_called()
-        owner.geometry.assert_not_called()
-        return
     if rejected:
-        with pytest.raises(
-            RuntimeError, match="allocation disagrees with admitted bytes"
-        ):
+        message = (
+            "stationary phase allocation metrics missing"
+            if phase_case == "missing-supported"
+            else "allocation disagrees with admitted bytes"
+        )
+        with pytest.raises(RuntimeError, match=message):
             execute()
         return
     result = execute()
-    assert result.work["primitive_integral_roots_retained"] is (
-        not native_required or aot
-    )
-    if native_required and not aot:
-        assert emitted == [(("nuclear", ()),)]
     assert result.work["owned_device_bytes"] == admitted["budget"] + allocation_delta
     assert result.work["center_geometry_bytes"] == cache_bytes
     if resident_grid:
@@ -431,14 +455,6 @@ def test_weight_fusion_orchestration_runs_without_a_device(
         assert result.work["grid_point_h2d_bytes"] == 96
         assert result.work["grid_weight_h2d_bytes"] == 32
 
-    if native_required:
-        owner.reset.assert_not_called()
-        owner.reset_geometry.assert_called_once_with(1.0e-12)
-        owner.integral_page.assert_not_called()
-        owner.nuclear.assert_called_once()
-        owner.reduced.assert_called_once()
-        assert result.work["stationary_task_executor"]["sources"] == ()
-        return
     owner.reset.assert_called_once_with(1.0e-12, state.density, state.weighted_density)
     assert admitted["spin_blocks"] == 1
     assert owner.integral_page.call_args_list == [
@@ -474,12 +490,28 @@ def test_weight_fusion_orchestration_runs_without_a_device(
 
 
 @pytest.mark.parametrize("aot", (False, True))
-@pytest.mark.parametrize("native", ("complete", "unavailable"))
-def test_required_native_pruning_preserves_nuclear_and_rejects_failed_producer(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, aot: bool, native: str
+@pytest.mark.parametrize("resident_grid", (False, True))
+@pytest.mark.parametrize(
+    "phase_case",
+    ("retained", "allocation-fallback", "old-abi", "mismatch", "missing-supported"),
+)
+def test_optional_phase_allocation_accounting(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    aot: bool,
+    resident_grid: bool,
+    phase_case: str,
 ) -> None:
+    """Admission is conservative; verify actual storage without zero-filling work."""
     test_weight_fusion_orchestration_runs_without_a_device(
-        monkeypatch, tmp_path, aot, False, 48, 0, False, native=native
+        monkeypatch,
+        tmp_path,
+        aot,
+        resident_grid,
+        48,
+        0,
+        phase_case in ("mismatch", "missing-supported"),
+        phase_case,
     )
 
 
