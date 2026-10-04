@@ -19,6 +19,7 @@ from generativeqc_compiler.cc.occupied_triples import (
     inverse,
     moment_program,
     v_scalar_program,
+    w_fp32_candidate_program,
 )
 from generativeqc_compiler.cc.occupied_triples_fock import (
     moment_program as fock_moment_program,
@@ -34,6 +35,7 @@ from generativeqc_compiler.cc.occupied_triples_response import (
     scaled_denominator_vjp,
 )
 from generativeqc_compiler.cc.triples import _LABELS, VP
+from generativeqc_compiler.tensor import describe_precision
 from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -72,8 +74,13 @@ def _gemm(
     this contraction, since one cube can be [ab,c] in W1 and [a,bc] in W2.
     """
     g = gemm_contract(node)
-    if g is None or g.batch_labels or g.coefficient != 1 or g.dtype != "float64":
-        raise ValueError("occupied triples require unbatched unit FP64 products")
+    if (
+        g is None
+        or g.batch_labels
+        or g.coefficient != 1
+        or g.dtype not in ("float32", "float64")
+    ):
+        raise ValueError("occupied triples require unbatched unit real products")
     a, b, c, m, n, k = (
         g.a_labels,
         g.b_labels,
@@ -90,6 +97,10 @@ def _gemm(
         operand = raw_operand
         while operand.op == "add" and len(operand.inputs) == 1:
             scale *= Fraction(*operand.attrs["coefficients"][0])
+            operand = operand.inputs[0]
+        while operand.op == "cast":
+            if operand.attrs["dtype"] != g.dtype:
+                raise ValueError("occupied triples cast does not match GEMM precision")
             operand = operand.inputs[0]
         if operand.op != "input":
             raise ValueError(
@@ -478,10 +489,28 @@ def fock_cuda_source() -> str:
 def header() -> str:
     panel = df_panel_program(3, 4)
     moments = moment_program(2, 3)
+    mixed_moments = w_fp32_candidate_program(2, 3)
+    mixed_schedule = describe_precision(mixed_moments)
     scalar, v_scalar = energy_scalar_program(), v_scalar_program()
     w = moments.outputs["w"]
+    mixed_w = mixed_moments.outputs["w"]
     if w.op != "add" or len(w.inputs) != 2:
         raise ValueError("occupied W seed must contain two audited products")
+    if mixed_w.op != "add" or len(mixed_w.inputs) != 2:
+        raise ValueError("mixed occupied W seed must retain the FP64 W sum")
+    mixed_products = []
+    for value in mixed_w.inputs:
+        if (
+            value.op != "cast"
+            or value.spec.dtype != "float64"
+            or len(value.inputs) != 1
+            or value.inputs[0].op != "einsum"
+            or value.inputs[0].spec.dtype != "float32"
+        ):
+            raise ValueError("mixed occupied W seed must cast two FP32 reductions to FP64")
+        mixed_products.append(value.inputs[0])
+    if mixed_w.attrs["coefficients"] != w.attrs["coefficients"]:
+        raise ValueError("mixed occupied W coefficients differ from the strict equation")
     weights = w.attrs["coefficients"]
     coefficient = lambda pair: f"({pair[0]}.0/{pair[1]}.0)"
     lines = [
@@ -502,6 +531,8 @@ def header() -> str:
         "  std::size_t n=1; for (auto x:xs) n=checked_mul(n,x); return n; }",
         f'inline constexpr const char* panel_hash="{panel.logical_hash}";',
         f'inline constexpr const char* moment_hash="{moments.logical_hash}";',
+        f'inline constexpr const char* w_fp32_precision_schedule_identity="{mixed_schedule.identity}";',
+        f'inline constexpr const char* w_fp32_precision_request_identity="{mixed_schedule.request_identity}";',
         f'inline constexpr const char* epilogue_hash="{scalar.logical_hash}";',
         "inline constexpr unsigned permutations[6][3]={"
         + ",".join("{" + ",".join(map(str, p)) + "}" for p in PERMUTATIONS)
@@ -534,6 +565,29 @@ def header() -> str:
             coefficient(weights[1]),
             "1.0",
         ),
+        "}",
+        "template<class Gemm,class Accumulate> void build_w_fp32(std::size_t o,std::size_t v,",
+        "  std::size_t i,std::size_t j,std::size_t k,const float* ovoo,const float* t2,",
+        "  const float* panel,float* scratch,double* output,Gemm&& gemm,Accumulate&& accumulate) {",
+        _gemm(
+            mixed_products[0],
+            {"panel": ("panel", "v"), "t2_kj": ("t2+(k*o+j)*v*v", "v")},
+            "1.0",
+            "0.0",
+            output_pointer="scratch",
+        ),
+        f"accumulate(scratch,checked_product({{v,v,v}}),{coefficient(weights[0])},0.0,output);",
+        _gemm(
+            mixed_products[1],
+            {
+                "ovoo_ij": ("ovoo+(i*v*o+j)*o", "o*o"),
+                "t2_mk": ("t2+k*v*v", "o*v*v"),
+            },
+            "1.0",
+            "0.0",
+            output_pointer="scratch",
+        ),
+        f"accumulate(scratch,checked_product({{v,v,v}}),{coefficient(weights[1])},1.0,output);",
         "}",
     ]
     for program, name in ((v_scalar, "v_element"), (scalar, "energy_element")):
