@@ -26,9 +26,10 @@ from tools.generate_rccsd_native import (
     _prepare_production,
     iteration_program,
 )
+from tools.generate_rhf_frame_response import programs as rhf_frame_programs
 
 
-def test_native_projection_validates_every_cc_recipe(tmp_path: Path) -> None:
+def test_native_projection_validates_cc_and_rhf_recipes(tmp_path: Path) -> None:
     """Validate semantic modes against matrix recipes at nonrepresentative sizes.
 
     Equal element counts would miss many transpose/batch mistakes. Compile the
@@ -44,6 +45,7 @@ def test_native_projection_validates_every_cc_recipe(tmp_path: Path) -> None:
         conventional,
         *packed_programs().values(),
         *matrix_programs().values(),
+        *rhf_frame_programs().values(),
     ):
         adapter = TensorLoweringAdapter(program)
         for node in program.live_nodes:
@@ -80,7 +82,7 @@ def test_native_projection_validates_every_cc_recipe(tmp_path: Path) -> None:
         "std::size_t value=1; for(auto n:factors) value=generativeqc::tensor::contraction_product(value,n); return value;}\n"
         "int main(){\n"
         "for(std::size_t o:{1,2,4}) for(std::size_t v:{1,3,7}) for(std::size_t q:{1,2,5}){\n"
-        "const std::vector<generativeqc::tensor::ContractionRequest> requests{\n"
+        "const auto n=o+v; const std::vector<generativeqc::tensor::ContractionRequest> requests{\n"
         + ",\n".join(requests)
         + "};\n"
         "for(const auto& request:requests) request.validate();\n"

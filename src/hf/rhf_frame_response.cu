@@ -9,7 +9,6 @@
 #include "hf/rhf_frame_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
-#include "runtime/allocation_measurement.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "scf/cuda_direct_jk_device.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
@@ -18,11 +17,10 @@
 namespace generativeqc::hf {
 namespace {
 namespace maps = scf::generated::rhf_frame;
-using generativeqc_tensor::blas_check;
 using posthf::checked_add;
 using posthf::checked_mul;
 using runtime::cuda_resource_check;
-constexpr std::size_t kProviderAllowance = 96ULL << 20;
+constexpr auto kProviderAllowance = tensor::CudaContractionContext::kProviderAllowance;
 constexpr double kReferenceTolerance = 1e-8;
 constexpr double kStationarityTolerance = 1e-8;
 constexpr double kResidualTolerance = 1e-10;
@@ -47,22 +45,14 @@ struct DirectDelete {
     scf::destroy_cuda_direct_jk_plan(plan);
   }
 };
-struct Blas {
-  cublasHandle_t handle{};
-  cudaStream_t stream{};
-  ~Blas() {
-    if (stream) (void)cudaStreamSynchronize(stream);
-    if (handle) (void)cublasDestroy(handle);
-  }
-};
 struct FailureDrain {
   cudaStream_t stream;
   ~FailureDrain() {
     if (stream) (void)cudaStreamSynchronize(stream);
   }
 };
-// Every BLAS result is audited before arena reuse; later zeros cannot mask
-// nonfinite intermediates. The flag is sticky across both AD stages and J/K.
+// Audit the composed exact J/K result. Shared contraction execution audits
+// its own intermediates before reuse; both paths retain the same sticky flag.
 __global__ void audit(const double* data, std::size_t count, int* error) {
   for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
        i += std::size_t(gridDim.x) * blockDim.x)
@@ -83,9 +73,8 @@ unsigned blocks(std::size_t count) {
  */
 class Owner {
  public:
-  Owner(const core::System& system, const PhysicalReference& ref, int device,
-        const RHFFrameResponseOptions& options, RHFFrameResponseResult& diagnostic,
-        std::size_t direct_budget, std::size_t arena_elements)
+  Owner(const core::System& system, const PhysicalReference& ref, int device, bool prepare,
+        RHFFrameResponseResult& diagnostic, std::size_t direct_budget, std::size_t arena_elements)
       : n(ref.nbf),
         o(ref.nocc),
         v(n - o),
@@ -161,32 +150,20 @@ class Owner {
     // Protect constructor-local upload sources even when a later setup fails.
     drain();
     upload_fence.stream = nullptr;
-    if (options.matrix_blas) {
-      std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
-      std::size_t before = 0, after = 0, total = 0;
-      cuda_resource_check(cudaMemGetInfo(&before, &total));
-      blas.stream = stream;
-      blas_check(cublasCreate(&blas.handle));
-      cuda_resource_check(cudaMemGetInfo(&after, &total));
-      require(before <= after || before - after <= kProviderAllowance,
-              "RHF BLAS provider exceeded admitted allowance");
-      blas_check(cublasSetStream(blas.handle, stream));
-      blas_check(cublasSetPointerMode(blas.handle, CUBLAS_POINTER_MODE_HOST));
-      blas_check(cublasSetWorkspace(blas.handle, nullptr, 0));
-      state.gemm = [&](char ta, char tb, std::size_t m, std::size_t cols, std::size_t inner,
-                       double alpha, const double* a, const double* b, double* output) {
-        const double beta = 0.0;
-        // Row-major C=A*B equals column-major C^T=B^T*A^T.
-        blas_check(cublasDgemm(blas.handle, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-                               ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, int(cols), int(m), int(inner),
-                               &alpha, b, int(tb == 'N' ? cols : inner), a,
-                               int(ta == 'N' ? inner : m), &beta, output, int(cols)));
-        audit<<<blocks(m * cols), 256, 0, stream>>>(output, m * cols, state.error);
-        cuda_resource_check(cudaGetLastError());
-        ++stats.gemms;
-      };
+    if (prepare && contractions.prepare(stream)) {
+      state.contractions = contraction_tables.data();
+      maps::prepare_contractions(state, contractions, stats.gemms,
+                                 stats.prepared_contraction_summands);
+      stats.prepared_contractions = true;
+      stats.owned_device_bytes = checked_add(stats.owned_device_bytes, kProviderAllowance);
+    } else {
+      // Budget or optional setup rejection retains the complete original CUDA
+      // traversal. Driver/arithmetic failures still propagate from preparation.
+      stats.numeric_capacity_bytes -= stats.contraction_binding_bytes;
+      stats.contraction_binding_bytes = 0;
     }
   }
+
   void upload(double* target, std::span<const double> source) {
     cuda_resource_check(cudaMemcpyAsync(target, source.data(), source.size_bytes(),
                                         cudaMemcpyHostToDevice, stream));
@@ -297,8 +274,8 @@ class Owner {
         d_rotation[i * n + o + a] = x[i * v + a];
         d_rotation[(o + a) * n + i] = -x[i * v + a];
       }
-    auto blas_callback = state.gemm;
-    if (scalar) state.gemm = {};
+    auto* bindings = state.contractions;
+    if (scalar) state.contractions = nullptr;
     try {
       begin();
       upload(direction, d_rotation);
@@ -309,10 +286,10 @@ class Owner {
       std::copy(y.begin(), y.end(), output.begin());
     } catch (...) {
       (void)cudaStreamSynchronize(stream);
-      state.gemm = std::move(blas_callback);
+      state.contractions = bindings;
       throw;
     }
-    state.gemm = std::move(blas_callback);
+    state.contractions = bindings;
     ++stats.orbital_actions;
     stats.contraction_terms += maps::density_direction_contraction_terms(o, v) +
                                maps::orbital_action_contraction_terms(o, v);
@@ -345,7 +322,8 @@ class Owner {
   int device;
   RHFFrameResponseResult& stats;
   std::unique_ptr<scf::CudaDirectJkPlan, DirectDelete> direct;
-  Blas blas;
+  tensor::CudaContractionContext contractions;
+  std::array<tensor::PreparedContractions, maps::prepared_stages> contraction_tables;
   runtime::OwnedCudaBuffer<double> storage;
   runtime::OwnedCudaBuffer<int> error;
   cudaStream_t stream{};
@@ -409,15 +387,17 @@ RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
       checked_add(checked_mul(4, source), checked_add(bytes(checked_mul(16, nn)), 1ULL << 20));
   total = checked_add(total, checked_mul(2, derivative_budget));
   total = checked_add(total, zplan.workspace_bytes);
-  if (options.matrix_blas) total = checked_add(total, kProviderAllowance);
   if (total > options.maximum_bytes)
     throw std::length_error("RHF frame response exceeds complete numeric budget");
   RHFFrameResponseResult result;
-  result.numeric_capacity_bytes = total;
-  result.matrix_blas = options.matrix_blas;
+  const auto binding_bytes = checked_add(kProviderAllowance, maps::prepared_host_bytes());
+  const bool prepare =
+      maps::prepared_dimensions_fit(o, v) && binding_bytes <= options.maximum_bytes - total;
+  result.contraction_binding_bytes = prepare ? binding_bytes : 0;
+  result.numeric_capacity_bytes = checked_add(total, result.contraction_binding_bytes);
   result.operator_hash = maps::orbital_action_hash;
   runtime::CudaDeviceScope device_scope(device);
-  Owner owner(system, ref, device, options, result, direct_bound, arena);
+  Owner owner(system, ref, device, prepare, result, direct_bound, arena);
   owner.reference_audit(ref);
   std::vector<double> seed(bar_f.begin(), bar_f.end());
   owner.weights(seed, bar_c);

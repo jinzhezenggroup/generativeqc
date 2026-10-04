@@ -104,7 +104,7 @@ def run(
     dp = ct.POINTER(ct.c_double)
     feeds = (dp * 8)(*(a.ctypes.data_as(dp) for a in [*arrays, *sources]))
     destinations = (dp * 6)(*(a.ctypes.data_as(dp) for a in output))
-    counts, values = np.zeros(12, dtype=np.uintp), np.zeros(3)
+    counts, values = np.zeros(15, dtype=np.uintp), np.zeros(3)
     error = ct.create_string_buffer(1024)
     with NativeSource(**source_arguments(metadata)) as source:
         status = probe(
@@ -144,6 +144,9 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     np.testing.assert_allclose(output[2], expected_pulay, atol=3e-9, rtol=3e-10)
     assert counts[2] == 3 and counts[9] == 0 and counts[11] == 0
     assert bool(counts[4]) == blas
+    assert bool(counts[12]) == blas
+    assert bool(counts[13]) == blas and bool(counts[14]) == blas
+    assert counts[14] <= counts[5]
     assert max(values) < 1e-8
     assert n > o
 
@@ -199,8 +202,21 @@ def test_admission_reference_and_stationarity_fail_without_publication(
     budget = int(counts[0])
     success = run(probe, metadata, arrays, sources, budget=budget)
     assert success[0] == 0, success[1]
+    assert success[3][12] == 1 and success[3][13] > 96 << 20
     for actual, want in zip(success[2], expected, strict=True):
         np.testing.assert_allclose(actual, want, atol=1e-11, rtol=1e-11)
+    # One byte below the optional table/provider reservation keeps the complete
+    # scalar response and its independent final residual; only its own floor fails.
+    fallback = run(probe, metadata, arrays, sources, budget=budget - 1)
+    assert fallback[0] == 0, fallback[1]
+    assert fallback[3][4] == 0 and fallback[3][0] < budget - 1
+    assert not np.any(fallback[3][12:])
+    assert counts[0] - fallback[3][0] == counts[13]
+    for actual, want in zip(fallback[2], expected, strict=True):
+        np.testing.assert_allclose(actual, want, atol=1e-11, rtol=1e-11)
+    scalar_budget = int(fallback[3][0])
+    exact_scalar = run(probe, metadata, arrays, sources, budget=scalar_budget)
+    assert exact_scalar[0] == 0 and exact_scalar[3][4] == 0, exact_scalar[1]
     changed = [a.copy() for a in arrays]
     changed[2][0, 0] += 1e-3
     bad_sources = [a.copy() for a in sources]
@@ -208,7 +224,7 @@ def test_admission_reference_and_stationarity_fail_without_publication(
     nan_sources = [a.copy() for a in sources]
     nan_sources[0][0, 0] = np.nan
     for data, seed, kwargs in (
-        (arrays, sources, {"budget": budget - 1}),
+        (arrays, sources, {"budget": scalar_budget - 1}),
         (changed, sources, {}),
         (arrays, bad_sources, {}),
         (arrays, nan_sources, {}),

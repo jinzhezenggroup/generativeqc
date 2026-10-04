@@ -15,14 +15,13 @@ struct System;
 namespace generativeqc::hf {
 
 /** Internal physical-RHF response controls. Scalar CUDA is a bounded fallback
- * for BLAS storage and an independent lowering audit, never a CPU fallback.
+ * for prepared resources and an independent lowering audit, never a CPU fallback.
  * Disabling orbital relaxation exposes fixed-frame metric/nuclear weights for
  * validation; such results are not stationary molecular gradients.
  */
 struct RHFFrameResponseOptions {
   std::size_t maximum_bytes{512ULL << 20};
   std::size_t caller_bytes{};
-  bool matrix_blas{true};
   bool relax_orbitals{true};
   response::GmresOptions gmres{};
 };
@@ -43,7 +42,9 @@ struct RHFFrameResponseResult {
   // counters exclude integral-provider setup and nuclear derivative consumers.
   std::size_t contraction_terms{}, h2d_bytes{}, d2h_bytes{}, synchronizations{};
   std::size_t explicit_hessian_elements{};  // Always zero.
-  bool matrix_blas{};
+  // Execution diagnostics only; scientific controls contain no provider selector.
+  bool prepared_contractions{};
+  std::size_t contraction_binding_bytes{}, prepared_contraction_summands{};
   std::string operator_hash;
 };
 
