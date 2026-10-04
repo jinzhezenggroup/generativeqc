@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 def test_compiled_raw_and_transformed_schedule_contract(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     driver = tmp_path / "schedule.cpp"
     driver.write_text(
