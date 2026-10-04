@@ -121,22 +121,30 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
         binding.module_bytes())
       throw std::runtime_error("unreserved CUTLASS preparation");
 #if defined(GENERATIVEQC_TEST_HOOKS)
+    // Keep separate reservations for the poisoned owner and ordinary replay.
+    // Both obligations remain charged until the enclosing CUDA context dies.
+    constexpr std::size_t simultaneous_module_ceiling = 512ULL << 20;
+    CudaCutlassContraction failed_binding;
     // Failure after loading must roll back descriptors while keeping the
     // context-retained reservation, including after an explicit release.
     cutlass_fail_after_module_load_for_test = true;
-    rejects([&] { binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20); });
+    rejects([&] { failed_binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20); });
     cutlass_fail_after_module_load_for_test = false;
-    binding.release();
-    if (binding.module_bytes() != (256ULL << 20) ||
-        binding.host_bytes() != sizeof(CudaCutlassContraction) || binding.preparations() ||
-        binding.calls() || binding.summands())
+    failed_binding.release();
+    if (failed_binding.module_bytes() != (256ULL << 20) ||
+        failed_binding.host_bytes() != sizeof(CudaCutlassContraction) ||
+        failed_binding.preparations() || failed_binding.calls() || failed_binding.summands())
       throw std::runtime_error("CUTLASS failed preparation lost retained module charge");
-    rejects([&] { (void)binding.provenance(); });
-    if (binding.prepare(request, stream, artifact, 1 << 20, (256ULL << 20) - 1))
-      throw std::runtime_error("CUTLASS failed preparation admitted a smaller reservation");
+    rejects([&] { (void)failed_binding.provenance(); });
+    for (const auto reservation : {(256ULL << 20) - 1, 256ULL << 20, 512ULL << 20})
+      rejects([&] { failed_binding.prepare(request, stream, artifact, 1 << 20, reservation); });
 #endif
     if (!binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20))
       throw std::runtime_error("CUTLASS preparation unavailable");
+#if defined(GENERATIVEQC_TEST_HOOKS)
+    if (binding.module_bytes() + failed_binding.module_bytes() != simultaneous_module_ceiling)
+      throw std::runtime_error("CUTLASS independent owners lost their combined reservations");
+#endif
     const auto host = binding.host_bytes();
     const auto provenance = binding.provenance();
     if (std::string_view(provenance.artifact_identity.data(), 64) != artifact ||
