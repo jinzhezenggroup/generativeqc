@@ -1360,18 +1360,20 @@ void pbe0_auto_local_ao_composition_case() {
     };
     const auto strict_mode = scf::PrecisionArithmeticMode::Strict;
     const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
-    require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) > 0 &&
-                operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) == 0 &&
-                operator_count(scf::PrecisionOperatorKind::ExchangeK, mixed_mode) == 0 &&
-                operator_count(scf::PrecisionOperatorKind::ExchangeK, strict_mode) > 0,
-            "PBE0 AUTO local-AO precision provenance does not match executed J/density/K arithmetic");
+    require(
+        operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) > 0 &&
+            operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) == 0 &&
+            operator_count(scf::PrecisionOperatorKind::ExchangeK, mixed_mode) == 0 &&
+            operator_count(scf::PrecisionOperatorKind::ExchangeK, strict_mode) > 0,
+        "PBE0 AUTO local-AO precision provenance does not match executed J/density/K arithmetic");
 
     auto moved = system;
     moved.atoms[1].position[2] += 0.07;
     std::string detail;
     require(molecule::validate_and_normalize(moved, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
     const auto moved_strict = solve(moved, GENERATIVEQC_PRECISION_FP64, false, &strict.density);
-    const auto moved_automatic = solve(moved, GENERATIVEQC_PRECISION_AUTO, true, &automatic.density);
+    const auto moved_automatic =
+        solve(moved, GENERATIVEQC_PRECISION_AUTO, true, &automatic.density);
     require(moved_strict.converged && moved_automatic.converged &&
                 std::abs(moved_strict.energy - moved_automatic.energy) < 1e-8 &&
                 moved_automatic.dft_diagnostic.cuda_ao_selection.selected &&
