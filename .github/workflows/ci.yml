@@ -498,10 +498,13 @@ jobs:
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
       NUMEXPR_NUM_THREADS: 1
+      # This job validates the CPU runtime; CUDA provider packaging/runtime has
+      # dedicated CI. Keep the editable scikit-build reconfigure CPU-only too.
+      GENERATIVEQC_ENABLE_CUDA: "OFF"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - name: Install uv and Python 3.11
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -509,6 +512,8 @@ jobs:
           version: "0.10.7"
           python-version: "3.11"
           enable-cache: true
+          cache-suffix: "python-cpu-v1"
+          prune-cache: true
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
@@ -531,12 +536,34 @@ jobs:
             ccache-python-
       - name: Reset ccache statistics
         run: ccache --zero-stats
-      - name: Prepare GFN2 CPU linear algebra runtime
+      - name: Prepare CPU Python test environment
         run: |
-          uv venv --python 3.11 .venv-gfn2-build
-          uv pip install --python .venv-gfn2-build/bin/python scipy
+          uv venv --python 3.11
+          mapfile -t ci_requirements < <(
+            .venv/bin/python - <<'PY_INNER'
+          import tomllib
+
+          with open("pyproject.toml", "rb") as handle:
+              config = tomllib.load(handle)
+          requirements = [
+              item
+              for item in config["project"]["dependencies"]
+              if not item.lstrip().startswith("nvidia-")
+          ]
+          requirements += config["project"]["optional-dependencies"]["test"]
+          requirements += config["project"]["optional-dependencies"]["reference-test"]
+          requirements += config["build-system"]["requires"]
+          for item in dict.fromkeys(requirements):
+              print(item)
+          PY_INNER
+          )
+          uv pip install --python .venv/bin/python "${ci_requirements[@]}"
+          # Exercise public autograd contracts without pulling CUDA-enabled
+          # PyTorch wheels or project-declared NVIDIA runtime providers.
+          uv pip install --python .venv/bin/python torch \
+            --index-url https://download.pytorch.org/whl/cpu
           xtb_linalg="$(
-            .venv-gfn2-build/bin/python - <<'PY_INNER'
+            .venv/bin/python - <<'PY_INNER'
           from pathlib import Path
           import scipy
 
@@ -553,7 +580,10 @@ jobs:
           cmake -S . -B build -G Ninja \
             -DGENERATIVEQC_ENABLE_CUDA=OFF \
             -DGENERATIVEQC_BUILD_TESTS=OFF \
+            -DGENERATIVEQC_PYTHON_WHEEL=ON \
+            -DGENERATIVEQC_BUNDLE_XTB_OPENBLAS=OFF \
             -DGENERATIVEQC_XTB_CPU_LINALG_LIBRARY="$GENERATIVEQC_XTB_CPU_LINALG_LIBRARY" \
+            -DPython3_EXECUTABLE="$PWD/.venv/bin/python" \
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build --parallel
@@ -565,17 +595,13 @@ jobs:
         with:
           path: ~/.cache/ccache
           key: ${{ steps.python_ccache.outputs.cache-primary-key }}
-      - name: Install the Python package and test dependencies
+      - name: Install GenerativeQC editable package
         run: |
-          uv venv --python 3.11
-          # Reuse the already configured/built native tree instead of letting
-          # scikit-build-core create a fresh temporary CMake tree and compile
-          # the same CPU library a second time for the editable install.
-          uv pip install --python .venv/bin/python --editable '.[test,reference-test]' \
-            -Cbuild-dir=build
-          # Exercise the public autograd contracts on every PR without pulling
-          # CUDA wheels into this CPU job.
-          uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu
+          # Dependencies and build requirements are already present. Reuse the
+          # native tree above so editable installation does not repeat codegen,
+          # compilation, or the large CUDA-provider dependency installation.
+          uv pip install --python .venv/bin/python --editable . \
+            --no-deps --no-build-isolation -Cbuild-dir=build
       # Core and compiler-heavy reference tests need the external oracle inputs.
       # Builds and installed production paths above remain completely offline.
       - name: Cache pinned GFN1 and D3 reference inputs
