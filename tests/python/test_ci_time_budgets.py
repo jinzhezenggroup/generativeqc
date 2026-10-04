@@ -50,7 +50,14 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     )
     assert "'tests/**'" not in cache_line
     assert "-DGENERATIVEQC_BUILD_TESTS=OFF" in section
-    assert "-Cbuild-dir=build" in section
+    assert "-DGENERATIVEQC_PYTHON_WHEEL=ON" in section
+    assert "-DPython3_EXECUTABLE=" in section
+    assert 'GENERATIVEQC_ENABLE_CUDA: "OFF"' in section
+    assert 'cache-suffix: "python-cpu-v1"' in section
+    assert "prune-cache: true" in section
+    assert 'if not item.lstrip().startswith("nvidia-")' in section
+    assert "--no-deps --no-build-isolation -Cbuild-dir=build" in section
+    assert ".venv-gfn2-build" not in section
     for path_name in (
         "test_cc_complete_gradient.py",
         "test_ecp_heavy.py",
