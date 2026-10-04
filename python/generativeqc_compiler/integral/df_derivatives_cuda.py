@@ -31,6 +31,7 @@ def emit_df_geometry_cuda(
     name: typing.Any = "prepare_geometry",
     *,
     moments: typing.Any = "boys_values(total+1,rho*distance,g.f,work);",
+    compensated: bool = False,
 ) -> typing.Any:
     """Share primitive geometry between polynomial and Rys derivative lowering.
 
@@ -54,19 +55,27 @@ def emit_df_geometry_cuda(
   boys_values(total+1,rho*distance,g.f,work);
   g.prefactor=34.986836655249725694/(p*q*sqrt(p+q))*exp(-alpha*beta/p*ab2);
 }"""
-    return source.replace("prepare_geometry(", name + "(", 1).replace(
+    source = source.replace("prepare_geometry(", name + "(", 1).replace(
         "boys_values(total+1,rho*distance,g.f,work);", moments, 1
     )
+    if compensated:
+        # The geometry equations and order stay shared. component() in this
+        # namespace returns Wide, so coordinate subtraction also retains its
+        # residual. The split prefactor is 2*pi**(5/2), rounded only at output.
+        source = source.replace("double", "Wide").replace(
+            "34.986836655249725694", "Wide(34.986836655249725,7.2256294425378e-16)"
+        )
+    return source
 
 
-def emit_df_boys_cuda() -> str:
+def emit_df_boys_cuda(*, compensated: bool = False) -> str:
     """Emit the shared FP64 positive-series/downward Boys evaluation.
 
     Callers own order+1 output slots. Value and derivative consumers use the
     same arithmetic and convergence rule; no fitted high-order Rys rule is
     introduced by the g-auxiliary value consumer.
     """
-    return r"""/** Diagnostic metadata describes the actual positive-series branch, not FLOPs.
+    source = r"""/** Diagnostic metadata describes the actual positive-series branch, not FLOPs.
  * A null sink is a compile-time constant in the normal inlined callers.
  * Zero arguments still execute the series; small_argument is a subdomain of
  * that branch, never a claim that a separate asymptotic formula was used.
@@ -96,6 +105,17 @@ __device__ __forceinline__ void boys_values(unsigned order,double argument,doubl
   }
 }
 """
+    if compensated:
+        source = (
+            source.replace("double", "Wide")
+            .replace("1.0/(2*order+1)", "Wide(1)/(2*order+1)")
+            .replace("1e-17*sum", "1e-30*sum")
+            .replace(
+                "0.88622692545275801365",
+                "Wide(0.886226925452758,-3.8332932499128993e-17)",
+            )
+        )
+    return source
 
 
 def emit_df_polynomial_dot_cuda() -> str:

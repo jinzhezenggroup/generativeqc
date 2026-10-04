@@ -228,6 +228,7 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
     runtime::OwnedCudaBuffer<double> transformed(device, layout.source_values, stream);
     runtime::OwnedCudaBuffer<double> coefficients(device, layout.matrix_values, stream);
     runtime::OwnedCudaBuffer<double> row(device, layout.row_values, stream);
+    runtime::OwnedCudaBuffer<double> row_low(device, layout.row_values, stream);
     runtime::cuda_resource_check(cudaMemcpyAsync(coefficients.get(), ref.coefficients.data(),
                                                  bytes(layout.matrix_values),
                                                  cudaMemcpyHostToDevice, stream));
@@ -235,15 +236,26 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
     posthf::generated::transform_df_mo_source(
         n, q, coefficients.get(), plan.inverse_square_roots, bmo.get(), transformed.get(),
         [&](std::size_t mu) {
-          check_status(scf::generate_cuda_density_fitting_raw_tile(
-                           plan.integral_source, 0, mu * n, n, 0, q, -1, stream, row.get(), detail),
+          check_status(scf::generate_cuda_density_fitting_raw_expansion(
+                           plan.integral_source, 0, mu * n, n, 0, q, stream, row.get(),
+                           row_low.get(), detail),
                        detail);
           ++result.source_rows;
           return row.get();
         },
         [&](char ta, char tb, std::size_t m, std::size_t columns, std::size_t k, const double* a,
             const double* b, double* output) {
-          gemm(ta, tb, m, columns, k, a, b, output);
+          // The two orbital projections can cancel large diffuse AO values.
+          // Consume raw residuals in the first and compensate both dots. The
+          // final metric projection retains ordinary FP64 cuBLAS execution.
+          if (result.transform_gemms <= n) {
+            posthf::generated::compensated::gemm(
+                ta, tb, m, columns, k, a, b, a == row.get() ? row_low.get() : nullptr,
+                b == row.get() ? row_low.get() : nullptr, output, stream);
+            runtime::cuda_resource_check(cudaGetLastError());
+          } else {
+            gemm(ta, tb, m, columns, k, a, b, output);
+          }
           ++result.transform_gemms;
           result.transform_summands =
               checked_add(result.transform_summands, checked_mul(checked_mul(m, columns), k));
