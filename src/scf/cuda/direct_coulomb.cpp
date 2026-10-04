@@ -749,21 +749,21 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
     if (p.angular_force_opt_in) {
-      // Keep the existing LR triangular domain for the controlled angular
-      // experiment. Indexed LR pages are a separate scheduling hypothesis.
+      // The retained owner fixes provider/system/screening/geometry identity,
+      // so LR can borrow the same optional row index as the full-range source.
       error = launch_bounded_shell_angular_energy_derivative(
           unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Long, omega,
-          0.0, 1.0);
+          0.0, 1.0, p.bounded_block_domain);
     } else {
       launch_bounded_shell_range_exchange_derivative(
           unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Long, omega,
-          1.0);
+          1.0, p.bounded_block_domain);
       error = cudaGetLastError();
     }
     if (error != cudaSuccess) return error;
