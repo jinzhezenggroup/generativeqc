@@ -45,12 +45,6 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     ):
         assert unrelated not in guard
     header = (ROOT / "src/dft/cuda_xc.hpp").read_text()
-    # The mapped layout now charges one prepared function pointer per tile.
-    # Use the real launcher declaration so this host-only resource probe follows
-    # its ABI; only the opaque CUDA stream handle needs a stand-in.
-    launcher_start = header.index("using CudaXcDensityLauncher =")
-    launcher_end = header.index(";", launcher_start) + 1
-    launcher = "using cudaStream_t = void*;\n" + header[launcher_start:launcher_end]
     declarations = "\n".join(
         _definition(header, signature) + ";"
         for signature in (
@@ -62,6 +56,12 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "struct CudaXcAoSelectionResources",
         )
     )
+    # Keep the exact production launcher signature in the host-storage census.
+    # The CUDA stream is opaque here; this probe never calls a launcher.
+    launcher_start = header.index("using CudaXcDensityLauncher =")
+    launcher_end = header.index(";", launcher_start) + 1
+    declarations += "\nstruct CUstream_st; using cudaStream_t = CUstream_st*;\n"
+    declarations += header[launcher_start:launcher_end]
     xc_source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
     definitions = "\n".join(
         _definition(xc_source, signature)
@@ -95,8 +95,6 @@ using runtime::size_add;
 using runtime::size_mul;
 namespace generated = generativeqc::dft::generated;
 """
-        + launcher
-        + "\n"
         + declarations
         + r"""
 namespace cuda_xc_detail {
