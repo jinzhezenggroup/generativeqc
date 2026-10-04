@@ -176,11 +176,16 @@ int main(int argc, char** argv) {
     const auto legacy_budget=external(orbital,auxiliary,ref)+
         std::max({layout.transform_bytes,layout.packing_bytes,layout.blocks_bytes});
     const auto budget=mode==0 ? legacy_budget : admitted-(mode==1);
-    assert(external(orbital,auxiliary,ref)==15408 && layout.transform_bytes==8032);
-    assert(legacy_budget==24212 && 100*100*sizeof(double)>legacy_budget);
+    assert(external(orbital,auxiliary,ref)==15408 && layout.transform_bytes==9632);
+    // The original unprojected fixture admitted 24,212 bytes. Physical pair
+    // projection now adds exactly two n*n*q FP64 arrays (6,400 bytes here).
+    // Both payload-only budgets remain below the metric allocation alone.
+    const auto pair_projection_bytes=2*layout.source_values*sizeof(double);
+    assert(pair_projection_bytes==6400 && legacy_budget==24212+pair_projection_bytes);
+    assert(100*100*sizeof(double)>legacy_budget);
     try {
       allocation_probe::enabled=true;
-      (void)cc::build_df_source_cuda(orbital,auxiliary,ref,budget,1e-10,0,0,&policy);
+      (void)cc::build_df_source_cuda(orbital,auxiliary,ref,budget,1e-10,0,0,false,&policy);
       allocation_probe::enabled=false;
       if (mode!=2 || factory_entries!=1 || device_entries!=1) return 2;
       if (allocation_probe::peak>p.numeric_bytes || allocation_probe::live) return 3;
@@ -203,7 +208,7 @@ int main(int argc, char** argv) {
       auto r=reference(o); auto bound=capacity(o,a);
       allocation_probe::peak=0;
       allocation_probe::enabled=true;
-      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0,&policy);
+      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0,false,&policy);
       allocation_probe::enabled=false;
       if (allocation_probe::peak>bound.numeric_bytes || allocation_probe::live) return 7;
     }
@@ -229,7 +234,7 @@ int main(int argc, char** argv) {
       auto r=reference(o); auto bound=capacity(o,a);
       allocation_probe::peak=0;
       allocation_probe::enabled=true;
-      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0,&policy);
+      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0,false,&policy);
       allocation_probe::enabled=false;
       if (allocation_probe::peak>bound.numeric_bytes || allocation_probe::live) return 11;
     }

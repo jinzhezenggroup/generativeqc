@@ -1875,11 +1875,19 @@ class KsPreparedBatch final : public PreparedBatch {
         throw std::invalid_argument("invalid KS seed dimensions or diagnostics");
       auto source = systems_[i];
       set_positions(source, state.coordinates);
+      scf::initial_guess::EigenOperation eigen;
+#if GENERATIVEQC_HAS_CUDA
+      if (auto* cuda = items_[i].plan ? items_[i].plan->cuda_plan() : nullptr)
+        eigen = cuda->seed_eigen_operation();
+#endif
       // This common validation reads only source S and checks the shared
-      // spin-density convention. It performs no HF Fock/energy evaluation.
+      // spin-density convention. An idle CUDA plan supplies the ordinary
+      // eigensolver without overwriting its final/warm state; source coordinates
+      // still determine S, including changed-geometry checkpoints. The shared
+      // validator preserves its legacy near-symmetric input fallback.
       scf::validate_hf_warm_density(
           source, unrestricted(execution_plan_) ? GENERATIVEQC_METHOD_UHF : GENERATIVEQC_METHOD_RHF,
-          state.density);
+          state.density, eigen);
     }
     // All source-metric validation precedes the no-throw commit. Missing
     // entries preserve neighbors, including their resident density ownership.

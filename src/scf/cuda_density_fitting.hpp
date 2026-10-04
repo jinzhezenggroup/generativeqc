@@ -210,6 +210,21 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, void* stream, double* output, std::string& detail);
 
+/** Raw value expansion for cancellation-sensitive orbital contractions.
+ * Each disjoint caller-owned buffer has pair_count*auxiliary_count doubles in
+ * the ordinary full-pair layout; the value is high+low. One source traversal
+ * retains low-angular primitive and contraction residuals in FP64. Consume
+ * both components before reusing either buffer on the supplied stream.
+ * This API selects its own canonical value math and one-lane schedule;
+ * experimental ordinary-tile math/mapping overrides do not apply to it.
+ * Source diagnostics count both component arrays in generated_value_bytes.
+ * The metric, rank, AO conventions and ordinary/derivative tile APIs are unchanged.
+ */
+generativeqc_status generate_cuda_density_fitting_raw_expansion(
+    CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
+    std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count, void* stream,
+    double* high, double* low, std::string& detail);
+
 /** Generate one auxiliary-metric derivative row tile on `stream`. */
 generativeqc_status generate_cuda_density_fitting_metric_derivative_tile(
     CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t auxiliary_row_begin,

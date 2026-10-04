@@ -22,8 +22,11 @@ bool resolve_cuda_df_source_policy(CudaDfSourcePolicy& policy, std::string& deta
  */
 bool cuda_df_shell_domain(const core::System& system, const char* role, std::string& detail);
 
-/** Value-only source domain: orbital through f, auxiliary through g. Auxiliary g
- * requires generic generated math. Legacy exporters/derivatives retain f admission.
+/** Source value domain: orbital through f, auxiliary through g. Auxiliary g
+ * requires generic generated value math. Raw source derivatives also have
+ * explicit auxiliary-g polynomial lowering. Legacy exporters and method
+ * force-capability queries retain their own stricter admission; creating this
+ * source does not enable a molecular force.
  */
 bool cuda_df_value_domain(const core::System& orbital, const core::System& auxiliary,
                           const CudaDfSourcePolicy& policy, std::string& detail);

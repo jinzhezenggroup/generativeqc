@@ -178,11 +178,11 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   candidate->value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, true);
   candidate->raw_value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, false);
   candidate->value_math = policy.value_math;
-  // Freeze the value-only capability with this immutable basis owner. All
-  // derivative entry points reject it before launching or changing outputs.
+  // Freeze the angular domain with this immutable basis owner. Auxiliary g
+  // retains its explicit value lowering and the separate F11 response policy.
   for (const auto& auxiliary : auxiliary_systems)
     for (const auto& shell : auxiliary.shells)
-      candidate->auxiliary_g_values_only |= shell.angular_momentum == 4U;
+      candidate->has_auxiliary_g |= shell.angular_momentum == 4U;
   candidate->batch_size = batch_size;
   candidate->public_nbf = public_nbf;
   candidate->public_naux = public_naux;

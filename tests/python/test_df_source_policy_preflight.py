@@ -299,7 +299,7 @@ def test_source_setup_consumes_the_admitted_policy_without_environment_reads() -
     assert "const auto requested_mapping = policy.requested_value_mapping;" in setup
     assert setup.index("cuda_df_value_domain(") < setup.index("cudaSetDevice(")
     method = " ".join((ROOT / "src/methods/rccsd_method.cpp").read_text().split())
-    assert "device, caller_bytes, correlation_policy" in method
+    assert "device, caller_bytes, false, correlation_policy" in method
     assert "provider_metrics, correlation_auxiliary, correlation_policy" in method
     builder = (ROOT / "src/cc/df_source_cuda.cu").read_text()
     assert "source_n, source_q, detail, policy);" in builder

@@ -1,0 +1,423 @@
+# Experiment: GPU semilocal preliminary density for WB97M-V
+
+Status: private complete-endpoint experiment; no public API/default promotion
+Date: 2026-10-04
+
+## Completed 96-atom control and resumed composition
+
+The previously submitted n1 RTX 5090 Slurm 5658 has completed both frozen
+678f7eb88/master837 variants. Its original verifier accepts all ten independent
+cold/priming/warm E/F pairs. Unseeded/LDA complete cold is
+3908.238625 / 2786.398065 s, with target iterations 24 / 15 and reference cold
+1822.589970 / 1825.246949 s. Native warm medians remain
+367.778438 / 367.586446 s versus reference 402.125205 / 403.480012 s.
+The observed 28.705% complete-cold reduction includes the whole source and
+does not establish cold superiority over the reference.
+
+The LDA source converges in 25 iterations and 25 recorded XC submissions;
+its Fock-build counter remains null. Construction/preparation/solve share one
+93.360954-s timer; export/import share another 177.873702-s timer. Complete
+source lifecycle is 271.253723 s, including destruction and bookkeeping whose
+individual times are unavailable. It transfers 4718592 density bytes and 2304
+coordinate bytes. Each source XC evaluation retains the full 768 AOs over
+768 tiles, with point-AO-square sum 115964116992. Those are contraction-domain
+counts, not FLOPs. Native preparation including this source costs 277.106615 s;
+the target's first complete E/F execution costs 2509.291451 s.
+
+Maximum errors across all pairs are below 1.137e-10 Eh / 4.204e-10 Eh/Bohr;
+all reference XC stays on GPU. Final raw reports and `matched96-verified.json`
+remain under `n1:/data/jzzeng/wb97m-seed96-master837-20261004/results/`. The old
+local in-progress copies and pending statements below do not supersede these
+completed receipts. Source identity d198acd7 and library fe826ad7 remain the
+measured identities; no other GPU or commit's improvement is added to them.
+
+Resumed work integrates master fc7d5e2d8 and #1807's GPU checkpoint-admission
+provider into the existing AO/indexed-force composition. The union requires
+its own source-bound build, admission/live-lease and complete E/F qualification
+before measuring a combined cold benefit. The separate #1807 experiment's
+48-atom import reduction is not extrapolated to this 96-atom timer. The public
+CUDA energy-only source capacity and lifetime contract remains unimplemented.
+
+## Admission and resident-path union qualification
+
+The composition at frozen c472684c9 includes master fc7d5e2d8 and #1807.
+Its 1,356 native/compiler/runtime inputs produce source identity
+`e98f295881774f47b077432c61371d38b0d944bf10a7aac4daf79fe31b455f3b`
+and library SHA-256
+`151af02d58efcec1b9b4567921b12a232b42bc6b233fedcb730edb3b53861d87`.
+All 453 compiler commands use verified ccache with retained before/after stats.
+Finite n1 RTX 5090 Slurm 5713 passes three native executables, four independent
+admission/live-lease cases, and all seven independent complete E/F, displaced
+energy and stale-state cases in each of sparse and zero-force-cache modes.
+Both modes retain 66 successful native calls and 467 actual XC submissions.
+The source/archive/library/executable/script receipts are verified before GPU
+execution; an independent local verifier accepts the completed allocation.
+
+The preceding deployment attempt, Slurm 5712, incorrectly inherited n2's
+`/usr/bin/g++-11` path, absent on n1. It passed native/admission checks but failed
+all seven force cases before force JIT compilation. The corrected n1 environment
+uses its installed `/usr/bin/g++` and the existing shared ccache. Original
+failure logs, script hashes and corrected qualification are retained separately
+under ignored `.artifacts/masterfc7-admission-20261004/`; a deployment correction
+is not a numerical-method improvement.
+
+The new complete cold comparison uses this qualified frozen binary for both
+no-source and LDA-source controls. Each source phase now has a separate
+synchronized timer: Calculator construction, prepared-owner creation, energy
+solve, density/coordinate export, target import and owner destruction. Remaining
+metadata/checking time is an explicitly named bookkeeping residual. Their sum
+must equal the source lifecycle and be included in target preparation. Unrun
+phases and unavailable Fock-build counts remain null. This preserves the earlier
+combined timers as historical measurements rather than retrospectively splitting
+them. The new results are pending; no combined speed gain is yet inferred.
+
+Master subsequently advances to 0fb5fdeea by merging #1756's low-order LR
+roots, already present in this integration. The sole merge conflict is the
+independent four-center derivative fixture: retain the integration's expanded
+d/p/s/s, d/p/p/s, d/d/p/s and d/d/p/p cases, including the original d/p/s/s
+case and repeated-center RKS/UKS checks. After resolution, both all 1,356
+production inputs and the complete native test file are byte-identical to the
+qualified composition. This merge adds lineage, not a new optimization or
+timing claim. The current host selection passes 76 closure/eligibility/stage/
+evidence-verifier cases. Evidence retention passes its unchanged 64 MiB cap;
+the change review remains 17 files / 243,328 bytes under the 2 MiB cap.
+
+## Completed admission-union lifecycle control
+
+Finite n1 RTX 5090 Slurm 5716 completes all four no-source/LDA reports at
+3 and 24 atoms. All 20 cold/priming/warm E/F pairs pass the unchanged
+1e-8 Eh / 1e-7 Eh/Bohr gates; maxima are 2.956e-12 Eh / 1.177e-9 Eh/Bohr.
+Every reference XC component runs on GPU. The source converges, its density is
+actually used without target fallback, and every priming/warm replay uses one
+iteration. This is the c472684c9 binary qualified above, not the older frozen
+96-atom source. The full endpoint protocol and allocation are retained with
+the raw reports in `benchmarks/results/wb97mv-cold-admission-20261004/`.
+
+At 24 atoms, no-source/LDA complete cold is 242.278002 / 192.881119 s: an
+observed 20.3885% reduction after all source costs. Target iterations are
+18 / 13; paired reference cold is 118.652617 / 117.618048 s. Native warm
+medians are 26.063857 / 26.088192 s versus reference 27.672955 / 27.719961 s.
+The preliminary source improves cold, with no observed warm benefit, and cold
+still trails the reference. These are single ordered cold samples in an
+eight-CPU, 16-GiB allocation; reverse-order repetition and larger combined
+controls remain necessary before general/default promotion.
+
+The LDA lifecycle is 12.213284 s: construction 0.002748 s, owner preparation
+0.114243 s, solve 12.033391 s, export 0.000640 s, import 0.055422 s, owner
+destruction 0.006478 s and bookkeeping 0.000363 s. The source takes 18
+iterations/18 XC submissions; unavailable Fock-build count remains null. Each
+source XC has point-AO-square domain 1,811,939,328, not a FLOP count. Exported
+density/coordinates are 294,912 / 576 bytes. Target first E/F execution falls
+from 241.421601 to 179.812750 s, saving 61.608851 s before charging the source;
+this timer includes forces and must not be relabeled as isolated SCF time.
+The measured source cost is therefore recovered by fewer target iterations,
+while checkpoint import is now only 55 ms at this size. The older 48-atom
+admission percentage is not added to this combined result.
+
+The 3-atom control has cold 10.432424 / 8.742931 s, target iterations 15 / 12
+and LDA lifecycle 0.665268 s. Independent verification checks every raw pair,
+phase sum, source/library identity, actual seed use, AO work and reference
+backend. The retained verifier is read-only and keeps all gates under Python
+optimization; corrupt phase totals, forces, source identity, target fallback,
+qualification and compressed hashes are rejected by subprocess controls.
+The public CUDA source capacity/lifetime API and the published large-system
+README curve remain unchanged.
+
+## Motivation and boundary
+
+The [cold-work investigation](2026-10-03-wb97mv-cold-scf-work.md) found that
+same-functional coarse-grid preparation still costs about 69 seconds at 24
+atoms. Loosening its energy/density thresholds leaves the strict physical
+residual gate and its 19 iterations unchanged. The next experiment changes
+the preliminary operator instead: GPU LDA or PBE has neither exact exchange
+nor VV10 pair work. The final target remains full-grid FP64 WB97M-V.
+
+This is a private driver using the existing native KS density restore
+contract, not an extension of CPU-only `InitialGuessSpec` or the public HF
+`initialize_from` API. `KsPreparedBatch::restore_warm_states` checks density
+dimensions, coordinates, diagnostics and the source AO metric/spin convention.
+Only the converged same-basis density is imported; target Fock, DIIS,
+functional, grid, convergence and energy baseline are not imported. The
+target constructs fresh physical work and retains its ordinary bounded retry.
+
+## Fixed comparison
+
+Run no preliminary solve, `lda-rks`, and `pbe-rks` sequentially on one RTX 5090.
+Both sources use spherical def2-SVP, the target nuclei/charge/spin, grid
+16×8×16, FP64, DIIS 8, at most 64 iterations and energy/density controls
+1e-6/1e-4. The source must actually converge before its density can be used.
+An unfinished source leaves the core guess intact; non-convergence is the only
+source failure status allowed to continue. Resource/runtime errors propagate.
+
+The target keeps grid 48×16×32, energy/density/screening controls
+1e-11/1e-9/1e-12, DIIS 8 and maximum 180 iterations. SCF/force AO maps and
+indexed forces are enabled for every target variant. Native experimental SCF
+AO maps currently admit WB97M-V only: the private single-threaded driver
+temporarily disables that opt-in for the separate LDA/PBE owner, restores it
+on every exit and retains the already-prepared target's map. This is not a
+general mechanism for selecting per-owner policies concurrently.
+
+Complete cold includes source construction, preparation, solve, synchronized
+density export/import and destruction as well as all target preparation and
+the first complete energy/analytic-force call. Actual source XC submissions,
+source iterations and available Fock-build diagnostics are retained; an absent
+Fock-build counter remains absent. The driver has a 16 MiB density/coordinate
+transfer bound. It does not establish joint public host/device-budget admission.
+
+After a 3-atom pilot passes all 15 cold/priming/warm pairs, the same allocation
+continues the 24-atom comparison. Every pair must pass independent 1e-8 Eh /
+1e-7 Eh/Bohr gates, finite/shape/convergence checks, one-iteration warm replay,
+actual target AO selection and on-GPU reference XC. Every accepted preliminary
+variant must also prove successful source convergence and inclusion of its
+complete cost in the cold timer. No source result is compared to the reference
+as though it were a WB97M-V answer.
+
+## Provenance and attempts
+
+Source 49f0f9bc078a3f714ccc4fa1b394f638c784bacf includes master dc6ea9940.
+That master update changes evidence consumers only; all 1355 native build inputs
+remain identical to the GPU-qualified master-9c/VWN composition:
+
+- Source identity: `ebdf07921464440e085b2925a1bd061ba9090788485d1cab01e3cada7122814c`
+- Library SHA-256: `5a1b86cef1c0e978118d3024dc36861ebe8cd326dee8a6fe944a6b34000a5461`
+
+Each job verifies source/library and measurement-script hashes before execution.
+No old timings are relabeled to this composition. All source and build receipts,
+scripts, raw results and unsuccessful attempts remain in ignored
+`.artifacts/semilocal-seed-20261004/`.
+
+Slurm 5634 stops because LDA preparation inherited the WB97M-V-only map flag.
+Slurm 5637 then completes the no-seed/LDA pilot endpoints but stops on the
+invalid shorthand `pbe`; the supported selector is `pbe-rks`. An attempted
+retry, 5639, is cancelled after local setup failed due to an omitted Python
+search path. These are driver/setup failures, not numerical method rejections;
+their outputs are preserved separately and do not qualify the full campaign.
+The corrected finite n1 allocation is Slurm 5640. It restores the source map
+policy explicitly, validates provider names before deployment and propagates
+unexpected source failure statuses. The completed comparisons are below.
+
+## Completed small pilot
+
+Slurm 5640 completes all three 3-atom variants and passes the independent
+15-pair verifier before continuing to 24 atoms. Maximum errors are below
+8.669e-13 Eh / 1.177e-9 Eh/Bohr; every reference XC component stays on GPU
+and every priming/warm replay takes one iteration. The target gates and full
+grid are unchanged.
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations / XC submissions | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 9.404071 s | 9.744874 s | 15 / 15 | none |
+| LDA | 8.536679 s | 9.598415 s | 12 / 12 | 15 / 0.656032 s |
+| PBE | 8.156632 s | 9.645183 s | 11 / 11 | 15 / 0.681369 s |
+
+Both sources actually converge and are imported. Their XC submission counts
+are 15 each, their Fock-build counters remain unavailable, and the complete
+source cost is included in the respective cold preparation totals. The small
+pilot supports testing the mechanism at 24 atoms; it does not establish a
+large-system benefit or justify a default/API promotion.
+
+## Completed 24-atom control
+
+Slurm 5640 finishes successfully, including all three 24-atom controls and
+their independent 15-pair E/F verifier. Maximum errors are below 3.070e-12 Eh /
+7.540e-10 Eh/Bohr. Every priming/warm replay takes one iteration, every
+reference XC component reports GPU execution, and source/target work remains
+explicit. Complete cold includes all source preparation and transfer:
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations / XC submissions | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 240.379900 s | 116.000208 s | 18 / 18 | none |
+| LDA | 191.435694 s | 115.936782 s | 13 / 13 | 18 / 13.088323 s |
+| PBE | 192.097899 s | 116.104328 s | 13 / 13 | 18 / 13.345290 s |
+
+The sources each converge with 18 actual XC submissions. Source Fock-build
+counts remain unavailable, not inferred. Both native seeded targets use their
+imported density without a cold retry. LDA/PBE reduce complete cold by
+20.36% / 20.09% relative to the same-allocation unseeded control. Unlike the
+same-functional coarse-grid source, these inexpensive operators leave a
+material net gain after charging their whole cost. Native cold still takes
+about 1.65 times the paired reference; this is not cold superiority. The
+subsecond LDA/PBE difference is not established beyond single-run variability.
+
+Warm medians are 26.122775 / 25.843800 / 25.843492 s for none/LDA/PBE, with
+paired references 27.374984 / 27.372269 / 27.381791 s. All warm calls replay
+their own frozen final density. Do not attribute their small differences to
+the preliminary operator, which performs no work in those calls.
+
+## Larger and displaced qualification
+
+Finite n1 Slurm 5645 starts the 48-atom three-way comparison only after 5640
+finishes, its complete verifier passes and at least one source reduces
+24-atom complete cold by 5%. This guard prevents expanding a failed or
+unprofitable small control. The larger run retains both source choices and
+the unseeded control, with the same native inputs, binary, target controls and
+measurement scripts. It remains in progress; no 48-atom seed benefit is claimed.
+The first launcher used an unsupported Slurm command-line option and created
+no job; that failure is retained separately. The corrected finite allocation
+uses `afterany:5640` plus explicit success/scientific checks inside the job.
+
+Slurm 5644 separately moves hydrogen 1 by (0.02, -0.01, 0.015) Bohr and creates
+both source and target at those identical displaced coordinates. This tests a
+fresh displaced endpoint, not an in-place warm geometry update. All 15 3-atom
+pairs pass independent E/F and coordinate checks (maximum errors below
+1.024e-12 Eh / 1.065e-9 Eh/Bohr), with on-GPU reference XC and one-iteration
+priming/warm calls. Complete cold is 10.336747 / 8.675310 / 8.130738 s for
+none/LDA/PBE; target iterations are 15/12/11. Each source takes 15 iterations
+and costs 0.654103 / 0.673232 s in full.
+
+The 24-atom displaced comparison also completes in Slurm 5644. All 15 pairs
+pass the independent E/F, coordinate, source-cost and backend checks, with
+maximum errors below 3.070e-12 Eh / 5.350e-10 Eh/Bohr. Every priming/warm
+replay takes one iteration. Complete cold, including all source work, is:
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 281.416608 s | 130.752835 s | 21 | none |
+| LDA | 222.939598 s | 130.674971 s | 15 | 24 / 17.473217 s |
+| PBE | 235.506555 s | 130.489469 s | 16 | 23 / 17.127575 s |
+
+LDA retains a 20.78% complete-cold reduction after this perturbation; PBE
+retains 16.31%. Native remains slower than the corresponding reference.
+These are fresh displaced solves, not same-plan geometry-rebuild timings,
+and do not qualify the still-running larger-size or public resource contracts.
+
+The separate scripts, geometry records, raw pairs, independent verifiers and
+Slurm/source/library receipts remain in ignored
+`.artifacts/semilocal-seed48-20261004/` and
+`.artifacts/semilocal-seed-displaced-20261004/`. They do not replace any of the
+frozen README timing reports.
+
+## Completed 48-atom LDA/control subset and 96-atom expansion
+
+Slurm 5645 completes the unseeded and LDA variants at 48 atoms. A separate
+read-only subset verifier checks all ten cold/priming/warm E/F pairs, source
+costs, actual SCF/force AO selection and reference XC on GPU. Maximum errors
+are below 1.251e-11 Eh / 6.305e-10 Eh/Bohr; every priming/warm call takes one
+iteration. PBE remains in progress and is not represented as completed.
+
+| Preliminary provider | Native complete cold | Paired reference complete cold | Target iterations | Source iterations / complete cost |
+| --- | ---: | ---: | ---: | ---: |
+| none | 960.174251 s | 475.260614 s | 21 | none |
+| LDA | 752.846451 s | 475.987336 s | 15 | 25 / 49.247219 s |
+
+The full 49.247219 s source cost includes 36.502280 s preparation/solve and
+12.739289 s export/import, plus the remaining measured source lifecycle work.
+All 25 source XC evaluations are recorded. The 21.59% complete-cold reduction
+survives charging that whole cost; native cold remains about 1.58 times its
+reference. Warm medians are 93.390685 / 93.425450 s for none/LDA, versus paired
+reference 103.141942 / 103.421357 s. The source performs no work in warm calls.
+
+`verify-completed-modes.py` preserves the original verifier's scientific gates
+while explicitly selecting the two completed variants and writing a separate
+`matched48-completed-subset-verified.json`; it does not alter the original
+three-variant runner/verifier or any raw record. No pending PBE sample is
+included or dropped from a completed comparison.
+
+The next 96-atom unseeded/LDA comparison uses newly qualified integration
+678f7eb88/master 837c2a51c, source identity d198acd7 and library fe826ad7 as
+fully recorded in the resident integration note. It runs on n1 RTX 5090 with
+a finite six-hour allocation and fresh identical source/target coordinates.
+Startup requires the ten-pair 48-atom receipt, at least 5% complete-cold benefit,
+and both seven-case numerical/fallback qualifications of the new composition.
+All source costs remain charged and all endpoint gates remain unchanged.
+This larger comparison is pending; the private source bridge is still not a
+public CUDA preliminary-SCF or public resource-budget contract. Receipts remain
+under ignored `.artifacts/seed96-master837-20261004/`.
+
+## Completed 48-atom three-way comparison
+
+Slurm 5645 subsequently completes PBE as well. The original full verifier now
+passes all 15 cold/priming/warm pairs, including every source-cost, actual-work,
+convergence and on-GPU reference-XC check. The maximum errors across all three
+variants remain below 1.251e-11 Eh / 6.305e-10 Eh/Bohr. The completed report is
+`matched48-verified.json` in the same ignored evidence directory; it supersedes
+the pending status at the earlier subset checkpoint without changing those
+raw measurements.
+
+PBE complete cold is 750.753985 s against its paired reference's 475.129622 s,
+a 21.81% reduction from the same-allocation unseeded 960.174251 s. Its source
+converges in 25 iterations/25 XC submissions, costing 50.303670 s in full:
+37.426212 s preparation/solve and 12.866928 s export/import, with the remaining
+measured source lifecycle work included. The target takes 15 iterations, as
+with LDA. PBE warm median is 93.186442 s versus reference 103.198634 s.
+
+The roughly two-second PBE/LDA cold difference is small relative to this
+single-run endpoint and does not establish a repeatable provider ranking.
+Continue the already launched 96-atom LDA/control experiment rather than
+expanding both providers based on that difference. Both seeded 48-atom cold
+endpoints remain about 1.58 times the reference; neither establishes cold
+superiority or a public preliminary-density/resource contract.
+
+## Energy-only source budget audit
+
+Finite n2 Slurm 2188 completes a dry capacity audit of the existing public KS
+planner at 3/24/48/96 atoms, using GPU LDA, spherical def2-SVP, the same coarse
+16×8×16 grid, DIIS 8 and at most 64 iterations. Preparation/context entry
+points are guarded to reject execution: this audit performs no SCF and does
+not measure allocated memory. It uses frozen 678f7eb88/master837 inputs,
+identity d198acd7 and library fe826ad7, byte-identical to the subsequent
+master794 composition. The first attempt (2187) passed one request instead of
+a request tuple to `plan_resources` and failed before producing a plan; its
+driver failure is retained separately.
+
+The existing planner contracts for complete energy plus forces, not an
+energy-only preliminary owner. It reserves a 128 MiB snapshot-grid cache and
+256 MiB force-host staging cap, so even the 3-atom request cannot fit a
+256 MiB source allowance. Removing only the conservative Cartesian quartic
+setup term would not fix that mismatch. Its generic CUDA matrix workspace is
+also a broad bound: 688,915,728 bytes at 96 atoms. The reported dry bounds are:
+
+| Atoms | Host peak bound (bytes) | Setup workspace bound (bytes) | SCF workspace bound (bytes) |
+| --- | ---: | ---: | ---: |
+| 3 | 417,044,648 | 12,929,504 | 674,064 |
+| 24 | 44,829,143,232 | 44,415,597,184 | 43,058,448 |
+| 48 | 703,560,378,368 | 703,121,677,184 | 172,229,904 |
+| 96 | 11,191,422,989,952 | 11,190,887,972,224 | 688,915,728 |
+
+These are conservative planner outputs, not observed allocations or claims
+that the GPU source needs terabytes. The CPU preliminary numeric query also
+contains a `24*c^4` term; it cannot be reused as a CUDA capacity contract.
+The separate #1801 patch removes an actual unused Direct-HF task catalog from
+Direct J/K preparation, but does not itself provide this missing contract.
+
+A production source needs an explicit energy-only native CUDA capacity model
+covering its J provider, grid, KS/eigensolver state, density transfer and its
+lifetime overlap with the target. Do not lower the existing full-force public
+planner's bounds merely to admit the private experiment. Both single and batch
+CUDA entry paths currently bypass the CPU preliminary wrapper; a public
+extension must handle warm-state precedence, at most one core-guess retry and
+per-item failure isolation in both. LDA also needs a per-owner dense AO policy,
+rather than the private driver's process-global environment mutation. No public
+planner/API or allocation policy is changed by this audit.
+
+Scripts, dry plans, frozen identity and Slurm receipts are retained in ignored
+`.artifacts/preliminary-budget-audit-20261004/completed/`, with the failed first
+attempt under `failed-attempt1/`. The continuing 96-atom private endpoint
+experiment cannot by itself qualify any of these public resource contracts.
+
+## Measured density-import bottleneck
+
+Finite n5 Slurm 1420 separates the existing source export from checkpoint
+admission, using qualified d198acd7/fe826ad7 inputs. At 48 atoms, export
+query/copy together cost 0.000895 s, while three imports cost
+15.684234 / 15.631609 / 15.632248 s. All imported density/coordinate values
+remain bitwise identical. Slurm 1421 observes the unchanged import with the
+shared host trace: two actual reference eigensolves consume about 15.35 of
+15.63 seconds, covering source-metric and occupation validation. These are
+component diagnostics without a target SCF or complete E/F speed claim.
+
+The follow-up #1807 starts from master d9431c913 and reuses the idle CUDA KS
+eigensolver for the existing shared admission guard. Its independently tracked
+build and device qualification do not alter this frozen experiment or promote
+the public preliminary API. Source coordinates and all ensemble gates remain
+required; live final-state/weight buffers must survive failed imports. Detailed
+scripts, the unsuccessful initial library-load attempt, ccache receipts and
+actual call traces remain in ignored `.artifacts/seed-transfer-audit-20261004/`.
+
+## Promotion gates
+
+Require larger and displaced-system complete endpoints before claiming a
+useful target domain. A production extension would need an explicit CUDA
+preliminary provider contract, total resource admission, diagnostics and
+failure/warm-priority tests; a profitable private density bridge alone does
+not satisfy those requirements. Keep the unseeded path and all target gates.

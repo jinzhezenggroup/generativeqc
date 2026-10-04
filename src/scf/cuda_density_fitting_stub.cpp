@@ -177,6 +177,15 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(CudaDensityFittingInt
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }
 
+generativeqc_status generate_cuda_density_fitting_raw_expansion(CudaDensityFittingIntegralSource*,
+                                                                std::size_t, std::size_t,
+                                                                std::size_t, std::size_t,
+                                                                std::size_t, void*, double*,
+                                                                double*, std::string& detail) {
+  detail = "CUDA density-fitting support is unavailable in this build";
+  return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+}
+
 generativeqc_status generate_cuda_density_fitting_metric_derivative_tile(
     CudaDensityFittingIntegralSource*, std::size_t, std::size_t, std::size_t, std::int64_t, void*,
     double*, std::string& detail) {

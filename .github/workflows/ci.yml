@@ -235,6 +235,7 @@ jobs:
         run: |
           run_id=""
           created_at=""
+          source_sha=""
           publish=false
           artifact_name='cuda-ccache-master-12.9-sm120-v2'
 
@@ -245,7 +246,7 @@ jobs:
           if runs_payload="$(gh api --method GET \
               "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
               -f branch=master -f event=push -f status=success -f per_page=20)"; then
-            while read -r candidate_run_id; do
+            while IFS=$'\t' read -r candidate_run_id candidate_head_sha; do
               [[ -n "$candidate_run_id" ]] || continue
               artifacts_payload=""
               if ! artifacts_payload="$(gh api --method GET \
@@ -260,6 +261,7 @@ jobs:
               if [[ -n "$candidate_created_at" ]]; then
                 run_id="$candidate_run_id"
                 created_at="$candidate_created_at"
+                source_sha="$candidate_head_sha"
                 break
               fi
             done < <(
@@ -270,7 +272,7 @@ jobs:
                     and .head_branch == "master"
                     and .conclusion == "success"
                   )
-                | .id
+                | [.id, .head_sha] | @tsv
               ' <<<"${runs_payload}"
             )
           else
@@ -287,6 +289,23 @@ jobs:
               now_epoch="$(date -u +%s)"
               if (( now_epoch - created_epoch >= 10800 )); then
                 publish=true
+              else
+                # A young snapshot can still predate newly compiled sources.
+                # Cover every CUDA cache-key input, plus upstream/generated-data
+                # and CI/toolchain configuration. Compare this checked-out push
+                # with the run that actually supplied the selected artifact.
+                cuda_inputs=(
+                  .github cmake python/generativeqc_compiler python/generativeqc
+                  CMakeLists.txt CMakePresets.json include src tests/native tools
+                  manifests data upstream pyproject.toml uv.lock
+                )
+                if [[ ! "$source_sha" =~ ^[0-9a-f]{40}$ ]] ||
+                    ! git diff --quiet --no-ext-diff --no-textconv \
+                      "$source_sha" "$GITHUB_SHA" -- "${cuda_inputs[@]}"; then
+                  # A missing/unreadable old commit also requests refresh;
+                  # cache discovery remains acceleration-only, never a gate.
+                  publish=true
+                fi
               fi
             fi
           fi

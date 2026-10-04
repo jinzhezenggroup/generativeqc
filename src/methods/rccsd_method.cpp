@@ -155,6 +155,8 @@ std::vector<double> fock_mo(const hf::PhysicalReference& ref) {
 void attach_df_source(cc::Problem& problem, cc::DFSourceResult&& fitted, posthf::ProviderWork& work,
                       generativeqc_tensor::Metrics& metrics) {
   problem.naux = fitted.naux;
+  problem.df_source_identity = fitted.source_identity;
+  problem.df_boo = std::move(fitted.boo);
   problem.df_bov = std::move(fitted.bov);
   problem.df_bvv = std::move(fitted.bvv);
   problem.ovov = std::move(fitted.ovov);
@@ -262,7 +264,7 @@ cc::Problem build_problem(
                             posthf::source_capacity(source.orbital()));
     auto fitted =
         cc::build_df_source_cuda(source.orbital(), *correlation_auxiliary, ref, options.max_bytes,
-                                 1e-10, device, caller_bytes, correlation_policy);
+                                 1e-10, device, caller_bytes, false, correlation_policy);
     attach_df_source(p, std::move(fitted), provider_work, provider_metrics);
     // RawSource is released before solve, but both caller systems and the
     // split orbital spectrum remain live beside the detached RHF reference.
