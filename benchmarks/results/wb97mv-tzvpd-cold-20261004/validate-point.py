@@ -9,6 +9,19 @@ from statistics import median
 
 from tools.render_omol25_benchmarks import validate
 
+
+def duration(value: object, name: str) -> int | float:
+    """Require a measured duration before closure or cold-boundary comparisons."""
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError(f"invalid {name}: expected a finite nonnegative duration")
+    return value
+
+
 point = Path(sys.argv[1])
 reference_path = point / "reference.json"
 reference = json.loads(reference_path.read_text())
@@ -50,6 +63,7 @@ for variant in ("reference", "none", "lda16"):
             != raw["protocol"]["basis_identity"]
         ):
             raise ValueError("wrong target basis identity")
+        wrapper = duration(raw["preliminary_wrapper_seconds"], "preliminary wrapper")
         if variant == "lda16":
             if not seed["selected"] or not seed["source_converged"]:
                 raise ValueError("LDA source was not admitted")
@@ -62,12 +76,13 @@ for variant in ("reference", "none", "lda16"):
                 "source_destroy_seconds",
                 "source_bookkeeping_seconds",
             )
-            phases = [seed[n] for n in names]
-            if any(v is None or not math.isfinite(v) or v < 0 for v in phases):
-                raise ValueError("missing source lifecycle phase")
-            if abs(sum(phases) - seed["complete_source_seconds"]) > 1e-9:
+            phases = [duration(seed[name], name) for name in names]
+            complete_source = duration(
+                seed["complete_source_seconds"], "complete source"
+            )
+            if abs(sum(phases) - complete_source) > 1e-9:
                 raise ValueError("source phases do not close")
-            if seed["complete_source_seconds"] > raw["preliminary_wrapper_seconds"]:
+            if complete_source > wrapper:
                 raise ValueError("source lifetime escaped cold timer")
             cold = raw["records"][0]
             if not cold["warm_start_used"] or cold["warm_start_fallback"]:

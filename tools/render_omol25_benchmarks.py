@@ -198,6 +198,12 @@ def figure(
         for point in points
         if (entry := point["engines"]["native"])["status"] == "measured"
     )
+    experimental_capacity = any(
+        entry.get("native_experiment", {}).get(limit) is not None
+        for point in points
+        if (entry := point["engines"]["native"])["status"] == "measured"
+        for limit in ("force_max_device_bytes", "force_max_host_bytes")
+    )
     no_preliminary_source = all(
         point["engines"]["native"]
         .get("native_experiment", {})
@@ -213,6 +219,8 @@ def figure(
             if experimental_native and no_preliminary_source
             else "GenerativeQC direct (experimental AO/seed policy)"
             if experimental_native
+            else "GenerativeQC direct (experimental force capacity)"
+            if experimental_capacity
             else "GenerativeQC direct (automatic through-f)"
             if automatic_native and not canonical_native
             else "GenerativeQC direct (canonical J/K opt-in)"
@@ -226,6 +234,8 @@ def figure(
             if engine == "native" and native_unsupported
             else default_label
         )
+        if engine == "native" and experimental_native and experimental_capacity:
+            label += " [explicit force capacity]"
         xs, ys, lows, highs = [], [], [], []
         for point in points:
             entry = point["engines"][engine]

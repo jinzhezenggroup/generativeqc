@@ -36,6 +36,10 @@ from tools.generate_df_ccsd_native import cpu_header, cuda_header, cuda_source
 assert "run_virtual_cpu" in cpu_header()
 assert "run_factor_vjp_cuda" in cuda_header()
 assert "run_amplitude_vjp_cuda" in cuda_source()
+from tools.generate_df_ccsd_hoisted import cpu_header, cuda_header, cuda_source
+assert "run_prepare_cpu" in cpu_header()
+assert "run_auxiliary_cuda" in cuda_header()
+assert "run_iteration_cuda" in cuda_source()
 """
     subprocess.run(
         [sys.executable, "-I", "-c", script, str(ROOT)],
@@ -180,3 +184,21 @@ def test_native_df_short_arena_refuses_before_arithmetic(
         timeout=60,
     )
     assert result.stdout.startswith("refused ")
+
+
+def test_composed_cuda_action_keeps_prior_arithmetic_failure(
+    df_native_probe: Path,
+) -> None:
+    if df_native_probe.name != "probe-cuda":
+        pytest.skip("sticky error state belongs to CUDA composition")
+    feeds = _inputs(2, 3)
+    supplied = _stream(2, 3, 0, feeds).replace("2 3 0 0\n", "2 3 0 2\n", 1)
+    result = subprocess.run(
+        [str(df_native_probe)],
+        input=supplied,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    )
+    assert result.stdout.strip() == "sticky 173"

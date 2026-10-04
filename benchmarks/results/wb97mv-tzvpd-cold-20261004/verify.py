@@ -14,7 +14,7 @@ from tools.generativeqc_validation.retention import safe_relative
 
 
 def verify(directory: Path) -> dict:
-    """Authenticate the bundle, then rerun scientific gates on exact report bytes."""
+    """Check bundle consistency, then apply the trusted checkout's scientific gates."""
     manifest = json.loads((directory / "publication.json").read_text())
     files = {
         safe_relative(e["path"]): (directory / safe_relative(e["path"])).read_bytes()
@@ -39,7 +39,7 @@ def verify(directory: Path) -> dict:
             command = [
                 sys.executable,
                 *(["-O"] if sys.flags.optimize else []),
-                str(directory / "validate-point.py"),
+                str(Path(__file__).resolve().with_name("validate-point.py")),
                 str(target),
             ]
             checked = subprocess.run(

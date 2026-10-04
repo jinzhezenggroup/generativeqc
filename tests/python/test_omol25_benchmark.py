@@ -318,6 +318,51 @@ def test_collect_retains_complete_seed_cost_and_experimental_policy(
     assert "Complete cold SCF" in svg
 
 
+@pytest.mark.parametrize(
+    "experiment,label",
+    [
+        ({"force_max_device_bytes": 4 << 30}, "experimental force capacity"),
+        ({"force_max_host_bytes": 4 << 30}, "experimental force capacity"),
+        ({"force_max_device_bytes": 0}, "experimental force capacity"),
+        ({}, "automatic through-f"),
+        (
+            {"force_max_device_bytes": None, "force_max_host_bytes": None},
+            "automatic through-f",
+        ),
+        ({"force_active_ao_cutoff": 1e-16}, "experimental AO selection"),
+        ({"preliminary_provider": "lda16"}, "experimental AO/seed policy"),
+        (
+            {"force_active_ao_cutoff": 1e-16, "force_max_host_bytes": 4 << 30},
+            "explicit force capacity",
+        ),
+    ],
+)
+def test_plot_labels_explicit_force_capacity(
+    tmp_path: Path, experiment: dict, label: str
+) -> None:
+    """A budget-only opt-in must not inherit an automatic/default policy label."""
+    pytest.importorskip("matplotlib")
+    rows = run()["records"]
+    point = {
+        "atoms": 3,
+        "protocol": {"aos": 58},
+        "engines": {
+            "native": {
+                "status": "measured",
+                "records": rows,
+                "native_schedule_policy": "automatic-generated-SPD/canonical-through-f",
+                "native_experiment": experiment,
+            },
+            "reference": {"status": "measured", "records": rows},
+        },
+    }
+    figure([point], tmp_path)
+    svg = (tmp_path / "omol25.svg").read_text()
+    assert label in svg
+    if "capacity" in label:
+        assert "GenerativeQC direct (automatic through-f)" not in svg
+
+
 def test_plot_keeps_variable_iteration_repeats(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

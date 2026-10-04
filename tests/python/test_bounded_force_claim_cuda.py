@@ -1,8 +1,8 @@
-"""Stress persistent claims for triangular products and indexed empty pages.
+"""Stress triangular/indexed claims across skipped products and empty pages.
 
-Preserve the master skip regression and PR #1767's indexed-page extension of
-njzjz-bot commit 0b99c6ce298f2726373f1909ad10a37b5acffc43. The host invariant
-checks control flow; optional CUDA stress does not replace integral oracles.
+Includes the triangular regression backported in PR #1776 and the indexed
+empty-page coverage from PR #1767. Optional CUDA stress is not an independent
+integral oracle or a complete-endpoint performance measurement.
 """
 
 import os
