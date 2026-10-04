@@ -46,3 +46,8 @@ pinned H2O/NH3/CH4 energy gates and exact contraction work remain unchanged.
 
 References: #1887; `src/tensor/cuda_cutensor.cuh`; NVIDIA cuTENSOR 2.8 headers
 for `cutensorCreatePlanPreference` and `cutensorPlanPreferenceAttribute_t`.
+
+This supersedes default algorithm selection in the
+[original affine binding](2026-10-05-native-affine-cutensor.md) and addresses the
+algorithm-provenance follow-up in the
+[source-response decision](2026-10-05-source-response-prepared-execution.md).
