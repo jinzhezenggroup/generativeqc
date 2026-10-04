@@ -39,6 +39,7 @@ enum class PrecisionOperatorKind : std::int32_t {
   OccupationStabilization = GENERATIVEQC_PRECISION_OPERATOR_OCCUPATION_STABILIZATION,
   CoulombRecurrence = GENERATIVEQC_PRECISION_OPERATOR_COULOMB_RECURRENCE,
   ExchangeRecurrence = GENERATIVEQC_PRECISION_OPERATOR_EXCHANGE_RECURRENCE,
+  NonlocalCorrelation = GENERATIVEQC_PRECISION_OPERATOR_NONLOCAL_CORRELATION,
 };
 
 enum class PrecisionDtype : std::int32_t {
