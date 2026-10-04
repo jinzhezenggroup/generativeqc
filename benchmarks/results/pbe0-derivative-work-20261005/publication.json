@@ -1,0 +1,346 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "9ba032c783addfeede96890c894b7cc9447cde95",
+    "dirty": false,
+    "reconstruction_base": "9d0f4fc0ddbe9c1dc4539cd4f6ad8a6e019ba990"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6161,
+      "sha256": "00c3b85a2303b506151891904781af77c660a0501e142706dd0d2582c4b4122f",
+      "role": "reproduction"
+    },
+    {
+      "path": "angular/binary-check.txt",
+      "bytes": 161,
+      "sha256": "e66b4de68bedb728c865131d54d2976b49b714113609114e09a76ecb7b22dc81",
+      "role": "reproduction"
+    },
+    {
+      "path": "angular/driver.sha256",
+      "bytes": 671,
+      "sha256": "d89442f4cd5573f5450f49351ec5fb4d15e6ae79471e6cca93e667350004f28c",
+      "role": "reproduction"
+    },
+    {
+      "path": "angular/job.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "role": "reproduction"
+    },
+    {
+      "path": "angular/kernel-events-48.json",
+      "bytes": 10516,
+      "sha256": "705e902091e621e1f8f129aec9dfca4140156fc28ffa082811a693c5153fe1c6",
+      "role": "samples"
+    },
+    {
+      "path": "angular/kernel-events-96.json",
+      "bytes": 10535,
+      "sha256": "d043b75d3ab40a2d072e3193718ed27568ead592feb2cb3307b4fda27b6ebfc6",
+      "role": "samples"
+    },
+    {
+      "path": "angular/nsys-version.txt",
+      "bytes": 58,
+      "sha256": "96ee6a04a390c528d5eafc7b21d5524f5e3f5864367724288ca2429a0b5445db",
+      "role": "reproduction"
+    },
+    {
+      "path": "angular/source-check.txt",
+      "bytes": 119,
+      "sha256": "cd1b866537c7cf3627d927c6df8edc06790418a75a486c74d7497ae666d17b7a",
+      "role": "reproduction"
+    },
+    {
+      "path": "angular/statistics-48_cuda_api_sum.csv",
+      "bytes": 374,
+      "sha256": "670c23998dc205db5fb73e8f2a16de2a4ad3f54018fae068c3f5903e9ff88753",
+      "role": "samples"
+    },
+    {
+      "path": "angular/statistics-48_cuda_gpu_kern_sum.csv",
+      "bytes": 10454,
+      "sha256": "04c55c14acb65ffda789a56a1c2b49e1a93f60c5b3ff395d7aa5f6c669f1d816",
+      "role": "samples"
+    },
+    {
+      "path": "angular/statistics-96_cuda_api_sum.csv",
+      "bytes": 384,
+      "sha256": "1357846e6327743d59e586b866816d73bb1e6d02e80c3a0c1c48babca113406a",
+      "role": "samples"
+    },
+    {
+      "path": "angular/statistics-96_cuda_gpu_kern_sum.csv",
+      "bytes": 10469,
+      "sha256": "69cd346a56204c2531fc627b0e78c2798924aac9895c3a3067821199fdfbf998",
+      "role": "samples"
+    },
+    {
+      "path": "angular/work-48.txt.gz",
+      "bytes": 3392,
+      "sha256": "4845776d4aa3ad102e6f004ac77a71e962c0473248e4d340204309a6fb825f2f",
+      "role": "samples"
+    },
+    {
+      "path": "angular/work-96.txt.gz",
+      "bytes": 3733,
+      "sha256": "e6f89054a058449887e320b4228840adf284a39a8824cc993045d11c77658d8e",
+      "role": "samples"
+    },
+    {
+      "path": "build/aot-binaries.sha256",
+      "bytes": 1554,
+      "sha256": "d2ff46ab942272889a992852f2697edd14e5f79e6a5360969075eea7cf5c24b3",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/aot-ccache-after.txt",
+      "bytes": 479,
+      "sha256": "bfaa3deff786670e9fbe2fc9a29fb0b98bef15a4c71fa622c4d0e2e760fe00b1",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/aot-ccache-before.txt",
+      "bytes": 479,
+      "sha256": "888518f9f680c0f5268228c92a80b9c0a8bc8e68b46d1ee977b3620323a3257d",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/binaries.sha256",
+      "bytes": 347,
+      "sha256": "a3a94128ea9f394ab699856ba59c5c71b23faad5cbe0571594f2f14fe89f29da",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/ccache-after.txt",
+      "bytes": 479,
+      "sha256": "888518f9f680c0f5268228c92a80b9c0a8bc8e68b46d1ee977b3620323a3257d",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/ccache-before.txt",
+      "bytes": 479,
+      "sha256": "2153a8d2240c1b9a351fe6bea40ad6e719459de153598ebc83a5fa3628eaa6c1",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/ccache-version.txt",
+      "bytes": 489,
+      "sha256": "9c3008378530cbe9a300ccd0d037e839ac82210a5303bf17d06d315be562c10b",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/source-head.txt",
+      "bytes": 41,
+      "sha256": "6260a4528ff2cbf31c53d87a562565334061642202c2f26622d16495995dddea",
+      "role": "reproduction"
+    },
+    {
+      "path": "build/source-identity.txt",
+      "bytes": 65,
+      "sha256": "30d56e620ba7bd62cdf97a674c15dff208e46adb7f2c561c6f85fa607ef1180a",
+      "role": "reproduction"
+    },
+    {
+      "path": "census/binary-check.txt",
+      "bytes": 161,
+      "sha256": "e66b4de68bedb728c865131d54d2976b49b714113609114e09a76ecb7b22dc81",
+      "role": "reproduction"
+    },
+    {
+      "path": "census/driver.sha256",
+      "bytes": 663,
+      "sha256": "af41702a087acda4526b7c451741f1c6f281f7f17146c376e0fe64a3b2edf095",
+      "role": "reproduction"
+    },
+    {
+      "path": "census/job.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "role": "reproduction"
+    },
+    {
+      "path": "census/source-check.txt",
+      "bytes": 119,
+      "sha256": "cd1b866537c7cf3627d927c6df8edc06790418a75a486c74d7497ae666d17b7a",
+      "role": "reproduction"
+    },
+    {
+      "path": "census/work-48.jsonl.gz",
+      "bytes": 3051,
+      "sha256": "4b96eb4211e61f38d8537df9d2f462ed354843dcebb5902e0390282330efa313",
+      "role": "samples"
+    },
+    {
+      "path": "census/work-96.jsonl.gz",
+      "bytes": 3359,
+      "sha256": "2bc7640fec86fb170c09f73932475d7722e73b9f721d4cd0211dc803bbdf61b3",
+      "role": "samples"
+    },
+    {
+      "path": "control-source.patch.gz",
+      "bytes": 24724,
+      "sha256": "561b7b72fba18cc938c67724da54bde81d83a9755982e0879b9566c13805f58f",
+      "role": "source-patch"
+    },
+    {
+      "path": "driver-binaries.json",
+      "bytes": 301,
+      "sha256": "5cf4fd41b2d18d5c957c25e11153147cbeaa5d898bec236680663ed61c6a8efb",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/census-derivative-n1.sh.txt",
+      "bytes": 883,
+      "sha256": "dbef52b49915bb0b66244d18f464fbbb4c9da034a0665c305aee001b1f14cb30",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/check-source.py.txt",
+      "bytes": 888,
+      "sha256": "f3ccdf1305d574f136b617cd5c6e4209c243000604ae24643695a7e2a8a70e49",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/derivative-census.cpp.txt",
+      "bytes": 13698,
+      "sha256": "f4469f9a684f33cc2fbf5fdb1733cd9830ae0ad8ae2ddc3c13f290cad30b48ff",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/derivative-orders.cpp.txt",
+      "bytes": 15779,
+      "sha256": "1726db59affe8b206e79df0b8729afed49f34d242ec9d8a1dabe0a3edbbd3042",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/gpu-env-n1.sh.txt",
+      "bytes": 1487,
+      "sha256": "5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/input-48-0.txt.gz",
+      "bytes": 1410,
+      "sha256": "a74716f367006fefcc4929fd806bfa10a4835cedeab253a91d0220e9509a8717",
+      "role": "input"
+    },
+    {
+      "path": "drivers/input-48-1.txt.gz",
+      "bytes": 1416,
+      "sha256": "2def7c76714be074a4e24e224e311c1d3fa82bdd8bfec10d39bedea0cf3a3eed",
+      "role": "input"
+    },
+    {
+      "path": "drivers/input-96-0.txt.gz",
+      "bytes": 2256,
+      "sha256": "7e2b6a55bf0a6a569e0b950aeb29087f0c5bfa50a41da5d6f5b6492171083c32",
+      "role": "input"
+    },
+    {
+      "path": "drivers/input-96-1.txt.gz",
+      "bytes": 2262,
+      "sha256": "d6575f0e3d6605eb07147b75e3b37516132656b2ac9fad732af426d9dd676b75",
+      "role": "input"
+    },
+    {
+      "path": "drivers/profile-derivative-orders-n1.sh.txt",
+      "bytes": 1259,
+      "sha256": "a24a856b3a7ebaa1f6b3ae24c69f8b00ffe87809c6a51223920dff75ecfebd45",
+      "role": "reproduction"
+    },
+    {
+      "path": "failed/binary-check.txt",
+      "bytes": 161,
+      "sha256": "e66b4de68bedb728c865131d54d2976b49b714113609114e09a76ecb7b22dc81",
+      "role": "reproduction"
+    },
+    {
+      "path": "failed/derivative-census.cpp.txt",
+      "bytes": 12948,
+      "sha256": "ffd0970b11b4a69fdcba36c2e485b7ca85768b263fc614e489bfd0249d1ae7c0",
+      "role": "reproduction"
+    },
+    {
+      "path": "failed/driver.sha256",
+      "bytes": 663,
+      "sha256": "18e31bf6914668a5373dde4435578ea6a0a72724defa7b658610c6b07d68c9d4",
+      "role": "reproduction"
+    },
+    {
+      "path": "failed/job.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "role": "reproduction"
+    },
+    {
+      "path": "failed/source-check.txt",
+      "bytes": 119,
+      "sha256": "cd1b866537c7cf3627d927c6df8edc06790418a75a486c74d7497ae666d17b7a",
+      "role": "reproduction"
+    },
+    {
+      "path": "failed/work-48.jsonl.gz",
+      "bytes": 20,
+      "sha256": "f61f27bd17de546264aa58f40f3aafaac7021e0ef69c17f6b1b4cd7664a037ec",
+      "role": "samples"
+    },
+    {
+      "path": "identities.json",
+      "bytes": 419,
+      "sha256": "753d23bc27bc5450f9cab02ac3fdd73df9819f2b3b4bcd1948c294f1447225d0",
+      "role": "reproduction"
+    },
+    {
+      "path": "profiler-retention.json",
+      "bytes": 1423,
+      "sha256": "da5ce0ba3f4ba36f1d3cfee46e2263edda1bf9459d99b360b64a6ee0e5ec4681",
+      "role": "reproduction"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 6399,
+      "sha256": "db99ba8f461dc82e1dc94bf76b96c3d5bd691835c854d1da6a6fad350ae44bee",
+      "role": "reproduction"
+    },
+    {
+      "path": "reconstruction.json",
+      "bytes": 257,
+      "sha256": "733daea13a06d940d01a80c1d4ed391502adf063ec47c4ff6df650667789852a",
+      "role": "reproduction"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 22664,
+      "sha256": "8fa1164ac191ccbd4c1e25187565a8cb5eabcd73a5e9abdef21cfdbb6993231e",
+      "role": "summary"
+    },
+    {
+      "path": "validation.json",
+      "bytes": 6387,
+      "sha256": "1067cc6535444699c0e4f57e978b7a0c63eefe352de921ed3afc3a53cf87c031",
+      "role": "evidence"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 11059,
+      "sha256": "bfcd422dac7d0301782ddc081f5abdfd91e663fb951254578f5bea87d9b76aba",
+      "role": "reproduction"
+    }
+  ],
+  "decision": {
+    "scope": "performance",
+    "status": "inconclusive",
+    "reason": "Intrusive work census and repeated angular traversal diagnose candidate work; no complete endpoint or independent scientific qualification."
+  },
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-derivative-work-20261005/verify.py"
+    ]
+  }
+}
