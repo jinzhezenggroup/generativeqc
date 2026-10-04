@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import ctypes as ct
-import hashlib
 import json
 import time
 from pathlib import Path
@@ -18,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from benchmarks._retention import raw_output_path
+from benchmarks.df_triples_provenance import sha256, validate_manifest
 
 COUNTS = (
     "virtual_triples",
@@ -37,26 +37,19 @@ COUNTS = (
 )
 
 
-def sha256(path: Path) -> str:
-    """Hash large retained inputs without making a second resident copy."""
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--state", type=Path, required=True)
     parser.add_argument("--reference", type=Path, required=True)
+    parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--probe", type=Path, required=True)
     parser.add_argument("--library", type=Path, required=True)
     parser.add_argument("--output", type=raw_output_path, required=True)
     parser.add_argument("--max-bytes", type=int, default=24 << 30)
     parser.add_argument("--panels", type=int, choices=(1, 2, 3), default=3)
     args = parser.parse_args()
+    manifest = validate_manifest(args.manifest, args.input, args.state, args.reference)
     with args.input.open("rb") as stream:
         header = np.fromfile(stream, dtype="<u8", count=7)
     if len(header) != 7 or any(int(x) <= 0 for x in header[:3]):
@@ -160,9 +153,15 @@ def main() -> None:
         "reference_energy": reference["triples_energy"],
         "absolute_energy_error": energy_error,
         "absolute_energy_gate": 3e-10,
+        "source_frame_id": manifest["frame"]["frame_id"],
+        "input_frame_acceptance": "manifest_verified",
+        "triples_phase_energy_acceptance": "passed"
+        if status == 0 and energy_error is not None and energy_error < 3e-10
+        else "failed",
+        "upstream_factor_acceptance": "unqualified",
         "sha256": {
             key: sha256(getattr(args, key))
-            for key in ("input", "state", "reference", "probe", "library")
+            for key in ("input", "state", "reference", "manifest", "probe", "library")
         },
     }
     args.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")

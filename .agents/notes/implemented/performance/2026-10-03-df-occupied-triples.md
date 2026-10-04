@@ -103,11 +103,41 @@ Reproduce CPU tests normally, or set `GENERATIVEQC_DF_TRIPLES_CUDA_TEST=1` and
 `srun --partition=main --gres=gpu:5090:1 --time=00:10:00` allocations. The native
 pytest fixture builds `tests/native/df_triples_probe.cpp` with ccache; the same
 adapter is accepted by `benchmarks/df_triples_native_probe.py --probe ...
---library ... --input ... --state ... --reference ... --output ...`.
+--library ... --input ... --state ... --reference ... --manifest ... --output ...`.
 The input is the native-source symmetric DF solver replay file; state/reference
 come from `benchmarks/df_ccsdt_large_oracle.py`. Full ignored artifacts and failed
 domain-rewrite prototypes are preserved under the isolated worktree's
 `.artifacts/occupied-triples/`; no new external archive is published.
+
+### Source-frame admission added after static review
+
+New qualifications also require `--manifest ...`. A replay producer captures
+`benchmarks.df_triples_provenance.frame_identity(state, reference)` before
+constructing native factors from that state, retains it with the construction,
+then calls `write_manifest(path, replay, state, reference, source_frame=frame)`.
+The frame binds geometry, explicit orbital/auxiliary basis definitions,
+representation, occupied/virtual order, coefficients, energies, amplitudes,
+metric convention/cutoff/rank and whole-state bytes. The manifest binds the
+replay and reference hashes and checks that replay T1/T2 are exactly the
+supplied converged amplitudes. The adapter verifies this identity before any
+library or probe load. Source construction remains responsible for actually
+using the captured frame; a manifest is not a numerical proof of the factors.
+
+There is no retrospective manifest-creation command. Existing retained timings
+and energies keep their original hashes and energy results, but are marked
+`legacy_unverified` for cross-file frame admission. No original large artifacts
+were requalified by this host-only repair. A producer must regenerate a replay
+with construction-time provenance before making a newly manifest-verified
+qualification claim. New oracle records include explicit resolved basis
+definitions and representation. Historical records are not silently rewritten.
+
+The host regression substitutes same-shaped finite canonical energies, MO
+coefficients, amplitudes, metric data, geometry, basis and representation; each
+is rejected before CUDA load with result sentinels unchanged. Matching inputs
+reach the mocked load boundary. A changed source-construction frame and altered
+replay amplitudes are rejected by the producer helper. Triples-phase energy
+acceptance and upstream factor acceptance are recorded separately; the latter
+remains `unqualified` at the original 3e-10 factor/block gate.
 
 ## Consequences and revisit conditions
 
