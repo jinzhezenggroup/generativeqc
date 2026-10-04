@@ -97,6 +97,7 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_DF_EXCHANGE_SCHEDULE_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_exchange_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_occupied_gram_cuda.py"
     ARGS --output "${GENERATIVEQC_DF_EXCHANGE_SCHEDULE_HEADER}"
     COMMENT "Generating compiler-owned DF source-reuse schedule")
 
@@ -454,6 +455,21 @@ macro(generativeqc_register_host_generated_sources target)
     ARGS --output "${GENERATIVEQC_GFN2_SDQ_CPU_HEADER}"
     COMMENT "Generating compiler-owned GFN2 S/D/Q CPU primitive kernels")
 
+  # Shared post-HF source traversal is generated for both CPU and CUDA owners.
+  file(GLOB GENERATIVEQC_DF_MO_SOURCE_INPUTS CONFIGURE_DEPENDS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/*.py")
+  set(GENERATIVEQC_DF_MO_SOURCE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/df_mo_source_generated.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_mo_source_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_mo_source.py"
+    OUTPUTS "${GENERATIVEQC_DF_MO_SOURCE_HEADER}"
+    DEPENDS ${GENERATIVEQC_DF_MO_SOURCE_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_mo_source.py"
+    ARGS --output "${GENERATIVEQC_DF_MO_SOURCE_HEADER}")
+
   set(GENERATIVEQC_RCCSD_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsd_cpu.hpp")
   generativeqc_register_generated_sources(
@@ -463,6 +479,57 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_RCCSD_CPU_HEADER}"
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
     ARGS --cpu-header "${GENERATIVEQC_RCCSD_CPU_HEADER}")
+
+  # The DF families share the existing RCCSD emitter. Their CPU queries
+  # also own exact admission sizes for CUDA; generate once for both backends.
+  foreach(_df_family IN ITEMS native core hoisted)
+    if(_df_family STREQUAL "native")
+      set(_df_prefix "generated_df_ccsd")
+    else()
+      set(_df_prefix "generated_df_ccsd_${_df_family}")
+    endif()
+    generativeqc_register_generated_sources(
+      NAME generativeqc_df_ccsd_${_df_family}_codegen
+      TARGET ${target}
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_${_df_family}.py"
+      OUTPUTS
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/${_df_prefix}_cpu.hpp"
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/${_df_prefix}_cuda.cuh"
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/${_df_prefix}_cuda.cu"
+      DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_native.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_core.py"
+      ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  endforeach()
+
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_cc_source_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_cc_source.py"
+    OUTPUTS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cpu.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cu"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_hoisted.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_ccsd_core.py"
+    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+  if(GENERATIVEQC_ENABLE_CUDA)
+    target_sources(${target} PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_cc_source_cuda.cu")
+  endif()
+
+  set(GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_triples_fock_response_cpu.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_triples_fock_cpu_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+    OUTPUTS "${GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER}"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+    ARGS --triples-fock-cpu-header "${GENERATIVEQC_TRIPLES_FOCK_CPU_HEADER}")
 
   set(GENERATIVEQC_RCCSDT_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsdt_cpu.hpp")
@@ -505,6 +572,10 @@ macro(generativeqc_register_host_generated_sources target)
 endmacro()
 
 macro(generativeqc_register_cuda_generated_sources target)
+  target_sources(${target} PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_cuda.cu"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_core_cuda.cu"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_ccsd_hoisted_cuda.cu")
   set(GENERATIVEQC_MEAN_FIELD_SETUP_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_mean_field_setup.cuh")
   generativeqc_register_generated_sources(
@@ -602,6 +673,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_rys_policy.hpp"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_production.hpp"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_screening.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_pair_screening.cuh"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_rys_shell.cuh")
   generativeqc_register_generated_sources(
     TARGET ${target}
@@ -949,6 +1021,28 @@ macro(generativeqc_register_cuda_generated_sources target)
     DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
     ARGS --cuda-source "${GENERATIVEQC_RCCSD_CUDA_SOURCE}")
 
+  set(GENERATIVEQC_TRIPLES_RESPONSE_CUDA_SOURCE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_triples_response_cuda.cu")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_triples_response_cuda_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+    OUTPUTS "${GENERATIVEQC_TRIPLES_RESPONSE_CUDA_SOURCE}"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+    ARGS --triples-cuda-source "${GENERATIVEQC_TRIPLES_RESPONSE_CUDA_SOURCE}")
+
+  set(GENERATIVEQC_TRIPLES_FOCK_CUDA_SOURCE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_triples_fock_response_cuda.cu")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_triples_fock_cuda_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_rccsd_native.py"
+    OUTPUTS "${GENERATIVEQC_TRIPLES_FOCK_CUDA_SOURCE}"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+    ARGS --triples-fock-cuda-source "${GENERATIVEQC_TRIPLES_FOCK_CUDA_SOURCE}")
+
   set(GENERATIVEQC_RCCSDT_CUDA_SOURCE
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_rccsdt_cuda.cu")
   generativeqc_register_generated_sources(
@@ -963,6 +1057,34 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/triples.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/cc/triples_cuda.hpp"
     ARGS --output "${GENERATIVEQC_RCCSDT_CUDA_SOURCE}")
+
+  set(GENERATIVEQC_DF_OCCUPIED_TRIPLES_SOURCES
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_occupied_triples.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_occupied_triples_cuda.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_occupied_triples_cuda.cu")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_occupied_triples_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_occupied_triples.py"
+    OUTPUTS ${GENERATIVEQC_DF_OCCUPIED_TRIPLES_SOURCES}
+    DEPENDS
+      ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/cuda_gemm.py"
+    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_lambda_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_lambda.py"
+    OUTPUTS
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda_cuda.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_lambda_cuda.cu"
+    DEPENDS ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+    ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
   set(GENERATIVEQC_MP2_GENERATED_DIRECTORY
       "${CMAKE_CURRENT_BINARY_DIR}/generated/mp2")

@@ -36,8 +36,22 @@ std::size_t checked_expanded_primitive_references(const std::vector<core::System
 bool pack_host_batch(const std::vector<core::System>& systems,
                      const std::vector<const std::vector<double>*>& initial_densities,
                      HostBatch& host, bool unrestricted, bool matrix_direct,
-                     bool require_direct_transform) {
+                     bool require_direct_transform, ResidentPsssPolicy resident_psss,
+                     HostBasisPacking packing) {
   if (systems.empty() || systems.size() != initial_densities.size()) return false;
+  const bool df_values = packing == HostBasisPacking::DfValues;
+  // The DF owner independently expands public spherical AOs after packing.
+  // Enforce Cartesian metadata here so the legacy three-term AO ABI remains
+  // valid; g public transforms have their own bounded six-term records.
+  if (df_values && (unrestricted || !matrix_direct || require_direct_transform ||
+                    std::any_of(systems.begin(), systems.end(),
+                                [](const auto& system) {
+                                  return system.basis_representation !=
+                                         GENERATIVEQC_BASIS_CARTESIAN;
+                                }) ||
+                    std::any_of(initial_densities.begin(), initial_densities.end(),
+                                [](const auto* density) { return density != nullptr; })))
+    return false;
   if (std::any_of(systems.begin(), systems.end(),
                   [](const auto& s) { return !s.ecp_terms.empty(); }))
     host.ecp_systems = systems;
@@ -60,7 +74,7 @@ bool pack_host_batch(const std::vector<core::System>& systems,
   host.system_shell_pair_block_offsets.push_back(0);
   host.system_shell_pair_block_quartet_offsets.push_back(0);
   host.shell_pair_primitive_offsets.push_back(0);
-  host.warm_density.resize(systems.size() * host.spin_count * matrix_size, 0.0);
+  if (!df_values) host.warm_density.resize(systems.size() * host.spin_count * matrix_size, 0.0);
   // Small-HF energy historically used persistent ERIs and therefore did not
   // need a public-to-Cartesian transform. Force requests may now select the
   // quartet-direct route at the same <=16-AO sizes, so their caller must opt
@@ -92,7 +106,7 @@ bool pack_host_batch(const std::vector<core::System>& systems,
     const std::size_t system_direct_ao_begin = host.direct_ao_shells.size();
     const std::size_t system_shell_begin = host.shell_atoms.size();
     for (const core::Shell& shell : system.shells) {
-      if (shell.angular_momentum > kMaximumAngularMomentum ||
+      if (shell.angular_momentum > (df_values ? 4U : kMaximumAngularMomentum) ||
           shell.atom_index >= system.atoms.size())
         return false;
       if (host.shell_atoms.size() >=
@@ -161,6 +175,25 @@ bool pack_host_batch(const std::vector<core::System>& systems,
       return false;
     }
     host.system_shell_offsets.push_back(static_cast<std::int64_t>(host.shell_atoms.size()));
+    // Values do not consume shell pairs, quartets, occupation or warm state.
+    // Skip their construction, rather than merely omitting device uploads.
+    if (df_values) continue;
+    if (matrix_direct && resident_psss == ResidentPsssPolicy::Skip) {
+      // The DF source knows its complete pair inventory before packing. Avoid
+      // old/new vector-buffer overlap that a construction preflight cannot
+      // infer from a final capacity sample. Other SCF packing modes are unchanged.
+      const auto shells = host.shell_atoms.size() - system_shell_begin;
+      std::size_t plus_one = 0, pairs = 0, total = 0, offsets = 0;
+      if (!runtime::checked_add(shells, 1, plus_one) ||
+          !runtime::checked_multiply(shells, plus_one, pairs) ||
+          !runtime::checked_add(host.shell_pair_first.size(), pairs / 2, total) ||
+          !runtime::checked_add(total, 1, offsets))
+        return false;
+      host.shell_pair_systems.reserve(total);
+      host.shell_pair_first.reserve(total);
+      host.shell_pair_second.reserve(total);
+      host.shell_pair_primitive_offsets.reserve(offsets);
+    }
     for (std::size_t first = system_shell_begin; first < host.shell_atoms.size(); ++first) {
       for (std::size_t second = system_shell_begin; second <= first; ++second) {
         host.shell_pair_systems.push_back(static_cast<std::int32_t>(system_index));
@@ -188,36 +221,39 @@ bool pack_host_batch(const std::vector<core::System>& systems,
     const std::size_t system_shell_pair_begin =
         static_cast<std::size_t>(host.system_shell_pair_offsets.back());
     const std::size_t system_shell_pair_count = system_shell_pair_end - system_shell_pair_begin;
-    std::vector<std::uint32_t> psss_bra_pairs;
-    const std::size_t resident_ket_begin = host.psss_resident_ket_pairs.size();
-    for (std::size_t pair = system_shell_pair_begin; pair < system_shell_pair_end; ++pair) {
-      if (pair > std::numeric_limits<std::uint32_t>::max()) return false;
-      const std::int32_t first_shell = host.shell_pair_first[pair];
-      const std::int32_t second_shell = host.shell_pair_second[pair];
-      const unsigned first_angular = host.shell_angular[first_shell];
-      const unsigned second_angular = host.shell_angular[second_shell];
-      if (first_angular + second_angular == 1U) {
-        psss_bra_pairs.push_back(static_cast<std::uint32_t>(pair));
-      } else if (first_angular == 0U && second_angular == 0U) {
-        host.psss_resident_ket_pairs.push_back(static_cast<std::uint32_t>(pair));
-      }
-    }
-    const std::size_t resident_ket_count = host.psss_resident_ket_pairs.size() - resident_ket_begin;
-    if (resident_ket_begin > std::numeric_limits<std::uint32_t>::max() ||
-        resident_ket_count > std::numeric_limits<std::uint32_t>::max()) {
-      return false;
-    }
-    for (const std::uint32_t bra_pair : psss_bra_pairs) {
-      if (matrix_direct) break;
-      for (std::size_t ket = 0; ket < resident_ket_count; ket += kResidentPsssThreads) {
-        const std::size_t chunk_count =
-            std::min<std::size_t>(kResidentPsssThreads, resident_ket_count - ket);
-        const std::size_t chunk_begin = resident_ket_begin + ket;
-        if (chunk_begin > std::numeric_limits<std::uint32_t>::max()) {
-          return false;
+    if (resident_psss == ResidentPsssPolicy::Build) {
+      std::vector<std::uint32_t> psss_bra_pairs;
+      const std::size_t resident_ket_begin = host.psss_resident_ket_pairs.size();
+      for (std::size_t pair = system_shell_pair_begin; pair < system_shell_pair_end; ++pair) {
+        if (pair > std::numeric_limits<std::uint32_t>::max()) return false;
+        const std::int32_t first_shell = host.shell_pair_first[pair];
+        const std::int32_t second_shell = host.shell_pair_second[pair];
+        const unsigned first_angular = host.shell_angular[first_shell];
+        const unsigned second_angular = host.shell_angular[second_shell];
+        if (first_angular + second_angular == 1U) {
+          psss_bra_pairs.push_back(static_cast<std::uint32_t>(pair));
+        } else if (first_angular == 0U && second_angular == 0U) {
+          host.psss_resident_ket_pairs.push_back(static_cast<std::uint32_t>(pair));
         }
-        host.psss_resident_tasks.push_back({bra_pair, static_cast<std::uint32_t>(chunk_begin),
-                                            static_cast<std::uint32_t>(chunk_count)});
+      }
+      const std::size_t resident_ket_count =
+          host.psss_resident_ket_pairs.size() - resident_ket_begin;
+      if (resident_ket_begin > std::numeric_limits<std::uint32_t>::max() ||
+          resident_ket_count > std::numeric_limits<std::uint32_t>::max()) {
+        return false;
+      }
+      for (const std::uint32_t bra_pair : psss_bra_pairs) {
+        if (matrix_direct) break;
+        for (std::size_t ket = 0; ket < resident_ket_count; ket += kResidentPsssThreads) {
+          const std::size_t chunk_count =
+              std::min<std::size_t>(kResidentPsssThreads, resident_ket_count - ket);
+          const std::size_t chunk_begin = resident_ket_begin + ket;
+          if (chunk_begin > std::numeric_limits<std::uint32_t>::max()) {
+            return false;
+          }
+          host.psss_resident_tasks.push_back({bra_pair, static_cast<std::uint32_t>(chunk_begin),
+                                              static_cast<std::uint32_t>(chunk_count)});
+        }
       }
     }
     host.system_shell_pair_offsets.push_back(static_cast<std::int64_t>(system_shell_pair_end));

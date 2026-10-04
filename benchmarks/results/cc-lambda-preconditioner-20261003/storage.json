@@ -1,0 +1,61 @@
+{
+  "records": [
+    {
+      "encoding": "gzip",
+      "original_bytes": 2868,
+      "original_git_blob": "c07f926cc904eadaa5f1fbc638feb964ec86864f",
+      "original_path": "evidence.json",
+      "original_sha256": "a06296a8e2fef3cfa468300ae152c4ec1a05497b0d6f86e759ce66ba2060b134",
+      "stored_bytes": 1374,
+      "stored_path": "evidence.original.json.gz",
+      "stored_sha256": "bc565f97364b5a15b2caad2fc36ca890d19d6d52e58929607688386d2872c267"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 152851,
+      "original_git_blob": "012665a1541c55d111969937782a553a724843ad",
+      "original_path": "records.json",
+      "original_sha256": "c4a3c2bd083518db31d992801e1cadc54bb685552fc6f3ad2aee8f58e39a4645",
+      "stored_bytes": 34232,
+      "stored_path": "records.json.gz",
+      "stored_sha256": "3ad9c6883d9f7f8ff0050ca4976ef0be66cf1010d287a9f6d96210dd8bf1c5f2"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 15399,
+      "original_git_blob": "738b2d78b8ae42c64024bcdc930f2e526aa76a41",
+      "original_path": "source.patch",
+      "original_sha256": "79007d9dc8e1c1a51b53e0dec5516367a32605380b7d2667c12d0ad27f4681a0",
+      "stored_bytes": 4272,
+      "stored_path": "source.patch.gz",
+      "stored_sha256": "7b92e3c4096030277a705d0e5146a93430bb067623590e91c2d746818ccc2dce"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 23286,
+      "original_git_blob": "7057009dfc1ba0d7ab6b379543bf55384b0fbba2",
+      "original_path": "summary.json",
+      "original_sha256": "9db50ef58513931dd2152e93aa1d9e1b308a6c67122ca0aaa5603cbdf1a6fda3",
+      "stored_bytes": 7714,
+      "stored_path": "summary.json.gz",
+      "stored_sha256": "c55145c31528d75a3a501c4acacf49f8cedaeb83de96a438b395f53052d32b11"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 26092,
+      "original_git_blob": "870bbd33f6baceeb6cdd87613c87ee7b06bbdf49",
+      "original_path": "work.json",
+      "original_sha256": "020012fb7068e123d6418ce28f5762efc4774aef2b02217645c96f3b19eb2be1",
+      "stored_bytes": 8994,
+      "stored_path": "work.json.gz",
+      "stored_sha256": "55c961e0c3de7fbe855f6d2dacfdaf9b846d1e8a2825bef6722c069f0eeab845"
+    }
+  ],
+  "retained_stored_source": {
+    "path": "records.json.gz",
+    "reason": "Exact existing gzip member retained; decompression is identical to the original records.json.",
+    "revision": "603b1995515601c67f6e974f33a712178a5cdff0"
+  },
+  "schema": "generativeqc.cc-evidence-storage.v1",
+  "storage_source_revision": "bda12d40d2e579bdfb9d4469f3baf652344ac233"
+}

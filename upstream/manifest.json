@@ -158,7 +158,7 @@
     "libxc-xc-admission": {
       "canonical_inputs": {
         "python/generativeqc_compiler/xc/b3lyp_production_policy.py": "a79041cce5d94fdac6b990dae93390791830642caf959399fbe44f8966aa33bb",
-        "python/generativeqc_compiler/xc/b88_vwn_maple.py": "a94aba9b30f7262d57c81c01e0867a30304868ce17ed5dc365e72f1a8716d6b9",
+        "python/generativeqc_compiler/xc/b88_vwn_maple.py": "3e187356356ed11d0b08754a4309fb2d7e8baf6dc0c3a2d13014b874f49bf8e4",
         "python/generativeqc_compiler/xc/expression_dispatch.py": "ff8e9794642809abf7f5ad0d02efba31ac68cbd1561c419071880aee846c74de",
         "python/generativeqc_compiler/xc/ityh_maple.py": "57e3adb4054244f3d502c131767849ed07f00915a45c41dc6a32201b14e42fb8",
         "python/generativeqc_compiler/xc/p86_pz_maple.py": "78158203828b796c8fd05efe27a3252b21ebd9f324ae6eabe74742286ea146f8",
@@ -211,16 +211,18 @@
         "degree": 17,
         "interval_width": 2.5,
         "roots": [
+          2,
           3,
-          4
+          4,
+          5
         ]
       },
       "generator": "tools/generate_rys_high_accuracy_tables.py",
-      "generator_sha256": "e91c2d80736d0d2dfbfa1d77075d99242754c97a7890744fc87599828af11929",
+      "generator_sha256": "087313bd716b49e01e111738304562b7838953381c9cf3a38a0971aa65d20e22",
       "input_identity_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
       "inputs": [],
       "outputs": {
-        "python/generativeqc_compiler/integral/rys_high_accuracy_data.py": "51f97cfdf2c750fff11a5f09b9435cb7d541c7153eea1826fe521ec248cae079"
+        "python/generativeqc_compiler/integral/rys_high_accuracy_data.py": "1ec410b10b761a38da92b040392399cd491a2426641b6a1a9559ec5c3474a1cb"
       }
     }
   },

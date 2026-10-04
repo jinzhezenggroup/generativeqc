@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
 #include <limits>
 #include <memory>
 #include <numeric>
@@ -13,13 +14,16 @@
 #include <utility>
 #include <vector>
 
+#include "cc/triples_fock_response.hpp"
 #include "cc/triples_response.hpp"
+#include "cc/triples_response_internal.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "posthf/capacity.hpp"
 #include "posthf/mp2_derivative.hpp"
 #include "posthf/mp2_gradient.hpp"
 #include "posthf/native_provider.hpp"
 #include "posthf/raw_source.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "scf/types.hpp"
 #include "tensor/cpu_linalg.hpp"
 
@@ -360,34 +364,15 @@ double max_abs(std::span<const double> values) {
 double minimum_symmetric_eigenvalue(std::vector<double> matrix, std::size_t n) {
   if (matrix.size() != square(n)) throw std::invalid_argument("RCCSD(T) response matrix shape");
   if (!n) return std::numeric_limits<double>::infinity();
-  const auto max_sweeps = checked_mul(std::size_t{100}, square(n));
-  for (std::size_t sweep = 0; sweep < max_sweeps; ++sweep) {
-    std::size_t p = 0, q = 0;
-    double largest = 0.0;
-    for (std::size_t i = 0; i < n; ++i)
-      for (std::size_t j = i + 1; j < n; ++j)
-        if (std::abs(matrix[i * n + j]) > largest) {
-          largest = std::abs(matrix[i * n + j]);
-          p = i;
-          q = j;
-        }
-    if (largest < 1e-13) break;
-    const double app = matrix[p * n + p], aqq = matrix[q * n + q], apq = matrix[p * n + q];
-    const double phi = 0.5 * std::atan2(2.0 * apq, aqq - app);
-    const double c = std::cos(phi), s = std::sin(phi);
-    for (std::size_t k = 0; k < n; ++k) {
-      if (k == p || k == q) continue;
-      const double akp = matrix[k * n + p], akq = matrix[k * n + q];
-      matrix[k * n + p] = matrix[p * n + k] = c * akp - s * akq;
-      matrix[k * n + q] = matrix[q * n + k] = s * akp + c * akq;
-    }
-    matrix[p * n + p] = c * c * app - 2.0 * s * c * apq + s * s * aqq;
-    matrix[q * n + q] = s * s * app + 2.0 * s * c * apq + c * c * aqq;
-    matrix[p * n + q] = matrix[q * n + p] = 0.0;
-  }
-  double result = matrix[0];
-  for (std::size_t i = 1; i < n; ++i) result = std::min(result, matrix[i * n + i]);
-  return result;
+  // Curvature requires the full spectrum, but repeated maximum-pivot searches
+  // cost O(n^4). Reuse the shared cyclic Jacobi owner with an explicit scalar
+  // plan: its matrix/vector storage is completely admitted below, including
+  // builds where an external LAPACK provider has opaque private workspace.
+  const tensor::CpuLinalgPlan plan{tensor::CpuLinalgProvider::scalar};
+  // Preserve the former absolute off-diagonal accuracy: a large remote
+  // eigenvalue must not hide a coupled low block near the 1e-8 stability gate.
+  auto eigen = tensor::cpu_symmetric_eigen(std::move(matrix), n, plan, 1.0e-13);
+  return eigen.values.front();
 }
 
 }  // namespace
@@ -415,6 +400,16 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
         &reference.orbital_energies, &reference.density, &reference.weighted_density})
     reference_bytes = checked_add(reference_bytes, bytes(values->capacity()));
   RccsdtForcePlan plan;
+  plan.full_triples_fock_response = include_triples && reference.orbital_energies.size() != n;
+  if (include_triples && reference.orbital_energies.size() == n) {
+    for (const auto& bounds :
+         {std::pair<std::size_t, std::size_t>{0, o}, std::pair<std::size_t, std::size_t>{o, n}})
+      for (std::size_t i = bounds.first; i < bounds.second; ++i)
+        for (std::size_t j = i + 1; j < bounds.second; ++j)
+          if (std::abs(reference.orbital_energies[i] - reference.orbital_energies[j]) <=
+              kMinimumSameSpaceGap)
+            plan.full_triples_fock_response = true;
+  }
   // Lambda's existing bound includes this borrowed subset. Subtract it only
   // when composing that stage, so the actual reference is charged once.
   const auto lambda_borrowed = sum({p.reference_retained_bytes, problem_host_bytes(p),
@@ -427,22 +422,31 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
           ? bytes(sum({checked_mul(o, checked_mul(v, square(v))), checked_mul(ov, square(o)),
                        checked_mul(2, square(ov)), checked_mul(2, ov), n}))
           : 0;
-  const auto pages = include_triples
-                         ? std::min<std::size_t>(TriplesResponseOptions{}.batch_capacity,
-                                                 checked_mul(v, checked_mul(v + 1, v + 2)) / 6)
-                         : 0;
   plan.triples_phase_bytes =
-      include_triples ? sum({plan.retained_input_bytes, bytes(n), triples_retained,
-                             bytes(generated::triples_response_arena_elements(o, v, pages)),
-                             checked_mul(pages, 3 * sizeof(std::int64_t) + 2 * sizeof(double))})
+      include_triples ? sum({plan.retained_input_bytes, bytes(n),
+                             detail::triples_response_layout(
+                                 o, v, TriplesResponseOptions{}.batch_capacity, cuda_transform)
+                                 .numeric_bytes()})
                       : 0;
+  const auto fock_retained =
+      plan.full_triples_fock_response ? bytes(checked_add(square(o), square(v))) : 0;
+  if (plan.full_triples_fock_response) {
+    // The triples VJP owner has released its arena/device storage; only its
+    // eight outputs coexist with the separately admitted Fock-moment phase.
+    plan.triples_fock_phase_bytes =
+        sum({plan.retained_input_bytes, bytes(n), triples_retained,
+             detail::triples_fock_response_layout(o, v, TriplesResponseOptions{}.batch_capacity,
+                                                  cuda_transform)
+                 .numeric_bytes()});
+    plan.triples_phase_bytes = std::max(plan.triples_phase_bytes, plan.triples_fock_phase_bytes);
+  }
   LambdaOptions lambda_options;
   lambda_options.max_bytes = max_bytes;
   lambda_options.gmres.max_workspace_bytes = max_bytes;
   const auto lambda_capacity = lambda_cpu_numeric_capacity(p, cc, lambda_options, include_triples);
   if (lambda_capacity < lambda_borrowed) throw std::logic_error("Lambda capacity underflow");
-  plan.lambda_phase_bytes =
-      sum({plan.retained_input_bytes, triples_retained, lambda_capacity - lambda_borrowed});
+  plan.lambda_phase_bytes = sum({plan.retained_input_bytes, triples_retained, fock_retained,
+                                 lambda_capacity - lambda_borrowed});
   const auto parameter_retained = bytes(parameter_elements(o, v));
   const auto parameter_arena = bytes(std::max({generated::parameter_foo_arena_elements(o, v),
                                                generated::parameter_fov_arena_elements(o, v),
@@ -456,7 +460,7 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
                                                generated::parameter_vvvv_arena_elements(o, v)}));
   const auto before_raw =
       sum({plan.retained_input_bytes, triples_retained, bytes(amplitudes), parameter_retained});
-  plan.parameter_phase_bytes = checked_add(before_raw, parameter_arena);
+  plan.parameter_phase_bytes = sum({before_raw, fock_retained, parameter_arena});
   std::size_t shell = 0;
   for (const auto& basis_shell : system.shells) {
     const auto l = static_cast<std::size_t>(basis_shell.angular_momentum);
@@ -509,7 +513,10 @@ static RccsdtForcePlan plan_relaxed_rccsd_force_cpu(const core::System& system,
       std::max({sum({core, checked_mul(2, small_response_retained), hamiltonian_small_arena}),
                 sum({core, checked_mul(2, small_response_retained), bytes(checked_mul(2, n2)),
                      control_arena}),
-                checked_add(response_base, bytes(square(ov))),  // eigenvalue-check matrix copy
+                // Scalar eigensolver: matrix copy, working and sorted eigenvectors,
+                // eigenvalues and the size_t permutation coexist at publication.
+                sum({response_base, bytes(sum({checked_mul(3, square(ov)), ov})),
+                     checked_mul(ov, sizeof(std::size_t))}),
                 checked_add(response_base, gmres.workspace_bytes),
                 sum({final_response_base, small_response_retained, hamiltonian_small_arena}),
                 sum({final_response_base, small_response_retained, eri_response_retained,
@@ -626,10 +633,42 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   if (include_triples) {
     TriplesResponseOptions triples_options;
     triples_options.denominator_threshold = denominator_threshold;
-    triples_options.max_bytes = max_bytes;
-    triples.emplace(
-        triples_response_cpu(problem, cc_result, std::vector<double>(eps_o.begin(), eps_o.end()),
-                             std::vector<double>(eps_v.begin(), eps_v.end()), triples_options));
+    triples_options.max_bytes = max_bytes - resources.retained_input_bytes - bytes(n);
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_derivative)
+      triples.emplace(triples_response_cuda(
+          problem, cc_result, std::vector<double>(eps_o.begin(), eps_o.end()),
+          std::vector<double>(eps_v.begin(), eps_v.end()), device_id, triples_options));
+    else
+#endif
+      triples.emplace(
+          triples_response_cpu(problem, cc_result, std::vector<double>(eps_o.begin(), eps_o.end()),
+                               std::vector<double>(eps_v.begin(), eps_v.end()), triples_options));
+  }
+
+  std::optional<TriplesFockResponseResult> triples_fock;
+  if (resources.full_triples_fock_response) {
+    TriplesResponseOptions options;
+    options.denominator_threshold = denominator_threshold;
+    std::size_t retained = 0;
+    for (const auto* block : {&triples->ovvv, &triples->ovoo, &triples->ovov, &triples->fov,
+                              &triples->t1, &triples->t2, &triples->eps_o, &triples->eps_v})
+      retained = checked_add(retained, bytes(block->capacity()));
+    const auto borrowed =
+        checked_add(resources.retained_input_bytes, checked_add(retained, bytes(n)));
+    if (borrowed >= max_bytes)
+      throw std::length_error("triples Fock response has no admitted budget");
+    options.max_bytes = max_bytes - borrowed;
+#if GENERATIVEQC_HAS_CUDA
+    if (cuda_derivative)
+      triples_fock.emplace(triples_fock_response_cuda(
+          problem, cc_result, std::vector<double>(eps_o.begin(), eps_o.end()),
+          std::vector<double>(eps_v.begin(), eps_v.end()), device_id, options));
+    else
+#endif
+      triples_fock.emplace(triples_fock_response_cpu(
+          problem, cc_result, std::vector<double>(eps_o.begin(), eps_o.end()),
+          std::vector<double>(eps_v.begin(), eps_v.end()), options));
   }
 
   LambdaOptions lambda_options;
@@ -667,6 +706,17 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
     throw std::runtime_error("RCCSD(T) CUDA force lost CUDA Lambda action ownership");
 
   if (triples) add_triples_parameter_sources(parameters, *triples);
+  if (triples_fock) {
+    // The full resolvent includes diagonal denominator AND off-diagonal
+    // canonicalization sources. Fold it once, then release its result buffers
+    // before raw-Hamiltonian allocation. Diagnostics remain available below.
+    for (std::size_t k = 0; k < parameters.foo.size(); ++k)
+      parameters.foo[k] += triples_fock->foo[k];
+    for (std::size_t k = 0; k < parameters.fvv.size(); ++k)
+      parameters.fvv[k] += triples_fock->fvv[k];
+    std::vector<double>().swap(triples_fock->foo);
+    std::vector<double>().swap(triples_fock->fvv);
+  }
   const auto raw_started = Clock::now();
   posthf::ProviderWork raw_work;
   auto raw = raw_hamiltonian(source, reference, max_bytes, cuda_derivative,
@@ -712,7 +762,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   // Fold them into the already-declared foo/fvv parameter seeds so every
   // intermediate orbital-control query can use the pruned Hamiltonian VJP.
   std::vector<double> bar_fock(square(n), 0.0);
-  if (triples) {
+  if (triples && !triples_fock) {
     for (std::size_t i = 0; i < o; ++i) bar_fock[i * n + i] = triples->eps_o[i];
     for (std::size_t a = 0; a < v; ++a) bar_fock[(o + a) * n + o + a] = triples->eps_v[a];
     add_same_space_fock_seed(parameters, bar_fock, o, v);
@@ -727,16 +777,20 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
       for (std::size_t q = p + 1; q < bounds.second; ++q) {
         const double gap = reference.orbital_energies[p] - reference.orbital_energies[q];
         minimum_same_space_gap = std::min(minimum_same_space_gap, std::abs(gap));
-        if (std::abs(gap) <= kMinimumSameSpaceGap)
-          throw std::runtime_error("degenerate RCCSD(T) canonical occupied/virtual subspace");
-        const double value = -correlation.stationarity[p * n + q] / (2.0 * gap);
-        bar_fock[p * n + q] = value;
-        bar_fock[q * n + p] = value;
+        if (!triples_fock) {
+          if (std::abs(gap) <= kMinimumSameSpaceGap)
+            throw std::runtime_error("degenerate RCCSD(T) canonical occupied/virtual subspace");
+          const double value = -correlation.stationarity[p * n + q] / (2.0 * gap);
+          bar_fock[p * n + q] = value;
+          bar_fock[q * n + p] = value;
+        }
       }
   }
-  add_same_space_fock_seed(parameters, bar_fock, o, v);
-  correlation = ControlWeights{};
-  correlation = control_dispatch(parameters, 0.0);
+  if (!triples_fock) {
+    add_same_space_fock_seed(parameters, bar_fock, o, v);
+    correlation = ControlWeights{};
+    correlation = control_dispatch(parameters, 0.0);
+  }
   std::vector<double>().swap(bar_fock);
   double same_space_stationarity = 0.0;
   for (const auto& bounds :
@@ -785,6 +839,7 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   const auto dimension = checked_mul(o, v);
   std::vector<double> response_matrix(square(dimension), 0.0), basis(dimension, 0.0),
       action(dimension);
+  const auto matrix_started = Clock::now();
   for (std::size_t column = 0; column < dimension; ++column) {
     std::fill(basis.begin(), basis.end(), 0.0);
     basis[column] = 1.0;
@@ -799,7 +854,9 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
                                                response_matrix[j * dimension + i]));
   if (asymmetry > 1e-10)
     throw std::runtime_error("generated RCCSD(T) RHF response is not symmetric");
+  const auto curvature_started = Clock::now();
   const double minimum_curvature = minimum_symmetric_eigenvalue(response_matrix, dimension);
+  const auto curvature_finished = Clock::now();
   if (!(minimum_curvature > kMinimumOrbitalCurvature))
     throw std::runtime_error("RCCSD(T) RHF orbital response is unstable or near-singular");
 
@@ -881,7 +938,11 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
       std::chrono::duration<double>(Clock::now() - derivative_started).count();
 #if GENERATIVEQC_HAS_CUDA
   if (cuda_response) {
-    result.response_owned_device_bytes = cuda_response->owned_device_bytes();
+    // These owners execute serially; the public device high-water mark must
+    // include triples scratch even when it exceeds the later response arena.
+    result.response_owned_device_bytes =
+        std::max({cuda_response->owned_device_bytes(), triples ? triples->device_capacity_bytes : 0,
+                  triples_fock ? triples_fock->device_capacity_bytes : 0});
     result.response_h2d_bytes = cuda_response->h2d_bytes();
     result.response_d2h_bytes = cuda_response->d2h_bytes();
     result.response_synchronizations = cuda_response->synchronizations();
@@ -889,6 +950,80 @@ static RccsdtForceResult relaxed_rccsd_force_impl(
   }
 #endif
   result.response_operator_hash = generated::orbital_jvp_program_hash;
+  // Publish successful completed phase observations without adding GPU fences.
+  // The five outer intervals are disjoint; raw provider/read observations are
+  // nested inside raw_hamiltonian_ns. CUDA source reads only time submission.
+  runtime::df_progress::Scope trace("relaxed_cc_force_completed");
+  if (trace.enabled()) {
+    using runtime::df_progress::Scope;
+    const auto nanoseconds = [](double seconds) {
+      return static_cast<std::uint64_t>(seconds * 1e9);
+    };
+    Scope::number("ao_functions", n);
+    Scope::number("include_triples", include_triples);
+    Scope::number("cuda_response_actions", result.cuda_response_actions);
+    Scope::label("triples_response_backend",
+                 include_triples ? (cuda_derivative ? "cuda" : "cpu") : "absent");
+    Scope::number("triples_response_capacity_bytes", triples ? triples->numeric_capacity_bytes : 0);
+    Scope::number("triples_response_device_bytes", triples ? triples->device_capacity_bytes : 0);
+    Scope::number("triples_response_h2d_bytes", triples ? triples->host_to_device_bytes : 0);
+    Scope::number("triples_response_d2h_bytes", triples ? triples->device_to_host_bytes : 0);
+    Scope::number("triples_response_kernel_launches", triples ? triples->kernel_launches : 0);
+    Scope::number("orbital_matrix_dimension", dimension);
+    Scope::number("orbital_matrix_columns", dimension);
+    // Progress numbers are integer work counters. A full-precision label keeps
+    // the small positive curvature observable without truncating it to zero.
+    char curvature_label[64];
+    std::snprintf(curvature_label, sizeof(curvature_label), "%.17g", minimum_curvature);
+    Scope::label("minimum_orbital_curvature", curvature_label);
+    Scope::number("orbital_matrix_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                           curvature_started - matrix_started)
+                                           .count());
+    Scope::number("orbital_curvature_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                              curvature_finished - curvature_started)
+                                              .count());
+    Scope::number("triples_fock_resolvent", triples_fock.has_value());
+    Scope::number("triples_fock_numeric_bytes",
+                  triples_fock ? triples_fock->numeric_capacity_bytes : 0);
+    Scope::number("triples_fock_device_bytes",
+                  triples_fock ? triples_fock->device_capacity_bytes : 0);
+    Scope::number("triples_fock_page_capacity", triples_fock ? triples_fock->page_capacity : 0);
+    Scope::number("triples_fock_pair_panels", triples_fock ? triples_fock->pair_panels : 0);
+    Scope::number("triples_fock_vector_pages", triples_fock ? triples_fock->vector_pages : 0);
+    Scope::number("triples_fock_occupied_moments",
+                  triples_fock ? triples_fock->occupied_moments : 0);
+    Scope::number("triples_fock_virtual_moments", triples_fock ? triples_fock->virtual_moments : 0);
+    Scope::number("triples_fock_h2d_bytes", triples_fock ? triples_fock->host_to_device_bytes : 0);
+    Scope::number("triples_fock_d2h_bytes", triples_fock ? triples_fock->device_to_host_bytes : 0);
+    Scope::number("triples_fock_d2d_bytes", triples_fock ? triples_fock->device_copy_bytes : 0);
+    Scope::number("triples_fock_kernel_launches", triples_fock ? triples_fock->kernel_launches : 0);
+    Scope::number("triples_response_ns", nanoseconds(result.triples_seconds));
+    Scope::number("lambda_parameter_ns", nanoseconds(result.lambda_parameter_seconds));
+    Scope::number("raw_hamiltonian_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                            orbital_started - raw_started)
+                                            .count());
+    Scope::number("orbital_response_ns", nanoseconds(result.orbital_seconds));
+    Scope::number("derivative_ns", nanoseconds(result.derivative_seconds));
+    Scope::number("raw_provider_ns", nanoseconds(result.raw_provider_seconds));
+    Scope::number("raw_source_read_ns", nanoseconds(result.raw_source_seconds));
+    Scope::number("raw_source_reads", result.raw_source_reads);
+    Scope::number("raw_device_source_reads", result.raw_device_source_reads);
+    Scope::number("raw_source_values", result.raw_source_values);
+    Scope::number("raw_transform_fmas", result.raw_transform_fmas);
+    Scope::number("triples_response_pages", result.triples_response_pages);
+    Scope::number("lambda_iterations", result.lambda.iterations);
+    Scope::number("lambda_operator_actions", result.lambda.operator_actions);
+    Scope::number("lambda_diagonal_preconditioned", result.lambda.diagonal_preconditioned);
+    Scope::number("lambda_preconditioner_actions", result.lambda.preconditioner_actions);
+    Scope::number("lambda_h2d_bytes", result.lambda.h2d_bytes);
+    Scope::number("lambda_d2h_bytes", result.lambda.d2h_bytes);
+    Scope::number("lambda_synchronizations", result.lambda.synchronizations);
+    Scope::number("orbital_iterations", result.orbital_response.iterations);
+    Scope::number("response_h2d_bytes", result.response_h2d_bytes);
+    Scope::number("response_d2h_bytes", result.response_d2h_bytes);
+    Scope::number("response_synchronizations", result.response_synchronizations);
+    Scope::number("numeric_capacity_bytes", result.numeric_capacity_bytes);
+  }
   return result;
 }
 

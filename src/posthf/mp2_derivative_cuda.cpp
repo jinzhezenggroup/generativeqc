@@ -6,6 +6,7 @@
 #include "posthf/cuda_derivative.hpp"
 #include "posthf/mp2_derivative.hpp"
 #include "posthf/mp2_derivative_common.hpp"
+#include "runtime/df_progress_trace.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_one_electron_gradient.hpp"
 
@@ -58,7 +59,9 @@ std::vector<double> conventional_derivative_cuda(const core::System& system,
 #else
   if (device_id < 0 || !stage_budget)
     throw std::invalid_argument("invalid CUDA conventional derivative request");
-  return detail::conventional_derivative(
+  runtime::df_progress::Scope trace("cuda_conventional_derivative");
+  posthf::CudaEriDerivativeBatch batch(device_id, system, stage_budget, trace.enabled());
+  auto derivative = detail::conventional_derivative_accumulate(
       system, reference, weights,
       [&](std::span<const double> overlap, std::span<const double> hcore) {
         std::vector<double> gradient;
@@ -71,14 +74,22 @@ std::vector<double> conventional_derivative_cuda(const core::System& system,
         add_nuclear_repulsion_gradient(system, gradient);
         return gradient;
       },
-      [&](const std::array<std::size_t, 4>& shells, std::span<const double> local) {
-        std::array<double, 12> center{};
-        std::string detail;
-        const auto status = posthf::contract_weighted_eri_shell_derivative_cuda(
-            device_id, system, shells, local, stage_budget, center, detail);
-        check_cuda_derivative(status, detail);
-        return center;
-      });
+      [&](const std::array<std::size_t, 4>& shells, std::span<const double> local,
+          std::span<double> gradient) { batch.append(shells, local, gradient); },
+      [&](std::span<double> gradient) { batch.finish(gradient); });
+  if (trace.enabled()) {
+    // These completed consumer calls include record upload, primitive kernels,
+    // result download, and stream/allocation lifetime. Host record construction
+    // belongs to the enclosing shell callback, not consumer_ns.
+    using runtime::df_progress::Scope;
+    const auto& total = batch.diagnostic();
+    Scope::number("batched_shells", batch.batched());
+    Scope::number("batch_numeric_capacity_bytes", batch.numeric_capacity_bytes());
+    Scope::number("primitive_records", total.primitive_records);
+    Scope::number("consumer_calls", total.consumer_calls);
+    Scope::number("consumer_ns", total.consumer_nanoseconds);
+  }
+  return derivative;
 #endif
 }
 
