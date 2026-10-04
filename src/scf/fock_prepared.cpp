@@ -10,6 +10,7 @@
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
 #include "scf/cuda_density_fitting_integrals.hpp"
+#include "scf/df_response_weights.hpp"
 #include "scf/initial_guess/overlap.hpp"
 
 namespace generativeqc::scf {
@@ -421,6 +422,70 @@ FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
     const std::vector<double>& density, const std::vector<double>& beta) const {
   return impl_->cpu_view ? impl_->cpu_view->energy_derivative_components(density, beta)
                          : impl_->cuda_view->energy_derivative_components(density, beta);
+}
+FockEnergyDerivativeComponents PreparedFockPlan::energy_derivative_components(
+    const std::vector<double>& density, const std::vector<double>& beta,
+    const CudaDensityFittingOccupiedProjectionLease* occupied_projection) const {
+#if GENERATIVEQC_HAS_CUDA
+  const auto& strategy = impl_->diagnostic.strategy;
+  const auto fitted_full_range = [](const FockTermSpec& term) {
+    return !term.present || (term.approximation == FockApproximation::DensityFitted &&
+                             term.op == FockOperator::FullRange);
+  };
+  const bool eligible =
+      occupied_projection && *occupied_projection && impl_->cuda_df && impl_->fitted &&
+      impl_->retained_fitted_derivative_order >= 1 && strategy.backend == FockBackend::Cuda &&
+      strategy.spec.derivative_order == 0 && strategy.spec.spin == FockSpin::Restricted &&
+      beta.empty() && strategy.spec.exchange.present && fitted_full_range(strategy.spec.coulomb) &&
+      fitted_full_range(strategy.spec.exchange);
+  if (eligible) {
+    const auto& data = *impl_->fitted;
+    const auto matrix = data.raw.nbf * data.raw.nbf;
+    if (density.size() == matrix && data.df_gradient_orbital && data.df_gradient_auxiliary &&
+        data.df_gradient_budget > 0) {
+      const auto execute = [&](FockBuildSpec spec,
+                               const CudaDensityFittingOccupiedProjectionLease* lease) {
+        std::vector<double> out(data.raw.ncoord);
+        const double cj = spec.coulomb.present ? spec.coulomb.coefficient : 0.0;
+        const double ck = spec.exchange.present ? -0.5 * spec.exchange.coefficient : 0.0;
+        if (cj == 0.0 && ck == 0.0) return out;
+        const DensityFittingDensityResponse term{std::span<const double>(density), cj, ck};
+        std::string detail;
+        checked(execute_cuda_density_fitting_generated_force_response(
+                    impl_->cuda_df.get(), 0, *data.df_gradient_orbital,
+                    *data.df_gradient_auxiliary, data.raw.three_center, data.raw.metric,
+                    std::span<const DensityFittingDensityResponse>(&term, 1),
+                    data.df_gradient_mapping, data.df_gradient_budget, 0, out, detail, nullptr,
+                    nullptr, lease),
+                detail);
+        if (out.size() != data.raw.ncoord)
+          throw std::runtime_error("CUDA DF response coordinate mismatch");
+        return out;
+      };
+
+      FockEnergyDerivativeComponents result{std::vector<double>(data.raw.ncoord),
+                                            std::vector<double>(data.raw.ncoord)};
+      // K' must consume U=B*Cocc before any later DF response revokes/writes
+      // the shared projection scratch. J' is independent and follows normally.
+      if (strategy.spec.exchange.present) {
+        auto exchange = strategy.spec;
+        exchange.derivative_order = 1;
+        exchange.coulomb.present = false;
+        result.exchange = execute(exchange, occupied_projection);
+      }
+      if (strategy.spec.coulomb.present) {
+        auto coulomb = strategy.spec;
+        coulomb.derivative_order = 1;
+        coulomb.exchange.present = false;
+        result.coulomb = execute(coulomb, nullptr);
+      }
+      return result;
+    }
+  }
+#else
+  (void)occupied_projection;
+#endif
+  return energy_derivative_components(density, beta);
 }
 std::vector<double> PreparedFockPlan::retained_energy_derivative(
     const std::vector<double>& density, const std::vector<double>& beta) const {
