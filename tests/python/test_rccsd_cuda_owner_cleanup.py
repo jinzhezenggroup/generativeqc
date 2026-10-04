@@ -60,6 +60,7 @@ PREFIX = r"""
 #include "cc/df_plan.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "runtime/allocation_measurement.hpp"
+#include "solver/diis_ring.hpp"
 #include <functional>
 #include <algorithm>
 #include <array>
