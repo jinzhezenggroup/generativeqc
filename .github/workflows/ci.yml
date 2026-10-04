@@ -181,6 +181,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Add NVIDIA CUDA repository
@@ -396,8 +397,86 @@ jobs:
           include-hidden-files: true
           compression-level: 0
           retention-days: 1
-      # This is release resource evidence. The production compile-only step
-      # above uses fast compilation and cannot supply acceptance resources.
+      - name: Preserve opted-in AO radial resource reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ao-radial-release-compile
+          path: build/ao-radial-compile
+
+  # Resource qualification must complete even when production compilation
+  # starts cold. Both required jobs check out the exact same event commit;
+  # generate the native grid through its original CMake dependency graph here.
+  cuda-resources:
+    name: CUDA 12.9 release resources (sm_120)
+    needs: merge_queue_liveness
+    if: needs.merge_queue_liveness.outputs.active != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CUDACXX: /usr/local/cuda-12.9/bin/nvcc
+      LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Add NVIDIA CUDA repository
+        run: |
+          curl --fail --silent --show-error --location --output cuda-keyring.deb \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring.deb
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
+      - name: Install CUDA 12.9 build dependencies
+        run: |
+          sudo apt-get install --yes \
+            cuda-nvcc-12-9 \
+            cuda-cuobjdump-12-9 \
+            cuda-cudart-dev-12-9 \
+            cuda-cccl-12-9 \
+            libcublas-dev-12-9 \
+            libcusolver-dev-12-9 \
+            libcusparse-12-9 \
+            libnvjitlink-12-9 \
+            python3-numpy \
+            python3-pytest
+          "$CUDACXX" --version
+      - name: Install ccache 4.14
+        run: |
+          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
+          curl --fail --silent --show-error --location \
+            --output "/tmp/${archive}" \
+            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
+          tar -xJf "/tmp/${archive}" -C /tmp
+          sudo install -m 0755 \
+            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
+            /usr/local/bin/ccache
+          ccache --version
+      - name: Configure native grid source generation
+        run: >-
+          cmake --preset cuda-release-sm120
+          -DGENERATIVEQC_BUILD_TESTS=ON
+          -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
+          -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
+          -DGENERATIVEQC_COMPILER_CACHE=ccache
+      - name: Generate exact native grid source and prerequisite headers
+        # Build only this generated-file target, never the library again.
+        # The validator below checks these bytes against compiler emission and
+        # still uses release flags, independently of the fast compile preset.
+        run: >-
+          cmake --build --preset cuda-release-sm120
+          --target generated/generated_grid_policy.cu --parallel 2
+      # This is release resource evidence. The separate production compile-only
+      # job uses fast compilation and cannot supply acceptance resources.
       - name: Restore f-shell release objects
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -468,7 +547,6 @@ jobs:
           path: |
             build/xc-compile
             build/native-xc-resource
-            build/ao-radial-compile
       - name: Preserve f-shell release resource report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -1182,7 +1260,7 @@ jobs:
   pass:
     name: Pass CI checks
     timeout-minutes: 5
-    needs: [merge_queue_liveness, cpu, cuda-compile, python]
+    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
     runs-on: ubuntu-24.04
     if: ${{ !cancelled() }}
     steps:
