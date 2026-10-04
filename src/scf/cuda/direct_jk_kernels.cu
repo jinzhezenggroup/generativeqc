@@ -414,30 +414,40 @@ __device__ unsigned contract_rsh_quartet(DeviceBatch batch, std::int32_t system,
                                          std::size_t j, std::size_t k, std::size_t l,
                                          std::size_t source_stride, double cj, double short_ck,
                                          double long_ck, bool unrestricted, double omega,
-                                         const double* density, const double* beta, double* out) {
+                                         const double* density, const double* beta, double* out,
+                                         bool bilinear = false, int* error = nullptr) {
   const std::size_t n = batch.nbf, matrix = n * n;
   const std::size_t offset = static_cast<std::size_t>(system) * matrix;
   unsigned evaluated = 0;
   double j_weight = 0.0, exchange_weight = 0.0;
-  for (unsigned permutation = 0; permutation < 8; ++permutation) {
-    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) continue;
-    std::size_t a = 0, b = 0, cc = 0, d = 0;
-    eri_symmetry_permutation(permutation, i, j, k, l, a, b, cc, d);
-    // Do not form unused total-density sums or spin quadratics: finite
-    // spin inputs can overflow those intermediates even when every
-    // requested source is finite (for example, cancellation in pure J).
-    if (cj != 0.0) {
-      const std::size_t ab = a * n + b, cd = cc * n + d;
-      const double total_ab = density[offset + ab] + (unrestricted ? beta[offset + ab] : 0.0);
-      const double total_cd = density[offset + cd] + (unrestricted ? beta[offset + cd] : 0.0);
-      j_weight += 0.5 * cj * total_ab * total_cd;
+  if (bilinear) {
+    j_weight = direct_bilinear_density_coefficient(n, offset, density, beta, i, j, k, l);
+    if (!isfinite(j_weight)) {
+      atomicExch(error, 1);
+      return 0;
     }
-    if (short_ck != 0.0 || long_ck != 0.0) {
-      const std::size_t ac = a * n + cc, bd = b * n + d;
-      exchange_weight += 0.5 * (density[offset + ac] * density[offset + bd] +
-                                (unrestricted ? beta[offset + ac] * beta[offset + bd] : 0.0));
+  } else
+    for (unsigned permutation = 0; permutation < 8; ++permutation) {
+      if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) continue;
+      std::size_t a = 0, b = 0, cc = 0, d = 0;
+      eri_symmetry_permutation(permutation, i, j, k, l, a, b, cc, d);
+      // Do not form unused total-density sums or spin quadratics: finite
+      // spin inputs can overflow those intermediates even when every
+      // requested source is finite (for example, cancellation in pure J).
+      if (cj != 0.0) {
+        const std::size_t ab = a * n + b, cd = cc * n + d;
+        const double total_ab = density[offset + ab] + (unrestricted ? beta[offset + ab] : 0.0);
+        const double total_cd = density[offset + cd] + (unrestricted ? beta[offset + cd] : 0.0);
+        j_weight += 0.5 * cj * total_ab * total_cd;
+      }
+      if (short_ck != 0.0 || long_ck != 0.0) {
+        const std::size_t ac = a * n + cc, bd = b * n + d;
+        exchange_weight += 0.5 * (density[offset + ac] * density[offset + bd] +
+                                  (unrestricted ? beta[offset + ac] * beta[offset + bd] : 0.0));
+      }
     }
-  }
+  // The bilinear RHF weight already combines J and -K/2. It uses only
+  // the full-range derivative source and the first output coordinate vector.
   const double short_weight = short_ck != 0.0 ? short_ck * exchange_weight : 0.0;
   const double long_weight = long_ck != 0.0 ? long_ck * exchange_weight : 0.0;
   if (j_weight == 0.0 && short_weight == 0.0 && long_weight == 0.0) return 0;
@@ -470,6 +480,9 @@ __device__ unsigned contract_rsh_quartet(DeviceBatch batch, std::int32_t system,
       full[0] = value.derivative_x;
       full[1] = value.derivative_y;
       full[2] = value.derivative_z;
+      if (bilinear)
+        for (unsigned axis = 0; axis < 3; ++axis)
+          if (!isfinite(full[axis]) || !isfinite(j_weight * full[axis])) atomicExch(error, 1);
     }
     if (short_weight != 0.0 || long_weight != 0.0) {
       const Dual3 value = rsh_quartet_derivative<AngularOrder, Cartesian>(
@@ -536,7 +549,7 @@ __global__ void canonical_rsh_derivative_kernel(
     std::size_t second_count, bool same_bucket, std::size_t work_count, std::size_t source_stride,
     double cj, double short_ck, double long_ck, bool unrestricted, double omega, double screening,
     const double* bounds, const double* density, const double* beta, double* out,
-    std::uint64_t* work_census) {
+    std::uint64_t* work_census, bool bilinear, int* error) {
   const std::size_t dimension = batch.nbf;
   const auto offset = static_cast<std::size_t>(system) * dimension * dimension;
   const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
@@ -559,7 +572,7 @@ __global__ void canonical_rsh_derivative_kernel(
       continue;
     const auto count = contract_rsh_quartet<AngularOrder, Cartesian>(
         batch, system, first, second, third, fourth, source_stride, cj, short_ck, long_ck,
-        unrestricted, omega, density, beta, out);
+        unrestricted, omega, density, beta, out, bilinear, error);
     if (work_census) evaluated += count;
   }
   if (work_census) {
@@ -750,7 +763,7 @@ void launch_canonical_rsh_derivative_source(
     std::size_t first_count, std::size_t second_begin, std::size_t second_count, bool same_bucket,
     std::size_t source_stride, double cj, double short_ck, double long_ck, bool unrestricted,
     double omega, double screening, const double* bounds, const double* density, const double* beta,
-    double* out, std::uint64_t* work_count) {
+    double* out, std::uint64_t* work_count, bool bilinear, int* error) {
   const auto dense_count =
       same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count;
   if (!dense_count) return;
@@ -762,7 +775,7 @@ void launch_canonical_rsh_derivative_source(
     canonical_rsh_derivative_kernel<order, Cartesian><<<blocks, threads, 0, stream>>>(       \
         batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,    \
         same_bucket, dense_count, source_stride, cj, short_ck, long_ck, unrestricted, omega, \
-        screening, bounds, density, beta, out, work_count);                                  \
+        screening, bounds, density, beta, out, work_count, bilinear, error);                 \
     break
   switch (angular_order) {
     GENERATIVEQC_CANONICAL_RSH_ORDER(0);
@@ -791,17 +804,17 @@ void launch_canonical_rsh_derivative_kernel(cudaStream_t stream, DeviceBatch bat
                                             double short_ck, double long_ck, bool unrestricted,
                                             double omega, double screening, const double* bounds,
                                             const double* density, const double* beta, double* out,
-                                            std::uint64_t* work_count) {
+                                            std::uint64_t* work_count, bool bilinear, int* error) {
   if (cartesian)
     launch_canonical_rsh_derivative_source<true>(
         stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
         second_count, same_bucket, source_stride, cj, short_ck, long_ck, unrestricted, omega,
-        screening, bounds, density, beta, out, work_count);
+        screening, bounds, density, beta, out, work_count, bilinear, error);
   else
     launch_canonical_rsh_derivative_source<false>(
         stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
         second_count, same_bucket, source_stride, cj, short_ck, long_ck, unrestricted, omega,
-        screening, bounds, density, beta, out, work_count);
+        screening, bounds, density, beta, out, work_count, bilinear, error);
 }
 
 void launch_independent_jk_derivative_kernel(

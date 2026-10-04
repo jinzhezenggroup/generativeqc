@@ -41,7 +41,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
                                   const generativeqc_method_descriptor& descriptor, bool forces,
                                   bool with_triples, bool df_auxiliary_reduction,
                                   bool df_matrix_gemm, bool lambda_matrix_gemm,
-                                  std::size_t lambda_batch_limit) {
+                                  std::size_t lambda_batch_limit,
+                                  const hf::RHFFrameResponseOptions& frame_options) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -233,7 +234,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   std::vector<double>().swap(state.eps_v);
   phase = Clock::now();
   if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
-  hf::RHFFrameResponseOptions orbital_options;
+  auto orbital_options = frame_options;
   orbital_options.maximum_bytes = budget;
   orbital_options.caller_bytes =
       checked_add(posthf::source_capacity(auxiliary),

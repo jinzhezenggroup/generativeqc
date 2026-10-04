@@ -109,16 +109,14 @@ void launch_independent_rsh_derivative_kernel(
     const double* bounds, const double* density, const double* beta, double* out);
 
 /** Reuse the canonical geometry schedule and the existing RSH derivative algebra. */
-void launch_canonical_rsh_derivative_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
-                                            std::int32_t system, unsigned angular_order,
-                                            const std::int32_t* pairs, CanonicalPairRows rows,
-                                            std::size_t first_begin, std::size_t first_count,
-                                            std::size_t second_begin, std::size_t second_count,
-                                            bool same_bucket, std::size_t source_stride, double cj,
-                                            double short_ck, double long_ck, bool unrestricted,
-                                            double omega, double screening, const double* bounds,
-                                            const double* density, const double* beta, double* out,
-                                            std::uint64_t* work_count);
+void launch_canonical_rsh_derivative_kernel(
+    cudaStream_t stream, DeviceBatch batch, bool cartesian, std::int32_t system,
+    unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool same_bucket, std::size_t source_stride, double cj,
+    double short_ck, double long_ck, bool unrestricted, double omega, double screening,
+    const double* bounds, const double* density, const double* beta, double* out,
+    std::uint64_t* work_count, bool bilinear = false, int* error = nullptr);
 
 /** Provider-facing shell derivative seam. Queue/numerical ownership remains in
  * the Direct consumer layer; host source owners borrow only this launch ABI.

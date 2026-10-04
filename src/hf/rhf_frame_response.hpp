@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string>
 #include <vector>
@@ -24,6 +25,16 @@ struct RHFFrameResponseOptions {
   std::size_t caller_bytes{};
   bool matrix_blas{true};
   bool relax_orbitals{true};
+  // Fixed geometry-only mask for the provisional Z solve. Its result must pass
+  // the zero-screening physical residual; otherwise exact GMRES refines it.
+  // Zero retains the original exact solve. Never screens final nuclear sources.
+  double orbital_screening_tolerance{0.0};
+  // Optional synchronized J/K timing and canonical integral census. Phase wall
+  // times are always reported; J/K times are subsets, not additive phases.
+  bool profile_jk{false};
+  // Canonical bilinear P:G'(D) is preferred only without a specialized shell
+  // derivative lease. False retains the three-pass polarization oracle/fallback.
+  bool bilinear_derivative{true};
   response::GmresOptions gmres{};
 };
 
@@ -44,6 +55,16 @@ struct RHFFrameResponseResult {
   std::size_t contraction_terms{}, h2d_bytes{}, d2h_bytes{}, synchronizations{};
   std::size_t explicit_hessian_elements{};  // Always zero.
   bool matrix_blas{};
+  double setup_seconds{}, reference_audit_seconds{}, weights_seconds{}, solve_seconds{},
+      independent_audit_seconds{}, one_electron_seconds{}, two_electron_seconds{};
+  double jk_seconds{}, screened_jk_seconds{}, screened_residual{};
+  double requested_screening{}, applied_screening{};
+  std::size_t screened_jk_actions{}, jk_census_actions{}, exact_refinements{};
+  std::size_t screened_iterations{}, screened_operator_actions{};
+  std::uint64_t jk_quartet_visits{}, jk_eri_evaluations{};
+  std::uint64_t derivative_quartet_visits{}, derivative_jet_evaluations{};
+  bool bilinear_derivative_used{}, derivative_census_measured{};
+  bool jk_timing_measured{}, linear_screening_available{}, screened_converged{};
   std::string operator_hash;
 };
 

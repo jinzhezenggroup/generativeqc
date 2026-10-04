@@ -66,10 +66,28 @@ Z seed is subtracted. Same-space stationarity never divides same-space gaps.
 An occupied/virtual gap and residual checks qualify the local solve; they do
 **not** certify global RHF stability or the minimum Hessian eigenvalue.
 
+The internal `orbital_screening_tolerance` defaults to zero. A positive value
+requests a provisional GMRES solve with a fixed geometry-only Schwarz mask over
+complete canonical ERI permutation orbits. This path bypasses density-dependent
+shell screening, preserving a fixed self-adjoint action for signed densities.
+The immutable source is still prepared unscreened. A provisional solution must
+pass the original zero-screening Z residual gate (`1e-10`); otherwise exact GMRES
+refines it and the independent audit runs again. Missing optional canonical
+storage retains the exact solve. Final reference, stationarity and nuclear
+sources always use the original unscreened Hamiltonian. Positive thresholds
+are experimental solver controls, not promoted force approximations.
+
 The reference nuclear branch contracts AO hcore and Pulay weights with existing
-CUDA derivative providers. Its two-electron source `P:G'(D)` uses the bounded
-polarization identity `E2'(D+P)-E2'(D)-E2'(P)`, with `E2(D)=D:G(D)/2`. Three
-passes are independent of the orbital-response dimension. The result is an
+CUDA derivative providers. Its two-electron source `P:G'(D)` uses a direct
+compiler-owned bilinear weight when canonical storage is admitted and no
+specialized shell derivative lease is available (notably through-f). It reuses
+the Cartesian projection, symmetry-unique angular buckets and translation
+reconstruction of the existing integral derivative provider. No derivative ERI
+tensor is materialized. The specialized SPD route and capacity fallback retain
+the bounded polarization identity `E2'(D+P)-E2'(D)-E2'(P)`, with `E2(D)=D:G(D)/2`.
+The internal `bilinear_derivative=false` selector retains those three passes for
+matched validation. All routes are independent of orbital-response dimension.
+The result is an
 **electronic gradient**: the final method must add the correlation-source and
 nuclear-repulsion gradients, then negate once to publish forces.
 
@@ -96,6 +114,16 @@ explicit Hessian elements, J/K actions, derivative passes, generated contraction
 summands, BLAS calls and matrix-owner transfers. Integral-provider setup and
 nuclear-consumer transfers are separate; these counters are not a complete
 endpoint traffic ledger.
+
+Response wall times separately report setup, reference audit, weight assembly,
+Z solve, independent residual audit, one-electron and two-electron derivatives.
+Optional `profile_jk` synchronizes each J/K call and records time and canonical
+integral counts. It selects the canonical provider where available, so compare
+matched selectors and hardware. J/K times are subsets of the phase times;
+quartet visits, contracted ERI values and three-axis derivative jets are distinct
+work units and are not FLOPs. Census/timing flags and action counts distinguish
+unmeasured fields from measured zeros. Integral-provider transfers remain outside
+the matrix-map traffic counters.
 
 Relevant validation modules include `test_df_cc_lambda.py`,
 `test_df_source_metric_response.py`, `test_df_nuclear_sink.py`,

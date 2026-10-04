@@ -942,9 +942,14 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, const double* beta,
     std::size_t elements, double* coulomb, double* alpha_exchange, double* beta_exchange,
     int* numerical_error, bool mixed_j, std::uint64_t* mixed_coulomb_work_count,
-    std::string& detail) {
+    double fixed_threshold, std::uint64_t* census, std::string& detail) {
   return direct_jk_guard(plan, detail, [&] {
     direct_jk_require(plan != nullptr, "null direct J/K plan");
+    const bool fixed = fixed_threshold >= 0;
+    direct_jk_require(
+        !fixed || (plan->canonical_pairs && fixed_threshold >= plan->screening_tolerance &&
+                   std::isfinite(fixed_threshold)),
+        "invalid fixed J/K screening domain");
     spec = direct_jk_strategy(plan, spec, 0, plan->diagnostic.batch_size);
     direct_jk_require(spec.derivative_order == 0 && elements == plan->matrix_elements,
                       "device direct J/K requires full-plan value dimensions");
@@ -975,18 +980,28 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
           reinterpret_cast<std::uintptr_t>(mixed_coulomb_work_count) % alignof(std::uint64_t) == 0,
           "device direct J/K mixed-work counter is misaligned");
     }
+    if (census) {
+      pointer(census);
+      direct_jk_require(reinterpret_cast<std::uintptr_t>(census) % alignof(std::uint64_t) == 0,
+                        "misaligned fixed J/K census");
+    }
     const auto bytes = direct_jk_product(elements, sizeof(double));
     const double* inputs[]{density, beta};
     double* outputs[]{coulomb, alpha_exchange, beta_exchange};
     for (const auto* input : inputs) {
+      direct_jk_require_disjoint(input, bytes, census, 2 * sizeof(std::uint64_t));
       direct_jk_require_disjoint(input, bytes, numerical_error, sizeof(int));
       direct_jk_require_disjoint(input, bytes, mixed_coulomb_work_count, sizeof(std::uint64_t));
     }
+    direct_jk_require_disjoint(numerical_error, sizeof(int), census, 2 * sizeof(std::uint64_t));
+    direct_jk_require_disjoint(census, 2 * sizeof(std::uint64_t), mixed_coulomb_work_count,
+                               sizeof(std::uint64_t));
     direct_jk_require_disjoint(numerical_error, sizeof(int), mixed_coulomb_work_count,
                                sizeof(std::uint64_t));
     for (unsigned i = 0; i < 3; ++i) {
       if (!outputs[i]) continue;
       pointer(outputs[i]);
+      direct_jk_require_disjoint(outputs[i], bytes, census, 2 * sizeof(std::uint64_t));
       for (const auto* input : inputs) direct_jk_require_disjoint(input, bytes, outputs[i], bytes);
       direct_jk_require_disjoint(outputs[i], bytes, numerical_error, sizeof(int));
       direct_jk_require_disjoint(outputs[i], bytes, mixed_coulomb_work_count,
@@ -995,6 +1010,8 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
         direct_jk_require_disjoint(outputs[i], bytes, outputs[j], bytes);
     }
     direct_jk_check(cudaMemsetAsync(numerical_error, 0, sizeof(int), plan->stream));
+    if (census)
+      direct_jk_check(cudaMemsetAsync(census, 0, 2 * sizeof(std::uint64_t), plan->stream));
     if (mixed_coulomb_work_count)
       direct_jk_check(
           cudaMemsetAsync(mixed_coulomb_work_count, 0, sizeof(std::uint64_t), plan->stream));
@@ -1015,7 +1032,7 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
     const bool generated_exchange_available =
         !mixed_j && direct_jk_generated_exchange_value_available(*plan, spec);
     const bool shell_values_cover_request =
-        !mixed_j && (!spec.coulomb.present || generated_coulomb_available) &&
+        !fixed && !mixed_j && (!spec.coulomb.present || generated_coulomb_available) &&
         (!spec.exchange.present || generated_exchange_available);
     if ((spec.coulomb.present || spec.exchange.present) && plan->canonical_pairs && !mixed_j &&
         !shell_values_cover_request) {
@@ -1041,9 +1058,10 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
                 offsets[first + 1U] - offsets[first], offsets[second],
                 offsets[second + 1U] - offsets[second], first == second, spec.coulomb.present,
                 spec.exchange.present, unrestricted, direct_exchange_range(spec.exchange),
-                spec.exchange.present ? spec.exchange.omega : 0.0, plan->screening_tolerance,
-                plan->canonical_bounds, plan->canonical_density, plan->canonical_coulomb,
-                plan->canonical_exchange, plan->canonical_work_count);
+                spec.exchange.present ? spec.exchange.omega : 0.0,
+                fixed ? fixed_threshold : plan->screening_tolerance, plan->canonical_bounds,
+                plan->canonical_density, plan->canonical_coulomb, plan->canonical_exchange,
+                census ? census : plan->canonical_work_count);
             direct_jk_check(cudaGetLastError());
           }
       }
@@ -1205,7 +1223,113 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
                                                   int* numerical_error, std::string& detail) {
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, false,
-                                            nullptr, detail);
+                                            nullptr, -1.0, nullptr, detail);
+}
+
+bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) noexcept {
+  return plan && plan->canonical_pairs;
+}
+
+bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept {
+  // Keep the specialized shell derivative consumer for SPD until its crossover
+  // is qualified. Through-f has no such lease and otherwise repeats ordered-AO
+  // derivatives three times for polarization.
+  return plan && plan->canonical_pairs &&
+         !(plan->generated_exchange && plan->generated_exchange->force_capability);
+}
+
+generativeqc_status execute_cuda_direct_bilinear_derivative_device(
+    CudaDirectJkPlan* plan, const double* density, const double* seed, std::size_t elements,
+    std::vector<double>& gradient, std::uint64_t* census, std::string& detail) {
+  if (!cuda_direct_jk_linear_available(plan)) {
+    detail = "canonical bilinear derivative storage is unavailable";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return direct_jk_guard(plan, detail, [&] {
+    direct_jk_require(plan->diagnostic.batch_size == 1 && plan->diagnostic.derivative_order >= 1 &&
+                          plan->screening_tolerance == 0.0 && elements == plan->matrix_elements,
+                      "bilinear derivative requires one unscreened derivative item");
+    direct_jk_check(cudaSetDevice(plan->device_id));
+    const auto pointer = [&](const void* value) {
+      direct_jk_require(value != nullptr, "null bilinear derivative input");
+      cudaPointerAttributes attributes{};
+      direct_jk_check(cudaPointerGetAttributes(&attributes, value));
+      direct_jk_require(
+          attributes.type == cudaMemoryTypeDevice && attributes.device == plan->device_id,
+          "bilinear derivative requires prepared-device buffers");
+    };
+    pointer(density);
+    pointer(seed);
+    if (census) {
+      pointer(census);
+      direct_jk_require(reinterpret_cast<std::uintptr_t>(census) % alignof(std::uint64_t) == 0,
+                        "misaligned bilinear derivative census");
+      for (const auto* input : {density, seed})
+        direct_jk_require_disjoint(input, direct_jk_product(elements, sizeof(double)), census,
+                                   2 * sizeof(std::uint64_t));
+    }
+    std::vector<double> result(plan->coordinates_per_item);
+    int failure = 0;
+    DirectJkDownloadFence fence{plan->stream};
+    direct_jk_check(cudaMemsetAsync(plan->numerical_failure, 0, sizeof(int), plan->stream));
+    direct_jk_check(
+        cudaMemsetAsync(plan->derivative, 0, result.size() * sizeof(double), plan->stream));
+    if (census)
+      direct_jk_check(cudaMemsetAsync(census, 0, 2 * sizeof(std::uint64_t), plan->stream));
+    for (const auto* input : {density, seed}) {
+      launch_independent_jk_finite_kernel(plan->stream, input, elements, plan->numerical_failure);
+      direct_jk_check(cudaGetLastError());
+    }
+    // Reuse the two admitted density slots and the existing public-to-Cartesian
+    // projection for D and P. They are bilinear operands, not physical spin blocks.
+    direct_jk_canonical_density(plan, true, density, seed, 0, 1);
+    const auto n = static_cast<std::size_t>(plan->canonical_batch.nbf);
+    const auto matrix = direct_jk_product(n, n);
+    launch_independent_jk_finite_kernel(plan->stream, plan->canonical_density, 2 * matrix,
+                                        plan->numerical_failure);
+    direct_jk_check(cudaGetLastError());
+    const auto& offsets = plan->canonical_pair_offsets[0];
+    for (unsigned first = 0; first < 7U; ++first)
+      for (unsigned second = 0; second <= first; ++second) {
+        launch_canonical_rsh_derivative_kernel(
+            plan->stream, plan->canonical_batch, plan->canonical_cartesian, 0, first + second,
+            plan->canonical_pairs, direct_jk_pair_rows(plan, second, offsets[first]),
+            offsets[first], offsets[first + 1U] - offsets[first], offsets[second],
+            offsets[second + 1U] - offsets[second], first == second, plan->coordinate_elements, 1.0,
+            0.0, 0.0, false, 0.0, 0.0, plan->canonical_bounds, plan->canonical_density,
+            plan->canonical_density + matrix, plan->derivative, census, true,
+            plan->numerical_failure);
+        direct_jk_check(cudaGetLastError());
+      }
+    direct_jk_check(cudaMemcpyAsync(result.data(), plan->derivative, result.size() * sizeof(double),
+                                    cudaMemcpyDeviceToHost, plan->stream));
+    direct_jk_check(cudaMemcpyAsync(&failure, plan->numerical_failure, sizeof(int),
+                                    cudaMemcpyDeviceToHost, plan->stream));
+    fence.complete();
+    direct_jk_require(failure == 0, "nonfinite bilinear derivative arithmetic");
+    direct_jk_finite_result(result);
+    gradient = std::move(result);
+  });
+}
+
+generativeqc_status enqueue_cuda_direct_jk_linear_device(CudaDirectJkPlan* plan, FockBuildSpec spec,
+                                                         const double* density,
+                                                         std::size_t elements, double* coulomb,
+                                                         double* exchange, int* numerical_error,
+                                                         double threshold, std::uint64_t* census,
+                                                         std::string& detail) {
+  if (!std::isfinite(threshold) || threshold < 0 || spec.spin != FockSpin::Restricted ||
+      (spec.exchange.present && direct_exchange_range(spec.exchange) != DirectCoulombRange::Full)) {
+    detail = "invalid fixed full-range restricted J/K request";
+    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  }
+  if (!cuda_direct_jk_linear_available(plan)) {
+    detail = "canonical linear J/K storage is unavailable";
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+  }
+  return enqueue_cuda_direct_jk_device_impl(plan, spec, density, nullptr, elements, coulomb,
+                                            exchange, nullptr, numerical_error, false, nullptr,
+                                            threshold, census, detail);
 }
 
 generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
@@ -1214,7 +1338,7 @@ generativeqc_status enqueue_cuda_direct_jk_device_mixed_j(
     int* numerical_error, std::string& detail, std::uint64_t* mixed_coulomb_work_count) {
   return enqueue_cuda_direct_jk_device_impl(plan, spec, density, beta, elements, coulomb,
                                             alpha_exchange, beta_exchange, numerical_error, true,
-                                            mixed_coulomb_work_count, detail);
+                                            mixed_coulomb_work_count, -1.0, nullptr, detail);
 }
 
 static generativeqc_status execute_cuda_direct_jk_range(
