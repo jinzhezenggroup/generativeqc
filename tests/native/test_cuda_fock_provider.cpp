@@ -29,6 +29,10 @@
 
 namespace {
 using namespace generativeqc::scf;
+// Executed coverage of the optional joint canonical source, not inferred from
+// its environment selector. Each bit pair records both sides of one contract.
+std::size_t shared_rsh_checks = 0;
+unsigned shared_rsh_coverage = 0;
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -160,10 +164,39 @@ void direct_rsh_device(CudaDirectJkPlan* plan, FockBuildSpec correction,
         range_failure, detail);
   };
   auto* range_failure = reinterpret_cast<int*>(range_error.pointer);
-  if (!plan->bounded_value_opt_in) {
+  const bool shared_canonical =
+      plan->canonical_range_exchange && !direct_jk_generated_full_range_value_available(*plan);
+  // Prepared admission must survive a later policy change. Every admitted
+  // joint call below executes with the environment selector disabled.
+  struct FrozenSharedPolicy {
+    bool active;
+    const bool was_set = std::getenv("GENERATIVEQC_CANONICAL_RSH_VALUES") != nullptr;
+    const std::string previous = was_set ? std::getenv("GENERATIVEQC_CANONICAL_RSH_VALUES") : "";
+    explicit FrozenSharedPolicy(bool selected) : active(selected) {
+      if (active)
+        require(setenv("GENERATIVEQC_CANONICAL_RSH_VALUES", "0", 1) == 0,
+                "cannot change shared-RSH test policy");
+    }
+    ~FrozenSharedPolicy() {
+      if (!active) return;
+      if (was_set)
+        setenv("GENERATIVEQC_CANONICAL_RSH_VALUES", previous.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_CANONICAL_RSH_VALUES");
+    }
+  } frozen_policy(shared_canonical);
+  DeviceMatrix shared_census({0.0, 0.0});
+  struct CensusRestore {
+    CudaDirectJkPlan* plan;
+    std::uint64_t* previous;
+    ~CensusRestore() { plan->canonical_work_count = previous; }
+  } restore_census{plan, plan->canonical_work_count};
+  if (shared_canonical)
+    plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(shared_census.pointer);
+  if (!plan->bounded_value_opt_in && !shared_canonical) {
     require(enqueue(full_a.pointer, range_a.pointer, range_failure) ==
                 GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "fused RSH bypassed the default bounded-value policy");
+            "fused RSH bypassed both retained value admission policies");
     for (const auto* output : {&j, &full_a, &full_b, &range_a, &range_b}) output->verify(sentinel);
     primary_error.verify({123.0});
     range_error.verify({123.0});
@@ -193,6 +226,40 @@ void direct_rsh_device(CudaDirectJkPlan* plan, FockBuildSpec correction,
     full_b.verify(unrestricted ? expected_full_b : sentinel);
     range_a.verify(expected_range_a);
     range_b.verify(unrestricted ? expected_range_b : sentinel);
+    if (shared_canonical) {
+      // Compare executed work with both original canonical consumers. These
+      // are actual candidate/radial counts, not a static task/FLOP estimate.
+      std::array<std::uint64_t, 2> joint{}, full{}, selected{};
+      check(cudaMemcpy(joint.data(), plan->canonical_work_count, sizeof(joint),
+                       cudaMemcpyDeviceToHost));
+      const auto separate = [&](FockBuildSpec spec, double* j_output, double* a_output,
+                                double* b_output, std::array<std::uint64_t, 2>& counts) {
+        require(enqueue_cuda_direct_jk_device(
+                    plan, spec, da.pointer, unrestricted ? db.pointer : nullptr, a.size(), j_output,
+                    a_output, b_output, reinterpret_cast<int*>(primary_error.pointer),
+                    detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        check(cudaStreamSynchronize(cuda_direct_jk_stream(plan)));
+        check(cudaMemcpy(counts.data(), plan->canonical_work_count, sizeof(counts),
+                         cudaMemcpyDeviceToHost));
+      };
+      separate(primary, j.pointer, full_a.pointer, unrestricted ? full_b.pointer : nullptr, full);
+      separate(correction, nullptr, range_a.pointer, unrestricted ? range_b.pointer : nullptr,
+               selected);
+      require(joint[0] == full[0] && joint[0] == selected[0] && joint[1] == full[1] + selected[1],
+              "joint canonical source changed admissions or duplicated radial work");
+      ++shared_rsh_checks;
+      shared_rsh_coverage |= unrestricted ? 2U : 1U;
+      shared_rsh_coverage |= plan->canonical_transform ? 8U : 4U;
+      shared_rsh_coverage |= correction.exchange.op == FockOperator::LongRange ? 32U : 16U;
+      shared_rsh_coverage |= plan->canonical_row_prefix ? 128U : 64U;
+      if (joint[1] != 0) shared_rsh_coverage |= 256U;
+      j.verify(expected_j);
+      full_a.verify(expected_full_a);
+      full_b.verify(unrestricted ? expected_full_b : sentinel);
+      range_a.verify(expected_range_a);
+      range_b.verify(unrestricted ? expected_range_b : sentinel);
+    }
   }
   da.verify(a);
   db.verify(b);
@@ -1300,17 +1367,107 @@ void canonical_screened_values() {
           require(work[0] == admitted &&
                       work[1] == admitted * (operation == FockOperator::FullRange ? 1U : 2U),
                   "screened canonical source still visited rejected quartets");
+          const auto check_joint = [&] {
+            if (!plan->canonical_range_exchange || operation == FockOperator::FullRange) return;
+            const auto full_ka = reference_exchange_from_eri(screened_full, dimension, alpha);
+            const auto full_kb = spin == FockSpin::Unrestricted
+                                     ? reference_exchange_from_eri(screened_full, dimension, beta)
+                                     : std::vector<double>{};
+            direct_rsh_device(plan.get(), spec, alpha,
+                              spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
+                              reference.coulomb, full_ka, full_kb, ka, kb);
+          };
+          check_joint();
           const auto* prefix = plan->canonical_row_prefix;
           plan->canonical_row_prefix = nullptr;
           direct_device(plan.get(), spec, alpha,
                         spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
                         reference.coulomb, ka, kb);
+          check_joint();
           plan->canonical_row_prefix = prefix;
         }
       }
     }
   }
   std::cout << "CUDA screened full/SR/LR matrices and work gates PASS\n";
+}
+
+/** Deny only the final optional range matrix through the real resource ledger.
+ * Earlier canonical and derivative owners must remain usable and fully charged.
+ */
+void shared_rsh_optional_allocation_fallback() {
+  namespace runtime = generativeqc::runtime;
+  struct LedgerScope {
+    std::shared_ptr<runtime::DeviceResourceLedger> previous{runtime::active_device_resource_ledger};
+    std::shared_ptr<runtime::DeviceResourceLedger> ledger{
+        std::make_shared<runtime::DeviceResourceLedger>()};
+    explicit LedgerScope(std::size_t limit) {
+      ledger->limit = limit;
+      ledger->device = 0;
+      runtime::active_device_resource_ledger = ledger;
+    }
+    ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
+  };
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 3, {{0.5, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  constexpr std::size_t budget = 64U << 20;
+  std::size_t total_bytes{}, extra_bytes{};
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(dimension * dimension);
+  for (std::size_t i = 0; i < density.size(); ++i)
+    density[i] = std::cos(0.3 * (i / dimension + i % dimension)) / dimension;
+  const auto full = generativeqc::integrals::build_integrals(system, false).eri;
+  const auto range = generativeqc::integrals::build_range_eri(
+      system, generativeqc::integrals::CoulombRange::Long, 0.37);
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  const auto reference = build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0),
+                                               dimension, full, density, {});
+  const auto full_k = reference_exchange_from_eri(full, dimension, density);
+  const auto range_k = reference_exchange_from_eri(range, dimension, density);
+  for (bool deny : {false, true}) {
+    LedgerScope scope(deny ? total_bytes - 1U : budget);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+        raw, &destroy_cuda_direct_jk_plan);
+    require(plan->canonical_cartesian && plan->canonical_pairs && plan->canonical_row_prefix &&
+                plan->generated_exchange && plan->generated_exchange->force_capability &&
+                bool(plan->canonical_range_exchange) == !deny && detail.empty(),
+            "range-buffer allocation fallback lost an earlier source owner");
+    if (!deny) {
+      total_bytes = diagnostic.device_bytes;
+      const auto cart = static_cast<std::size_t>(plan->canonical_batch.nbf);
+      extra_bytes = 2U * cart * cart * sizeof(double);
+      require(scope.ledger->rejected == 0 && extra_bytes < total_bytes,
+              "range-buffer baseline already declined an allocation");
+    } else {
+      require(scope.ledger->rejected == 1 && diagnostic.device_bytes == total_bytes - extra_bytes,
+              "range-buffer rollback changed earlier allocation charges");
+    }
+    require(scope.ledger->live == diagnostic.device_bytes,
+            "range-buffer diagnostic does not match retained device storage");
+    // DeviceMatrix test allocations need their own unrestricted fixture budget.
+    // The prepared owner's denied allocation has already happened.
+    scope.ledger->limit = budget;
+    spec.exchange.op = FockOperator::LongRange;
+    spec.exchange.omega = 0.37;
+    direct_rsh_device(plan.get(), spec, density, {}, reference.coulomb, full_k, {}, range_k, {});
+    direct_device(plan.get(), spec, density, {}, reference.coulomb, range_k, {});
+    plan.reset();
+    require(scope.ledger->live == 0, "range-buffer fixture leaked device storage");
+  }
+  std::cout << "CUDA shared-RSH real-allocation fallback and retained-owner gates PASS\n";
 }
 
 /** Count executed candidates and radial evaluations at two larger dimensions.
@@ -2314,6 +2471,20 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-work-only") {
       canonical_work_census();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--shared-rsh-values-only") {
+      require(generativeqc::scf::cuda_execution::direct_shared_rsh_values_requested(),
+              "shared RSH gate requires its explicit preparation policy");
+      canonical_screening_rows();
+      shared_rsh_optional_allocation_fallback();
+      canonical_screened_values();
+      canonical_value_provider();
+      require(shared_rsh_checks > 0 && shared_rsh_coverage == 511U,
+              "joint canonical source missed spin/basis/range/row or nonempty execution coverage");
+      std::cout << "CUDA joint canonical full/SR/LR values, independent matrices, exact work and "
+                   "fallback gates PASS: "
+                << shared_rsh_checks << " actual joins\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-values-only") {

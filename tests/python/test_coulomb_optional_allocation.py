@@ -1,5 +1,6 @@
 """Exercise the optional owner's real exception scopes with a fake CUDA runtime."""
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -68,8 +69,10 @@ std::uint64_t enabled_fock_shell_class_mask() { return 1; }
 namespace cuda_policy {
 struct Schedule { unsigned persistent_quartet_warps_per_sm=1; std::size_t cuda_stack_limit_bytes=1; };
 Schedule resolve_direct_jk_schedule_policy(int) { return {}; }
-bool reachable_policy=false;
-bool direct_coulomb_reachable_requested() { return reachable_policy; }
+unsigned reachable_policy=0;
+unsigned hermite_policy=0;
+unsigned direct_hermite_convolution_mode() { return hermite_policy; }
+unsigned direct_coulomb_reachable_mode() { return reachable_policy; }
 }
 namespace detail {
 using generativeqc::scf::detail::BoundedDirectHostSchedule;
@@ -93,7 +96,8 @@ struct HostBatch {
 struct PrimitivePairData { double value; };
 struct DeviceBatch {
   std::size_t batch_size=1, total_shell_pairs=0, nbf=1, direct_nbf=1;
-  bool direct_coulomb_reachable=false;
+  unsigned direct_coulomb_reachable=0;
+  unsigned direct_hermite_convolution=0;
 #define P(name) const std::int64_t* name=nullptr;
   METADATA(P)
 #undef P
@@ -135,11 +139,14 @@ std::size_t product(std::size_t a,std::size_t b) { return runtime::size_mul(a,b)
 
 DRIVER = r"""
 int main(int argc,char** argv) {
-  assert(argc==4);
-  const bool reachable=std::atoi(argv[3])!=0;
+  assert(argc==5);
+  const unsigned hermite=static_cast<unsigned>(std::atoi(argv[4]));
+  cuda_policy::hermite_policy=hermite;
+  const unsigned reachable=static_cast<unsigned>(std::atoi(argv[3]));
   cuda_policy::reachable_policy=reachable;
   HostBatch host; DeviceBatch borrowed;
-  borrowed.direct_coulomb_reachable=!reachable;
+  borrowed.direct_coulomb_reachable=reachable ^ 3U;
+  borrowed.direct_hermite_convolution=hermite ^ 3U;
   injected_stage=std::atoi(argv[1]); injected_kind=std::atoi(argv[2]);
   bool propagated=false;
   try {
@@ -147,6 +154,7 @@ int main(int argc,char** argv) {
     if(injected_stage==0) {
       assert(plan && live_allocations>0);
       assert(plan->batch.direct_coulomb_reachable==reachable);
+      assert(plan->batch.direct_hermite_convolution==hermite);
     }
     else assert(!plan);
   } catch(const std::bad_alloc&) { return 2; }
@@ -160,23 +168,59 @@ int main(int argc,char** argv) {
   auto recovered=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
   assert(recovered && live_allocations>0);
   assert(recovered->batch.direct_coulomb_reachable==reachable);
+  assert(recovered->batch.direct_hermite_convolution==hermite);
   // A prepared owner freezes its policy; only a new owner sees later changes.
-  cuda_policy::reachable_policy=!reachable;
+  cuda_policy::reachable_policy=reachable ^ 3U;
+  cuda_policy::hermite_policy=hermite ^ 3U;
   assert(recovered->batch.direct_coulomb_reachable==reachable);
+  assert(recovered->batch.direct_hermite_convolution==hermite);
   auto reselected=prepare_generated_coulomb(host,borrowed,reinterpret_cast<void*>(1),0,0.0,1<<20,false,nullptr);
-  assert(reselected && reselected->batch.direct_coulomb_reachable==!reachable);
+  assert(reselected && reselected->batch.direct_coulomb_reachable==(reachable ^ 3U));
+  assert(reselected->batch.direct_hermite_convolution==(hermite ^ 3U));
   assert(recovered->batch.direct_coulomb_reachable==reachable);
+  assert(recovered->batch.direct_hermite_convolution==hermite);
   reselected.reset();
   recovered.reset(); assert(live_allocations==0);
 }
 """
 
 
+def compile_cached_probe(cpp: Path, binary: Path) -> None:
+    """Compile source-executing host fixtures with the same cache policy as builds."""
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("requires a C++ compiler and ccache")
+    subprocess.run([cache, "--version"], capture_output=True, check=True)
+    obj = cpp.with_suffix(".o")
+    subprocess.run(
+        [
+            cache,
+            compiler,
+            "-std=c++17",
+            "-I",
+            str(ROOT / "src"),
+            "-c",
+            str(cpp),
+            "-o",
+            str(obj),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "CCACHE_BASEDIR": str(ROOT)},
+    )
+    subprocess.run(
+        [compiler, str(obj), "-o", str(binary)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+
 @pytest.fixture(scope="module")
 def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     begin = source.index("void configure_direct_coulomb_recurrence(")
     end = source.index("GeneratedExchangePlan::~GeneratedExchangePlan()", begin)
@@ -196,46 +240,43 @@ def allocation_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("coulomb-allocation")
     cpp, binary = directory / "probe.cpp", directory / "probe"
     cpp.write_text(STUBS + preparation + DRIVER)
-    subprocess.run(
-        [compiler, "-std=c++17", "-I", str(ROOT / "src"), str(cpp), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    compile_cached_probe(cpp, binary)
     return binary
 
 
 @pytest.mark.parametrize("stage", [1, 2, 3, 4, 5])
-@pytest.mark.parametrize("reachable", [False, True])
+@pytest.mark.parametrize("reachable", range(4))
+@pytest.mark.parametrize("hermite", range(4))
 def test_optional_host_allocation_failure_falls_back(
-    allocation_probe: Path, stage: int, reachable: bool
+    allocation_probe: Path, stage: int, reachable: int, hermite: int
 ) -> None:
     subprocess.run(
-        [str(allocation_probe), str(stage), "0", str(int(reachable))],
+        [str(allocation_probe), str(stage), "0", str(int(reachable)), str(hermite)],
         check=True,
         timeout=10,
     )
 
 
 @pytest.mark.parametrize("kind", [1, 2, 3])
-@pytest.mark.parametrize("reachable", [False, True])
+@pytest.mark.parametrize("reachable", range(4))
+@pytest.mark.parametrize("hermite", range(4))
 def test_late_device_oom_falls_back_but_other_errors_propagate(
-    allocation_probe: Path, kind: int, reachable: bool
+    allocation_probe: Path, kind: int, reachable: int, hermite: int
 ) -> None:
     subprocess.run(
-        [str(allocation_probe), "5", str(kind), str(int(reachable))],
+        [str(allocation_probe), "5", str(kind), str(int(reachable)), str(hermite)],
         check=True,
         timeout=10,
     )
 
 
-@pytest.mark.parametrize("reachable", [False, True])
+@pytest.mark.parametrize("reachable", range(4))
+@pytest.mark.parametrize("hermite", range(4))
 def test_successful_optional_preparation_is_unchanged(
-    allocation_probe: Path, reachable: bool
+    allocation_probe: Path, reachable: int, hermite: int
 ) -> None:
     subprocess.run(
-        [str(allocation_probe), "0", "0", str(int(reachable))],
+        [str(allocation_probe), "0", "0", str(int(reachable)), str(hermite)],
         check=True,
         timeout=10,
     )

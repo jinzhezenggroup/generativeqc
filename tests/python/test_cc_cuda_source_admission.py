@@ -141,6 +141,7 @@ PREFIX = r"""
 #include <vector>
 #include "hf/reference.hpp"
 #include "methods/correlated_cuda_source.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 int live=0,native_calls=0,host_calls=0,allocations=0;
 int warm_failure=0;

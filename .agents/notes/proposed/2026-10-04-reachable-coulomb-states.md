@@ -146,7 +146,7 @@ from this job's unset angular environment control.
 The same job passes candidate memcheck and initcheck with **zero errors** and
 all **five** selected checkpoint policy cases. These are five parameterized
 host cases, including the new recurrence control, not six or GPU checkpoint
-coverage. Native-donor 3-atom ABBA completes; the 12-atom continuation is running.
+coverage. Native-donor 3-atom and 12-atom ABBA both complete; job 5736 exits zero.
 The installed CUDA 12.9 Compute Sanitizer documents
 initcheck as **global memory** initialization checking; it does not prove that
 every per-thread local auxiliary cell was initialized. The dependency proof,
@@ -171,5 +171,22 @@ All 24 prime/replay E/F calls pass independent rechecking (maximum errors
 **0.872968 / 1.019439 s**. This is evidence against enabling the joint value/force
 selection for this size. SCF full/LR value durations are not separately observed
 in this replay, so subtracting endpoint/stage medians cannot establish a value
-kernel speedup. The control remains off. The larger 12-atom result is needed
-before choosing further work; no speculative size guard or cold gain is promoted.
+kernel speedup. The control remains off; no speculative size guard or cold
+gain is promoted.
+
+The completed 12-atom ABBA has ten one-iteration warm calls per selection:
+off/reachable medians are **63.010484 / 56.627230 s**, a **10.130% reduction**.
+All 24 prime/replay E/F calls pass independent rechecking (maximum errors
+5.002e-12 Eh / 6.776e-11 Eh/Bohr). Both off groups bracket the candidate:
+group medians are 62.945372 / 56.527716 / 56.664583 / 63.038442 s.
+Derivative-stage medians nonetheless increase **33.128862 / 35.868590 s**.
+This is an observed complete warm E/F improvement for a native-seeded
+diagnostic, not prepared cold, a paired GPU4PySCF timing or a README point.
+The audit result is `.artifacts/reachable-coulomb-20261004/comparison12.json`.
+Molecular force-source counts and FLOPs remain null.
+
+The next implementation exposes independent value/force selection so an actual
+ablation can retain the old derivative schedule. It also adds a separate
+[Hermite axis-convolution experiment](2026-10-04-hermite-axis-convolution.md).
+The first comparison must keep convolution off; neither benefit is assumed
+additive, and both controls remain default off.

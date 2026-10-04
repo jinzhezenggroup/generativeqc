@@ -37,6 +37,7 @@ from .cuda_providers import tensor_lowering_diagnostics
 from .cuda_reduction import (
     cooperative_reduction_provider,
     cooperative_reduction_shared_bytes,
+    streamed_reduction_fusion_groups,
 )
 from .precision import describe_precision
 from .program import Program
@@ -437,6 +438,7 @@ def estimate_schedule(plan: TensorPlan) -> dict:
     effective_flops, virtual_evaluations, rematerialized_values = (
         _effective_arithmetic_work(plan)
     )
+    fusion_groups = streamed_reduction_fusion_groups(plan)
     peak_live_values = max(live_values, default=0)
     promotion_rejections = _scalar_reduction_promotion_rejections(plan)
     profitability = GpuProfitability(
@@ -523,6 +525,10 @@ def estimate_schedule(plan: TensorPlan) -> dict:
         "estimated_effective_flops": effective_flops,
         "estimated_virtual_value_evaluations": virtual_evaluations,
         "estimated_rematerialized_value_count": rematerialized_values,
+        "streamed_reduction_fusion_group_count": len(fusion_groups),
+        "streamed_reduction_fusion_groups": [
+            group.to_payload() for group in fusion_groups
+        ],
         "estimated_fp64_accumulation_terms": widened_accumulation_terms,
         "estimated_registers_per_thread": registers,
         "estimated_shared_bytes": shared_bytes,
