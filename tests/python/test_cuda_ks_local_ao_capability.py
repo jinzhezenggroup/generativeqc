@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _guard() -> str:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    start = source.index('    const char* ao_selection = std::getenv(')
+    start = source.index("    const char* ao_selection = std::getenv(")
     end = source.index("    constexpr std::size_t ao_map_host_budget", start)
     return source[start:end]
 
@@ -66,7 +66,16 @@ int main(int argc, char** argv) {
 """
     )
     built = subprocess.run(
-        [compiler, "-std=c++20", "-Wall", "-Wextra", "-Werror", str(unit), "-o", str(executable)],
+        [
+            compiler,
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            str(unit),
+            "-o",
+            str(executable),
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -95,9 +104,13 @@ int main(int argc, char** argv) {
 
 def test_iteration_path_intersects_schedule_with_xc_density_capability() -> None:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    start = source.index("      const auto iteration_precision = resolve_cuda_ks_iteration_precision(")
+    start = source.index(
+        "      const auto iteration_precision = resolve_cuda_ks_iteration_precision("
+    )
     end = source.index("      // Provider selection stays inside", start)
     block = source[start:end]
-    assert "cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction" in block
+    assert (
+        "cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction" in block
+    )
     assert "pending_mixed_coulomb = iteration_precision.mixed_coulomb;" in block
     assert "pending_mixed_density = iteration_precision.mixed_density;" in block

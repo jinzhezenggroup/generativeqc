@@ -117,8 +117,8 @@ void local_ao_cases() {
     {
       const auto response = cuda_xc_layout_shape(basis.natom, basis.nprimitive, basis.nao,
                                                  grid.point_count(), 1U, false, 19, true);
-      const auto fp32_ao = cuda_xc_layout(basis, grid, 1U, false, 19,
-                                         CudaXcAoPrecision::Fp32ComputeFp64Storage);
+      const auto fp32_ao =
+          cuda_xc_layout(basis, grid, 1U, false, 19, CudaXcAoPrecision::Fp32ComputeFp64Storage);
       require(!cuda_xc_execution_capabilities(response).local_ao_selection &&
                   !cuda_xc_execution_capabilities(fp32_ao).local_ao_selection,
               "response or FP32-AO layout incorrectly admitted local maps");

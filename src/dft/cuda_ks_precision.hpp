@@ -71,8 +71,7 @@ inline CudaKsIterationPrecision resolve_cuda_ks_iteration_precision(
   const bool mixed_stage = schedule.any_lower_precision() && !strict_refinement;
   return {
       mixed_stage && schedule.uses_lower_precision(cuda_ks_precision_region::kCoulombJ),
-      mixed_stage &&
-          schedule.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) &&
+      mixed_stage && schedule.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) &&
           mixed_density_contraction_capability,
   };
 }

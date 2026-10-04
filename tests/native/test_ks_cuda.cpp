@@ -1309,7 +1309,6 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
             << " residual=" << result.dft_diagnostic.physical_residual << '\n';
 }
 
-
 void pbe0_auto_local_ao_composition_case() {
   const char* previous = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
   const std::string saved = previous ? previous : "";
@@ -1329,8 +1328,8 @@ void pbe0_auto_local_ao_composition_case() {
             "could not select CUDA PBE0 local-AO qualification route");
     const dft::AoBasis basis(system);
     const dft::MolecularGrid grid(system, {1, 24, 12, 24, 3, 1e-12});
-    const scf::PreparedFockPlan gpu(
-        system, nullptr, exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
+    const scf::PreparedFockPlan gpu(system, nullptr,
+                                    exact_exchange_strategy(true, scf::FockBackend::Cuda), 0);
     auto run_options = options;
     run_options.precision_mode = precision_mode;
     dft::CudaKsPlan plan(gpu, basis, grid, run_options, dft::SemilocalFamily::Pbe, 257);
