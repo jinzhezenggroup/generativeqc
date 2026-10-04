@@ -596,7 +596,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ccache-python-probes
-          key: ccache-python-probes-v1-${{ matrix.shard }}-${{ github.sha }}
+          key: ccache-python-probes-v1-${{ matrix.shard }}-${{ github.sha }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py', 'tests/python/**', 'tests/native/**', 'benchmarks/**') }}
           restore-keys: |
             ccache-python-probes-v1-${{ matrix.shard }}-
       - name: Reset native probe ccache statistics

@@ -28,7 +28,17 @@ def test_probe_cache_is_separate_per_shard_and_saved_after_success() -> None:
     # The combined cache action registers its save as a success-only post step.
     assert "uses: actions/cache@" in cache
     assert "        if:" not in cache
-    assert "key: ccache-python-probes-v1-${{ matrix.shard }}-${{ github.sha }}" in cache
+    key = next(line.strip() for line in cache.splitlines() if "key:" in line)
+    assert key.startswith(
+        "key: ccache-python-probes-v1-${{ matrix.shard }}-${{ github.sha }}-"
+    )
+    assert "hashFiles(" in key
+    probe_inputs = set(re.findall(r"'([^']+)'", key))
+    build_key = next(
+        line for line in steps["Restore ccache"].splitlines() if "key:" in line
+    )
+    assert set(re.findall(r"'([^']+)'", build_key)) <= probe_inputs
+    assert {"tests/python/**", "tests/native/**", "benchmarks/**"} <= probe_inputs
     assert (
         "restore-keys: |\n            ccache-python-probes-v1-${{ matrix.shard }}-"
         in cache

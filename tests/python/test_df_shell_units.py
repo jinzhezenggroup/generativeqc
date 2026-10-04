@@ -168,8 +168,7 @@ def test_ci_cache_snapshots_version_compiler_and_build_inputs() -> None:
     for workflow in ("ci.yml", "wheels.yml"):
         source = (ROOT / ".github/workflows" / workflow).read_text()
         keys = [line for line in source.splitlines() if "key: ccache-" in line]
-        build_keys = [key for key in keys if "ccache-python-probes-v1-" not in key]
-        assert build_keys
-        for key in build_keys:
+        assert keys
+        for key in keys:
             assert "'cmake/**'" in key
             assert "'python/generativeqc_compiler/**'" in key
