@@ -88,6 +88,35 @@ def test_composite_component_seconds_use_method_neutral_route_name() -> None:
     assert record["source_route"] == "composite-component-seconds"
 
 
+@pytest.mark.parametrize("selection", [None, {"mode": "disabled", "work": None}])
+def test_absent_ao_work_is_not_reported_as_zero(
+    selection: dict[str, object] | None,
+) -> None:
+    record = normalize_force_work({"resident_ao_selection": selection})
+    assert record["resident_ao_selection"] == selection
+
+
+def test_normalization_retains_ao_policy_and_work_not_just_grid_capacity() -> None:
+    selection = {
+        "mode": "explicit-sampled-jet-cutoff",
+        "cutoff": 1e-16,
+        "cache_host_reserve_bytes": 1024,
+        "full_ao_capacity": 8,
+        "derivative_order": 2,
+        "work": {
+            "tile_count": 2,
+            "empty_tile_count": 1,
+            "point_ao_square_sum": 36,
+            "dense_point_ao_square_sum": 512,
+            "active_aos_sum": 3,
+            "discoveries": 0,
+        },
+    }
+    record = normalize_force_work({"resident_ao_selection": selection})
+    assert record["resident_ao_selection"] == selection
+    assert record["resident_ao_selection"] is not selection
+
+
 def test_wb97mv_component_seconds_map_to_same_schema() -> None:
     work = {
         "execution": "cuda-complete-wb97mv",
