@@ -3,6 +3,7 @@
 Use this guide to keep GenerativeQC scientifically trustworthy, reproducible, performant, and maintainable.
 
 - [Validation gates](validation.md)
+- [Frozen DF factor precision](df_frozen_precision.md)
 - [Performance engineering](performance_engineering.md)
 - [Large-domain stationary CUDA qualification](stationary_large_domain_qualification.md)
 - [Scientific evidence retention](evidence_retention.md)
@@ -20,6 +21,7 @@ Historical investigation belongs in `.agents/notes/`; current operational truth 
 :maxdepth: 1
 
 validation
+df_frozen_precision
 performance_engineering
 evidence_retention
 cuda_ownership
