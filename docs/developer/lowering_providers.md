@@ -106,8 +106,13 @@ It exposes resolved AOT provenance and counts the canonical affine work on repla
 Unpublished plans are drained on failure; their module charges transfer to the
 table before destruction. `optional_resources().cache_bytes` includes previous
 attempts and survives `release()`. The enclosing owner must preserve this charge
-across fallback and table destruction if it keeps using the CUDA context. Shared
-region selection does not yet offer CUTLASS, and no production profile is installed.
+across fallback and table destruction if it keeps using the CUDA context.
+Homogeneous shared regions offer CUTLASS only with matching compiled version,
+actual artifact digest and qualified host/module bounds. The region owns the
+digest and subtracts charges left by partial preparation before admitting the
+complete generated fallback. Its complete binding bound retains the preparation
+ceiling when modules were loaded; retained-provider diagnostics include those
+cache bytes. No production profile is installed.
 Native CMake builds can enable the optional header dependency with
 `GENERATIVEQC_ENABLE_CUTLASS=ON` and
 `GENERATIVEQC_CUTLASS_ROOT=/path/to/cutlass-3.9.2`. The option defaults to OFF;
@@ -284,14 +289,17 @@ the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
 rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
 
-Streamed DF MO source response offers cuBLASLt alongside cuBLAS, cuTENSOR and
-generated execution for the same compiler region. `PreparedContractionRegion`
+Streamed DF MO source response offers cuBLASLt and CUTLASS alongside cuBLAS,
+cuTENSOR and generated execution for the same compiler region. `PreparedContractionRegion`
 reserves all eight simultaneous plans before source callbacks and reuses their
 cached algorithms for every row. Reservations are provider-specific; a partial
 optional preparation failure drains provisional plans before selecting the
 same-precision generated fallback. Diagnostics report the actual provider,
-version, preparation time, work and resource counts. No production cuBLASLt
-resource profile is installed, so ordinary selection retains the incumbent.
+version, preparation time, work and resource counts, including modules retained
+after partial CUTLASS preparation. No production cuBLASLt or CUTLASS resource
+profile is installed, so ordinary selection retains the incumbent. The test
+adapter's `df_mo_response_probe_v3` ABI accepts the actual artifact digest;
+rebuild validation adapters before using current provider qualification controls.
 
 The native cuTENSOR executor fixes the GETT family and kernel rank zero at
 preparation, with JIT, cache and incremental autotuning disabled. Unsupported
