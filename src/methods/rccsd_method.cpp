@@ -412,13 +412,16 @@ RccsdNativeState execute_rccsd_prepared(
       prepared_exact = nullptr;
     }
     const auto reference_started = std::chrono::steady_clock::now();
+    std::shared_ptr<const integrals::ElectronInteractionSource> borrowed_reference_source;
     const auto run_reference = [&](const std::vector<double>* seed) {
       if (prepared_exact) {
         auto prepared_options = reference_options;
         prepared_options.resolved_fock_build = prepared_exact->strategy();
         return scf::run_prepared_fock_strategy(*prepared_exact, prepared_options, seed);
       }
-      return cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed)
+      return cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed,
+                                      correlation_auxiliary ? nullptr
+                                                            : &borrowed_reference_source)
                   : scf::run_rhf(system, reference_options, seed);
     };
     scf::ScfResult hf;
@@ -450,7 +453,7 @@ RccsdNativeState execute_rccsd_prepared(
     const auto problem_started = std::chrono::steady_clock::now();
     std::size_t source_preparation_peak = 0;
 #if GENERATIVEQC_HAS_CUDA
-    if (cuda && cuda_source_cache && !correlation_auxiliary) {
+    if (cuda && cuda_source_cache && !correlation_auxiliary && !borrowed_reference_source) {
       std::size_t primitives = 0, s_shells = 0, p_shells = 0;
       for (const auto& shell : system.shells) {
         primitives = posthf::checked_add(primitives, shell.primitives.size());
@@ -488,6 +491,7 @@ RccsdNativeState execute_rccsd_prepared(
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
     state.reference = reference;
+    state.reference_interaction_source = std::move(borrowed_reference_source);
     state.reference_energy_change = hf.energy_change;
     state.reference_density_rms = hf.density_rms;
     state.reference_iterations = static_cast<int>(hf.iterations);
@@ -501,7 +505,9 @@ RccsdNativeState execute_rccsd_prepared(
     std::unique_ptr<posthf::RawSource> raw_source;
     std::optional<scf::PreparedFockInteractionSourceView> prepared_source;
     const integrals::ElectronInteractionSource* source = nullptr;
-    if (prepared_exact) {
+    if (state.reference_interaction_source) {
+      source = state.reference_interaction_source.get();
+    } else if (prepared_exact) {
       prepared_source.emplace(*prepared_exact);
       source = &*prepared_source;
     } else {
@@ -514,6 +520,11 @@ RccsdNativeState execute_rccsd_prepared(
                            retain_df_response ? &state.df_source : nullptr);
     };
     const auto retire_optional_source = [&] {
+      if (state.reference_interaction_source) {
+        state.reference_interaction_source.reset();
+        source = nullptr;
+        return true;
+      }
       if (!cuda || !cuda_source_cache || !*cuda_source_cache) return false;
       prepared_source.reset();
       cuda_source_cache->reset();
@@ -536,11 +547,16 @@ RccsdNativeState execute_rccsd_prepared(
     const double problem_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - problem_started).count();
     // Provider planning already charged this source. Subsequent CC/(T)/force
-    // stages must additionally retain the prepared owner beside the reference.
-    const auto prepared_retained = prepared_exact ? prepared_source->retained_numeric_bytes() : 0;
-    if (prepared_exact)
+    // stages additionally retain whichever exact owner actually survived the
+    // build. Borrowed RHF storage and fallback PreparedFock storage are mutually
+    // exclusive, so overlapping reference/correlation bytes are charged once.
+    const auto exact_source_retained =
+        state.reference_interaction_source
+            ? state.reference_interaction_source->retained_numeric_bytes()
+            : prepared_exact ? prepared_source->retained_numeric_bytes() : 0;
+    if (exact_source_retained)
       state.problem.reference_retained_bytes =
-          posthf::checked_add(state.problem.reference_retained_bytes, prepared_retained);
+          posthf::checked_add(state.problem.reference_retained_bytes, exact_source_retained);
     prepared_source.reset();
     raw_source.reset();
     allocation_stage = "CC resident solve";
@@ -550,11 +566,11 @@ RccsdNativeState execute_rccsd_prepared(
                           : cc::solve_cpu(state.problem, solver_options);
     } catch (const std::length_error&) {
       if (!retire_optional_source()) throw;
-      state.problem.reference_retained_bytes -= prepared_retained;
+      state.problem.reference_retained_bytes -= exact_source_retained;
       state.solved = cc::solve_cuda(state.problem, solver_options, execution.device_id());
     } catch (const std::bad_alloc&) {
       if (!retire_optional_source()) throw;
-      state.problem.reference_retained_bytes -= prepared_retained;
+      state.problem.reference_retained_bytes -= exact_source_retained;
       state.solved = cc::solve_cuda(state.problem, solver_options, execution.device_id());
     }
     const double solver_seconds =
@@ -753,7 +769,9 @@ class RccsdPrepared final : public PreparedCalculation {
     std::unique_ptr<posthf::RawSource> force_raw_source;
     std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
     const integrals::ElectronInteractionSource* force_source = nullptr;
-    if (cpu_exact_plan_) {
+    if (state.reference_interaction_source) {
+      force_source = state.reference_interaction_source.get();
+    } else if (cpu_exact_plan_) {
       force_prepared_source.emplace(*cpu_exact_plan_);
       force_source = &*force_prepared_source;
     } else {

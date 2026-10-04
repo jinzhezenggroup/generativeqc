@@ -62,6 +62,25 @@ def test_cuda_reference_finishes_before_optional_source(tmp_path: Path) -> None:
     _run(tmp_path, PREFIX + retained + body + MAIN)
 
 
+def test_cuda_reference_resident_interaction_handoff_is_preferred() -> None:
+    entry = (ROOT / "src/scf/cuda_hf_entry.cpp").read_text()
+    direct = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text()
+    rccsd = (ROOT / "src/methods/rccsd_method.cpp").read_text()
+    rccsdt = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
+    assert "exact_reference_source_identity" in entry
+    assert "run_rhf_cuda_bucket_cached(&raw_plan" in entry
+    assert "launch_copy_resident_eri_tile" in entry
+    assert "copy_resident_eri_tile_kernel" in direct
+    assert (
+        "if (cuda && cuda_source_cache && !correlation_auxiliary && "
+        "!borrowed_reference_source)" in rccsd
+    )
+    assert rccsd.index("if (state.reference_interaction_source)") < rccsd.index(
+        "else if (prepared_exact)"
+    )
+    assert "state.reference_interaction_source.get()" in rccsdt
+
+
 def test_provider_schedule_checks_attempt_deltas(tmp_path: Path) -> None:
     text = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     assert "const auto initial_work = provider_work;" in text
@@ -146,6 +165,7 @@ int live=0,native_calls=0,host_calls=0,allocations=0;
 int warm_failure=0;
 bool converged=true,fail_source=false;
 std::size_t given_budget=0;
+namespace generativeqc::integrals { class ElectronInteractionSource; }
 namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& s) noexcept { return s.shells.size(); }
 std::size_t cartesian_ao_count(const core::System& s) noexcept { return s.shells.size(); }
@@ -191,8 +211,9 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan&,const ScfOptions&,
                                     const std::vector<double>*) {
   ++host_calls; return physical();
 }
-ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int,
-                       const std::vector<double>* seed) {
+ScfResult run_rhf_cuda(
+    const core::System&,const ScfOptions&,int,const std::vector<double>* seed,
+    std::shared_ptr<const integrals::ElectronInteractionSource>*) {
   if (live) throw std::runtime_error("prior source survived into native reference");
   ++native_calls;
   if (seed && warm_failure==1) throw std::runtime_error("injected warm reference failure");

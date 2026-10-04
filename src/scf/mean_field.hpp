@@ -27,6 +27,10 @@ class PreparedFockPlan;
 
 }  // namespace generativeqc::scf
 
+namespace generativeqc::integrals {
+class ElectronInteractionSource;
+}
+
 namespace generativeqc::dft {
 class AoBasis;
 class MolecularGrid;
@@ -309,8 +313,10 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_cached(
     const std::vector<initial_guess::OverlapOrthogonalizer*>* overlap_caches = nullptr);
 
 /** Execute RHF through the native CUDA scientific path. */
-ScfResult run_rhf_cuda(const core::System& system, const ScfOptions& options, int device_id,
-                       const std::vector<double>* initial_density = nullptr);
+ScfResult run_rhf_cuda(
+    const core::System& system, const ScfOptions& options, int device_id,
+    const std::vector<double>* initial_density = nullptr,
+    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source = nullptr);
 
 /** Execute UHF through the native CUDA scientific path. */
 ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, int device_id,

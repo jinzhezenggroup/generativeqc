@@ -3293,7 +3293,9 @@ CudaRhfBasisLayoutStats inspect_rhf_cuda_basis_layout(const std::vector<core::Sy
               : 0};
 }
 
-ScfResult run_rhf_cuda(const core::System&, const ScfOptions&, int, const std::vector<double>*) {
+ScfResult run_rhf_cuda(
+    const core::System&, const ScfOptions&, int, const std::vector<double>*,
+    std::shared_ptr<const integrals::ElectronInteractionSource>*) {
   throw std::runtime_error("the library was built without CUDA support");
 }
 

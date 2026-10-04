@@ -58,6 +58,15 @@ void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::in
                                  const std::array<std::size_t, 4>& count, std::size_t elements,
                                  double* eri);
 
+/** Copy one exact public-AO tile from a resident row-major [i,j,k,l] tensor.
+ * Source ownership stays with the physical-reference plan; the caller owns the
+ * destination and stream.
+ */
+void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, std::size_t nbf,
+                                   const std::array<std::size_t, 4>& begin,
+                                   const std::array<std::size_t, 4>& count,
+                                   std::size_t elements, double* eri);
+
 /** Materialize one validated system's complete public-AO ERI tensor.
  * The caller owns an nbf^4 output and its stream. No cache is retained here;
  * partial AO tiles must use the independent rectangular tile producer.

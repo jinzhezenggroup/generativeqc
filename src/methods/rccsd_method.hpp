@@ -6,12 +6,16 @@
 #include "hf/reference.hpp"
 #include "methods/method.hpp"
 
+namespace generativeqc::integrals {
+class ElectronInteractionSource;
+}
 namespace generativeqc::scf {
 class PreparedFockPlan;
 }
 namespace generativeqc::methods::detail {
 struct RccsdNativeState {
   std::shared_ptr<const hf::PhysicalReference> reference;
+  std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source;
   cc::Problem problem;
   cc::SolverResult solved;
   // Opt-in immutable DF source/frame owner, retained across CC response.
