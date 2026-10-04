@@ -73,6 +73,12 @@ __DEVICE_OBSERVER__
 """
 
 FACTORY_END = r"""
+  // Metadata-only packing must not even reserve the omitted SCF payloads.
+  if (host.shell_pair_systems.capacity() || host.shell_pair_first.capacity() ||
+      host.shell_pair_second.capacity() || host.psss_resident_tasks.capacity() ||
+      host.psss_resident_ket_pairs.capacity() || host.warm_density.capacity() ||
+      host.occupied.capacity() || host.warm_mask.capacity())
+    throw std::logic_error("DF metadata packing retained SCF payload capacity");
   const auto capacity = df_source_capacity::plan(
       orbital_systems.front(), auxiliary_systems.front(),
       {sizeof(CudaDensityFittingIntegralSourceImpl), sizeof(HostBatch), sizeof(DfPublicAoExpansion)});
@@ -203,6 +209,19 @@ int main(int argc, char** argv) {
     (void)capacity(orbital,auxiliary);
     allocation_probe::enabled=false;
     if (allocation_probe::peak || allocation_probe::live) return 9;
+  } else if (mode==6) {
+    // Auxiliary-g metadata uses the physical six-term public transform and
+    // still skips all SCF pair/warm payloads before the reservation branch.
+    static_assert(scf::cuda_execution::kDfPublicAoExpansionTerms == 6);
+    for (bool spherical : {false, true}) for (unsigned primitives : {1U, 37U}) {
+      auto o=system(2,3,primitives,spherical), a=system(2,4,primitives,spherical);
+      auto r=reference(o); auto bound=capacity(o,a);
+      allocation_probe::peak=0;
+      allocation_probe::enabled=true;
+      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0);
+      allocation_probe::enabled=false;
+      if (allocation_probe::peak>bound.numeric_bytes || allocation_probe::live) return 11;
+    }
   } else return 10;
   return 0;
 }
@@ -290,8 +309,8 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     prelude = prelude.replace("__DEVICE_OBSERVER__", observer)
     program = prelude + domain + transform + factory + FACTORY_END + helpers + prefix
     program += (
-        "(void)started; (void)stage; (void)source_status; (void)work; return result;\n}\n"
-        + MAIN
+        "check_status(source_status, detail);\n"
+        "(void)started; (void)stage; (void)work; return result;\n}\n" + MAIN
     )
     path = directory / "admission.cpp"
     path.write_text(program)
@@ -335,7 +354,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("mode", range(6))
+@pytest.mark.parametrize("mode", range(7))
 def test_source_setup_admission_and_allocation_peak(
     admission_probe: Path, mode: int
 ) -> None:
