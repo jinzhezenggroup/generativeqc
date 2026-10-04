@@ -98,6 +98,205 @@ __global__ void canonical_pair_rows_kernel(const double* keys, std::size_t first
   }
 }
 
+/** Conservative shell maxima come from the exact resident AO bounds, not a
+ * separately rounded reference/source bound. Prefixes only prune whole shells;
+ * every component still applies its original FP64 product predicate.
+ */
+__global__ void component_pair_keys_kernel(DeviceBatch batch, const std::int32_t* pairs,
+                                           const double* bounds, int count, double* keys,
+                                           std::int32_t* order) {
+  const std::size_t n = static_cast<std::size_t>(batch.nbf);
+  for (std::size_t pair = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+       pair < static_cast<std::size_t>(count);
+       pair += static_cast<std::size_t>(blockDim.x) * gridDim.x) {
+    const auto a = pairs[2U * pair], b = pairs[2U * pair + 1U];
+    const auto system = batch.atom_systems[batch.shell_atoms[a]];
+    const auto base = static_cast<std::size_t>(system) * n;
+    double maximum = 0.0;
+    for (auto i = batch.shell_direct_ao_offsets[a]; i < batch.shell_direct_ao_offsets[a + 1]; ++i)
+      for (auto j = batch.shell_direct_ao_offsets[b]; j < batch.shell_direct_ao_offsets[b + 1]; ++j)
+        maximum = fmax(maximum, bounds[base * n + (i - base) * n + j - base]);
+    keys[pair] = maximum;
+    order[pair] = static_cast<std::int32_t>(pair);
+  }
+}
+
+/** Decode one unordered Cartesian AO pair within a physical shell pair. */
+__device__ void component_ao_pair(DeviceBatch batch, std::int32_t a, std::int32_t b,
+                                  std::size_t ordinal, std::size_t& i, std::size_t& j) {
+  if (a == b)
+    decode_lower_triangle(ordinal, i, j);
+  else {
+    const auto width = batch.shell_direct_ao_offsets[b + 1] - batch.shell_direct_ao_offsets[b];
+    i = ordinal / width;
+    j = ordinal % width;
+  }
+  i += batch.shell_direct_ao_offsets[a];
+  j += batch.shell_direct_ao_offsets[b];
+}
+
+/** One CTA owns a shell quartet and a bounded tile of up to 128 components.
+ * All lanes traverse identical primitive loops and barriers, including masked
+ * lanes in a tail tile. Only the leader writes shared sources; every consumer
+ * finishes before their roots are reused. Accumulate primitives in registers
+ * and scatter each contracted AO integral once, as in the original consumer.
+ */
+template <unsigned Order, bool Unrestricted, bool PairedRanges>
+__global__ void component_jk_kernel(DeviceBatch batch, std::int32_t system,
+                                    const std::int32_t* pairs, CanonicalPairRows rows,
+                                    std::size_t first_begin, std::size_t first_count,
+                                    std::size_t second_begin, std::size_t second_count,
+                                    bool same_bucket, bool want_j, bool want_k,
+                                    generativeqc::integrals::CoulombRange range, double omega,
+                                    double screening, const double* bounds, const double* density,
+                                    double* coulomb, double* exchange, double* range_exchange,
+                                    std::uint64_t* work_census, std::uint64_t* source_census) {
+  __shared__ CartesianComponentSource<Order> source;
+  __shared__ bool radial_valid;
+  const auto n = static_cast<std::size_t>(batch.nbf);
+  const auto base = static_cast<std::size_t>(system) * n;
+  const auto physical_offset = base * n;
+  const auto spin_offset = 2U * physical_offset;
+  const auto total = rows.prefix[first_count - 1U];
+  const bool full =
+      PairedRanges || want_j || (want_k && range == generativeqc::integrals::CoulombRange::Full);
+  const bool selected =
+      PairedRanges || (want_k && range != generativeqc::integrals::CoulombRange::Full);
+  for (std::size_t work = blockIdx.x; work < total; work += gridDim.x) {
+    std::size_t first_local{}, second_local{};
+    canonical_pair_indices(work, first_count, second_count, same_bucket, rows, first_local,
+                           second_local);
+    const auto first_pair = rows.order[first_begin + first_local];
+    const auto second_pair = rows.order[second_begin + second_local];
+    const std::int32_t shells[4] = {pairs[2U * first_pair], pairs[2U * first_pair + 1U],
+                                    pairs[2U * second_pair], pairs[2U * second_pair + 1U]};
+    std::size_t counts[4];
+    unsigned angular_orders[4];
+    Vec3<double> centers[4];
+    for (unsigned slot = 0; slot < 4U; ++slot) {
+      counts[slot] = batch.shell_direct_ao_offsets[shells[slot] + 1] -
+                     batch.shell_direct_ao_offsets[shells[slot]];
+      angular_orders[slot] = batch.shell_angular[shells[slot]];
+      centers[slot] = atom_position<double>(batch, batch.shell_atoms[shells[slot]], -1);
+    }
+    const auto first_size =
+        shells[0] == shells[1] ? counts[0] * (counts[0] + 1U) / 2U : counts[0] * counts[1];
+    const auto second_size =
+        shells[2] == shells[3] ? counts[2] * (counts[2] + 1U) / 2U : counts[2] * counts[3];
+    const bool same_pair = first_pair == second_pair;
+    const auto components =
+        same_pair ? first_size * (first_size + 1U) / 2U : first_size * second_size;
+    if (threadIdx.x == 0 && source_census)
+      atomicAdd(reinterpret_cast<unsigned long long*>(source_census), 1ULL);
+    for (std::size_t tile = 0; tile < components; tile += blockDim.x) {
+      const auto ordinal = tile + threadIdx.x;
+      std::size_t i{}, j{}, k{}, l{};
+      bool keep = ordinal < components;
+      Angular angular[4]{};
+      double normalization = 0.0;
+      if (keep) {
+        std::size_t p{}, q{};
+        if (same_pair)
+          decode_lower_triangle(ordinal, p, q);
+        else {
+          p = ordinal / second_size;
+          q = ordinal % second_size;
+        }
+        component_ao_pair(batch, shells[0], shells[1], p, i, j);
+        component_ao_pair(batch, shells[2], shells[3], q, k, l);
+        keep = !(bounds[physical_offset + (i - base) * n + j - base] *
+                     bounds[physical_offset + (k - base) * n + l - base] <
+                 screening);
+        if (keep) {
+          angular[0] = direct_ao_angular(batch, i);
+          angular[1] = direct_ao_angular(batch, j);
+          angular[2] = direct_ao_angular(batch, k);
+          angular[3] = direct_ao_angular(batch, l);
+          normalization = cartesian_component_normalization(batch, i, j, k, l);
+        }
+      }
+      const auto admitted = __syncthreads_count(keep);
+      if (threadIdx.x == 0 && work_census) {
+        // Candidate work includes AO checks below a conservative shell maximum.
+        // Radial evaluations retain their old contracted-component meaning.
+        atomicAdd(reinterpret_cast<unsigned long long*>(work_census),
+                  min(static_cast<std::size_t>(blockDim.x), components - tile));
+        atomicAdd(
+            reinterpret_cast<unsigned long long*>(work_census + 1U),
+            static_cast<unsigned long long>(admitted) * (unsigned(full) + unsigned(selected)));
+      }
+      if (!admitted) continue;
+      double full_integral = 0.0, range_integral = 0.0;
+      for (auto a = batch.shell_primitive_offsets[shells[0]];
+           a < batch.shell_primitive_offsets[shells[0] + 1]; ++a)
+        for (auto b = batch.shell_primitive_offsets[shells[1]];
+             b < batch.shell_primitive_offsets[shells[1] + 1]; ++b)
+          for (auto c = batch.shell_primitive_offsets[shells[2]];
+               c < batch.shell_primitive_offsets[shells[2] + 1]; ++c)
+            for (auto d = batch.shell_primitive_offsets[shells[3]];
+                 d < batch.shell_primitive_offsets[shells[3] + 1]; ++d) {
+              const double weight = cartesian_component_primitive_weight(
+                  normalization, batch.primitive_coefficients[a], batch.primitive_coefficients[b],
+                  batch.primitive_coefficients[c], batch.primitive_coefficients[d]);
+              if (threadIdx.x == 0) {
+                const double exponents[4] = {
+                    batch.primitive_exponents[a], batch.primitive_exponents[b],
+                    batch.primitive_exponents[c], batch.primitive_exponents[d]};
+                prepare_cartesian_component_geometry(source, angular_orders, centers, exponents);
+                if (source_census) {
+                  atomicAdd(reinterpret_cast<unsigned long long*>(source_census + 1U), 1ULL);
+                  atomicAdd(reinterpret_cast<unsigned long long*>(source_census + 2U),
+                            unsigned(full) + unsigned(selected));
+                  atomicAdd(reinterpret_cast<unsigned long long*>(source_census + 3U),
+                            static_cast<unsigned long long>(admitted) *
+                                (unsigned(full) + unsigned(selected)));
+                }
+              }
+              // The previous primitive ends at a barrier; root writers cannot
+              // overlap readers, including the independent second radial pass.
+              if (full) {
+                if (threadIdx.x == 0)
+                  radial_valid = prepare_cartesian_component_radial(
+                      source, generativeqc::integrals::CoulombRange::Full, 0.0);
+                __syncthreads();
+                if (keep)
+                  full_integral +=
+                      weight * (radial_valid ? consume_cartesian_component(source, angular) : NAN);
+                __syncthreads();
+              }
+              if (selected) {
+                if (threadIdx.x == 0)
+                  radial_valid = prepare_cartesian_component_radial(source, range, omega);
+                __syncthreads();
+                if (keep)
+                  range_integral +=
+                      weight * (radial_valid ? consume_cartesian_component(source, angular) : NAN);
+                __syncthreads();
+              }
+            }
+      if (keep) {
+        i -= base;
+        j -= base;
+        k -= base;
+        l -= base;
+        if (want_j)
+          accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density,
+                                                        coulomb, i, j, k, l, full_integral, true,
+                                                        false);
+        if (want_k)
+          accumulate_direct_fock_integral<Unrestricted>(
+              n, physical_offset, spin_offset, density, exchange, i, j, k, l,
+              PairedRanges || !selected ? full_integral : range_integral, false, true);
+        if constexpr (PairedRanges)
+          accumulate_direct_fock_integral<Unrestricted>(n, physical_offset, spin_offset, density,
+                                                        range_exchange, i, j, k, l, range_integral,
+                                                        false, true);
+      }
+      __syncthreads();
+    }
+  }
+}
+
 /** Select compiler-owned public or Cartesian sources without new recurrence algebra. */
 template <unsigned AngularOrder, bool Cartesian, typename Scalar>
 __device__ Scalar canonical_quartet(DeviceBatch batch, std::int32_t system, std::int32_t first,
@@ -672,6 +871,69 @@ cudaError_t prepare_canonical_pair_rows(cudaStream_t stream, const double* sorte
   if (status != cudaSuccess) return status;
   return cub::DeviceScan::InclusiveSum(workspace, workspace_bytes, prefix, prefix,
                                        static_cast<int>(first_count), stream);
+}
+
+cudaError_t prepare_component_pair_order(cudaStream_t stream, DeviceBatch batch,
+                                         const std::int32_t* pairs, const double* bounds,
+                                         int pair_count, int segment_count,
+                                         const int* segment_offsets, double* input_keys,
+                                         std::int32_t* input_order, double* sorted_keys,
+                                         std::int32_t* sorted_order, void* workspace,
+                                         std::size_t workspace_bytes) {
+  const auto blocks =
+      static_cast<unsigned>(std::min<std::size_t>((pair_count + 127U) / 128U, 4096U));
+  component_pair_keys_kernel<<<blocks, 128, 0, stream>>>(batch, pairs, bounds, pair_count,
+                                                         input_keys, input_order);
+  const auto status = cudaGetLastError();
+  if (status != cudaSuccess) return status;
+  return cub::DeviceSegmentedRadixSort::SortPairsDescending(
+      workspace, workspace_bytes, input_keys, sorted_keys, input_order, sorted_order, pair_count,
+      segment_count, segment_offsets, segment_offsets + 1, 0, 64, stream);
+}
+
+void launch_component_jk_kernel(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
+                                unsigned angular_order, const std::int32_t* pairs,
+                                CanonicalPairRows rows, std::size_t first_begin,
+                                std::size_t first_count, std::size_t second_begin,
+                                std::size_t second_count, bool same_bucket, bool want_j,
+                                bool want_k, bool unrestricted, DirectCoulombRange exchange_range,
+                                double omega, double screening, const double* bounds,
+                                const double* density, double* coulomb, double* exchange,
+                                double* range_exchange, std::uint64_t* work_count,
+                                std::uint64_t* component_work_count) {
+  if (!first_count || !second_count) return;
+  const auto capacity =
+      same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count;
+  const auto blocks = static_cast<unsigned>(std::min<std::size_t>(capacity, 4096U));
+#define GENERATIVEQC_COMPONENT_LAUNCH(order, unrestricted_value, paired)                     \
+  component_jk_kernel<order, unrestricted_value, paired><<<blocks, 128, 0, stream>>>(        \
+      batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,      \
+      same_bucket, want_j, want_k, integral_range(exchange_range), omega, screening, bounds, \
+      density, coulomb, exchange, range_exchange, work_count, component_work_count)
+#define GENERATIVEQC_COMPONENT_ORDER(order)                 \
+  case order:                                               \
+    if (unrestricted) {                                     \
+      if (range_exchange) {                                 \
+        GENERATIVEQC_COMPONENT_LAUNCH(order, true, true);   \
+      } else {                                              \
+        GENERATIVEQC_COMPONENT_LAUNCH(order, true, false);  \
+      }                                                     \
+    } else {                                                \
+      if (range_exchange) {                                 \
+        GENERATIVEQC_COMPONENT_LAUNCH(order, false, true);  \
+      } else {                                              \
+        GENERATIVEQC_COMPONENT_LAUNCH(order, false, false); \
+      }                                                     \
+    }                                                       \
+    return
+  switch (angular_order) {
+    GENERATIVEQC_COMPONENT_ORDER(5);
+    GENERATIVEQC_COMPONENT_ORDER(6);
+    GENERATIVEQC_COMPONENT_ORDER(7);
+    GENERATIVEQC_COMPONENT_ORDER(8);
+  }
+#undef GENERATIVEQC_COMPONENT_ORDER
+#undef GENERATIVEQC_COMPONENT_LAUNCH
 }
 
 void launch_independent_jk_finite_kernel(cudaStream_t stream, const double* values,

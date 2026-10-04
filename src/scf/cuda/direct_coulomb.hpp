@@ -23,6 +23,7 @@ void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
  * This adapter keeps canonical providers independent of HF policy headers.
  */
 bool direct_shared_rsh_values_requested() noexcept;
+bool direct_component_values_requested() noexcept;
 
 /** Optional geometry owner for the generated pure-J consumer. It borrows the
  * direct provider's stream and public basis metadata, and owns bounded shell

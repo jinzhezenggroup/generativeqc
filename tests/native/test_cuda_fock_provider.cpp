@@ -1392,6 +1392,240 @@ void canonical_screened_values() {
   std::cout << "CUDA screened full/SR/LR matrices and work gates PASS\n";
 }
 
+/** Exercise the new physical-shell traversal against independently screened
+ * Cartesian ERIs, before spherical projection. Device counters prove that
+ * multiple component contractions consumed each common primitive preparation.
+ */
+void component_source_values() {
+  require(generativeqc::scf::cuda_execution::direct_component_values_requested(),
+          "component gate requires its explicit preparation policy");
+  struct PolicyRestore {
+    std::string previous{std::getenv("GENERATIVEQC_CANONICAL_COMPONENT_VALUES")};
+    ~PolicyRestore() { setenv("GENERATIVEQC_CANONICAL_COMPONENT_VALUES", previous.c_str(), 1); }
+  } policy;
+  std::uint64_t prepared = 0, radial_prepared = 0, consumed = 0;
+  for (bool spherical : {false, true}) {
+    generativeqc::core::System system;
+    system.atoms = {
+        {1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}, {1, {-0.8, 0.4, 0.2}}, {1, {0.5, 0.7, -0.2}}};
+    system.shells = {{0, 0, {{0.8, 1.0}}},
+                     {1, 1, {{0.5, 0.8}, {0.08, -0.2}}},
+                     {2, 2, {{0.4, 1.0}}},
+                     {3, 3, {{0.3, 1.0}}}};
+    system.electron_count = 4;
+    system.basis_representation =
+        spherical ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
+    std::string detail;
+    require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    auto displaced = system;
+    displaced.atoms[1].position[2] += 0.27;
+    const std::array<generativeqc::core::System, 2> systems{system, displaced};
+    const auto n = generativeqc::molecule::ao_count(system), matrix = n * n;
+    std::vector<double> alpha(2U * matrix), beta(2U * matrix);
+    for (std::size_t i = 0; i < alpha.size(); ++i) {
+      alpha[i] = std::cos(0.31 * (i / n) + 0.17 * (i % n)) / n;
+      beta[i] = std::sin(0.23 * (i / n) - 0.37 * (i % n)) / n;
+    }
+    std::array<std::vector<double>, 2> full, bounds;
+    for (unsigned item = 0; item < 2U; ++item) {
+      auto cartesian = systems[item];
+      cartesian.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+      full[item] = generativeqc::integrals::build_integrals(cartesian, false).eri;
+      const auto c = generativeqc::molecule::ao_count(cartesian);
+      bounds[item].resize(c * c);
+      for (std::size_t pair = 0; pair < c * c; ++pair)
+        bounds[item][pair] = std::sqrt(std::abs(full[item][pair * c * c + pair]));
+    }
+    for (double screening : {0.0, 0.04, 1e10}) {
+      require(setenv("GENERATIVEQC_CANONICAL_COMPONENT_VALUES", "shell", 1) == 0,
+              "cannot set component policy");
+      CudaDirectJkPlan* raw{};
+      CudaDirectJkDiagnostic diagnostic;
+      require(create_cuda_direct_jk_plan(0, {system, displaced}, 1, screening, 64U << 20, &raw,
+                                         diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+          raw, &destroy_cuda_direct_jk_plan);
+      require(plan->component_pairs && plan->component_pair_order && plan->component_row_prefix,
+              "component source did not retain its charged shell rows");
+      require(std::string(diagnostic.schedule) ==
+                  "canonical-cartesian-jk/shell-components-5-8/experimental",
+              "component source must report its admitted schedule");
+      require(setenv("GENERATIVEQC_CANONICAL_COMPONENT_VALUES", "0", 1) == 0,
+              "cannot test frozen component policy");
+      DeviceMatrix census(std::vector<double>(2U)), component_census(std::vector<double>(4U));
+      struct Lease {
+        CudaDirectJkPlan* plan;
+        ~Lease() {
+          cudaStreamSynchronize(plan->stream);
+          plan->canonical_work_count = nullptr;
+          plan->component_work_count = nullptr;
+        }
+      } lease{plan.get()};
+      plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(census.pointer);
+      plan->component_work_count = reinterpret_cast<std::uint64_t*>(component_census.pointer);
+      for (auto operation :
+           {FockOperator::FullRange, FockOperator::LongRange, FockOperator::ShortRange}) {
+        std::array<std::vector<double>, 2> screened_full, screened_range;
+        std::uint64_t admitted = 0;
+        for (unsigned item = 0; item < 2U; ++item) {
+          auto cartesian = systems[item];
+          cartesian.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+          const auto c = generativeqc::molecule::ao_count(cartesian);
+          const auto radial = operation == FockOperator::LongRange
+                                  ? generativeqc::integrals::CoulombRange::Long
+                                  : generativeqc::integrals::CoulombRange::Short;
+          const auto range =
+              operation == FockOperator::FullRange
+                  ? full[item]
+                  : generativeqc::integrals::build_range_eri(cartesian, radial, 0.37);
+          screened_full[item] =
+              screened_cartesian_public_eri(systems[item], full[item], bounds[item], screening);
+          screened_range[item] =
+              screened_cartesian_public_eri(systems[item], range, bounds[item], screening);
+          std::vector<std::size_t> pairs;
+          for (std::size_t i = 0; i < c; ++i)
+            for (std::size_t j = 0; j <= i; ++j) pairs.push_back(i * c + j);
+          for (std::size_t p = 0; p < pairs.size(); ++p)
+            for (std::size_t q = 0; q <= p; ++q)
+              if (!(bounds[item][pairs[p]] * bounds[item][pairs[q]] < screening)) ++admitted;
+        }
+        for (auto spin : {FockSpin::Restricted, FockSpin::Unrestricted}) {
+          std::vector<double> expected_j, expected_a, expected_b, full_a, full_b;
+          auto spec = make_hf_fock_spec(spin);
+          spec.exchange.op = operation;
+          spec.exchange.omega = operation == FockOperator::FullRange ? 0.0 : 0.37;
+          for (unsigned item = 0; item < 2U; ++item) {
+            const std::vector<double> a(alpha.begin() + item * matrix,
+                                        alpha.begin() + (item + 1U) * matrix);
+            const std::vector<double> b =
+                spin == FockSpin::Unrestricted
+                    ? std::vector<double>(beta.begin() + item * matrix,
+                                          beta.begin() + (item + 1U) * matrix)
+                    : std::vector<double>{};
+            auto j_spec = spec;
+            j_spec.exchange.present = false;
+            const auto reference = build_exact_direct_jk(
+                resolve_fock_build(j_spec, FockBackend::Cpu, 0.0), n, screened_full[item], a, b);
+            const auto append = [](std::vector<double>& out, const std::vector<double>& values) {
+              out.insert(out.end(), values.begin(), values.end());
+            };
+            append(expected_j, reference.coulomb);
+            append(expected_a, reference_exchange_from_eri(screened_range[item], n, a));
+            append(full_a, reference_exchange_from_eri(screened_full[item], n, a));
+            if (!b.empty()) {
+              append(expected_b, reference_exchange_from_eri(screened_range[item], n, b));
+              append(full_b, reference_exchange_from_eri(screened_full[item], n, b));
+            }
+          }
+          const auto b = spin == FockSpin::Unrestricted ? beta : std::vector<double>{};
+          for (unsigned selection : {0U, 1U, 2U}) {
+            auto selected = spec;
+            selected.coulomb.present = selection != 2U;
+            selected.exchange.present = selection != 1U;
+            direct_device(plan.get(), selected, alpha, b,
+                          selected.coulomb.present ? expected_j : std::vector<double>{},
+                          selected.exchange.present ? expected_a : std::vector<double>{},
+                          selected.exchange.present ? expected_b : std::vector<double>{});
+            std::array<std::uint64_t, 2> work{};
+            std::array<std::uint64_t, 4> reuse{};
+            check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                             cudaMemcpyDeviceToHost));
+            check(cudaMemcpy(reuse.data(), plan->component_work_count, sizeof(reuse),
+                             cudaMemcpyDeviceToHost));
+            const auto radial_count =
+                selection == 0U && operation != FockOperator::FullRange ? 2U : 1U;
+            require(work[1] == admitted * radial_count,
+                    "component source changed admitted radial evaluations");
+            if (screening < 1e10)
+              require(reuse[1] > 0 && reuse[3] > reuse[2],
+                      "component source did not share actual radial preparation");
+            else
+              require(work[1] == 0 && reuse[1] == 0 && reuse[3] == 0,
+                      "empty component source performed primitive work");
+            prepared += reuse[1];
+            radial_prepared += reuse[2];
+            consumed += reuse[3];
+          }
+          if (plan->canonical_range_exchange && operation != FockOperator::FullRange)
+            direct_rsh_device(plan.get(), spec, alpha, b, expected_j, full_a, full_b, expected_a,
+                              expected_b);
+        }
+      }
+    }
+  }
+  std::cout
+      << "CUDA shell-component full/LR/SR values, batch/spin/masks/empty-domain PASS: preparations="
+      << prepared << ", radial=" << radial_prepared << ", component-contractions=" << consumed
+      << '\n';
+}
+
+/** Allocation failure must release only the optional component domain. The
+ * prior canonical/force/range owners and their exact charged bytes survive.
+ */
+void component_optional_allocation_fallback() {
+  namespace runtime = generativeqc::runtime;
+  struct LedgerScope {
+    std::shared_ptr<runtime::DeviceResourceLedger> previous{runtime::active_device_resource_ledger};
+    std::shared_ptr<runtime::DeviceResourceLedger> ledger{
+        std::make_shared<runtime::DeviceResourceLedger>()};
+    explicit LedgerScope(std::size_t limit) {
+      ledger->limit = limit;
+      ledger->device = 0;
+      runtime::active_device_resource_ledger = ledger;
+    }
+    ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
+  };
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 3, {{0.5, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const auto n = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(n * n);
+  for (std::size_t i = 0; i < density.size(); ++i) density[i] = std::cos(0.3 * (i / n + i % n)) / n;
+  const auto full = generativeqc::integrals::build_integrals(system, false).eri;
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  const auto reference =
+      build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0), n, full, density, {});
+  const auto exchange = reference_exchange_from_eri(full, n, density);
+  std::size_t retained_bytes = 0, total_bytes = 0;
+  constexpr std::size_t budget = 64U << 20;
+  for (unsigned mode = 0; mode < 3U; ++mode) {
+    require(setenv("GENERATIVEQC_CANONICAL_COMPONENT_VALUES", mode == 0U ? "0" : "shell", 1) == 0,
+            "component test policy failed");
+    LedgerScope scope(mode == 2U ? total_bytes - 1U : budget);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+        raw, &destroy_cuda_direct_jk_plan);
+    require(plan->canonical_pairs && plan->canonical_row_prefix && plan->generated_exchange &&
+                plan->generated_exchange->force_capability && detail.empty(),
+            "component fallback lost prior owners");
+    if (mode == 0U) retained_bytes = diagnostic.device_bytes;
+    if (mode == 1U) total_bytes = diagnostic.device_bytes;
+    require(bool(plan->component_pairs) == (mode == 1U), "component allocation admission differs");
+    require(scope.ledger->live == diagnostic.device_bytes,
+            "component retained bytes differ from resource ledger");
+    if (mode == 2U)
+      require(scope.ledger->rejected == 1 && diagnostic.device_bytes == retained_bytes,
+              "component rollback changed prior charges or failed to reject allocation");
+    runtime::active_device_resource_ledger = scope.previous;
+    direct_device(plan.get(), spec, density, {}, reference.coulomb, exchange, {});
+  }
+  require(total_bytes > retained_bytes, "component domain did not charge new storage");
+  std::cout << "CUDA component-source allocation rollback and retained matrices PASS\n";
+}
+
 /** Deny only the final optional range matrix through the real resource ledger.
  * Earlier canonical and derivative owners must remain usable and fully charged.
  */
@@ -2506,6 +2740,11 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--component-values-only") {
+      component_optional_allocation_fallback();
+      component_source_values();
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--spd-range-only") {
       spd_optional_allocation_fallback();
       spd_canonical_range_values();

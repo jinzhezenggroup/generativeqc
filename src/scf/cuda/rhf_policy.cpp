@@ -462,6 +462,11 @@ bool scalar_center_gradient_requested() noexcept {
   return mode && (std::strcmp(mode, "scalar") == 0 || std::strcmp(mode, "1") == 0);
 }
 
+bool canonical_component_values_requested() noexcept {
+  const char* mode = std::getenv("GENERATIVEQC_CANONICAL_COMPONENT_VALUES");
+  return mode && (std::strcmp(mode, "shell") == 0 || std::strcmp(mode, "1") == 0);
+}
+
 unsigned direct_coulomb_reachable_mode() noexcept {
   const char* mode = std::getenv("GENERATIVEQC_DIRECT_COULOMB_REACHABLE");
   if (mode == nullptr) return 0;
