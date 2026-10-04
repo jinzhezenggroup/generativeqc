@@ -42,7 +42,7 @@ __device__ double contracted_df(const DeviceBatch& batch, std::int32_t system, s
                                 std::int64_t coordinate, unsigned lane = 0U, unsigned lanes = 1U) {
   (void)dummy;
   namespace products = runtime::cuda_gaussian_products;
-  using Policy = std::conditional_t<Derivative, generated_df_policy::Derivative,
+  using Policy = std::conditional_t<Derivative, generated_df_policy::AuxiliaryGDerivative,
                                     generated_df_policy::ValueMath<Math>>;
   constexpr unsigned rank = Metric ? 2 : 3;
   const auto basis = df_basis_view(batch);

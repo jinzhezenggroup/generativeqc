@@ -206,12 +206,12 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     detail = "GENERATIVEQC_DF_VALUE_MATH must be auto, generic, polynomial rys or candidate";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
-  // Freeze the value-only capability with this immutable basis owner. All
-  // derivative entry points reject it before launching or changing outputs.
+  // Freeze the angular domain with this immutable basis owner. Auxiliary g
+  // retains its explicit value lowering and the separate F11 response policy.
   for (const auto& auxiliary : auxiliary_systems)
     for (const auto& shell : auxiliary.shells)
-      candidate->auxiliary_g_values_only |= shell.angular_momentum == 4U;
-  if (candidate->auxiliary_g_values_only && candidate->value_math != 0U) {
+      candidate->has_auxiliary_g |= shell.angular_momentum == 4U;
+  if (candidate->has_auxiliary_g && candidate->value_math != 0U) {
     detail = "g auxiliary DF values require the generic generated math policy";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
