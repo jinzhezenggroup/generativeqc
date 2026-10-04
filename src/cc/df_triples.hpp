@@ -18,8 +18,9 @@ struct DFCudaResult {
   double minimum_absolute_denominator{};
   double seconds{};
   DFTriplesPrecision precision{DFTriplesPrecision::Fp64};
-  std::uint32_t w_storage_bits{64}, w_compute_bits{64}, w_accumulation_bits{64};
-  std::array<char, 65> precision_schedule_identity{};
+  std::uint32_t w_contraction_storage_bits{64}, w_contraction_compute_bits{64};
+  std::uint32_t w_contraction_accumulation_bits{64};
+  std::array<char, 65> w_codegen_precision_schedule_identity{};
   std::size_t virtual_triples{}, occupied_tiles{};
   std::size_t workspace_bytes{}, arena_bytes{}, provider_retained_bytes{};
   std::size_t panel_capacity{}, panel_gemms{}, moment_gemms{};
@@ -63,7 +64,8 @@ struct DFCudaFockResult {
  * callers composing endpoints separately charge their retained host/CC state.
  * WFp32 lowers only the compiler-qualified W reductions to FP32. W assembly,
  * V, denominators, energy epilogue and final reductions remain FP64, and the
- * result records the resolved compiler precision-schedule identity.
+ * result records the actual contraction precision plus the generated code's
+ * compiler precision-schedule identity.
  */
 #if GENERATIVEQC_HAS_CUDA
 DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const double* bov,
