@@ -19,6 +19,31 @@ if typing.TYPE_CHECKING:
     from .types import Index
 
 
+def affine_contraction_initializer(
+    adapter: TensorLoweringAdapter,
+    node: Node,
+    dimension: Callable[[Index], str],
+    *,
+    coefficient: str,
+    beta: str = "0.0",
+) -> str:
+    """Project the original binary axes without requiring a GEMM factorization.
+
+    Zero matrix dimensions deliberately prevent accidental matrix execution.
+    General providers validate the same descriptor's affine semantic fields;
+    the matrix provider additionally requires its existing physical recipe.
+    """
+    return contraction_initializer(
+        adapter,
+        node,
+        dimension,
+        transpose=("N", "N"),
+        extents=("1", "0", "0", "0"),
+        coefficient=coefficient,
+        beta=beta,
+    )
+
+
 def contraction_initializer(
     adapter: TensorLoweringAdapter,
     node: Node,
