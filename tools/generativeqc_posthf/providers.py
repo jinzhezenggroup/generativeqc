@@ -124,6 +124,9 @@ class ConventionalProvider:
                     f"MO block needs {plan.peak_bytes} numeric bytes, budget is {self.budget_bytes}"
                 )
             key = (self.snapshot.identity, self.source.identity, block.slots)
+            spins = getattr(block, "spins", None)
+            if spins is not None:
+                key += (spins,)
             if key in self._cache:
                 self._cache.move_to_end(key)
                 self.statistics["hits"] += 1
@@ -156,9 +159,14 @@ class ConventionalProvider:
                 )
             self.statistics["peak_bytes"] = max(self.statistics["peak_bytes"], peak)
             setup = time.perf_counter()
+            matrices = (
+                [self.snapshot.coefficients] * 4
+                if spins is None
+                else [getattr(self.snapshot, f"coefficients_{spin}") for spin in spins]
+            )
             coefficients = [
-                np.ascontiguousarray(self.snapshot.coefficients[:, slot])
-                for slot in block.slots
+                np.ascontiguousarray(matrix[:, slot])
+                for matrix, slot in zip(matrices, block.slots, strict=True)
             ]
             if plan.output_elements == 0:
                 values = immutable(np.zeros(block.shape))

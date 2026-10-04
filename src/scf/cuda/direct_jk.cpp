@@ -712,6 +712,27 @@ generativeqc_status create_cuda_direct_jk_plan(
         plan->generated_coulomb = prepare_generated_coulomb(
             host, plan->batch, plan->stream, device_id, screening_tolerance, optional_budget);
     }
+    if (plan->canonical_cartesian && plan->canonical_pairs &&
+        !direct_jk_generated_full_range_value_available(*plan) &&
+        direct_shared_rsh_values_requested() && budget > plan->device_bytes) {
+      // Through-f owners were admitted after canonical storage. Earlier SPD
+      // owners already reduced budget. Preserve both before admitting another
+      // optional matrix, including the no-room/allocation-failure fallback.
+      const auto owner_bytes =
+          through_f ? (plan->generated_exchange  ? plan->generated_exchange->device_bytes
+                       : plan->generated_coulomb ? plan->generated_coulomb->device_bytes
+                                                 : 0U)
+                    : 0U;
+      const auto available = budget - plan->device_bytes;
+      const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
+      const auto range_bytes = direct_jk_product(
+          direct_jk_product(systems.size(), direct_jk_product(dimension, dimension)),
+          2U * sizeof(double));
+      if (owner_bytes <= available && range_bytes <= available - owner_bytes)
+        direct_jk_optional_storage(
+            *plan, true, detail, [&] { plan->canonical_range_exchange = scratch(range_bytes); },
+            [&] { plan->canonical_range_exchange = nullptr; });
+    }
     auto& info = plan->diagnostic;
     info.batch_size = systems.size();
     info.nbf = host.nbf;
@@ -1108,8 +1129,11 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
     const double* beta, std::size_t elements, double* coulomb, double* full_alpha_exchange,
     double* full_beta_exchange, double* range_alpha_exchange, double* range_beta_exchange,
     int* primary_error, int* range_error, std::string& detail) {
-  if (plan == nullptr || !direct_jk_bounded_value_enabled(*plan)) {
-    detail = "prepared Direct bounded range values are unavailable or not opted in";
+  const bool shared_canonical = plan && plan->canonical_cartesian && plan->canonical_pairs &&
+                                plan->canonical_range_exchange &&
+                                !direct_jk_generated_full_range_value_available(*plan);
+  if (plan == nullptr || (!shared_canonical && !direct_jk_bounded_value_enabled(*plan))) {
+    detail = "prepared Direct joint range values are unavailable or not opted in";
     return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   }
   return direct_jk_guard(plan, detail, [&] {
@@ -1189,10 +1213,45 @@ generativeqc_status enqueue_cuda_direct_rsh_values_device(
       direct_jk_check(cudaGetLastError());
     }
 
-    direct_jk_check(enqueue_generated_rsh_values(
-        *plan->generated_exchange, unrestricted, density, beta, coulomb, full_alpha_exchange,
-        full_beta_exchange, range_alpha_exchange, range_beta_exchange,
-        direct_exchange_range(correction.exchange), correction.exchange.omega));
+    if (shared_canonical) {
+      const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
+      const auto matrix = direct_jk_product(dimension, dimension);
+      const auto spin_count = unrestricted ? 2U : 1U;
+      const auto scratch_bytes = direct_jk_product(
+          direct_jk_product(matrix, plan->diagnostic.batch_size), spin_count * sizeof(double));
+      direct_jk_canonical_density(plan, unrestricted, density, beta, 0,
+                                  plan->diagnostic.batch_size);
+      for (auto* output :
+           {plan->canonical_coulomb, plan->canonical_exchange, plan->canonical_range_exchange})
+        direct_jk_check(cudaMemsetAsync(output, 0, scratch_bytes, plan->stream));
+      for (std::size_t item = 0; item < plan->diagnostic.batch_size; ++item) {
+        const auto& offsets = plan->canonical_pair_offsets[item];
+        for (unsigned first = 0; first < 7U; ++first)
+          for (unsigned second = 0; second <= first; ++second) {
+            launch_canonical_rsh_values_kernel(
+                plan->stream, plan->canonical_batch, static_cast<std::int32_t>(item),
+                first + second, plan->canonical_pairs,
+                direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
+                offsets[first + 1U] - offsets[first], offsets[second],
+                offsets[second + 1U] - offsets[second], first == second, unrestricted,
+                direct_exchange_range(correction.exchange), correction.exchange.omega,
+                plan->screening_tolerance, plan->canonical_bounds, plan->canonical_density,
+                plan->canonical_coulomb, plan->canonical_exchange, plan->canonical_range_exchange,
+                plan->canonical_work_count);
+            direct_jk_check(cudaGetLastError());
+          }
+      }
+      direct_jk_canonical_output(plan, unrestricted, plan->canonical_coulomb, coulomb, nullptr);
+      direct_jk_canonical_output(plan, unrestricted, plan->canonical_exchange, full_alpha_exchange,
+                                 full_beta_exchange);
+      direct_jk_canonical_output(plan, unrestricted, plan->canonical_range_exchange,
+                                 range_alpha_exchange, range_beta_exchange);
+    } else {
+      direct_jk_check(enqueue_generated_rsh_values(
+          *plan->generated_exchange, unrestricted, density, beta, coulomb, full_alpha_exchange,
+          full_beta_exchange, range_alpha_exchange, range_beta_exchange,
+          direct_exchange_range(correction.exchange), correction.exchange.omega));
+    }
 
     for (const auto* output : {coulomb, full_alpha_exchange, full_beta_exchange})
       if (output) {

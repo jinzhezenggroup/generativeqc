@@ -8,6 +8,7 @@
 
 #include "core/types.hpp"
 #include "hf/reference.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 
 namespace generativeqc::cc {
 
@@ -50,11 +51,12 @@ struct DFSourceResult {
  * metric/source owner; downstream callers must charge retained_source_bytes
  * while that state remains live. Ordinary energy calls release it by default.
  */
-DFSourceResult build_df_source_cuda(const core::System& orbital, const core::System& auxiliary,
-                                    const hf::PhysicalReference& reference,
-                                    std::size_t maximum_bytes, double metric_relative_threshold,
-                                    int device, std::size_t caller_bytes = 0,
-                                    bool retain_response_state = false);
+DFSourceResult build_df_source_cuda(
+    const core::System& orbital, const core::System& auxiliary,
+    const hf::PhysicalReference& reference, std::size_t maximum_bytes,
+    double metric_relative_threshold, int device, std::size_t caller_bytes = 0,
+    bool retain_response_state = false,
+    const scf::cuda_execution::CudaDfSourcePolicy* policy = nullptr);
 
 /** Borrowed physical factors and fixed-orbital Lagrangian cotangents.
  * All factors are Q-major. Boo/Bvv must be symmetric spatial-orbital pairs.

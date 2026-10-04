@@ -484,6 +484,33 @@ void run_range_exchange_case(bool restricted) {
               snapshot.identity.determinant.model == gpu_strategy.primary &&
               std::abs(snapshot.components.total() - result.energy) < 1e-10,
           "CUDA range-separated final state lost correction identity or energy");
+
+  const auto warm = plan.run();
+  require(warm.converged && warm.initial_density_used && warm.iterations <= result.iterations &&
+              std::abs(warm.energy - result.energy) < 1e-11,
+          "CUDA range-separated warm replay changed the endpoint");
+
+  const auto moved_system = hydrogens(restricted ? 2U : 3U, restricted, 0.05);
+  const dft::AoBasis moved_basis(moved_system);
+  const dft::MolecularGrid moved_grid(moved_system, grid_spec);
+  const scf::PreparedFockPlan moved_cpu_primary(moved_system, nullptr, cpu_strategy.primary);
+  const scf::PreparedFockPlan moved_cpu_correction(moved_system, nullptr, cpu_strategy.correction);
+  const scf::PreparedFockPlan moved_gpu_primary(moved_system, nullptr, gpu_strategy.primary, 0);
+  dft::CudaKsPlan moved_plan(moved_gpu_primary, moved_basis, moved_grid, options,
+                             dft::SemilocalFamily::Pbe, 257, &gpu_strategy.correction);
+  auto moved_seed = plan.warm_density();
+  const auto moved_warm = moved_plan.run(&moved_seed);
+  const auto moved_cold = moved_plan.run(nullptr, false);
+  const auto moved_reference = restricted
+                                   ? scf::run_pbe_rsh_rks(moved_cpu_primary, moved_cpu_correction,
+                                                          moved_basis, moved_grid, options)
+                                   : scf::run_pbe_rsh_uks(moved_cpu_primary, moved_cpu_correction,
+                                                          moved_basis, moved_grid, options);
+  require(moved_warm.converged && moved_warm.initial_density_used && moved_cold.converged &&
+              moved_reference.converged &&
+              std::abs(moved_warm.energy - moved_cold.energy) < 1e-10 &&
+              std::abs(moved_cold.energy - moved_reference.energy) < 1e-10,
+          "changed-geometry CUDA range-separated warm seed changed the physical endpoint");
 }
 
 RshStrategies wb97mv_rsh_strategies(bool restricted, scf::FockBackend backend) {

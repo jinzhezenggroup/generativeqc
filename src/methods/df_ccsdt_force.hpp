@@ -41,6 +41,6 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System
                                   const core::System& auxiliary,
                                   const generativeqc_method_descriptor&, bool forces = true,
                                   bool with_triples = true, bool df_auxiliary_reduction = true,
-                                  bool df_matrix_gemm = true, bool lambda_matrix_gemm = false,
+                                  bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
                                   std::size_t lambda_batch_limit = 8);
 }  // namespace generativeqc::methods::detail
