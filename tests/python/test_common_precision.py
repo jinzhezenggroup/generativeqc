@@ -1,8 +1,12 @@
 """Cross-IR execution-precision contracts for TensorIR, DFT, and integrals."""
 
+from pathlib import Path
+
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.precision import (
+    PRECISION_SCHEDULE_SCHEMA,
+    STRICT_MATH_MODE,
     ExecutionPrecisionSchedule,
     PrecisionDirective,
     uniform_precision_schedule,
@@ -31,6 +35,17 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor import (
     PrecisionDirective as TensorPrecisionDirective,
 )
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_native_execution_precision_contract_matches_common_identity_vocabulary() -> None:
+    source = (ROOT / "src/runtime/execution_precision.hpp").read_text(encoding="utf-8")
+    assert f'"{PRECISION_SCHEDULE_SCHEMA}"' in source
+    assert f'"{STRICT_MATH_MODE}"' in source
+    for field in ("storage_dtype", "compute_dtype", "accumulation_dtype", "qualification"):
+        assert field in source
 
 
 def _dft_scientific() -> GridXcScientificIdentity:
