@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
 """
         + guard
         + r"""
-    std::cout << "accepted";
+    std::cout << (select_ao ? "local" : "dense");
   } catch (const std::invalid_argument&) {
     std::cout << "rejected";
   }
@@ -84,9 +84,11 @@ int main(int argc, char** argv) {
     assert built.returncode == 0, built.stderr
 
     cases = {
-        ("unset", "blocked", "host"): "accepted",
-        ("0", "blocked", "host"): "accepted",
-        ("1", "capable", "device"): "accepted",
+        ("unset", "blocked", "host"): "dense",
+        ("unset", "capable", "device"): "local",
+        ("0", "capable", "device"): "dense",
+        ("0", "blocked", "host"): "dense",
+        ("1", "capable", "device"): "local",
         ("1", "blocked", "device"): "rejected",
         ("1", "capable", "host"): "rejected",
         ("yes", "capable", "device"): "rejected",
@@ -120,3 +122,12 @@ def test_iteration_path_intersects_schedule_with_xc_density_capability() -> None
         "iteration_precision.uses_lower_precision(cuda_ks_precision_region::kDensityContraction)"
         in block
     )
+
+
+def test_selected_physical_layout_propagates_back_to_the_ks_owner() -> None:
+    source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    start = source.index("        if (admit_ao) {")
+    end = source.index("        prepared_ao_work = xc->ao_selection_work();", start)
+    block = source[start:end]
+    assert "xc->select_local_ao(1e-16, ao_map_host_budget)" in block
+    assert "xc_layout = xc->layout();" in block
