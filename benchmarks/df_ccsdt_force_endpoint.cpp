@@ -34,10 +34,10 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 8)
+    if (argc < 4 || argc > 9)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT]]]]");
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -49,6 +49,9 @@ int main(int argc, char** argv) {
     };
     const bool matrix = selector(4), forces = selector(5), lambda_matrix = selector(6);
     const std::size_t batch_limit = argc > 7 ? std::stoull(argv[7]) : 8;
+    const auto diis_history = argc > 8 ? std::stoul(argv[8]) : 6;
+    if (diis_history == 1 || diis_history > 20)
+      throw std::invalid_argument("invalid endpoint DIIS history");
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -76,7 +79,7 @@ int main(int argc, char** argv) {
     descriptor.energy_tolerance = 1e-12;
     descriptor.density_tolerance = 1e-11;
     descriptor.ccsd_max_iterations = 150;
-    descriptor.ccsd_diis_history = 6;
+    descriptor.ccsd_diis_history = static_cast<unsigned>(diis_history);
     descriptor.ccsd_energy_tolerance = 1e-12;
     descriptor.ccsd_residual_tolerance = 1e-10;
     descriptor.correlation_memory_budget_bytes = budget;
@@ -118,6 +121,20 @@ int main(int argc, char** argv) {
     field("ccsd_contraction_terms", result.solver.df_contraction_terms);
     field("ccsd_evaluations", result.solver.iteration_graph_calls);
     field("ccsd_capacity", result.solver.numeric_capacity_bytes);
+    field("ccsd_iterations", result.solver.iterations);
+    field("ccsd_replay_r1_max", result.solver.replay_r1_max);
+    field("ccsd_replay_r2_max", result.solver.replay_r2_max);
+    field("ccsd_diis_history", diis_history);
+    field("ccsd_diis_seconds", result.solver.diis_seconds);
+    field("ccsd_diis_restarts", result.solver.diis_restarts);
+    field("ccsd_diis_gram_calls", result.solver.diis_gram_calls);
+    field("ccsd_diis_coefficient_calls", result.solver.diis_coefficient_calls);
+    field("ccsd_diis_combine_calls", result.solver.diis_combine_calls);
+    field("ccsd_diis_insert_bytes", result.solver.diis_history_insert_bytes);
+    field("ccsd_diis_shift_bytes", result.solver.diis_history_shift_bytes);
+    field("ccsd_diis_dot_terms", result.solver.diis_residual_dot_terms);
+    field("ccsd_diis_gram_updates", result.solver.diis_gram_updates);
+    field("ccsd_diis_combine_terms", result.solver.diis_combine_terms);
     field("triples_seconds", result.triples_seconds);
     field("lambda_seconds", result.lambda_seconds);
     field("source_response_seconds", result.source_response_seconds);
