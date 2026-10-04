@@ -92,6 +92,26 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         assert path_name in section
 
 
+def test_python_ci_keeps_history_for_offline_retention_checks() -> None:
+    # test_retention_20260925_objects.py recovers the actual trimmed inventories
+    # from their recorded historical commit, with network and lazy fetch disabled.
+    # A shallow or blob-filtered checkout cannot provide that mandatory gate.
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text()
+        .split("\n  python:\n", 1)[1]
+        .split("\n  upload-coverage:\n", 1)[0]
+    )
+    checkout = section.split("      - uses: actions/checkout@", 1)[1]
+    checkout = checkout.split("\n      - ", 1)[0]
+    assert re.search(r"^          fetch-depth: 0$", checkout, re.MULTILINE), (
+        "Python CI needs complete Git history for test_retention_20260925_objects.py"
+    )
+    assert not re.search(r"^          filter:", checkout, re.MULTILINE), (
+        "Offline retention must have the historical blobs before tests run"
+    )
+
+
 def test_f_shell_release_cache_tracks_only_its_generator_dependencies() -> None:
     path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
     section = (
