@@ -1,0 +1,87 @@
+# Decision: exact orbital response with bounded numerical accelerators
+
+Status: implemented; complete endpoint qualification pending
+Date: 2026-10-05
+
+## Problem and decision
+
+Following [checkpoint amortization](2026-10-05-rhf-exact-response-checkpoints.md),
+#1901 also requires a stronger conventional inverse and strict-identity
+subspace reuse. Neither may change the physical unscreened exact J/K action.
+
+The independent canonical action is `gap*x + 4(ia|jb)x - (ij|ab)x -(ib|ja)x`.
+Compiler TensorIR constructs `D=gap-(ii|aa)-(ia|ia)` and `U_Qia=2 B_Qia` from
+the already qualified correlation factors in the same physical RHF frame.
+No factor/source is rebuilt. The low-rank inverse retains full Coulomb and
+diagonal exchange: with `W=U D^-1/2`, invert `I+WW^T` by Cholesky and use
+Woodbury. The optional preconditioner has no scientific authority; every
+accepted result still passes the exact physical and independent scalar audits.
+
+Positive D and finite successful Cholesky are admission conditions, without
+clipping. Unsafe numerics/capacity refuse the option. A failed accelerated
+solve retries diagonal from zero; attempted actions remain in diagnostics.
+Only numerical errors inside the optional callback are converted to refusal;
+CUDA/exact-operator failures propagate. Setup uses the shared scalar host
+linalg provider to keep provider scratch explicit, not a CPU physical oracle.
+
+For n=ov and rank q, inverse retained numeric payload is
+`8*(qn+q²+2n+q)`, including conversion and solve scratch. Setup has O(q²n+q³)
+numerical work; each application O(qn+q²). The generated factor-map summands
+are `2qn`, but that count excludes all inverse setup/application arithmetic.
+No counter calls `2qn` the complete preconditioner work. Preparation peak also
+charges generated arena, retained D/U, exact identity and still-live CC data.
+The inverse bound conservatively includes raw D/U even though they are freed
+before the exact owner allocates. All overhead is included in orbital timing.
+
+## Recycling boundary
+
+Retain one solved Krylov direction and its independently computed exact scalar
+image, normalized by the image norm. Project a future RHS onto that image and
+let ordinary GMRES verify a fresh true residual of the proposed initial guess.
+This first slice is rank-one solution-subspace reuse, not retained full Arnoldi
+bases or a geometry extrapolator. It needs no extra physical setup action.
+
+The caller owns the non-reentrant cache. Identity includes the full normalized
+basis/geometry and bitwise coefficients, energies, density, Fock, overlap,
+hcore, weighted density, occupation, energy, device and operator/provider policy.
+There is no approximate comparison or pointer-only/hash-only reference match.
+One ULP can reject reuse. This deliberately limits usefulness across cold RHF
+endpoints whose reductions produce slightly different canonical frames.
+
+The cache charges identity plus three n-vectors and the response retains one
+additional n-vector for the audited image until derivative gates pass. It is
+also reserved while earlier endpoint phases run. On a resource refusal with a
+retained cache, release it and retry once; total time includes that attempt,
+and a diagnostic marks its unavailable work so successful-primal counters
+cannot be mistaken for total attempted work. No failed response publishes a
+new subspace. A stale or short-budget subspace is actually freed.
+
+## Evidence and remaining gates
+
+Job2305 passes 12 independent long-double dense inverse cases, aliasing,
+threshold/overflow and exact/short-budget tests. Independent Python IR versus
+dense exact-AO physical-action comparisons pass for three shapes. CUDA
+build2307 and job2309 pass generated runtime-shape, identity/budget, inverse,
+GMRES and compiler/ownership gates. Water complete force with deferred checks
+uses 13 exact J/K calls with diagonal and 11 with the DF inverse; this small
+result does not establish a representative large endpoint benefit.
+
+Job2310 caught nonfinite image rejection calling the strict norm before its
+finite check. Job2311 passes the repaired cache's projection, independent
+residual, stale device/hash/frame, and budget tests. The next full build and
+real-device same-operator lifecycle/independent FD/large endpoint gates remain
+pending. Stronger preconditioning and recycling are opt-in until those results
+justify a selection policy. No cross-GPU speedup or all-coordinate large-force
+qualification is inferred from small cases.
+
+CUDA build2314 and real-device2315 passed all numerical gates, but the shared
+architecture check caught a response-to-posthf capacity dependency. The helper
+now owns method-neutral pointer-extent guards; no architecture exemption was
+added. Build2318 and full qualification2319 pass: four native suites,15 real
+response/IR tests including same-operator recycling, and the independent
+all-coordinate small-water FD/publication suite under both diagonal and DF
+preconditioning. Compiler, shared-SCF, native dependency, promotion, metadata
+and CUDA ownership checks pass. The ledger has no added scientific CUDA lines;
+runtime CUDA grows172 lines net relative to #1904. The failed2316 dependency
+was cancelled; same-GPU complete comparisons run in2321. Large results remain
+pending and no large action-count or speedup claim is made yet.

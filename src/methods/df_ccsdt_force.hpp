@@ -12,6 +12,9 @@ namespace generativeqc::methods::detail {
 /** Complete internal endpoint, on an unchanged conventional RHF reference with
  * a DF correlation Hamiltonian. Public capability promotion is separate. */
 struct DFCCSDTResult {
+  // If true, total_seconds includes a resource-refused precursor whose work
+  // counters are unavailable; successful-primal counters are not endpoint totals.
+  bool recycling_discarded_primal_attempt{};
   double energy{}, reference_energy{}, correlation_energy{}, triples_energy{};
   std::vector<double> forces;
   std::size_t numeric_capacity_bytes{}, source_weight_values{}, metric_weight_values{};

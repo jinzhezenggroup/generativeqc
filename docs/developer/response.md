@@ -40,6 +40,27 @@ and full frame stationarity audits remain mandatory. Setting
 `gmres.true_residual_every=1` retains per-iteration candidate auditing for
 comparisons and difficult numerical domains.
 
+Native `RHFFrameResponseOptions::df_preconditioning` optionally prepares a
+same-frame DF numerical inverse from `D_ia=gap_ia-(ii|aa)-(ia|ia)` and
+`U_Qia=2 B_Qia`. The compiler owns these expressions. A bounded host
+Woodbury/Cholesky helper applies `(D+U^T U)^-1`; it supplies no physical response
+values. Nonpositive/unsafe diagonals, failed Cholesky, short budgets or failed
+accelerated solves retain the exact diagonal solver. Preparation consumes the
+existing correlation source before its release, and all setup/workspace time
+and capacities belong to the complete force endpoint. This option remains
+opt-in until a representative complete-endpoint benefit is qualified.
+
+An optional caller-owned `RHFFrameResponseRecycle` retains one solved direction
+and its independent scalar-CUDA exact image, plus projection scratch. It binds
+the exact geometry/basis, bitwise reference arrays/energy, occupation, device,
+operator hash and provider policy. A new RHS may project onto that subspace;
+the fresh exact residual still controls acceptance. Nearby geometries and
+approximately equal canonical frames are rejected. There is no global cache
+or promise of reuse across freshly recomputed RHF references. Retained cache
+payload is charged during earlier RHF/CC phases as well. A resource-refused
+primal attempt releases the optional cache before one cold retry; its elapsed
+time is included and its unavailable work counters are explicitly flagged.
+
 `ResponseProblem` binds all scientific state before an operator or subspace is
 created:
 

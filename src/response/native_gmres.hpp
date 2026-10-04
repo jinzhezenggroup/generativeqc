@@ -17,6 +17,7 @@ enum class GmresStatus {
   stagnation,
   nonfinite_input,
   nonfinite_operator,
+  nonfinite_preconditioner,
 };
 
 struct GmresOptions {
@@ -67,8 +68,14 @@ struct GmresResult {
 
 double stable_norm(std::span<const double> values);
 GmresPlan prepare_gmres(std::size_t dimension, const GmresOptions& options);
+/** Solve with either a diagonal or a caller-owned right preconditioner.
+ * The callback overwrites its output; nonfinite output is refused before the
+ * physical operator runs. Callback exceptions propagate. Its storage/setup
+ * belong to the caller's complete budget, not this controller's workspace.
+ */
 GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                         std::span<const double> rhs, std::span<const double> initial_guess = {},
-                        std::span<const double> diagonal_preconditioner = {});
+                        std::span<const double> diagonal_preconditioner = {},
+                        const LinearOperator& right_preconditioner = {});
 
 }  // namespace generativeqc::response

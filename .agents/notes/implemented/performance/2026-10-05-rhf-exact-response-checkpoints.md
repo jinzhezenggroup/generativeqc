@@ -37,6 +37,11 @@ workspace bound is unchanged. Full molecular action counts/times are pending.
 
 ## Next bounded experiment
 
+The following proposal is now implemented in
+[bounded DF preconditioning and exact-identity recycling](2026-10-05-rhf-df-preconditioner-recycling.md).
+The original rationale below is retained; complete large-endpoint qualification
+is still separate from the implemented small-system gates.
+
 Before changing the physical operator, derive an optional conventional
 preconditioner from already retained same-frame DF factors. With x indexed ia,
 the canonical RHF action is gap*x + 4(ia|jb)x - (ij|ab)x - (ib|ja)x.

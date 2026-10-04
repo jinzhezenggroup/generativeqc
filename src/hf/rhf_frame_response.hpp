@@ -1,11 +1,15 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "hf/reference.hpp"
+#include "hf/rhf_frame_identity.hpp"
+#include "hf/rhf_frame_recycle.hpp"
 #include "response/native_gmres.hpp"
 
 namespace generativeqc::core {
@@ -13,6 +17,58 @@ struct System;
 }
 
 namespace generativeqc::hf {
+
+/** Owned, immutable same-frame DF preconditioner inputs. Transfer this owner
+ * into response so resource/identity rejection can release it before falling
+ * back to the ordinary diagonal solve. It contains no exact operator images.
+ */
+class RHFFrameDFPreconditioner {
+ public:
+  RHFFrameDFPreconditioner(const core::System& system, const PhysicalReference& reference,
+                           std::size_t rank, std::uint64_t source_identity,
+                           std::vector<double>&& diagonal, std::vector<double>&& low_rank)
+      : identity_(system, reference),
+        rank_(rank),
+        source_identity_(source_identity),
+        diagonal_(std::move(diagonal)),
+        low_rank_(std::move(low_rank)) {}
+  RHFFrameDFPreconditioner(const RHFFrameDFPreconditioner&) = delete;
+  RHFFrameDFPreconditioner& operator=(const RHFFrameDFPreconditioner&) = delete;
+  [[nodiscard]] bool matches(const core::System& system, const PhysicalReference& reference) const {
+    return source_identity_ != 0 && identity_.matches(system, reference);
+  }
+  [[nodiscard]] std::span<const double> diagonal() const { return diagonal_; }
+  [[nodiscard]] std::span<const double> low_rank() const { return low_rank_; }
+  [[nodiscard]] std::size_t rank() const { return rank_; }
+  [[nodiscard]] std::size_t storage_bytes() const {
+    return posthf::checked_add(
+        identity_.storage_bytes(),
+        posthf::checked_mul(posthf::checked_add(diagonal_.capacity(), low_rank_.capacity()),
+                            sizeof(double)));
+  }
+
+ private:
+  RHFFrameIdentity identity_;
+  std::size_t rank_{};
+  std::uint64_t source_identity_{};
+  std::vector<double> diagonal_, low_rank_;
+};
+
+struct RHFFrameDFPreconditionerPreparation {
+  std::unique_ptr<RHFFrameDFPreconditioner> data;
+  std::size_t numeric_capacity_bytes{}, contraction_terms{};
+  double seconds{};
+  std::string reason;
+};
+
+/** Build only a numerical accelerator from qualified same-frame factors.
+ * maximum_bytes is the additional allowance after all borrowed factor/reference
+ * payloads have been charged. Resource/numeric refusal returns empty data.
+ */
+RHFFrameDFPreconditionerPreparation prepare_rhf_frame_df_preconditioner(
+    const core::System&, const PhysicalReference&, std::size_t naux, std::span<const double> boo,
+    std::span<const double> bov, std::span<const double> bvv, std::uint64_t source_identity,
+    std::size_t maximum_bytes);
 
 /** Internal physical-RHF response controls. Scalar CUDA is a bounded fallback
  * for BLAS storage and an independent lowering audit, never a CPU fallback.
@@ -24,6 +80,12 @@ struct RHFFrameResponseOptions {
   std::size_t caller_bytes{};
   bool matrix_blas{true};
   bool relax_orbitals{true};
+  // Opt-in while complete endpoint qualification is pending. The physical
+  // exact J/K operator and all final acceptance gates remain unchanged.
+  bool df_preconditioning{false};
+  // Optional caller-owned, strictly same-operator solved-direction subspace.
+  // Its complete numeric payload is charged to maximum_bytes by this owner.
+  RHFFrameResponseRecycle* recycling{};
   response::GmresOptions gmres = [] {
     response::GmresOptions options;
     // Each exact action traverses J/K. Intermediate candidate checks are
@@ -51,6 +113,12 @@ struct RHFFrameResponseResult {
   std::size_t explicit_hessian_elements{};  // Always zero.
   bool matrix_blas{};
   std::string operator_hash;
+  bool df_preconditioned{}, preconditioner_fallback{};
+  std::size_t preconditioner_capacity_bytes{}, preconditioner_contraction_terms{};
+  double preconditioner_setup_seconds{};
+  std::string preconditioner_reason;
+  bool recycled_guess{}, recycle_published{};
+  std::size_t recycle_capacity_bytes{};
 };
 
 /** Compose matrix-sized TensorIR pullbacks, exact G(D)=J(D)-K(D)/2,
@@ -68,10 +136,10 @@ struct RHFFrameResponseResult {
  * bounded host Krylov/output buffers, provider metadata and device storage;
  * caller_bytes adds other simultaneously live owners.
  */
-RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
-                                               const PhysicalReference& reference,
-                                               std::span<const double> bar_fock_mo,
-                                               std::span<const double> bar_frame, int device,
-                                               const RHFFrameResponseOptions& options = {});
+RHFFrameResponseResult rhf_frame_response_cuda(
+    const core::System& system, const PhysicalReference& reference,
+    std::span<const double> bar_fock_mo, std::span<const double> bar_frame, int device,
+    const RHFFrameResponseOptions& options = {},
+    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner = {});
 
 }  // namespace generativeqc::hf

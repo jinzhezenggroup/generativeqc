@@ -56,17 +56,47 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     if (system.atoms[a].position != auxiliary.atoms[a].position ||
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
-  auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0,
-                                      &auxiliary, forces, df_matrix_gemm, ccsd_batch_limit,
-                                      derived_denominators);
+  auto recycle_bytes = response_options && response_options->recycling
+                           ? response_options->recycling->storage_bytes()
+                           : 0;
+  // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
+  // in every phase, then let the response owner rebind/release it explicitly.
+  auto primal = [&] {
+    return run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
+                                  recycle_bytes, &auxiliary, forces, df_matrix_gemm,
+                                  ccsd_batch_limit, derived_denominators);
+  };
+  RccsdNativeState state;
+  bool discarded_attempt = false;
+  try {
+    state = primal();
+  } catch (const MethodError& error) {
+    if (!recycle_bytes || error.status() != GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw;
+    discarded_attempt = true;
+  } catch (const std::length_error&) {
+    if (!recycle_bytes) throw;
+    discarded_attempt = true;
+  } catch (const std::bad_alloc&) {
+    if (!recycle_bytes) throw;
+    discarded_attempt = true;
+  }
+  if (discarded_attempt) {
+    // A retained optional subspace cannot make an otherwise admitted cold
+    // endpoint fail. Retry once after actual release, preserving elapsed time.
+    response_options->recycling->clear();
+    recycle_bytes = 0;
+    state = primal();
+  }
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
+  result.recycling_discarded_primal_attempt = discarded_attempt;
   result.reference_energy = state.reference->energy;
   result.correlation_energy = state.solved.correlation_energy;
   result.energy = state.solved.total_energy;
   result.primal = state.performance;
   result.solver = state.solved.diagnostic;
-  result.numeric_capacity_bytes = state.diagnostic.numeric_capacity_bytes;
+  result.numeric_capacity_bytes =
+      difference(state.diagnostic.numeric_capacity_bytes, recycle_bytes);
   const auto budget = state.budget;
   const auto device = execution.device_id();
   auto& p = state.problem;
@@ -113,6 +143,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   }
   result.triples_seconds = elapsed(phase);
   if (!forces) {
+    result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, recycle_bytes);
     result.total_seconds = elapsed(started);
     return result;
   }
@@ -226,6 +257,26 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     throw std::logic_error("DF force physical source traversal was incomplete");
   factors = {};
   result.source_response_seconds = elapsed(phase);
+  phase = Clock::now();
+  if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
+  hf::RHFFrameResponseOptions orbital_options =
+      response_options ? *response_options : hf::RHFFrameResponseOptions{};
+  hf::RHFFrameDFPreconditionerPreparation preconditioner;
+  if (orbital_options.df_preconditioning) {
+    // Preparation precedes source release so it consumes the very same frame
+    // and factors, without rebuilding either source. Charge all surviving CC
+    // payloads while the generated map, copies and identity snapshot coexist.
+    const auto outer = checked_add(base, capacity({&bar_f, &bar_c, &correlation_gradient}));
+    if (outer < budget) {
+      preconditioner =
+          hf::prepare_rhf_frame_df_preconditioner(system, *state.reference, q, p.df_boo, p.df_bov,
+                                                  p.df_bvv, p.df_source_identity, budget - outer);
+      result.numeric_capacity_bytes = std::max(
+          result.numeric_capacity_bytes, checked_add(outer, preconditioner.numeric_capacity_bytes));
+    } else {
+      preconditioner.reason = "DF preconditioner caller budget";
+    }
+  }
   // The source stream is drained and its sink has died. Release all completed
   // CC/source numeric owners before allocating the exact-reference response.
   state.df_source = {};
@@ -234,16 +285,16 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   state.result = {};
   std::vector<double>().swap(state.eps_o);
   std::vector<double>().swap(state.eps_v);
-  phase = Clock::now();
-  if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
-  hf::RHFFrameResponseOptions orbital_options =
-      response_options ? *response_options : hf::RHFFrameResponseOptions{};
-  orbital_options.maximum_bytes = budget;
+  result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, recycle_bytes);
+  orbital_options.maximum_bytes = checked_add(budget, recycle_bytes);
   orbital_options.caller_bytes =
       checked_add(posthf::source_capacity(auxiliary),
                   checked_add(capacity({&correlation_gradient}), bytes(coords)));
-  result.orbital =
-      hf::rhf_frame_response_cuda(system, *state.reference, bar_f, bar_c, device, orbital_options);
+  result.orbital = hf::rhf_frame_response_cuda(system, *state.reference, bar_f, bar_c, device,
+                                               orbital_options, std::move(preconditioner.data));
+  result.orbital.preconditioner_setup_seconds += preconditioner.seconds;
+  result.orbital.preconditioner_contraction_terms = preconditioner.contraction_terms;
+  if (!preconditioner.reason.empty()) result.orbital.preconditioner_reason = preconditioner.reason;
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes, result.orbital.numeric_capacity_bytes);
   result.orbital_seconds = elapsed(phase);

@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <memory>
@@ -9,6 +10,7 @@
 #include "hf/rhf_frame_response.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
+#include "response/low_rank_preconditioner.hpp"
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "scf/cuda_direct_jk_device.hpp"
@@ -355,11 +357,65 @@ class Owner {
 };
 }  // namespace
 
-RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
-                                               const PhysicalReference& ref,
-                                               std::span<const double> bar_f,
-                                               std::span<const double> bar_c, int device,
-                                               const RHFFrameResponseOptions& options) {
+RHFFrameDFPreconditionerPreparation prepare_rhf_frame_df_preconditioner(
+    const core::System& system, const PhysicalReference& ref, std::size_t q,
+    std::span<const double> boo, std::span<const double> bov, std::span<const double> bvv,
+    std::uint64_t source_identity, std::size_t maximum_bytes) {
+  const auto started = std::chrono::steady_clock::now();
+  RHFFrameDFPreconditionerPreparation result;
+  const auto o = ref.nocc, v = ref.nbf - o;
+  require(o && ref.nbf > o && q && source_identity && ref.orbital_energies.size() == ref.nbf,
+          "invalid RHF DF preconditioner provenance");
+  const auto ov = checked_mul(o, v);
+  require(boo.size() == checked_mul(q, checked_mul(o, o)) && bov.size() == checked_mul(q, ov) &&
+              bvv.size() == checked_mul(q, checked_mul(v, v)),
+          "RHF DF preconditioner factor dimensions differ");
+  const auto arena_elements = maps::preconditioner_arena_elements(o, v, q);
+  const auto bound = checked_add(RHFFrameIdentity::required_storage_bytes(system, ref),
+                                 bytes(checked_add(arena_elements, checked_add(ov, bov.size()))));
+  if (bound > maximum_bytes) {
+    result.reason = "DF preconditioner preparation budget";
+  } else {
+    result.numeric_capacity_bytes = bound;
+    maps::PreconditionerInputs inputs;
+    inputs.eps_o = ref.orbital_energies.data();
+    inputs.eps_v = inputs.eps_o + o;
+    inputs.boo = boo.data();
+    inputs.bov = bov.data();
+    inputs.bvv = bvv.data();
+    try {
+      std::vector<double> arena(arena_elements);
+      // This is the complete-map work bound, including a numerically rejected
+      // attempt. It is not a completed-work counter for an early failed map.
+      result.contraction_terms = maps::preconditioner_contraction_terms(o, v, q);
+      const auto output = maps::run_preconditioner_cpu(o, v, q, inputs, arena.data(), arena.size());
+      std::vector<double> diagonal(output.diagonal, output.diagonal + ov);
+      std::vector<double> low_rank(output.low_rank, output.low_rank + bov.size());
+      result.data = std::make_unique<RHFFrameDFPreconditioner>(
+          system, ref, q, source_identity, std::move(diagonal), std::move(low_rank));
+      result.numeric_capacity_bytes =
+          checked_add(result.data->storage_bytes(), bytes(arena.capacity()));
+      if (result.numeric_capacity_bytes > maximum_bytes) {
+        result.data.reset();
+        result.reason = "DF preconditioner actual preparation capacity";
+      }
+    } catch (const std::bad_alloc&) {
+      result.reason = "DF preconditioner preparation allocation";
+    } catch (const std::runtime_error&) {
+      // Only the optional numerical expression is evaluated here. No exact
+      // physical response, provider action or CUDA failure can be swallowed.
+      result.reason = "nonfinite DF preconditioner expression";
+    }
+  }
+  result.seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+  return result;
+}
+
+RHFFrameResponseResult rhf_frame_response_cuda(
+    const core::System& system, const PhysicalReference& ref, std::span<const double> bar_f,
+    std::span<const double> bar_c, int device, const RHFFrameResponseOptions& options,
+    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner) {
   const auto n = ref.nbf, o = ref.nocc;
   require(device >= 0 && o && o < n && n == molecule::ao_count(system) &&
               system.ecp_terms.empty() && system.electron_count == int(2 * o) &&
@@ -413,6 +469,57 @@ RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
   if (total > options.maximum_bytes)
     throw std::length_error("RHF frame response exceeds complete numeric budget");
   RHFFrameResponseResult result;
+  std::optional<response::LowRankPreconditioner> inverse;
+  const auto setup_started = std::chrono::steady_clock::now();
+  if (options.df_preconditioning && options.relax_orbitals && preconditioner) {
+    if (!preconditioner->matches(system, ref)) {
+      result.preconditioner_reason = "DF preconditioner reference/source identity mismatch";
+    } else
+      try {
+        const auto extra = checked_add(
+            preconditioner->storage_bytes(),
+            response::LowRankPreconditioner::capacity_bytes(o * v, preconditioner->rank()));
+        if (extra <= options.maximum_bytes - total) {
+          result.preconditioner_capacity_bytes = extra;
+          total = checked_add(total, extra);
+          try {
+            inverse = response::LowRankPreconditioner::prepare(
+                preconditioner->diagonal(), preconditioner->low_rank(), preconditioner->rank(),
+                extra - preconditioner->storage_bytes());
+            if (!inverse) result.preconditioner_reason = "unsafe DF diagonal or Cholesky";
+          } catch (const std::bad_alloc&) {
+            result.preconditioner_reason = "DF inverse allocation";
+          }
+        } else {
+          result.preconditioner_reason = "DF inverse response budget";
+        }
+      } catch (const std::overflow_error&) {
+        result.preconditioner_reason = "DF inverse capacity overflow";
+      }
+  } else if (options.df_preconditioning && options.relax_orbitals) {
+    result.preconditioner_reason = "DF preconditioner data unavailable";
+  }
+  // This owner was transferred, rather than borrowed, so rejection really
+  // releases optional storage before the exact diagonal fallback allocates.
+  preconditioner.reset();
+  result.preconditioner_setup_seconds =
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - setup_started).count();
+  result.df_preconditioned = inverse.has_value();
+  result.preconditioner_fallback = options.df_preconditioning && !inverse;
+  auto* recycling = options.relax_orbitals ? options.recycling : nullptr;
+  if (recycling) {
+    // The extra vector holds the independent scalar audit image until all
+    // derivative gates pass; it is not reconstructed as RHS + residual.
+    const auto image_bytes = bytes(o * v);
+    const auto allowance = options.maximum_bytes - total;
+    if (recycling->prepare(system, ref, device, options.matrix_blas, maps::orbital_action_hash,
+                           allowance > image_bytes ? allowance - image_bytes : 0)) {
+      result.recycle_capacity_bytes = checked_add(recycling->storage_bytes(), image_bytes);
+      total = checked_add(total, result.recycle_capacity_bytes);
+    } else {
+      recycling = nullptr;
+    }
+  }
   result.numeric_capacity_bytes = total;
   result.matrix_blas = options.matrix_blas;
   result.operator_hash = maps::orbital_action_hash;
@@ -420,6 +527,7 @@ RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
   Owner owner(system, ref, device, options, result, direct_bound, arena);
   owner.reference_audit(ref);
   std::vector<double> seed(bar_f.begin(), bar_f.end());
+  std::vector<double> exact_image;
   owner.weights(seed, bar_c);
   if (options.relax_orbitals) {
     double same_space = 0;
@@ -433,13 +541,44 @@ RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
       for (std::size_t a = 0; a < v; ++a)
         diagonal[i * v + a] = ref.orbital_energies[o + a] - ref.orbital_energies[i];
     auto rhs = result.orbital_rhs;
-    auto z =
-        response::solve_gmres(zplan, [&](auto x, auto y) { owner.apply(x, y); }, rhs, {}, diagonal);
+    auto physical = [&](auto x, auto y) { owner.apply(x, y); };
+    const auto initial = recycling ? recycling->initial_guess(rhs) : std::span<const double>{};
+    result.recycled_guess = !initial.empty();
+    response::GmresResult z;
+    if (inverse) {
+      z = response::solve_gmres(zplan, physical, rhs, initial, {}, [&](auto x, auto y) {
+        try {
+          inverse->apply(x, y);
+        } catch (const std::runtime_error&) {
+          // Refuse this optional numerical accelerator inside its callback.
+          // Exceptions from the exact physical action still propagate.
+          std::fill(y.begin(), y.end(), std::numeric_limits<double>::quiet_NaN());
+        }
+      });
+    } else {
+      z = response::solve_gmres(zplan, physical, rhs, initial, diagonal);
+    }
+    if (!z.converged() && (inverse || !initial.empty())) {
+      // An unsuccessful optional accelerator cannot replace the original
+      // physical solve. Keep all attempted work in the final diagnostics.
+      const auto actions = z.operator_actions, iterations = z.iterations,
+                 preconditioner_actions = z.preconditioner_actions;
+      // Release its result before the retry: one GMRES workspace remains
+      // sufficient, and the conservative inverse bound is still charged.
+      z = {};
+      z = response::solve_gmres(zplan, physical, rhs, {}, diagonal);
+      z.operator_actions += actions;
+      z.iterations += iterations;
+      z.preconditioner_actions += preconditioner_actions;
+      result.preconditioner_fallback = inverse.has_value();
+      result.preconditioner_reason = "optional accelerator did not converge; exact diagonal retry";
+    }
     if (!z.converged()) throw std::runtime_error("RHF matrix-free Z response did not converge");
     std::vector<double> residual(o * v);
     // Fresh scalar lowering, exact unscreened J/K and the original RHS audit
     // the solved equation without reconstructing all Hessian basis columns.
     owner.apply(z.solution, residual, true);
+    if (recycling) exact_image = residual;
     for (std::size_t i = 0; i < o * v; ++i) residual[i] -= rhs[i];
     result.orbital_residual = response::stable_norm(residual);
     if (result.orbital_residual > kResidualTolerance)
@@ -473,6 +612,8 @@ RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
   for (std::size_t i = 0; i < cross.size(); ++i)
     result.gradient[i] += cross[i] - density_part[i] - seed_part[i];
   require(finite(result.gradient), "nonfinite RHF electronic gradient");
+  if (recycling)
+    result.recycle_published = recycling->capture(result.orbital_response.solution, exact_image);
   return result;
 }
 }  // namespace generativeqc::hf

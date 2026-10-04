@@ -2,6 +2,7 @@
 // electronic value, amplitude, adjoint and nuclear contraction is native CUDA.
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 
 #include "methods/df_ccsdt_force.hpp"
@@ -30,8 +31,14 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     descriptor.ccsd_energy_tolerance = 1e-12;
     descriptor.ccsd_residual_tolerance = 1e-10;
     descriptor.correlation_memory_budget_bytes = budget;
+    hf::RHFFrameResponseOptions options;
+    // Test-only selection runs unchanged independent FD gates through the
+    // optional accelerator without changing public method semantics.
+    if (const auto* mode = std::getenv("GENERATIVEQC_TEST_Z_PRECONDITIONER"))
+      options.df_preconditioning = std::string(mode) == "1";
     const auto result = methods::detail::run_df_ccsdt_native(
-        execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples);
+        execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
+        8, true, &options);
     const double scalars[]{result.energy,
                            result.reference_energy,
                            result.correlation_energy,
