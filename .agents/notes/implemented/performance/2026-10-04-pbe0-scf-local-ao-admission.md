@@ -306,3 +306,11 @@ GPU requalification; no merge or release is authorized.
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
+
+## Generic-owner reconciliation
+
+The [generic default reconciliation](2026-10-04-generic-scf-local-ao-default-reconciliation.md)
+supersedes this note's method/provider-specific admission predicate. All
+measurements, source/binary receipts and negative findings above remain frozen
+at their original scope; the broader automatic capability policy does not
+convert them into generic-family or current-head qualification.

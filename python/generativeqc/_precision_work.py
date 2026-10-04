@@ -41,6 +41,7 @@ _OPERATOR_NAMES = {
     _native.PRECISION_OPERATOR_OCCUPATION_STABILIZATION: "occupation_stabilization",
     _native.PRECISION_OPERATOR_COULOMB_RECURRENCE: "coulomb_recurrence",
     _native.PRECISION_OPERATOR_EXCHANGE_RECURRENCE: "exchange_recurrence",
+    _native.PRECISION_OPERATOR_NONLOCAL_CORRELATION: "nonlocal_correlation",
 }
 _DTYPES = {
     _native.PRECISION_DTYPE_FP64: "fp64",

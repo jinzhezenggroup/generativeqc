@@ -26,7 +26,8 @@ enum class CudaXcAoPrecision : std::uint8_t {
 
 /** Density-times-AO arithmetic. Mixed evaluates products in explicit RN FP32
  * while keeping storage, the long reduction, point XC, Vxc and scalar reductions FP64.
- * Mixed is qualified for LDA, PBE and r2SCAN; omegaB97M-V requires Fp64. */
+ * Dense mixed contraction is qualified for the current LDA/PBE/r2SCAN programs;
+ * local-AO layouts remain strict FP64 until independently qualified. */
 enum class CudaXcDensityPrecision : std::uint8_t {
   Fp64 = 0,
   Fp32ComputeFp64Accumulate = 1,
@@ -38,6 +39,13 @@ enum class CudaXcDensityPrecision : std::uint8_t {
 using CudaXcPointLauncher = void (*)(cudaStream_t, const double*, const double*, std::size_t,
                                      std::size_t, double*, double*, int*, std::uint32_t, double,
                                      double, const double*);
+
+/** Compiler-emitted facts for one resolved point program. Runtime schedulers
+ * consume these facts instead of inferring arithmetic support from functional
+ * ordinals or method names. */
+struct CudaXcPointCapabilities {
+  bool local_ao_selection{}, mixed_density_contraction{};
+};
 
 struct CudaXcLayout {
   std::size_t natom{}, nprimitive{}, nao{}, npoint{}, tile_points{}, spins{}, jets{};
@@ -58,6 +66,16 @@ struct CudaXcLayout {
   bool local_ao{};
   std::size_t ao_map_entries{}, host_ao_map_bytes{};
 };
+
+/** Layout-owned execution facts consumed by higher-level schedulers. These
+ * facts deliberately exclude method names and unrelated Fock-provider policy:
+ * local-AO legality belongs to the physical XC layout, while density precision
+ * is a separate arithmetic capability. */
+struct CudaXcExecutionCapabilities {
+  bool local_ao_selection{}, mixed_density_contraction{};
+};
+
+CudaXcExecutionCapabilities cuda_xc_execution_capabilities(const CudaXcLayout& layout);
 
 /** Explicit CSR maps for the immutable point-tile sequence. Every local map
  * is sorted, unique, and in range; empty tiles are legal. These indices define
@@ -238,6 +256,8 @@ void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* ba
                int* error, unsigned* host_flags);
 /** Emitted finite admission selector; performs no CUDA calls or allocation. */
 CudaXcPointLauncher resolve_point_launcher(std::uint32_t functional, bool response);
+/** Emitted capability selector for the same finite point-program registry. */
+CudaXcPointCapabilities resolve_point_capabilities(std::uint32_t functional, bool response);
 /** Allocation-free launch adapter compiled with the existing generated AO
  * policy. Scientific AO/ingredient arithmetic has one shared generator. */
 void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cudaStream_t stream,

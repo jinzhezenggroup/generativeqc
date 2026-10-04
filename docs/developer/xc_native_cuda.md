@@ -64,6 +64,13 @@ does not double the scalar term. All symmetric matrix cross terms are retained.
 The compiler emits five bounded point consumers: physical LDA/PBE/r²SCAN and
 signed LDA/PBE response. A plan resolves its immutable `(functional, response)`
 key to an emitted launcher during preparation. Spin layout remains an argument;
+CUDA KS intersects its shared `ExecutionPrecisionSchedule` with the selected
+XC layout's capabilities before each iteration. A local AO layout keeps density
+contraction strict FP64 while independently qualified Direct J may retain lower
+precision. The filtered schedule preserves region names, surviving arithmetic
+directives and qualification metadata. Strict refinement restores every region
+to FP64; the requested schedule remains reusable for subsequent iterations.
+
 AO precision does not change the FP64 point algebra. The selected consumer calls
 the same canonical point implementation with constant functional/consumer facts,
 so CUDA compilation can remove unrelated algebra before register allocation.
@@ -138,14 +145,32 @@ to energy and rejects forces. HF retains its energy-plus-force default.
 
 ## SCF local AO selection
 
-Geometry-bound AO discovery is enabled automatically for qualified
-device-fused FP64 WB97M-V and all-electron exact-direct RKS-PBE0. For PBE0,
-admission requires the scaled PBE graph (exchange/correlation scales 0.75/1,
-full-range exchange coefficient -0.125), without DF, ECP, range separation or
-nonlocal correlation. Other compositions keep dense execution by default.
+Geometry-bound AO discovery is requested automatically for device-fused XC
+layouts whose compiler-emitted point program and physical FP64 layout support
+local AO selection. The XC owner determines legality; SCF does not add a
+functional-name, spin, exact-exchange, range-separated, fitted-provider or
+nonlocal-correlation whitelist. The enclosing KS composition must still be
+supported by its own owners. Response, already-local and unsupported point
+program layouts do not admit discovery.
 `GENERATIVEQC_CUDA_KS_ACTIVE_AO=0` explicitly disables selection for debugging;
-`=1` explicitly requests it and rejects unsupported compositions. Invalid
-switch values are rejected.
+`=1` explicitly requests it and rejects layouts that cannot select local maps.
+Invalid switch values are rejected. An automatic request keeps dense execution
+when the layout or execution schedule does not support selection.
+
+Selected physical layouts propagate back from the XC owner. The shared
+iteration precision schedule intersects that layout's arithmetic capabilities:
+local density contraction remains FP64 while independently qualified Coulomb J
+may retain its lower-precision directive. A whole-schedule FP64 veto would
+incorrectly couple these independent operations.
+
+Execution capability is not a profitability certificate or a numerical
+qualification of the AO cutoff for every complete KS composition. Automatic
+selection follows the shared capability policy; performance in the additional
+domains is unmeasured. Use the complete-endpoint qualification described in
+[performance engineering](../maintainer/performance_engineering.md) for claims
+and further tuning. Frozen PBE0/WB97M-V receipts establish only their recorded
+scientific, source, precision and device scope; they are not current-head or
+generic-family performance evidence.
 
 The prepared XC owner discovers AO value/first-derivative support at cutoff
 1e-16. Existing compiler-generated contractions gather local density entries

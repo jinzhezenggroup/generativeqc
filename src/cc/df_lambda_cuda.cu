@@ -1,5 +1,3 @@
-#include <cublas_v2.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -38,13 +36,9 @@ struct Fence {
   }
   void complete() noexcept { stream = nullptr; }
 };
-constexpr std::size_t kProviderAllowance = 96ULL << 20;
-void blas_check(cublasStatus_t code) {
-  if (code != CUBLAS_STATUS_SUCCESS)
-    throw std::runtime_error("DF Lambda cuBLAS failure: " + std::to_string(int(code)));
-}
+constexpr auto kProviderAllowance = tensor::CudaContractionContext::kProviderAllowance;
 struct Storage {
-  cublasHandle_t blas{};
+  tensor::CudaContractionContext contractions;
   cudaStream_t stream{};
   unsigned char* base{};
   ~Storage() {
@@ -52,7 +46,7 @@ struct Storage {
     // allocation inside its before/after cudaMemGetInfo measurement.
     std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) (void)cudaStreamSynchronize(stream);
-    if (blas) (void)cublasDestroy(blas);
+    contractions.reset_locked();
     if (base) (void)cudaFree(base);
     if (stream) (void)cudaStreamDestroy(stream);
   }
@@ -62,12 +56,6 @@ __global__ void accumulate(const double* source, std::size_t count, double* targ
   for (std::size_t x = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; x < count;
        x += std::size_t(blockDim.x) * gridDim.x)
     target[x] = generativeqc_tensor::finite(target[x] + source[x], error, 1);
-}
-
-__global__ void audit_matrix(const double* values, std::size_t count, int* error) {
-  for (std::size_t x = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; x < count;
-       x += std::size_t(blockDim.x) * gridDim.x)
-    (void)generativeqc_tensor::finite(values[x], error, 1);
 }
 
 using Query = std::size_t (*)(std::size_t, std::size_t);
@@ -239,11 +227,14 @@ struct DFLambdaActions::Impl {
     // is optional and includes explicit IR packing/broadcast intermediates.
     const auto scalar_cursor = cursor, scalar_staged_arena = staged_arena;
     const bool scalar_reduction = metrics.df_auxiliary_reduction;
+    std::size_t binding_host_bytes = 0;
     auto capacity = [&] {
       metrics.owned_device_bytes = checked_add(cursor, metrics.df_provider_allowance_bytes);
-      metrics.numeric_capacity_bytes = checked_add(host_bytes, metrics.owned_device_bytes);
+      metrics.numeric_capacity_bytes =
+          checked_add(checked_add(host_bytes, binding_host_bytes), metrics.owned_device_bytes);
     };
     auto scalar_plan = [&] {
+      binding_host_bytes = 0;
       metrics.df_matrix_gemm = false;
       metrics.df_auxiliary_batch_size = 1;
       metrics.df_provider_allowance_bytes = 0;
@@ -271,8 +262,11 @@ struct DFLambdaActions::Impl {
         }
         auto candidate = scalar_cursor;
         const auto matrix_arena = reserve(candidate, bytes(matrix_scratch));
-        if (fits && checked_add(checked_add(host_bytes, candidate), kProviderAllowance) <=
-                        options.max_bytes) {
+        const auto descriptor_bytes =
+            generated_response::contraction_host_bytes(q % batch ? 2 : 1, with_parameters);
+        if (fits && checked_add(checked_add(checked_add(host_bytes, descriptor_bytes), candidate),
+                                kProviderAllowance) <= options.max_bytes) {
+          binding_host_bytes = descriptor_bytes;
           metrics.df_matrix_gemm = true;
           metrics.df_auxiliary_batch_size = batch;
           metrics.df_provider_allowance_bytes = kProviderAllowance;
@@ -287,35 +281,12 @@ struct DFLambdaActions::Impl {
       throw std::length_error("DF Lambda complete numeric storage exceeds budget");
     parameters_admitted = with_parameters;
     cuda_check(cudaStreamCreateWithFlags(&storage.stream, cudaStreamNonBlocking));
-    if (metrics.df_matrix_gemm) {
-      std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
-      std::size_t before = 0, after = 0, total = 0;
-      cuda_check(cudaMemGetInfo(&before, &total));
-      const auto code = cublasCreate(&storage.blas);
-      if (code == CUBLAS_STATUS_ALLOC_FAILED) {
-        if (storage.blas) blas_check(cublasDestroy(storage.blas));
-        storage.blas = nullptr;
-        scalar_plan();
-      } else {
-        blas_check(code);
-        blas_check(cublasSetStream(storage.blas, storage.stream));
-        blas_check(cublasSetPointerMode(storage.blas, CUBLAS_POINTER_MODE_HOST));
-        blas_check(cublasSetMathMode(storage.blas, CUBLAS_PEDANTIC_MATH));
-        blas_check(cublasSetWorkspace(storage.blas, nullptr, 0));
-        cuda_check(cudaMemGetInfo(&after, &total));
-        if (before > after && before - after > kProviderAllowance) {
-          blas_check(cublasDestroy(storage.blas));
-          storage.blas = nullptr;
-          scalar_plan();
-        }
-      }
-    }
+    if (metrics.df_matrix_gemm && !storage.contractions.prepare(storage.stream)) scalar_plan();
     auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
     if (allocation == cudaErrorMemoryAllocation && metrics.df_matrix_gemm) {
       (void)cudaGetLastError();
       std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
-      blas_check(cublasDestroy(storage.blas));
-      storage.blas = nullptr;
+      storage.contractions.release_locked();
       scalar_plan();
       allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
     }
@@ -378,14 +349,12 @@ struct DFLambdaActions::Impl {
         *seeds[x] = cut_seeds[x] = at(seed_offsets[x]);
       }
       if (metrics.df_matrix_gemm) {
-        staged.gemm = [this](char ta, char tb, std::size_t m, std::size_t n, std::size_t k,
-                             double alpha, const double* a, const double* b,
-                             double* c) { matrix(ta, tb, 1, m, n, k, alpha, a, b, c, false); };
-        staged.batched_gemm = [this](char ta, char tb, std::size_t batch, std::size_t m,
-                                     std::size_t n, std::size_t k, double alpha, const double* a,
-                                     const double* b, double* c) {
-          matrix(ta, tb, batch, m, n, k, alpha, a, b, c, true);
-        };
+        // Pre-bind both complete batches and the final Q tail. A partial batch
+        // must not allocate/replan inside the iterative response action.
+        generated_response::prepare_contractions(
+            staged, storage.contractions, metrics.df_auxiliary_batch_size,
+            q % metrics.df_auxiliary_batch_size, with_parameters, metrics.df_gemm_calls,
+            metrics.df_gemm_summands);
       }
       prepare_cuts();
     } else {
@@ -400,31 +369,6 @@ struct DFLambdaActions::Impl {
     metrics.cuda_actions = true;
   }
 
-  void matrix(char ta, char tb, std::size_t batch, std::size_t m, std::size_t n, std::size_t k,
-              double alpha, const double* a, const double* b, double* output, bool batched) {
-    if (std::max({batch, m, n, k}) > std::size_t(std::numeric_limits<int>::max()))
-      throw std::length_error("DF Lambda matrix dimension exceeds provider range");
-    const double beta = 0.0;
-    const auto opa = ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
-    const auto opb = tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
-    // Row-major C=A*B is column-major C^T=B^T*A^T. Packed batches
-    // have explicit contiguous strides even when an operand was broadcast.
-    if (batched)
-      blas_check(cublasDgemmStridedBatched(storage.blas, opb, opa, int(n), int(m), int(k), &alpha,
-                                           b, int(tb == 'N' ? n : k), checked_mul(k, n), a,
-                                           int(ta == 'N' ? k : m), checked_mul(m, k), &beta, output,
-                                           int(n), checked_mul(m, n), int(batch)));
-    else
-      blas_check(cublasDgemm(storage.blas, opb, opa, int(n), int(m), int(k), &alpha, b,
-                             int(tb == 'N' ? n : k), a, int(ta == 'N' ? k : m), &beta, output,
-                             int(n)));
-    const auto count = checked_mul(batch, checked_mul(m, n));
-    audit_matrix<<<generativeqc_tensor::blocks(count, 256), 256, 0, storage.stream>>>(output, count,
-                                                                                      state.error);
-    cuda_check(cudaGetLastError());
-    ++metrics.df_gemm_calls;
-    metrics.df_gemm_summands = checked_add(metrics.df_gemm_summands, checked_mul(count, k));
-  }
   void record_stage(const Stage& stage) {
     if (!metrics.df_matrix_gemm) {
       record(stage.work, stage.operations);

@@ -900,7 +900,6 @@ class Calculator:
             self._device_name == "cuda"
             and self._method_name.startswith("wb97m-v")
             and not basis_has_ecp
-            and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
             and cuda_wb97mv_force_basis_eligible(self._basis)
         )

@@ -1,4 +1,4 @@
-"""Compile the native automatic local-AO admission guard without claiming CUDA execution."""
+"""Host admission coverage, not GPU numerics or generic default profitability."""
 
 from __future__ import annotations
 
@@ -8,24 +8,71 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
+
+from tools.generate_xc_split_hybrid_registry import emit_registry
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _definition(source: str, signature: str) -> str:
+    start = source.index(signature)
+    opening = source.index("{", start)
+    depth, end = 1, opening + 1
+    while depth:
+        depth += (source[end] == "{") - (source[end] == "}")
+        end += 1
+    return source[start:end]
+
+
 @pytest.fixture(scope="module")
 def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Exercise the production decision with synthetic, explicit owner facts."""
+    """Compile real point capabilities, XC layout/resource logic and SCF guard."""
     compiler, cache = shutil.which("c++"), shutil.which("ccache")
     if compiler is None or cache is None:
         pytest.skip("requires c++ and ccache")
     subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     start = source.index("    const char* ao_selection = std::getenv(")
-    end = source.index("    constexpr std::size_t ao_map_host_budget", start)
+    end = source.index("    if (host_unfused &&", start)
+    guard = source[start:end]
+    # No method/provider/schedule stubs: restoring a whitelist is a compile error.
+    for unrelated in (
+        "SemilocalFamily",
+        "precision_schedule",
+        "provider",
+        "exchange_coefficient",
+    ):
+        assert unrelated not in guard
+    header = (ROOT / "src/dft/cuda_xc.hpp").read_text()
+    declarations = "\n".join(
+        _definition(header, signature) + ";"
+        for signature in (
+            "enum class CudaXcAoPrecision",
+            "struct CudaXcPointCapabilities",
+            "struct CudaXcLayout",
+            "struct CudaXcExecutionCapabilities",
+            "struct CudaXcAoTiles",
+            "struct CudaXcAoSelectionResources",
+        )
+    )
+    xc_source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
+    definitions = "\n".join(
+        _definition(xc_source, signature)
+        for signature in (
+            "CudaXcLayout cuda_xc_layout_shape(",
+            "CudaXcExecutionCapabilities cuda_xc_execution_capabilities(",
+            "CudaXcLayout cuda_xc_local_ao_layout(",
+            "CudaXcAoSelectionResources cuda_xc_ao_selection_resources(",
+        )
+    )
     directory = tmp_path_factory.mktemp("ks-local-ao-admission")
+    (directory / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     unit, executable = directory / "probe.cpp", directory / "probe"
     unit.write_text(
         r"""
+#include <algorithm>
+#include <climits>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -33,50 +80,70 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <stdexcept>
 #include <string>
 #include <vector>
-enum class SemilocalFamily { Pbe = 1, Wb97mv = 4 };
-bool is_semilocal_family(unsigned code, SemilocalFamily family) {
-  return code == static_cast<unsigned>(family);
-}
-struct Options { double semilocal_exchange_scale{0.75}, semilocal_correlation_scale{1}; };
-struct Provider {
-  struct System { std::vector<int> ecp_terms; } value;
-  const System& system() const { return value; }
-};
-struct Precision { bool mixed{}; bool any_lower_precision() const { return mixed; } };
+#include "dft/cuda_ks_precision.hpp"
+#include "runtime/bounded_workspace.hpp"
+#include "generated_split_hybrid_registry.cuh"
+using namespace generativeqc;
+using namespace generativeqc::dft;
+using runtime::size_add;
+using runtime::size_mul;
+namespace generated = generativeqc::dft::generated;
+"""
+        + declarations
+        + r"""
+namespace cuda_xc_detail {
+using CudaXcPointLauncher = void (*)();
+template <unsigned F, bool R> void launch_points() {}
+template <unsigned Mask> void launch_split_hybrid_points() {}
+"""
+        + emit_native_xc_point_dispatch()
+        + "\n}\n"
+        + definitions
+        + r"""
 int main(int argc, char** argv) {
-  if (argc != 3) return 2;
+  if (argc != 7) return 2;
   if (std::string(argv[1]) == "unset") unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
   else setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", argv[1], 1);
-  const std::string mode = argv[2];
-  Options options;
-  Provider provider;
-  Precision precision_schedule;
-  unsigned functional = 1, spins = 1;
-  bool has_exchange = true, has_range_correction = false, fitted_coulomb = false;
-  bool fitted_exchange = false, nonlocal_correlation = false, host_unfused = false;
-  double exchange_coefficient = -0.125;
-  if (mode == "wb97mv") functional = 4;
-  else if (mode == "family") functional = 2;
-  else if (mode == "uks") spins = 2;
-  else if (mode == "no-exchange") has_exchange = false;
-  else if (mode == "range") has_range_correction = true;
-  else if (mode == "df-j") fitted_coulomb = true;
-  else if (mode == "df-k") fitted_exchange = true;
-  else if (mode == "nonlocal") nonlocal_correlation = true;
-  else if (mode == "ecp") provider.value.ecp_terms.push_back(1);
-  else if (mode == "host") host_unfused = true;
-  else if (mode == "mixed") precision_schedule.mixed = true;
-  else if (mode == "x-scale") options.semilocal_exchange_scale = 1.0;
-  else if (mode == "c-scale") options.semilocal_correlation_scale = 0.5;
-  else if (mode == "k-scale") exchange_coefficient = -0.25;
-  else if (mode == "near-k") exchange_coefficient = std::nextafter(-0.125, 0.0);
-  else if (mode == "nan") options.semilocal_exchange_scale = std::nan("");
-  else if (mode != "pbe0") return 3;
+  const std::string family = argv[2], mode = argv[4];
+  const auto functional = family == "m062x" ? generated::kM062XFunctionalCode
+                          : family == "mn15" ? generated::kMN15FunctionalCode
+                          : static_cast<unsigned>(std::stoul(family));
+  const bool unrestricted = std::string(argv[3]) == "uks";
+  const bool host_unfused = mode == "host";
+  const bool automatic = std::string(argv[5]) == "auto";
+  const bool nonlocal = std::string(argv[6]) == "nonlocal";
   try {
+    auto xc_layout = cuda_xc_layout_shape(
+        3, 9, mode == "budget" ? 4096 : 12, mode == "budget" ? 1048576 : 64,
+        functional, unrestricted, 16, false, CudaXcAoPrecision::Fp64,
+        mode == "scaled" ? 0.37 : 1.0, mode == "scaled" ? 0.81 : 1.0, false);
+    if (mode == "response") xc_layout.response = true;
+    if (mode == "fp32-ao") xc_layout.ao_precision = CudaXcAoPrecision::Fp32ComputeFp64Storage;
+    if (mode == "already-local") xc_layout.local_ao = true;
+    if (mode == "zero-nao") xc_layout.nao = 0;
+    if (mode == "zero-points") xc_layout.npoint = 0;
+    if (mode == "zero-tile") xc_layout.tile_points = 0;
 """
-        + source[start:end]
-        + '\n    std::cout << (select_ao ? "local" : "dense");\n'
-        '  } catch (const std::invalid_argument&) { std::cout << "rejected"; }\n}\n'
+        + guard
+        + r"""
+    // Emulate a successful owner's selected layout without any CUDA execution.
+    // Empty maps are legal; this tests the arithmetic contract, not the cutoff.
+    if (admit_ao) {
+      CudaXcAoTiles maps;
+      maps.offsets.resize(ao_selection_bound.tiles + 1);
+      xc_layout = cuda_xc_local_ao_layout(xc_layout, maps);
+    }
+    const auto schedule = resolve_cuda_ks_precision_schedule(
+        automatic ? GENERATIVEQC_PRECISION_AUTO : GENERATIVEQC_PRECISION_FP64,
+        functional, false, nonlocal);
+    const auto iteration = resolve_cuda_ks_iteration_precision(
+        schedule, false, cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+    std::cout << (admit_ao ? "local" : "dense") << ":"
+              << iteration.uses_lower_precision(cuda_ks_precision_region::kCoulombJ) << ":"
+              << iteration.uses_lower_precision(cuda_ks_precision_region::kDensityContraction);
+  } catch (const std::invalid_argument&) { std::cout << "rejected"; }
+}
+"""
     )
     subprocess.run(
         [
@@ -84,7 +151,15 @@ int main(int argc, char** argv) {
             compiler,
             "-std=c++20",
             "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
             "-fsanitize=undefined",
+            "-fno-sanitize-recover=undefined",
+            "-I",
+            str(ROOT / "src"),
+            "-I",
+            str(ROOT / "include"),
             str(unit),
             "-o",
             str(executable),
@@ -98,62 +173,91 @@ int main(int argc, char** argv) {
     return executable
 
 
-@pytest.mark.parametrize("mode", ["pbe0", "wb97mv"])
-@pytest.mark.parametrize(
-    ("selection", "expected"),
-    [("unset", "local"), ("0", "dense"), ("1", "local")],
-)
-def test_qualified_paths_default_to_local_ao(
-    admission_probe: Path, mode: str, selection: str, expected: str
-) -> None:
-    result = subprocess.run(
-        [str(admission_probe), selection, mode],
+def _run(
+    probe: Path,
+    selection: str,
+    family: str = "1",
+    spin: str = "rks",
+    mode: str = "physical",
+    precision: str = "fp64",
+    nonlocal_: str = "local",
+) -> str:
+    return subprocess.run(
+        [str(probe), selection, family, spin, mode, precision, nonlocal_],
         check=True,
         capture_output=True,
         text=True,
+        timeout=10,
+    ).stdout
+
+
+@pytest.mark.parametrize("family", ["0", "1", "2", "3", "4"])
+@pytest.mark.parametrize("spin", ["rks", "uks"])
+@pytest.mark.parametrize("precision", ["fp64", "auto"])
+@pytest.mark.parametrize("selection", ["unset", "0", "1"])
+def test_capable_family_spin_matrix(
+    admission_probe: Path, family: str, spin: str, precision: str, selection: str
+) -> None:
+    automatic = precision == "auto"
+    dense = selection == "0"
+    expected = f"{'dense' if dense else 'local'}:{int(automatic)}:{int(dense and automatic and int(family) < 3)}"
+    assert (
+        _run(admission_probe, selection, family, spin, precision=precision) == expected
     )
-    assert result.stdout == expected
+
+
+@pytest.mark.parametrize("spin", ["rks", "uks"])
+@pytest.mark.parametrize("precision", ["fp64", "auto"])
+@pytest.mark.parametrize("nonlocal_", ["local", "nonlocal"])
+@pytest.mark.parametrize("selection", ["unset", "1"])
+def test_scaled_pbe_is_not_an_exact_composition_gate(
+    admission_probe: Path, spin: str, precision: str, nonlocal_: str, selection: str
+) -> None:
+    assert _run(
+        admission_probe, selection, "1", spin, "scaled", precision, nonlocal_
+    ) == (f"local:{int(precision == 'auto')}:0")
 
 
 @pytest.mark.parametrize(
     "mode",
     [
-        "family",
-        "uks",
-        "no-exchange",
-        "range",
-        "df-j",
-        "df-k",
-        "nonlocal",
-        "ecp",
         "host",
-        "mixed",
-        "x-scale",
-        "c-scale",
-        "k-scale",
-        "near-k",
-        "nan",
+        "response",
+        "fp32-ao",
+        "already-local",
+        "zero-nao",
+        "zero-points",
+        "zero-tile",
     ],
 )
 @pytest.mark.parametrize("selection", ["unset", "0", "1"])
-def test_unqualified_compositions_stay_out(
+def test_actual_layout_incompatibilities_fail_closed(
     admission_probe: Path, mode: str, selection: str
 ) -> None:
-    result = subprocess.run(
-        [str(admission_probe), selection, mode],
-        check=True,
-        capture_output=True,
-        text=True,
+    assert _run(admission_probe, selection, mode=mode) == (
+        "rejected" if selection == "1" else "dense:0:0"
     )
-    assert result.stdout == ("rejected" if selection == "1" else "dense")
+
+
+@pytest.mark.parametrize("family", ["m062x", "mn15"])
+@pytest.mark.parametrize("selection", ["unset", "0", "1"])
+def test_point_program_without_capability_stays_dense(
+    admission_probe: Path, family: str, selection: str
+) -> None:
+    assert _run(admission_probe, selection, family) == (
+        "rejected" if selection == "1" else "dense:0:0"
+    )
+
+
+@pytest.mark.parametrize("selection", ["unset", "1"])
+def test_host_budget_decline_keeps_dense_arithmetic_capability(
+    admission_probe: Path, selection: str
+) -> None:
+    assert (
+        _run(admission_probe, selection, mode="budget", precision="auto") == "dense:1:1"
+    )
 
 
 @pytest.mark.parametrize("selection", ["", "yes", "2", "-1", "01"])
 def test_unknown_selection_fails_closed(admission_probe: Path, selection: str) -> None:
-    result = subprocess.run(
-        [str(admission_probe), selection, "pbe0"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert result.stdout == "rejected"
+    assert _run(admission_probe, selection) == "rejected"
