@@ -34,6 +34,7 @@ struct MethodError : std::runtime_error {
 };
 struct Reference { std::size_t reference_memory_budget_bytes=100; int diis_history=8; double screening_tolerance=0; };
 namespace scf {
+struct CudaRhfBucketPlan;
 namespace cuda_execution {
 bool cuda_df_value_domain(const core::System& orbital,const core::System& system,std::string& detail) {
   detail="unsupported DF source basis";
@@ -74,7 +75,8 @@ Reference reference_options(const generativeqc_method_descriptor&,std::size_t) {
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,SolverOptions,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*,
-                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*, bool retain_df_response) {
+                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*,
+                                      bool retain_df_response, scf::CudaRhfBucketPlan** = nullptr) {
   ++executions;
   retained_response=retain_df_response;
   return {p != nullptr,0,{80}};
@@ -187,8 +189,5 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         )
         assert result.returncode == 0, (mode, result.returncode, result.stderr)
     consumer = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
-    assert (
-        "run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,"
-        in consumer
-    )
+    assert "execution_, system_, descriptor_, &cpu_exact_plan_," in consumer
     assert "make_unique<scf::PreparedFockPlan>" not in consumer

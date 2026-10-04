@@ -3297,6 +3297,12 @@ ScfResult run_rhf_cuda(const core::System&, const ScfOptions&, int, const std::v
   throw std::runtime_error("the library was built without CUDA support");
 }
 
+ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan**, const core::System&, const ScfOptions&, int,
+                              const std::vector<double>*, bool* execution_plan_reused) {
+  if (execution_plan_reused) *execution_plan_reused = false;
+  throw std::runtime_error("the library was built without CUDA support");
+}
+
 std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
 
 ScfResult run_uhf_cuda(const core::System&, const ScfOptions&, int, const std::vector<double>*) {

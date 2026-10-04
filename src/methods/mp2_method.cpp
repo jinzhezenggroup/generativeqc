@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "api/handles.hpp"
+#include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/mp2_energy.hpp"
@@ -62,6 +63,10 @@ class Mp2Prepared final : public PreparedCalculation {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
+  void transfer_cuda_reference_plan_to(Mp2Prepared& target) noexcept {
+    target.cuda_reference_plan_ = std::move(cuda_reference_plan_);
+  }
+
   Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
                                      bool* warm_start_fallback,
                                      std::optional<scf::HfWarmState>* retained_warm_state) {
@@ -99,6 +104,14 @@ class Mp2Prepared final : public PreparedCalculation {
         throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED, "CUDA MP2 is not compiled");
 #endif
       scf::PreparedFockPlan* prepared_exact = nullptr;
+      bool reference_plan_reused = false;
+      bool reference_plan_observed = false;
+      const auto observe_reference_plan = [&](bool reused) {
+        if (!reference_plan_observed) {
+          reference_plan_reused = reused;
+          reference_plan_observed = true;
+        }
+      };
       const auto run_reference = [&](const std::vector<double>* seed) {
         scf::ScfResult candidate;
         if (!density_fitted_ && !cuda) {
@@ -112,14 +125,25 @@ class Mp2Prepared final : public PreparedCalculation {
           auto execution = reference_options;
           execution.resolved_fock_build = prepared_exact->strategy();
           candidate = scf::run_prepared_fock_strategy(*prepared_exact, execution, seed);
+          observe_reference_plan(false);
+        } else if (density_fitted_) {
+          candidate = fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
+                                         system_, *auxiliary_, reference_options,
+                                         context_.device_id, seed)
+                                   : scf::run_rhf_density_fitting(
+                                         system_, *auxiliary_, reference_options, seed);
+          observe_reference_plan(false);
         } else {
-          candidate = density_fitted_
-                          ? (fitted_cuda_ ? scf::run_rhf_density_fitting_cuda(
-                                                system_, *auxiliary_, reference_options,
-                                                context_.device_id, seed)
-                                          : scf::run_rhf_density_fitting(system_, *auxiliary_,
-                                                                         reference_options, seed))
-                          : scf::run_rhf_cuda(system_, reference_options, context_.device_id, seed);
+          bool attempt_reused = false;
+          try {
+            candidate = scf::run_rhf_cuda_cached(
+                cuda_reference_plan_.slot(), system_, reference_options, context_.device_id, seed,
+                &attempt_reused);
+          } catch (...) {
+            observe_reference_plan(attempt_reused);
+            throw;
+          }
+          observe_reference_plan(attempt_reused);
         }
         return candidate;
       };
@@ -146,6 +170,13 @@ class Mp2Prepared final : public PreparedCalculation {
       if (!hf.converged || !hf.reference)
         throw MethodError(GENERATIVEQC_STATUS_NOT_CONVERGED,
                           "HF did not converge; no MP2 energy evaluated");
+
+      const auto reference_plan_bytes =
+          !density_fitted_ && cuda ? cuda_reference_plan_.owned_device_bytes() : 0;
+      if (reference_plan_bytes >= phase_budget)
+        throw MethodError(GENERATIVEQC_STATUS_OUT_OF_MEMORY,
+                          "retained CUDA RHF plan exhausts MP2 numeric memory budget");
+      const auto correlation_budget = phase_budget - reference_plan_bytes;
 
       if (retained_warm_state) {
         // Preserve #1701: CUDA exports its immutable reference density, while
@@ -176,11 +207,12 @@ class Mp2Prepared final : public PreparedCalculation {
         conventional_source = &*prepared_source;
       }
       const auto corr =
-          density_fitted_ ? mp2::density_fitted_energy(ref, *raw_source, phase_budget, threshold_,
-                                                       options_.density_fitting_relative_threshold,
-                                                       8, fitted_cuda_, context_.device_id)
-                          : mp2::conventional_energy(ref, *conventional_source, phase_budget,
-                                                     threshold_, 8, cuda, context_.device_id);
+          density_fitted_
+              ? mp2::density_fitted_energy(ref, *raw_source, correlation_budget, threshold_,
+                                            options_.density_fitting_relative_threshold, 8,
+                                            fitted_cuda_, context_.device_id)
+              : mp2::conventional_energy(ref, *conventional_source, correlation_budget, threshold_,
+                                          8, cuda, context_.device_id);
       Result result;
       result.energy = ref.energy + corr.opposite_spin + corr.same_spin;
       if (!std::isfinite(result.energy)) throw std::runtime_error("nonfinite MP2 total energy");
@@ -198,16 +230,17 @@ class Mp2Prepared final : public PreparedCalculation {
         response_options.absolute_tolerance = 1e-12;
         response_options.restart = 30;
         response_options.max_iterations = 200;
-        response_options.max_workspace_bytes = phase_budget;
+        response_options.max_workspace_bytes = correlation_budget;
         force_diagnostic =
             density_fitted_
-                ? mp2::density_fitted_force_cpu(ref, *raw_source, phase_budget, threshold_,
-                                                options_.density_fitting_relative_threshold, 1e-10,
-                                                response_options)
-                : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, phase_budget, threshold_,
-                                                       1e-10, response_options, context_.device_id)
-                        : mp2::conventional_force_cpu(ref, *raw_source, phase_budget, threshold_,
-                                                      1e-10, response_options));
+                ? mp2::density_fitted_force_cpu(
+                      ref, *raw_source, correlation_budget, threshold_,
+                      options_.density_fitting_relative_threshold, 1e-10, response_options)
+                : (cuda ? mp2::conventional_force_cuda(ref, *raw_source, correlation_budget,
+                                                       threshold_, 1e-10, response_options,
+                                                       context_.device_id)
+                        : mp2::conventional_force_cpu(ref, *raw_source, correlation_budget,
+                                                      threshold_, 1e-10, response_options));
         result.forces = force_diagnostic->forces;
       }
       result.convergence = {hf.iterations, hf.energy_change, ref.commutator_residual, true};
@@ -223,9 +256,13 @@ class Mp2Prepared final : public PreparedCalculation {
       diagnostic.minimum_absolute_denominator = corr.minimum_denominator;
       diagnostic.reference_residual = ref.commutator_residual;
       diagnostic.numeric_capacity_bytes = std::max(
-          reference_capacity, posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity));
+          reference_capacity,
+          posthf::checked_add(posthf::checked_add(corr.numeric_capacity_bytes, warm_capacity),
+                              reference_plan_bytes));
       diagnostic.energy_tile_count = corr.tiles;
       diagnostic.mo_host_staging = executed_cuda && !density_fitted_ ? 1 : 0;
+      diagnostic.reference_execution_plan_reused = reference_plan_reused ? 1 : 0;
+      diagnostic.reference_execution_plan_owned_device_bytes = reference_plan_bytes;
       last_ = diagnostic;
       last_->correlation_owned_device_bytes = corr.metrics.owned_device_bytes;
       last_->correlation_provider_retained_bytes = corr.metrics.provider_retained_bytes;
@@ -248,12 +285,14 @@ class Mp2Prepared final : public PreparedCalculation {
         last_->derivative_workspace_bytes = force_diagnostic->derivative_workspace_bytes;
         last_->planned_endpoint_peak_bytes = std::max(
             reference_capacity,
-            posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity));
-        // A planned warm-state reservation is not allocator telemetry. Until
-        // endpoint measurement includes these external owners, keep it unknown.
-        // Warm-disabled calls preserve the producer's value (including zero).
+            posthf::checked_add(
+                posthf::checked_add(force_diagnostic->planned_endpoint_peak_bytes, warm_capacity),
+                reference_plan_bytes));
+        // External warm/plan reservations are not part of the force allocator
+        // telemetry. Keep the whole-endpoint measurement unknown when either
+        // owner remains live beside the force phase.
         last_->measured_endpoint_peak_bytes =
-            warm_capacity ? 0 : force_diagnostic->measured_endpoint_peak_bytes;
+            warm_capacity || reference_plan_bytes ? 0 : force_diagnostic->measured_endpoint_peak_bytes;
         last_->numeric_capacity_bytes =
             std::max(last_->numeric_capacity_bytes, last_->planned_endpoint_peak_bytes);
         last_->force_provenance_flags = density_fitted_ ? 0x5 : 0x7;
@@ -284,6 +323,7 @@ class Mp2Prepared final : public PreparedCalculation {
   bool density_fitted_{};
   bool fitted_cuda_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
+  CorrelatedCudaReferencePlan cuda_reference_plan_;
   std::optional<generativeqc_correlation_diagnostic> last_;
   mutable std::mutex mutex_;
 };
@@ -353,6 +393,9 @@ class Mp2PreparedBatch final : public PreparedBatch {
         }
         if (target_coordinates != owner_coordinates_[index]) {
           auto candidate = prepare_mp2_calculation(capabilities_, *context_, target, descriptor_);
+          auto& current_owner = static_cast<Mp2Prepared&>(*owners_[index]);
+          auto& candidate_owner = static_cast<Mp2Prepared&>(*candidate);
+          current_owner.transfer_cuda_reference_plan_to(candidate_owner);
           owners_[index] = std::move(candidate);
           owner_coordinates_[index] = std::move(target_coordinates);
         }

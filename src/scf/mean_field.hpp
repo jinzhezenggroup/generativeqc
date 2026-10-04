@@ -312,6 +312,14 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_cached(
 ScfResult run_rhf_cuda(const core::System& system, const ScfOptions& options, int device_id,
                        const std::vector<double>* initial_density = nullptr);
 
+/** Single-system adapter over the caller-owned CUDA bucket plan. The optional
+ * flag reports executable-plan reuse only; it says nothing about warm-density
+ * or physical-reference reuse. */
+ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan** plan, const core::System& system,
+                              const ScfOptions& options, int device_id,
+                              const std::vector<double>* initial_density = nullptr,
+                              bool* execution_plan_reused = nullptr);
+
 /** Execute UHF through the native CUDA scientific path. */
 ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, int device_id,
                        const std::vector<double>* initial_density = nullptr);

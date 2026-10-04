@@ -118,10 +118,13 @@ struct Owner {
   scf::CudaRhfBucketPlan* plan=nullptr;
   ~Owner() { scf::destroy_rhf_cuda_bucket_plan(plan); }
 };
-scf::ScfResult solve(Owner& owner, const core::System& system, const scf::ScfOptions& options) {
+scf::ScfResult solve(Owner& owner, const core::System& system, const scf::ScfOptions& options,
+                     bool expected_reuse=false) {
   auto rows=scf::run_rhf_cuda_bucket_cached(&owner.plan,{system},options,{nullptr},0);
   require(rows.size()==1 && rows[0].status==GENERATIVEQC_STATUS_SUCCESS,
           "CUDA reference endpoint failed");
+  require(rows[0].execution_plan_reused==expected_reuse,
+          "CUDA reference execution-plan reuse diagnostic");
   require(rows[0].scf.converged && rows[0].scf.reference, "missing physical reference");
   require(rows[0].scf.reference->numeric_capacity_bytes<=options.reference_memory_budget_bytes,
           "reference exceeded complete budget");
@@ -160,6 +163,15 @@ int main(int argc,char** argv) {
     require(resident==7*7*7*7*sizeof(double),"roomy reference did not retain ERIs");
     minimum=result.reference->numeric_capacity_bytes-resident;
     owned=scf::hf_cuda_owned_device_bytes(roomy.plan)-resident;
+  }
+  {
+    Owner retained; options.reference_memory_budget_bytes=512ULL<<20;
+    compare(solve(retained,system,options,false),expected);
+    compare(solve(retained,system,options,true),expected);
+    auto moved=system;moved.atoms[1].position[2]+=0.01;
+    require(molecule::validate_and_normalize(moved,detail)==GENERATIVEQC_STATUS_SUCCESS,
+            "retained changed geometry");
+    compare(solve(retained,moved,options,true),scf::run_rhf(moved,options));
   }
   for (std::size_t budget : {minimum+resident-1, minimum+resident}) {
     Owner boundary;options.reference_memory_budget_bytes=budget;

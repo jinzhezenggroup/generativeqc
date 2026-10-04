@@ -37,6 +37,46 @@ ScfResult run_rhf_cuda(const core::System& system, const ScfOptions& options, in
   return std::move(result.front().scf);
 }
 
+ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan** plan, const core::System& system,
+                              const ScfOptions& options, int device_id,
+                              const std::vector<double>* initial_density,
+                              bool* execution_plan_reused) {
+  if (options.hooks || options.strict_initial_density)
+    throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
+
+  const std::vector<core::System> systems{system};
+  const std::vector<const std::vector<double>*> initial_densities{initial_density};
+  std::vector<RhfBucketItem> result;
+  try {
+    result = run_rhf_cuda_bucket_cached(plan, systems, options, initial_densities, device_id);
+  } catch (...) {
+    destroy_rhf_cuda_bucket_plan(*plan);
+    *plan = nullptr;
+    throw;
+  }
+  if (result.empty()) {
+    destroy_rhf_cuda_bucket_plan(*plan);
+    *plan = nullptr;
+    throw std::runtime_error("CUDA RHF returned no result");
+  }
+  if (execution_plan_reused) *execution_plan_reused = result.front().execution_plan_reused;
+  const generativeqc_status status = result.front().status;
+  if (status != GENERATIVEQC_STATUS_SUCCESS) {
+    // A failed or nonconverged attempt must not publish a partially advanced
+    // executable owner. The method layer may retry cold with a fresh plan.
+    destroy_rhf_cuda_bucket_plan(*plan);
+    *plan = nullptr;
+  }
+  if (status == GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw std::bad_alloc();
+  if (status == GENERATIVEQC_STATUS_INVALID_ARGUMENT)
+    throw std::invalid_argument("CUDA RHF received invalid arguments");
+  if (status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+    throw Error(status, "CUDA RHF numerical endpoint is unavailable in this mode");
+  if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED)
+    throw std::runtime_error("CUDA RHF execution failed");
+  return std::move(result.front().scf);
+}
+
 ScfResult run_uhf_cuda(const core::System& system, const ScfOptions& options, int device_id,
                        const std::vector<double>* initial_density) {
   if (options.hooks || options.strict_initial_density)

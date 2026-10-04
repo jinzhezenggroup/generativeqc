@@ -17,6 +17,7 @@
 #include "cc/rccsdt_force.hpp"
 #include "cc/triples_cuda.hpp"
 #include "generated_rccsdt_cpu.hpp"
+#include "methods/correlated_cuda_reference.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "methods/rccsd_method.hpp"
 #include "molecule/basis.hpp"
@@ -95,6 +96,10 @@ class RccsdtPrepared final : public PreparedCalculation {
     return execute_with_reference_seed(compute_forces, nullptr, nullptr, nullptr);
   }
 
+  void transfer_cuda_reference_plan_to(RccsdtPrepared& target) noexcept {
+    target.cuda_reference_plan_ = std::move(cuda_reference_plan_);
+  }
+
   Result execute_with_reference_seed(bool compute_forces, const scf::HfWarmState* initial_state,
                                      bool* warm_start_fallback,
                                      std::optional<scf::HfWarmState>* retained_warm_state) {
@@ -107,9 +112,11 @@ class RccsdtPrepared final : public PreparedCalculation {
 
     const auto warm_capacity =
         warm_reference::reservation_bytes(system_, initial_state, retained_warm_state != nullptr);
-    auto state = run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,
-                                        initial_state ? &initial_state->density : nullptr,
-                                        warm_start_fallback, warm_capacity);
+    auto state = run_rccsd_native_state(
+        execution_, system_, descriptor_, &cpu_exact_plan_,
+        initial_state ? &initial_state->density : nullptr, warm_start_fallback, warm_capacity,
+        nullptr, false, true,
+        execution_.cuda_requested() ? cuda_reference_plan_.slot() : nullptr);
     last_ = state.diagnostic;
     last_performance_ = state.performance;
     if (state.solved.status == cc::SolveStatus::NumericalFailure)
@@ -170,10 +177,11 @@ class RccsdtPrepared final : public PreparedCalculation {
       performance.triples_seconds = triples_seconds;
       diagnostic.minimum_absolute_denominator =
           std::min(diagnostic.minimum_absolute_denominator, triples_minimum_denominator);
-      diagnostic.numeric_capacity_bytes =
-          std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes,
-                                  checked_add(checked_add(retained, triples_workspace_bytes),
-                                              state.external_reservation_bytes));
+      diagnostic.numeric_capacity_bytes = std::max<std::uint64_t>(
+          diagnostic.numeric_capacity_bytes,
+          checked_add(checked_add(retained, triples_workspace_bytes),
+                      checked_add(state.external_reservation_bytes,
+                                  state.reference_execution_plan_bytes)));
       diagnostic.ccsd_t_triples_energy = triples_energy;
       diagnostic.ccsd_t_virtual_triples = triples_virtual_count;
       diagnostic.ccsd_t_workspace_bytes = triples_workspace_bytes;
@@ -182,6 +190,9 @@ class RccsdtPrepared final : public PreparedCalculation {
             diagnostic.correlation_owned_device_bytes, triples_workspace_bytes);
         execution_.observe_workspace_peak(runtime::ExecutionMemorySpace::Device,
                                           triples_workspace_bytes);
+        execution_.observe_numeric_peak(
+            runtime::ExecutionMemorySpace::Device,
+            checked_add(state.reference_execution_plan_bytes, triples_workspace_bytes));
       } else {
         execution_.observe_workspace_peak(runtime::ExecutionMemorySpace::Host,
                                           triples_workspace_bytes);
@@ -226,10 +237,13 @@ class RccsdtPrepared final : public PreparedCalculation {
           if (!force.cuda_response_actions || !force.response_owned_device_bytes)
             throw std::runtime_error(
                 "RCCSD(T) CUDA force replayed Hamiltonian/orbital response on host");
-          execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
-                                          force.lambda.owned_device_bytes);
-          execution_.observe_numeric_peak(runtime::ExecutionMemorySpace::Device,
-                                          force.response_owned_device_bytes);
+          execution_.observe_numeric_peak(
+              runtime::ExecutionMemorySpace::Device,
+              checked_add(state.reference_execution_plan_bytes, force.lambda.owned_device_bytes));
+          execution_.observe_numeric_peak(
+              runtime::ExecutionMemorySpace::Device,
+              checked_add(state.reference_execution_plan_bytes,
+                          force.response_owned_device_bytes));
           diagnostic.correlation_owned_device_bytes =
               std::max<std::uint64_t>(diagnostic.correlation_owned_device_bytes,
                                       std::max<std::uint64_t>(force.lambda.owned_device_bytes,
@@ -247,7 +261,9 @@ class RccsdtPrepared final : public PreparedCalculation {
         diagnostic.response_workspace_allocation_count =
             force.orbital_response.workspace_allocation_count;
         const auto force_capacity =
-            checked_add(force.numeric_capacity_bytes, state.external_reservation_bytes);
+            checked_add(force.numeric_capacity_bytes,
+                        checked_add(state.external_reservation_bytes,
+                                    state.reference_execution_plan_bytes));
         diagnostic.planned_endpoint_peak_bytes =
             std::max<std::uint64_t>(diagnostic.numeric_capacity_bytes, force_capacity);
         // Bits 0-2 retain the qualified analytic-response provenance. Bit 3
@@ -283,6 +299,7 @@ class RccsdtPrepared final : public PreparedCalculation {
   core::System system_;
   generativeqc_method_descriptor descriptor_{};
   std::unique_ptr<scf::PreparedFockPlan> cpu_exact_plan_;
+  CorrelatedCudaReferencePlan cuda_reference_plan_;
   std::optional<generativeqc_correlation_diagnostic> last_;
   std::optional<CcPerformanceDiagnostic> last_performance_;
   mutable std::mutex mutex_;
@@ -338,8 +355,12 @@ class RccsdtPreparedBatch final : public PreparedBatch {
           warm_reference::set_coordinates(target, target_coordinates);
         }
         if (target_coordinates != owner_coordinates_[index]) {
-          owners_[index] =
+          auto candidate =
               prepare_rccsdt_calculation(capabilities_, *context_, target, descriptor_);
+          auto& current_owner = static_cast<RccsdtPrepared&>(*owners_[index]);
+          auto& candidate_owner = static_cast<RccsdtPrepared&>(*candidate);
+          current_owner.transfer_cuda_reference_plan_to(candidate_owner);
+          owners_[index] = std::move(candidate);
           owner_coordinates_[index] = std::move(target_coordinates);
         }
         const bool has_warm_state = warm_starts_enabled_ && warm_states_[index].has_value();

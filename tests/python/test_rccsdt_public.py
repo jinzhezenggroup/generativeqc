@@ -413,12 +413,26 @@ def test_public_native_rccsdt_cuda_batch_rebuild_and_failure_isolation(
     with calc.prepare_batch([atoms, atoms]) as batch:
         first = batch.execute(properties=("energy",), strict=True)
         assert all(item.succeeded and item.forces is None for item in first.items)
+        assert all(
+            not item.correlation.reference_execution_plan_reused
+            and item.correlation.reference_execution_plan_owned_device_bytes > 0
+            for item in first.items
+        )
         updated = batch.execute(
             coordinates=[None, [xyz for _, xyz in moved]],
             properties=("energy",),
             strict=True,
         )
         assert updated.items[1].energy == pytest.approx(expected, abs=2e-9)
+        assert all(
+            item.correlation.reference_execution_plan_reused for item in updated.items
+        )
+        batch.clear_warm_starts()
+        no_density = batch.execute(properties=("energy",), strict=True)
+        assert all(not item.warm_start_used for item in no_density.items)
+        assert all(
+            item.correlation.reference_execution_plan_reused for item in no_density.items
+        )
         invalid = batch.execute(
             coordinates=[None, [0.0]], properties=("energy",), strict=False
         )

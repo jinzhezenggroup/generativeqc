@@ -166,6 +166,8 @@ int resolve_fock_build(FockSpec spec,FockBackend,double) {
   return 0;
 }
 struct ScfOptions {int resolved_fock_build=0;};
+struct CudaRhfBucketPlan {};
+std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
 struct PreparedFockPlan {
   PreparedFockPlan() {++live;}
   PreparedFockPlan(const core::System&,std::nullptr_t,int,int,std::size_t budget) {
@@ -198,6 +200,14 @@ ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int,
   if (seed && warm_failure==1) throw std::runtime_error("injected warm reference failure");
   if (seed && warm_failure==2) return {};
   return physical();
+}
+ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan** plan,const core::System& system,
+                              const ScfOptions& options,int device,
+                              const std::vector<double>* seed,bool* reused) {
+  const bool had_plan=*plan!=nullptr;
+  if (!*plan) *plan=new CudaRhfBucketPlan;
+  if (reused) *reused=had_plan;
+  return run_rhf_cuda(system,options,device,seed);
 }
 ScfResult run_rhf(const core::System&,const ScfOptions&,const std::vector<double>*) {
   ++host_calls; return physical();

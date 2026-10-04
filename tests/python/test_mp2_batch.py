@@ -163,6 +163,12 @@ def test_mp2_cuda_batch_matches_cpu_and_isolates_failed_items(warm_start: bool) 
     calculator = Calculator(method="mp2", device="cuda")
     with calculator.prepare_batch(H2, warm_start=warm_start) as batch:
         cuda = batch.execute(strict=True)
+        assert all(item.correlation is not None for item in cuda.items)
+        assert all(
+            not item.correlation.reference_execution_plan_reused
+            and item.correlation.reference_execution_plan_owned_device_bytes > 0
+            for item in cuda.items
+        )
         if warm_start:
             # CUDA HF retains D in its physical reference, not ScfResult.density.
             # The MP2 checkpoint must still own all four AO density entries.
@@ -173,14 +179,27 @@ def test_mp2_cuda_batch_matches_cpu_and_isolates_failed_items(warm_start: bool) 
         replay = batch.execute(strict=True)
         assert all(item.warm_start_used == warm_start for item in replay.items)
         assert all(not item.warm_start_fallback for item in replay.items)
+        assert all(
+            item.correlation.reference_execution_plan_reused
+            and item.correlation.reference_execution_plan_owned_device_bytes > 0
+            for item in replay.items
+        )
         np.testing.assert_allclose(replay.energies, cuda.energies, atol=1.0e-9, rtol=0)
         for item, reference in zip(replay.items, cpu.items, strict=True):
             assert item.executed_backend == "cuda"
             np.testing.assert_allclose(
                 item.forces, reference.forces, atol=2.0e-9, rtol=0
             )
+        moved = np.asarray([[0.0, 0.0, -0.75], [0.0, 0.0, 0.75]])
+        changed = batch.execute([moved, None], properties=("energy",), strict=True)
+        assert changed.items[0].warm_start_used == warm_start
+        assert changed.items[0].correlation.reference_execution_plan_reused
+        assert changed.items[0].correlation.reference_execution_plan_owned_device_bytes > 0
         failed = batch.execute([np.zeros((1, 3)), None])
         recovered = batch.execute(strict=True)
+        assert all(
+            item.correlation.reference_execution_plan_reused for item in recovered.items
+        )
     np.testing.assert_allclose(cuda.energies, cpu.energies, atol=1.0e-9, rtol=0)
     for item, reference in zip(cuda.items, cpu.items, strict=True):
         assert item.executed_backend == "cuda"

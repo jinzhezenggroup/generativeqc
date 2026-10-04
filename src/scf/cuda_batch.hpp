@@ -19,6 +19,9 @@ struct RhfBucketItem {
   /** A completed isolated Fock measurement deliberately has no converged SCF
    * result. Fleet must preserve its input instead of retrying a cold solve. */
   bool fock_only_diagnostic{};
+  /** The successful execution used a compatible caller-retained CUDA plan.
+   * This is execution-owner reuse, not evidence of a reused converged density. */
+  bool execution_plan_reused{};
 };
 
 struct CudaRhfBucketPlan;

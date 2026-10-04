@@ -399,6 +399,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     delete *plan;
     *plan = nullptr;
   }
+  bool execution_plan_reused = *plan != nullptr && (*plan)->initialized;
   if (*plan == nullptr) {
     *plan = new (std::nothrow) CudaRhfBucketPlan{};
     if (*plan == nullptr) {
@@ -416,6 +417,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     *plan = nullptr;
   }
   if (retry_without_cublas) {
+    execution_plan_reused = false;
     // Provider setup or graph capture can reject a cuBLAS implementation on a
     // particular CUDA release. Rebuild once with the numerically identical
     // native kernel so public CUDA execution remains available.
@@ -433,6 +435,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
       *plan = nullptr;
     }
   }
+  for (auto& output : outputs) output.execution_plan_reused = execution_plan_reused;
   return outputs;
 }
 
