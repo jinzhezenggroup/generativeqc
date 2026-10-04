@@ -490,8 +490,8 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain, refine_ao_density,
-              ao_work_count);
+              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain,
+              refine_ao_density, ao_work_count);
     } else {
       bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
@@ -499,8 +499,8 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain, refine_ao_density,
-              ao_work_count);
+              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain,
+              refine_ao_density, ao_work_count);
     }
   } else {
     if (purpose == DirectScreeningPurpose::Fock) {
@@ -510,8 +510,8 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain, refine_ao_density,
-              ao_work_count);
+              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain,
+              refine_ao_density, ao_work_count);
     } else {
       bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
           <<<grid, block, shared_bytes, stream>>>(
@@ -519,8 +519,8 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
               shell_pair_order, shell_pair_block_bounds, system_density_bounds,
               enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
               density, active, output, global_cursor, profile, coulomb_coefficient,
-              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain, refine_ao_density,
-              ao_work_count);
+              exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain,
+              refine_ao_density, ao_work_count);
     }
   }
 }
