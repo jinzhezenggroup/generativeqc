@@ -503,7 +503,7 @@ generativeqc_status execute_cuda_density_fitting_generated_force_response(
           !plan->integral_source || !plan->three_center ||
           !df_packed_pairs(plan->value_storage.pairs) || !plan->metric_full_rank[0] ||
           !plan->metric_response_valid[0] || lease.rank > plan->value_storage.rank_capacity ||
-          plan->naux * lease.rank > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+          lease.rank > static_cast<std::size_t>(std::numeric_limits<int>::max()) / plan->naux) {
         detail = "external fitted occupied projection differs from the prepared DF owner";
         return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
       }
