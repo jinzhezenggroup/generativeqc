@@ -121,3 +121,32 @@ small cold-force variation remains unlocalized. It is accepted here against
 the independent complete-force FD gates and shared-state comparison, while
 retaining the failed stricter cold-pair line and the separate outstanding
 large source-factor qualification. No extra node3 job was submitted.
+
+## Review follow-up: explicit matrix selection pending promotion qualification
+
+The matrix schedule remains available through explicit options and the retained
+benchmark commands, but ordinary Lambda and complete-DF-force defaults now keep
+the scalar staged schedule. The shared-state diagnostic explicitly requests the
+matrix solve before its scalar comparison; it must not depend on a production
+default to select the candidate.
+
+This is a temporary promotion boundary, not a finding that the matrix equations
+fail the formal force gate. The failed supplemental 3e-9 cold-pair comparison and
+the passing formal 3e-7 directional gate retain their original meanings.
+
+The internal complete-force API is cold-only: it reconstructs RHF/source/CC state
+on every call and exposes no prepared warm-force API. Promotion evidence should
+therefore characterize repeated calls to that supported cold API, including the
+same geometry with warmed runtime caches and changed input geometry, alongside
+the supported batch/budget fallbacks. It must not claim warm source reuse or
+require inventing a new warm endpoint. Retain matched scientific settings, work,
+complete timings and unchanged independent numerical gates. The one cold pair
+and fixed-state Lambda comparison above remain useful evidence for their stated
+domains, rather than an unrestricted default-promotion record.
+
+## Superseded default-policy decision
+
+The temporary explicit-selection decision above is superseded by
+[the matrix-default restoration](../compatibility/2026-10-04-df-lambda-matrix-default-restoration.md).
+The earlier review checkpoint is retained as historical rationale; it no longer
+describes the active defaults or shared-state probe selection.

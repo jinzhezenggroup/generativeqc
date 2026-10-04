@@ -21,7 +21,10 @@ BECKE_COOPERATIVE_THREADS = 32
 BECKE_PAIR_STATE_BYTES = 64
 BECKE_COOPERATIVE_CONTROL_BYTES = 16
 STATIONARY_MAX_ATOMS = 128
-STATIONARY_MAX_AOS = 1024
+# Dense D/W and AO panels are dynamically allocated. This finite bound admits
+# 96-atom full def2-TZVPD (1856 AOs); byte budgets and the native-integral-only
+# rule below still apply. Keep native allocation admission in parity tests.
+STATIONARY_MAX_AOS = 2048
 STATIONARY_MAX_PRIMITIVES = 16384
 _SIZE_MAX = (1 << 64) - 1
 _TileLayout = TypeVar("_TileLayout")

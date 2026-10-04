@@ -1,5 +1,8 @@
 # Decision: compose the native CUDA DF source with conventional-reference CCSD
 
+The post-construction-only setup admission below is superseded by the
+[construction preflight decision](2026-10-04-df-source-construction-admission.md).
+
 Status: implemented
 Date: 2026-10-03
 

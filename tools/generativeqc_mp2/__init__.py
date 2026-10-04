@@ -24,6 +24,7 @@ from .gradient import (
     solve_canonical_orbital_response,
     tile_energy_adjoint,
 )
+from .unrestricted import PreparedUMP2Energy, UMP2EnergyResult, denominator_check_ump2
 
 __all__ = [
     "CompleteGradientValidation",
@@ -34,7 +35,9 @@ __all__ = [
     "MP2RILagrangianWeights",
     "MP2ResponseResult",
     "PreparedMP2Energy",
+    "PreparedUMP2Energy",
     "TileEnergyAdjoint",
+    "UMP2EnergyResult",
     "ao_lagrangian_weights",
     "canonical_energy_adjoint",
     "canonical_lagrangian_weights",
@@ -42,6 +45,7 @@ __all__ = [
     "canonical_orbital_rhs",
     "canonical_orbital_rhs_streamed",
     "complete_gradient_validation",
+    "denominator_check_ump2",
     "dense_molecular_gradient_oracle",
     "dense_ri_lagrangian_weights_oracle",
     "dense_ri_molecular_gradient_oracle",

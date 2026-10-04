@@ -14,6 +14,24 @@ def test_current_shared_scf_dependencies_are_valid() -> None:
     assert report["modules"]
 
 
+def test_rhf_bucket_allows_reference_policy_without_device_implementation(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "src/scf/cuda"
+    source.mkdir(parents=True)
+    policy = source / "reference_eri_policy.hpp"
+    policy.write_text("// Pure host admission policy\n")
+    bucket = source / "rhf_bucket.cpp"
+    bucket.write_text('#include "reference_eri_policy.hpp"\n')
+    assert not audit_scf_structure(tmp_path)["errors"]
+    device = source / "reference_eri_policy.cuh"
+    device.write_text("// Device implementation remains forbidden\n")
+    bucket.write_text('#include "reference_eri_policy.cuh"\n')
+    errors = audit_scf_structure(tmp_path)["errors"]
+    assert len(errors) == 1
+    assert "forbidden cuda_hf_bucket dependency" in errors[0]
+
+
 def test_one_electron_mapping_uses_explicit_cuda_provider_capability() -> None:
     root = Path(__file__).resolve().parents[2]
     policy = (root / "src/scf/cuda/rhf_policy.cpp").read_text(encoding="utf-8")

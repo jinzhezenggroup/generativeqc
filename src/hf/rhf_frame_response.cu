@@ -286,6 +286,8 @@ class Owner {
     auto primal = maps::run_primal_cuda(state);
     auto d = download(primal.density, nn), fm = download(primal.fock_mo, nn);
     finish();
+    stats.contraction_terms =
+        checked_add(stats.contraction_terms, maps::primal_contraction_terms(o, v));
     double residual = 0;
     for (std::size_t i = 0; i < nn; ++i) {
       residual = std::max(residual, std::abs(d[i] - ref.density[i]));
@@ -296,6 +298,8 @@ class Owner {
     begin();
     auto overlap = download(maps::run_primal_cuda(state).fock_mo, nn);
     finish();
+    stats.contraction_terms =
+        checked_add(stats.contraction_terms, maps::primal_contraction_terms(o, v));
     state.fock_ao = f;
     for (std::size_t i = 0; i < nn; ++i)
       residual = std::max(residual, std::abs(overlap[i] - (i / n == i % n ? 1.0 : 0.0)));

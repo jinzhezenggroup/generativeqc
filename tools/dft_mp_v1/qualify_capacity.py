@@ -284,7 +284,7 @@ NATIVE_CUDA_GRID_CONTRACT_SHA256 = (
     "0f5c74f638f51833f3242d369df019362e0df08c3602f2c2cc645266c46d53ed"
 )
 NATIVE_GRID_ROUTE_CONTRACT_SHA256 = (
-    "98b6763435fcd84c6306ea034c330a9864ecf4d33d0009031230f7b64e77b71e"
+    "a7a81679f2f854149cbd498f481149c529b8b1fdc5963432f3dc06c2ccb79c30"
 )
 NATIVE_GRID_POINT_COUNT_CONTRACT_SHA256 = (
     "92cd50078b7a96f371ed8d4fcdb77930b8c472134bd1e97bba803ac445d85867"
@@ -335,7 +335,7 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "7916c0f782cb6e40882144c091887bb57cb67cdc12ad733531a1d79c9df87d8a"
+    "f94b63e26682a0796fe28b145885c1d9bae20d4147b6bc2e7f6cd6b8fc0e8af3"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
     "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
@@ -359,7 +359,7 @@ NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
-    "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
+    "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
 )
 NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
     "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
@@ -402,7 +402,7 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "1c14203191273a1b3644cbbb574484b79423674e66715b3efa9764cec26723e4"
+    "d63c25b8993857082f2d6792bcd591b78a63cfde49a9be1fa69b11d7e3359649"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -435,7 +435,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "0addc7ec684aa1e2116fb0f52d328a9717484b79009e9c236107f4f55bb19563"
+    "7949d2b5f585c0f5cadeaa8a6f52426355821046b209422d0947835093eb0da4"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -1952,11 +1952,10 @@ def _grid_count_contract(repository: Path) -> dict[str, str]:
     route_source = (repository / "src/methods/dft_method.cpp").read_text(
         encoding="utf-8"
     )
-    route_digest = _source_span_sha256(
-        route_source,
-        begin="dft::MolecularGrid ks_molecular_grid(",
-        end="class KsPreparedCalculation",
-        label="native CUDA grid route",
+    # Bind the complete routing function, not unrelated helpers inserted before
+    # the following class. Actual grid-route mutations still fail the digest.
+    route_digest = _cpp_block_sha256(
+        route_source, "dft::MolecularGrid ks_molecular_grid("
     )
     native_abi_digest = _source_span_sha256(
         route_source,

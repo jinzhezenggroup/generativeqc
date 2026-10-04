@@ -102,6 +102,8 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
 }
 CUDA_ALLOWED["cuda_df_source"] = (
     "runtime/cuda_component_trace.hpp",
+    # The CUDA-free construction planner shares checked metadata sizes only.
+    "scf/df_source_capacity.hpp",
     "scf/cuda/df_source_domain.",
     "scf/cuda/df_source.",
     "scf/cuda/df_source_setup.",
@@ -253,6 +255,7 @@ CUDA_MODULES["cuda_direct_provider_host"] = (
     "direct_coulomb",
 )
 CUDA_ALLOWED["cuda_direct_provider_host"] = (
+    "scf/direct_block_schedule.hpp",
     "scf/cuda/direct_jk.",
     "scf/cuda/direct_jk_plan.",
     "scf/cuda/direct_coulomb.",
@@ -298,7 +301,10 @@ CUDA_MODULES["cuda_provider_kernel_interfaces"] = (
     "direct_jk_kernels.hpp",
     "one_electron_export_kernels.hpp",
 )
-CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = ("scf/cuda/packed_basis.",)
+CUDA_ALLOWED["cuda_provider_kernel_interfaces"] = (
+    "scf/cuda/packed_basis.",
+    "scf/direct_block_domain.hpp",
+)
 # Retained numerical primitives have no queue policy or host plan dependency.
 # One-electron consumers share only these bounded scientific building blocks.
 CUDA_MODULES["cuda_integral_numerics"] = (
@@ -449,6 +455,7 @@ CUDA_ALLOWED["cuda_direct_kernel_interfaces"] = (
     "scf/cuda/direct_metadata.hpp",
     "scf/cuda/packed_basis.hpp",
     "scf/cuda_weighted_eri.hpp",
+    "scf/direct_block_domain.hpp",
 )
 # Direct-HF host control is split from numerical launch orchestration. The
 # bucket owner may consume planning/policy interfaces but never device
@@ -464,8 +471,8 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
     "scf/cuda/arena.",
     "scf/cuda/topology.",
     "scf/cuda/rhf_policy.",
-    # #1792 shares this pure topology/budget policy with reference export;
-    # the bucket still cannot depend on the reference-export implementation.
+    # Pure reference cache/quartet admission policy, shared with device setup;
+    # the bucket still cannot include the physical export implementation.
     "scf/cuda/reference_eri_policy.hpp",
     "scf/cuda/direct_constants.",
     "scf/cuda/checked_layout.",

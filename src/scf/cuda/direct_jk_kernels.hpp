@@ -7,6 +7,7 @@
 #include <cstdint>
 
 #include "scf/cuda/packed_basis.hpp"
+#include "scf/direct_block_domain.hpp"
 
 namespace generativeqc::scf::cuda_execution {
 
@@ -128,7 +129,21 @@ void launch_bounded_shell_energy_derivative(
     const double* shell_pair_block_bounds, const double* system_density_bounds,
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
-    double coulomb_coefficient, double exchange_coefficient);
+    double coulomb_coefficient, double exchange_coefficient,
+    detail::BoundedDirectBlockDomain block_domain = {});
+
+/** Qualification-only angular partition behind the provider launch boundary.
+ * Full publishes separate J/K channels; Long publishes one K channel. Short
+ * is not supported. The native consumer owns enumeration and cursor resets. */
+cudaError_t launch_bounded_shell_angular_energy_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DirectCoulombRange range, double omega, double coulomb_coefficient, double exchange_coefficient,
+    detail::BoundedDirectBlockDomain block_domain = {});
 
 /** SR/LR exchange derivative through the same bounded shell scheduler.
  * The full-range Schwarz/density bounds remain conservative for both ranges. */

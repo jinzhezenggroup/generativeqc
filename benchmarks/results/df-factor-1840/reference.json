@@ -1,0 +1,29 @@
+{
+  "schema": "generativeqc.df-frozen-reference.v1",
+  "case": "ethane230",
+  "moment_check": {
+    "max_relative_error": 5.225705865606745e-15,
+    "worst_case": [
+      6,
+      6.66,
+      1
+    ],
+    "cases": 1308,
+    "dps": 90
+  },
+  "slurm_job_id": "2266",
+  "old_reference_sha256": "ee7ca5b08f2dbe5b2b268649e7f9c718299edb0be0a8d59672e3b7042024c50d",
+  "metadata_sha256": "30a7b5b8de8e965d3f380015d450cb7c5a9f8a45c4d5411de147f2054b2281cb",
+  "recipe_sha256": "e7d1bc780d5e24b272e9344683be87e6a7a03cc8c533efc7771e4a7b506540ac",
+  "helper_sha256": {
+    "df_reference_roots.c": "d68e231addb5c549a904e7dd0862bab70aad25f53e9415697b916d8f8a65a03e",
+    "df_precision_oracle.cpp": "51f3078ddb3ebf11821d0ff8415d7328665a37d83b0fe5ce49ce7cf59c6957ba"
+  },
+  "integral_root_calls": 1662640,
+  "metric_rank": 488,
+  "metric_absolute_cutoff": 1.0875788266271165e-07,
+  "reference_sha256": "cb66df98e25968f03a92e46742d596c35475d376a8e9fe3e60b343a16cfeea62",
+  "coefficient_sha256": "413a762e78a0fe13d48f3c6b095cfe198ba3ae676a8a5865e8de88bc17ec1236",
+  "pair_projection": "none",
+  "benzene264": "not qualified"
+}

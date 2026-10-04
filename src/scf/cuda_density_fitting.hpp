@@ -66,13 +66,32 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
  * compatibility plans report their host staging. No failure authorizes an
  * oracle retry; unresolved rank crossings fail transactionally.
  */
+/** Method-owned, token-validated borrow of the exact restricted final-K
+ * occupied factor and fitted projection U=B*C. The provider remains the owner;
+ * the synchronous response consumes this view before its scratch lease is
+ * revoked. This descriptor cannot authorize reuse by itself: the DF plan also
+ * checks device/stream/shape/storage identity at the execution boundary. */
+struct CudaDfBorrowedFittedProjection {
+  int device_id{-1};
+  const double* occupied_coefficients{};
+  const double* projection{};
+  std::size_t nbf{}, naux{}, rank{};
+  void* stream{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && occupied_coefficients != nullptr && projection != nullptr &&
+           nbf != 0 && naux != 0 && rank != 0 && stream != nullptr;
+  }
+};
+
 generativeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDensityFittingJkPlan* plan, std::size_t system, const core::System& orbital,
     const core::System& auxiliary, std::span<const double> raw_a, const std::vector<double>& metric,
     std::span<const DensityFittingDensityResponse> terms, unsigned schedule,
     std::size_t maximum_bytes, std::size_t maximum_auxiliary_tile, std::vector<double>& derivative,
     std::string& detail, DfGradientResources* resources = nullptr,
-    const CudaDfFinalStateToken* final_state = nullptr);
+    const CudaDfFinalStateToken* final_state = nullptr,
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.
@@ -187,6 +206,21 @@ generativeqc_status generate_cuda_density_fitting_raw_tile(
     CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
     std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count,
     std::int64_t derivative_coordinate, void* stream, double* output, std::string& detail);
+
+/** Raw value expansion for cancellation-sensitive orbital contractions.
+ * Each disjoint caller-owned buffer has pair_count*auxiliary_count doubles in
+ * the ordinary full-pair layout; the value is high+low. One source traversal
+ * retains low-angular primitive and contraction residuals in FP64. Consume
+ * both components before reusing either buffer on the supplied stream.
+ * This API selects its own canonical value math and one-lane schedule;
+ * experimental ordinary-tile math/mapping overrides do not apply to it.
+ * Source diagnostics count both component arrays in generated_value_bytes.
+ * The metric, rank, AO conventions and ordinary/derivative tile APIs are unchanged.
+ */
+generativeqc_status generate_cuda_density_fitting_raw_expansion(
+    CudaDensityFittingIntegralSource* source, std::size_t system, std::size_t pair_begin,
+    std::size_t pair_count, std::size_t auxiliary_begin, std::size_t auxiliary_count, void* stream,
+    double* high, double* low, std::string& detail);
 
 /** Generate one auxiliary-metric derivative row tile on `stream`. */
 generativeqc_status generate_cuda_density_fitting_metric_derivative_tile(

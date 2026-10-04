@@ -48,11 +48,6 @@ def test_pbe0_chunks_and_semilocal_replay_exclude_each_auto_component(
     tmp_path: Path,
 ) -> None:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
-    schedule = _span(
-        source,
-        "struct CudaKsPrecisionSchedule",
-        "CudaKsPrecisionSchedule resolve_cuda_ks_precision_schedule(",
-    )
     chunk = _span(
         source, "    const bool pure_semilocal_chunk", "    if (device_chunk_mode)"
     )
@@ -64,6 +59,7 @@ def test_pbe0_chunks_and_semilocal_replay_exclude_each_auto_component(
 #include <vector>
 #include "dft/semilocal_family.hpp"
 #include "scf/types.hpp"
+#include "runtime/execution_precision.hpp"
 using namespace generativeqc;
 using namespace generativeqc::dft;
 namespace generativeqc::scf::cuda_execution {
@@ -74,11 +70,20 @@ bool is_semilocal_family(std::uint32_t code, SemilocalFamily family) {
   return code == semilocal_family_code(family);
 }
 """
-        + schedule
         + r"""
+runtime::ExecutionPrecisionSchedule test_precision_schedule(bool coulomb, bool density) {
+  runtime::ExecutionPrecisionSchedule schedule;
+  schedule.add_region("test.coulomb",
+                      coulomb ? runtime::fp32_compute_fp64_accumulation("test/coulomb")
+                              : runtime::strict_fp64_precision());
+  schedule.add_region("test.density",
+                      density ? runtime::fp32_compute_fp64_accumulation("test/density")
+                              : runtime::strict_fp64_precision());
+  return schedule;
+}
 struct Owner {
   scf::ScfOptions options;
-  CudaKsPrecisionSchedule precision_schedule;
+  runtime::ExecutionPrecisionSchedule precision_schedule;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
   bool device_nonlocal{};
   void* nonlocal_correlation{};
@@ -106,7 +111,7 @@ int main() {
   for (bool coulomb : {false, true}) for (bool density : {false, true})
     for (bool hybrid : {false, true}) {
       Owner p;
-      p.precision_schedule = {coulomb, density};
+      p.precision_schedule = test_precision_schedule(coulomb, density);
       p.has_exchange = hybrid;
       p.options.semilocal_exchange_scale = hybrid ? 0.75 : 1.0;
       assert(p.chunk() == (!coulomb && !density));
@@ -145,7 +150,7 @@ int main() {
     rsh.range_correction->spec.coulomb.present = false;
     rsh.range_correction->spec.exchange.op = scf::FockOperator::LongRange;
     rsh.range_correction->spec.exchange.omega = 0.3;
-    rsh.precision_schedule = {coulomb, density};
+    rsh.precision_schedule = test_precision_schedule(coulomb, density);
     assert(rsh.chunk() == (!coulomb && !density));
     assert(!rsh.replay());
     rsh.nonlocal_correlation = &rsh;

@@ -107,6 +107,9 @@ std::vector<AoExpansion> ao_expansions(unsigned l,
     return result;
   };
   std::vector<AoExpansion> expansions;
+  // The DF nuclear sink admits this single-shell workspace before packing.
+  // Reserve both known bounds so no geometric old/new allocation overlaps it.
+  expansions.reserve(2 * l + 1);
   for (int signed_m = -static_cast<int>(l); signed_m <= static_cast<int>(l); ++signed_m) {
     const unsigned m = static_cast<unsigned>(std::abs(signed_m));
     std::vector<double> polynomial(cartesian.size(), 0.0);
@@ -143,6 +146,7 @@ std::vector<AoExpansion> ao_expansions(unsigned l,
       }
     }
     AoExpansion expansion;
+    expansion.reserve(kMaximumAuxiliaryAoExpansionTerms);
     for (std::size_t i = 0; i < cartesian.size(); ++i) {
       if (polynomial[i] != 0.0)
         expansion.push_back(
