@@ -18,7 +18,7 @@ from .gfn2_electronic_contract import (
     GFN2_QUADRUPOLE_COMPONENTS,
 )
 
-GFN2_ELECTRONIC_RUNTIME_VERSION = "gfn2-electronic-runtime-ir-v2"
+GFN2_ELECTRONIC_RUNTIME_VERSION = "gfn2-electronic-runtime-ir-v3"
 
 
 def _input(name: str, *, differentiable: bool = False) -> Node:
@@ -65,6 +65,55 @@ def build_gfn2_core_energy_update_program() -> Program:
         },
     )
 
+
+
+def build_gfn2_energy_weight_program() -> Program:
+    """One orbital energy weight, f * epsilon, shared by CPU/CUDA schedules."""
+
+    occupation = _input("occupation")
+    eigenvalue = _input("eigenvalue")
+    energy_weight = multiply(occupation, eigenvalue)
+    return Program(
+        {"energy_weight": energy_weight},
+        provenance={
+            "kind": "gfn2-runtime-energy-weight",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "#505 Gfn2PopulationProgram",
+        },
+    )
+
+
+def build_gfn2_weighted_coefficient_program() -> Program:
+    """One backend-independent C*f coefficient update."""
+
+    coefficient = _input("coefficient")
+    weight = _input("weight")
+    weighted_coefficient = multiply(coefficient, weight)
+    return Program(
+        {"weighted_coefficient": weighted_coefficient},
+        provenance={
+            "kind": "gfn2-runtime-weighted-coefficient",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "#505 Gfn2PopulationProgram",
+        },
+    )
+
+
+def build_gfn2_density_update_program() -> Program:
+    """One ordered density reduction update: accumulator + (C*f)*C."""
+
+    weighted_coefficient = _input("weighted_coefficient")
+    coefficient = _input("coefficient")
+    accumulator = _input("accumulator")
+    updated = add(accumulator, multiply(weighted_coefficient, coefficient))
+    return Program(
+        {"updated": updated},
+        provenance={
+            "kind": "gfn2-runtime-density-update",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "#505 Gfn2PopulationProgram",
+        },
+    )
 
 def build_gfn2_scalar_hamiltonian_update_program() -> Program:
     """One overlap/scalar-potential Hamiltonian update."""

@@ -49,6 +49,12 @@ int main() {
   out=123.;
   if(gfn2_core_energy_update_tensor(1e308,2.,1e308,out) || out!=123.) return 6;
   if(gfn2_population_update_tensor(std::numeric_limits<double>::quiet_NaN(),1.,1.,out) || out!=123.) return 7;
+  double ew=0.;
+  if(!gfn2_energy_weight_tensor(0.25,-2.,ew) || ew!=-0.5) return 8;
+  double wc=0.;
+  if(!gfn2_weighted_coefficient_tensor(3.,0.25,wc) || wc!=0.75) return 9;
+  out=0.1;
+  if(!gfn2_density_update_tensor(wc,2.,out,out) || out!=std::fma(wc,2.,0.1)) return 10;
 }
 """)
     binary = tmp_path / "fused"
@@ -70,3 +76,17 @@ int main() {
         [str(binary)], check=False, capture_output=True, text=True, timeout=10
     )
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+
+
+
+def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
+    root = Path(__file__).resolve().parents[2]
+    cpu = (root / "src/xtb/native/src/model/gfn2/eigensolver.cpp").read_text()
+    cuda = (root / "src/xtb/native/src/backends/cuda/gfn2_density.cu").read_text()
+    assert "gfn2_weighted_coefficient_tensor(" in cpu
+    assert "gfn2_energy_weight_tensor(" in cpu
+    assert "gfn2_weighted_coefficient_cuda_tensor(" in cuda
+    assert "gfn2_density_update_cuda_tensor(" in cuda
+    assert "gfn2_energy_weight_cuda_tensor(" in cuda
+    assert "fma(density_left, second, density)" not in cuda
+    assert "fma(weighted_left, second, weighted_density)" not in cuda

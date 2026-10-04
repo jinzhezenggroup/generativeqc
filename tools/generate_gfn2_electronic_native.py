@@ -14,17 +14,23 @@ if __package__ in (None, ""):
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_RUNTIME_VERSION,
     build_gfn2_core_energy_update_program,
+    build_gfn2_density_update_program,
+    build_gfn2_energy_weight_program,
     build_gfn2_multipole_hamiltonian_update_program,
     build_gfn2_multipole_integral_vjp_program,
     build_gfn2_population_update_program,
     build_gfn2_scalar_hamiltonian_update_program,
     build_gfn2_scalar_integral_vjp_program,
+    build_gfn2_weighted_coefficient_program,
 )
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
 POPULATION_INPUTS = ("density", "integral", "accumulator")
 CORE_ENERGY_INPUTS = ("density", "h0", "accumulator")
+ENERGY_WEIGHT_INPUTS = ("occupation", "eigenvalue")
+WEIGHTED_COEFFICIENT_INPUTS = ("coefficient", "weight")
+DENSITY_UPDATE_INPUTS = ("weighted_coefficient", "coefficient", "accumulator")
 SCALAR_HAMILTONIAN_INPUTS = (
     "overlap",
     "row_vat",
@@ -51,6 +57,15 @@ def native_header() -> str:
     core_energy = prepare_for_backend(
         build_gfn2_core_energy_update_program(), backend="cpu"
     )
+    energy_weight = prepare_for_backend(
+        build_gfn2_energy_weight_program(), backend="cpu"
+    )
+    weighted_coefficient = prepare_for_backend(
+        build_gfn2_weighted_coefficient_program(), backend="cpu"
+    )
+    density_update = prepare_for_backend(
+        build_gfn2_density_update_program(), backend="cpu"
+    )
     scalar_h = prepare_for_backend(
         build_gfn2_scalar_hamiltonian_update_program(), backend="cpu"
     )
@@ -76,6 +91,26 @@ def native_header() -> str:
             function_name="gfn2_core_energy_update_tensor",
             input_order=CORE_ENERGY_INPUTS,
             output_order=("updated",),
+        ),
+        emit_scalar_cpp(
+            energy_weight,
+            function_name="gfn2_energy_weight_tensor",
+            input_order=ENERGY_WEIGHT_INPUTS,
+            output_order=("energy_weight",),
+        ),
+        emit_scalar_cpp(
+            weighted_coefficient,
+            function_name="gfn2_weighted_coefficient_tensor",
+            input_order=WEIGHTED_COEFFICIENT_INPUTS,
+            output_order=("weighted_coefficient",),
+        ),
+        emit_scalar_cpp(
+            density_update,
+            fused_accumulation=True,
+            function_name="gfn2_density_update_tensor",
+            input_order=DENSITY_UPDATE_INPUTS,
+            output_order=("updated",),
+            ordered_native_sums=True,
         ),
         emit_scalar_cpp(
             scalar_h,
@@ -119,6 +154,12 @@ inline constexpr const char* gfn2_population_update_logical_hash =
     "{population.logical_hash}";
 inline constexpr const char* gfn2_core_energy_update_logical_hash =
     "{core_energy.logical_hash}";
+inline constexpr const char* gfn2_energy_weight_logical_hash =
+    "{energy_weight.logical_hash}";
+inline constexpr const char* gfn2_weighted_coefficient_logical_hash =
+    "{weighted_coefficient.logical_hash}";
+inline constexpr const char* gfn2_density_update_logical_hash =
+    "{density_update.logical_hash}";
 inline constexpr const char* gfn2_scalar_hamiltonian_update_logical_hash =
     "{scalar_h.logical_hash}";
 inline constexpr const char* gfn2_multipole_hamiltonian_update_logical_hash =
