@@ -471,6 +471,7 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
     "scf/cuda/arena.",
     "scf/cuda/topology.",
     "scf/cuda/rhf_policy.",
+    "scf/cuda/reference_eri_policy.hpp",
     "scf/cuda/direct_constants.",
     "scf/cuda/checked_layout.",
     "scf/cuda/direct_tile_validation.",
