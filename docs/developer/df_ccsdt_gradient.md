@@ -2,8 +2,10 @@
 
 The native internal components target the correlation-only DF Hamiltonian:
 conventional all-electron RHF supplies the reference Fock/orbitals, while the
-correlation two-electron interaction is density fitted. The complete native
-DF-CCSD(T) force endpoint is not yet registered or qualified.
+correlation two-electron interaction is density fitted. The internal
+`methods::detail::run_df_ccsdt_native` composes a complete energy/force endpoint.
+Small-molecule force qualification is available; public registration and
+hundreds-AO qualification remain separate.
 
 ## Correlation response
 
@@ -71,7 +73,22 @@ passes are independent of the orbital-response dimension. The result is an
 **electronic gradient**: the final method must add the correlation-source and
 nuclear-repulsion gradients, then negate once to publish forces.
 
-## Qualification and remaining integration
+## Complete native owner and qualification
+
+The complete owner starts from normalized orbital/auxiliary geometry, computes
+a fresh exact CUDA RHF reference and native DF-CCSD amplitudes, then composes the
+triples, corrected-Lambda, factor/source and reference branches above. Forces
+retain the original source/frame across the CC solve. Energy-only execution
+releases that state and evaluates the same Hamiltonian without response.
+
+Each phase charges all other live owners to its admission. The nuclear sink
+uses the same immutable geometry/basis arguments as the source producer, and
+the source identity must match. After successful source reverse and sink drain,
+the owner releases completed CC/amplitude/factor/source buffers before the
+exact-reference Z/Pulay phase. Nuclear repulsion is added once through the shared
+ionic-gradient assembly, followed by a single sign conversion. Errors publish
+no partial energy/force result. An optional CCSD-only mode omits triples for
+separate closure validation.
 
 The internal interfaces admit complete numeric payloads before execution;
 outer callers must charge all other live owners. Matrix response reports zero
@@ -87,7 +104,16 @@ Relevant validation modules include `test_df_cc_lambda.py`,
 The RHF module checks independent forces and nonzero-Z molecular energy finite
 differences with both scalar and BLAS schedules.
 
-The remaining method owner must compose all these branches on the identical
-converged CC/reference/source state, retain complete phase admission, validate
-independent complete DF-CCSD(T) forces, and measure cold hundreds-AO endpoints.
-Passing any individual component does not qualify the composed force endpoint.
+`test_df_complete_force.py` compares complete native CCSD/CCSD(T) energies and
+forces with independent libcint/PySCF correlation-only DF Hamiltonians. It
+includes nonzero triples, two-step energy directions, every water coordinate,
+native energy/force consistency, auxiliary g in both representations, fixed-rank
+duplicate-auxiliary metrics, translation and failure publication. PySCF and its
+tiny dense ERIs are test oracles only. Set `GENERATIVEQC_DF_COMPLETE_FORCE_TEST=1`
+and `GENERATIVEQC_DF_COMPLETE_FORCE_PROBE` for the native validation seam.
+
+Cold hundreds-AO force timings, independent force gates and complete work/traffic
+qualification are still required before broad promotion. The pre-existing
+strict large-factor gates (`atol=rtol=3e-10`) are not qualified by small-molecule
+force agreement and must not be relaxed. See the
+[composition decision](../../.agents/notes/implemented/architecture/2026-10-04-complete-native-df-ccsdt-forces.md).

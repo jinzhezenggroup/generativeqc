@@ -59,13 +59,15 @@ std::size_t checked_add(std::size_t a,std::size_t b) {
 }
 }
 struct Problem { std::size_t reference_retained_bytes=100, provider_peak_bytes{}; };
-struct State { Problem problem; };
+struct State { Problem problem; int df_source{}; };
 struct Execution { int device_id() const { return 0; } };
 Problem build_problem(const integrals::ElectronInteractionSource& source,
                       int,int,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
+                      int* retained_df_response,
                       const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy) {
-  if (correlation_auxiliary || correlation_policy)
-    throw std::logic_error("conventional lifetime fixture requires no DF auxiliary/policy");
+  if (correlation_policy) throw std::logic_error("conventional lifetime fixture requires no policy");
+  if (correlation_auxiliary) throw std::logic_error("conventional lifetime fixture requires no auxiliary");
+  if (retained_df_response) throw std::logic_error("conventional lifetime fixture must not retain DF response");
   // Real providers increment work before a source read may fail. Validate only
   // this attempt's delta while retaining both attempts in endpoint diagnostics.
   const int initial_work=work, initial_metrics=metrics;
@@ -86,8 +88,9 @@ Problem build_problem(const integrals::ElectronInteractionSource& source,
 @pytest.fixture(scope="module")
 def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+    cache = shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler and ccache required")
     mp2 = (ROOT / "src/methods/mp2_method.cpp").read_text()
     cc = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     mp2_setup = mp2.split("      std::unique_ptr<posthf::RawSource> raw_source;", 1)[
@@ -132,6 +135,7 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0) {
   int system=0, reference_value=0, solver_options=0, provider_work=0, provider_metrics=0;
   const auto* reference=&reference_value;
   const int* correlation_auxiliary=nullptr;
+  const bool retain_df_response=false;
   const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy=nullptr;
   const bool cuda=optional_cuda || !prepared;
   source_failure=failure;
@@ -168,14 +172,22 @@ int main(int argc,char** argv) {
     directory = tmp_path_factory.mktemp("posthf-source-lifetime")
     path, executable = directory / "probe.cpp", directory / "probe"
     path.write_text(program)
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
+    object_file = directory / "probe.o"
     compiled = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
+        [cache, compiler, "-std=c++20", "-O0", "-c", str(path), "-o", str(object_file)],
         capture_output=True,
         text=True,
         timeout=30,
         check=False,
     )
     assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    subprocess.run(
+        [compiler, str(object_file), "-o", str(executable)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
     return executable
 
 

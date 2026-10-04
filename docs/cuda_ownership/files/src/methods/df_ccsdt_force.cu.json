@@ -1,0 +1,7 @@
+{
+  "path": "src/methods/df_ccsdt_force.cu",
+  "reason": "Composes native DF CCSD/triples, corrected Lambda, retained-factor and molecular-source pullbacks with exact RHF orbital/Pulay response. Owns complete phase admission, immutable source lifetime, stream callbacks, completed-phase release and force publication; all electronic equations and derivative contractions are delegated to existing generated owners.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

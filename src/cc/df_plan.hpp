@@ -15,10 +15,11 @@ struct DFIterationPlan {
   bool hoisted{};
   std::size_t iteration{}, auxiliary{}, preparation{}, accumulation{};
   std::size_t preparation_terms{}, auxiliary_terms{}, core_terms{};
+  bool matrix_gemm{};
 };
 
 inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size_t q, bool cuda,
-                                         bool allow_hoisting) {
+                                         bool allow_hoisting, bool matrix_gemm = false) {
   using generated::df::checked_add;
   using generated::df::checked_mul;
   namespace fast = generated::dfhoist;
@@ -52,6 +53,15 @@ inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size
   plan.preparation_terms = prepare_work;
   plan.auxiliary_terms = q_work;
   plan.core_terms = core_work;
+  if (cuda && matrix_gemm) {
+    plan.matrix_gemm = true;
+    plan.iteration = fast::iteration_packed_arena_elements(o, v);
+    plan.auxiliary = std::max(plan.auxiliary, fast::auxiliary_packed_arena_elements(o, v));
+    plan.preparation = fast::prepare_packed_arena_elements(o, v);
+    plan.preparation_terms = fast::prepare_packed_contraction_terms(o, v);
+    plan.auxiliary_terms = fast::auxiliary_packed_contraction_terms(o, v);
+    plan.core_terms = fast::iteration_packed_contraction_terms(o, v);
+  }
   return plan;
 }
 

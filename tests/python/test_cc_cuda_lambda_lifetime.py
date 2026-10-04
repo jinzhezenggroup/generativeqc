@@ -98,6 +98,13 @@ struct LambdaOptions { std::size_t max_bytes=1U<<20; };
 struct LambdaDiagnostic {
   std::size_t owned_device_bytes{},numeric_capacity_bytes{},h2d_bytes{},d2h_bytes{},synchronizations{};
   std::size_t df_auxiliary_slices{},df_contraction_terms{},df_generated_kernels{};
+  // The extracted owner compiles its DF diagnostic forwarding even though this
+  // conventional-only harness rejects DF construction. Keep that surface typed.
+  bool df_auxiliary_reduction{},df_matrix_gemm{};
+  std::size_t df_preparation_calls{},df_reduced_actions{};
+  std::size_t df_auxiliary_batch_size{1},df_auxiliary_batches{};
+  std::size_t df_gemm_calls{},df_gemm_summands{},df_packing_output_bytes{};
+  std::size_t df_provider_allowance_bytes{};
   const char *shared_program_hash{},*independent_program_hash{};
 };
 struct CudaFixedOrbitalResponseResult { TrackingVector df_bov,df_bvv; };

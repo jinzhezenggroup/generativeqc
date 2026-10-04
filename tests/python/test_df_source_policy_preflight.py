@@ -83,15 +83,16 @@ struct RccsdNativeState {
 };
 void validate_descriptor(const generativeqc_method_descriptor&, const runtime::ExecutionContext&) {}
 std::size_t correlation_budget(const generativeqc_method_descriptor&) { return 100; }
-int cc_options(const generativeqc_method_descriptor&, std::size_t) { return 0; }
+struct SolverOptions { bool df_matrix_gemm = true; };
+SolverOptions cc_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
 Reference reference_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(
-    runtime::ExecutionContext&, const core::System& orbital, Reference, int, std::size_t,
+    runtime::ExecutionContext&, const core::System& orbital, Reference, SolverOptions options, std::size_t,
     scf::PreparedFockPlan*, const std::vector<double>*, bool* warm_fallback,
-    std::unique_ptr<scf::PreparedFockPlan>*, const core::System* auxiliary,
+    std::unique_ptr<scf::PreparedFockPlan>*, const core::System* auxiliary, bool retain_df_response,
     const scf::cuda_execution::CudaDfSourcePolicy* policy) {
   ++rhf_calls;
-  assert(auxiliary && policy);
+  assert(auxiliary && policy && retain_df_response && !options.df_matrix_gemm);
   // A mid-RHF diagnostic change must not alter the already admitted source.
   setenv("GENERATIVEQC_DF_VALUE_MATH", "invalid-after-rhf", 1);
   setenv("GENERATIVEQC_DF_VALUE_MAPPING", "primitive", 1);
@@ -155,7 +156,7 @@ int main(int argc, char** argv) {
     RccsdNativeState output;
     try {
       output = run_rccsd_native_state(execution, orbital, descriptor, &cache, &density,
-                                      &warm_fallback, 0, &auxiliary);
+                                      &warm_fallback, 0, &auxiliary, true, false);
       assert(admitted && rhf_calls == 1 && source_calls == 1);
       assert(!warm_fallback);
     } catch (const MethodError& error) {
@@ -299,8 +300,14 @@ def test_source_setup_consumes_the_admitted_policy_without_environment_reads() -
     assert "const auto requested_mapping = policy.requested_value_mapping;" in setup
     assert setup.index("cuda_df_value_domain(") < setup.index("cudaSetDevice(")
     method = " ".join((ROOT / "src/methods/rccsd_method.cpp").read_text().split())
-    assert "device, caller_bytes, false, correlation_policy" in method
-    assert "provider_metrics, correlation_auxiliary, correlation_policy" in method
+    assert (
+        "device, caller_bytes, retained_df_response != nullptr, correlation_policy"
+        in method
+    )
+    assert (
+        "provider_metrics, correlation_auxiliary, retain_df_response ? &state.df_source : nullptr, correlation_policy"
+        in method
+    )
     builder = (ROOT / "src/cc/df_source_cuda.cu").read_text()
     assert "source_n, source_q, detail, policy);" in builder
 
