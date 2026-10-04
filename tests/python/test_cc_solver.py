@@ -275,7 +275,7 @@ def test_collective_provider_budget_rejects_before_any_read_and_accepts_cache_hi
     # a cold-cache worst-case estimate. Actual provider.get serves all hits.
     for block in blocks:
         values = a["g"][np.ix_(*block.slots)]
-        provider._cache[(s.identity, source.identity, block.slots)] = (
+        provider._cache[(s.identity, source.identity, block.slots, block.spins)] = (
             BlockResult(block, values, s.identity, s.hamiltonian_id, {}),
             values.nbytes,
         )
