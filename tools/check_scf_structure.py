@@ -102,6 +102,8 @@ CUDA_ALLOWED = {
 }
 CUDA_ALLOWED["cuda_df_source"] = (
     "runtime/cuda_component_trace.hpp",
+    # The CUDA-free construction planner shares checked metadata sizes only.
+    "scf/df_source_capacity.hpp",
     "scf/cuda/df_source_domain.",
     "scf/cuda/df_source.",
     "scf/cuda/df_source_setup.",
@@ -397,6 +399,9 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         "scf/cuda/" + stem + ".cuh" for stem in CUDA_MODULES["cuda_direct_contractions"]
     )
     + (
+        # Weighted LR force consumers reuse the shared scalar moment primitive;
+        # this exact dependency does not admit integral tensors or CPU oracles.
+        "integrals/range_moments.hpp",
         "scf/cuda/direct_constants.hpp",
         "scf/cuda/direct_metadata.hpp",
         "scf/cuda/packed_basis.hpp",

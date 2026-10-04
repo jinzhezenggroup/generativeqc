@@ -312,7 +312,7 @@ void run_exact_exchange_case(bool restricted) {
           "CUDA exact-exchange final state lost the converged model or energy");
 }
 
-void run_density_fitted_exchange_case(bool restricted) {
+void run_density_fitted_exchange_case(bool restricted, bool warm_updates = true) {
   const auto system = hydrogens(restricted ? 2U : 3U, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
@@ -328,6 +328,7 @@ void run_density_fitted_exchange_case(bool restricted) {
   options.max_iterations = 200;
 
   dft::CudaKsPlan plan(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
+  plan.set_warm_start_updates(warm_updates);
   const auto result = plan.run(nullptr, false);
   require(result.converged && !plan.failed(), "CUDA density-fitted hybrid KS did not converge");
   const auto reference = restricted ? scf::run_pbe_rks(cpu, basis, grid, options)
@@ -356,6 +357,76 @@ void run_density_fitted_exchange_case(bool restricted) {
   require(snapshot.identity.determinant.model == gpu.strategy() &&
               std::abs(snapshot.components.total() - result.energy) < 1e-10,
           "density-fitted hybrid final state lost its model or energy");
+
+  dft::CudaKsResidentFittedProjectionBinding projection;
+  const auto before_lease = plan.transfers();
+  const auto projection_status = plan.resident_final_fitted_projection(token, projection, detail);
+  const auto after_lease = plan.transfers();
+  require(after_lease.matrix_d2h_bytes == before_lease.matrix_d2h_bytes &&
+              after_lease.synchronizations == before_lease.synchronizations,
+          "fitted projection query performed a transfer or synchronization");
+  if (restricted && movement.fitted_occupied_exchange_builds > 0) {
+    require(projection_status == GENERATIVEQC_STATUS_SUCCESS, detail);
+    require(projection && projection.nbf == basis.nao && projection.naux > 0 &&
+                projection.rank == system.electron_count / 2 &&
+                projection.owner == token.identity.model.owner &&
+                projection.solve_epoch == token.identity.determinant.solve_epoch &&
+                projection.generation == token.identity.determinant.factor.density_generation &&
+                movement.fitted_final_projection_leases == 1,
+            "restricted fitted hybrid lost final Cocc/U projection provenance");
+    // Explicit test-only exports validate the borrowed contents, independently
+    // of the final canonical frame and the CUDA projection implementation.
+    std::vector<double> coefficients(projection.nbf * projection.rank);
+    std::vector<double> projected(projection.nbf * projection.rank * projection.naux);
+    const auto stream = reinterpret_cast<cudaStream_t>(projection.stream);
+    require(cudaMemcpyAsync(coefficients.data(), projection.occupied_coefficients,
+                            coefficients.size() * sizeof(double), cudaMemcpyDeviceToHost,
+                            stream) == cudaSuccess,
+            "could not export the retained density-generating occupied factor");
+    require(
+        cudaMemcpyAsync(projected.data(), projection.projection, projected.size() * sizeof(double),
+                        cudaMemcpyDeviceToHost, stream) == cudaSuccess &&
+            cudaStreamSynchronize(stream) == cudaSuccess,
+        "could not export the retained occupied projection");
+    const auto* fitted = cpu.cpu_fitted_data();
+    require(fitted && fitted->three_center.nbf == projection.nbf &&
+                fitted->three_center.naux == projection.naux,
+            "independent CPU fitted tensor has a different projection shape");
+    for (std::size_t mu = 0; mu < projection.nbf; ++mu) {
+      for (std::size_t nu = 0; nu < projection.nbf; ++nu) {
+        double density = 0;
+        for (std::size_t i = 0; i < projection.rank; ++i)
+          density +=
+              2 * coefficients[i * projection.nbf + mu] * coefficients[i * projection.nbf + nu];
+        require(std::abs(density - snapshot.density[0][mu * projection.nbf + nu]) < 2e-11,
+                "retained Cocc does not generate the exact final density");
+      }
+      for (std::size_t i = 0; i < projection.rank; ++i)
+        for (std::size_t q = 0; q < projection.naux; ++q) {
+          double expected = 0;
+          for (std::size_t nu = 0; nu < projection.nbf; ++nu)
+            expected +=
+                fitted->three_center.values[(mu * projection.nbf + nu) * projection.naux + q] *
+                coefficients[i * projection.nbf + nu];
+          require(std::abs(expected - projected[(mu * projection.rank + i) * projection.naux + q]) <
+                      2e-11,
+                  "retained U does not equal independent CPU B times exact final Cocc");
+        }
+    }
+    // Another KS owner can reuse the prepared provider and overwrite U with
+    // the same shape/rank. The old method token must not revive that lease.
+    dft::CudaKsPlan replacement(gpu, basis, grid, options, dft::SemilocalFamily::Pbe, 257);
+    require(replacement.run(nullptr, false).converged,
+            "replacement fitted hybrid KS did not converge");
+    require(plan.resident_final_fitted_projection(token, projection, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+                !projection,
+            "same-rank provider reuse revived the previous final projection lease");
+  } else {
+    require(projection_status == GENERATIVEQC_STATUS_NOT_IMPLEMENTED &&
+                movement.fitted_final_projection_leases == 0,
+            "unsupported fitted-hybrid final projection was published");
+  }
 }
 
 void run_range_exchange_case(bool restricted) {
@@ -1790,6 +1861,7 @@ int main() {
     run_exact_exchange_case(true);
     run_exact_exchange_case(false);
     run_density_fitted_exchange_case(true);
+    run_density_fitted_exchange_case(true, false);
     run_density_fitted_exchange_case(false);
     run_range_exchange_case(true);
     run_range_exchange_case(false);

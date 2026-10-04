@@ -4,6 +4,7 @@
 #include <cuda_runtime.h>
 #include <cusolverDn.h>
 
+#include <limits>
 #include <optional>
 
 #include "scf/cuda_density_fitting.hpp"
@@ -78,6 +79,21 @@ struct CudaDensityFittingJkPlan {
   // validated final physical RHF K publishes it. Every scratch writer and
   // new solve revokes it before submission, including unsuccessful attempts.
   std::optional<CudaDfFinalStateToken> final_projection_token;
+  // Method-neutral evidence that the most recently submitted occupied-K build
+  // left a complete resident U=B*C factor in auxiliary_tile_values. Rank zero
+  // means no such projection is live. This is execution provenance only; a
+  // method owner must still bind it to its own exact final-state identity.
+  std::size_t completed_occupied_projection_rank{};
+  // Rank and allocation identity can repeat after a later scratch writer.
+  // Bind method-level leases to the exact write generation as well. Saturation
+  // permanently disables this optional reuse rather than wrapping to an old lease.
+  std::uint64_t projection_scratch_generation{};
+  void revoke_projection_leases() noexcept {
+    final_projection_token.reset();
+    completed_occupied_projection_rank = 0;
+    if (projection_scratch_generation != std::numeric_limits<std::uint64_t>::max())
+      ++projection_scratch_generation;
+  }
   // Reconstructing raw projections from whitened U is valid only when every
   // metric direction survived the forward cutoff. Rank boundaries still use
   // the existing spectral-response validity check.

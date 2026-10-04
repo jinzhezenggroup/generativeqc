@@ -17,8 +17,11 @@
 #include "posthf/capacity.hpp"
 #include "runtime/cuda_resources.cuh"
 #include "scf/cuda/df_plan_internal.hpp"
+#include "scf/cuda/df_source_internal.hpp"
+#include "scf/cuda/topology.hpp"
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_eigen.hpp"
+#include "scf/df_source_capacity.hpp"
 
 namespace generativeqc::cc {
 namespace {
@@ -90,6 +93,12 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   const auto execution_payload =
       std::max({layout.transform_bytes, layout.packing_bytes, layout.blocks_bytes});
   admit(checked_add(external, execution_payload), budget);
+  const auto construction = scf::df_source_capacity::plan(
+      orbital, auxiliary,
+      {sizeof(scf::cuda_execution::CudaDensityFittingIntegralSourceImpl),
+       sizeof(scf::cuda_execution::HostBatch), sizeof(scf::cuda_execution::DfPublicAoExpansion)});
+  const auto construction_peak = checked_add(external, construction.numeric_bytes);
+  admit(construction_peak, budget);
   runtime::CudaDeviceScope device_scope(device);
   DFSourceResult result;
   result.nocc = o;
@@ -115,10 +124,14 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
     throw std::runtime_error("native CUDA DF-CC requires generated device DF integrals");
   const auto source_device = scf::cuda_density_fitting_integral_source_device_bytes(source.get());
   const auto source_host = scf::cuda_density_fitting_integral_source_host_peak_bytes(source.get());
-  // The existing source API reports its setup peak after construction. Reject
-  // it before publishing a handle or allocating metric/transform consumers.
+  // Keep the observed ledger check as well as the pre-allocation bound. The
+  // factory's device diagnostic excludes its already-freed metric staging.
   const auto source_peak = checked_add(
       external, checked_add(source_device, checked_add(source_host, bytes(metric.capacity()))));
+  const auto observed_construction = checked_add(
+      external, checked_add(source_device, checked_add(source_host, bytes(checked_mul(q, q)))));
+  if (observed_construction > construction_peak)
+    throw std::logic_error("DF source construction exceeded its preflight bound");
   admit(source_peak, budget);
   const auto setup_bound =
       checked_add(external, metric_setup_bound(n, q, source_device, source_host));
@@ -155,11 +168,12 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
       checked_add(external, checked_add(diag.device_resident_bytes, diag.host_resident_bytes));
   const auto execution_peak = checked_add(fixed, execution_payload);
   admit(execution_peak, budget);
-  result.numeric_capacity_bytes = std::max({source_peak, setup_bound, execution_peak});
+  result.numeric_capacity_bytes =
+      std::max({construction_peak, source_peak, setup_bound, execution_peak});
   const auto device_payload = std::max({layout.transform_bytes, layout.packing_bytes,
                                         layout.blocks_bytes - result.host_output_bytes});
   result.device_capacity_bytes =
-      std::max({source_device, diag.peak_device_bytes,
+      std::max({construction.device_bytes, source_device, diag.peak_device_bytes,
                 checked_add(diag.device_resident_bytes, device_payload)});
   result.metric_seconds = elapsed(stage);
 
