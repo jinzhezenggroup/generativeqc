@@ -20,5 +20,15 @@ Preserved fail-closed boundaries: #1847 local-AO admission is intentionally not 
 
 Curated capabilities are manifest-owned. Generated split hybrids receive one point-program-class capability record independent of method identifier. No performance or default-promotion claim is made by this refactor.
 
+## Composition with local-AO execution capabilities
+
+The merged #1865 local-AO path retains its independent generated physical-layout
+capabilities. Mixed-density enqueue requires both executable layout support and a
+`Qualified` point-program entry; neither record can override the other. Local maps
+continue to require FP64 density contraction. The shared iteration precision
+schedule intersects qualified policy with the physical layout while preserving
+independently lowered Direct J, qualification/audit metadata, and strict final
+refinement. The host guard census exercises both directions of disagreement
+between execution support and all three qualification states.
+
 Agent: ChatGPT
-Model: GPT-5.6 Sol

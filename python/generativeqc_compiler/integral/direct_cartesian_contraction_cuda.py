@@ -52,6 +52,58 @@ __device__ inline Scalar primitive_eri(double alpha, const Vec3<Scalar>& first, 
          boys0(rho * distance_squared(center_p, center_q));
 }
 
+/** Factor the Cartesian pair convolution before consuming Coulomb roots.
+ *
+ * H_axis[k] = sum_(t+u=k) E_ab[t] (-1)^u E_cd[u]. The Coulomb root depends
+ * only on these three sums, so the six independent pair loops become three
+ * bounded axis convolutions and one three-axis contraction. This rearranges
+ * floating-point sums: callers must explicitly select this experiment.
+ * The packed three-axis workspace has at most MaximumAngular+3 scalar entries;
+ * it neither changes the Coulomb auxiliary nor stores primitive/AO quartets.
+ */
+template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
+          typename SecondCoefficients>
+__device__ inline Scalar convolved_hermite_contraction(
+    const Angular& angular_first, const Angular& angular_second,
+    const Angular& angular_third, const Angular& angular_fourth,
+    const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
+    const CoulombAuxiliary<Scalar, MaximumAngular>& auxiliary) {
+  static_assert(!std::is_same_v<Scalar, MixedPrecisionFloat>,
+                "Hermite reassociation requires its own mixed-precision qualification");
+  unsigned degree[3];
+  for (unsigned axis = 0; axis < 3; ++axis)
+    degree[axis] = angular_axis(angular_first, axis) + angular_axis(angular_second, axis) +
+                   angular_axis(angular_third, axis) + angular_axis(angular_fourth, axis);
+  // Generated shell bounds normally make this equality exact. Fail closed if
+  // a malformed caller would exceed the packed workspace or auxiliary order.
+  if (degree[0] + degree[1] + degree[2] > MaximumAngular) return scalar<Scalar>(NAN);
+  const unsigned offsets[3] = {0, degree[0] + 1, degree[0] + degree[1] + 2};
+  Scalar weights[MaximumAngular + 3];
+  for (unsigned axis = 0; axis < 3; ++axis) {
+    const unsigned first = angular_axis(angular_first, axis);
+    const unsigned second = angular_axis(angular_second, axis);
+    const unsigned third = angular_axis(angular_third, axis);
+    const unsigned fourth = angular_axis(angular_fourth, axis);
+    Scalar* row = weights + offsets[axis];
+    for (unsigned k = 0; k <= degree[axis]; ++k) row[k] = scalar<Scalar>(0.0);
+    for (unsigned t = 0; t <= first + second; ++t) {
+      const Scalar left = first_coefficients[axis].at(first, second, t);
+      for (unsigned u = 0; u <= third + fourth; ++u) {
+        const double sign = (u & 1U) ? -1.0 : 1.0;
+        row[t + u] = row[t + u] + sign * left * second_coefficients[axis].at(third, fourth, u);
+      }
+    }
+  }
+  Scalar value = scalar<Scalar>(0.0);
+  for (unsigned t = 0; t <= degree[0]; ++t)
+    for (unsigned u = 0; u <= degree[1]; ++u) {
+      const Scalar xy = weights[t] * weights[offsets[1] + u];
+      for (unsigned v = 0; v <= degree[2]; ++v)
+        value = value + xy * weights[offsets[2] + v] * auxiliary.at(0, t, u, v);
+    }
+  return value;
+}
+
 template <unsigned MaximumAngular, typename Scalar, typename FirstCoefficients,
           typename SecondCoefficients>
 __device__ inline __noinline__ Scalar eri_cartesian_value(
@@ -60,7 +112,7 @@ __device__ inline __noinline__ Scalar eri_cartesian_value(
     const Angular& angular_second, const Angular& angular_third, const Angular& angular_fourth,
     const FirstCoefficients* first_coefficients, const SecondCoefficients* second_coefficients,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
-    double omega = 0.0, bool reachable_coulomb = false) {
+    double omega = 0.0, bool reachable_coulomb = false, bool hermite_convolution = false) {
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
   CoulombAuxiliary<Scalar, MaximumAngular> auxiliary;
   // The compiler consumer knows the exact AO-component roots. The shared
@@ -82,6 +134,18 @@ __device__ inline __noinline__ Scalar eri_cartesian_value(
     fill_coulomb<MaximumAngular>(rho, product_p, product_q, auxiliary, domain);
   }
 
+  // Limit the experimental consumer to the profiled generic high orders.
+  // Existing low-order specializations and all mixed arithmetic remain intact.
+  if constexpr (MaximumAngular >= 5 && !std::is_same_v<Scalar, MixedPrecisionFloat>) {
+    if (hermite_convolution) {
+      const Scalar value = convolved_hermite_contraction<MaximumAngular>(
+          angular_first, angular_second, angular_third, angular_fourth,
+          first_coefficients, second_coefficients, auxiliary);
+      const EvaluationReal<Scalar> prefactor =
+          EvaluationReal<Scalar>{2.0 * pow(kPi, 2.5)} / (p * q * qsqrt(p + q));
+      return prefactor * value;
+    }
+  }
   Scalar value = scalar<Scalar>(0.0);
   for (unsigned t = 0; t <= angular_first.x + angular_second.x; ++t) {
     for (unsigned u = 0; u <= angular_first.y + angular_second.y; ++u) {

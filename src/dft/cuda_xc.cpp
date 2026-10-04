@@ -158,9 +158,21 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
   return out;
 }
 
+CudaXcExecutionCapabilities cuda_xc_execution_capabilities(const CudaXcLayout& layout) {
+  const auto program =
+      cuda_xc_detail::resolve_point_capabilities(layout.functional, layout.response);
+  const bool physical =
+      !layout.response && layout.nao != 0 && layout.npoint != 0 && layout.tile_points != 0;
+  return {
+      physical && !layout.local_ao && layout.ao_precision == CudaXcAoPrecision::Fp64 &&
+          program.local_ao_selection,
+      physical && !layout.local_ao && program.mixed_density_contraction,
+  };
+}
+
 CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps) {
-  if (dense.local_ao || dense.ao_map_entries || dense.host_ao_map_bytes || dense.response ||
-      dense.ao_precision != CudaXcAoPrecision::Fp64 || !dense.tile_points || !dense.npoint)
+  if (!cuda_xc_execution_capabilities(dense).local_ao_selection || dense.ao_map_entries ||
+      dense.host_ao_map_bytes)
     throw std::invalid_argument("local CUDA XC maps require a dense physical FP64 layout");
   const auto tiles = 1 + (dense.npoint - 1) / dense.tile_points;
   if (maps.offsets.size() != tiles + 1 || maps.offsets.front() != 0 ||
@@ -184,8 +196,7 @@ CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& ma
 }
 
 CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& dense) {
-  if (dense.local_ao || dense.response || dense.ao_precision != CudaXcAoPrecision::Fp64 ||
-      !dense.tile_points || !dense.npoint || !dense.nao)
+  if (!cuda_xc_execution_capabilities(dense).local_ao_selection)
     throw std::invalid_argument("AO discovery requires a dense physical FP64 XC layout");
   constexpr auto overflow = "CUDA XC AO discovery resource overflow";
   CudaXcAoSelectionResources result;
@@ -555,6 +566,9 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     throw std::invalid_argument("unknown CUDA XC density precision");
   if (layout_.local_ao && precision != CudaXcDensityPrecision::Fp64)
     throw std::invalid_argument("local CUDA XC maps require FP64 density contraction");
+  if (precision == CudaXcDensityPrecision::Fp32ComputeFp64Accumulate &&
+      !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
+    throw std::invalid_argument("mixed CUDA XC density precision is unavailable for this layout");
   if (precision == CudaXcDensityPrecision::Fp32ComputeFp64Accumulate &&
       !cuda_xc_capability_qualified(layout_.fast_paths.mixed_density_precision))
     throw std::invalid_argument(

@@ -34,6 +34,9 @@ def test_admitted_point_consumers(tmp_path: Path) -> None:
         '#include "generated_split_hybrid_registry.cuh"\n'
         "namespace generated = generativeqc::dft::generated;\n"
         "using CudaXcPointLauncher = void (*)();\n"
+        "struct CudaXcPointCapabilities {\n"
+        "  bool local_ao_selection{}, mixed_density_contraction{};\n"
+        "};\n"
         "unsigned selected_functional; bool selected_response;\n"
         "template <unsigned F, bool R> void launch_points() {\n"
         "  selected_functional = F; selected_response = R;\n}\n"
@@ -50,6 +53,9 @@ int main() {
       try {
         auto launch = resolve_point_launcher(f, r);
         if (!admitted || !launch) return 1;
+        const auto capability = resolve_point_capabilities(f, r);
+        if (capability.local_ao_selection != !bool(r)) return 10;
+        if (capability.mixed_density_contraction != (!r && f < 3)) return 11;
         launch();
         if (selected_functional != f || selected_response != bool(r)) return 2;
         for (unsigned i = 0; i < count; ++i)
@@ -66,6 +72,8 @@ int main() {
   for (const auto code : generated_codes) {
     auto launch = resolve_point_launcher(code, false);
     if (launch != &launch_split_hybrid_points<5>) return 7;
+    const auto capability = resolve_point_capabilities(code, false);
+    if (capability.local_ao_selection || capability.mixed_density_contraction) return 12;
     launch();
     if (selected_functional != 5 || selected_response) return 8;
     try {
