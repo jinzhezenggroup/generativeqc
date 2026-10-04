@@ -77,6 +77,16 @@ and decisions remain preparation metadata; they do not resolve executable owners
 
 ## Current integration
 
+`tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
+rank-2/3 matrix contractions, using the same canonical planned request as existing
+cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and
+transposed outputs without packing/scatter. The first adapter supports homogeneous
+pedantic FP32/FP64 and rejects unimplemented precision obligations and aliases.
+Provider version and simultaneous workspace/provider/host/cache ceilings must be
+explicit. Ready means preparation eligibility; algorithm selection, exact queried
+workspace, native replay and opaque/lazy allocation qualification remain required.
+No cuBLASLt production executor or measured default promotion is connected yet.
+
 `tensor.lowering.TensorLoweringAdapter` projects existing TensorIR nodes for CPU
 or CUDA consumers. It resolves program-wide precision and node hashes once per
 preparation. Tensor CUDA provider diagnostics and generated/CUB reduction offers
