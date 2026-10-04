@@ -151,9 +151,8 @@ class CudaCacheRefreshTests(unittest.TestCase):
         calls = self.root / "calls"
         output.write_text("")
         calls.write_text("")
-        script = (
-            SCRIPT.replace("${{ github.event_name }}", event)
-            .replace("${{ github.ref }}", ref)
+        script = SCRIPT.replace("${{ github.event_name }}", event).replace(
+            "${{ github.ref }}", ref
         )
         result = subprocess.run(
             ["bash", "-e", "-o", "pipefail", "-c", script],
@@ -310,7 +309,7 @@ class CudaCacheRefreshTests(unittest.TestCase):
             if "key: ccache-cuda-" in line
         )
         dependencies = re.findall(r"'([^']+)'", key)
-        match = re.search(r"cuda_inputs=\(\s*(.*?)\s*\)", SCRIPT, re.S)
+        match = re.search(r"cuda_inputs=\(\s*(.*?)\s*\)", SCRIPT, re.DOTALL)
         self.assertIsNotNone(match)
         paths = shlex.split(match.group(1))
         for dependency in dependencies:
