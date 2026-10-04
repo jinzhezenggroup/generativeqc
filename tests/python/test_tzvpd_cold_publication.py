@@ -169,3 +169,41 @@ def test_standalone_point_rejects_invalid_durations(
     )
     assert f"invalid {label}: expected a finite nonnegative duration" in checked.stderr
     assert "variants" not in checked.stdout
+
+
+@pytest.mark.parametrize("mutation", ["valid", "unused", "fallback"])
+def test_standalone_point_checks_cold_admission_by_phase(
+    tmp_path: Path, mutation: str
+) -> None:
+    """Record ordering cannot substitute a warm replay for cold seed admission."""
+    samples = json.loads(
+        gzip.decompress((PUBLICATION / "samples.json.gz").read_bytes())
+    )
+    point = samples["points"]["6"]
+    rows = point["reports"]["lda16"]["records"]
+    cold = next(row for row in rows if row["phase"] == "cold")
+    rows.remove(cold)
+    rows.append(cold)
+    if mutation == "unused":
+        cold["warm_start_used"] = False
+    elif mutation == "fallback":
+        cold["warm_start_fallback"] = True
+    for name, raw in point["reports"].items():
+        (tmp_path / f"{name}.json").write_text(json.dumps(raw, indent=2) + "\n")
+        (tmp_path / f"{name}.outcome").write_text(json.dumps(point["outcomes"][name]))
+    (tmp_path / "source-identity.json").write_text(json.dumps(point["identity"]))
+    checked = subprocess.run(
+        [sys.executable, "-O", str(PUBLICATION / "validate-point.py"), str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": ""},
+    )
+    if mutation == "valid":
+        assert checked.returncode == 0, checked.stderr
+        assert "lda16" in json.loads(checked.stdout)["variants"]
+    else:
+        assert checked.returncode != 0
+        assert "target did not use admitted density" in checked.stderr

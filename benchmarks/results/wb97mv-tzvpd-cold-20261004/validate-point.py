@@ -87,7 +87,8 @@ for variant in ("reference", "none", "lda16"):
                 raise ValueError("source phases do not close")
             if complete_source > wrapper:
                 raise ValueError("source lifetime escaped cold timer")
-            cold = raw["records"][0]
+            # validate() requires exactly one cold row but permits reordering.
+            cold = next(row for row in raw["records"] if row["phase"] == "cold")
             if not cold["warm_start_used"] or cold["warm_start_fallback"]:
                 raise ValueError("target did not use admitted density")
         elif seed["selected"] or seed["complete_source_seconds"] is not None:
