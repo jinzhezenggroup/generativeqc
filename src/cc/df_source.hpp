@@ -5,6 +5,7 @@
 
 #include "core/types.hpp"
 #include "hf/reference.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 
 namespace generativeqc::cc {
 
@@ -37,9 +38,10 @@ struct DFSourceResult {
  * return no partial result; there is no CPU numerical fallback. CUDA builds
  * provide this internal entry point while public DF-CC forces remain gated.
  */
-DFSourceResult build_df_source_cuda(const core::System& orbital, const core::System& auxiliary,
-                                    const hf::PhysicalReference& reference,
-                                    std::size_t maximum_bytes, double metric_relative_threshold,
-                                    int device, std::size_t caller_bytes = 0);
+DFSourceResult build_df_source_cuda(
+    const core::System& orbital, const core::System& auxiliary,
+    const hf::PhysicalReference& reference, std::size_t maximum_bytes,
+    double metric_relative_threshold, int device, std::size_t caller_bytes = 0,
+    const scf::cuda_execution::CudaDfSourcePolicy* policy = nullptr);
 
 }  // namespace generativeqc::cc
