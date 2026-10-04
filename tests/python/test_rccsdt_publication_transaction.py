@@ -51,12 +51,16 @@ struct Diagnostic {
 };
 struct Result { double energy{}; std::vector<double> forces; };
 struct Performance { double triples_seconds{}; };
+namespace integrals { struct ElectronInteractionSource; }
 struct State {
   Diagnostic diagnostic;
   Performance performance;
   Result result;
   struct { double total_energy{10}; } solved;
   std::optional<int> reference{1};
+  struct {
+    std::shared_ptr<integrals::ElectronInteractionSource> source;
+  } reference_source;
   int problem{}, eps_o{}, eps_v{};
   std::size_t budget{1024}, external_reservation_bytes{64};
   double reference_energy_change{1e-11}, reference_density_rms{1e-12};
