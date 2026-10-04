@@ -1,7 +1,7 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_mulliken.cu",
-  "reason": "GFN2 Mulliken CUDA traversal, shell/atom/spin reductions, reference-occupation publication and charge/magnetization conversion. Repeated density-times-overlap/dipole/quadrupole population updates consume the compiler-owned #505 TensorIR helper emitted in generated_gfn2_electronic_native.cuh; remaining representation reductions/conversions stay maintained scientific composition.",
+  "reason": "GFN2 Mulliken CUDA topology, S/D/Q traversal, reductions, scratch, validation and publication. Population updates and final charge/magnetization/reference-occupation transforms consume compiler-owned #505 generated helpers.",
   "regions": [],
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "gfn2"
 }

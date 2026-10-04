@@ -15,6 +15,7 @@
 
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/resource_cuda.cuh"
 #include "runtime/resource_ledger.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
@@ -29,6 +30,10 @@
 
 namespace {
 using namespace generativeqc::scf;
+// Executed coverage of the optional joint canonical source, not inferred from
+// its environment selector. Each bit pair records both sides of one contract.
+std::size_t shared_rsh_checks = 0;
+unsigned shared_rsh_coverage = 0;
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -70,6 +75,51 @@ struct DeviceCounter {
     std::uint64_t value{};
     check(cudaMemcpy(&value, pointer, sizeof(value), cudaMemcpyDeviceToHost));
     return value;
+  }
+};
+
+/** Observe actual streaming/canonical dispatch, independently of selector flags.
+ * This intrusive census is only a numerical/routing gate, never a timing run.
+ * Detach after draining so neither a failed test nor plan teardown keeps a
+ * dangling borrowed pointer. All optional storage is charged to the runtime.
+ */
+struct DirectValueCensus {
+  static constexpr auto classes = detail::kDirectQuartetShellClassCount;
+  CudaDirectJkPlan& plan;
+  unsigned long long* device{};
+  explicit DirectValueCensus(CudaDirectJkPlan& owner) : plan(owner) {
+    require(plan.generated_exchange && plan.generated_exchange->shared &&
+                !plan.canonical_work_count && !plan.generated_exchange->admitted_shell_counts &&
+                !plan.generated_exchange->shared->admitted_shell_counts,
+            "census requires an unobserved generated shell owner");
+    check(generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&device),
+                                                      (2 * classes + 2) * sizeof(*device)));
+    plan.generated_exchange->shared->admitted_shell_counts = device;
+    plan.generated_exchange->admitted_shell_counts = device + classes;
+    plan.canonical_work_count = reinterpret_cast<std::uint64_t*>(device + 2 * classes);
+  }
+  ~DirectValueCensus() {
+    cudaStreamSynchronize(plan.stream);
+    plan.generated_exchange->shared->admitted_shell_counts = nullptr;
+    plan.generated_exchange->admitted_shell_counts = nullptr;
+    plan.canonical_work_count = nullptr;
+    generativeqc::runtime::resource_cuda_free(device);
+  }
+  void reset() {
+    check(cudaMemsetAsync(device, 0, (2 * classes + 2) * sizeof(*device), plan.stream));
+  }
+  std::array<unsigned long long, 3> totals() {
+    std::array<unsigned long long, 2 * classes + 2> counts{};
+    check(cudaMemcpyAsync(counts.data(), device, sizeof(counts), cudaMemcpyDeviceToHost,
+                          plan.stream));
+    check(cudaStreamSynchronize(plan.stream));
+    std::array<unsigned long long, 3> result{};
+    for (std::size_t cls = 0; cls < classes; ++cls) {
+      result[0] += counts[cls];
+      result[1] += counts[classes + cls];
+    }
+    result[2] = counts[2 * classes + 1];  // Actual canonical radial evaluations.
+    return result;
   }
 };
 
@@ -160,10 +210,39 @@ void direct_rsh_device(CudaDirectJkPlan* plan, FockBuildSpec correction,
         range_failure, detail);
   };
   auto* range_failure = reinterpret_cast<int*>(range_error.pointer);
-  if (!plan->bounded_value_opt_in) {
+  const bool shared_canonical =
+      plan->canonical_range_exchange && !direct_jk_generated_full_range_value_available(*plan);
+  // Prepared admission must survive a later policy change. Every admitted
+  // joint call below executes with the environment selector disabled.
+  struct FrozenSharedPolicy {
+    bool active;
+    const bool was_set = std::getenv("GENERATIVEQC_CANONICAL_RSH_VALUES") != nullptr;
+    const std::string previous = was_set ? std::getenv("GENERATIVEQC_CANONICAL_RSH_VALUES") : "";
+    explicit FrozenSharedPolicy(bool selected) : active(selected) {
+      if (active)
+        require(setenv("GENERATIVEQC_CANONICAL_RSH_VALUES", "0", 1) == 0,
+                "cannot change shared-RSH test policy");
+    }
+    ~FrozenSharedPolicy() {
+      if (!active) return;
+      if (was_set)
+        setenv("GENERATIVEQC_CANONICAL_RSH_VALUES", previous.c_str(), 1);
+      else
+        unsetenv("GENERATIVEQC_CANONICAL_RSH_VALUES");
+    }
+  } frozen_policy(shared_canonical);
+  DeviceMatrix shared_census({0.0, 0.0});
+  struct CensusRestore {
+    CudaDirectJkPlan* plan;
+    std::uint64_t* previous;
+    ~CensusRestore() { plan->canonical_work_count = previous; }
+  } restore_census{plan, plan->canonical_work_count};
+  if (shared_canonical)
+    plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(shared_census.pointer);
+  if (!plan->bounded_value_opt_in && !shared_canonical) {
     require(enqueue(full_a.pointer, range_a.pointer, range_failure) ==
                 GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "fused RSH bypassed the default bounded-value policy");
+            "fused RSH bypassed both retained value admission policies");
     for (const auto* output : {&j, &full_a, &full_b, &range_a, &range_b}) output->verify(sentinel);
     primary_error.verify({123.0});
     range_error.verify({123.0});
@@ -193,6 +272,40 @@ void direct_rsh_device(CudaDirectJkPlan* plan, FockBuildSpec correction,
     full_b.verify(unrestricted ? expected_full_b : sentinel);
     range_a.verify(expected_range_a);
     range_b.verify(unrestricted ? expected_range_b : sentinel);
+    if (shared_canonical) {
+      // Compare executed work with both original canonical consumers. These
+      // are actual candidate/radial counts, not a static task/FLOP estimate.
+      std::array<std::uint64_t, 2> joint{}, full{}, selected{};
+      check(cudaMemcpy(joint.data(), plan->canonical_work_count, sizeof(joint),
+                       cudaMemcpyDeviceToHost));
+      const auto separate = [&](FockBuildSpec spec, double* j_output, double* a_output,
+                                double* b_output, std::array<std::uint64_t, 2>& counts) {
+        require(enqueue_cuda_direct_jk_device(
+                    plan, spec, da.pointer, unrestricted ? db.pointer : nullptr, a.size(), j_output,
+                    a_output, b_output, reinterpret_cast<int*>(primary_error.pointer),
+                    detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        check(cudaStreamSynchronize(cuda_direct_jk_stream(plan)));
+        check(cudaMemcpy(counts.data(), plan->canonical_work_count, sizeof(counts),
+                         cudaMemcpyDeviceToHost));
+      };
+      separate(primary, j.pointer, full_a.pointer, unrestricted ? full_b.pointer : nullptr, full);
+      separate(correction, nullptr, range_a.pointer, unrestricted ? range_b.pointer : nullptr,
+               selected);
+      require(joint[0] == full[0] && joint[0] == selected[0] && joint[1] == full[1] + selected[1],
+              "joint canonical source changed admissions or duplicated radial work");
+      ++shared_rsh_checks;
+      shared_rsh_coverage |= unrestricted ? 2U : 1U;
+      shared_rsh_coverage |= plan->canonical_transform ? 8U : 4U;
+      shared_rsh_coverage |= correction.exchange.op == FockOperator::LongRange ? 32U : 16U;
+      shared_rsh_coverage |= plan->canonical_row_prefix ? 128U : 64U;
+      if (joint[1] != 0) shared_rsh_coverage |= 256U;
+      j.verify(expected_j);
+      full_a.verify(expected_full_a);
+      full_b.verify(unrestricted ? expected_full_b : sentinel);
+      range_a.verify(expected_range_a);
+      range_b.verify(unrestricted ? expected_range_b : sentinel);
+    }
   }
   da.verify(a);
   db.verify(b);
@@ -389,54 +502,75 @@ void prepared_interaction_source_device(const generativeqc::core::System& system
           "prepared CUDA interaction source silently published a host ERI");
 }
 
+/** Independent CPU ERIs protect strict K while J alone uses mixed recurrence.
+ * Include DDDD, canonical through-f, signed nonsymmetric spins, moved geometry
+ * and both public AO representations. Counters must prove the intended source
+ * executed: merely checking a populated owner would miss dispatch coupling.
+ */
 void mixed_coulomb_preserves_strict_exchange() {
-  generativeqc::core::System system;
-  system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
-  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
-  system.electron_count = 2;
-  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
-  std::string detail;
-  require(
-      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
-      detail.c_str());
-  const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
-  const std::vector<double> density{0.9, 0.2, -0.1, 0.7};
-  const std::vector<double> zeros(matrix, 0.0);
-  CudaDirectJkPlan* raw{};
-  CudaDirectJkDiagnostic diagnostic;
-  require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, 32U * 1024U * 1024U, &raw, diagnostic,
-                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
-          detail.c_str());
-  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
-      raw, &destroy_cuda_direct_jk_plan);
-  auto spec = make_hf_fock_spec(FockSpin::Restricted);
-  spec.derivative_order = 0;
-  DeviceMatrix device_density(density), strict_j(zeros), strict_k(zeros), mixed_j(zeros),
-      mixed_k(zeros), error({0.0});
-  DeviceCounter count;
-  auto* failure = reinterpret_cast<int*>(error.pointer);
-  require(enqueue_cuda_direct_jk_device(plan.get(), spec, device_density.pointer, nullptr, matrix,
-                                        strict_j.pointer, strict_k.pointer, nullptr, failure,
-                                        detail) == GENERATIVEQC_STATUS_SUCCESS,
-          detail.c_str());
-  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
-  count.set(0);
-  require(enqueue_cuda_direct_jk_device_mixed_j(plan.get(), spec, device_density.pointer, nullptr,
-                                                matrix, mixed_j.pointer, mixed_k.pointer, nullptr,
-                                                failure, detail,
-                                                count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
-          detail.c_str());
-  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
-  require(count.get() > 0, "mixed-J hybrid did not execute mixed Coulomb work");
-  std::vector<double> strict_exchange(matrix), mixed_exchange(matrix);
-  check(cudaMemcpy(strict_exchange.data(), strict_k.pointer, matrix * sizeof(double),
-                   cudaMemcpyDeviceToHost));
-  check(cudaMemcpy(mixed_exchange.data(), mixed_k.pointer, matrix * sizeof(double),
-                   cudaMemcpyDeviceToHost));
-  for (std::size_t i = 0; i < matrix; ++i)
-    require(std::isfinite(strict_exchange[i]) && std::isfinite(mixed_exchange[i]) &&
-                std::abs(strict_exchange[i] - mixed_exchange[i]) < 3e-12,
-            "mixed-J hybrid changed strict FP64 exchange");
+  for (unsigned angular : {0U, 1U, 2U, 3U})
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      generativeqc::core::System system;
+      system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7 + 0.03 * angular}}};
+      system.shells = {{0, 0, {{0.8, 1.0}}}, {1, angular, {{0.6, 1.0}}}};
+      if (angular == 2) system.shells.push_back({0, 1, {{1.1, 1.0}}});
+      system.electron_count = 2;
+      system.basis_representation = representation;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      const auto oracle = generativeqc::integrals::build_integrals(system, false);
+      const std::size_t n = oracle.nbf, matrix = n * n;
+      std::vector<double> alpha(matrix), beta(matrix), zeros(matrix, 0.0);
+      for (std::size_t ij = 0; ij < matrix; ++ij) {
+        alpha[ij] = std::cos(0.3 * (ij / n) + 0.7 * (ij % n)) / n;
+        beta[ij] = std::sin(0.8 * (ij / n) - 0.2 * (ij % n)) / n;
+      }
+      CudaDirectJkPlan* raw{};
+      CudaDirectJkDiagnostic diagnostic;
+      require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, 32U << 20, &raw, diagnostic,
+                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+          raw, &destroy_cuda_direct_jk_plan);
+      DirectValueCensus census(*plan);
+      DeviceMatrix da(alpha), db(beta), j(zeros), ka(zeros), kb(zeros), error({0.0});
+      DeviceCounter count;
+      for (bool unrestricted : {false, true}) {
+        auto spec = make_hf_fock_spec(unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted);
+        spec.derivative_order = 0;
+        const auto expected =
+            build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0), n, oracle.eri,
+                                  alpha, unrestricted ? beta : std::vector<double>{});
+        census.reset();
+        require(enqueue_cuda_direct_jk_device_mixed_j(
+                    plan.get(), spec, da.pointer, unrestricted ? db.pointer : nullptr, matrix,
+                    j.pointer, ka.pointer, unrestricted ? kb.pointer : nullptr,
+                    reinterpret_cast<int*>(error.pointer), detail,
+                    count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        const auto work = census.totals();
+        require(count.get() > 0 && work[0] == 0,
+                "mixed-J request changed its recurrence-only arithmetic route");
+        require(angular <= 2 ? (work[1] > 0 && work[2] == 0) : (work[1] == 0 && work[2] > 0),
+                "mixed J displaced strict generated/canonical K");
+        ka.verify(expected.exchange_alpha);
+        if (unrestricted) kb.verify(expected.exchange_beta);
+        std::vector<double> actual_j(matrix);
+        check(cudaMemcpy(actual_j.data(), j.pointer, matrix * sizeof(double),
+                         cudaMemcpyDeviceToHost));
+        for (std::size_t ij = 0; ij < matrix; ++ij)
+          require(
+              std::isfinite(actual_j[ij]) && std::abs(actual_j[ij] - expected.coulomb[ij]) < 3e-6,
+              "mixed-J matrix differs from independent CPU beyond its acceptance gate");
+        int failure = -1;
+        check(cudaMemcpy(&failure, error.pointer, sizeof(failure), cudaMemcpyDeviceToHost));
+        require(failure == 0, "mixed-J/strict-K split reported a numerical failure");
+        da.verify(alpha);
+        db.verify(beta);
+      }
+    }
 }
 
 void direct_value_dispatch_selection() {
@@ -471,9 +605,17 @@ void direct_value_dispatch_selection() {
           "qualified K-only request did not select generated exchange");
 
   const auto generated_mixed = direct_jk_value_dispatch(true, true, true, true, true);
-  require(!generated_mixed.generated_coulomb && !generated_mixed.generated_exchange &&
-              generated_mixed.generic_coulomb && generated_mixed.generic_exchange,
-          "mixed-J request incorrectly entered generated exchange route");
+  require(!generated_mixed.generated_coulomb && generated_mixed.generated_exchange &&
+              generated_mixed.generic_coulomb && !generated_mixed.generic_exchange,
+          "mixed J displaced an independently qualified strict exchange route");
+  const auto range_fallback = direct_jk_value_dispatch(true, false, true, true, false, true);
+  require(range_fallback.generated_coulomb && range_fallback.canonical_exchange &&
+              !range_fallback.canonical_coulomb && !range_fallback.generic_exchange,
+          "canonical range K displaced generated J");
+  const auto mixed_fallback = direct_jk_value_dispatch(false, false, true, true, true, true);
+  require(mixed_fallback.generic_coulomb && mixed_fallback.canonical_exchange &&
+              !mixed_fallback.canonical_coulomb && !mixed_fallback.generic_exchange,
+          "mixed J displaced canonical strict K");
 }
 
 void device_selection() {
@@ -745,8 +887,7 @@ void spd_canonical_range_values() {
                   constrained->generated_exchange->force_capability &&
                   constrained_diagnostic.device_bytes == generated_budget,
               "optional canonical range storage displaced the constrained SPD owner");
-      DeviceMatrix census(std::vector<double>(2U, 0.0));
-      plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(census.pointer);
+      DirectValueCensus census(*plan);
       const auto source_n = static_cast<std::size_t>(plan->canonical_batch.nbf);
       const auto pairs = source_n * (source_n + 1U) / 2U;
       const auto quartets = 2U * pairs * (pairs + 1U) / 2U;
@@ -796,14 +937,19 @@ void spd_canonical_range_values() {
                   }
                 }
               }
+              census.reset();
               direct_device(plan.get(), spec, alpha, beta, expected_j, expected_a, expected_b);
+              const auto channels = census.totals();
+              require((channels[0] > 0) == want_j &&
+                          (channels[1] > 0) == (want_k && op == FockOperator::FullRange),
+                      "range fallback displaced an independently generated J/K channel");
               std::array<std::uint64_t, 2> work{};
               check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
                                cudaMemcpyDeviceToHost));
               const bool canonical = want_k && op != FockOperator::FullRange;
-              require(work[0] == (canonical ? quartets : 0U) &&
-                          work[1] == (canonical ? quartets * (want_j ? 2U : 1U) : 0U),
-                      "SPD generated/canonical selection disagrees with actual source work");
+              require(
+                  work[0] == (canonical ? quartets : 0U) && work[1] == (canonical ? quartets : 0U),
+                  "SPD generated/canonical selection disagrees with actual source work");
               direct_device(constrained.get(), spec, alpha, beta, expected_j, expected_a,
                             expected_b);
             }
@@ -1300,17 +1446,107 @@ void canonical_screened_values() {
           require(work[0] == admitted &&
                       work[1] == admitted * (operation == FockOperator::FullRange ? 1U : 2U),
                   "screened canonical source still visited rejected quartets");
+          const auto check_joint = [&] {
+            if (!plan->canonical_range_exchange || operation == FockOperator::FullRange) return;
+            const auto full_ka = reference_exchange_from_eri(screened_full, dimension, alpha);
+            const auto full_kb = spin == FockSpin::Unrestricted
+                                     ? reference_exchange_from_eri(screened_full, dimension, beta)
+                                     : std::vector<double>{};
+            direct_rsh_device(plan.get(), spec, alpha,
+                              spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
+                              reference.coulomb, full_ka, full_kb, ka, kb);
+          };
+          check_joint();
           const auto* prefix = plan->canonical_row_prefix;
           plan->canonical_row_prefix = nullptr;
           direct_device(plan.get(), spec, alpha,
                         spin == FockSpin::Unrestricted ? beta : std::vector<double>{},
                         reference.coulomb, ka, kb);
+          check_joint();
           plan->canonical_row_prefix = prefix;
         }
       }
     }
   }
   std::cout << "CUDA screened full/SR/LR matrices and work gates PASS\n";
+}
+
+/** Deny only the final optional range matrix through the real resource ledger.
+ * Earlier canonical and derivative owners must remain usable and fully charged.
+ */
+void shared_rsh_optional_allocation_fallback() {
+  namespace runtime = generativeqc::runtime;
+  struct LedgerScope {
+    std::shared_ptr<runtime::DeviceResourceLedger> previous{runtime::active_device_resource_ledger};
+    std::shared_ptr<runtime::DeviceResourceLedger> ledger{
+        std::make_shared<runtime::DeviceResourceLedger>()};
+    explicit LedgerScope(std::size_t limit) {
+      ledger->limit = limit;
+      ledger->device = 0;
+      runtime::active_device_resource_ledger = ledger;
+    }
+    ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
+  };
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.1, -0.2, -0.7}}, {1, {0.2, 0.1, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 3, {{0.5, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  constexpr std::size_t budget = 64U << 20;
+  std::size_t total_bytes{}, extra_bytes{};
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(dimension * dimension);
+  for (std::size_t i = 0; i < density.size(); ++i)
+    density[i] = std::cos(0.3 * (i / dimension + i % dimension)) / dimension;
+  const auto full = generativeqc::integrals::build_integrals(system, false).eri;
+  const auto range = generativeqc::integrals::build_range_eri(
+      system, generativeqc::integrals::CoulombRange::Long, 0.37);
+  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+  spec.derivative_order = 0;
+  const auto reference = build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0),
+                                               dimension, full, density, {});
+  const auto full_k = reference_exchange_from_eri(full, dimension, density);
+  const auto range_k = reference_exchange_from_eri(range, dimension, density);
+  for (bool deny : {false, true}) {
+    LedgerScope scope(deny ? total_bytes - 1U : budget);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+        raw, &destroy_cuda_direct_jk_plan);
+    require(plan->canonical_cartesian && plan->canonical_pairs && plan->canonical_row_prefix &&
+                plan->generated_exchange && plan->generated_exchange->force_capability &&
+                bool(plan->canonical_range_exchange) == !deny && detail.empty(),
+            "range-buffer allocation fallback lost an earlier source owner");
+    if (!deny) {
+      total_bytes = diagnostic.device_bytes;
+      const auto cart = static_cast<std::size_t>(plan->canonical_batch.nbf);
+      extra_bytes = 2U * cart * cart * sizeof(double);
+      require(scope.ledger->rejected == 0 && extra_bytes < total_bytes,
+              "range-buffer baseline already declined an allocation");
+    } else {
+      require(scope.ledger->rejected == 1 && diagnostic.device_bytes == total_bytes - extra_bytes,
+              "range-buffer rollback changed earlier allocation charges");
+    }
+    require(scope.ledger->live == diagnostic.device_bytes,
+            "range-buffer diagnostic does not match retained device storage");
+    // DeviceMatrix test allocations need their own unrestricted fixture budget.
+    // The prepared owner's denied allocation has already happened.
+    scope.ledger->limit = budget;
+    spec.exchange.op = FockOperator::LongRange;
+    spec.exchange.omega = 0.37;
+    direct_rsh_device(plan.get(), spec, density, {}, reference.coulomb, full_k, {}, range_k, {});
+    direct_device(plan.get(), spec, density, {}, reference.coulomb, range_k, {});
+    plan.reset();
+    require(scope.ledger->live == 0, "range-buffer fixture leaked device storage");
+  }
+  std::cout << "CUDA shared-RSH real-allocation fallback and retained-owner gates PASS\n";
 }
 
 /** Count executed candidates and radial evaluations at two larger dimensions.
@@ -2314,6 +2550,20 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-work-only") {
       canonical_work_census();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--shared-rsh-values-only") {
+      require(generativeqc::scf::cuda_execution::direct_shared_rsh_values_requested(),
+              "shared RSH gate requires its explicit preparation policy");
+      canonical_screening_rows();
+      shared_rsh_optional_allocation_fallback();
+      canonical_screened_values();
+      canonical_value_provider();
+      require(shared_rsh_checks > 0 && shared_rsh_coverage == 511U,
+              "joint canonical source missed spin/basis/range/row or nonempty execution coverage");
+      std::cout << "CUDA joint canonical full/SR/LR values, independent matrices, exact work and "
+                   "fallback gates PASS: "
+                << shared_rsh_checks << " actual joins\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-values-only") {

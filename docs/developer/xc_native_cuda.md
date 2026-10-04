@@ -64,6 +64,13 @@ does not double the scalar term. All symmetric matrix cross terms are retained.
 The compiler emits five bounded point consumers: physical LDA/PBE/r²SCAN and
 signed LDA/PBE response. A plan resolves its immutable `(functional, response)`
 key to an emitted launcher during preparation. Spin layout remains an argument;
+CUDA KS intersects its shared `ExecutionPrecisionSchedule` with the selected
+XC layout's capabilities before each iteration. A local AO layout keeps density
+contraction strict FP64 while independently qualified Direct J may retain lower
+precision. The filtered schedule preserves region names, surviving arithmetic
+directives and qualification metadata. Strict refinement restores every region
+to FP64; the requested schedule remains reusable for subsequent iterations.
+
 AO precision does not change the FP64 point algebra. The selected consumer calls
 the same canonical point implementation with constant functional/consumer facts,
 so CUDA compilation can remove unrelated algebra before register allocation.
