@@ -4,7 +4,6 @@ import ctypes
 import subprocess
 import typing
 
-import pytest
 from generativeqc_compiler.integral.df_cuda import emit_df_values_cuda
 from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
 from generativeqc_compiler.integral.df_policy import emit_df_policy_cuda
