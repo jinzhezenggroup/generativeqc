@@ -40,7 +40,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
                                   const core::System& auxiliary,
                                   const generativeqc_method_descriptor& descriptor, bool forces,
                                   bool with_triples, bool df_auxiliary_reduction,
-                                  bool df_matrix_gemm) {
+                                  bool df_matrix_gemm, bool lambda_matrix_gemm,
+                                  std::size_t lambda_batch_limit) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -118,6 +119,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   if (trace.enabled()) Trace::label("phase", "corrected_lambda");
   cc::LambdaOptions lambda_options;
   lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
+  lambda_options.df_matrix_gemm = lambda_matrix_gemm;
+  lambda_options.df_auxiliary_batch_limit = lambda_batch_limit;
   lambda_options.cc_tolerance = 1e-9;
   lambda_options.lambda_tolerance = 1e-9;
   const auto lambda_external = checked_add(tbytes, fbytes);
