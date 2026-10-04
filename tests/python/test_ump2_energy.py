@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from itertools import product
+import typing
 
 import numpy as np
 import pytest
@@ -33,13 +34,19 @@ class DenseSource:
         if self.closed:
             raise RuntimeError("fixture source is closed")
 
-    def requests(self, operator, *, axis_tile, budget_bytes):
+    def requests(
+        self,
+        operator: typing.Any,
+        *,
+        axis_tile: typing.Any,
+        budget_bytes: typing.Any,
+    ) -> typing.Any:
         assert operator == "four_center_eri"
         assert budget_bytes > 0
         for starts in product(range(0, self.nbf, axis_tile), repeat=4):
             yield starts, tuple(min(axis_tile, self.nbf - begin) for begin in starts)
 
-    def tile(self, request):
+    def tile(self, request: typing.Any) -> typing.Any:
         self.reads += 1
         starts, sizes = request
         return np.ascontiguousarray(
@@ -48,7 +55,7 @@ class DenseSource:
             ]
         )
 
-    def global_offsets(self, request):
+    def global_offsets(self, request: typing.Any) -> typing.Any:
         return request[0]
 
 
@@ -106,7 +113,7 @@ def _eri(nbf: int = 4) -> np.ndarray:
     return np.einsum("uvP,wxP->uvwx", factor, factor, optimize=True)
 
 
-def _oracle(reference: UHFReferenceSnapshot, eri: np.ndarray):
+def _oracle(reference: UHFReferenceSnapshot, eri: np.ndarray) -> dict[str, float]:
     components = {}
     for name, left, right in (
         ("alpha_alpha", "alpha", "alpha"),

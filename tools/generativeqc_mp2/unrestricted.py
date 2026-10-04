@@ -326,7 +326,7 @@ class PreparedUMP2Energy:
             self._last_result = None
             self._state = "closed"
 
-    def __enter__(self) -> PreparedUMP2Energy:
+    def __enter__(self) -> typing.Self:
         return self
 
     def __exit__(self, *_: object) -> None:
