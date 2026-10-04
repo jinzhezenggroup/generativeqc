@@ -444,7 +444,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
                                                    detail::kBoundedDirectShellPairBlockSize);
     const auto products =
         plan->bounded_block_domain.prefix
-            ? plan->bounded_block_domain.quartet_count
+            ? static_cast<std::size_t>(plan->bounded_block_domain.quartet_count)
             : static_cast<std::size_t>(plan->shared->batch.total_shell_pair_block_quartets);
     const auto layout = plan_force_page(products, budget - plan->device_bytes);
     if (layout.bytes) {
@@ -698,7 +698,7 @@ static cudaError_t enqueue_compact_full_range_force(GeneratedExchangePlan& plan,
   const auto page = plan.force_page;
   const auto products =
       plan.bounded_block_domain.prefix
-          ? plan.bounded_block_domain.quartet_count
+          ? static_cast<std::size_t>(plan.bounded_block_domain.quartet_count)
           : static_cast<std::size_t>(shared.batch.total_shell_pair_block_quartets);
   for (std::size_t begin = 0; begin < products;) {
     const auto count = std::min(page.block_capacity, products - begin);

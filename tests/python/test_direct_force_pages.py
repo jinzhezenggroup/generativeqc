@@ -139,7 +139,8 @@ int operation() {
   if (throws) throw std::runtime_error("injected");
   return 7;
 }
-struct Domain { const unsigned* prefix{}; std::size_t quartet_count{}; };
+// On Darwin uint64_t and size_t have equal widths but distinct underlying types.
+struct Domain { const unsigned* prefix{}; unsigned long long quartet_count{}; };
 struct Batch { std::size_t total_shell_pair_block_quartets=7; };
 struct BoundedForcePage {
   std::size_t block_capacity=2;
