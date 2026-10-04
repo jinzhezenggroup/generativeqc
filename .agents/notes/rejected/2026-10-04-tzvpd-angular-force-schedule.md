@@ -179,3 +179,23 @@ choosing a different source algorithm. The separate
 removes unused primitive recurrence states while retaining one force traversal.
 Any revisit of angular scheduling requires a materially different work or
 resource argument, not another default-on trial of this rejected schedule.
+
+## Exact historical test boundary
+
+The source actually sealed for Slurm 5730 is SHA-256
+`218cf0739c41a26ea60c1a1ca28177c3302900a4538782dd65b77f1a0d5b16f5`,
+with native-test executable
+`d80f441f109f978ad24554af644e32e100365471819f92b82cb113a2227beb07`
+and the `d4e316e1...` library identified above. Its range selection runs with
+the default environment; its through-f selection explicitly sets
+`GENERATIVEQC_BOUNDED_ANGULAR_FORCE=1`. The source contains mixed f/d/p/s
+coverage but predates the later noncoincident f/f/s/s order-12 fixture and
+explicit angular loop around the RSH source-mask checks. Historical passes
+must not be relabeled as execution of those repairs.
+
+The newer recurrence experiment's Slurm 5736 now executes the repaired source
+`7200a4c8...` and independently passes the two-center high-order fixture with
+both angular schedules. Its production library is different, so this is new
+current-composition correctness evidence, not a retroactive qualification of
+the frozen angular timing binary. See the
+[new qualification boundary](../proposed/2026-10-04-reachable-coulomb-states.md#cuda-build-and-numerical-qualification).

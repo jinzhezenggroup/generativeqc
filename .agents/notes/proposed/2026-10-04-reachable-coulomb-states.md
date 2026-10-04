@@ -1,6 +1,6 @@
 # Experiment: evaluate only consumer-reachable Coulomb recurrence states
 
-Status: proposed (opt-in implementation; CUDA qualification pending)
+Status: proposed (opt-in implementation; CUDA numerical gates pass, endpoint qualification pending)
 Date: 2026-10-04
 
 ## Motivation and scope
@@ -113,3 +113,63 @@ through-f bounded value route, or repeat rejected VV10 variants. The public
 Open Becke #1830, ordinary force AO-map #1833 and density-product #1798 work
 have separate owners and scientific contracts; this change does not duplicate
 them. No measured gain or default promotion is established by this note.
+
+## CUDA build and numerical qualification
+
+Production `fb6f6335c` has source identity
+`026543856fc338d54ee73fc451a264b9951ef06ed52856c964db8d0d6a35a086`
+(1,381 inputs), library SHA-256
+`3b90323d90ccdca0c193567fa5dec135be178eafafa5bea9c5d8dad13a2e134c`,
+and native-test executable SHA-256
+`aadfd7b014d5cc70d3fc95a3ed1b36c64fcf43ccea4e15047979b1fdbb4a7d7d`.
+The incremental CUDA rebuild exits zero, with all 453 compiler commands using
+ccache. Shared-cache snapshots increase by 225 hits and 47 misses; other users
+of that cache are not excluded. The first failed build remains retained: a
+missing policy declaration was repaired through `direct_coulomb.hpp`'s shared
+source-preparation adapter, without introducing an HF-policy header dependency
+in the canonical provider. Its existing compiler children drained before any
+source was patched.
+
+n1 RTX 5090 Slurm **5736**, device visibility **1**, passes both
+`--range-response-only` and `--through-f-response` with the recurrence selection
+off and on. These include independent full/SR/LR values and derivatives, both
+spins, Cartesian/spherical basis conventions, separate J/K source masks, and
+indexed-domain/prefix-budget fallbacks. The executed native test source SHA-256
+is `7200a4c8f2b386aa17f31b28d249a50de32bc36ebdc2efab59c9bf16443a859d`.
+Unlike the older angular experiment's test source, this revision includes the
+two-center f/f/s/s fixture: nonzero order-12 derivatives are independently
+checked for both angular schedules. The general source-mask test uses the
+prepared default angular schedule; the internal RSH and four-center fixtures
+explicitly exercise both. Do not infer angular-enabled source-mask coverage
+from this job's unset angular environment control.
+
+The same job passes candidate memcheck and initcheck with **zero errors** and
+all **five** selected checkpoint policy cases. These are five parameterized
+host cases, including the new recurrence control, not six or GPU checkpoint
+coverage. Native-donor 3-atom ABBA completes; the 12-atom continuation is running.
+The installed CUDA 12.9 Compute Sanitizer documents
+initcheck as **global memory** initialization checking; it does not prove that
+every per-thread local auxiliary cell was initialized. The dependency proof,
+NaN-poisoned host execution and independent device value/derivative oracles
+remain necessary for that contract. Sanitizer output is an additional gate,
+not a substitute for them.
+
+The pilot performs a genuine target priming solve after native density import;
+only the five subsequent frozen-density calls must take one iteration. An
+independent audit verifies every prime/replay E/F, allocation, source/library,
+donor, runner, numerical controls and semantic SCF AO work. It reproduces the
+previous angular negative control under Python `-O` and rejects seven corrupted
+variants (force, missing repeat, GPU, donor, control, timing and iteration).
+There is no newly paired reference timing in this pilot. Prepared cold,
+displaced geometry, larger endpoints and actual molecular recurrence counts
+remain outstanding; a static closure reduction is not a speedup claim.
+
+The complete 3-atom ABBA has ten measured one-iteration calls per selection:
+off/reachable warm medians are **1.925322 / 2.014610 s**, a **4.638% regression**.
+All 24 prime/replay E/F calls pass independent rechecking (maximum errors
+1.990e-13 Eh / 9.377e-12 Eh/Bohr). Derivative-stage medians are
+**0.872968 / 1.019439 s**. This is evidence against enabling the joint value/force
+selection for this size. SCF full/LR value durations are not separately observed
+in this replay, so subtracting endpoint/stage medians cannot establish a value
+kernel speedup. The control remains off. The larger 12-atom result is needed
+before choosing further work; no speculative size guard or cold gain is promoted.
