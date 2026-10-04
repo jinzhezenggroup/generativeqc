@@ -683,10 +683,21 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool requested_incremental_direct_jk =
       options.incremental_direct_jk && requested_quartet_direct && !requested_mixed_precision_fock;
   // A mixed item is promoted to exact FP64 by the target refinement before any
-  // consumer runs, so the matrix it retains is target precision. The density
-  // criterion and convergence check below still decide each item's reuse.
-  const bool requested_reuse_converged_fock =
-      reuse_converged_fock_requested() && !options.export_physical_reference;
+  // consumer runs, so the matrix it retains is target precision. The convergence
+  // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item
+  // stops; no Fock matrix is ever reused across executions or geometries.
+  const bool requested_reuse_converged_fock = reuse_converged_fock_requested();
+  // Physical-reference export independently validates max|P(C)-P| <= 1e-8.
+  // density_rms is RMS over n^2 AO entries, hence
+  //   ||delta P||_inf <= ||delta P||_F = n * density_rms.
+  // Cap the ordinary profitability/accuracy threshold so admission itself proves
+  // the retained P_n can pass that stronger reconstruction gate. Items without
+  // this proof take the existing P_{n+1}/F(P_{n+1}) rebuild path.
+  const double final_fock_reuse_density_rms =
+      options.export_physical_reference
+          ? std::min(converged_fock_reuse_density_rms(options.density_tolerance),
+                     1.0e-8 / static_cast<double>(nbf))
+          : converged_fock_reuse_density_rms(options.density_tolerance);
   // Direct consumers expand each compact logical tile into one-warp blocks;
   // validate the resulting fixed Graph grid before narrowing it to unsigned.
   if (total_shell_pairs > std::numeric_limits<unsigned>::max() ||
@@ -3499,6 +3510,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   std::uint32_t post_scf_physical_fock_builds = 0;
   std::uint32_t post_scf_final_eigen_solves = 0;
+  // Keep the final selection count through reference publication so diagnostics
+  // can distinguish retained-Fock finalization from an explicit final rebuild.
+  std::uint32_t host_final_fock_rebuild_count = static_cast<std::uint32_t>(batch_size);
   if (scf_force_ready_state) {
     // Convergence already certified the un-extrapolated physical F(P_n)
     // commutator before DIIS and RetainConvergedDensity kept P_n paired with
@@ -3544,7 +3558,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         static_cast<std::uint64_t>(spin_matrix_elements * sizeof(double)));
     trace.finish("submitted");
   } else {
-    std::uint32_t host_final_fock_rebuild_count = static_cast<std::uint32_t>(batch_size);
     if (reuse_converged_fock) {
       // Partition on the device because density RMS is already per-system. This
       // permits a mixed bucket: tight systems retain P_n/F(P_n), while only
@@ -3555,8 +3568,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         launch_select_final_fock_rebuild_kernel(
             blocks_for(batch_size), threads, 0, resources.stream_,
             static_cast<std::int32_t>(batch_size),
-            converged_fock_reuse_density_rms(options.density_tolerance), density_rms, converged,
-            failed, final_fock_reuse_mask, active, final_fock_rebuild_count);
+            final_fock_reuse_density_rms, density_rms, converged, failed, final_fock_reuse_mask,
+            active, final_fock_rebuild_count);
         launch_copy_selected_matrices_kernel(
             blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
             static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
@@ -3879,9 +3892,22 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         {overlap, hcore, fock, coefficients, density}, eigenvalues,
         {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
     if (outputs[0].status == GENERATIVEQC_STATUS_SUCCESS) {
+      const bool reused_final_physical_fock =
+          reuse_converged_fock && host_final_fock_rebuild_count == 0U;
+      // Reference download has independently checked F/P/C/epsilon,
+      // reconstructed density, the physical commutator, F C = S C epsilon and
+      // C^T F C canonicality before anything is published. Expose the final
+      // operator work as ordinary SCF provenance too, not only as trace text.
+      outputs[0].scf.precision.post_scf_fock_builds = post_scf_physical_fock_builds;
+      outputs[0].scf.precision.skipped_final_fock_builds =
+          reused_final_physical_fock ? 1U : 0U;
       // Download has synchronized the stream. Report semantic completed work,
       // not the one-time host graph-capture calls or allocator pool rounding.
       runtime::df_progress::Scope trace("cuda_rhf_reference_completed", "cuda_completed");
+      runtime::df_progress::Scope::label("final_physical_fock",
+                                         reused_final_physical_fock ? "reused" : "rebuilt");
+      runtime::df_progress::Scope::number("final_physical_fock_rebuilds",
+                                          post_scf_physical_fock_builds);
       runtime::df_progress::Scope::number("ao_functions", nbf);
       runtime::df_progress::Scope::number("scf_iterations", outputs[0].scf.iterations);
       runtime::df_progress::Scope::number(
@@ -4646,10 +4672,13 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         final_density, active, forces);
   }
 
-  if (reuse_converged_fock && !stationary_force_required) {
-    // Energy-only execution may keep its historical warm-start advancement.
-    // A force result must return exactly the density generation consumed by
-    // energy/force/Pulay, so the force-ready path never swaps in P_{n+1}.
+  if (reuse_converged_fock && !stationary_force_required &&
+      !options.export_physical_reference) {
+    // Ordinary energy-only execution may keep its historical warm-start
+    // advancement. A physical-reference export must instead publish the retained
+    // P_n/F(P_n) pair that licensed reuse; swapping only P to P_{n+1} would
+    // destroy the reference's density/Fock provenance. Force-ready publication
+    // likewise never swaps in P_{n+1}.
     launch_copy_selected_matrices_kernel(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
