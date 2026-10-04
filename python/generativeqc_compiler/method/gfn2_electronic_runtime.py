@@ -77,7 +77,7 @@ def build_gfn2_energy_weight_program() -> Program:
         provenance={
             "kind": "gfn2-runtime-energy-weight",
             "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
-            "source": "#505 Gfn2PopulationProgram",
+            "source": "tensor.scf weighted_density_program",
         },
     )
 
@@ -93,7 +93,7 @@ def build_gfn2_weighted_coefficient_program() -> Program:
         provenance={
             "kind": "gfn2-runtime-weighted-coefficient",
             "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
-            "source": "#505 Gfn2PopulationProgram",
+            "source": "tensor.scf density_program/weighted_density_program schedule lowering",
         },
     )
 
@@ -110,7 +110,7 @@ def build_gfn2_density_update_program() -> Program:
         provenance={
             "kind": "gfn2-runtime-density-update",
             "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
-            "source": "#505 Gfn2PopulationProgram",
+            "source": "tensor.scf density_program/weighted_density_program schedule lowering",
         },
     )
 

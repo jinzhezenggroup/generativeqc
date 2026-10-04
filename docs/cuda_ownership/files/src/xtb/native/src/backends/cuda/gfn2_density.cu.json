@@ -1,6 +1,6 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_density.cu",
-  "reason": "GFN2 CUDA density tiling, ragged activity, reductions, traces, validation and publication. Orbital energy weighting, coefficient weighting and ordered density accumulation consume compiler-owned #505 scalar programs shared with the CPU density schedule.",
+  "reason": "GFN2 CUDA density tiling, ragged activity, reductions, traces, validation and publication. The complete plain/energy-weighted density scientific identity is bound to the shared tensor.scf density/weighted-density TensorIR templates; orbital weighting and ordered scalar updates are schedule lowerings of that contract.",
   "regions": [],
   "role": "runtime",
   "subsystem": "gfn2"

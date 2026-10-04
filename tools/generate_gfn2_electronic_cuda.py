@@ -31,6 +31,10 @@ from generativeqc_compiler.method.gfn2_electronic_schedule import (
 )
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scf_cuda import (
+    density_template_hash,
+    weighted_density_template_hash,
+)
 
 
 def _device(source: str, function_name: str) -> str:
@@ -132,6 +136,8 @@ def _cpp_output(name: str) -> str:
 
 
 def cuda_header() -> str:
+    density_hash = density_template_hash()
+    weighted_density_hash = weighted_density_template_hash()
     primal = prepare_for_backend(
         build_gfn2_runtime_electronic_pair_primal(), backend="cuda"
     )
@@ -277,6 +283,9 @@ def cuda_header() -> str:
 namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_electronic_pair_version = "{GFN2_ELECTRONIC_PAIR_VERSION}";
+inline constexpr const char* gfn2_density_tensor_template_hash = "{density_hash}";
+inline constexpr const char* gfn2_weighted_density_tensor_template_hash =
+    "{weighted_density_hash}";
 inline constexpr const char* gfn2_electronic_pair_primal_hash = "{primal.logical_hash}";
 inline constexpr const char* gfn2_electronic_pair_vjp_hash = "{vjp.logical_hash}";
 

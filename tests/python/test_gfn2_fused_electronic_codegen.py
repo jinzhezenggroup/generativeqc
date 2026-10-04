@@ -7,6 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from generativeqc_compiler.tensor.scf_cuda import (
+    density_template_hash,
+    weighted_density_template_hash,
+)
+
 
 def test_native_electronic_fma_cancellation_and_publication(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
@@ -26,6 +31,10 @@ def test_native_electronic_fma_cancellation_and_publication(tmp_path: Path) -> N
         capture_output=True,
         timeout=45,
     )
+    generated = header.read_text()
+    assert density_template_hash() in generated
+    assert weighted_density_template_hash() in generated
+
     source = tmp_path / "fused.cpp"
     source.write_text(r"""
 #include <cmath>
@@ -84,6 +93,9 @@ int main() {
 
 def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
     root = Path(__file__).resolve().parents[2]
+    cuda_generator = (root / "tools/generate_gfn2_electronic_cuda.py").read_text()
+    assert "density_template_hash()" in cuda_generator
+    assert "weighted_density_template_hash()" in cuda_generator
     cpu = (root / "src/xtb/native/src/model/gfn2/eigensolver.cpp").read_text()
     cuda = (root / "src/xtb/native/src/backends/cuda/gfn2_density.cu").read_text()
     assert "gfn2_weighted_coefficient_tensor(" in cpu

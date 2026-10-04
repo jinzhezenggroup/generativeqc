@@ -20,8 +20,12 @@ files as handwritten science after earlier generated cutovers.
 Keep backend schedules backend-specific, while moving the repeated scalar
 mathematics to compiler-owned programs:
 
-- The #505 electronic runtime programs own orbital energy weights, coefficient
-  weighting, ordered density updates and Mulliken publication transforms.
+- Shared `tensor.scf` density/weighted-density TensorIR remains the complete
+  scientific identity for orbital density formation. GFN2 CPU/CUDA schedules
+  bind that identity and use compiler-owned scalar lowerings for orbital energy
+  weights, coefficient weighting and ordered updates.
+- The #505 electronic runtime programs own the remaining Mulliken publication
+  transforms.
 - CUDA SCC electronic energy consumes the generated H0-density update and the
   shared SCC free-energy program.
 - CPU and CUDA terminal energy consume one generated

@@ -27,6 +27,10 @@ from generativeqc_compiler.method.gfn2_electronic_runtime import (
 )
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scf_cuda import (
+    density_template_hash,
+    weighted_density_template_hash,
+)
 
 POPULATION_INPUTS = ("density", "integral", "accumulator")
 CORE_ENERGY_INPUTS = ("density", "h0", "accumulator")
@@ -55,6 +59,8 @@ MULTIPOLE_VJP_INPUTS = ("row_potential", "column_potential", "bar_updated")
 
 
 def native_header() -> str:
+    density_hash = density_template_hash()
+    weighted_density_hash = weighted_density_template_hash()
     population = prepare_for_backend(
         build_gfn2_population_update_program(), backend="cpu"
     )
@@ -174,6 +180,10 @@ namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_electronic_runtime_version =
     "{GFN2_ELECTRONIC_RUNTIME_VERSION}";
+inline constexpr const char* gfn2_density_tensor_template_hash =
+    "{density_hash}";
+inline constexpr const char* gfn2_weighted_density_tensor_template_hash =
+    "{weighted_density_hash}";
 inline constexpr const char* gfn2_population_update_logical_hash =
     "{population.logical_hash}";
 inline constexpr const char* gfn2_core_energy_update_logical_hash =
