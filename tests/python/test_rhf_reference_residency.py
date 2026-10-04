@@ -166,9 +166,9 @@ int main(int argc,char** argv) {
   require(expected.converged && expected.reference,"independent CPU reference");
 
   // Qualify the retained-Fock reference path independently from optional ERI
-  // residency. Tight FP64 convergence guarantees the retained P_n/F(P_n) pair
-  // falls inside the reference reconstruction gate; forcing the legacy final
-  // rebuild must change only the work count, never the published reference.
+  // residency. The retained P_n/F(P_n) candidate still passes the independent
+  // reference reconstruction/canonicality validator before publication; forcing
+  // the legacy final rebuild must change only the work count, never the state.
   scf::ScfOptions qualification=options;
   qualification.precision_mode=GENERATIVEQC_PRECISION_FP64;
   qualification.density_tolerance=5e-13;
