@@ -136,11 +136,12 @@ __device__ void component_ao_pair(DeviceBatch batch, std::int32_t a, std::int32_
 }
 
 /** Reconverge every lane before the CTA handoff. Component contractions have
- * lane-dependent loop bounds and tail masks; on sm120 an explicit warp join
- * is needed before the subsequent block barrier. All 128 lanes call this,
- * including lanes that did not consume a component or scatter an output.
+ * lane-dependent loop bounds and tail masks. Keep this boundary out of line:
+ * the sm120 compiler eliminated the inline warp join after the six-index
+ * contraction, leaving a block barrier reached by divergent warp fragments.
+ * All 128 lanes call this, including inactive component and scatter lanes.
  */
-__device__ __forceinline__ void component_source_barrier() {
+__device__ __noinline__ void component_source_barrier() {
   __syncwarp();
   __syncthreads();
 }
