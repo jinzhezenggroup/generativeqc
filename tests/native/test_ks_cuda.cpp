@@ -1,8 +1,10 @@
 #include <cuda_runtime_api.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -1416,7 +1418,16 @@ void pbe0_auto_local_ao_composition_case() {
             "could not restore CUDA local-AO selection");
 }
 
-void precision_work_census_case(bool restricted, int precision_mode) {
+void precision_work_census_case(bool restricted, int precision_mode, const char* ao_selection) {
+  // Exercise default, explicit local and dense schedules separately. Local AO
+  // contraction deliberately remains FP64 even when AUTO lowers Coulomb J.
+  const char* previous = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
+  const std::string saved = previous ? previous : "";
+  const bool had_previous = previous != nullptr;
+  require((ao_selection ? ::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", ao_selection, 1)
+                        : ::unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO")) == 0,
+          "could not select precision-census AO policy");
+  const bool expect_local = !ao_selection || std::strcmp(ao_selection, "0") != 0;
   const auto system = hydrogens(2, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
@@ -1499,6 +1510,9 @@ void precision_work_census_case(bool restricted, int precision_mode) {
   };
   const auto strict = scf::PrecisionArithmeticMode::Strict;
   const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
+  require(result.dft_diagnostic.cuda_ao_selection.selected == expect_local,
+          "precision-census solve did not execute the requested AO layout");
+  const auto expected_mixed_density = expect_local ? 0U : result.precision.mixed_stage_fock_builds;
   require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) ==
                   result.precision.mixed_stage_fock_builds &&
               operator_count(scf::PrecisionOperatorKind::CoulombJ, strict) ==
@@ -1506,7 +1520,7 @@ void precision_work_census_case(bool restricted, int precision_mode) {
               operator_count(scf::PrecisionOperatorKind::Xc, mixed_mode) == 0 &&
               operator_count(scf::PrecisionOperatorKind::Xc, strict) == result.fock_builds &&
               operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) ==
-                  result.precision.mixed_stage_fock_builds,
+                  expected_mixed_density,
           "CUDA-KS J/XC operator census disagrees with executed arithmetic");
   for (const auto kind :
        {scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionOperatorKind::PhysicalResidual,
@@ -1589,6 +1603,9 @@ void precision_work_census_case(bool restricted, int precision_mode) {
                 recovered.precision_work.returned_solve_epoch != previous_epoch,
             "CUDA-KS recovery did not publish fresh complete precision evidence");
   }
+  require((had_previous ? ::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", saved.c_str(), 1)
+                        : ::unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO")) == 0,
+          "could not restore precision-census AO policy");
 }
 
 /** Exercise the C validation layer, which can reject a request before the
@@ -1940,12 +1957,13 @@ int main() {
   try {
     prepared_cuda_fock_seam();
     registered_functional_code_seam();
+    for (const auto* ao_selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
+      precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection);
+      precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection);
+      // UKS avoids optional strict-RKS chunks, retaining a complete FP64 census.
+      precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection);
+    }
     pbe0_auto_local_ao_composition_case();
-    precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO);
-    precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO);
-    // UKS avoids the optional strict-RKS device-chunk route even if the test
-    // environment preselects it, so this also qualifies a complete FP64 census.
-    precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64);
     if (std::getenv("GENERATIVEQC_CUDA_KS_CHUNK") == nullptr) {
       require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
               "could not enable CUDA RKS chunk qualification");
