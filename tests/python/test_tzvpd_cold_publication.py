@@ -35,6 +35,12 @@ PUBLICATION = (
         "point-label",
         "atom-mismatch",
         "report-label",
+        "capacity",
+        "capacity-library",
+        "capacity-force",
+        "capacity-device",
+        "capacity-missing",
+        "legacy-seed-missing",
     ],
 )
 def test_live_tzvpd_publication_checks_all_calls_under_optimization(
@@ -45,6 +51,7 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
     samples_path = tmp_path / "samples.json.gz"
     samples = json.loads(gzip.decompress(samples_path.read_bytes()))
     reports = samples["points"]["6"]["reports"]
+    capacity = samples["points"]["24"]
     escaped = tmp_path / "outside-workspace"
     if mutation in {"force", "force-forged"}:
         reports["lda16"]["records"][-1]["forces"][0][0] += 1e-3
@@ -71,6 +78,23 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
     elif mutation == "report-label":
         reports[str(escaped)] = reports["none"]
         samples["points"]["6"]["outcomes"][str(escaped)] = {"exit_code": 0}
+    elif mutation == "capacity":
+        capacity["reports"]["none"]["native_experiment"]["force_max_device_bytes"] = (
+            None
+        )
+    elif mutation == "capacity-library":
+        capacity["reports"]["none"]["native_build"]["library_sha256"] = "wrong"
+    elif mutation == "capacity-force":
+        capacity["reports"]["none"]["records"][-1]["forces"][0][0] += 1e-3
+    elif mutation == "capacity-device":
+        capacity["reports"]["none"]["environment"]["runtime"][
+            "cuda_visible_devices"
+        ] = "wrong"
+    elif mutation == "capacity-missing":
+        del samples["points"]["24"]
+    elif mutation == "legacy-seed-missing":
+        del reports["lda16"]
+        del samples["points"]["6"]["outcomes"]["lda16"]
     if mutation in {"validator-replaced", "force-forged"}:
         (tmp_path / "validate-point.py").write_text(
             "raise RuntimeError('bundle code ran')\n"
@@ -85,15 +109,24 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
                 "raise RuntimeError('external package ran')\n"
             )
     samples_path.write_bytes(gzip.compress(json.dumps(samples).encode(), mtime=0))
-    evidence_path = tmp_path / "evidence.json"
-    evidence = json.loads(evidence_path.read_text())
+    manifest_path = tmp_path / "publication.json"
+    manifest = json.loads(manifest_path.read_text())
+    evidence_path = tmp_path / next(
+        entry["path"] for entry in manifest["files"] if entry["role"] == "evidence"
+    )
+    compressed = evidence_path.suffix == ".gz"
+    evidence_bytes = evidence_path.read_bytes()
+    evidence = json.loads(
+        gzip.decompress(evidence_bytes) if compressed else evidence_bytes
+    )
     for attachment in evidence["attachments"]:
         attachment["sha256"] = hashlib.sha256(
             (tmp_path / attachment["path"]).read_bytes()
         ).hexdigest()
-    evidence_path.write_text(json.dumps(evidence))
-    manifest_path = tmp_path / "publication.json"
-    manifest = json.loads(manifest_path.read_text())
+    evidence_bytes = json.dumps(evidence).encode()
+    evidence_path.write_bytes(
+        gzip.compress(evidence_bytes, mtime=0) if compressed else evidence_bytes
+    )
     for entry in manifest["files"]:
         data = (tmp_path / entry["path"]).read_bytes()
         entry.update(bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
@@ -117,7 +150,7 @@ def test_live_tzvpd_publication_checks_all_calls_under_optimization(
         "shadow-packages",
     }:
         assert checked.returncode == 0, checked.stderr
-        assert json.loads(checked.stdout)["accepted_endpoint_calls"] == 108
+        assert json.loads(checked.stdout)["accepted_endpoint_calls"] == 132
     else:
         assert checked.returncode != 0
         assert "accepted_endpoint_calls" not in checked.stdout

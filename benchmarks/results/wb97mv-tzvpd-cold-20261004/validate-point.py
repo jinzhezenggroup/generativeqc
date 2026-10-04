@@ -30,7 +30,12 @@ reference_path = point / "reference.json"
 reference = json.loads(reference_path.read_text())
 identity = json.loads((point / "source-identity.json").read_text())
 rows = {}
-for variant in ("reference", "none", "lda16"):
+# The original seed experiment has three variants; the later capacity campaign
+# has only the paired no-seed endpoint. The publication verifier separately
+# requires the exact point/report inventory, including all legacy seed data.
+atoms = reference["protocol"]["atoms"]
+variants = ("reference", "none") if atoms == 24 else ("reference", "none", "lda16")
+for variant in variants:
     raw = json.loads((point / f"{variant}.json").read_text())
     outcome = json.loads((point / f"{variant}.outcome").read_text())
     if (
@@ -40,6 +45,10 @@ for variant in ("reference", "none", "lda16"):
     ):
         raise ValueError(f"{variant}: incomplete endpoint")
     validate(raw, reference)
+    if raw["scheduler"] != reference["scheduler"] or raw["environment"]["runtime"][
+        "cuda_visible_devices"
+    ] != reference["environment"]["runtime"]["cuda_visible_devices"]:
+        raise ValueError("paired allocation or device differs")
     if raw["protocol"]["reference_fock_policy"] != "full-density-rebuild":
         raise ValueError("reference Fock policy differs")
     if variant == "reference":
@@ -56,8 +65,15 @@ for variant in ("reference", "none", "lda16"):
         if (
             raw["native_build"]["probe"]["source_identity"]
             != identity["source_identity"]
+            or raw["native_build"]["library_sha256"] != identity["library_sha256"]
         ):
             raise ValueError("native source/binary mismatch")
+        capacity = 4294967296 if atoms == 24 else None
+        if any(
+            raw["native_experiment"].get(name) != capacity
+            for name in ("force_max_device_bytes", "force_max_host_bytes")
+        ):
+            raise ValueError("force capacity differs from this measured campaign")
         seed = raw["preliminary_density"]
         if seed["requested"] != variant or seed["source_reference_density_used"]:
             raise ValueError("wrong source policy")

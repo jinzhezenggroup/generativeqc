@@ -7,40 +7,40 @@
   },
   "files": [
     {
-      "bytes": 119523,
-      "path": "evidence.json",
+      "bytes": 13090,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "a2e3fdf72c6efe8b2eb7011e54c2983e246ed626bb8aec01da2a6f602e9a941a"
+      "sha256": "51cc724ec84d7af698002f5fa45907a1e43314fba5863c5f2a62238fa55ce947"
     },
     {
-      "bytes": 91017,
+      "bytes": 121599,
       "path": "samples.json.gz",
       "role": "samples",
-      "sha256": "fdc3474418213da9161d4d588ac1eb1f3fcb1d3cced0f9a07f038400f6620440"
+      "sha256": "071868090ad347ac7995604aaaef27e29ebce0992e8d61bd0c25fd4a4cec6c2d"
     },
     {
-      "bytes": 40952,
+      "bytes": 56890,
       "path": "summary.json",
       "role": "summary",
-      "sha256": "e292164fe6735d38309cbefcc5297876b2e79a967a0e9734efaeb70fed7f4a7e"
+      "sha256": "ecd2998e1ca3fd9fddc42877a90c7a9b730eb1d3caa0c2654894be5ce7b11d7a"
     },
     {
-      "bytes": 5169,
+      "bytes": 7727,
       "path": "qualification.json",
       "role": "summary",
-      "sha256": "563c735f2bf381d9471df0f13988006206c21d739d0c16e0b3d0742c2d5f52be"
+      "sha256": "ae8f69207361ff17391bb4bef6fc032d1b0a40fefc938a3df0283fa31b6d46a1"
     },
     {
-      "bytes": 20573,
+      "bytes": 26378,
       "path": "omol25.svg",
       "role": "summary",
-      "sha256": "cb2bc6cf74289bf2a03a5070526b5ed2c1871ae9306d83ae055037d9f62fae0a"
+      "sha256": "30a03837b077505760bf7299abedf4e28e1fe3dd8e55dd5b42d0f3ec8d43c211"
     },
     {
-      "bytes": 21005,
+      "bytes": 26378,
       "path": "omol25-cold.svg",
       "role": "summary",
-      "sha256": "06da3b16381b1dd6f8a4ab2dac3387a7a4982ddbdb9059584e521f29f478880f"
+      "sha256": "1a92bb22732b89ea1e0986bbe80e1ede58112f08d30947edc2637d97cca9b172"
     }
   ],
   "reproduction": {
@@ -50,7 +50,7 @@
       "benchmarks.readme_omol25",
       "native",
       "--atoms",
-      "12",
+      "24",
       "--basis-file",
       "benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json",
       "--reference-full-fock",
@@ -62,13 +62,17 @@
       "--reference",
       ".artifacts/tzvpd/reference.json",
       "--output",
-      ".artifacts/tzvpd/none.json"
+      ".artifacts/tzvpd/none.json",
+      "--force-max-device-bytes",
+      "4294967296",
+      "--force-max-host-bytes",
+      "4294967296"
     ],
-    "instructions": "Build the pinned composition with verified ccache, Release/sm_120, and exact offline basis. Run each engine through finite Slurm main --gres=gpu:5090:1, 8 CPUs/16 GiB; preserve device visibility, select the verified library, set three BLAS thread counts to 8, GENERATIVEQC_CUDA_KS_ACTIVE_AO=1 and GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=indexed. First run the reference mode without native-only switches; then run native none and lda16 in separate processes with the same reference bytes. All detailed protocols, original reports, identities and outcomes are retained. Imports/library probes are outside prepared cold; this is not an empty disk/JIT-cache measurement."
+    "instructions": "Build the pinned composition with verified ccache, Release/sm_120, and exact offline basis. Run each engine through finite Slurm main --gres=gpu:5090:1, 8 CPUs/16 GiB; preserve device visibility, select the verified library, set three BLAS thread counts to 8, GENERATIVEQC_CUDA_KS_ACTIVE_AO=1 and GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=indexed. First run the reference mode without native-only switches; then run native none and lda16 in separate processes with the same reference bytes. All detailed protocols, original reports, identities and outcomes are retained. Imports/library probes are outside prepared cold; this is not an empty disk/JIT-cache measurement. The 24-atom point uses separate source 302039f8e and Slurm 5725/device2 with explicit 4 GiB host/device force budgets and no LDA variant. Earlier 3/6/12 records retain their original source/budget identities and all LDA controls. Per-point identity is authoritative; the latest revision field does not relabel older measurements."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {
     "dirty": false,
-    "revision": "e45e29c99c12496a35d24b4f331070252aa21ab2"
+    "revision": "302039f8e26a30c2efb6578d409d6c83f8930493"
   }
 }

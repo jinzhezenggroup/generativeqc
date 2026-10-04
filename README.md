@@ -195,7 +195,7 @@ print(first.energies)
 | --- | --- |
 | HF (direct / DF) | <a href="benchmarks/results/df-source-screening-20261004/hf.svg"><img src="benchmarks/results/df-source-screening-20261004/hf.svg" width="900" alt="GenerativeQC versus GPU4PySCF: direct and DF RHF energy-plus-force latency"></a> |
 | ωB97M-V / def2-SVP | <a href="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg"><img src="benchmarks/results/wb97mv-active-ao-20261003/wb97mv.svg" width="900" alt="GenerativeQC versus GPU4PySCF: warm WB97M-V energy-plus-analytic-force latency at 3, 6, 12, 24, 48 and 96 atoms; medians and min–max ranges"></a> |
-| ωB97M-V / full def2-TZVPD | <a href="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg"><img src="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg" width="900" alt="Full OMol25 functional and basis: validated 3-, 6- and 12-atom warm energy-plus-force observations; 24–96 atoms pending"></a> |
+| ωB97M-V / full def2-TZVPD | <a href="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg"><img src="benchmarks/results/wb97mv-tzvpd-cold-20261004/omol25.svg" width="900" alt="Full OMol25 functional and basis: validated 3-, 6-, 12- and 24-atom warm energy-plus-force observations; 48–96 atoms pending"></a> |
 
 <!-- DFT benchmark rows are temporarily withheld from the rendered README.
 Restore these rows to the table above only after approval to publish the results.
@@ -219,8 +219,10 @@ The full def2-TZVPD pilot uses OMol25's functional and basis on the same water
 clusters, with five warm repeats and original/displaced energy-and-force gates.
 The explicitly enabled candidate is faster at 3 and 6 atoms (58 and 116 AOs),
 but at 12 atoms (232 AOs) takes 62.96 s warm versus 18.20 s for GPU4PySCF.
-The 24/48/96-atom endpoints are in progress; the goal remains the full HF-size
-series. [Cold graph, initialization costs and exact
+At 24 atoms (464 AOs), a separately identified capacity build takes 584.66 s
+warm versus 57.37 s; prepared cold takes 5752.51 s versus 471.07 s. The graph
+retains each point's measured source and resource policy. The 48/96-atom
+endpoints remain in progress; the goal remains the full HF-size series. [Cold graph, initialization costs and exact
 protocol](benchmarks/results/wb97mv-tzvpd-cold-20261004/README.md) accompany the
 warm figure. These are matched-grid RTX 5090 observations, not OMol25 dataset
 or ORCA throughput.

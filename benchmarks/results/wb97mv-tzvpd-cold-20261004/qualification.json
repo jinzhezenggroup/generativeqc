@@ -65,5 +65,53 @@
   "compiler_commands_with_ccache": 458,
   "host_selection_passed": 55,
   "build_ccache_before": "Summary:\n  Hits:             67708 / 234575 (28.86 %)\n    Direct:         55464 / 235706 (23.53 %)\n    Preprocessed:   12244 / 180193 (6.79 %)\n  Misses:          166867\n    Direct:        180242\n    Preprocessed:  167949\n  Errors:             922\n  Uncacheable:       4125\nPrimary storage:\n  Hits:            137089 / 471363 (29.08 %)\n  Misses:          334274\n  Cache size (GB):   5.79 /  30.00 (19.29 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
-  "build_ccache_after": "Summary:\n  Hits:             67762 / 234730 (28.87 %)\n    Direct:         55518 / 235861 (23.54 %)\n    Preprocessed:   12244 / 180294 (6.79 %)\n  Misses:          166968\n    Direct:        180343\n    Preprocessed:  168050\n  Errors:             922\n  Uncacheable:       4125\nPrimary storage:\n  Hits:            137288 / 471673 (29.11 %)\n  Misses:          334385\n  Cache size (GB):   5.83 /  30.00 (19.43 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n"
+  "build_ccache_after": "Summary:\n  Hits:             67762 / 234730 (28.87 %)\n    Direct:         55518 / 235861 (23.54 %)\n    Preprocessed:   12244 / 180294 (6.79 %)\n  Misses:          166968\n    Direct:        180343\n    Preprocessed:  168050\n  Errors:             922\n  Uncacheable:       4125\nPrimary storage:\n  Hits:            137288 / 471673 (29.11 %)\n  Misses:          334385\n  Cache size (GB):   5.83 /  30.00 (19.43 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+  "scope_of_original_build_gates": "Original qualification fields apply to 3/6/12 atoms only. The 24-atom endpoint has a separate source/binary and is independently checked below.",
+  "capacity24": {
+    "independent_local_check": {
+      "accepted": true,
+      "calls": 24,
+      "job": "5725",
+      "device": "2",
+      "native_source": "bd67b5aa0b87fc329d84a002c6fae8c518f41177246a5b9d06415b2897810178",
+      "reports": {
+        "reference.json": "ad94110ecbb8f37748dfe20689695606b6904cc3c04c772bdea0dad7648ca079",
+        "none.json": "d220045e4754c92030bf390c3573a804a8cfcbd0d6836af1b5ea89e6e6d9ca5d"
+      },
+      "native_phases": {
+        "cold": 5752.5096702463925,
+        "warm": 584.6612428799272,
+        "moved": 3613.400059413165,
+        "moved-warm": 590.6088568978012
+      }
+    },
+    "paired_gate": {
+      "native_calls": 12,
+      "reference_calls": 12,
+      "max_energy_error": 4.092726157978177e-12,
+      "max_force_error": 5.695404148298167e-10,
+      "native_source": "bd67b5aa0b87fc329d84a002c6fae8c518f41177246a5b9d06415b2897810178",
+      "reports": {
+        "reference.json": "ad94110ecbb8f37748dfe20689695606b6904cc3c04c772bdea0dad7648ca079",
+        "none.json": "d220045e4754c92030bf390c3573a804a8cfcbd0d6836af1b5ea89e6e6d9ca5d"
+      }
+    },
+    "identity": {
+      "source_commit": "302039f8e26a30c2efb6578d409d6c83f8930493",
+      "master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "current_composition_commit": "302039f8e26a30c2efb6578d409d6c83f8930493",
+      "current_master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "source_identity": "bd67b5aa0b87fc329d84a002c6fae8c518f41177246a5b9d06415b2897810178",
+      "manifest_inputs": 1368,
+      "source_archive_sha256": "8e91e159fb657c540df21fc3a4d2c34c69fb561be664fba570f2c213f2ec09cb",
+      "library_sha256": "4da2d760e4b85e6c8ab5aee199cd541f3240656967f706c0765bdebf62ba488e",
+      "native_tests": {
+        "generativeqc_cuda_stream_eigensolver_tests": "64761c4e950b6ec6da8adfad0c4a478a678fbe7724a4f1e5a82c38f45ead6974",
+        "generativeqc_dft_cuda_tests": "d08cb6d8814aa03f3491becd4df81bdc7a7bdd178da4e9802ccaa5fefc389d4e",
+        "generativeqc_scf_proposal_tests": "93a2bdd501866b109bb59f9fc39a2d603fd621bd989e115defa6cbe98004ae96"
+      },
+      "scope": "master d22 composition plus bounded 2048-AO admission; full TZVPD through 96 atoms"
+    },
+    "timing_scope": "Slurm 5725, device 2, reference and native in one allocation; no preliminary source, force host/device budgets each 4 GiB; no default promotion"
+  }
 }

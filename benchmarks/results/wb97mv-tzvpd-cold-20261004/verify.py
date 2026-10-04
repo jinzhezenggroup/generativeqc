@@ -29,7 +29,17 @@ def verify(directory: Path) -> dict:
     samples = load_publication_record(directory, role="samples")
     expected = load_publication_record(directory, role="summary", name="summary.json")
     observed = {}
-    variants = ("reference", "none", "lda16")
+    # This frozen publication retains both distinct campaigns. Never infer a
+    # missing seed measurement from absent files or invent one for the 24-atom
+    # capacity run, which intentionally did not repeat the regressing LDA seed.
+    point_variants = {
+        "3": ("reference", "none", "lda16"),
+        "6": ("reference", "none", "lda16"),
+        "12": ("reference", "none", "lda16"),
+        "24": ("reference", "none"),
+    }
+    if set(samples["points"]) != set(point_variants):
+        raise ValueError("publication point inventory differs")
     with tempfile.TemporaryDirectory(prefix="tzvpd-evidence-") as workspace:
         for index, (atoms, point) in enumerate(samples["points"].items()):
             if (
@@ -40,11 +50,12 @@ def verify(directory: Path) -> dict:
                 or str(int(atoms)) != atoms
             ):
                 raise ValueError("invalid canonical atom-count label")
+            variants = point_variants[atoms]
             if set(point["reports"]) != set(variants) or set(point["outcomes"]) != set(
                 variants
             ):
                 raise ValueError(
-                    "point requires exactly reference, none and lda16 reports/outcomes"
+                    "point reports/outcomes differ from its retained campaign"
                 )
             if any(
                 type(report["protocol"]["atoms"]) is not int

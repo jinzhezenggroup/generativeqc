@@ -1384,5 +1384,651 @@
         "sha256": "8a904b0e46187b3c922720c3571ab2d12e4fa59de34e2b2eea1a3b9cfb680180"
       }
     }
+  },
+  "24": {
+    "protocol": {
+      "case": "water-24",
+      "atoms": 24,
+      "aos": 464,
+      "method": "WB97M-V/RKS",
+      "basis": "def2-TZVPD",
+      "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+      "representation": "spherical",
+      "geometries_bohr": [
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.653477530875584,
+              -13.210302597551673,
+              2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -10.03509801091492,
+              -14.557579850656921,
+              3.923524987977727
+            ]
+          ],
+          [
+            "H",
+            [
+              -11.0488257295427,
+              -11.96251960956995,
+              2.8921348693023314
+            ]
+          ],
+          [
+            "O",
+            [
+              -13.112343224611836,
+              -9.496961557199665,
+              2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -13.553997598721192,
+              -9.398815932861053,
+              0.8661927624563385
+            ]
+          ],
+          [
+            "H",
+            [
+              -12.092024916334609,
+              -7.999127260240872,
+              2.9564098944273542
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.400299689058038,
+              -13.112343224611836,
+              -2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -9.49844531339665,
+              -13.553997598721192,
+              -0.8661927624563385
+            ]
+          ],
+          [
+            "H",
+            [
+              -10.89813398601683,
+              -12.092024916334609,
+              -2.9564098944273542
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.496961557199665,
+              -5.784918021645867,
+              -2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -7.999127260240872,
+              -6.805236329923094,
+              -2.9564098944273542
+            ]
+          ],
+          [
+            "H",
+            [
+              -9.398815932861053,
+              -5.343263647536509,
+              -0.8661927624563385
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.243783715382119,
+              -5.68695864870603,
+              2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -7.848435516715002,
+              -6.934741636687752,
+              2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -8.862163235342782,
+              -4.339681395600782,
+              3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -13.210302597551673,
+              -9.243783715382119,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -11.96251960956995,
+              -7.848435516715002,
+              -2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -14.557579850656921,
+              -8.862163235342782,
+              -3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -5.784918021645867,
+              -9.400299689058038,
+              2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -5.343263647536509,
+              -9.49844531339665,
+              0.8661927624563385
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.805236329923094,
+              -10.89813398601683,
+              2.9564098944273542
+            ]
+          ]
+        ],
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8911348693023315
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.653477530875584,
+              -13.210302597551673,
+              2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -10.03509801091492,
+              -14.557579850656921,
+              3.923524987977727
+            ]
+          ],
+          [
+            "H",
+            [
+              -11.0488257295427,
+              -11.96251960956995,
+              2.8921348693023314
+            ]
+          ],
+          [
+            "O",
+            [
+              -13.112343224611836,
+              -9.496961557199665,
+              2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -13.553997598721192,
+              -9.398815932861053,
+              0.8661927624563385
+            ]
+          ],
+          [
+            "H",
+            [
+              -12.092024916334609,
+              -7.999127260240872,
+              2.9564098944273542
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.400299689058038,
+              -13.112343224611836,
+              -2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -9.49844531339665,
+              -13.553997598721192,
+              -0.8661927624563385
+            ]
+          ],
+          [
+            "H",
+            [
+              -10.89813398601683,
+              -12.092024916334609,
+              -2.9564098944273542
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.496961557199665,
+              -5.784918021645867,
+              -2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -7.999127260240872,
+              -6.805236329923094,
+              -2.9564098944273542
+            ]
+          ],
+          [
+            "H",
+            [
+              -9.398815932861053,
+              -5.343263647536509,
+              -0.8661927624563385
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.243783715382119,
+              -5.68695864870603,
+              2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -7.848435516715002,
+              -6.934741636687752,
+              2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -8.862163235342782,
+              -4.339681395600782,
+              3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -13.210302597551673,
+              -9.243783715382119,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -11.96251960956995,
+              -7.848435516715002,
+              -2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -14.557579850656921,
+              -8.862163235342782,
+              -3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -5.784918021645867,
+              -9.400299689058038,
+              2.648657577077294
+            ]
+          ],
+          [
+            "H",
+            [
+              -5.343263647536509,
+              -9.49844531339665,
+              0.8661927624563385
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.805236329923094,
+              -10.89813398601683,
+              2.9564098944273542
+            ]
+          ]
+        ]
+      ],
+      "grid": {
+        "radial_points": 48,
+        "angular_polar": 16,
+        "angular_azimuth": 32,
+        "element_radii": [],
+        "partition_iterations": 3,
+        "coincident_tolerance": 1e-12,
+        "version": 1,
+        "radial_rule": "rational-legendre",
+        "angular_rule": "legendre-trapezoid",
+        "partition": "becke-equal-radius",
+        "pruning": "none",
+        "units": "Bohr",
+        "ordering": "atom-radial-polar-azimuth"
+      },
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "force_return": "host_array_in_timed_endpoint",
+      "density_fitting": false,
+      "nonlocal_density_policy": "vv10-molecular-rho-ge-1e-8-v1",
+      "nonlocal_density_threshold": 1e-08,
+      "reference_nonlocal_weight_threshold": 1e-14,
+      "repeats": 5,
+      "energy_tolerance": 1e-12,
+      "density_tolerance": 1e-10,
+      "reference_gradient_tolerance": 1e-10,
+      "screening_tolerance": 1e-12,
+      "reference_direct_scf_tolerance": 1e-14,
+      "reference_fock_policy": "full-density-rebuild",
+      "max_iterations": 100,
+      "energy_gate": 1e-08,
+      "force_gate": 1e-07,
+      "cold_definition": "preparation plus first synchronized energy/force endpoint",
+      "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+      "threads": {
+        "OMP_NUM_THREADS": "8",
+        "OPENBLAS_NUM_THREADS": "8",
+        "MKL_NUM_THREADS": "8"
+      }
+    },
+    "identity": {
+      "source_commit": "302039f8e26a30c2efb6578d409d6c83f8930493",
+      "master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "current_composition_commit": "302039f8e26a30c2efb6578d409d6c83f8930493",
+      "current_master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "source_identity": "bd67b5aa0b87fc329d84a002c6fae8c518f41177246a5b9d06415b2897810178",
+      "manifest_inputs": 1368,
+      "source_archive_sha256": "8e91e159fb657c540df21fc3a4d2c34c69fb561be664fba570f2c213f2ec09cb",
+      "library_sha256": "4da2d760e4b85e6c8ab5aee199cd541f3240656967f706c0765bdebf62ba488e",
+      "native_tests": {
+        "generativeqc_cuda_stream_eigensolver_tests": "64761c4e950b6ec6da8adfad0c4a478a678fbe7724a4f1e5a82c38f45ead6974",
+        "generativeqc_dft_cuda_tests": "d08cb6d8814aa03f3491becd4df81bdc7a7bdd178da4e9802ccaa5fefc389d4e",
+        "generativeqc_scf_proposal_tests": "93a2bdd501866b109bb59f9fc39a2d603fd621bd989e115defa6cbe98004ae96"
+      },
+      "scope": "master d22 composition plus bounded 2048-AO admission; full TZVPD through 96 atoms"
+    },
+    "variants": {
+      "reference": {
+        "seconds": {
+          "cold": 471.07484663650393,
+          "warm": 57.3650260604918,
+          "moved": 461.7655807994306,
+          "moved-warm": 57.45436343178153
+        },
+        "iterations": {
+          "cold": [
+            39
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            38
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 4.547473508864641e-13,
+        "max_force_error": 4.697575661793962e-12,
+        "preliminary_density": null,
+        "sha256": "ad94110ecbb8f37748dfe20689695606b6904cc3c04c772bdea0dad7648ca079"
+      },
+      "none": {
+        "seconds": {
+          "cold": 5752.5096702463925,
+          "warm": 584.6612428799272,
+          "moved": 3613.400059413165,
+          "moved-warm": 590.6088568978012
+        },
+        "iterations": {
+          "cold": [
+            22
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            13
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 4.092726157978177e-12,
+        "max_force_error": 5.695404148298167e-10,
+        "preliminary_density": {
+          "requested": "none",
+          "selected": false,
+          "scope": "private GPU preliminary density; complete lifecycle charged",
+          "source_reference_density_used": false,
+          "public_api_qualification": false,
+          "public_budget_qualification": false,
+          "target_basis_identity": {
+            "name": "def2-TZVPD",
+            "role": "orbital",
+            "mathematical_identity": "cda315dfaa35edcf508dd417cd1a7452d194cb9efa9b1be483c00e994fef48a4",
+            "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+            "representation": "spherical",
+            "provenance": {
+              "source": "MolSSI Basis Set Exchange",
+              "version": "basis_set_exchange 0.12; def2-TZVPD version 1; basis-data=1",
+              "license": "BSD-3-Clause",
+              "checksum": "5d89177dc85b594a590140615bbb7fb33483fc6bbfa2879e185792073deee873"
+            },
+            "electrons": {
+              "atomic_numbers": [
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1
+              ],
+              "nuclear_charges": [
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1,
+                8,
+                1,
+                1
+              ],
+              "ecp_core_electrons": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "ionic_charge": 0,
+              "electron_count": 80,
+              "multiplicity": 1,
+              "nalpha": 40,
+              "nbeta": 40
+            },
+            "shell_count": 192,
+            "primitive_count": 296
+          },
+          "target_energy_tolerance": 1e-12,
+          "target_density_tolerance": 1e-10,
+          "source_construct_seconds": null,
+          "source_prepare_seconds": null,
+          "source_solve_seconds": null,
+          "export_seconds": null,
+          "import_seconds": null,
+          "source_destroy_seconds": null,
+          "source_bookkeeping_seconds": null,
+          "complete_source_seconds": null,
+          "source_fock_builds": null
+        },
+        "sha256": "d220045e4754c92030bf390c3573a804a8cfcbd0d6836af1b5ea89e6e6d9ca5d"
+      }
+    }
   }
 }
