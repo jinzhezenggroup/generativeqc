@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -122,6 +123,83 @@ def test_iteration_path_intersects_schedule_with_xc_density_capability() -> None
         "iteration_precision.uses_lower_precision(cuda_ks_precision_region::kDensityContraction)"
         in block
     )
+
+
+def test_density_enqueue_requires_physical_support_and_formal_qualification(
+    tmp_path: Path,
+) -> None:
+    source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
+    start = source.index(
+        "  if (precision != CudaXcDensityPrecision::Fp64",
+        source.index("void CudaXcPlan::enqueue_impl("),
+    )
+    end = source.index("  if (publish_generation", start)
+    guard = source[start:end]
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a host C++ compiler")
+    unit = tmp_path / "density_guard.cpp"
+    executable = tmp_path / "density_guard"
+    unit.write_text(
+        r"""
+#include <cassert>
+#include <stdexcept>
+#include "dft/xc_capabilities.hpp"
+using namespace generativeqc::dft;
+enum class CudaXcDensityPrecision { Fp64, Fp32ComputeFp64Accumulate };
+struct Layout {
+  bool local_ao{}, physical_mixed{};
+  CudaXcFastPathCapabilities fast_paths{};
+};
+struct Execution { bool mixed_density_contraction{}; };
+Execution cuda_xc_execution_capabilities(const Layout& layout) {
+  return {layout.physical_mixed};
+}
+bool admitted(Layout layout_, CudaXcDensityPrecision precision) {
+  try {
+"""
+        + textwrap.indent(guard, "  ")
+        + r"""
+    return true;
+  } catch (const std::invalid_argument&) {
+    return false;
+  }
+}
+int main() {
+  for (bool local : {false, true}) for (bool physical : {false, true})
+    for (auto qualification : {CudaXcCapability::Unavailable,
+                               CudaXcCapability::QualificationRequired,
+                               CudaXcCapability::Qualified}) {
+      Layout layout{local, physical};
+      layout.fast_paths.mixed_density_precision = qualification;
+      assert(admitted(layout, CudaXcDensityPrecision::Fp64));
+      assert(admitted(layout, CudaXcDensityPrecision::Fp32ComputeFp64Accumulate) ==
+             (!local && physical && qualification == CudaXcCapability::Qualified));
+      assert(!admitted(layout, static_cast<CudaXcDensityPrecision>(99)));
+    }
+}
+"""
+    )
+    built = subprocess.run(
+        [
+            compiler,
+            "-std=c++17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(ROOT / "src"),
+            str(unit),
+            "-o",
+            str(executable),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=45,
+    )
+    assert built.returncode == 0, built.stderr
+    subprocess.run([str(executable)], check=True, timeout=10)
 
 
 def test_selected_physical_layout_propagates_back_to_the_ks_owner() -> None:
