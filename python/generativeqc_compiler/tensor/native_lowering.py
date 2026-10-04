@@ -27,8 +27,15 @@ def contraction_initializer(
     transpose: tuple[str, str],
     extents: tuple[str, str, str, str],
     coefficient: str,
+    row_axes: tuple[int, int, int] | None = None,
+    leading_dimensions: tuple[str, str, str] | None = None,
+    beta: str = "0.0",
 ) -> str:
-    """Emit a typed descriptor for an already recognized dense binary einsum.
+    """Emit a typed descriptor for an already recognized binary matrix einsum.
+
+    Optional row cuts/strides describe unbatched affine views; beta can also
+    update a dense output. Native validation checks the physical recipe against
+    the original semantic modes before execution.
 
     Matrix recognition belongs to the existing physical lowerer. The descriptor
     retains original mode labels and operand shapes, so provider execution can
@@ -63,12 +70,21 @@ def contraction_initializer(
         )
 
     operands = []
-    for value, layout in zip((*node.inputs, node), request.operands, strict=True):
+    if (row_axes is None) != (leading_dimensions is None):
+        raise ValueError("matrix view cuts and strides must be supplied together")
+    for i, (value, layout) in enumerate(
+        zip((*node.inputs, node), request.operands, strict=True)
+    ):
         modes = ",".join(map(str, layout.modes))
         shape = ",".join(dimension(index) for index in value.spec.indices)
+        view = "matrix_view" if row_axes is not None else "dense"
+        extra = ""
+        if row_axes is not None:
+            assert leading_dimensions is not None
+            extra = f",{row_axes[i]},{leading_dimensions[i]}"
         operands.append(
-            "generativeqc::tensor::ContractionOperand::dense("
-            f"{{{modes}}},{{{shape}}},{dtype(value.spec.dtype)})"
+            f"generativeqc::tensor::ContractionOperand::{view}("
+            f"{{{modes}}},{{{shape}}},{dtype(value.spec.dtype)}{extra})"
         )
     arithmetic = ",".join(
         (
@@ -90,5 +106,10 @@ def contraction_initializer(
         + dtype(precision.publication_dtype)
         + f",'{transpose[0]}','{transpose[1]}',"
         + ",".join((*extents, coefficient))
+        + (
+            ",{" + ",".join(leading_dimensions or ()) + "}," + beta
+            if leading_dimensions is not None or beta != "0.0"
+            else ""
+        )
         + "}"
     )
