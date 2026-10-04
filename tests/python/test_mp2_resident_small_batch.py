@@ -18,7 +18,7 @@ def test_full_residency_reduces_j_scratch(nbf: int, virtuals: int, budget: int) 
 
 
 def test_generated_native_full_residency_reduces_j_scratch(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     (tmp_path / "schedule.hpp").write_text(native_header())
     source = tmp_path / "check.cpp"
