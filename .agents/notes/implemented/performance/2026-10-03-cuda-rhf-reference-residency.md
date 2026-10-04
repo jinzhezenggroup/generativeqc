@@ -90,6 +90,11 @@ angular domain only with complete workload and resource evidence. The public
 CCSD(T) force boundary remains 28 AOs; the separate 56-AO degeneracy failure is
 not addressed by this scheduling change.
 
+The later [bounded reference-quartet decision](2026-10-03-reference-bounded-quartets.md)
+supersedes the matrix-direct choice for d/f references and s/p topologies beyond
+the cache ceiling. It preserves the optional-cache policy and low-budget
+fallback documented here for cache-eligible s/p systems.
+
 ## Lossless evidence storage
 
 The original records and summary use deterministic gzip. The

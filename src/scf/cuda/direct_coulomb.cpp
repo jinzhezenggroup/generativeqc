@@ -31,6 +31,10 @@ std::size_t product(std::size_t a, std::size_t b) { return runtime::size_mul(a, 
 unsigned blocks(std::size_t elements) { return static_cast<unsigned>((elements + 127) / 128); }
 }  // namespace
 
+void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
+  batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_requested();
+}
+
 GeneratedCoulombPlan::~GeneratedCoulombPlan() {
   // The outer provider still owns this stream and all borrowed geometry.
   if (stream) (void)cudaStreamSynchronize(stream);
@@ -122,6 +126,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
     return {};
   auto plan = std::make_unique<GeneratedCoulombPlan>();
   plan->batch = borrowed;
+  configure_direct_coulomb_recurrence(plan->batch);
   plan->batch.total_shell_pairs = pairs;
   plan->stream = stream;
   plan->screening = screening;
@@ -326,6 +331,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   auto plan = std::make_unique<GeneratedExchangePlan>();
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
+  plan->angular_force_opt_in = force_capability && cuda_policy::bounded_angular_force_requested();
   plan->bounded_value_capability = bounded_value_capability;
   plan->device_bytes = plan->shared->device_bytes;
   auto allocate = [&](std::size_t count, std::size_t width, const void* values = nullptr) {
@@ -664,13 +670,24 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
   if (error != cudaSuccess) return error;
   if (coulomb_coefficient != 0.0 || exchange_coefficient != 0.0) {
-    launch_bounded_shell_energy_derivative(
-        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
-        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
-        p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
-        p.force_cursor, coulomb_coefficient, exchange_coefficient, p.bounded_block_domain);
-    error = cudaGetLastError();
-    if (error != cudaSuccess) return error;
+    if (p.angular_force_opt_in) {
+      error = launch_bounded_shell_angular_energy_derivative(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
+          p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Full, 0.0,
+          coulomb_coefficient, exchange_coefficient, p.bounded_block_domain);
+      if (error != cudaSuccess) return error;
+    } else {
+      launch_bounded_shell_energy_derivative(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
+          p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
+          exchange_coefficient, p.bounded_block_domain);
+      error = cudaGetLastError();
+      if (error != cudaSuccess) return error;
+    }
   }
   error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, shared.stream);
@@ -731,12 +748,24 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
     if (error != cudaSuccess) return error;
     error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
     if (error != cudaSuccess) return error;
-    launch_bounded_shell_range_exchange_derivative(
-        unrestricted, shared.worker_blocks, shared.stream, b, shared.screening, shared.shell_bounds,
-        p.shell_pair_density_bounds, p.bounded_pair_order, p.shell_pair_block_bounds,
-        p.system_density_bounds, p.heads, shared.schwarz, p.direct_spin, shared.active, p.force,
-        p.force_cursor, DirectCoulombRange::Long, omega, 1.0);
-    error = cudaGetLastError();
+    if (p.angular_force_opt_in) {
+      // Keep the existing LR triangular domain for the controlled angular
+      // experiment. Indexed LR pages are a separate scheduling hypothesis.
+      error = launch_bounded_shell_angular_energy_derivative(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
+          p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Long, omega,
+          0.0, 1.0);
+    } else {
+      launch_bounded_shell_range_exchange_derivative(
+          unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
+          shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
+          p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
+          p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Long, omega,
+          1.0);
+      error = cudaGetLastError();
+    }
     if (error != cudaSuccess) return error;
     error = cudaMemcpyAsync(long_force.data(), p.force, coordinates * sizeof(double),
                             cudaMemcpyDeviceToHost, shared.stream);
