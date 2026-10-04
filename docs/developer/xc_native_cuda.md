@@ -136,6 +136,32 @@ Unavailable and failed items report absence, including after a rejected replay.
 Python batch calls default to the method's supported observables, so KS defaults
 to energy and rejects forces. HF retains its energy-plus-force default.
 
+## SCF local AO selection
+
+Geometry-bound AO discovery is enabled automatically for qualified
+device-fused FP64 WB97M-V and all-electron exact-direct RKS-PBE0. For PBE0,
+admission requires the scaled PBE graph (exchange/correlation scales 0.75/1,
+full-range exchange coefficient -0.125), without DF, ECP, range separation or
+nonlocal correlation. Other compositions keep dense execution by default.
+`GENERATIVEQC_CUDA_KS_ACTIVE_AO=0` explicitly disables selection for debugging;
+`=1` explicitly requests it and rejects unsupported compositions. Invalid
+switch values are rejected.
+
+The prepared XC owner discovers AO value/first-derivative support at cutoff
+1e-16. Existing compiler-generated contractions gather local density entries
+and scatter the potential into the global matrix. Maps persist within that
+geometry/grid owner; rebuilding coordinates or the grid requires new discovery.
+Host/device resource admission can still retain dense execution, so read
+`generativeqc_batch_get_ks_ao_selection_diagnostic_v1` to determine whether
+selection actually occurred and inspect actual AO work and XC build counts.
+This policy does not select local force AO maps or change Becke response.
+
+The targeted `generativeqc_dft_cuda_tests --pbe0-local-ao` gate compares
+scaled-PBE E/V with independent CPU integration and checks empty maps and
+bounded admission. It does not establish complete PBE0 SCF/force accuracy or
+performance. Qualify cold, warm and changed-geometry energy/force endpoints
+before promotion, counting discovery in setup rather than amortizing it away.
+
 ## Validation
 
 `generativeqc_dft_cuda_tests` checks the actual device-buffer pipeline against CPU
