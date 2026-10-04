@@ -63,7 +63,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   // in every phase, then let the response owner rebind/release it explicitly.
   auto primal = [&] {
     return run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
-                                  recycle_bytes, &auxiliary, forces, df_matrix_gemm,
+                                  recycle_bytes, &auxiliary, forces, df_matrix_gemm, nullptr,
                                   ccsd_batch_limit, derived_denominators);
   };
   RccsdNativeState state;

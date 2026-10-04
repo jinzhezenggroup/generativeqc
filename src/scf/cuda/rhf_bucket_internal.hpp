@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -13,6 +14,10 @@
 #include "scf/cuda_batch.hpp"
 
 namespace generativeqc::scf {
+
+namespace cuda_execution {
+std::size_t host_batch_numeric_bytes(const HostBatch& host) noexcept;
+}
 
 struct CudaRhfBucketPlan {
   cuda_execution::CudaResources resources;
@@ -42,6 +47,10 @@ struct CudaRhfBucketPlan {
   CudaDirectFinalStateAudit last_direct_final_state;
   CudaEigensolverDiagnostic eigensolver_diagnostic;
   ScfOptions options;
+  // Snapshots covered by the last complete reference admission. Reuse charges
+  // only later capacity growth, preserving the existing cold-reference bound.
+  std::size_t reference_admitted_plan_host_bytes{};
+  std::size_t reference_admitted_candidate_host_bytes{};
   std::size_t batch_size{};
   std::size_t nbf{};
   std::size_t direct_nbf{};
@@ -173,8 +182,8 @@ struct CudaDirectFinalSCFState {
   }
 };
 
-/** Exact captured-option identity shared by admission and driver invariants. */
-inline bool same_hf_bucket_options(const ScfOptions& first, const ScfOptions& second) {
+/** Captured scientific identity; a reference budget has a separate fit proof. */
+inline bool same_hf_bucket_execution_options(const ScfOptions& first, const ScfOptions& second) {
   return first.max_iterations == second.max_iterations &&
          first.diis_history == second.diis_history &&
          first.energy_tolerance == second.energy_tolerance &&
@@ -182,12 +191,34 @@ inline bool same_hf_bucket_options(const ScfOptions& first, const ScfOptions& se
          first.screening_tolerance == second.screening_tolerance &&
          first.compute_forces == second.compute_forces &&
          first.export_physical_reference == second.export_physical_reference &&
-         first.reference_memory_budget_bytes == second.reference_memory_budget_bytes &&
          first.precision_mode == second.precision_mode &&
          first.incremental_direct_jk == second.incremental_direct_jk &&
          first.incremental_direct_jk_rebuild_interval ==
              second.incremental_direct_jk_rebuild_interval &&
          first.resolved_fock_build == second.resolved_fock_build;
+}
+
+/** Exact identity remains the driver invariant after admission updates the budget. */
+inline bool same_hf_bucket_options(const ScfOptions& first, const ScfOptions& second) {
+  return same_hf_bucket_execution_options(first, second) &&
+         first.reference_memory_budget_bytes == second.reference_memory_budget_bytes;
+}
+
+std::size_t hf_cuda_retained_host_numeric_bytes(const CudaRhfBucketPlan& plan) noexcept;
+std::size_t hf_cuda_reference_reuse_capacity(const CudaRhfBucketPlan& plan,
+                                             const cuda_execution::HostBatch& candidate) noexcept;
+
+/** A changed budget can preserve an already admitted complete reference, but
+ * must never retain an optional ERI cache that no longer fits. Rebuilding gives
+ * the existing bounded, nonresident reference path another admission attempt. */
+inline bool compatible_hf_bucket_options(const CudaRhfBucketPlan& plan,
+                                         const cuda_execution::HostBatch& candidate,
+                                         const ScfOptions& options) {
+  if (!same_hf_bucket_execution_options(plan.options, options)) return false;
+  if (!options.export_physical_reference) return same_hf_bucket_options(plan.options, options);
+  const auto peak = hf_cuda_reference_reuse_capacity(plan, candidate);
+  return peak != std::numeric_limits<std::size_t>::max() &&
+         peak <= options.reference_memory_budget_bytes;
 }
 
 /** Internal direct-HF numerical driver consumed by the bucket lifecycle owner. */

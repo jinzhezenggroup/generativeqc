@@ -58,8 +58,32 @@ def test_cuda_reference_finishes_before_optional_source(tmp_path: Path) -> None:
     ]
     # Execute the production reference and source-preparation prefix. Correlated
     # kernels are outside this probe; their existing source-lifetime test remains.
-    body += "return {bool(prepared_exact), source_preparation_peak}; } catch (...) { throw; } }\n"
-    _run(tmp_path, PREFIX + retained + body + MAIN)
+    body += "return {bool(prepared_exact), source_preparation_peak, bool(borrowed_reference_source)}; } catch (...) { throw; } }\n"
+    helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
+    helper = helper[
+        helper.index("template <class Operation>") : helper.index("/** Method-layer")
+    ]
+    _run(tmp_path, PREFIX + helper + retained + body + MAIN)
+
+
+def test_cuda_reference_resident_interaction_handoff_is_preferred() -> None:
+    entry = (ROOT / "src/scf/cuda_hf_entry.cpp").read_text()
+    direct = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text()
+    rccsd = (ROOT / "src/methods/rccsd_method.cpp").read_text()
+    rccsdt = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
+    assert "exact_reference_source_identity" in entry
+    assert "run_rhf_cuda_cached(&owner.plan" in entry
+    assert "std::exchange(*plan, nullptr)" in entry
+    assert "launch_copy_resident_eri_tile" in entry
+    assert "copy_resident_eri_tile_kernel" in direct
+    assert (
+        "if (cuda && cuda_source_cache && !correlation_auxiliary && "
+        "!borrowed_reference_source)" in rccsd
+    )
+    assert rccsd.index("if (state.reference_interaction_source)") < rccsd.index(
+        "else if (prepared_exact)"
+    )
+    assert "state.reference_interaction_source.get()" in rccsdt
 
 
 def test_provider_schedule_checks_attempt_deltas(tmp_path: Path) -> None:
@@ -138,15 +162,18 @@ int main() {
 PREFIX = r"""
 #include <chrono>
 #include <memory>
+#include <utility>
 #include <vector>
 #include "hf/reference.hpp"
 #include "methods/correlated_cuda_source.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
 int live=0,native_calls=0,host_calls=0,allocations=0;
+int source_attempts=0;
 int warm_failure=0;
-bool converged=true,fail_source=false;
+bool converged=true,fail_source=false,borrow_resident=false;
 std::size_t given_budget=0;
+namespace generativeqc::integrals { struct ElectronInteractionSource { std::shared_ptr<void> owner; }; }
 namespace generativeqc::molecule {
 std::size_t ao_count(const core::System& s) noexcept { return s.shells.size(); }
 std::size_t cartesian_ao_count(const core::System& s) noexcept { return s.shells.size(); }
@@ -167,11 +194,19 @@ int resolve_fock_build(FockSpec spec,FockBackend,double) {
   return 0;
 }
 struct ScfOptions {int resolved_fock_build=0;};
+struct CudaRhfBucketPlan {};
+std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexcept {
+  return plan ? 64 : 0;
+}
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete plan; }
 struct PreparedFockPlan {
   PreparedFockPlan() {++live;}
   PreparedFockPlan(const core::System&,std::nullptr_t,int,int,std::size_t budget) {
     if (!native_calls || live) throw std::runtime_error("source preceded native reference");
     given_budget=budget;
+    std::vector<double> partial_storage(16);
+    ++source_attempts;
     if (fail_source) throw std::bad_alloc();
     ++live; ++allocations;
   }
@@ -192,13 +227,30 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan&,const ScfOptions&,
                                     const std::vector<double>*) {
   ++host_calls; return physical();
 }
-ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int,
-                       const std::vector<double>* seed) {
+ScfResult run_rhf_cuda(
+    const core::System&,const ScfOptions&,int,const std::vector<double>* seed,
+    std::shared_ptr<const integrals::ElectronInteractionSource>* source) {
   if (live) throw std::runtime_error("prior source survived into native reference");
   ++native_calls;
   if (seed && warm_failure==1) throw std::runtime_error("injected warm reference failure");
   if (seed && warm_failure==2) return {};
+  if (borrow_resident && source) *source=std::make_shared<integrals::ElectronInteractionSource>();
   return physical();
+}
+ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan** plan,const core::System& system,
+                              const ScfOptions& options,int device,
+                              const std::vector<double>* seed,bool* reused,
+                              std::shared_ptr<const integrals::ElectronInteractionSource>* source) {
+  const bool had_plan=*plan!=nullptr;
+  if (!*plan) *plan=new CudaRhfBucketPlan;
+  if (reused) *reused=had_plan;
+  auto result=run_rhf_cuda(system,options,device,seed,source);
+  if(borrow_resident && source && *source) {
+    auto resident=std::make_shared<integrals::ElectronInteractionSource>();
+    resident->owner=std::shared_ptr<CudaRhfBucketPlan>(std::exchange(*plan,nullptr));
+    *source=std::move(resident);
+  }
+  return result;
 }
 ScfResult run_rhf(const core::System&,const ScfOptions&,const std::vector<double>*) {
   ++host_calls; return physical();
@@ -208,7 +260,7 @@ std::size_t cuda_direct_jk_device_bytes(std::size_t,std::size_t,std::size_t,
 }
 namespace generativeqc::methods::detail {
 struct MethodError : std::runtime_error {MethodError(int,const char* s):std::runtime_error(s){}};
-struct RccsdNativeState {bool prepared; std::size_t peak;};
+struct RccsdNativeState {bool prepared; std::size_t peak; bool borrowed;};
 """
 
 MAIN = r"""
@@ -241,6 +293,43 @@ int main() {
     cache.reset();
     if (live) return 6;
   }
+  // An admitted constructor attempt may allocate and unwind before failing.
+  // Its complete conservative bound still includes the simultaneous RHF plan.
+  // A rejected estimate never starts construction and contributes no peak.
+  const auto source_plan=methods::detail::plan_correlated_cuda_source(
+      2,2,1,2,2,2,0,scf::cuda_execution::kResidentPsssThreads,
+      posthf::source_capacity(system),
+      methods::detail::retained_reference_bytes(*scf::physical().reference),8192,1<<20);
+  if (!source_plan.admitted) return 9;
+  for (int mode=0;mode<3;++mode) {
+    auto* plan=new scf::CudaRhfBucketPlan;
+    native_calls=host_calls=allocations=source_attempts=0;
+    given_budget=0; converged=true; warm_failure=0; fail_source=mode==1;
+    solver.max_bytes=source_plan.peak_bytes+64-(mode==2);
+    auto result=methods::detail::execute_rccsd_prepared(
+        execution,system,reference,solver,0,nullptr,nullptr,nullptr,&cache,
+        nullptr,false,nullptr,&plan);
+    if (result.peak!=(mode==2 ? 0 : source_plan.peak_bytes+64)) return 10;
+    if (source_attempts!=(mode==2 ? 0 : 1) || allocations!=(mode==0)) return 11;
+    if (result.prepared!=(mode==0) || !plan || native_calls!=1) return 12;
+    cache.reset();
+    scf::destroy_rhf_cuda_bucket_plan(plan);
+    if (live) return 13;
+  }
+  // The real dispatch must use the returned resident source and skip a second
+  // PreparedFock owner in both cached and uncached reference adapters.
+  borrow_resident=true; converged=true; fail_source=false; warm_failure=0;
+  for(bool cached : {false,true}) {
+    auto* plan=cached?new scf::CudaRhfBucketPlan:nullptr;
+    native_calls=host_calls=allocations=source_attempts=0;
+    solver.max_bytes=1<<20;
+    const auto borrowed=methods::detail::execute_rccsd_prepared(
+        execution,system,reference,solver,0,nullptr,nullptr,nullptr,&cache,
+        nullptr,false,nullptr,cached?&plan:nullptr);
+    if(!borrowed.borrowed || borrowed.prepared || borrowed.peak || plan || cache ||
+       source_attempts || allocations || native_calls!=1) return 14;
+  }
+  borrow_resident=false;
   execution.cuda=false; converged=true; fail_source=false;
   cache=std::make_unique<scf::PreparedFockPlan>(); native_calls=host_calls=0;
   auto* original=cache.get();
