@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from generativeqc_compiler.tensor.scf_cuda import (
     density_template_hash,
     weighted_density_template_hash,
