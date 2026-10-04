@@ -200,7 +200,9 @@ class RccsdtPrepared final : public PreparedCalculation {
         std::unique_ptr<posthf::RawSource> force_raw_source;
         std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
         const integrals::ElectronInteractionSource* force_source = nullptr;
-        if (cpu_exact_plan_) {
+        if (state.reference_source.source) {
+          force_source = state.reference_source.source.get();
+        } else if (cpu_exact_plan_) {
           force_prepared_source.emplace(*cpu_exact_plan_);
           force_source = &*force_prepared_source;
         } else {

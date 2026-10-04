@@ -564,6 +564,21 @@ CUDA_ALLOWED["cuda_reference_export"] = (
     "scf/mean_field.hpp",
     "tensor/cuda_error.hpp",
 )
+# A compact post-RHF source is a host lifetime adapter, not another recurrence
+# or a consumer of solver equations. Only the raw ERI provider surface is used.
+CUDA_MODULES["cuda_rhf_source_handoff"] = ("rhf_source_handoff",)
+CUDA_ALLOWED["cuda_rhf_source_handoff"] = (
+    "core/types.hpp",
+    "integrals/electron_interaction_source.hpp",
+    "posthf/capacity.hpp",
+    "runtime/",
+    "scf/rhf_source_handoff.hpp",
+    "scf/cuda/rhf_source_handoff.hpp",
+    "scf/cuda/rhf_bucket_internal.hpp",
+    "scf/cuda/direct_jk_plan.hpp",
+    "scf/cuda_direct_jk_device.hpp",
+    "tensor/cuda_error.hpp",
+)
 SUFFIXES = {".cpp", ".hpp", ".cu", ".cuh"}
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -58,9 +58,16 @@ std::size_t checked_add(std::size_t a,std::size_t b) {
 }
 }
 struct Problem { std::size_t reference_retained_bytes=100, provider_peak_bytes{}; };
-struct State { Problem problem; int df_source{}; };
+struct Detached : integrals::ElectronInteractionSource {
+  Detached() { ++plan_live; }
+  ~Detached() { --plan_live; }
+  std::size_t retained_numeric_bytes() const override { return plan_bytes; }
+};
+struct Handoff { std::shared_ptr<const integrals::ElectronInteractionSource> source;
+                 std::size_t retained_numeric_bytes{}; };
+struct State { Problem problem; int df_source{}; Handoff reference_source; };
 struct Execution { int device_id() const { return 0; } };
-Problem build_problem(const integrals::ElectronInteractionSource& source,
+Problem build_problem(int, const integrals::ElectronInteractionSource* source,
                       int,int,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
                       int* retained_df_response) {
   if (correlation_auxiliary) throw std::logic_error("conventional lifetime fixture requires no auxiliary");
@@ -77,7 +84,7 @@ Problem build_problem(const integrals::ElectronInteractionSource& source,
   if (work-initial_work!=1 || metrics-initial_metrics!=1)
     throw std::logic_error("invalid provider attempt counters");
   // The provider already charges the source exactly once during its own phase.
-  return {100, source.retained_numeric_bytes()+110};
+  return {100, source->retained_numeric_bytes()+110};
 }
 """
 
@@ -125,10 +132,13 @@ int mp2_case(bool prepared,bool compute_forces) {
 }
 int cc_case(bool prepared,bool optional_cuda=false,int failure=0) {
   std::unique_ptr<scf::PreparedFockPlan> owner;
-  if (prepared) owner=std::make_unique<scf::PreparedFockPlan>();
+  if (prepared && !optional_cuda) owner=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=owner.get();
-  auto* cuda_source_cache=&owner;
   State state;
+  if (prepared && optional_cuda) {
+    state.reference_source.source=std::make_shared<Detached>();
+    state.reference_source.retained_numeric_bytes=plan_bytes;
+  }
   int system=0, reference_value=0, solver_options=0, provider_work=0, provider_metrics=0;
   const auto* reference=&reference_value;
   const int* correlation_auxiliary=nullptr;
@@ -306,4 +316,6 @@ def test_cc_force_hamiltonian_uses_prepared_cuda_source() -> None:
     assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsd
     assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsdt
     assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsd
-    assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsdt
+    assert "force_source = state.reference_source.source.get();" in rccsd
+    assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsd
+    assert "force_source = state.reference_source.source.get();" in rccsdt

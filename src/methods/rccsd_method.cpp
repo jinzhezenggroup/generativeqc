@@ -20,7 +20,6 @@
 #include "cc/rccsdt_force.hpp"
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
-#include "methods/correlated_cuda_source.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -192,7 +191,8 @@ std::size_t retained_reference_bytes(const hf::PhysicalReference& ref) {
   return result;
 }
 
-cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
+cc::Problem build_problem(const core::System& system,
+                          const integrals::ElectronInteractionSource* source,
                           const hf::PhysicalReference& ref, const cc::SolverOptions& options,
                           bool cuda, int device, posthf::ProviderWork& provider_work,
                           generativeqc_tensor::Metrics& provider_metrics,
@@ -257,31 +257,30 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
     auto caller_elements = posthf::checked_add(fmo.capacity(), n);
     for (const auto* values : {&p.foo, &p.fov, &p.fvv, &p.d1, &p.d2})
       caller_elements = posthf::checked_add(caller_elements, values->capacity());
-    // RawSource owns a basis copy while the caller's original system stays
-    // alive. The new source already counts the supplied copy and auxiliary.
-    const auto caller_bytes =
-        posthf::checked_add(posthf::checked_mul(caller_elements, sizeof(double)),
-                            posthf::source_capacity(source.orbital()));
+    // The DF builder already charges the caller's original orbital/auxiliary
+    // systems. No compatibility RawSource or duplicate AO expansion is needed.
+    const auto caller_bytes = posthf::checked_mul(caller_elements, sizeof(double));
     auto fitted =
-        cc::build_df_source_cuda(source.orbital(), *correlation_auxiliary, ref, options.max_bytes,
-                                 1e-10, device, caller_bytes, retained_df_response != nullptr);
+        cc::build_df_source_cuda(system, *correlation_auxiliary, ref, options.max_bytes, 1e-10,
+                                 device, caller_bytes, retained_df_response != nullptr);
     attach_df_source(p, std::move(fitted), provider_work, provider_metrics);
     if (retained_df_response) {
       p.reference_retained_bytes =
           posthf::checked_add(p.reference_retained_bytes, fitted.retained_source_bytes);
       *retained_df_response = std::move(fitted);
     }
-    // RawSource is released before solve, but both caller systems and the
-    // split orbital spectrum remain live beside the detached RHF reference.
+    // Both caller systems and the split orbital spectrum remain live beside
+    // the detached RHF reference after DF source preparation.
     p.reference_retained_bytes = posthf::checked_add(
         p.reference_retained_bytes,
         posthf::checked_add(posthf::checked_mul(n, sizeof(double)),
-                            posthf::checked_add(posthf::source_capacity(source.orbital()),
+                            posthf::checked_add(posthf::source_capacity(system),
                                                 posthf::source_capacity(*correlation_auxiliary))));
 #else
     throw std::runtime_error("native molecular DF-CC source requires a CUDA build");
 #endif
   } else {
+    if (!source) throw std::invalid_argument("conventional RCCSD requires an interaction source");
     const auto occ = range(0, o), vir = range(o, n);
     const std::array<posthf::MOSlots, 7> requests{{
         {occ, vir, occ, vir},
@@ -322,7 +321,7 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
                                                           options.max_bytes, schedule_requests);
     };
 
-    posthf::NativeBlockProvider widest_provider(source, ref, options.max_bytes,
+    posthf::NativeBlockProvider widest_provider(*source, ref, options.max_bytes,
                                                 std::numeric_limits<unsigned>::max(),
                                                 posthf::AOTileDomain::Basis);
     const auto maximum_axis_tile = widest_provider.tile_shape()[0];
@@ -330,7 +329,7 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
     tile_candidates.reserve(maximum_axis_tile);
     for (std::size_t axis_tile = 1; axis_tile <= maximum_axis_tile; ++axis_tile) {
       try {
-        posthf::NativeBlockProvider candidate(source, ref, options.max_bytes,
+        posthf::NativeBlockProvider candidate(*source, ref, options.max_bytes,
                                               static_cast<unsigned>(axis_tile),
                                               posthf::AOTileDomain::Basis);
         const auto candidate_reuse = schedule_for(candidate);
@@ -343,7 +342,7 @@ cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
     if (tile_candidates.empty())
       throw std::length_error("RCCSD MO provider exceeds numeric memory budget");
     const auto source_tile_plan = posthf::generated::select_source_tile(n, tile_candidates);
-    posthf::NativeBlockProvider provider(source, ref, options.max_bytes,
+    posthf::NativeBlockProvider provider(*source, ref, options.max_bytes,
                                          static_cast<unsigned>(source_tile_plan.axis_tile),
                                          posthf::AOTileDomain::Basis);
     const auto reuse = schedule_for(provider);
@@ -405,12 +404,13 @@ RccsdNativeState execute_rccsd_prepared(
   try {
     const bool cuda = execution.cuda_requested();
     if (warm_start_fallback) *warm_start_fallback = false;
-    // A previous correlation source must not coexist with the next native
-    // CUDA RHF arena. CPU keeps its qualified shared reference/source owner.
+    // CPU retains its shared Fock owner. CUDA receives a compact immutable
+    // source from this RHF execution; no second prepared Fock plan is built.
     if (cuda) {
       if (cuda_source_cache) cuda_source_cache->reset();
       prepared_exact = nullptr;
     }
+    scf::CudaRhfSourceHandoff reference_source;
     const auto reference_started = std::chrono::steady_clock::now();
     const auto run_reference = [&](const std::vector<double>* seed) {
       if (prepared_exact) {
@@ -418,6 +418,9 @@ RccsdNativeState execute_rccsd_prepared(
         prepared_options.resolved_fock_build = prepared_exact->strategy();
         return scf::run_prepared_fock_strategy(*prepared_exact, prepared_options, seed);
       }
+      if (cuda && !correlation_auxiliary)
+        return scf::run_rhf_cuda_with_source(system, reference_options, execution.device_id(), seed,
+                                             reference_source);
       return cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed)
                   : scf::run_rhf(system, reference_options, seed);
     };
@@ -448,45 +451,10 @@ RccsdNativeState execute_rccsd_prepared(
     hf.density.clear();
     hf.density.shrink_to_fit();
     const auto problem_started = std::chrono::steady_clock::now();
-    std::size_t source_preparation_peak = 0;
-#if GENERATIVEQC_HAS_CUDA
-    if (cuda && cuda_source_cache && !correlation_auxiliary) {
-      std::size_t primitives = 0, s_shells = 0, p_shells = 0;
-      for (const auto& shell : system.shells) {
-        primitives = posthf::checked_add(primitives, shell.primitives.size());
-        s_shells += shell.angular_momentum == 0;
-        p_shells += shell.angular_momentum == 1;
-      }
-      const auto n = molecule::ao_count(system);
-      const auto device_bytes = scf::cuda_direct_jk_device_bytes(
-          1, n, system.atoms.size(), system.shells.size(), primitives, 0);
-      const auto source_plan = plan_correlated_cuda_source(
-          n, molecule::cartesian_ao_count(system), system.atoms.size(), system.shells.size(),
-          primitives, s_shells, p_shells, scf::cuda_execution::kResidentPsssThreads,
-          posthf::source_capacity(system), retained_reference_bytes(*reference), device_bytes,
-          solver_options.max_bytes);
-      if (source_plan.admitted) {
-        source_preparation_peak = source_plan.peak_bytes;
-        try {
-          auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
-          // Admission above reserves value-only Direct storage. The default
-          // Fock spec requests derivatives and would make this exact allowance
-          // fail, silently routing every source tile through the host fallback.
-          spec.derivative_order = 0;
-          const auto strategy = scf::resolve_fock_build(spec, scf::FockBackend::Cuda, 0.0);
-          auto candidate = std::make_unique<scf::PreparedFockPlan>(
-              system, nullptr, strategy, execution.device_id(), source_plan.device_bytes);
-          *cuda_source_cache = std::move(candidate);
-          prepared_exact = cuda_source_cache->get();
-        } catch (const std::bad_alloc&) {
-          // Optional Direct storage cannot displace the existing bounded
-          // RawSource route. No partially prepared owner is published.
-        }
-      }
-    }
-#endif
+    const auto source_preparation_peak = reference_source.numeric_peak_bytes;
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
+    state.reference_source = std::move(reference_source);
     state.reference = reference;
     state.reference_energy_change = hf.energy_change;
     state.reference_density_rms = hf.density_rms;
@@ -501,23 +469,24 @@ RccsdNativeState execute_rccsd_prepared(
     std::unique_ptr<posthf::RawSource> raw_source;
     std::optional<scf::PreparedFockInteractionSourceView> prepared_source;
     const integrals::ElectronInteractionSource* source = nullptr;
-    if (prepared_exact) {
+    if (state.reference_source.source) {
+      source = state.reference_source.source.get();
+    } else if (prepared_exact) {
       prepared_source.emplace(*prepared_exact);
       source = &*prepared_source;
-    } else {
+    } else if (!correlation_auxiliary) {
       raw_source = std::make_unique<posthf::RawSource>(system);
       source = raw_source.get();
     }
     const auto build = [&] {
-      return build_problem(*source, *reference, solver_options, cuda, execution.device_id(),
+      return build_problem(system, source, *reference, solver_options, cuda, execution.device_id(),
                            provider_work, provider_metrics, correlation_auxiliary,
                            retain_df_response ? &state.df_source : nullptr);
     };
     const auto retire_optional_source = [&] {
-      if (!cuda || !cuda_source_cache || !*cuda_source_cache) return false;
-      prepared_source.reset();
-      cuda_source_cache->reset();
-      prepared_exact = nullptr;
+      if (!state.reference_source.source) return false;
+      state.reference_source.source.reset();
+      state.reference_source.retained_numeric_bytes = 0;
       return true;
     };
     try {
@@ -537,8 +506,11 @@ RccsdNativeState execute_rccsd_prepared(
         std::chrono::duration<double>(std::chrono::steady_clock::now() - problem_started).count();
     // Provider planning already charged this source. Subsequent CC/(T)/force
     // stages must additionally retain the prepared owner beside the reference.
-    const auto prepared_retained = prepared_exact ? prepared_source->retained_numeric_bytes() : 0;
-    if (prepared_exact)
+    const auto prepared_retained =
+        state.reference_source.source
+            ? state.reference_source.retained_numeric_bytes
+            : (prepared_exact ? prepared_source->retained_numeric_bytes() : 0);
+    if (prepared_retained)
       state.problem.reference_retained_bytes =
           posthf::checked_add(state.problem.reference_retained_bytes, prepared_retained);
     prepared_source.reset();
@@ -753,7 +725,9 @@ class RccsdPrepared final : public PreparedCalculation {
     std::unique_ptr<posthf::RawSource> force_raw_source;
     std::optional<scf::PreparedFockInteractionSourceView> force_prepared_source;
     const integrals::ElectronInteractionSource* force_source = nullptr;
-    if (cpu_exact_plan_) {
+    if (state.reference_source.source) {
+      force_source = state.reference_source.source.get();
+    } else if (cpu_exact_plan_) {
       force_prepared_source.emplace(*cpu_exact_plan_);
       force_source = &*force_prepared_source;
     } else {
