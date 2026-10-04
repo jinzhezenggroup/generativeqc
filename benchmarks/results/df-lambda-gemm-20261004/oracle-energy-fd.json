@@ -1,0 +1,418 @@
+{
+  "source": "Retained #1809 independent PySCF 2.14 conventional RHF plus correlation-only DF energy records; no new oracle run.",
+  "direction": "atom 0 +z/sqrt(2), atom 4 -z/sqrt(2), other components zero",
+  "rows": [
+    {
+      "step_bohr": 0.0001,
+      "minus": {
+        "schema": "generativeqc.df-ccsdt.large-oracle.v1",
+        "case": "ethane230",
+        "pyscf_version": "2.14.0",
+        "numpy_version": "2.5.2",
+        "slurm_job_id": "12221",
+        "threads": 16,
+        "atoms_bohr": [
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              1.455018405236979
+            ]
+          ],
+          [
+            1,
+            [
+              1.9419994552256128,
+              0.0,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.970999727612806,
+              1.6818208623609212,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.9709997276128072,
+              -1.6818208623609205,
+              2.1416896078404033
+            ]
+          ],
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              -1.455018405236979
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128065,
+              1.681820862360921,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -1.9419994552256128,
+              2.3782634167879504e-16,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128051,
+              -1.6818208623609219,
+              -2.1416896078404033
+            ]
+          ]
+        ],
+        "input_sha256": "22e01531551792a6bed065c03b37384feb05c2a0159bad587de832d9363800bc",
+        "basis": "aug-cc-pvtz",
+        "auxiliary_basis": "aug-cc-pvtz-ri",
+        "nbf": 230,
+        "nocc": 9,
+        "nvir": 221,
+        "naux": 488,
+        "reference_mode": "conventional-unscreened-rhf",
+        "correlation_mode": "density-fitting",
+        "metric_policy": "symmetric inverse square root",
+        "metric_relative_threshold": 1e-10,
+        "metric_absolute_threshold": 1.0875810095535113e-07,
+        "metric_rank": 488,
+        "metric_condition_number": 350754082.4237987,
+        "rhf_energy": -79.25943221248467,
+        "correlation_energy": -0.4446951340029109,
+        "triples_energy": -0.014391102152673403,
+        "total_energy": -79.71851844864025,
+        "replay_r1_max": 2.8314343999907846e-12,
+        "replay_r2_max": 6.017354168268615e-13,
+        "timings": {
+          "rhf_seconds": 8.298157119192183,
+          "df_source_seconds": 0.8037847010418773,
+          "ccsd_seconds": 480.7318969578482,
+          "replay_and_triples_seconds": 59.029552289284766,
+          "complete_seconds": 548.9389220881276
+        }
+      },
+      "plus": {
+        "schema": "generativeqc.df-ccsdt.large-oracle.v1",
+        "case": "ethane230",
+        "pyscf_version": "2.14.0",
+        "numpy_version": "2.5.2",
+        "slurm_job_id": "12222",
+        "threads": 16,
+        "atoms_bohr": [
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              1.4551598265932162
+            ]
+          ],
+          [
+            1,
+            [
+              1.9419994552256128,
+              0.0,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.970999727612806,
+              1.6818208623609212,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.9709997276128072,
+              -1.6818208623609205,
+              2.1416896078404033
+            ]
+          ],
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              -1.4551598265932162
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128065,
+              1.681820862360921,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -1.9419994552256128,
+              2.3782634167879504e-16,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128051,
+              -1.6818208623609219,
+              -2.1416896078404033
+            ]
+          ]
+        ],
+        "input_sha256": "886691682c3fec3c0e7ae83389126c926af836ec434b5e76a5b7f99d9360dda3",
+        "basis": "aug-cc-pvtz",
+        "auxiliary_basis": "aug-cc-pvtz-ri",
+        "nbf": 230,
+        "nocc": 9,
+        "nvir": 221,
+        "naux": 488,
+        "reference_mode": "conventional-unscreened-rhf",
+        "correlation_mode": "density-fitting",
+        "metric_policy": "symmetric inverse square root",
+        "metric_relative_threshold": 1e-10,
+        "metric_absolute_threshold": 1.0875766436286044e-07,
+        "metric_rank": 488,
+        "metric_condition_number": 350490167.6073448,
+        "rhf_energy": -79.25942910658046,
+        "correlation_energy": -0.44469439876231137,
+        "triples_energy": -0.01439132613599461,
+        "total_energy": -79.71851483147876,
+        "replay_r1_max": 2.8928209253406065e-12,
+        "replay_r2_max": 6.060101573468198e-13,
+        "timings": {
+          "rhf_seconds": 11.35299627808854,
+          "df_source_seconds": 0.6347774229943752,
+          "ccsd_seconds": 470.2741603660397,
+          "replay_and_triples_seconds": 58.975247574970126,
+          "complete_seconds": 541.3348760181107
+        }
+      },
+      "derivative": 0.01808580748274835
+    },
+    {
+      "step_bohr": 3e-05,
+      "minus": {
+        "schema": "generativeqc.df-ccsdt.large-oracle.v1",
+        "case": "ethane230",
+        "pyscf_version": "2.14.0",
+        "numpy_version": "2.5.2",
+        "slurm_job_id": "12221",
+        "threads": 16,
+        "atoms_bohr": [
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              1.455067902711662
+            ]
+          ],
+          [
+            1,
+            [
+              1.9419994552256128,
+              0.0,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.970999727612806,
+              1.6818208623609212,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.9709997276128072,
+              -1.6818208623609205,
+              2.1416896078404033
+            ]
+          ],
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              -1.455067902711662
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128065,
+              1.681820862360921,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -1.9419994552256128,
+              2.3782634167879504e-16,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128051,
+              -1.6818208623609219,
+              -2.1416896078404033
+            ]
+          ]
+        ],
+        "input_sha256": "d884a2b9edefc3fd328ef884c95d3e1e1b6de862f5c8d8b57065ad0a38f8c959",
+        "basis": "aug-cc-pvtz",
+        "auxiliary_basis": "aug-cc-pvtz-ri",
+        "nbf": 230,
+        "nocc": 9,
+        "nvir": 221,
+        "naux": 488,
+        "reference_mode": "conventional-unscreened-rhf",
+        "correlation_mode": "density-fitting",
+        "metric_policy": "symmetric inverse square root",
+        "metric_relative_threshold": 1e-10,
+        "metric_absolute_threshold": 1.0875794815126082e-07,
+        "metric_rank": 488,
+        "metric_condition_number": 350661687.89307827,
+        "rhf_energy": -79.2594311285686,
+        "correlation_energy": -0.44469487641327055,
+        "triples_energy": -0.014391180504175913,
+        "total_energy": -79.71851718548604,
+        "replay_r1_max": 2.873917697995948e-12,
+        "replay_r2_max": 5.531410813335297e-13,
+        "timings": {
+          "rhf_seconds": 15.216776939108968,
+          "df_source_seconds": 0.5680422806181014,
+          "ccsd_seconds": 475.4292919728905,
+          "replay_and_triples_seconds": 58.159977324306965,
+          "complete_seconds": 549.4554656478576
+        }
+      },
+      "plus": {
+        "schema": "generativeqc.df-ccsdt.large-oracle.v1",
+        "case": "ethane230",
+        "pyscf_version": "2.14.0",
+        "numpy_version": "2.5.2",
+        "slurm_job_id": "12222",
+        "threads": 16,
+        "atoms_bohr": [
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              1.4551103291185332
+            ]
+          ],
+          [
+            1,
+            [
+              1.9419994552256128,
+              0.0,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.970999727612806,
+              1.6818208623609212,
+              2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -0.9709997276128072,
+              -1.6818208623609205,
+              2.1416896078404033
+            ]
+          ],
+          [
+            6,
+            [
+              0.0,
+              0.0,
+              -1.4551103291185332
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128065,
+              1.681820862360921,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              -1.9419994552256128,
+              2.3782634167879504e-16,
+              -2.1416896078404033
+            ]
+          ],
+          [
+            1,
+            [
+              0.9709997276128051,
+              -1.6818208623609219,
+              -2.1416896078404033
+            ]
+          ]
+        ],
+        "input_sha256": "d90f120b4e6ad2361d86eeca2ed200fddcd789497d402425091acaf47a9cc05e",
+        "basis": "aug-cc-pvtz",
+        "auxiliary_basis": "aug-cc-pvtz-ri",
+        "nbf": 230,
+        "nocc": 9,
+        "nvir": 221,
+        "naux": 488,
+        "reference_mode": "conventional-unscreened-rhf",
+        "correlation_mode": "density-fitting",
+        "metric_policy": "symmetric inverse square root",
+        "metric_relative_threshold": 1e-10,
+        "metric_absolute_threshold": 1.0875781717351336e-07,
+        "metric_rank": 488,
+        "metric_condition_number": 350582513.39536333,
+        "rhf_energy": -79.25943019679681,
+        "correlation_energy": -0.4446946558409894,
+        "triples_energy": -0.014391247699156801,
+        "total_energy": -79.71851610033696,
+        "replay_r1_max": 2.8953654814297834e-12,
+        "replay_r2_max": 5.28067623348407e-13,
+        "timings": {
+          "rhf_seconds": 15.784810052718967,
+          "df_source_seconds": 0.3590301922522485,
+          "ccsd_seconds": 466.71935830125585,
+          "replay_and_triples_seconds": 58.58853659918532,
+          "complete_seconds": 541.5412137466483
+        }
+      },
+      "derivative": 0.01808581799878084
+    }
+  ]
+}

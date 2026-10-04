@@ -1,0 +1,1596 @@
+{
+  "kind": "compiler-derived semantic summands, not hardware FLOPs or measured time",
+  "scalar": {
+    "staged_primal_prepare": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 3,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    },
+    "staged_primal_auxiliary": {
+      "summands_polynomial": [
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 5,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 8,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 44,
+      "ordinary_gemms": 4,
+      "batched_gemms": 0
+    },
+    "staged_core": {
+      "summands_polynomial": [
+        {
+          "coefficient": 3,
+          "dimensions": [
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 7,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 8,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 35,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 16,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 36,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 27,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 10,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 13,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 3,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 291,
+      "ordinary_gemms": 25,
+      "batched_gemms": 0
+    },
+    "staged_auxiliary": {
+      "summands_polynomial": [
+        {
+          "coefficient": 12,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 5,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 62,
+      "ordinary_gemms": 5,
+      "batched_gemms": 0
+    },
+    "staged_prepare": {
+      "summands_polynomial": [
+        {
+          "coefficient": 3,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 7,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    },
+    "staged_factors": {
+      "summands_polynomial": [
+        {
+          "coefficient": 10,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 10,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 14,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 85,
+      "ordinary_gemms": 11,
+      "batched_gemms": 0
+    },
+    "staged_parameter_foo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 17,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    },
+    "staged_parameter_fov": {
+      "summands_polynomial": [
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 32,
+      "ordinary_gemms": 1,
+      "batched_gemms": 0
+    },
+    "staged_parameter_fvv": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 18,
+      "ordinary_gemms": 1,
+      "batched_gemms": 0
+    },
+    "staged_parameter_ovov": {
+      "summands_polynomial": [
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 9,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 8,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 10,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 17,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 5,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 119,
+      "ordinary_gemms": 7,
+      "batched_gemms": 0
+    },
+    "staged_parameter_ovvo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 27,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    },
+    "staged_parameter_oovv": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 28,
+      "ordinary_gemms": 1,
+      "batched_gemms": 0
+    },
+    "staged_parameter_ovoo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 56,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    },
+    "staged_parameter_oooo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 16,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    }
+  },
+  "matrix": {
+    "staged_primal_prepare": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 3,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    },
+    "staged_primal_auxiliary": {
+      "summands_polynomial": [
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 5,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "q",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 7,
+          "dimensions": [
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "q",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 66,
+      "ordinary_gemms": 11,
+      "batched_gemms": 8
+    },
+    "staged_core": {
+      "summands_polynomial": [
+        {
+          "coefficient": 3,
+          "dimensions": [
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 7,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 8,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 35,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 16,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 36,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 27,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 9,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 13,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 3,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 436,
+      "ordinary_gemms": 120,
+      "batched_gemms": 0
+    },
+    "staged_auxiliary": {
+      "summands_polynomial": [
+        {
+          "coefficient": 10,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 5,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "q",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "q",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 98,
+      "ordinary_gemms": 17,
+      "batched_gemms": 10
+    },
+    "staged_prepare": {
+      "summands_polynomial": [
+        {
+          "coefficient": 3,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 7,
+      "ordinary_gemms": 0,
+      "batched_gemms": 0
+    },
+    "staged_factors": {
+      "summands_polynomial": [
+        {
+          "coefficient": 8,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 10,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "q",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "q",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 13,
+          "dimensions": [
+            "o",
+            "q",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "q",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 147,
+      "ordinary_gemms": 41,
+      "batched_gemms": 0
+    },
+    "staged_parameter_foo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 21,
+      "ordinary_gemms": 2,
+      "batched_gemms": 0
+    },
+    "staged_parameter_fov": {
+      "summands_polynomial": [
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 40,
+      "ordinary_gemms": 5,
+      "batched_gemms": 0
+    },
+    "staged_parameter_fvv": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 21,
+      "ordinary_gemms": 2,
+      "batched_gemms": 0
+    },
+    "staged_parameter_ovov": {
+      "summands_polynomial": [
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 9,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 8,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 10,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 17,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 5,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 168,
+      "ordinary_gemms": 39,
+      "batched_gemms": 0
+    },
+    "staged_parameter_ovvo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 37,
+      "ordinary_gemms": 4,
+      "batched_gemms": 0
+    },
+    "staged_parameter_oovv": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 37,
+      "ordinary_gemms": 4,
+      "batched_gemms": 0
+    },
+    "staged_parameter_ovoo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 4,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "v",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 6,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 85,
+      "ordinary_gemms": 15,
+      "batched_gemms": 0
+    },
+    "staged_parameter_oooo": {
+      "summands_polynomial": [
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o"
+          ]
+        },
+        {
+          "coefficient": 1,
+          "dimensions": [
+            "o",
+            "o",
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        },
+        {
+          "coefficient": 2,
+          "dimensions": [
+            "o",
+            "o",
+            "v",
+            "v"
+          ]
+        }
+      ],
+      "generated_ops": 18,
+      "ordinary_gemms": 1,
+      "batched_gemms": 0
+    }
+  },
+  "per_transpose_230ao": {
+    "o": 9,
+    "v": 221,
+    "q": 488,
+    "batch": 8,
+    "scalar": 1210132747322,
+    "matrix": 1178851698575
+  }
+}
