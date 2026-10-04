@@ -1,6 +1,6 @@
 # Decision: preserve shell reuse in physical nuclear response
 
-Status: implemented, qualification in progress
+Status: implemented; two-pass schedule qualified at the recorded endpoint
 Date: 2026-10-04
 
 ## Problem
@@ -79,6 +79,12 @@ not be added to enclosing phase wall times.
   derivative source work and introduce subtractive cancellation.
 - New recurrence code, an N^4 derivative tensor or a CPU oracle in production
   would violate ownership or capacity requirements.
+- Enabling bounded through-f **value** dispatch just because the nuclear
+  derivative lease is useful would repeat a rejected promotion. The existing
+  [value-policy decision](2026-10-02-through-f-value-policy.md) retains separate
+  opt-in selection after measured complete SCF regressions in #1666. Derivative
+  reuse does not establish value profitability. Those RTX5090 measurements are
+  evidence against blind promotion, not a timing calibration for this PRO6000.
 
 ## Measured rejection of canonical AO promotion
 
@@ -106,10 +112,40 @@ nuclear two-electron phase, and1.481x for eliminating the entire Z solve.
 These are idealized limits, not achieved speedups. Fixed screening remains an
 experiment with a mandatory unscreened audit; the default threshold is zero.
 
+## Measured two-pass shell result
+
+Source8a8375983, n2 job2238 uses the same GPU UUID as job2226, but a separately
+frozen binary/allocation. Its complete force is1306.786s, orbital response616.828s
+and nuclear two-electron103.814s. The nuclear phase improves1.500x, saving51.957s.
+Raw complete improvement is1.035x (45.652s); cold RHF increases6.158s and is not
+assigned to the nuclear schedule. J/K is512.691s, essentially unchanged. The
+actual consumer is now two shell passes; complete numeric capacity remains
+7170696363bytes. Internal shell quartet/jet work remains unmeasured.
+
+The two-pass Z residual is1.360e-13, stationarity1.139e-11, and independent
+directional FD errors4.896e-9/5.620e-9. Cold force differences from legacy and
+canonical are1.119e-9/1.850e-9, both below the unchanged3e-9 gate. These gates
+qualify this schedule comparison, not the outstanding source-factor or global
+stability requirements.
+
+The same-binary 1e-12 screening control completes in 1350.010 s, with response
+616.589 s, Z solve 439.312 s and nuclear response 103.812 s. It removes only
+4924248 of 16117903620 complete J/K ERI evaluations (0.03055%); canonical visits
+are unchanged. There are 24 provisional actions, four exact actions, 12
+iterations and no corrective solve. The unscreened residual is 1.358e-13.
+The 0.036 s Z-time difference is not a demonstrated speedup. Cold RHF increases
+43.335 s, explaining almost all of the increased complete time. Keep screening
+at zero; do not promote this threshold based on subsecond single-sample noise.
+
+Across all four retained force schedules, all six cold-pair comparisons pass
+3e-9 (maximum 2.702e-9), and all independent two-step directional FD gates pass.
+Job2238 finishes with exit0. No additional GPU allocation is left running.
+
 ## Evidence
 
-Validation and matched endpoint measurements are being retained under
-`.artifacts/orbital/` and the associated PR. Independent tests include signed
+Validation and endpoint measurements are retained under
+`benchmarks/results/rhf-orbital-response-20261004/` with frozen artifacts under
+`.artifacts/orbital/`. Independent tests include signed
 fixed-mask linearity/self-adjointness, dense masked libcint J/K, exact correction
 for aggressive masks, all repeated-index bilinear coefficient orbits, spherical
 and Cartesian through-f nuclear derivatives, two finite-difference steps,
@@ -118,8 +154,8 @@ nonfinite publication refusal, HF-limit fallback parity and complete DF forces.
 This work does not qualify the outstanding large source-factor
 `atol=rtol=3e-10` gate, certify global RHF stability, or resolve #1829's separate
 cold-force pair discrepancy. Small-system closure is not large-system force
-qualification. Actual measured results must be attached before performance
-promotion.
+qualification; the large endpoint and its specific acceptance limits are
+recorded separately above.
 
 ## References
 
