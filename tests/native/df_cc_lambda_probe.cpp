@@ -4,8 +4,10 @@
 #include <array>
 #include <cstdio>
 #include <exception>
+#include <limits>
 #include <vector>
 
+#include "cc/df_lambda.hpp"
 #include "cc/lambda_response.hpp"
 
 extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, int mode,
@@ -53,6 +55,17 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
     response.max_bytes = budget;
     response.gmres.absolute_tolerance = 1e-12;
     response.df_auxiliary_reduction = !(mode & 4);
+    response.df_matrix_gemm = !(mode & 8);
+    response.df_auxiliary_batch_limit = (mode & 16) ? 2 : 8;
+    if (mode & 32) {
+      // Large finite seeds overflow intermediate adjoints. The sticky flag
+      // must reject the complete action before the adapter publishes outputs.
+      generativeqc::cc::detail::DFLambdaActions actions(p, cc, response, 0, false, true);
+      std::vector<double> one(n1, std::numeric_limits<double>::max()),
+          two(n2, std::numeric_limits<double>::max()), out_one, out_two;
+      actions.transpose(false, one, two, out_one, out_two);
+      throw std::logic_error("overflowing adjoint was accepted");
+    }
     const auto result =
         (mode & 2) ? generativeqc::cc::solve_lambda_parameter_response_cuda_with_energy_source(
                          p, cc, {source1, n1}, {source2, n2}, 0, response)
@@ -83,7 +96,14 @@ extern "C" int df_cc_lambda_probe(std::size_t o, std::size_t v, std::size_t q, i
                              d.df_generated_kernels,
                              std::size_t(d.df_auxiliary_reduction),
                              d.df_preparation_calls,
-                             d.df_reduced_actions};
+                             d.df_reduced_actions,
+                             std::size_t(d.df_matrix_gemm),
+                             d.df_auxiliary_batch_size,
+                             d.df_auxiliary_batches,
+                             d.df_gemm_calls,
+                             d.df_gemm_summands,
+                             d.df_packing_output_bytes,
+                             d.df_provider_allowance_bytes};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;

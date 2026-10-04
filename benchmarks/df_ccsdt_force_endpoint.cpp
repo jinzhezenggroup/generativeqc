@@ -34,20 +34,21 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 6)
+    if (argc < 4 || argc > 8)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1]]");
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
-    const auto selector = [&](int index) {
-      if (argc <= index) return true;
+    const auto selector = [&](int index, bool fallback = true) {
+      if (argc <= index) return fallback;
       const std::string value(argv[index]);
       if (value != "0" && value != "1") throw std::invalid_argument("invalid endpoint selector");
       return value == "1";
     };
-    const bool matrix = selector(4), forces = selector(5);
+    const bool matrix = selector(4), forces = selector(5), lambda_matrix = selector(6, false);
+    const std::size_t batch_limit = argc > 7 ? std::stoull(argv[7]) : 8;
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -83,7 +84,8 @@ int main(int argc, char** argv) {
               << generativeqc::molecule::ao_count(orbital)
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
-        execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix);
+        execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
+        batch_limit);
     std::ofstream output(argv[2]);
     if (!output) throw std::runtime_error("cannot open completed force output");
     output << std::setprecision(17) << "{\n";
@@ -127,6 +129,13 @@ int main(int argc, char** argv) {
     field("triples_work", result.triples.contraction_summands);
     field("fock_response_work", result.triples_fock.contraction_summands);
     field("lambda_work", result.lambda.df_contraction_terms);
+    field("lambda_matrix_gemm", result.lambda.df_matrix_gemm);
+    field("lambda_batch_size", result.lambda.df_auxiliary_batch_size);
+    field("lambda_batches", result.lambda.df_auxiliary_batches);
+    field("lambda_gemm_calls", result.lambda.df_gemm_calls);
+    field("lambda_gemm_summands", result.lambda.df_gemm_summands);
+    field("lambda_packing_output_bytes", result.lambda.df_packing_output_bytes);
+    field("lambda_provider_allowance", result.lambda.df_provider_allowance_bytes);
     field("lambda_reduced", result.lambda.df_auxiliary_reduction ? 1 : 0);
     field("lambda_preparations", result.lambda.df_preparation_calls);
     field("lambda_reduced_actions", result.lambda.df_reduced_actions);

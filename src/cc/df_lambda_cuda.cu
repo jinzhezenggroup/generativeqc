@@ -1,6 +1,10 @@
+#include <cublas_v2.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
+#include <mutex>
 #include <stdexcept>
 
 #include "cc/df_lambda.hpp"
@@ -8,6 +12,7 @@
 #include "generated_df_ccsd_cuda.cuh"
 #include "generated_df_lambda_cuda.cuh"
 #include "posthf/capacity.hpp"
+#include "runtime/allocation_measurement.hpp"
 #include "runtime/cuda_resources.cuh"
 
 namespace generativeqc::cc::detail {
@@ -33,11 +38,21 @@ struct Fence {
   }
   void complete() noexcept { stream = nullptr; }
 };
+constexpr std::size_t kProviderAllowance = 96ULL << 20;
+void blas_check(cublasStatus_t code) {
+  if (code != CUBLAS_STATUS_SUCCESS)
+    throw std::runtime_error("DF Lambda cuBLAS failure: " + std::to_string(int(code)));
+}
 struct Storage {
+  cublasHandle_t blas{};
   cudaStream_t stream{};
   unsigned char* base{};
   ~Storage() {
+    // Releasing this owner's buffers must not hide another owner's provider
+    // allocation inside its before/after cudaMemGetInfo measurement.
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) (void)cudaStreamSynchronize(stream);
+    if (blas) (void)cublasDestroy(blas);
     if (base) (void)cudaFree(base);
     if (stream) (void)cudaStreamDestroy(stream);
   }
@@ -49,7 +64,35 @@ __global__ void accumulate(const double* source, std::size_t count, double* targ
     target[x] = generativeqc_tensor::finite(target[x] + source[x], error, 1);
 }
 
+__global__ void audit_matrix(const double* values, std::size_t count, int* error) {
+  for (std::size_t x = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; x < count;
+       x += std::size_t(blockDim.x) * gridDim.x)
+    (void)generativeqc_tensor::finite(values[x], error, 1);
+}
+
 using Query = std::size_t (*)(std::size_t, std::size_t);
+using MatrixQuery = std::size_t (*)(std::size_t, std::size_t, std::size_t);
+using FitQuery = bool (*)(std::size_t, std::size_t, std::size_t);
+struct Stage {
+  Query arena, work;
+  std::size_t operations;
+  MatrixQuery matrix_arena, matrix_work, packing;
+  FitQuery fit;
+  std::size_t matrix_operations;
+};
+#define GQC_STAGE(name)                                                                          \
+  Stage {                                                                                        \
+    generated_response::name##_arena_elements, generated_response::name##_contraction_terms,     \
+        generated_response::name##_operations, generated_response::name##_matrix_arena_elements, \
+        generated_response::name##_matrix_contraction_terms,                                     \
+        generated_response::name##_matrix_packing_elements,                                      \
+        generated_response::name##_matrix_dimensions_fit,                                        \
+        generated_response::name##_matrix_operations                                             \
+  }
+const Stage primal_prepare = GQC_STAGE(staged_primal_prepare),
+            primal_auxiliary = GQC_STAGE(staged_primal_auxiliary),
+            core_stage = GQC_STAGE(staged_core), auxiliary_stage = GQC_STAGE(staged_auxiliary),
+            prepare_stage = GQC_STAGE(staged_prepare), factor_stage = GQC_STAGE(staged_factors);
 using Runner = generated::DeviceParameterOutput (*)(generated_response::CudaState&);
 using StagedRunner = generated::DeviceParameterOutput (*)(generated_response::StagedCudaState&);
 struct Parameter {
@@ -60,22 +103,24 @@ struct Parameter {
   Query staged_arena, staged_work;
   std::size_t staged_operations;
   StagedRunner staged_run;
+  Stage stage;
 };
-#define GQC_DF_PARAMETER(name)                                           \
-  Parameter {                                                            \
-    #name, generated_response::parameter_##name##_arena_elements,        \
-        generated_response::parameter_##name##_contraction_terms,        \
-        generated_response::parameter_##name##_operations,               \
-        generated_response::run_parameter_##name##_cuda,                 \
-        generated_response::staged_parameter_##name##_arena_elements,    \
-        generated_response::staged_parameter_##name##_contraction_terms, \
-        generated_response::staged_parameter_##name##_operations,        \
-        generated_response::run_staged_parameter_##name##_cuda           \
+#define GQC_DF_PARAMETER(name)                                                                     \
+  Parameter {                                                                                      \
+    #name, generated_response::parameter_##name##_arena_elements,                                  \
+        generated_response::parameter_##name##_contraction_terms,                                  \
+        generated_response::parameter_##name##_operations,                                         \
+        generated_response::run_parameter_##name##_cuda,                                           \
+        generated_response::staged_parameter_##name##_arena_elements,                              \
+        generated_response::staged_parameter_##name##_contraction_terms,                           \
+        generated_response::staged_parameter_##name##_operations,                                  \
+        generated_response::run_staged_parameter_##name##_cuda, GQC_STAGE(staged_parameter_##name) \
   }
 const std::array parameters{GQC_DF_PARAMETER(foo),  GQC_DF_PARAMETER(fov),  GQC_DF_PARAMETER(fvv),
                             GQC_DF_PARAMETER(ovov), GQC_DF_PARAMETER(ovvo), GQC_DF_PARAMETER(oovv),
                             GQC_DF_PARAMETER(ovoo), GQC_DF_PARAMETER(oooo)};
 #undef GQC_DF_PARAMETER
+#undef GQC_STAGE
 }  // namespace
 
 struct DFLambdaActions::Impl {
@@ -190,21 +235,97 @@ struct DFLambdaActions::Impl {
         cursor = candidate;
       }
     }
-    metrics.owned_device_bytes = cursor;
-    metrics.numeric_capacity_bytes = checked_add(host_bytes, cursor);
+    // Keep the scalar staged layout as a bounded fallback. The matrix arena
+    // is optional and includes explicit IR packing/broadcast intermediates.
+    const auto scalar_cursor = cursor, scalar_staged_arena = staged_arena;
+    const bool scalar_reduction = metrics.df_auxiliary_reduction;
+    auto capacity = [&] {
+      metrics.owned_device_bytes = checked_add(cursor, metrics.df_provider_allowance_bytes);
+      metrics.numeric_capacity_bytes = checked_add(host_bytes, metrics.owned_device_bytes);
+    };
+    auto scalar_plan = [&] {
+      metrics.df_matrix_gemm = false;
+      metrics.df_auxiliary_batch_size = 1;
+      metrics.df_provider_allowance_bytes = 0;
+      metrics.df_auxiliary_reduction = scalar_reduction;
+      staged_arena = scalar_staged_arena;
+      cursor = scalar_cursor;
+      capacity();
+    };
+    if (scalar_reduction && options.df_matrix_gemm) {
+      for (auto batch = std::min(q, options.df_auxiliary_batch_limit); batch; batch /= 2) {
+        std::size_t matrix_scratch = 0;
+        bool fits = true;
+        auto include = [&](const Stage& stage, std::size_t extent) {
+          fits = fits && stage.fit(o, v, extent);
+          matrix_scratch = std::max(matrix_scratch, stage.matrix_arena(o, v, extent));
+        };
+        include(primal_prepare, 1);
+        include(primal_auxiliary, batch);
+        include(core_stage, 1);
+        include(auxiliary_stage, batch);
+        include(prepare_stage, 1);
+        if (with_parameters) {
+          include(factor_stage, batch);
+          for (const auto& item : parameters) include(item.stage, 1);
+        }
+        auto candidate = scalar_cursor;
+        const auto matrix_arena = reserve(candidate, bytes(matrix_scratch));
+        if (fits && checked_add(checked_add(host_bytes, candidate), kProviderAllowance) <=
+                        options.max_bytes) {
+          metrics.df_matrix_gemm = true;
+          metrics.df_auxiliary_batch_size = batch;
+          metrics.df_provider_allowance_bytes = kProviderAllowance;
+          staged_arena = matrix_arena;
+          cursor = candidate;
+          break;
+        }
+      }
+    }
+    capacity();
     if (metrics.numeric_capacity_bytes > options.max_bytes)
       throw std::length_error("DF Lambda complete numeric storage exceeds budget");
     parameters_admitted = with_parameters;
     cuda_check(cudaStreamCreateWithFlags(&storage.stream, cudaStreamNonBlocking));
+    if (metrics.df_matrix_gemm) {
+      std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+      std::size_t before = 0, after = 0, total = 0;
+      cuda_check(cudaMemGetInfo(&before, &total));
+      const auto code = cublasCreate(&storage.blas);
+      if (code == CUBLAS_STATUS_ALLOC_FAILED) {
+        if (storage.blas) blas_check(cublasDestroy(storage.blas));
+        storage.blas = nullptr;
+        scalar_plan();
+      } else {
+        blas_check(code);
+        blas_check(cublasSetStream(storage.blas, storage.stream));
+        blas_check(cublasSetPointerMode(storage.blas, CUBLAS_POINTER_MODE_HOST));
+        blas_check(cublasSetMathMode(storage.blas, CUBLAS_PEDANTIC_MATH));
+        blas_check(cublasSetWorkspace(storage.blas, nullptr, 0));
+        cuda_check(cudaMemGetInfo(&after, &total));
+        if (before > after && before - after > kProviderAllowance) {
+          blas_check(cublasDestroy(storage.blas));
+          storage.blas = nullptr;
+          scalar_plan();
+        }
+      }
+    }
     auto allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    if (allocation == cudaErrorMemoryAllocation && metrics.df_matrix_gemm) {
+      (void)cudaGetLastError();
+      std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+      blas_check(cublasDestroy(storage.blas));
+      storage.blas = nullptr;
+      scalar_plan();
+      allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
+    }
     if (allocation == cudaErrorMemoryAllocation && metrics.df_auxiliary_reduction) {
-      // Optional retention is not a prerequisite for scientifically identical
-      // bounded actions. Retry only allocation failure, never arithmetic errors.
+      // Only allocation failure may discard optional cuts; arithmetic errors
+      // and driver failures never trigger a scientific/backend fallback.
       (void)cudaGetLastError();
       metrics.df_auxiliary_reduction = false;
       cursor = fallback_cursor;
-      metrics.owned_device_bytes = cursor;
-      metrics.numeric_capacity_bytes = checked_add(host_bytes, cursor);
+      capacity();
       allocation = cudaMalloc(reinterpret_cast<void**>(&storage.base), cursor);
     }
     cuda_check(allocation);
@@ -256,18 +377,68 @@ struct DFLambdaActions::Impl {
         *values[x] = cuts[x] = at(cut_offsets[x]);
         *seeds[x] = cut_seeds[x] = at(seed_offsets[x]);
       }
+      if (metrics.df_matrix_gemm) {
+        staged.gemm = [this](char ta, char tb, std::size_t m, std::size_t n, std::size_t k,
+                             double alpha, const double* a, const double* b,
+                             double* c) { matrix(ta, tb, 1, m, n, k, alpha, a, b, c, false); };
+        staged.batched_gemm = [this](char ta, char tb, std::size_t batch, std::size_t m,
+                                     std::size_t n, std::size_t k, double alpha, const double* a,
+                                     const double* b, double* c) {
+          matrix(ta, tb, batch, m, n, k, alpha, a, b, c, true);
+        };
+      }
       prepare_cuts();
     } else {
       cuda_check(cudaStreamSynchronize(storage.stream));
       ++metrics.synchronizations;
     }
-    metrics.shared_program_hash = metrics.df_auxiliary_reduction
-                                      ? generated_response::staged_operator_hash
-                                      : generated_response::operator_hash;
+    metrics.shared_program_hash =
+        metrics.df_matrix_gemm           ? generated_response::staged_matrix_operator_hash
+        : metrics.df_auxiliary_reduction ? generated_response::staged_operator_hash
+                                         : generated_response::operator_hash;
     metrics.independent_program_hash = generated_response::independent_operator_hash;
     metrics.cuda_actions = true;
   }
 
+  void matrix(char ta, char tb, std::size_t batch, std::size_t m, std::size_t n, std::size_t k,
+              double alpha, const double* a, const double* b, double* output, bool batched) {
+    if (std::max({batch, m, n, k}) > std::size_t(std::numeric_limits<int>::max()))
+      throw std::length_error("DF Lambda matrix dimension exceeds provider range");
+    const double beta = 0.0;
+    const auto opa = ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
+    const auto opb = tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
+    // Row-major C=A*B is column-major C^T=B^T*A^T. Packed batches
+    // have explicit contiguous strides even when an operand was broadcast.
+    if (batched)
+      blas_check(cublasDgemmStridedBatched(storage.blas, opb, opa, int(n), int(m), int(k), &alpha,
+                                           b, int(tb == 'N' ? n : k), checked_mul(k, n), a,
+                                           int(ta == 'N' ? k : m), checked_mul(m, k), &beta, output,
+                                           int(n), checked_mul(m, n), int(batch)));
+    else
+      blas_check(cublasDgemm(storage.blas, opb, opa, int(n), int(m), int(k), &alpha, b,
+                             int(tb == 'N' ? n : k), a, int(ta == 'N' ? k : m), &beta, output,
+                             int(n)));
+    const auto count = checked_mul(batch, checked_mul(m, n));
+    audit_matrix<<<generativeqc_tensor::blocks(count, 256), 256, 0, storage.stream>>>(output, count,
+                                                                                      state.error);
+    cuda_check(cudaGetLastError());
+    ++metrics.df_gemm_calls;
+    metrics.df_gemm_summands = checked_add(metrics.df_gemm_summands, checked_mul(count, k));
+  }
+  void record_stage(const Stage& stage) {
+    if (!metrics.df_matrix_gemm) {
+      record(stage.work, stage.operations);
+      return;
+    }
+    metrics.df_contraction_terms =
+        checked_add(metrics.df_contraction_terms, stage.matrix_work(state.o, state.v, staged.q));
+    // One audit kernel replaces each GEMM contraction kernel in this count;
+    // provider-internal kernels are deliberately not guessed or counted here.
+    metrics.df_generated_kernels =
+        checked_add(metrics.df_generated_kernels, stage.matrix_operations);
+    metrics.df_packing_output_bytes = checked_add(metrics.df_packing_output_bytes,
+                                                  bytes(stage.packing(state.o, state.v, staged.q)));
+  }
   void upload(double* target, const double* source, std::size_t count) {
     cuda_check(
         cudaMemcpyAsync(target, source, bytes(count), cudaMemcpyHostToDevice, storage.stream));
@@ -295,12 +466,14 @@ struct DFLambdaActions::Impl {
         checked_add(metrics.df_contraction_terms, work(state.o, state.v));
     metrics.df_generated_kernels = checked_add(metrics.df_generated_kernels, operations);
   }
-  void select(std::size_t index) {
+  void select(std::size_t index, std::size_t count = 1) {
     auxiliary.bov = bov + index * n1;
     auxiliary.bvv = bvv + index * vv;
     staged.bov = auxiliary.bov;
     staged.bvv = auxiliary.bvv;
-    ++metrics.df_auxiliary_slices;
+    staged.q = count;
+    metrics.df_auxiliary_slices = checked_add(metrics.df_auxiliary_slices, count);
+    ++metrics.df_auxiliary_batches;
   }
   void add_buffer(const double* source, std::size_t count, double* target) {
     accumulate<<<generativeqc_tensor::blocks(count, 256), 256, 0, storage.stream>>>(
@@ -314,25 +487,25 @@ struct DFLambdaActions::Impl {
   }
   void prepare_cuts() {
     clear_error();
+    staged.q = 1;
     const auto prepared = generated_response::run_staged_primal_prepare_cuda(staged);
     copy_buffer(prepared.df_tau, n2, tau);
-    record(generated_response::staged_primal_prepare_contraction_terms,
-           generated_response::staged_primal_prepare_operations);
+    record_stage(primal_prepare);
     for (std::size_t x = 0; x < cuts.size(); ++x)
       cuda_check(cudaMemsetAsync(cuts[x], 0, bytes(cut_sizes[x]), storage.stream));
-    for (std::size_t Q = 0; Q < q; ++Q) {
-      select(Q);
+    for (std::size_t Q = 0; Q < q; Q += metrics.df_auxiliary_batch_size) {
+      select(Q, std::min(metrics.df_auxiliary_batch_size, q - Q));
       const auto out = generated_response::run_staged_primal_auxiliary_cuda(staged);
-      const std::array sources{out.df_Lvv, out.df_Wvoov,         out.df_Wvovo,
-                               out.df_Xv,  out.df_D05_vv_ladder, out.df_singles_residual};
-      for (std::size_t x = 0; x < cuts.size(); ++x) add_buffer(sources[x], cut_sizes[x], cuts[x]);
-      record(generated_response::staged_primal_auxiliary_contraction_terms,
-             generated_response::staged_primal_auxiliary_operations);
+      generated_response::accumulate_staged_primal_auxiliary_cuda(
+          staged, out, cuts[4], cuts[0], cuts[1], cuts[2], cuts[3], cuts[5]);
+      ++metrics.df_generated_kernels;
+      record_stage(primal_auxiliary);
     }
     ++metrics.df_preparation_calls;
     finish();
   }
   void core_seeds() {
+    staged.q = 1;
     const auto out = generated_response::run_staged_core_cuda(staged);
     // Borrowed adjoints must survive reuse of the graph arena by every Q VJP.
     const std::array sources{out.bar_df_Lvv, out.bar_df_Wvoov,         out.bar_df_Wvovo,
@@ -341,25 +514,25 @@ struct DFLambdaActions::Impl {
       copy_buffer(sources[x], cut_sizes[x], cut_seeds[x]);
     copy_buffer(out.bar_t1, n1, sum1);
     copy_buffer(out.bar_t2, n2, sum2);
-    record(generated_response::staged_core_contraction_terms,
-           generated_response::staged_core_operations);
+    record_stage(core_stage);
   }
   void reduced_transpose() {
     core_seeds();
     cuda_check(cudaMemsetAsync(tau_seed, 0, bytes(n2), storage.stream));
-    for (std::size_t Q = 0; Q < q; ++Q) {
-      select(Q);
+    for (std::size_t Q = 0; Q < q; Q += metrics.df_auxiliary_batch_size) {
+      select(Q, std::min(metrics.df_auxiliary_batch_size, q - Q));
       const auto out = generated_response::run_staged_auxiliary_cuda(staged);
-      // Direct T2 dependence coexists with the tau cut; accumulate BOTH paths.
-      add(out.bar_t1, out.bar_t2);
-      add_buffer(out.bar_df_tau, n2, tau_seed);
-      record(generated_response::staged_auxiliary_contraction_terms,
-             generated_response::staged_auxiliary_operations);
+      // The compiler declaration fixes the output order: inspect the IR rather
+      // than assuming the tau cut replaces direct T2 dependence.
+      generated_response::accumulate_staged_auxiliary_cuda(staged, out, tau_seed, sum1, sum2);
+      ++metrics.df_generated_kernels;
+      record_stage(auxiliary_stage);
     }
+    staged.q = 1;
     const auto out = generated_response::run_staged_prepare_cuda(staged);
-    add(out.bar_t1, out.bar_t2);
-    record(generated_response::staged_prepare_contraction_terms,
-           generated_response::staged_prepare_operations);
+    generated_response::accumulate_staged_prepare_cuda(staged, out, sum1, sum2);
+    ++metrics.df_generated_kernels;
+    record_stage(prepare_stage);
     ++metrics.df_reduced_actions;
   }
   void add(const double* one, const double* two) {
@@ -496,10 +669,13 @@ std::vector<double> DFLambdaActions::parameter(std::string_view name, std::size_
   std::vector<double> values(count);
   Fence fence{s.storage.stream};
   s.clear_error();
+  s.staged.q = 1;
   const auto out =
       s.metrics.df_auxiliary_reduction ? found->staged_run(s.staged) : found->run(s.state);
-  s.record(s.metrics.df_auxiliary_reduction ? found->staged_work : found->work,
-           s.metrics.df_auxiliary_reduction ? found->staged_operations : found->operations);
+  if (s.metrics.df_auxiliary_reduction)
+    s.record_stage(found->stage);
+  else
+    s.record(found->work, found->operations);
   s.download(values.data(), out.values, count);
   s.finish();
   fence.complete();
@@ -514,14 +690,13 @@ std::pair<std::vector<double>, std::vector<double>> DFLambdaActions::virtual_fac
   Fence fence{s.storage.stream};
   s.clear_error();
   if (s.metrics.df_auxiliary_reduction) s.core_seeds();
-  for (std::size_t Q = 0; Q < s.q; ++Q) {
-    s.select(Q);
+  for (std::size_t Q = 0; Q < s.q; Q += s.metrics.df_auxiliary_batch_size) {
+    s.select(Q, std::min(s.metrics.df_auxiliary_batch_size, s.q - Q));
     if (s.metrics.df_auxiliary_reduction) {
       const auto out = generated_response::run_staged_factors_cuda(s.staged);
-      s.record(generated_response::staged_factors_contraction_terms,
-               generated_response::staged_factors_operations);
-      s.download(result.first.data() + Q * s.n1, out.bar_bov, s.n1);
-      s.download(result.second.data() + Q * s.vv, out.bar_bvv, s.vv);
+      s.record_stage(factor_stage);
+      s.download(result.first.data() + Q * s.n1, out.bar_bov, checked_mul(s.staged.q, s.n1));
+      s.download(result.second.data() + Q * s.vv, out.bar_bvv, checked_mul(s.staged.q, s.vv));
       continue;
     }
     const auto out = generated_virtual::run_factor_vjp_accumulate_cuda(s.auxiliary);
