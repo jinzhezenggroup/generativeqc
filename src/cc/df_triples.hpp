@@ -29,6 +29,20 @@ struct DFCudaResponseResult {
   std::size_t reverse_gemms{}, reverse_kernels{}, audit_kernels{}, scalar_response_evaluations{};
 };
 
+/** Complete same-space Fock resolvent response, including internal degeneracy.
+ * Both matrices use dense symmetric Frobenius coordinates. They replace the
+ * diagonal epsilon sources; adding both would double-count denominator response.
+ */
+struct DFCudaFockResult {
+  std::vector<double> foo, fvv;
+  double seconds{}, minimum_absolute_denominator{};
+  std::size_t numeric_capacity_bytes{}, borrowed_host_bytes{}, workspace_bytes{}, arena_bytes{};
+  std::size_t provider_retained_bytes{}, page_capacity{}, page_count{}, panel_capacity{};
+  std::size_t occupied_pairs{}, unique_vector_cubes{}, vector_cubes{}, page_builds{};
+  std::size_t panel_gemms{}, w_gemms{}, fock_gemms{}, contraction_summands{};
+  std::size_t scalar_evaluations{}, audit_kernels{}, scatter_kernels{}, h2d_bytes{}, d2h_bytes{};
+};
+
 /** Standard closed-shell (T) on a supplied physical DF Hamiltonian.
  * Q-major B_ov/B_vv replace resident ovvv. Other inputs retain the canonical
  * spatial-MO layout. The owner uploads each input once, builds at most three
@@ -59,6 +73,21 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
                                       double denominator_threshold, std::size_t max_bytes,
                                       int device, std::size_t caller_bytes = 0,
                                       std::size_t max_panel_buffers = 3);
+/** Full oo/vv derivative of the separable triples Fock inverse on CUDA.
+ * Fixed j>=k pages vary i and retain cubic X/Y vectors; no same-space energy
+ * differences are divided. max_page_rows=0 requests all occupied rows. If they
+ * do not fit, two bounded pages recompute cross-page vectors with explicit work
+ * counts. max_bytes includes host inputs/outputs and caller_bytes as above.
+ * This resolves fixed-frame canonicalization only, not nuclear/orbital response.
+ */
+DFCudaFockResult fock_response_df_cuda(std::size_t o, std::size_t v, std::size_t q,
+                                       const double* bov, const double* bvv, const double* ovoo,
+                                       const double* ovov, const double* fov, const double* t1,
+                                       const double* t2, const double* eps_o, const double* eps_v,
+                                       double denominator_threshold, std::size_t max_bytes,
+                                       int device, std::size_t caller_bytes = 0,
+                                       std::size_t max_page_rows = 0,
+                                       std::size_t max_panel_buffers = 3);
 #endif
 
 }  // namespace generativeqc::cc::triples
