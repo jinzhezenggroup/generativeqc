@@ -67,8 +67,9 @@ int main() {
   if(!gfn2_density_update_tensor(wc,2.,out,out) || out!=std::fma(wc,2.,0.1)) return 11;
   double charge=0.,mag=0.;
   if(!gfn2_restricted_population_publish_tensor(-0.3,1.0,charge) || charge!=0.7) return 11;
-  if(!gfn2_spin_population_publish_tensor(-0.3,-0.2,1.0,charge,mag) ||
-     charge!=0.5 || mag!=-0.1) return 12;
+  const double alpha=-0.3, beta=-0.2;
+  if(!gfn2_spin_population_publish_tensor(alpha,beta,1.0,charge,mag) ||
+     charge!=alpha+beta+1.0 || mag!=alpha-beta) return 12;
 }
 """)
     binary = tmp_path / "fused"
