@@ -13,7 +13,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.cc.occupied_triples import (
     DF_TRIPLES_W_FP32_QUALIFICATION,
     PERMUTATIONS,
@@ -23,6 +22,7 @@ from generativeqc_compiler.cc.occupied_triples import (
     w_fp32_candidate_program,
 )
 from generativeqc_compiler.cc.triples import _LABELS, VP, triples_energy
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor import describe_precision, execute
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
