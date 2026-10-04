@@ -165,3 +165,31 @@ Promote only after independent full cold/warm/moved-geometry energy/force gates,
 constrained-resource fallback checks, actual work reporting, and matched large
 endpoint timing establish a useful workload domain. The preliminary force-only
 24-atom experiment did not establish an advantage over GPU4PySCF.
+
+## 2026-10-04 master integration and diagnostic invalidation
+
+The current integration includes actual master `db6d7672` after #1774 merged.
+The earlier B3LYP failure above is historical: #1794 subsequently corrected the
+VWN spin-fraction rounding, with the original full native DFT regression passing
+in its recorded Slurm 5625 composition. The adapter, provenance manifest and
+boundary tests are preserved unchanged here. See the
+[VWN correction record](../numerics/2026-10-04-vwn-spin-fractions.md).
+This does not claim a new device run of the present restack.
+
+The restack retains the original discovery implementation and all local-map
+tests, plus master's newer moved-geometry/epoch regression. Independent review
+found one host diagnostic-lifetime defect: batch execution could revoke its
+method-owned result and then reject a null output before clearing cached KS
+diagnostics. The new AO getter could therefore expose the previous solve's work
+record. Cached host diagnostics now clear before method invalidation or argument
+rejection can return. The production getter and admission prefix are executed
+in a device-free C++ regression for null output, throwing invalidation and normal
+preflight; the original prefix reproduces the stale-record failure.
+
+Focused validation passes 322 host/compiler/oracle cases. Ninety-three real-device
+cases and one NVCC resource probe are explicitly skipped; eleven native-library
+resource cases are not part of this bounded local run. No AO formula, cutoff,
+capacity policy, scientific tolerance or default is changed by the repair.
+The fixed 64 MiB experiment cap remains distinct from public remaining-budget
+admission, and unset/0 still selects dense execution. Historical qualification
+and timing identities above remain separate from current integration checks.

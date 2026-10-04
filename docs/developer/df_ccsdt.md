@@ -117,6 +117,92 @@ Remaining Slice-C work is C2b native Calculator energy registration plus C3
 production performance/memory qualification (and later CUDA promotion); DF
 gradients remain #158.
 
+## Compiler-owned virtual residual and response actions
+
+`generativeqc_compiler.cc.df_equations` derives the omitted `ovvv/vvvv`
+contributions directly from the expanded conventional RCCSD inventory. It
+substitutes one auxiliary slice of `B_ov` and symmetric `B_vv` before planning
+binary contractions. New intermediates have at most two virtual axes, including
+occupied-rich shapes; a scheduler constraint prevents reconstructing the dense
+virtual blocks. An execution owner must accumulate every auxiliary slice once.
+
+`build_df_virtual_response_programs` also generates amplitude JVP/VJP and
+factor VJP actions using the existing dense-symmetry TensorIR AD. Amplitude
+cotangents accumulate over auxiliary slices; each factor cotangent belongs to
+its own slice. These actions cover the virtual correction, not the retained
+smaller integral blocks, complete Lambda solution, or nuclear derivative chain.
+
+`tools/generate_df_ccsd_native.py --output-dir <directory>` emits CPU/CUDA
+runtime-shape actions, exact scratch-arena queries, equation hashes and operation
+counts using the shared native CC emitter. The scratch queries exclude caller
+inputs, accumulated outputs, device staging and endpoint state; a complete owner
+must admit those as well. Generated outputs borrow the supplied scratch arena.
+This generator is an internal building block and does not register a public
+DF Calculator method or extend its qualified force domain.
+
+The one-slice virtual actions have at most fifth-degree contraction work and
+fourth-degree storage. The complete auxiliary sum adds the auxiliary population
+to the work count. DF therefore avoids the dense virtual-integral storage but
+does not, by itself, remove the usual sixth-order CCSD or seventh-order standard
+triples work. Neither source generation nor small action tests establish large
+complete-endpoint performance.
+
+The native action tests use
+`GENERATIVEQC_DF_CC_CUDA_TEST=1` for explicit real-device qualification; on the
+local scheduled GPU they must run inside the repository's required Slurm job.
+`benchmarks/df_ccsdt_large_oracle.py` supplies pinned independent PySCF references
+for 230-AO ethane and 264-AO benzene, with explicit symmetric metric whitening,
+conventional RHF, same-Hamiltonian DF correlation, and physical residual replay.
+Its retained states are validation artifacts, not production inputs.
+
+## Internal native RCCSD solver
+
+`cc::Problem::naux`, `df_bov` and `df_bvv` select an explicit factorized
+virtual representation. `ovvv` and `vvvv` must be empty; retained smaller
+blocks must describe the same fitted Hamiltonian. The native CPU/CUDA solver
+reuses the conventional DIIS and physical convergence policy. It accumulates
+all Q slices for every current/trial/replay amplitude state. The compiler derives
+the primary schedule in `cc/df_hoist.py` from the shared RCCSD inventory: prepare
+amplitude-only tau once, accumulate the virtual contributions to Lvv, Wvoov,
+Wvovo and Xv, then contract the complete sums with T2. The virtual ladder remains
+inside the Q loop. `tools/generate_df_ccsd_hoisted.py` emits this schedule; no
+materialized tensor has more than two virtual axes. This reduces repeated
+contraction work without changing the formal leading CCSD scaling.
+
+The planner charges preparation, every Q slice and the retained core. It selects
+the reduced schedule only when its scalar contraction-summand count is smaller
+and its complete owner storage fits the budget. Otherwise it uses the original
+bounded schedule. `SolverOptions::df_auxiliary_reduction=false` forces that
+fallback for qualification. Convergence always uses the original expanded
+virtual actions and `tools/generate_df_ccsd_core.py` replay, independently of the
+primary schedule.
+
+Complete solver admission includes resident factors, accumulated corrections,
+both core arenas, one-slice scratch, preparation and accumulated intermediates,
+DIIS and retained/final host arrays. CUDA
+uploads factors once; borrowed action outputs are consumed on the same stream
+before scratch reuse. A sticky arithmetic flag spans all Q slices and the
+core. Diagnostics report auxiliary slices, virtual operations, accumulation
+calls, prepared/hoisted evaluations and exact scalar contraction summands across
+the entire solve, including convergence replay. Summand counts exclude
+elementwise operations and are not hardware FLOPs or timing predictions.
+
+Conventional admission rejects the DF representation unless an owner explicitly
+opts in. Existing Lambda, triples and force consumers remain conventional.
+This internal supplied-Hamiltonian solver does not register a native source or
+public DF Calculator endpoint. Its qualification is
+`tests/python/test_df_cc_native_solver.py`. The supplied-Hamiltonian solver is
+also checked for 230-AO ethane using `benchmarks/df_ccsd_native_solver_probe.py`:
+energy must agree within 3e-9 Eh, every amplitude within 1e-8, and expanded
+physical residuals must be below 1e-10. That adapter reconstructs the same packed
+AO factors consumed by the independent oracle before the symmetric MO transform;
+stored full MO factors are not substituted for the oracle's packed source.
+Complete hundreds-AO native CCSD(T) energy and forces still require the remaining
+source/response owners.
+
+See the [native solver decision](../../.agents/notes/implemented/architecture/2026-10-03-df-cc-native-solver.md)
+for ownership and auxiliary-work rationale.
+
 ## Validation rules
 
 Implementation tolerances and DF fitting error are separate quantities.

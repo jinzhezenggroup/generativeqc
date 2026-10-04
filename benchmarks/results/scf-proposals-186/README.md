@@ -46,7 +46,8 @@ The CPU Release build ran on an AMD EPYC 7K62 with affinity fixed to CPU 8,
 `OMP_NUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1`, Python 3.13.9 and NumPy 2.5.1.
 A CUDA compiler process tree was restricted to CPUs 0-3 and could run
 concurrently; shared caches and memory make these timings diagnostic.
-`report.json` retains all samples, source hashes, and the native library hash.
+The historical `report.json` retains all samples, source hashes, and the native
+library hash; restore it with the command below before inspecting those values.
 
 The median across cases of disabled-interface/legacy-interface latency is
 0.9961, with range 0.9550-1.0011. Both interfaces execute identical final results.
@@ -67,7 +68,7 @@ budget. They must not be used as complete-solve speed measurements.
 
 ## Artifacts and validation
 
-`report.json` contains 130 configuration records. Each of the 15 cases has
+The archived `report.json` contains 130 configuration records. Each of the 15 cases has
 `cold`, `proposal`, and `failed` JSON/NPZ traces, for 45 traces and 451 snapshots.
 Every trace passes the bounded, checksummed loader. Reconstructing each source
 and independently contracting its target operator gives maximum differences
@@ -102,3 +103,29 @@ regeneration additionally requires `pyscf==2.14.0`; run
 output option. Ordinary execution neither requires PySCF nor exports data.
 See `docs/scf_proposals.md` for the physical invariants, acceptance policy,
 failure budget, ownership, and trace/replay contracts.
+
+## Historical report recovery
+
+The proposal comparison is a frozen diagnostic campaign, not a current
+performance promotion or a live regression dataset. Its 130-row report has
+no current scientific reader; current proposal, trace-loader and independent
+reference tests retain their own inputs. The outcomes and all 15 deliberate
+failures are summarized above. In particular, the intended state was never
+verified, the timing conditions were diagnostic, and the alternative proposal
+baselines did not establish an acceleration claim.
+
+The exact report moved to existing Git history in the
+[shared recovery manifest](../retention-reports-20261003/snapshot.manifest.json),
+anchored at `1a4acc519eb881cc19d418de65ecca72324359d4`:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/scf-proposals-186/report.json \
+  --manifest benchmarks/results/retention-reports-20261003/snapshot.manifest.json \
+  --output .artifacts/scf-proposals-186/report.json
+```
+
+This restores the exact original samples for historical reanalysis. The older
+trace and validation records still use the separate bulk-retention manifest
+linked at the top. Missing local history requires an explicit user-controlled
+fetch or a full clone; see [recovery](../retention-reports-20261003/README.md#recovery).

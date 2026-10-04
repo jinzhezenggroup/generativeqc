@@ -24,7 +24,7 @@ using runtime::cuda_trace::TraceOperation;
 // Coulomb needs two bounded raw passes unless an admitted K traversal supplies its charge.
 generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* density,
                                   std::string& detail, bool raw_charge_ready) {
-  plan.final_projection_token.reset();
+  plan.revoke_projection_leases();
   if (raw_charge_ready && (!plan.streamed || !plan.integral_source || plan.batch_size != 1 ||
                            plan.metric_full_rank.empty() || !plan.metric_full_rank[0] ||
                            plan.row_tile * plan.nbf * plan.auxiliary_tile < plan.naux)) {

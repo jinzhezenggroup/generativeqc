@@ -86,6 +86,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/cc/solver.cpp
     src/cc/lambda_response.cpp
     src/cc/triples_response.cpp
+    src/cc/triples_fock_response.cpp
     src/cc/rccsdt_force.cpp
     src/methods/mp2_method.cpp
     src/methods/rccsd_method.cpp
@@ -107,6 +108,8 @@ function(generativeqc_add_posthf_cc_sources target)
     target_sources(${target} PRIVATE
       src/cc/cuda_solver.cu
       src/cc/lambda_response_cuda.cu
+      src/cc/triples_response_cuda.cu
+      src/cc/triples_fock_response_cuda.cu
       src/posthf/df_bridge.cu
       src/posthf/cuda_transform.cu
       src/posthf/ri_mp2_cuda.cu)
@@ -136,6 +139,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/solver/proposal_control.cpp
     src/scf/solver/mean_field_driver.cpp
     src/scf/solver/eigen_frame.cpp
+    src/scf/solver/cpu_target_eigen.cpp
     src/scf/solver/final_state.cpp
     src/scf/solver/warm_subspace.cpp
     src/scf/gradient/hf_gradient.cpp

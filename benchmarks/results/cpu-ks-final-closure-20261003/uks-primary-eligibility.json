@@ -1,0 +1,678 @@
+{
+  "schema": "generativeqc.cpu-uks-primary-eligibility.v1",
+  "decision": "accepted bounded local correctness repair; final public union qualification remains separately identified",
+  "performance_claim": false,
+  "input": {
+    "atoms_bohr": [
+      [
+        "O",
+        [
+          0,
+          0,
+          0
+        ]
+      ],
+      [
+        "H",
+        [
+          0,
+          0,
+          1.8
+        ]
+      ]
+    ],
+    "charge": 0,
+    "multiplicity": 2,
+    "basis": "def2-svp",
+    "representation": "cartesian",
+    "ao_count": 20,
+    "grid_points": 55296,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "singlepoint_max_iterations": 150,
+    "ragged_max_iterations": 200,
+    "ragged_companion": "neutral doublet H atom",
+    "grid": "unchanged native default; exact exported snapshot points and weights used by independent NumInt"
+  },
+  "diagnosis": {
+    "openblas": {
+      "baseline_status": 0,
+      "candidate_status": 4,
+      "primary_histories_bitwise_equal": true,
+      "baseline_iterations": 13,
+      "candidate_iterations": 13,
+      "baseline_fock_builds": 16,
+      "candidate_fock_builds": 18,
+      "energies_bitwise_equal": true
+    },
+    "scalar": {
+      "baseline_status": 0,
+      "candidate_status": 4,
+      "primary_histories_bitwise_equal": true,
+      "baseline_iterations": 13,
+      "candidate_iterations": 13,
+      "baseline_fock_builds": 16,
+      "candidate_fock_builds": 18,
+      "energies_bitwise_equal": true
+    },
+    "batch_scalar": {
+      "baseline_exit": 0,
+      "candidate_exit": 1,
+      "scope": "Unmodified exact cold/replay/moved-geometry/failure/recovery node; baseline completes, candidate fails at first cold OH."
+    }
+  },
+  "source_roles": {
+    "parent_revision": "837c2a51c06c6d38a6edc4d41da3060573ca40ab",
+    "failing_candidate_revision": "1b115455f2d493fb287886730891b9d6c66175d4",
+    "failing_candidate_tree": "b2fc88bd147da84b339a11ef14d15b74a36b0f14",
+    "repair_qualification": "local amendment of exact failing candidate tree; production postimages and canonical source identity identify the compiled repair; no future public commit invented"
+  },
+  "repair_source": {
+    "embedded_source": "71f7911c548aee51f35a543c64f3bdb8ac3a3e2479812fd0bdfb7d2acc0b03a5",
+    "files": {
+      "src/dft/uks.cpp": {
+        "bytes": 32740,
+        "sha256": "4f55f7932ad6dc1796b404d5df6df854741768383a6378d014064dd44e7bfa6f"
+      },
+      "src/solver/self_consistent.hpp": {
+        "bytes": 4135,
+        "sha256": "775711495a6b7baaa0edb87caf76464123bc8b29e45f7efafd0bafeccea0cc55"
+      }
+    },
+    "internal_callable_compatibility": "Existing direct call expressions unchanged; optional trailing callable changes internal address-taking type. No production pointer users found; no forwarding overload or extra State move."
+  },
+  "primary_diagnosis": {
+    "rms_at_13": 9.783423097002126e-11,
+    "maximum_at_13": 5.417238879701358e-10,
+    "maximum_gate": 1e-10,
+    "four_closure_maxima": [
+      1.7125630427661243e-10,
+      2.0213913876077072e-10,
+      2.381155272956903e-10,
+      3.319030050796812e-10
+    ],
+    "logger_validation": "test-only logger erasure and binary/state noninterference checked separately; final repair has no logger"
+  },
+  "primary_prefix": {
+    "repair_first13_equal_published": true,
+    "repair_first13_equal_parent": true,
+    "repair_rows": 14,
+    "published_rows": 13,
+    "history_sha256": "815c393c3334ae71558aa8dc96a0cd9f6153a6cfcd8d5854228a83cf6ecde9ec"
+  },
+  "qualification": {
+    "openblas": {
+      "library": {
+        "bytes": 22148120,
+        "sha256": "86a0c4cce8c86524613da810a4c9566960808343c936e021f505a040109af59e"
+      },
+      "embedded_source": "71f7911c548aee51f35a543c64f3bdb8ac3a3e2479812fd0bdfb7d2acc0b03a5",
+      "build_inputs": {
+        "CMakeCache.txt": {
+          "bytes": 29605,
+          "sha256": "f64784bc354c3b378e40dfa1f383039c06b71b5b2277fd3b0a64693917d612b6"
+        },
+        "compile_commands.json": {
+          "bytes": 525556,
+          "sha256": "a429d3a820fa549da8457b2b80acff5e0508a152cffab32194154e9d4700d42e"
+        },
+        "generated/build_identity.hpp": {
+          "bytes": 379,
+          "sha256": "793ac4592143328dc3227f8efefd2e834a8974f4d57fdc87dc49ffc0d5eda9ab"
+        },
+        "generated/build_identity_inputs.txt": {
+          "bytes": 57656,
+          "sha256": "251c28831a0f2f995d6dd9367e6085b759ed697246f31d207811deb48f2b4aa9"
+        }
+      },
+      "configuration": {
+        "provider": "openblas",
+        "build": "Release",
+        "cpu_affinity": [
+          2
+        ],
+        "parallelism": 1,
+        "cuda": false,
+        "pch": false,
+        "cxx_compiler": "/usr/bin/c++",
+        "both_compiler_launchers": "ccache",
+        "compile_rows": 274,
+        "all_cxx_commands_cached": true
+      },
+      "ccache_base_dir": "own checkout root",
+      "exact_regression_nodes": [
+        "tests/python/test_dft_scf.py::test_native_matches_independent_scf[cpu-oh_large_solver-pbe]",
+        "tests/python/test_dft_batch.py::test_open_shell_large_solver_ragged_replay_and_failure[cpu-pbe-uks]"
+      ],
+      "exact_regression_tests_passed": 2,
+      "unchanged_exact_tests": {
+        "tests/python/test_dft_scf.py": {
+          "bytes": 7067,
+          "sha256": "6f57e40cf7d21459ee6cbea68bb1d8fc08d8662c206848fa681d57cc346da7af",
+          "unchanged_from_base": true
+        },
+        "tests/python/test_dft_batch.py": {
+          "bytes": 13762,
+          "sha256": "5f12e5a2177b0454ec84761604496c24d8f37faa3df7382a97ab8879dbed15d7",
+          "unchanged_from_base": true
+        }
+      },
+      "cold": {
+        "status": 0,
+        "converged": true,
+        "iterations": 14,
+        "fock_builds": 16,
+        "energy": -75.58222621724569,
+        "energy_change": 0.0,
+        "density_rms": 3.4614195234978082e-12,
+        "physical_residual_rms": 1.3141552161930813e-12
+      },
+      "exact_test_log": {
+        "bytes": 99,
+        "sha256": "3b43fc335696347b3da79031e5dddcd3254689bfb3d08a0ec8bedaa5e75ed06a"
+      },
+      "expanded": {
+        "native_suites_passed": 13,
+        "publication_plus_new_host_passed": 536,
+        "publication_skipped": 61,
+        "skip_categories": {
+          "requires_explicit_Slurm_GPU": 8,
+          "CUDA_only_transport": 1,
+          "opt_in_VWN_CUDA": 52
+        },
+        "all_cpu_dft_scf_batch_resources_passed": 50,
+        "cuda_selectors_deselected": 41,
+        "original_publication_nodes": 596,
+        "selection_identity": {
+          "bytes": 75267,
+          "sha256": "e8a4907b81cc965b1b4f0c7dd04859fc8a06c93ca2709e2c654d675a8bcae5ef"
+        },
+        "additional_small_composed_passed": 42,
+        "additional_cuda_selectors_deselected": 2,
+        "additional_scope": "Existing response RKS/UKS, VV10/rVV10, RSH, WB97M-V live H2 and PBE-UKS small three-atom force controls; original test geometries, bases, grids and tolerances unchanged",
+        "native_test_binaries": {
+          "generativeqc_dft_tests": {
+            "bytes": 612696,
+            "sha256": "0c225e81bb8e95dc9fba656f539ecf1b7bd7d917116c69fe8c283ef7d39a4041"
+          },
+          "generativeqc_dft_density_source_tests": {
+            "bytes": 71776,
+            "sha256": "37f2b3c107f13345733eec53922b82e15037596b153cf1b2b0932a14e6e95d1b"
+          },
+          "generativeqc_uks_tests": {
+            "bytes": 60912,
+            "sha256": "5f43c165b77ab663bb8f489c9efdf723841184caeaaba61e9668857d79627f91"
+          },
+          "generativeqc_uks_state_tests": {
+            "bytes": 37384,
+            "sha256": "698597c596600c06548ba3842d2519d2f0bfdb53cca8c877709a1cfe7981e80f"
+          },
+          "generativeqc_ks_final_state_tests": {
+            "bytes": 120112,
+            "sha256": "1ba548696d6dd97de9c18bdc8551ac50e63514aecbfe39d3bf6d3567d1795b5e"
+          },
+          "generativeqc_final_state_tests": {
+            "bytes": 147408,
+            "sha256": "ad97221ac4fcd0960000094dda95a0ca54e687e469a62ac42cae13a1f37b4d3f"
+          },
+          "generativeqc_rks_response_tests": {
+            "bytes": 54440,
+            "sha256": "686d50bae6096153f5726315bdd28a6e675a7805a23e3dda5afacf4bf7d0c08b"
+          },
+          "generativeqc_uks_response_tests": {
+            "bytes": 32560,
+            "sha256": "157a5227db4d925b082b3dbcb3535b8b3910af873efd44f2b3b4b0a8d8960ad6"
+          },
+          "generativeqc_scf_diagnostic_tests": {
+            "bytes": 32424,
+            "sha256": "f182fd7b8d7e171ec070d9856bc88632d686638df8046cf7fca8870505f43810"
+          },
+          "generativeqc_self_consistent_tests": {
+            "bytes": 45000,
+            "sha256": "638a588cb0f8312ef4ff2dae34ffe3959354ed87aa5e2c1ffe68a4d8321e3efc"
+          },
+          "generativeqc_native_tests": {
+            "bytes": 37280,
+            "sha256": "f51a718d282ca6f6573f3580870d19e6f07d4bcaea1c07bf226230d61b2c8307"
+          },
+          "generativeqc_uhf_tests": {
+            "bytes": 28560,
+            "sha256": "9b6ea3afffd16278107eafd7d6ace2dc67187a7e672279598d1ab44295ee3426"
+          },
+          "generativeqc_scf_proposal_tests": {
+            "bytes": 43472,
+            "sha256": "71039db69e4d7529ed0df1a80b992c5d7c6f45e5c0adf52bfede32e5c4dda2a7"
+          }
+        }
+      }
+    },
+    "scalar": {
+      "library": {
+        "bytes": 22142936,
+        "sha256": "aa183dcd7e0c8e4a5122d2b425284860769886ecdd5cc94852fc24c0de3fc551"
+      },
+      "embedded_source": "71f7911c548aee51f35a543c64f3bdb8ac3a3e2479812fd0bdfb7d2acc0b03a5",
+      "build_inputs": {
+        "CMakeCache.txt": {
+          "bytes": 22627,
+          "sha256": "e38c2b9e5414eb372231b9b8e78cb8f49de6f007347649165ef48660fb3b3fc2"
+        },
+        "compile_commands.json": {
+          "bytes": 505133,
+          "sha256": "c8955da014ab0a4d7ed26270b3d8b3b0772347768d8643e03e2e5b7790c24770"
+        },
+        "generated/build_identity.hpp": {
+          "bytes": 379,
+          "sha256": "793ac4592143328dc3227f8efefd2e834a8974f4d57fdc87dc49ffc0d5eda9ab"
+        },
+        "generated/build_identity_inputs.txt": {
+          "bytes": 57656,
+          "sha256": "251c28831a0f2f995d6dd9367e6085b759ed697246f31d207811deb48f2b4aa9"
+        }
+      },
+      "configuration": {
+        "provider": "scalar",
+        "build": "Release",
+        "cpu_affinity": [
+          2
+        ],
+        "parallelism": 1,
+        "cuda": false,
+        "pch": false,
+        "cxx_compiler": "/usr/bin/c++",
+        "both_compiler_launchers": "ccache",
+        "compile_rows": 274,
+        "all_cxx_commands_cached": true
+      },
+      "ccache_base_dir": "own checkout root",
+      "exact_regression_nodes": [
+        "tests/python/test_dft_scf.py::test_native_matches_independent_scf[cpu-oh_large_solver-pbe]",
+        "tests/python/test_dft_batch.py::test_open_shell_large_solver_ragged_replay_and_failure[cpu-pbe-uks]"
+      ],
+      "exact_regression_tests_passed": 2,
+      "unchanged_exact_tests": {
+        "tests/python/test_dft_scf.py": {
+          "bytes": 7067,
+          "sha256": "6f57e40cf7d21459ee6cbea68bb1d8fc08d8662c206848fa681d57cc346da7af",
+          "unchanged_from_base": true
+        },
+        "tests/python/test_dft_batch.py": {
+          "bytes": 13762,
+          "sha256": "5f12e5a2177b0454ec84761604496c24d8f37faa3df7382a97ab8879dbed15d7",
+          "unchanged_from_base": true
+        }
+      },
+      "cold": {
+        "status": 0,
+        "converged": true,
+        "iterations": 14,
+        "fock_builds": 16,
+        "energy": -75.58222621724569,
+        "energy_change": 0.0,
+        "density_rms": 3.4614195234978082e-12,
+        "physical_residual_rms": 1.3141552161930813e-12
+      },
+      "exact_test_log": {
+        "bytes": 99,
+        "sha256": "1909d0b446f921a8ec296cfed20f682327f59af984ad7f4bd218dd844085dba9"
+      }
+    }
+  },
+  "physical": {
+    "provider": "openblas",
+    "independent": "PySCF2.14.0/libcint/Libxc at native density with exact primitive coefficients, Cartesian AO normalization derived and independently checked through overlap",
+    "arrays": "Full D/F/S/reference/grid/scaling/E arrays retained locally; hashes and selected numerical values only are published",
+    "grid_contract": "Read-only native and supplied arrays; same grid object and array identities at actual nr_uks entry/exit; shape/dtype/byte checks before and after get_fock and energy_tot; grid.build forbidden",
+    "phases": [
+      {
+        "phase": "cold",
+        "converged": true,
+        "iterations": 14,
+        "fock_builds": 16,
+        "energy": -75.58222621724569,
+        "warm_start_used": false,
+        "warm_start_fallback": false,
+        "seed_present": true,
+        "gates": {
+          "overlap_max_abs": 2e-11,
+          "physical_fock_max_abs": 2e-09,
+          "energy_abs": 1e-08,
+          "native_commutator_max_abs": 1e-10,
+          "independent_commutator_max_abs": 2e-09,
+          "trace_max_abs": 1e-09,
+          "idempotency_max_abs": 1e-09
+        },
+        "errors": {
+          "overlap_max_abs": 4.440892098500626e-16,
+          "physical_fock_max_abs": 1.525446435834965e-13,
+          "energy_abs": 2.2737367544323206e-13,
+          "native_commutator_max_abs": 9.630407582505995e-12,
+          "independent_commutator_max_abs": 9.611367257633674e-12,
+          "trace_max_abs": 8.881784197001252e-16,
+          "idempotency_max_abs": 2.220446049250313e-15
+        },
+        "trace": [
+          5.0,
+          4.000000000000001
+        ],
+        "native_commutator_spin_rms": [
+          8.522491714199177e-13,
+          1.6515678006030368e-12
+        ],
+        "array_archive": {
+          "sha256": "b3cc1af66d0a0b03ed89402f6bb435b864e22ed42a1774651ca68b446339096f"
+        },
+        "array_identities": {
+          "density": "f3b2102172eae4048c144fee74a7175d34312edff68fbe47d7924aa2e045c6b9",
+          "fock": "87e31dfed544a3970c736b06300158e583546f24dcdcabed8ab0a227f40495c9",
+          "overlap": "3bcbd62e67e141ff2027c20421107b23b94fd6ff533168aafd610de1a73dea32"
+        },
+        "grid_checks": 9,
+        "grid_build_attempts": 0,
+        "native_input_used_grid_identity": {
+          "coords": {
+            "shape": [
+              55296,
+              3
+            ],
+            "dtype": "<f8",
+            "sha256": "156528293c1516043039363ea0150c21adddc351957eb62b24054450eb77a8dc"
+          },
+          "weights": {
+            "shape": [
+              55296
+            ],
+            "dtype": "<f8",
+            "sha256": "9499caed71db41852bcefb4cf918142855c9f7938c24cc4d04ac00750e537e99"
+          }
+        }
+      },
+      {
+        "phase": "warm",
+        "converged": true,
+        "iterations": 2,
+        "fock_builds": 4,
+        "energy": -75.58222621724569,
+        "warm_start_used": true,
+        "warm_start_fallback": false,
+        "seed_present": true,
+        "gates": {
+          "overlap_max_abs": 2e-11,
+          "physical_fock_max_abs": 2e-09,
+          "energy_abs": 1e-08,
+          "native_commutator_max_abs": 1e-10,
+          "independent_commutator_max_abs": 2e-09,
+          "trace_max_abs": 1e-09,
+          "idempotency_max_abs": 1e-09
+        },
+        "errors": {
+          "overlap_max_abs": 4.440892098500626e-16,
+          "physical_fock_max_abs": 1.45328193923433e-13,
+          "energy_abs": 1.8474111129762605e-13,
+          "native_commutator_max_abs": 1.3178180768846914e-11,
+          "independent_commutator_max_abs": 1.3136325360818546e-11,
+          "trace_max_abs": 1.7763568394002505e-15,
+          "idempotency_max_abs": 1.9984014443252818e-15
+        },
+        "trace": [
+          5.000000000000001,
+          4.000000000000002
+        ],
+        "native_commutator_spin_rms": [
+          2.206439468703097e-12,
+          2.1034811982623445e-12
+        ],
+        "array_archive": {
+          "sha256": "eb55560b4d65136cb45c5ebda6042f025c07cbacb0451af8d7fce30ef8b18d47"
+        },
+        "array_identities": {
+          "density": "c4365170834fa9aa71a957724861a0a6875e89903697c88324c4ac79c97bc52c",
+          "fock": "c8d8d2b99db683904fc3302ad1d925b2e7797a333b281d2ce43bd51665b22f7a",
+          "overlap": "3bcbd62e67e141ff2027c20421107b23b94fd6ff533168aafd610de1a73dea32"
+        },
+        "grid_checks": 9,
+        "grid_build_attempts": 0,
+        "native_input_used_grid_identity": {
+          "coords": {
+            "shape": [
+              55296,
+              3
+            ],
+            "dtype": "<f8",
+            "sha256": "156528293c1516043039363ea0150c21adddc351957eb62b24054450eb77a8dc"
+          },
+          "weights": {
+            "shape": [
+              55296
+            ],
+            "dtype": "<f8",
+            "sha256": "9499caed71db41852bcefb4cf918142855c9f7938c24cc4d04ac00750e537e99"
+          }
+        }
+      },
+      {
+        "phase": "restart",
+        "converged": true,
+        "iterations": 14,
+        "fock_builds": 16,
+        "energy": -75.58222621724569,
+        "warm_start_used": false,
+        "warm_start_fallback": false,
+        "seed_present": true,
+        "gates": {
+          "overlap_max_abs": 2e-11,
+          "physical_fock_max_abs": 2e-09,
+          "energy_abs": 1e-08,
+          "native_commutator_max_abs": 1e-10,
+          "independent_commutator_max_abs": 2e-09,
+          "trace_max_abs": 1e-09,
+          "idempotency_max_abs": 1e-09
+        },
+        "errors": {
+          "overlap_max_abs": 4.440892098500626e-16,
+          "physical_fock_max_abs": 1.525446435834965e-13,
+          "energy_abs": 2.2737367544323206e-13,
+          "native_commutator_max_abs": 9.630407582505995e-12,
+          "independent_commutator_max_abs": 9.611367257633674e-12,
+          "trace_max_abs": 8.881784197001252e-16,
+          "idempotency_max_abs": 2.220446049250313e-15
+        },
+        "trace": [
+          5.0,
+          4.000000000000001
+        ],
+        "native_commutator_spin_rms": [
+          8.522491714199177e-13,
+          1.6515678006030368e-12
+        ],
+        "array_archive": {
+          "sha256": "b3cc1af66d0a0b03ed89402f6bb435b864e22ed42a1774651ca68b446339096f"
+        },
+        "array_identities": {
+          "density": "f3b2102172eae4048c144fee74a7175d34312edff68fbe47d7924aa2e045c6b9",
+          "fock": "87e31dfed544a3970c736b06300158e583546f24dcdcabed8ab0a227f40495c9",
+          "overlap": "3bcbd62e67e141ff2027c20421107b23b94fd6ff533168aafd610de1a73dea32"
+        },
+        "grid_checks": 9,
+        "grid_build_attempts": 0,
+        "native_input_used_grid_identity": {
+          "coords": {
+            "shape": [
+              55296,
+              3
+            ],
+            "dtype": "<f8",
+            "sha256": "156528293c1516043039363ea0150c21adddc351957eb62b24054450eb77a8dc"
+          },
+          "weights": {
+            "shape": [
+              55296
+            ],
+            "dtype": "<f8",
+            "sha256": "9499caed71db41852bcefb4cf918142855c9f7938c24cc4d04ac00750e537e99"
+          }
+        }
+      },
+      {
+        "phase": "forced_budget_13",
+        "converged": false,
+        "iterations": 13,
+        "fock_builds": 13,
+        "energy": -75.58222621724568,
+        "warm_start_used": false,
+        "warm_start_fallback": false,
+        "seed_present": false,
+        "snapshot_rejected": true
+      }
+    ]
+  },
+  "host_controls": {
+    "semantic_contrast": "Original/default scalar decision accepts RMS-small/max-large current state at2; real driver with extracted UKS predicate continues to3 or exhausts original4 budget retaining CURRENT",
+    "unchanged_scalar_predicates": true,
+    "default_state_moves": 4,
+    "false_to_true_veto": true,
+    "all_false_original_budget": true,
+    "first_iteration_excluded": true,
+    "scalar_failure_cannot_be_overridden": true,
+    "both_spins_threshold_equality_nextafter_nonfinite": true,
+    "non_cpu_eligible": true,
+    "structural_red_only": "New six-argument tests do not compile against old header; this is not itself the behavioral red"
+  },
+  "historical_reconstruction": {
+    "public_checkout": "1b115455f2d493fb287886730891b9d6c66175d4",
+    "measured_tree": "25d0c2bbad37264b435fda787a960ae8a9ef73e2",
+    "uks_postimage": {
+      "blob": "5a61d2c5bdc944e32d63fcc2a983b60b7e62c64f",
+      "sha256": "7d23ec2c18243b1483425e16cf9caa2851ff64b73d1761eb0fe4ee010f1339bb"
+    },
+    "unchanged_helper": "Run historical reconstruct_source.py from the public checkout and pass that historical checkout as --repository; do not apply old postimage hashes to repaired UKS"
+  },
+  "historical_payloads": {
+    "common.py": {
+      "bytes": 9451,
+      "sha256": "964509328d86ee1b122cf03275868b464c6d51e4792038363f452e3f3093f5c1"
+    },
+    "evidence.json": {
+      "bytes": 7160,
+      "sha256": "227b523322b2716612ba247f80458ac0e801aab3357b4336c584e51a6213c237"
+    },
+    "explicit_grid.py": {
+      "bytes": 1833,
+      "sha256": "da21d5f3a1f11f752d9958e621c3e09f9de6327796202557e323f350597e6e5f"
+    },
+    "grid_audit.py": {
+      "bytes": 1277,
+      "sha256": "dd33e3dea90bac39fa9c8639a6efabfc9a62a9f11fd9e1f851d5952f4a66c89f"
+    },
+    "independent_state.py": {
+      "bytes": 14633,
+      "sha256": "dbad4e3307fd9f823c57ba8d95c35f987f5069503c35845d89cf804f118b738f"
+    },
+    "input.json": {
+      "bytes": 7481,
+      "sha256": "725428d4b5729b6452b7bc6a4b6409cafe24a7f19c5e35e51fbbfc1163f7f411"
+    },
+    "native_state.py": {
+      "bytes": 10085,
+      "sha256": "e7e4d02307878fea967646d7e703eb93de6d1da62ba61bfb075bf7303400576d"
+    },
+    "oracle_state.py": {
+      "bytes": 2808,
+      "sha256": "554aedd5af07832fd939ed311f84c0a2a440c7ac52fd53a1f1e73efe6100e4ff"
+    },
+    "provenance.json": {
+      "bytes": 31917,
+      "sha256": "47dc1978eae7648d61d49bb90f89eeed02d34647f19cbb4a63ebf1da7bd023b5"
+    },
+    "reconstruct_source.py": {
+      "bytes": 2657,
+      "sha256": "1fc276e62da8980d2a7aae888c085b39f21b49fa92d01c6ad632f1915dfbd344"
+    },
+    "reproduce.py": {
+      "bytes": 9409,
+      "sha256": "ce69b7107583d1f455cf58bdb8ccc7ded34eea21fd0a2bbca4883b9cdf6a6dd8"
+    },
+    "run_small_controls.sh": {
+      "bytes": 1541,
+      "sha256": "c835e9de5b219a505ae4f407a74182a187bb26ff579350fa6115a77615cef524"
+    },
+    "run_union_controls.sh": {
+      "bytes": 1428,
+      "sha256": "39f5f9c28e1e3fb66f22367cbb7fdbfe12fc3dee071494bd5db77095f0fc2c14"
+    },
+    "safety.py": {
+      "bytes": 3148,
+      "sha256": "6087f7b6265c302b96e87ad3e8586a75dcb008ab3d71b9b359a43d7b142e32a3"
+    },
+    "samples.json": {
+      "bytes": 20273,
+      "sha256": "bad360a5bafcc3ae4ec70eb6d781c86c3f83c648e7978174edea7a7923919d31"
+    },
+    "test_reproduction.py": {
+      "bytes": 7810,
+      "sha256": "defaef16c28fa398c3576f267e0dbf65548af0bff72aeeceb60420a0d6dcf097"
+    }
+  },
+  "receipts": {
+    "diagnosis-comparison": {
+      "bytes": 823,
+      "sha256": "69e320cedba4fff0ab3f5aa7a3b212a4972e05f6ae2acd1e8ad85d28100f3902"
+    },
+    "logger-noninterference": {
+      "bytes": 476,
+      "sha256": "ea8acb1268000f6b64d24c45f70115dc68c2bf04e26ba2f02c3a1872a53e8cb3"
+    },
+    "logger-erasure": {
+      "bytes": 335,
+      "sha256": "bfa652c88f1311ac9c3201c1f7d0733e955b327946b2fe59da513ed1b974edca"
+    },
+    "physical-first-summary-only": {
+      "bytes": 52620,
+      "sha256": "58b9889b25633f1335edcf7be3d6ab6511fb7f437e05db218c0b5d22a17b4555"
+    },
+    "physical-array-complete-repeat": {
+      "bytes": 80203,
+      "sha256": "a7fb6497f091cecb049b657786ff9ce3919201d5e170e3644e1234c6cb4156fb"
+    },
+    "physical-array-complete-harness": {
+      "bytes": 10020,
+      "sha256": "368d139cf64d196927666ad13b9cd0c41088a03bae4db6a3f0b2dc62eb5846a2"
+    },
+    "native-controls": {
+      "bytes": 1851,
+      "sha256": "e64a6711bde39a0c89a1f1cd05ca2969cd247fc19f81aba52be7a0cb0d11c852"
+    },
+    "publication-controls": {
+      "bytes": 1555,
+      "sha256": "568c4186ab18d0f539d9199ac4aeaa112d4fe261b0b05e183e44bb616d53ba3f"
+    },
+    "cpu-scf-batch-resources": {
+      "bytes": 125,
+      "sha256": "e5c971ac7df2ba9d6fd575b3a1d8c37c5cc784feb5d0a93b1a17ed3a85444e9d"
+    },
+    "small-composed-controls": {
+      "bytes": 125,
+      "sha256": "aa1927e35cb60d1dc3f561e6cf64d6a26aaaafb746c340820aacf8249cb2d3fc"
+    },
+    "small-composed-control-command": {
+      "bytes": 1011,
+      "sha256": "b62a649bbd40f67c2f06178c1dc99394b51abc64b224b498b840a176b3890974"
+    },
+    "command-binding": {
+      "bytes": 4658,
+      "sha256": "8e09518e7326d47ab28e3ea401ce74177510e4136e48b652638e8bef2a05ba99"
+    },
+    "both-final-provider-manifests": {
+      "bytes": 4758,
+      "sha256": "dc7ada43f93531157ae3e1ab6754e6e3db31c13c22e4ac144a854e027f03f0bb"
+    }
+  },
+  "limits": [
+    "No timing or performance/default-promotion claim",
+    "No large-molecule rerun: b3 RKS measurements and their failures remain historical and unchanged",
+    "No actual CUDA/device qualification; non-CPU predicate bypass is a host control",
+    "Local GCC14.2/Python3.12.14 differs from CI GCC13.3/Python3.11.14; scalar provider agreement is not exact CI binary identity",
+    "Fixed-density independent physics is array-complete for OpenBLAS only; both providers pass the independently converged PySCF exact singlepoint test",
+    "The original requested primary budget and existing4 final-correction cap are unchanged; universal convergence/export is not claimed"
+  ]
+}

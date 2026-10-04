@@ -17,6 +17,64 @@ solver trajectories in NPZ files differ from temporary restart checkpoints.
 Fixture location and explicit justification take precedence over suffixes.
 Audited Libxc source snapshots remain versioned and unchanged.
 
+## Retain information according to its consumer
+
+An old report is not a permanent scientific fixture merely because a test hashes
+or unpacks it. Review the actual consumer before retaining a campaign:
+
+- **Independent inputs and regression references:** keep the exact numerical
+  values required by current scientific tests, with provenance and offline access
+- **Live numerical or performance claims:** retain the full-precision values,
+  paired timing samples, cohort identities, failures and protocol needed to
+  recompute the claim. Share repeated provenance instead of copying it per sample
+- **Historical engineering reports:** keep readable Markdown with the question,
+  decision, source/input identities, commands, gates, failures and limitations.
+  Already-published full reports may leave the current tree when an exact verified
+  Git snapshot makes them recoverable and no active numerical consumer needs them
+- **Transient diagnostics:** summarize material failures and keep full build/test
+  logs, retries, profiler streams and generated products in ignored run storage
+
+Use the existing Git snapshot and restoration schemas for historical reports.
+Pin the full published commit, original path, byte count and SHA-256; retain dirty
+source reconstruction where needed. A local blob or an unmerged PR head alone is
+not a durable history anchor. Verify recovery before retiring a payload and update
+its current links, policy rows and consumers in the same change. Do not leave a
+live publication manifest pointing at an intentionally archived member.
+
+Ordinary archive unit tests use small synthetic data and temporary repositories;
+hash/count-only tests must not force whole historical campaigns into every
+checkout. Actual history recovery is a separate audit. It may require an explicit
+fetch in a shallow clone; restoration never fetches implicitly. Current scientific
+fixtures and normal offline tests must not depend on that history fetch.
+
+This reduces checkout and routine CI payload, not the size of an existing full
+historical Git clone. It does not authorize history rewriting or external uploads.
+
+## Shared storage for necessary publication records
+
+Retained datasets that still have numerical consumers use the shared plain/gzip
+reader and the publication's declared role/path, rather than campaign-specific
+decoders or hard-coded `.json` filenames. For example,
+`load_publication_record(directory, role="samples", name="samples.json")` verifies
+declared stored hashes and resolves the plain or gzip member. It verifies storage;
+`validate_publication` and the campaign's scientific tests still enforce acceptance.
+
+The shared compactor authenticates all original members, resolves child parts
+before parent records, and updates their attachment/part bindings together. It
+preserves numbers, sample ordering and scientific identities. It discovers tracked
+publication manifests, never untracked run directories. Pre-commit and CI require
+eligible large evidence/sample JSON members to use this shared representation:
+
+```bash
+python tools/compact_evidence_publications.py --check
+# Apply only to explicitly reviewed publications, then stage the resulting files:
+python tools/compact_evidence_publications.py \
+  --publication benchmarks/results/my-campaign/publication.json
+```
+
+An explicit publication path also works in a source archive without Git metadata.
+Compression is not justification for retaining unnecessary reports or embedded logs.
+
 ## Run, inspect, publish
 
 Benchmark writers use `.artifacts/benchmarks/` by default or require an explicit
@@ -105,7 +163,7 @@ files, preserving the original array bytes and numeric identity checks.
 The same retention checker also enforces the optional
 `benchmark_results_max_bytes` policy field across **all** indexed files under
 `benchmarks/results/`, including manifests and summaries. Its current budget is
-96 MiB. Many individually sub-limit files cannot bypass this aggregate guard;
+64 MiB. Many individually sub-limit files cannot bypass this aggregate guard;
 classification exceptions cannot waive it. Permanent fixtures under
 `tests/reference_data/`, `tests/data/`, audited `upstream/` sources and
 `manifests/` provenance are not counted. Changing the budget is an explicit policy review, not an automatic
