@@ -51,6 +51,7 @@ struct Diagnostic {
 };
 struct Result { double energy{}; std::vector<double> forces; };
 struct Performance { double triples_seconds{}; };
+namespace integrals { struct ElectronInteractionSource {}; }
 struct State {
   Diagnostic diagnostic;
   Performance performance;
@@ -61,6 +62,7 @@ struct State {
   std::size_t budget{1024}, external_reservation_bytes{64};
   double reference_energy_change{1e-11}, reference_density_rms{1e-12};
   std::size_t reference_iterations{8};
+  std::unique_ptr<integrals::ElectronInteractionSource> reference_interaction_source;
 };
 int failure_mode{};
 bool cuda_mode{};
@@ -76,7 +78,6 @@ int capture(int, int, double energy_change, double density_rms, std::size_t iter
   return 42;
 }
 }
-namespace integrals { struct ElectronInteractionSource {}; }
 namespace posthf {
 struct RawSource : integrals::ElectronInteractionSource {
   explicit RawSource(int) {}
