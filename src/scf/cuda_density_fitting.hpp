@@ -66,13 +66,32 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
  * compatibility plans report their host staging. No failure authorizes an
  * oracle retry; unresolved rank crossings fail transactionally.
  */
+/** Method-owned, token-validated borrow of the exact restricted final-K
+ * occupied factor and fitted projection U=B*C. The provider remains the owner;
+ * the synchronous response consumes this view before its scratch lease is
+ * revoked. This descriptor cannot authorize reuse by itself: the DF plan also
+ * checks device/stream/shape/storage identity at the execution boundary. */
+struct CudaDfBorrowedFittedProjection {
+  int device_id{-1};
+  const double* occupied_coefficients{};
+  const double* projection{};
+  std::size_t nbf{}, naux{}, rank{};
+  void* stream{};
+
+  explicit operator bool() const noexcept {
+    return device_id >= 0 && occupied_coefficients != nullptr && projection != nullptr &&
+           nbf != 0 && naux != 0 && rank != 0 && stream != nullptr;
+  }
+};
+
 generativeqc_status execute_cuda_density_fitting_generated_force_response(
     CudaDensityFittingJkPlan* plan, std::size_t system, const core::System& orbital,
     const core::System& auxiliary, std::span<const double> raw_a, const std::vector<double>& metric,
     std::span<const DensityFittingDensityResponse> terms, unsigned schedule,
     std::size_t maximum_bytes, std::size_t maximum_auxiliary_tile, std::vector<double>& derivative,
     std::string& detail, DfGradientResources* resources = nullptr,
-    const CudaDfFinalStateToken* final_state = nullptr);
+    const CudaDfFinalStateToken* final_state = nullptr,
+    const CudaDfBorrowedFittedProjection* borrowed_fitted_projection = nullptr);
 
 /**
  * Prepare a device-resident source for bounded DF tile generation.
