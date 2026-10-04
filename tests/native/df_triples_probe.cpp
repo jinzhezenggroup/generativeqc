@@ -11,9 +11,8 @@ extern "C" int df_triples_probe(std::size_t o, std::size_t v, std::size_t q,
                                 std::size_t panels, int precision, double* values,
                                 std::size_t* counts, char* error, std::size_t error_size) noexcept {
   try {
-    const auto mode = precision == 0
-                          ? generativeqc::cc::triples::DFTriplesPrecision::Fp64
-                          : generativeqc::cc::triples::DFTriplesPrecision::WFp32;
+    const auto mode = precision == 0 ? generativeqc::cc::triples::DFTriplesPrecision::Fp64
+                                     : generativeqc::cc::triples::DFTriplesPrecision::WFp32;
     const auto result = generativeqc::cc::triples::evaluate_df_cuda(
         o, v, q, inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5], inputs[6],
         inputs[7], inputs[8], threshold, budget, 0, panels, mode);

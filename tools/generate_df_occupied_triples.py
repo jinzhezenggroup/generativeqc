@@ -507,10 +507,14 @@ def header() -> str:
             or value.inputs[0].op != "einsum"
             or value.inputs[0].spec.dtype != "float32"
         ):
-            raise ValueError("mixed occupied W seed must cast two FP32 reductions to FP64")
+            raise ValueError(
+                "mixed occupied W seed must cast two FP32 reductions to FP64"
+            )
         mixed_products.append(value.inputs[0])
     if mixed_w.attrs["coefficients"] != w.attrs["coefficients"]:
-        raise ValueError("mixed occupied W coefficients differ from the strict equation")
+        raise ValueError(
+            "mixed occupied W coefficients differ from the strict equation"
+        )
     weights = w.attrs["coefficients"]
     coefficient = lambda pair: f"({pair[0]}.0/{pair[1]}.0)"
     lines = [

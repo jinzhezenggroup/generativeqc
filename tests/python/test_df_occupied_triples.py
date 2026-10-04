@@ -402,15 +402,15 @@ def test_native_w_fp32_matches_strict_and_reports_actual_precision(
     native_probe: typing.Any,
 ) -> None:
     inputs, _ = case(2, 3, 4)
-    strict_status, strict_values, strict_counts, strict_error = run(native_probe, inputs)
+    strict_status, strict_values, strict_counts, strict_error = run(
+        native_probe, inputs
+    )
     mixed_status, mixed_values, mixed_counts, mixed_error = run(
         native_probe, inputs, mixed=True
     )
     assert strict_status == 0, strict_error
     assert mixed_status == 0, mixed_error
-    np.testing.assert_allclose(
-        mixed_values[0], strict_values[0], atol=2e-7, rtol=2e-4
-    )
+    np.testing.assert_allclose(mixed_values[0], strict_values[0], atol=2e-7, rtol=2e-4)
     assert strict_counts[15] == 0
     assert strict_counts[14] == strict_counts[6] + strict_counts[7]
     assert tuple(strict_counts[17:20]) == (64, 64, 64)
@@ -517,8 +517,6 @@ def test_native_pinned_independent_molecular_energies(
         native_probe, inputs, mixed=True
     )
     assert mixed_status == 0, mixed_error
-    np.testing.assert_allclose(
-        mixed_values[0], expected, atol=2e-7, rtol=2e-4
-    )
+    np.testing.assert_allclose(mixed_values[0], expected, atol=2e-7, rtol=2e-4)
     assert mixed_counts[15] > 0
     assert tuple(mixed_counts[17:20]) == (32, 32, 32)

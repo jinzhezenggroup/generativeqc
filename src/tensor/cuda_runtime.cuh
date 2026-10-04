@@ -180,9 +180,8 @@ static __global__ void check_scale(float* values, I count, float scale, int* err
 }
 
 static __global__ void convert_fp64_to_fp32_kernel(const double* source, float* target, I count,
-                                                     int* error, int node) {
-  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
-       i += I(blockDim.x) * gridDim.x) {
+                                                   int* error, int node) {
+  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < count; i += I(blockDim.x) * gridDim.x) {
     const double input = finite(source[i], error, node);
     target[i] = finite(__double2float_rn(input), error, node);
   }
@@ -192,16 +191,15 @@ static __global__ void convert_fp64_to_fp32_kernel(const double* source, float* 
 inline void convert_fp64_to_fp32(Context& context, const double* source, float* target, I count,
                                  int node) {
   if (count <= 0) return;
-  convert_fp64_to_fp32_kernel<<<blocks(count, 256), 256, 0, context.stream>>>(
-      source, target, count, context.error, node);
+  convert_fp64_to_fp32_kernel<<<blocks(count, 256), 256, 0, context.stream>>>(source, target, count,
+                                                                              context.error, node);
   cuda_check(cudaGetLastError());
 }
 
 static __global__ void accumulate_fp32_into_fp64_kernel(const float* source, double* target,
                                                         I count, double alpha, double beta,
                                                         int* error, int node) {
-  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
-       i += I(blockDim.x) * gridDim.x) {
+  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < count; i += I(blockDim.x) * gridDim.x) {
     const double converted = static_cast<double>(finite(source[i], error, node));
     double value = __dmul_rn(alpha, converted);
     if (beta != 0.0) value = __dadd_rn(value, __dmul_rn(beta, target[i]));

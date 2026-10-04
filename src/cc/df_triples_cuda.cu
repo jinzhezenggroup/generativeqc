@@ -70,8 +70,7 @@ Layout layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
   if (mixed_w) {
     p.fp32_ovoo = reserve(cursor, float_bytes(p.sizes[2]));
     p.fp32_t2 = reserve(cursor, float_bytes(p.sizes[6]));
-    p.fp32_panels =
-        reserve(cursor, float_bytes(checked_mul(p.panel_capacity, p.v3)));
+    p.fp32_panels = reserve(cursor, float_bytes(checked_mul(p.panel_capacity, p.v3)));
     p.fp32_w_scratch = reserve(cursor, float_bytes(p.v3));
   }
   p.partials = reserve(cursor, bytes(p.blocks));
@@ -318,24 +317,21 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
     auto* partials = reinterpret_cast<double*>(context.arena + p.partials);
     auto* energies = reinterpret_cast<double*>(context.arena + p.energies);
     auto* energy = reinterpret_cast<double*>(context.arena + p.energy);
-    auto* fp32_ovoo =
-        mixed_w ? reinterpret_cast<float*>(context.arena + p.fp32_ovoo) : nullptr;
+    auto* fp32_ovoo = mixed_w ? reinterpret_cast<float*>(context.arena + p.fp32_ovoo) : nullptr;
     auto* fp32_t2 = mixed_w ? reinterpret_cast<float*>(context.arena + p.fp32_t2) : nullptr;
-    auto* fp32_panels =
-        mixed_w ? reinterpret_cast<float*>(context.arena + p.fp32_panels) : nullptr;
+    auto* fp32_panels = mixed_w ? reinterpret_cast<float*>(context.arena + p.fp32_panels) : nullptr;
     auto* fp32_w_scratch =
         mixed_w ? reinterpret_cast<float*>(context.arena + p.fp32_w_scratch) : nullptr;
     if (mixed_w) {
-      generativeqc_tensor::convert_fp64_to_fp32(context, in.ovoo, fp32_ovoo,
-                                                static_cast<generativeqc_tensor::I>(p.sizes[2]), 20);
-      generativeqc_tensor::convert_fp64_to_fp32(context, in.t2, fp32_t2,
-                                                static_cast<generativeqc_tensor::I>(p.sizes[6]), 21);
-      result.precision_cast_elements =
-          checked_add(p.sizes[2], p.sizes[6]);
+      generativeqc_tensor::convert_fp64_to_fp32(
+          context, in.ovoo, fp32_ovoo, static_cast<generativeqc_tensor::I>(p.sizes[2]), 20);
+      generativeqc_tensor::convert_fp64_to_fp32(
+          context, in.t2, fp32_t2, static_cast<generativeqc_tensor::I>(p.sizes[6]), 21);
+      result.precision_cast_elements = checked_add(p.sizes[2], p.sizes[6]);
     }
     auto gemm64 = [&](char ta, char tb, std::size_t m, std::size_t n, std::size_t k, double alpha,
-                    const double* a, std::size_t lda, const double* b, std::size_t ldb, double beta,
-                    double* c, std::size_t ldc) {
+                      const double* a, std::size_t lda, const double* b, std::size_t ldb,
+                      double beta, double* c, std::size_t ldc) {
       generativeqc_tensor::blas_check(
           cublasDgemm(context.handle, ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
                       tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, static_cast<int>(m),
@@ -378,9 +374,9 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
         generated_df::build_panel(o, v, q, occupied, in, panels + slot * p.v3, gemm64);
         ++result.panel_gemms;
         if (mixed_w) {
-          generativeqc_tensor::convert_fp64_to_fp32(
-              context, panels + slot * p.v3, fp32_panels + slot * p.v3,
-              static_cast<generativeqc_tensor::I>(p.v3), 23);
+          generativeqc_tensor::convert_fp64_to_fp32(context, panels + slot * p.v3,
+                                                    fp32_panels + slot * p.v3,
+                                                    static_cast<generativeqc_tensor::I>(p.v3), 23);
           result.precision_cast_elements = checked_add(result.precision_cast_elements, p.v3);
         }
         identities[slot] = occupied;
@@ -405,14 +401,14 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
               const auto* order = generated_df::permutations[permutation];
               if (occupied[order[0]] != occupied[index]) continue;
               if (mixed_w) {
-                generated_df::build_w_fp32(
-                    o, v, occupied[order[0]], occupied[order[1]], occupied[order[2]], fp32_ovoo,
-                    fp32_t2, fp32_panels + slot * p.v3, fp32_w_scratch,
-                    moments + permutation * p.v3, gemm32, accumulate32);
+                generated_df::build_w_fp32(o, v, occupied[order[0]], occupied[order[1]],
+                                           occupied[order[2]], fp32_ovoo, fp32_t2,
+                                           fp32_panels + slot * p.v3, fp32_w_scratch,
+                                           moments + permutation * p.v3, gemm32, accumulate32);
               } else {
                 generated_df::build_w(o, v, occupied[order[0]], occupied[order[1]],
-                                      occupied[order[2]], in, panel,
-                                      moments + permutation * p.v3, gemm64);
+                                      occupied[order[2]], in, panel, moments + permutation * p.v3,
+                                      gemm64);
               }
               result.moment_gemms += 2;
             }
