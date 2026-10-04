@@ -85,7 +85,15 @@ pedantic FP32/FP64 and rejects unimplemented precision obligations and aliases.
 Provider version and simultaneous workspace/provider/host/cache ceilings must be
 explicit. Ready means preparation eligibility; algorithm selection, exact queried
 workspace, native replay and opaque/lazy allocation qualification remain required.
-No cuBLASLt production executor or measured default promotion is connected yet.
+`src/tensor/cuda_cublaslt.cuh` prepares at most eight heuristic offers once,
+checks algorithm/workspace legality, and retains the selected algorithm for every
+replay. It reports the algorithm ID, tile, split-K/reduction, stages, swizzle,
+custom/inner/cluster configuration, version, target and exact queried workspace.
+Logical output audits preserve sticky errors and ignore row/batch padding.
+Capture is rejected. The opaque host and global heuristic-cache footprint still
+needs external qualification; cache capacity is reported without changing global
+policy. Standalone native qualification uses explicit test reservations. No
+production portfolio execution or measured default promotion is connected yet.
 
 `tensor.lowering.TensorLoweringAdapter` projects existing TensorIR nodes for CPU
 or CUDA consumers. It resolves program-wide precision and node hashes once per

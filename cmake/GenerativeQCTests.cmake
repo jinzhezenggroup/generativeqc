@@ -23,6 +23,12 @@ endfunction()
 macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
+    if(GENERATIVEQC_CUDA_PROVIDER STREQUAL "nvidia" AND TARGET CUDA::cublasLt)
+      generativeqc_native_test(generativeqc_native_cublaslt_tests
+                         tests/native/test_native_cublaslt.cu NO_GENERATIVEQC
+                         LIBRARIES CUDA::cudart CUDA::cublasLt CUDA::cublas)
+      set_tests_properties(generativeqc_native_cublaslt_tests PROPERTIES TIMEOUT 180)
+    endif()
     if(TARGET generativeqc_cutensor)
       generativeqc_native_test(generativeqc_native_cutensor_tests
                          tests/native/test_native_cutensor.cu NO_GENERATIVEQC
