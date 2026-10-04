@@ -1723,16 +1723,24 @@ void range_exchange_derivatives() {
               shell_raw, &destroy_cuda_direct_jk_plan);
           DeviceMatrix device_a(a), device_b(b);
           std::vector<double> shell;
-          require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
-                      shell_plan.get(), spin, 1.0, coefficient, coefficient, omega,
-                      device_a.pointer, spin == FockSpin::Unrestricted ? device_b.pointer : nullptr,
-                      matrix, shell, detail) == GENERATIVEQC_STATUS_SUCCESS,
-                  detail.c_str());
-          require(shell.size() == fused.size(), "bounded shell RSH source shape changed");
-          for (std::size_t coordinate = 0; coordinate < shell.size(); ++coordinate)
-            require(std::isfinite(shell[coordinate]) &&
-                        std::abs(shell[coordinate] - fused[coordinate]) < 3e-10,
-                    "bounded shell RSH derivative differs from CPU-qualified canonical source");
+          // Both schedules satisfy the same independent canonical/CPU oracle.
+          // Restore the prepared policy after exercising the explicit opt-in.
+          const bool selected_angular = shell_plan->generated_exchange->angular_force_opt_in;
+          for (bool angular_schedule : {false, true}) {
+            shell_plan->generated_exchange->angular_force_opt_in = angular_schedule;
+            require(
+                execute_cuda_direct_shell_rsh_energy_derivatives_device(
+                    shell_plan.get(), spin, 1.0, coefficient, coefficient, omega, device_a.pointer,
+                    spin == FockSpin::Unrestricted ? device_b.pointer : nullptr, matrix, shell,
+                    detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+            require(shell.size() == fused.size(), "bounded shell RSH source shape changed");
+            for (std::size_t coordinate = 0; coordinate < shell.size(); ++coordinate)
+              require(std::isfinite(shell[coordinate]) &&
+                          std::abs(shell[coordinate] - fused[coordinate]) < 3e-10,
+                      "bounded shell RSH derivative differs from CPU-qualified canonical source");
+          }
+          shell_plan->generated_exchange->angular_force_opt_in = selected_angular;
           for (std::size_t coordinate = 0; coordinate < 6; ++coordinate) {
             require(std::abs(fused[coordinate] - j_gradient[coordinate]) < 2e-11,
                     "fused CUDA RSH Coulomb derivative changed");
@@ -1760,7 +1768,8 @@ void shell_range_four_center_derivatives() {
   constexpr double omega = 0.3, coefficient = -0.37, step = 1e-4;
   for (const auto angular :
        {std::array<unsigned, 4>{2, 1, 0, 0}, std::array<unsigned, 4>{2, 1, 1, 0},
-        std::array<unsigned, 4>{2, 2, 1, 0}, std::array<unsigned, 4>{2, 2, 1, 1}}) {
+        std::array<unsigned, 4>{2, 2, 1, 0}, std::array<unsigned, 4>{2, 2, 1, 1},
+        std::array<unsigned, 4>{3, 2, 1, 0}}) {
     for (const bool repeated_center : {false, true}) {
       generativeqc::core::System system;
       system.atoms = {{1, {0.1, -0.2, -0.8}},
@@ -1792,13 +1801,30 @@ void shell_range_four_center_derivatives() {
       std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
           raw, &destroy_cuda_direct_jk_plan);
       DeviceMatrix device_a(a), device_b(b);
-      std::array<std::vector<double>, 2> actual;
-      for (unsigned spin = 0; spin < 2; ++spin)
-        require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
-                    plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 0.0, 0.0,
-                    coefficient, omega, device_a.pointer, spin ? device_b.pointer : nullptr, matrix,
-                    actual[spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
-                detail.c_str());
+      // Mixed f/d/p/s combinations include orders 10/11, absent from the
+      // s/f two-center fixture. Reuse each CPU derivative for both schedules.
+      std::array<std::array<std::vector<double>, 2>, 2> scheduled, full_scheduled;
+      for (unsigned schedule = 0; schedule < 2; ++schedule) {
+        plan->generated_exchange->angular_force_opt_in = schedule != 0;
+        for (unsigned spin = 0; spin < 2; ++spin) {
+          require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
+                      plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 0.0, 0.0,
+                      coefficient, omega, device_a.pointer, spin ? device_b.pointer : nullptr,
+                      matrix, scheduled[schedule][spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
+                  detail.c_str());
+          if (angular[0] == 3U)
+            require(execute_cuda_direct_shell_full_range_derivatives_device(
+                        plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 1.3,
+                        coefficient, device_a.pointer, spin ? device_b.pointer : nullptr, matrix,
+                        full_scheduled[schedule][spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
+                    detail.c_str());
+        }
+      }
+      // The mixed high orders need independent full-range coverage too; LR
+      // correctness alone cannot qualify separate J/K source accumulation.
+      const auto full_derivatives =
+          angular[0] == 3U ? generativeqc::integrals::build_integrals(system, true).eri_derivative
+                           : std::vector<double>{};
       const auto coordinates = system.atoms.size() * 3U;
       for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
         auto plus = system, minus = system;
@@ -1818,12 +1844,35 @@ void shell_range_four_center_derivatives() {
           const auto cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
           const double expected = contract_exact_direct_energy_derivative(
               cpu, n, derivative, a, spin ? b : std::vector<double>{});
-          require(actual[spin].size() == 3U * coordinates, "bounded LR source shape changed");
-          require(actual[spin][coordinate] == 0.0 && actual[spin][coordinates + coordinate] == 0.0,
-                  "disabled bounded RSH source acquired a contribution");
-          const double value = actual[spin][2U * coordinates + coordinate];
-          require(std::isfinite(value) && std::abs(value - expected) < 3e-8,
-                  "four-center bounded LR derivative differs from displaced CPU ERIs");
+          for (const auto& actual : scheduled) {
+            require(actual[spin].size() == 3U * coordinates, "bounded LR source shape changed");
+            require(
+                actual[spin][coordinate] == 0.0 && actual[spin][coordinates + coordinate] == 0.0,
+                "disabled bounded RSH source acquired a contribution");
+            const double value = actual[spin][2U * coordinates + coordinate];
+            require(std::isfinite(value) && std::abs(value - expected) < 3e-8,
+                    "four-center bounded LR derivative differs from displaced CPU ERIs");
+          }
+          if (!full_derivatives.empty()) {
+            for (unsigned source = 0; source < 2; ++source) {
+              spec.coulomb.present = source == 0;
+              spec.exchange.present = source == 1;
+              spec.coulomb.coefficient = 1.3;
+              const auto full_cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+              const double expected_full = contract_exact_direct_energy_derivative(
+                  full_cpu, n,
+                  std::span<const double>(full_derivatives)
+                      .subspan(coordinate * matrix * matrix, matrix * matrix),
+                  a, spin ? b : std::vector<double>{});
+              for (const auto& actual : full_scheduled) {
+                require(actual[spin].size() == 2U * coordinates,
+                        "mixed full-range source shape changed");
+                const double value = actual[spin][source * coordinates + coordinate];
+                require(std::isfinite(value) && std::abs(value - expected_full) < 3e-10,
+                        "mixed full-range J/K derivative differs from independent CPU ERIs");
+              }
+            }
+          }
         }
       }
     }

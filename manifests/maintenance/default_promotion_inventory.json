@@ -147,6 +147,27 @@
       ]
     },
     {
+      "id": "hf.bounded-angular-force",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_BOUNDED_ANGULAR_FORCE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/direct_bounded_fallback.cu",
+        "src/scf/cuda/direct_coulomb.cpp"
+      ],
+      "rationale": "Off-by-default full/LR force angular partition shares existing recurrence and screening but repeats shell enumeration thirteen times. Register-pressure diagnosis motivates an experiment, not a speedup claim.",
+      "revisit_condition": "Require independent full/SR/LR derivative gates, observed semantic work and same-binary cold/warm/moved endpoints including a larger size before promotion. Retain the single traversal when the tradeoff loses.",
+      "evidence": [
+        "pr:#1761",
+        "docs:docs/developer/fock_build.md"
+      ]
+    },
+    {
       "id": "hf.force-density-product-screening",
       "classification": "negative-evidence",
       "controls": [

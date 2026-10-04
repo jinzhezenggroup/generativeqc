@@ -35,6 +35,9 @@ from .elements import electron_state
 # Preserve that distinction in restart provenance; absence is not a claim
 # that an older build implemented today's automatic execution policy.
 _CUDA_SCHEDULE_EXTENSION_VARIABLES = (
+    # Optional in historical checkpoints, but part of every new resource and
+    # restart identity: changing the force schedule requires explicit admission.
+    "GENERATIVEQC_BOUNDED_ANGULAR_FORCE",
     "GENERATIVEQC_DF_VALUE_STORAGE",
     "GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION",
     "GENERATIVEQC_DF_VALUE_RAW_MAPPING",

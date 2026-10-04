@@ -49,6 +49,17 @@ balance, not the dense worst-case scaling. Sparse-density cases can be slower;
 this switch is a qualification control, not a universal speedup or default
 promotion. See the [schedule decision](../../.agents/notes/implemented/performance/2026-10-03-schwarz-indexed-independent-force-domain.md).
 
+`GENERATIVEQC_BOUNDED_ANGULAR_FORCE=1` (or `angular`) separately opts full-range
+J/K and omega=0.3 LR force sources into thirteen total-angular-order passes.
+It is **off by default** and changes neither the recurrence nor the screening
+gates. Full-range passes retain the selected indexed/triangular domain; LR keeps
+its existing triangular domain. Cursor/output storage is reused on the owning
+stream, while shell enumeration is repeated per order. The purpose is to qualify
+the tradeoff between compiled kernel resources and repeated scanning, not to
+assume less integral work. The switch is recorded in resource and checkpoint
+identity; differing or missing historical policy needs explicit warm admission.
+See the [experiment and acceptance gates](../../.agents/notes/proposed/2026-10-04-tzvpd-angular-force-schedule.md).
+
 ## Public prepared API
 
 `FockPlan` owns normalized geometry, orbital/auxiliary data and native sources.

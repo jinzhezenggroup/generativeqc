@@ -73,6 +73,8 @@ struct GeneratedExchangePlan {
   // Optional bounded Direct-HF lease. Value fallback and stationary forces
   // share immutable shell topology, screening metadata and one cursor.
   bool force_capability{}, bounded_value_capability{};
+  /** Experimental schedule only; false retains the qualified single traversal. */
+  bool angular_force_opt_in{};
   const std::uint32_t* bounded_pair_order{};
   /** Optional geometry-live row index; owned by allocations, never by a call. */
   detail::BoundedDirectBlockDomain bounded_block_domain{};

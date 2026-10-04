@@ -892,6 +892,28 @@ void launch_bounded_shell_energy_derivative(
       block_domain);
 }
 
+cudaError_t launch_bounded_shell_angular_energy_derivative(
+    bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
+    double screening, const double* shell_pair_bounds,
+    const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* pair_order,
+    const double* shell_pair_block_bounds, const double* system_density_bounds,
+    const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
+    const std::uint8_t* active, double* output, unsigned long long* cursor,
+    DirectCoulombRange range, double omega, double coulomb_coefficient, double exchange_coefficient,
+    detail::BoundedDirectBlockDomain block_domain) {
+  if (range != DirectCoulombRange::Full && range != DirectCoulombRange::Long)
+    return cudaErrorInvalidValue;
+  // Keep the host provider independent of the Direct consumer's radial enum
+  // and queue implementation, as for the retained single-traversal seams.
+  return launch_bounded_direct_angular_force_kernel(
+      unrestricted, worker_blocks, stream, batch, screening, shell_pair_bounds,
+      shell_pair_density_bounds, pair_order, shell_pair_block_bounds, system_density_bounds,
+      class_state, schwarz_bounds, density, active, output, cursor,
+      range == DirectCoulombRange::Full ? DirectRangeOperator::FullSources
+                                        : DirectRangeOperator::Long,
+      omega, coulomb_coefficient, exchange_coefficient, block_domain);
+}
+
 void launch_bounded_shell_range_exchange_derivative(
     bool unrestricted, unsigned worker_blocks, cudaStream_t stream, DeviceBatch batch,
     double screening, const double* shell_pair_bounds,
