@@ -106,6 +106,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/methods/xtb_method.cpp)
   if(GENERATIVEQC_ENABLE_CUDA)
     target_sources(${target} PRIVATE
+      src/methods/df_ccsdt_force.cu
       src/hf/rhf_frame_response.cu
       src/cc/df_source_cuda.cu
       src/posthf/df_mo_response.cu
