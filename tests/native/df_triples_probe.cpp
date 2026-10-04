@@ -35,9 +35,9 @@ extern "C" int df_triples_probe(std::size_t o, std::size_t v, std::size_t q,
                                 result.fp64_gemms,
                                 result.fp32_gemms,
                                 result.precision_cast_elements,
-                                result.w_storage_bits,
-                                result.w_compute_bits,
-                                result.w_accumulation_bits};
+                                result.w_contraction_storage_bits,
+                                result.w_contraction_compute_bits,
+                                result.w_contraction_accumulation_bits};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;
