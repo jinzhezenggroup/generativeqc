@@ -91,6 +91,15 @@ void check(char ta, char tb, std::size_t batch, bool padded = false,
     throw std::runtime_error("provider preparation failed");
   PreparedContractions bindings;
   std::size_t calls{}, summands{};
+#if !GENERATIVEQC_HAS_CUTENSOR
+  try {
+    bindings.add(m, n, batch, {request}, context, calls, summands,
+                 {ContractionAlgorithm::CutensorAffine});
+    throw std::logic_error("provider-absent build accepted cuTENSOR");
+  } catch (const ContractionPreparationUnavailable&) {
+  }
+  if (bindings) throw std::logic_error("unavailable provider changed table state");
+#endif
   bindings.add(m, n, batch, {request}, context, calls, summands, {algorithm});
   T *da{}, *db{}, *dc{};
   int* error{};
