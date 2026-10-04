@@ -289,10 +289,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   bool complete_precision_inventory_domain() const noexcept {
     // Version-1 detailed census covers the ordinary host-controlled CUDA-KS
-    // schedule with device-resident semilocal XC. Device chunks have a separate
-    // replay owner, host-unfused XC has CPU arithmetic, and nonlocal correlation
-    // needs its own operator identity before any of them can be certified.
-    return !device_chunk_mode && !nonlocal_correlation &&
+    // schedule with device-resident semilocal XC and, when present, the
+    // device-resident nonlocal owner. Device chunks have a separate replay owner
+    // and host-unfused XC/nonlocal work has arithmetic outside this census.
+    return !device_chunk_mode && (!nonlocal_correlation || device_nonlocal) &&
            options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
   }
 
@@ -346,6 +346,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                 scf::PrecisionArithmeticMode::Strict, exchange_builds);
       record_precision_operator(scf::PrecisionOperatorKind::Xc, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
+      if (nonlocal_correlation)
+        record_precision_operator(scf::PrecisionOperatorKind::NonlocalCorrelation,
+                                  scf::PrecisionDtype::Fp64,
+                                  scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,

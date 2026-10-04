@@ -435,9 +435,6 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       !cuda_wb97mv)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA self-consistent nonlocal correlation is qualified only for WB97M-V");
-  if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.nonlocal_correlation)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "self-consistent nonlocal correlation currently requires strict FP64");
   if (execution_plan.range_exchange && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
       !cuda_wb97mv)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
