@@ -293,12 +293,8 @@ def test_wb97mv_auto_matches_fp64_cold_warm_and_moved(
 
         moved = np.asarray([xyz for _, xyz in atoms], dtype=float)
         moved[-1, 0] += 0.02
-        auto_moved = automatic_batch.execute(
-            coordinates=[moved], strict=True
-        ).items[0]
-        fp64_moved = strict_batch.execute(
-            coordinates=[moved], strict=True
-        ).items[0]
+        auto_moved = automatic_batch.execute(coordinates=[moved], strict=True).items[0]
+        fp64_moved = strict_batch.execute(coordinates=[moved], strict=True).items[0]
 
     for automatic_result, fp64_result in (
         (auto_cold, fp64_cold),
@@ -306,9 +302,7 @@ def test_wb97mv_auto_matches_fp64_cold_warm_and_moved(
         (auto_moved, fp64_moved),
     ):
         _assert_wb97mv_auto_component_precision(automatic_result)
-        assert automatic_result.energy == pytest.approx(
-            fp64_result.energy, abs=2e-8
-        )
+        assert automatic_result.energy == pytest.approx(fp64_result.energy, abs=2e-8)
         np.testing.assert_allclose(
             automatic_result.forces, fp64_result.forces, atol=2e-7, rtol=0
         )

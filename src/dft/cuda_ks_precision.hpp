@@ -37,11 +37,10 @@ inline runtime::ExecutionPrecisionSchedule resolve_cuda_ks_precision_schedule(
     throw std::invalid_argument("CUDA KS received an unknown precision mode");
   if (automatic && fitted_coulomb)
     throw std::invalid_argument("CUDA fitted KS requires strict FP64");
-  const bool mixed_density =
-      automatic && !nonlocal_correlation &&
-      (functional == semilocal_family_code(SemilocalFamily::Lda) ||
-                    functional == semilocal_family_code(SemilocalFamily::Pbe) ||
-                    functional == semilocal_family_code(SemilocalFamily::R2scan));
+  const bool mixed_density = automatic && !nonlocal_correlation &&
+                             (functional == semilocal_family_code(SemilocalFamily::Lda) ||
+                              functional == semilocal_family_code(SemilocalFamily::Pbe) ||
+                              functional == semilocal_family_code(SemilocalFamily::R2scan));
 
   runtime::ExecutionPrecisionSchedule schedule;
   schedule.add_region(cuda_ks_precision_region::kCoulombJ,

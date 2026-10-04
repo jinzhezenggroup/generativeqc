@@ -348,8 +348,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                 scf::PrecisionArithmeticMode::Strict);
       if (nonlocal_correlation)
         record_precision_operator(scf::PrecisionOperatorKind::NonlocalCorrelation,
-                                  scf::PrecisionDtype::Fp64,
-                                  scf::PrecisionArithmeticMode::Strict);
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
