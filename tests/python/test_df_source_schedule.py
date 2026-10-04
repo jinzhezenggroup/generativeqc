@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -13,10 +12,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def test_compiled_raw_and_transformed_schedule_contract(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def test_compiled_raw_and_transformed_schedule_contract(
+    tmp_path: Path, native_cxx
+) -> None:
     driver = tmp_path / "schedule.cpp"
     driver.write_text(
         emit_df_value_source_schedule_cuda()
@@ -33,17 +31,10 @@ int main() {
 """
     )
     executable = tmp_path / "schedule"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-include",
-            "initializer_list",
-            str(driver),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [driver],
+        executable,
+        compile_args=("-std=c++20", "-include", "initializer_list"),
+        compile_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
