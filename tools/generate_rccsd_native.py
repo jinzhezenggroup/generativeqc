@@ -806,6 +806,14 @@ def _independent_cpu(
 
 def cpu_header() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
+    iteration_matrix = [
+        g
+        for node in iteration.live_nodes
+        if (g := _packed_matrix_gemm(node)) is not None
+    ]
+    iteration_matrix_dimensions = sorted(
+        {dimension for g in iteration_matrix for dimension in g[2:]}
+    )
     expanded = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
     replay = _prepare_production(expanded, "cpu", preserve_reduction_order=True)
     replay_fast = _reassociated_independent(expanded, "cpu")
@@ -960,6 +968,17 @@ def cpu_header() -> str:
             "};",
             f'inline constexpr const char* iteration_equation_hash="{iteration.provenance["physical_equation"]}";',
             f'inline constexpr const char* iteration_program_hash="{iteration.logical_hash}";',
+            f"inline constexpr std::size_t iteration_matrix_gemms={len(iteration_matrix)};",
+            (
+                "inline bool iteration_matrix_dimensions_fit(std::size_t o,std::size_t v){"
+                "[[maybe_unused]] const auto n=checked_add(o,v);try{return "
+                "iteration_matrix_gemms!=0 && "
+                + " && ".join(
+                    [f"{dimension}<=2147483647ULL" for dimension in iteration_matrix_dimensions]
+                    or ["false"]
+                )
+                + ";}catch(const std::length_error&){return false;}}"
+            ),
             f'inline constexpr const char* replay_equation_hash="{replay.logical_hash}";',
             f'inline constexpr const char* lambda_rhs_program_hash="{lambda_rhs.logical_hash}";',
             f'inline constexpr const char* lambda_transpose_program_hash="{lambda_transpose.logical_hash}";',
@@ -1486,19 +1505,23 @@ def _cuda_program(
     reset_error: bool = True,
     matrix_gemm: str | None = None,
     batched_matrix_gemm: str | None = None,
+    kernel_prefix: str | None = None,
+    emit_kernels: bool = True,
 ) -> str:
     names = _prepare_program(program)
     arena_plan = _arena_plan(program)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
+    kernel_name = prefix if kernel_prefix is None else kernel_prefix
     kernels = []
-    for number, node in enumerate(_execution_nodes(program)):
-        if node.op != "input" and not (
-            (matrix_gemm and _packed_matrix_gemm(node) is not None)
-            or (batched_matrix_gemm and _packed_batched_matrix_gemm(node) is not None)
-        ):
-            kernels.append(
-                _cuda_kernel(node, number, prefix, names, batch_dim=batch_dim)
-            )
+    if emit_kernels:
+        for number, node in enumerate(_execution_nodes(program)):
+            if node.op != "input" and not (
+                (matrix_gemm and _packed_matrix_gemm(node) is not None)
+                or (batched_matrix_gemm and _packed_batched_matrix_gemm(node) is not None)
+            ):
+                kernels.append(
+                    _cuda_kernel(node, number, kernel_name, names, batch_dim=batch_dim)
+                )
     uses_complete_orbital = any(
         _dim(index) == "n"
         for node in _execution_nodes(program)
@@ -1579,7 +1602,7 @@ def _cuda_program(
             ]
         )
         lines += [
-            f"  {prefix}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
+            f"  {kernel_name}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
         ]
     lines.append("  generativeqc_tensor::cuda_check(cudaGetLastError());")
     outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
@@ -1753,6 +1776,15 @@ def cuda_source() -> str:
             '#include "generated_rccsd_cpu.hpp"',
             "namespace generativeqc::cc::generated {",
             _cuda_program(iteration, "iteration", "DeviceIterationOutputs"),
+            _cuda_program(
+                iteration,
+                "iteration_matrix",
+                "DeviceIterationOutputs",
+                arena_field="iteration_arena",
+                matrix_gemm="s.matrix_gemm",
+                kernel_prefix="iteration",
+                emit_kernels=False,
+            ),
             _independent_cuda(replay, replay_fast, "replay", "DeviceReplayOutputs"),
             _cuda_program(
                 lambda_rhs,
@@ -1826,6 +1858,7 @@ def cuda_source() -> str:
                 input_overrides={name: f"s.{name}" for name in orbital_jvp_input_names},
             ),
             "DeviceIterationOutputs run_iteration_cuda(CudaState& state){return run_iteration(state);}",
+            "DeviceIterationOutputs run_iteration_matrix_cuda(CudaState& state){return run_iteration_matrix(state);}",
             "DeviceReplayOutputs run_replay_cuda(CudaState& state){return run_replay(state);}",
             "DeviceLambdaOutputs run_lambda_rhs_cuda(CudaState& state){return run_lambda_rhs(state);}",
             "DeviceLambdaOutputs run_lambda_transpose_cuda(CudaState& state){return run_lambda_transpose(state);}",
