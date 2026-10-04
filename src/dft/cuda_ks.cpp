@@ -842,6 +842,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
             throw std::logic_error("admitted native SCF AO selection failed its resource check");
           xc_layout = xc->layout();
         }
+        xc->prepare_density(*precision_schedule.find(cuda_ks_precision_region::kDensityContraction),
+                            options.max_iterations);
         prepared_ao_work = xc->ao_selection_work();
         prepared_ao_work.requested = select_ao;
         if (!admit_ao) {
@@ -1315,11 +1317,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   CudaXcView stage_xc(std::uint64_t next_generation,
-                      CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64) {
+                      generativeqc::runtime::PrecisionPhase phase =
+                          generativeqc::runtime::PrecisionPhase::StrictAudit) {
     if (options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       if (!xc) throw std::logic_error("device-fused XC owner is unavailable");
       if (!device_nonlocal) {
-        xc->enqueue(density, elements, next_generation, precision);
+        xc->enqueue(density, elements, next_generation, phase);
         return xc->view(next_generation);
       }
       xc->enqueue_density_features(density, elements, next_generation, nonlocal_raw_density,
@@ -1429,8 +1432,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
       const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
       pending_mixed_coulomb = mixed_stage && precision_schedule.uses_lower_precision(
                                                  cuda_ks_precision_region::kCoulombJ);
-      pending_mixed_density = mixed_stage && precision_schedule.uses_lower_precision(
-                                                 cuda_ks_precision_region::kDensityContraction);
+      const auto density_phase = strict_refinement
+                                     ? generativeqc::runtime::PrecisionPhase::StrictAudit
+                                     : generativeqc::runtime::PrecisionPhase::Admitted;
+      pending_mixed_density =
+          xc && !xc->density_binding(density_phase).precision.arithmetic.is_strict_fp64();
       // Provider selection stays inside the prepared Fock facade. For a fitted
       // hybrid, the first cold/warm-seed build has no trusted canonical factor
       // and stays dense. After a successful proposal becomes the current density,
@@ -1490,9 +1496,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
               detail);
       mixed_precision_executed =
           mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
-      const auto potential = stage_xc(
-          ++generation, pending_mixed_density ? CudaXcDensityPrecision::Fp32ComputeFp64Accumulate
-                                              : CudaXcDensityPrecision::Fp64);
+      const auto potential = stage_xc(++generation, density_phase);
       pending_generations[0] = generation;
       ++movement.submitted_iterations;
       pending_iterations = 1;
@@ -2295,7 +2299,7 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
       CudaXcView view;
       profile.milliseconds[3] = timed([&] {
         view = impl_->xc->enqueue_replay_body(impl_->density, impl_->elements,
-                                              CudaXcDensityPrecision::Fp64);
+                                              generativeqc::runtime::PrecisionPhase::StrictAudit);
       });
       read_error(view.error, "fixed-density XC");
       profile.present_mask |= (1U << 3);

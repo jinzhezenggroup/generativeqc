@@ -18,6 +18,10 @@ inline constexpr std::string_view kExecutionPrecisionSchema =
     "generativeqc.compiler.execution-precision.v1";
 inline constexpr std::string_view kStrictPrecisionMathMode = "ieee-rn-no-tf32";
 
+/** The method requests an admitted iteration or the strict publication audit;
+ * implementation arithmetic is resolved once by the prepared binding. */
+enum class PrecisionPhase : std::uint8_t { Admitted, StrictAudit };
+
 enum class PrecisionDtype : std::uint8_t { Fp32, Fp64 };
 
 struct PrecisionDirective {

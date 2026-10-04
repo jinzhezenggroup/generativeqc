@@ -100,7 +100,9 @@ void local_ao_cases() {
           require(fixture.layout.device_bytes ==
                       dense.device_bytes + maps.indices.size() * sizeof(std::size_t),
                   "local AO indices were not charged exactly");
-          require(fixture.layout.host_ao_map_bytes == maps.offsets.size() * sizeof(std::size_t),
+          require(fixture.layout.host_ao_map_bytes ==
+                      maps.offsets.size() * sizeof(std::size_t) +
+                          (maps.offsets.size() - 1) * sizeof(CudaXcDensityLauncher),
                   "local AO host offsets were not charged exactly");
           // Setup copies all indices and offsets. Releasing caller metadata must
           // not leave any borrowed host storage in asynchronous evaluation.
