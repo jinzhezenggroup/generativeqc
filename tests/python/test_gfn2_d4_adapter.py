@@ -1,6 +1,5 @@
 """Compile the actual GFN2 D4 adapter and exercise its outer storage contract."""
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -11,12 +10,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def adapter(tmp_path_factory: pytest.TempPathFactory) -> Path:
+def adapter(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Path:
     if sys.platform != "linux":
         pytest.skip("ELF section-GC fixture requires Linux")
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     output = tmp_path_factory.mktemp("gfn2-d4-adapter") / "probe"
     runtime = ROOT / "src/xtb/native"
     subprocess.run(
@@ -33,9 +29,13 @@ def adapter(tmp_path_factory: pytest.TempPathFactory) -> Path:
         text=True,
         timeout=30,
     )
-    subprocess.run(
+    native_cxx.build_executable(
         [
-            compiler,
+            ROOT / "tests/native/test_gfn2_d4_adapter.cpp",
+            runtime / "src/model/gfn2/d4.cpp",
+        ],
+        output,
+        compile_args=(
             "-std=c++20",
             "-O1",
             "-ffunction-sections",
@@ -45,16 +45,9 @@ def adapter(tmp_path_factory: pytest.TempPathFactory) -> Path:
             f"-I{runtime}",
             f"-I{runtime / 'src'}",
             f"-I{runtime / 'include'}",
-            str(ROOT / "tests/native/test_gfn2_d4_adapter.cpp"),
-            str(runtime / "src/model/gfn2/d4.cpp"),
-            "-Wl,--gc-sections",
-            "-o",
-            str(output),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=90,
+        ),
+        link_args=("-Wl,--gc-sections",),
+        compile_timeout=90,
     )
     return output
 

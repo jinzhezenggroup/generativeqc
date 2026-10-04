@@ -133,6 +133,7 @@ int main() {
           for (bool want_k : {false, true})
             for (auto radial : {FockOperator::FullRange, FockOperator::ShortRange,
                                 FockOperator::LongRange})
+              for (bool canonical : {false, true})
               for (bool mixed_j : {false, true}) {
                 SharedValueCapability shared{value_capability};
                 GeneratedExchangeValueCapability exchange{
@@ -155,11 +156,19 @@ int main() {
                 const bool selected = direct_jk_generated_exchange_value_available(plan, spec);
                 assert(selected == expected);
                 const auto route = direct_jk_value_dispatch(expected_shell, selected, want_j,
-                                                            want_k, mixed_j);
-                assert(route.generated_exchange == (expected && !mixed_j));
-                assert(route.generic_exchange == (want_k && !route.generated_exchange));
+                                                            want_k, mixed_j, canonical);
+                assert(route.generated_exchange == expected);
+                assert(route.canonical_exchange == (want_k && !expected && canonical));
+                assert(route.generic_exchange == (want_k && !expected && !canonical));
                 assert(route.generated_coulomb == (want_j && expected_shell && !mixed_j));
-                assert(route.generic_coulomb == (want_j && !route.generated_coulomb));
+                assert(route.canonical_coulomb ==
+                       (want_j && !route.generated_coulomb && canonical && !mixed_j));
+                assert(route.generic_coulomb ==
+                       (want_j && !route.generated_coulomb && !route.canonical_coulomb));
+                assert(int(route.generated_coulomb) + int(route.canonical_coulomb) +
+                       int(route.generic_coulomb) == int(want_j));
+                assert(int(route.generated_exchange) + int(route.canonical_exchange) +
+                       int(route.generic_exchange) == int(want_k));
               }
 }
 """
@@ -194,11 +203,8 @@ def test_through_f_values_keep_canonical_and_bounded_sources() -> None:
     direct = _source("src/scf/cuda/direct_jk.cpp")
     owner = _source("src/scf/cuda/direct_coulomb.cpp")
     assert "const bool bounded_through_f = through_f;" in direct
-    assert "shell_values_cover_request" in direct
-    assert (
-        "plan->canonical_pairs && !mixed_j &&\n        !shell_values_cover_request"
-        in direct
-    )
+    assert "dispatch.canonical_coulomb || dispatch.canonical_exchange" in direct
+    assert "mixed_j, plan->canonical_pairs != nullptr" in direct
     assert "enqueue_generated_coulomb(*plan->generated_exchange" in direct
     assert "launch_bounded_shell_fock_source(" in owner
     assert "launch_bounded_shell_range_exchange_source(" in owner
@@ -361,34 +367,41 @@ def test_canonical_screening_fixture_preserves_default_and_opt_in_coverage() -> 
     assert "std::abs(actual[i] - expected[i]) < 3e-12" in source
 
 
-def test_canonical_outer_dispatch_preserves_mixed_source(tmp_path: Path) -> None:
-    """Compile the real outer gate, including the competing through-f owner."""
+def test_channel_dispatch_is_independent(tmp_path: Path) -> None:
+    """All availability/precision masks select exactly one source per request."""
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a C++ compiler")
-    source = _source("src/scf/cuda/direct_jk.cpp")
-    begin = source.index("if ((spec.coulomb.present || spec.exchange.present)")
-    end = source.index(") {", begin)
-    condition = source[begin + len("if (") : end]
-    harness = r"""
-#include <cassert>
-struct Term { bool present; };
-struct Spec { Term coulomb, exchange; };
-struct Plan { bool canonical_pairs; };
-bool canonical_route(const Plan* plan, Spec spec, bool mixed_j,
-                     bool shell_values_cover_request) {
-  return CONDITION;
-}
+    header = _source("src/scf/cuda/direct_jk_plan.hpp")
+    start = header.index("struct DirectJkValueDispatch")
+    end = header.index("/** Own one exact public-AO provider", start)
+    harness = (
+        "#include <cassert>\n"
+        + header[start:end]
+        + r"""
 int main() {
-  for (unsigned mask = 0; mask < 32; ++mask) {
-    const bool canonical = mask & 1U, mixed = mask & 2U;
-    const bool shell = mask & 4U, j = mask & 8U, k = mask & 16U;
-    const Plan plan{canonical};
-    assert(canonical_route(&plan, {{j}, {k}}, mixed, shell) ==
-           (canonical && !mixed && !shell && (j || k)));
+  for (unsigned mask = 0; mask < 64; ++mask) {
+    const bool generated_j = mask & 1U, generated_k = mask & 2U;
+    const bool j = mask & 4U, k = mask & 8U;
+    const bool mixed = mask & 16U, canonical = mask & 32U;
+    const auto both = direct_jk_value_dispatch(generated_j, generated_k, j, k, mixed, canonical);
+    const auto solo_j = direct_jk_value_dispatch(generated_j, false, j, false, mixed, canonical);
+    const auto solo_k = direct_jk_value_dispatch(false, generated_k, false, k, false, canonical);
+    assert(both.generated_coulomb == solo_j.generated_coulomb);
+    assert(both.canonical_coulomb == solo_j.canonical_coulomb);
+    assert(both.generic_coulomb == solo_j.generic_coulomb);
+    assert(both.generated_exchange == solo_k.generated_exchange);
+    assert(both.canonical_exchange == solo_k.canonical_exchange);
+    assert(both.generic_exchange == solo_k.generic_exchange);
+    assert(int(both.generated_coulomb) + int(both.canonical_coulomb) +
+           int(both.generic_coulomb) == int(j));
+    assert(int(both.generated_exchange) + int(both.canonical_exchange) +
+           int(both.generic_exchange) == int(k));
+    if (mixed) assert(!both.generated_coulomb && !both.canonical_coulomb);
   }
 }
-""".replace("CONDITION", condition)
+"""
+    )
     path = tmp_path / "canonical_value_policy.cpp"
     executable = tmp_path / "canonical_value_policy"
     path.write_text(harness)

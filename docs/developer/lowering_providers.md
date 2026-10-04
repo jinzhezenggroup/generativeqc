@@ -67,6 +67,14 @@ invalidate an otherwise identical executable cache key. Runtime preparation
 failure and OOM handling still require the native owner to prepare only the
 listed fallbacks; this compiler metadata does not implement that runtime work.
 
+`common.native_lowering.native_lowering_portfolio` emits that metadata for
+`runtime/lowering_binding.hpp`. Native admission checks the complete canonical
+request identity and the selected precision identity alongside its lookup index;
+equal semantic identities do not permit mixing portfolios. Emission validates
+resource/count literals against the compiler's nonnegative signed-64-bit contract,
+and native selection retains checked resource and cost arithmetic. These records
+and decisions remain preparation metadata; they do not resolve executable owners.
+
 ## Current integration
 
 `tensor.lowering.TensorLoweringAdapter` projects existing TensorIR nodes for CPU

@@ -15,16 +15,27 @@ from generativeqc_compiler.method.gfn2_electronic_contract import (
 )
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_PAIR_VERSION,
+    build_gfn2_core_energy_update_program,
+    build_gfn2_density_contribution_program,
+    build_gfn2_density_update_program,
+    build_gfn2_energy_weight_program,
     build_gfn2_population_update_program,
+    build_gfn2_restricted_population_publish_program,
     build_gfn2_runtime_electronic_pair_primal,
     build_gfn2_runtime_electronic_pair_vjp,
     build_gfn2_runtime_overlap_vjp,
+    build_gfn2_spin_population_publish_program,
+    build_gfn2_weighted_coefficient_program,
 )
 from generativeqc_compiler.method.gfn2_electronic_schedule import (
     emit_gfn2_electronic_schedule,
 )
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+from generativeqc_compiler.tensor.scf_cuda import (
+    density_template_hash,
+    weighted_density_template_hash,
+)
 
 
 def _device(source: str, function_name: str) -> str:
@@ -126,6 +137,8 @@ def _cpp_output(name: str) -> str:
 
 
 def cuda_header() -> str:
+    density_hash = density_template_hash()
+    weighted_density_hash = weighted_density_template_hash()
     primal = prepare_for_backend(
         build_gfn2_runtime_electronic_pair_primal(), backend="cuda"
     )
@@ -133,6 +146,27 @@ def cuda_header() -> str:
     overlap_vjp = prepare_for_backend(build_gfn2_runtime_overlap_vjp(), backend="cuda")
     population = prepare_for_backend(
         build_gfn2_population_update_program(), backend="cuda"
+    )
+    core_energy = prepare_for_backend(
+        build_gfn2_core_energy_update_program(), backend="cuda"
+    )
+    energy_weight = prepare_for_backend(
+        build_gfn2_energy_weight_program(), backend="cuda"
+    )
+    weighted_coefficient = prepare_for_backend(
+        build_gfn2_weighted_coefficient_program(), backend="cuda"
+    )
+    density_contribution = prepare_for_backend(
+        build_gfn2_density_contribution_program(), backend="cuda"
+    )
+    density_update = prepare_for_backend(
+        build_gfn2_density_update_program(), backend="cuda"
+    )
+    restricted_publish = prepare_for_backend(
+        build_gfn2_restricted_population_publish_program(), backend="cuda"
+    )
+    spin_publish = prepare_for_backend(
+        build_gfn2_spin_population_publish_program(), backend="cuda"
     )
     primal_inputs = _primal_input_order()
     vjp_inputs = _vjp_input_order()
@@ -182,6 +216,75 @@ def cuda_header() -> str:
         ),
         "gfn2_population_update_cuda_tensor",
     )
+    core_energy_source = _device(
+        emit_scalar_cpp(
+            core_energy,
+            function_name="gfn2_core_energy_update_cuda_tensor",
+            input_order=("density", "h0", "accumulator"),
+            output_order=("updated",),
+            fused_accumulation=True,
+            ordered_native_sums=True,
+        ),
+        "gfn2_core_energy_update_cuda_tensor",
+    )
+    energy_weight_source = _device(
+        emit_scalar_cpp(
+            energy_weight,
+            function_name="gfn2_energy_weight_cuda_tensor",
+            input_order=("occupation", "eigenvalue"),
+            output_order=("energy_weight",),
+        ),
+        "gfn2_energy_weight_cuda_tensor",
+    )
+    weighted_coefficient_source = _device(
+        emit_scalar_cpp(
+            weighted_coefficient,
+            function_name="gfn2_weighted_coefficient_cuda_tensor",
+            input_order=("coefficient", "weight"),
+            output_order=("weighted_coefficient",),
+        ),
+        "gfn2_weighted_coefficient_cuda_tensor",
+    )
+    density_contribution_source = _device(
+        emit_scalar_cpp(
+            density_contribution,
+            function_name="gfn2_density_contribution_cuda_tensor",
+            input_order=("weighted_coefficient", "coefficient"),
+            output_order=("contribution",),
+        ),
+        "gfn2_density_contribution_cuda_tensor",
+    )
+    density_update_source = _device(
+        emit_scalar_cpp(
+            density_update,
+            function_name="gfn2_density_update_cuda_tensor",
+            input_order=("weighted_coefficient", "coefficient", "accumulator"),
+            output_order=("updated",),
+            fused_accumulation=True,
+            ordered_native_sums=True,
+        ),
+        "gfn2_density_update_cuda_tensor",
+    )
+    restricted_publish_source = _device(
+        emit_scalar_cpp(
+            restricted_publish,
+            function_name="gfn2_restricted_population_publish_cuda_tensor",
+            input_order=("electronic", "reference"),
+            output_order=("charge",),
+            ordered_native_sums=True,
+        ),
+        "gfn2_restricted_population_publish_cuda_tensor",
+    )
+    spin_publish_source = _device(
+        emit_scalar_cpp(
+            spin_publish,
+            function_name="gfn2_spin_population_publish_cuda_tensor",
+            input_order=("alpha", "beta", "reference"),
+            output_order=("charge", "magnetization"),
+            ordered_native_sums=True,
+        ),
+        "gfn2_spin_population_publish_cuda_tensor",
+    )
     primal_call = ", ".join([*map(_cpp_input, primal_inputs), "shift"])
     vjp_call = ", ".join([*map(_cpp_input, vjp_inputs), *map(_cpp_output, vjp_outputs)])
     return f"""// Generated by tools/generate_gfn2_electronic_cuda.py from TensorIR; do not edit.
@@ -193,6 +296,9 @@ def cuda_header() -> str:
 namespace generativeqc::xtb::generated {{
 
 inline constexpr const char* gfn2_electronic_pair_version = "{GFN2_ELECTRONIC_PAIR_VERSION}";
+inline constexpr const char* gfn2_density_tensor_template_hash = "{density_hash}";
+inline constexpr const char* gfn2_weighted_density_tensor_template_hash =
+    "{weighted_density_hash}";
 inline constexpr const char* gfn2_electronic_pair_primal_hash = "{primal.logical_hash}";
 inline constexpr const char* gfn2_electronic_pair_vjp_hash = "{vjp.logical_hash}";
 
@@ -227,6 +333,13 @@ struct Gfn2ElectronicPairAdjoint {{
 {vjp_source}
 {overlap_source}
 {population_source}
+{core_energy_source}
+{energy_weight_source}
+{weighted_coefficient_source}
+{density_contribution_source}
+{density_update_source}
+{restricted_publish_source}
+{spin_publish_source}
 __device__ inline bool evaluate_gfn2_electronic_pair(
     const Gfn2ElectronicPairIntegrals& integrals,
     const Gfn2ElectronicPairPotentials& potentials,
