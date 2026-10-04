@@ -3898,6 +3898,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       // reconstructed density, the physical commutator, F C = S C epsilon and
       // C^T F C canonicality before anything is published. Expose the final
       // operator work as ordinary SCF provenance too, not only as trace text.
+      outputs[0].scf.precision.requested_mode =
+          options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
+      // Strict-FP64 reference work is fully reconstructible from the SCF
+      // iteration count plus this finalization counter. A mixed candidate keeps
+      // its existing conservative provenance until per-item mixed accounting is
+      // exported here too.
+      if (!mixed_precision_fock) {
+        outputs[0].scf.precision.operator_work_counters_valid = 1U;
+        outputs[0].scf.precision.effective_bits = 64U;
+        outputs[0].scf.precision.strict_stage_fock_builds = outputs[0].scf.iterations;
+      }
       outputs[0].scf.precision.post_scf_fock_builds = post_scf_physical_fock_builds;
       outputs[0].scf.precision.skipped_final_fock_builds =
           reused_final_physical_fock ? 1U : 0U;
