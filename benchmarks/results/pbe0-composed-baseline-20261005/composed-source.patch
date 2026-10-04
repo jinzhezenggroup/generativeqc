@@ -1,0 +1,1675 @@
+diff --git a/benchmarks/dft_force_components.py b/benchmarks/dft_force_components.py
+index e1ea39233..0905ff460 100644
+--- a/benchmarks/dft_force_components.py
++++ b/benchmarks/dft_force_components.py
+@@ -119,6 +119,9 @@ def _stationary_work_counts(
+         _store_counter(counts["capacity"], key, executor.get(key))
+     for key in ("ordered_quartets", "exchange_ordered_quartets"):
+         _store_counter(counts["capacity"], key, work.get(key))
++    _store_counter(
++        counts["capacity"], "phased_becke_bytes", work.get("phased_becke_bytes")
++    )
+     for output_key, source_key in (
+         ("semilocal_geometry_points", "xc_points"),
+         ("partition_grid_pair_visits", "grid_pair_visits"),
+@@ -134,6 +137,8 @@ def _stationary_work_counts(
+         ("bulk_packed_descriptors", "bulk_packed_descriptors"),
+         ("scalar_packed_descriptors", "scalar_packed_descriptors"),
+         ("geometry_batches", "geometry_batches"),
++        ("becke_pair_state_evaluations", "becke_pair_state_evaluations"),
++        ("phased_becke_batches", "phased_becke_batches"),
+     ):
+         _store_counter(counts["observed"], output_key, work.get(source_key))
+     return counts
+@@ -338,10 +343,13 @@ def _normalize_stationary(
+     wall = _empty_components()
+     profiled_ms = _empty_components()
+ 
+-    wall["stationary_integral_derivatives"] = _value(
+-        phases,
+-        "primitive_derivative_reduction_sync",
+-        field="timeline.primitive_derivative_reduction_sync",
++    wall["stationary_integral_derivatives"] = _sum_present(
++        (
++            phases.get("prepared_stationary_integral_derivatives"),
++            phases.get("direct_shell_integral_derivatives"),
++            phases.get("primitive_derivative_reduction_sync"),
++        ),
++        field="timeline.stationary_integral_derivatives",
+     )
+     legacy_geometry = _value(
+         phases,
+@@ -434,7 +442,13 @@ def _normalize_stationary(
+     return {
+         "schema": "generativeqc.dft-force-components.v1",
+         "source_route": "stationary-exclusive-wall",
++        "source_exclusive_wall_seconds": dict(phases),
+         "grid_work_plan": dict(_mapping(work.get("grid_work_plan"))),
++        "resident_ao_selection": (
++            None
++            if work.get("resident_ao_selection") is None
++            else dict(_mapping(work["resident_ao_selection"]))
++        ),
+         "native_integrals_required": work.get("native_integrals_required"),
+         "resource_bounds": {
+             name: _int_or_none(work.get(name))
+diff --git a/benchmarks/readme_pbe0_integrated.py b/benchmarks/readme_pbe0_integrated.py
+new file mode 100644
+index 000000000..bdce15270
+--- /dev/null
++++ b/benchmarks/readme_pbe0_integrated.py
+@@ -0,0 +1,158 @@
++"""Same-source PBE0 policy comparison; no default production promotion.
++
++The requested policy is separate from observed work. The complete endpoint
++normalizer is imported from its canonical module, including inside the shared
++runner, rather than patched through a shadow module attribute. Validate each
++successful force call before spending time on another replay.
++"""
++
++from __future__ import annotations
++
++import argparse
++import os
++import sys
++from contextlib import contextmanager
++from dataclasses import asdict, dataclass
++from typing import TYPE_CHECKING, Any
++from unittest.mock import patch
++
++from generativeqc import _stationary_cuda
++from generativeqc_compiler.method.stationary_resources import (
++    BECKE_RETAINED_MAX_ATOMS,
++    StationaryCudaResources,
++    plan_stationary_cuda_resources,
++)
++
++from benchmarks import dft_force_components, readme_omol25
++from benchmarks.readme_pbe0 import PBE0
++
++if TYPE_CHECKING:
++    from collections.abc import Iterator
++
++
++@dataclass(frozen=True)
++class QualificationPolicy:
++    """Independent qualification choices, not an auto-tuning cost model."""
++
++    name: str
++    indexed_force_requested: bool = False
++    resident_ao_cutoff: float | None = None
++    resident_ao_cache_bytes: int = 16 << 20
++    phased_becke_requested: bool = False
++
++
++POLICIES = {
++    policy.name: policy
++    for policy in (
++        QualificationPolicy("default"),
++        QualificationPolicy("local-indexed", True, 1e-16),
++        QualificationPolicy("local-indexed-phased", True, 1e-16, 16 << 20, True),
++        QualificationPolicy("local-indexed-zero-cache", True, 1e-16, 0),
++    )
++}
++
++
++def verify_force_work(
++    work: dict[str, Any], policy: QualificationPolicy, *, atoms: int
++) -> None:
++    """Reject missing observers and silent route misses, never fill counters.
++
++    There is no endpoint-native indexed-page counter in the current ABI. Its
++    request remains only a request in the receipt; neither task counts nor a
++    timing reduction prove a page count. Native integral route, AO selection
++    and Becke execution do have independent endpoint observers.
++    """
++    record = dft_force_components.normalize_force_work(work)
++    if work["native_integrals_required"]:
++        if record["stationary_integral_derivative_route"] != "prepared-native-complete":
++            raise RuntimeError(
++                "integrated qualification lost the native integral route"
++            )
++        seconds = record["wall_seconds"]["stationary_integral_derivatives"]
++        if seconds is None or seconds <= 0:
++            raise RuntimeError("native derivative wall observer is missing")
++    grid = record["grid_work_plan"]
++    batches = (grid["grid_points"] + grid["tile_points"] - 1) // grid["tile_points"]
++    observed = record["work_counts"]["observed"]
++    if observed.get("geometry_batches") != batches:
++        raise RuntimeError("complete grid geometry batch count changed")
++    phased = policy.phased_becke_requested and atoms > BECKE_RETAINED_MAX_ATOMS
++    if observed.get("phased_becke_batches") != (batches if phased else 0):
++        raise RuntimeError("requested Becke policy did not execute")
++    selection = record["resident_ao_selection"]
++    if selection is None or selection["cutoff"] != policy.resident_ao_cutoff:
++        raise RuntimeError("resident AO policy observer is missing or inconsistent")
++    if policy.resident_ao_cutoff is None:
++        if selection["mode"] != "disabled" or selection["work"] is not None:
++            raise RuntimeError("default qualification unexpectedly selected local AO")
++        return
++    if selection["mode"] != "explicit-sampled-jet-cutoff":
++        raise RuntimeError("local AO policy lost its resident grid")
++    selected = selection["work"]
++    if selected is None or selected["tile_count"] != batches:
++        raise RuntimeError("local AO observer does not cover the complete grid")
++    if policy.resident_ao_cache_bytes == 0:
++        if selected["dense_budget_tiles"] != batches or selected["discoveries"] != 0:
++            raise RuntimeError("zero-cache qualification did not use dense fallback")
++    elif selected["point_ao_square_sum"] >= selected["dense_point_ao_square_sum"]:
++        raise RuntimeError("local AO qualification did not reduce AO contraction work")
++
++
++@contextmanager
++def qualification_policy(
++    policy: QualificationPolicy, *, scf_active_ao: bool = False
++) -> Iterator[None]:
++    """Select SCF and force policies independently, restoring them on failure.
++
++    Explicitly disable SCF selection by default: inherited environment must not
++    turn the dense control into a second local-AO candidate. This is a request,
++    not proof that native admission or discovery succeeded.
++    """
++    original_force = _stationary_cuda._complete_rks_cuda_gradient_diagnostic
++
++    def force(state: Any, basis: Any, **options: Any) -> Any:
++        options["resident_ao_cutoff"] = policy.resident_ao_cutoff
++        options["resident_ao_cache_bytes"] = policy.resident_ao_cache_bytes
++        result = original_force(state, basis, **options)
++        verify_force_work(result.work, policy, atoms=basis.natom)
++        return result
++
++    def resources(**options: Any) -> StationaryCudaResources:
++        options["phased_becke"] = policy.phased_becke_requested
++        return plan_stationary_cuda_resources(**options)
++
++    environment = {
++        "GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE": (
++            "indexed" if policy.indexed_force_requested else ""
++        ),
++        "GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING": "0",
++        "GENERATIVEQC_CUDA_KS_ACTIVE_AO": "1" if scf_active_ao else "0",
++    }
++    with (
++        patch.dict(os.environ, environment),
++        patch.object(_stationary_cuda, "_complete_rks_cuda_gradient_diagnostic", force),
++        patch.object(_stationary_cuda, "plan_stationary_cuda_resources", resources),
++    ):
++        yield
++
++
++def main() -> None:
++    """Run the unchanged scientific protocol with a separate policy receipt."""
++    parser = argparse.ArgumentParser(add_help=False)
++    parser.add_argument("--policy", choices=POLICIES, required=True)
++    parser.add_argument("--scf-active-ao", action="store_true")
++    parser.add_argument("engine", choices=("reference", "native"))
++    args, remaining = parser.parse_known_args()
++    if args.scf_active_ao and args.engine == "reference":
++        parser.error("--scf-active-ao requires the native engine")
++    policy = POLICIES[args.policy]
++    receipt = {**asdict(policy), "scf_active_ao_requested": args.scf_active_ao}
++    with (
++        patch.object(sys, "argv", [sys.argv[0], args.engine, *remaining]),
++        qualification_policy(policy, scf_active_ao=args.scf_active_ao),
++    ):
++        readme_omol25.main(PBE0, qualification_policy=receipt)
++
++
++if __name__ == "__main__":
++    main()
+diff --git a/cmake/GenerativeQCTests.cmake b/cmake/GenerativeQCTests.cmake
+index c8d66a658..1f3a8d02c 100644
+--- a/cmake/GenerativeQCTests.cmake
++++ b/cmake/GenerativeQCTests.cmake
+@@ -296,6 +296,8 @@ macro(generativeqc_add_native_tests)
+     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
+     add_test(NAME generativeqc_dft_cuda_matrix_tests COMMAND generativeqc_dft_cuda_tests --matrix-schedule)
+     add_test(NAME generativeqc_dft_cuda_local_ao_tests COMMAND generativeqc_dft_cuda_tests --local-ao)
++    add_test(NAME generativeqc_dft_cuda_pbe0_local_ao_tests COMMAND generativeqc_dft_cuda_tests --pbe0-local-ao)
++    set_tests_properties(generativeqc_dft_cuda_pbe0_local_ao_tests PROPERTIES SKIP_RETURN_CODE 77)
+     set_tests_properties(generativeqc_dft_cuda_local_ao_tests PROPERTIES SKIP_RETURN_CODE 77)
+     set_tests_properties(generativeqc_dft_cuda_matrix_tests PROPERTIES SKIP_RETURN_CODE 77)
+     set_tests_properties(generativeqc_dft_cuda_tests PROPERTIES SKIP_RETURN_CODE 77)
+diff --git a/python/generativeqc/_stationary_cuda.py b/python/generativeqc/_stationary_cuda.py
+index f5959bf94..a54c6b317 100644
+--- a/python/generativeqc/_stationary_cuda.py
++++ b/python/generativeqc/_stationary_cuda.py
+@@ -491,6 +491,7 @@ class _CudaSources:
+         source_names: tuple[str, ...] = _SOURCE_NAMES,
+         integral_derivatives: bool = True,
+         cooperative_becke: bool | None = None,
++        phased_becke: bool = False,
+     ) -> None:
+         if type(integral_derivatives) is not bool:
+             raise TypeError("integral_derivatives must be boolean")
+@@ -714,6 +715,7 @@ class _CudaSources:
+             target=compiler.target if target is None else target,
+             budget_bytes=budget,
+             cooperative_becke=cooperative_becke,
++            phased_becke=phased_becke,
+         )
+         self._call(
+             "stationary_create",
+@@ -737,6 +739,19 @@ class _CudaSources:
+             self.resources.becke_threads_per_point,
+             self.resources.becke_shared_bytes,
+         )
++        configure_phased = getattr(lib, "stationary_configure_phased_becke_v1", None)
++        self.phased_becke_supported = configure_phased is not None and hasattr(
++            lib, "stationary_phased_becke_metrics_v1"
++        )
++        if self.resources.phased_becke_bytes and self.phased_becke_supported:
++            configure_phased.argtypes = [ct.c_void_p, ct.c_size_t, *tail]
++            self._call(
++                "stationary_configure_phased_becke_v1",
++                self.handle,
++                self.resources.phased_becke_bytes,
++            )
++        # An older AOT artifact retains its bounded route. The plan reservation
++        # stays conservative; only native metrics report actual phase allocation.
+         if profile_device:
+             self.enable_profile()
+         self._call(
+@@ -1550,6 +1565,21 @@ class _CudaSources:
+             )
+         )
+         metrics["primitive_batches"] = metrics["task_batches"]
++        phased_metrics = getattr(
++            self.library, "stationary_phased_becke_metrics_v1", None
++        )
++        if phased_metrics is not None:
++            phased_metrics.argtypes = [
++                ct.c_void_p,
++                ct.POINTER(ct.c_uint64),
++                ct.c_size_t,
++            ]
++            phased_values = (ct.c_uint64 * 2)()
++            if phased_metrics(self.handle, phased_values, 2):
++                raise RuntimeError("stationary phased Becke metrics unavailable")
++            metrics["phased_becke_bytes"], metrics["phased_becke_batches"] = (
++                phased_values
++            )
+         profile = (ct.c_double * 10)()
+         if self.profile_device:
+             self.library.stationary_profile_metrics.argtypes = [
+@@ -1646,6 +1676,8 @@ class PreparedStationaryCudaExecution:
+         self._stack: ExitStack | None = None
+         self._lease = PreparedExecutionLease()
+         self.preparation_seconds = 0.0
++        self._resident_ao_maps = None
++        self._resident_ao_map_key = None
+ 
+     @property
+     def identity(self) -> str | None:
+@@ -1682,6 +1714,8 @@ class PreparedStationaryCudaExecution:
+         integral_terms: int,
+         page_work_budget: int,
+         integral_derivatives: bool = True,
++        resident_ao_cutoff: float | None = None,
++        resident_ao_cache_bytes: int = 0,
+     ) -> PreparedExecutionRequest:
+         topology = _basis_topology_identity(basis)
+         scientific_identity = canonical_hash(
+@@ -1712,6 +1746,8 @@ class PreparedStationaryCudaExecution:
+                 "primitive_page_work_budget": page_work_budget,
+                 "primitive_integral_derivatives": integral_derivatives,
+                 "grid_allocation_bytes": grid_plan.allocation_bytes,
++                "resident_ao_cutoff": resident_ao_cutoff,
++                "resident_ao_cache_bytes": resident_ao_cache_bytes,
+                 "tensor_plans": [
+                     (name, value.identity)
+                     for name, value in sorted(tensor_plans.items())
+@@ -1776,6 +1812,8 @@ class PreparedStationaryCudaExecution:
+         host_bound: int,
+         profile_device: bool = False,
+         integral_derivatives: bool = True,
++        resident_ao_cutoff: float | None = None,
++        resident_ao_cache_bytes: int = 0,
+     ) -> None:
+         if not integral_derivatives and (
+             aot_directory is not None
+@@ -1808,6 +1846,8 @@ class PreparedStationaryCudaExecution:
+             integral_terms=integral_terms,
+             page_work_budget=page_work_budget,
+             integral_derivatives=integral_derivatives,
++            resident_ao_cutoff=resident_ao_cutoff,
++            resident_ao_cache_bytes=resident_ao_cache_bytes,
+         )
+         if self._lease.contract is not None:
+             try:
+@@ -1834,6 +1874,8 @@ class PreparedStationaryCudaExecution:
+                 ):
+                     raise ValueError("stationary CUDA prepared artifact hash mismatch")
+                 self.sources.rebind_geometry(basis)
++                self._resident_ao_maps = None
++                self._resident_ao_map_key = None
+                 self.grid._rebind_centers(
+                     np.ascontiguousarray(
+                         basis.packed[: 3 * basis.natom].reshape(basis.natom, 3)
+@@ -1993,6 +2035,8 @@ class PreparedStationaryCudaExecution:
+                     "integral_terms": integral_terms,
+                     "primitive_page_work_budget": page_work_budget,
+                     "grid_allocation_bytes": grid_plan.allocation_bytes,
++                    "resident_ao_cutoff": resident_ao_cutoff,
++                    "resident_ao_cache_bytes": resident_ao_cache_bytes,
+                     "geometry_resources": asdict(sources.resources),
+                 },
+                 "tensor_plans": tuple(
+@@ -2014,6 +2058,8 @@ class PreparedStationaryCudaExecution:
+ 
+     def close(self) -> None:
+         with self._lock:
++            self._resident_ao_maps = None
++            self._resident_ao_map_key = None
+             if self._stack is not None:
+                 self._stack.close()
+                 self._stack = None
+@@ -2075,6 +2121,7 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
+         "center_distance_evaluations",
+         "center_geometry_preparations",
+         "becke_pair_state_evaluations",
++        "phased_becke_batches",
+     ):
+         if name in after and name in before:
+             result[name] = after[name] - before[name]
+@@ -2307,6 +2354,86 @@ def _plan_stationary_cuda_tile(
+     )
+ 
+ 
++def _stationary_ao_map_reserve(
++    cutoff: float | None, requested_bytes: int, host_bound: int, max_host_bytes: int
++) -> int:
++    """Admit optional mask storage without stealing the dense fallback's budget.
++
++    The cache includes its producer's transient numeric staging. Exhausting this
++    additional allowance selects full AO tiles, not an unbudgeted discovery or a
++    different scientific cutoff. An explicit zero allowance is a useful control.
++    """
++    if cutoff is not None and (
++        type(cutoff) not in (int, float) or not np.isfinite(cutoff) or cutoff <= 0
++    ):
++        raise ValueError("resident AO cutoff must be finite and positive")
++    if type(requested_bytes) is not int or not 0 <= requested_bytes <= 1 << 40:
++        raise ValueError("resident AO cache budget must be an integer in [0,2**40]")
++    if host_bound > max_host_bytes:
++        raise ValueError("stationary additional-host byte budget exceeded")
++    return 0 if cutoff is None else min(requested_bytes, max_host_bytes - host_bound)
++
++
++def _stationary_resident_ao_cache(
++    prepared: PreparedStationaryCudaExecution | None,
++    grid: typing.Any,
++    state: typing.Any,
++    resident: typing.Any,
++    *,
++    cutoff: float | None,
++    budget_bytes: int,
++) -> typing.Any:
++    """Bind optional force masks to the current token-checked resident grid.
++
++    Density generations are deliberately not part of this key: AO jets depend
++    only on basis/geometry/points. Native snapshots still validate their current
++    owner before every endpoint. The grid's center/basis generations prevent
++    address reuse or a failed prepared execution from reviving stale masks.
++    """
++    if cutoff is None or resident is None:
++        if prepared is not None:
++            prepared._resident_ao_maps = None
++            prepared._resident_ao_map_key = None
++        return None
++    from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
++
++    state._source.check_current()
++    domain = ResidentAoMapDomain(
++        basis_identity=grid.basis_identity,
++        geometry_identity=state.identity.geometry_identity,
++        grid_identity=state.identity.grid_identity,
++        device=resident.device,
++        point_pointer=resident.points,
++        point_count=resident.point_count,
++        tile_points=grid.plan.tile_points,
++        derivative_order=grid.plan.order,
++    )
++    key = (
++        domain,
++        id(grid),
++        grid.geometry_generation,
++        grid.basis_generation,
++        float(cutoff),
++        budget_bytes,
++    )
++    owner = None if prepared is None else prepared._resident_ao_maps
++    if owner is None or prepared._resident_ao_map_key != key:
++        # Release the old maps before constructing new ones: both geometries
++        # must never coexist under an allowance sized for just one cache.
++        if prepared is not None:
++            prepared._resident_ao_maps = None
++            prepared._resident_ao_map_key = None
++        owner = None
++        owner = ResidentAoMapCache(
++            grid, domain, cutoff=cutoff, budget_bytes=budget_bytes
++        )
++        if prepared is not None:
++            prepared._resident_ao_maps = owner
++            prepared._resident_ao_map_key = key
++    owner.reset_work()
++    return owner
++
++
+ def _complete_rks_cuda_gradient_diagnostic(
+     state: typing.Any,
+     basis: typing.Any,
+@@ -2329,6 +2456,8 @@ def _complete_rks_cuda_gradient_diagnostic(
+     max_ecp_pair_samples: int = 100_000_000,
+     prepared: PreparedStationaryCudaExecution | None = None,
+     profile_device: bool = False,
++    resident_ao_cutoff: float | None = None,
++    resident_ao_cache_bytes: int = 16 << 20,
+ ) -> typing.Any:
+     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
+ 
+@@ -2348,6 +2477,9 @@ def _complete_rks_cuda_gradient_diagnostic(
+     charges (nine sources). Its small dense export is separately budgeted and
+     preserves the checked native two-grid gate. The public wrapper restricts ECP
+     force capability to Cartesian/real-spherical s/p records.
++    Resident AO selection is experimental and disabled unless a sampled-jet
++    cutoff is explicitly supplied. It changes only force-grid AO membership;
++    it does not screen SCF, shrink full-capacity arenas, or prune grid points.
+     """
+     timeline = _ExclusiveWallTimeline()
+     contract = StationaryDerivativeContract(state.identity)
+@@ -2526,6 +2658,18 @@ def _complete_rks_cuda_gradient_diagnostic(
+     tile_points = grid_plan.tile_points
+     pair_visits = grid_work.grid_pair_visits
+     source_bytes = source_resources.allocation_bytes
++    ao_map_reserve = _stationary_ao_map_reserve(
++        resident_ao_cutoff,
++        resident_ao_cache_bytes,
++        host_bound
++        + (
++            sum(value.host_bytes for value in tensor_plans.values())
++            if prepared is not None
++            else 0
++        ),
++        max_host_bytes,
++    )
++    host_bound += ao_map_reserve
+     cache = Path(cache)
+     spec = state._source.grid_spec
+     if prepared is None:
+@@ -2599,6 +2743,8 @@ def _complete_rks_cuda_gradient_diagnostic(
+                 host_bound=host_bound,
+                 profile_device=profile_device,
+                 integral_derivatives=primitive_demand.integral_derivatives,
++                resident_ao_cutoff=resident_ao_cutoff,
++                resident_ao_cache_bytes=ao_map_reserve,
+             )
+         artifact = prepared.stationary_artifact
+         grid_artifact = prepared.grid_artifact
+@@ -2905,16 +3051,29 @@ def _complete_rks_cuda_gradient_diagnostic(
+                 "grid_atomic_measure_source": "host-grid-atomic-measures",
+                 "grid_atomic_measure_h2d_bytes": grid_points * 8,
+             }
++        ao_maps = _stationary_resident_ao_cache(
++            prepared,
++            ao,
++            state,
++            resident_grid,
++            cutoff=resident_ao_cutoff,
++            budget_bytes=ao_map_reserve,
++        )
+         for chunk_begin, chunk_end in grid_work.chunks():
+             with timeline.phase("xc_geometry_enqueue"):
+                 for begin in range(chunk_begin, chunk_end, tile_points):
+                     end = min(begin + tile_points, chunk_end)
+                     if resident_grid is not None:
+                         point_pointer = resident_grid.points + 3 * begin * 8
++                        selected_ao_ids = (
++                            None
++                            if ao_maps is None
++                            else ao_maps.select(ao, ao_maps.domain, begin, end - begin)
++                        )
+                         with ao.feature_task_device_points(
+                             point_pointer,
+                             end - begin,
+-                            None,
++                            selected_ao_ids,
+                             ingredients,
+                         ) as task:
+                             sources.geometry_molecular_resident_weights(
+@@ -3053,10 +3212,24 @@ def _complete_rks_cuda_gradient_diagnostic(
+         # Keep admission/peak accounting conservative, but verify actual storage.
+         actual_center_bytes = work["center_geometry_bytes"]
+         planned_center_bytes = source_resources.center_geometry_bytes
++        planned_phase_bytes = source_resources.phased_becke_bytes
++        expected_source_bytes = (
++            source_bytes - planned_center_bytes + actual_center_bytes
++        )
++        if "phased_becke_bytes" in work:
++            if work["phased_becke_bytes"] not in (0, planned_phase_bytes):
++                raise RuntimeError(
++                    "stationary phase allocation disagrees with admitted bytes"
++                )
++            expected_source_bytes -= planned_phase_bytes - work["phased_becke_bytes"]
++        elif planned_phase_bytes:
++            if getattr(sources, "phased_becke_supported", True):
++                raise RuntimeError("stationary phase allocation metrics missing")
++            # This is a known old-ABI fallback, not a zero-filled work counter.
++            expected_source_bytes -= planned_phase_bytes
+         if (
+             actual_center_bytes not in (0, planned_center_bytes)
+-            or work["owned_device_bytes"]
+-            != source_bytes - planned_center_bytes + actual_center_bytes
++            or work["owned_device_bytes"] != expected_source_bytes
+         ):
+             raise RuntimeError("stationary allocation disagrees with admitted bytes")
+         timeline.switch("owner_cleanup")
+@@ -3097,6 +3270,22 @@ def _complete_rks_cuda_gradient_diagnostic(
+             "schema": "generativeqc.stationary-grid-work.v1",
+             **asdict(grid_work),
+         },
++        resident_ao_selection={
++            "schema": "generativeqc.stationary-resident-ao-selection.v1",
++            "mode": (
++                "disabled"
++                if resident_ao_cutoff is None
++                else "dense-no-resident-grid"
++                if ao_maps is None
++                else "explicit-sampled-jet-cutoff"
++            ),
++            "cutoff": resident_ao_cutoff,
++            "cache_budget_requested_bytes": resident_ao_cache_bytes,
++            "cache_host_reserve_bytes": ao_map_reserve,
++            "full_ao_capacity": n,
++            "derivative_order": grid_plan.order,
++            "work": None if ao_maps is None else ao_maps.work,
++        },
+         grid_tile_schedule=(
+             "budget-auto" if requested_tile_points is None else "explicit"
+         ),
+@@ -3306,6 +3495,8 @@ def complete_rks_cuda_gradient_diagnostic(
+     max_ecp_pair_samples: int = 100_000_000,
+     prepared: PreparedStationaryCudaExecution | None = None,
+     profile_device: bool = False,
++    resident_ao_cutoff: float | None = None,
++    resident_ao_cache_bytes: int = 16 << 20,
+ ) -> typing.Any:
+     """Execute once, optionally retaining validated CUDA owners for later replay."""
+     kwargs = {
+@@ -3327,6 +3518,8 @@ def complete_rks_cuda_gradient_diagnostic(
+         "max_ecp_pair_samples": max_ecp_pair_samples,
+         "prepared": prepared,
+         "profile_device": profile_device,
++        "resident_ao_cutoff": resident_ao_cutoff,
++        "resident_ao_cache_bytes": resident_ao_cache_bytes,
+     }
+     if prepared is None:
+         return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)
+diff --git a/python/generativeqc_compiler/method/stationary_becke_phased.py b/python/generativeqc_compiler/method/stationary_becke_phased.py
+new file mode 100644
+index 000000000..0d38dccf6
+--- /dev/null
++++ b/python/generativeqc_compiler/method/stationary_becke_phased.py
+@@ -0,0 +1,94 @@
++"""Lower the shared Becke phase plan into the stationary owner's source panels.
++
++The ordinary and composite owners use the same kernels and point ownership
++contract. Allocation, capability checks, stream ordering and launches remain in
++the native owner. Scalar science stays in the authoritative grid-response AD.
++"""
++
++from generativeqc_compiler.xc.grid_phased import emit_phased_becke
++
++_KERNELS = r"""
++#include <cuda/atomic>
++namespace generativeqc_stationary_cuda {
++struct PhasedBeckeInput {
++  generativeqc_grid_phased::Workspace work;
++  const double* points;
++  const double* centers;
++  const int64_t* owners;
++  size_t owner_offset, points_per_atom;
++  double* seeds;
++  const generativeqc_grid_adjoint::CenterPair* center_pairs;
++  const uint2* indices;
++  double* partial;
++  int* error;
++  __device__ size_t owner(size_t point) const {
++    return owners ? size_t(owners[point])
++        : (points_per_atom ? (owner_offset + point) / points_per_atom : size_t(-1));
++  }
++  __device__ bool failed() const {
++    return cuda::atomic_ref<int, cuda::thread_scope_device>(*error)
++        .load(cuda::memory_order_relaxed) != 0;
++  }
++};
++
++// Layout descriptors, not scientific preparation: center partials continue to
++// be refreshed by the existing topology/geometry owner at every geometry bind.
++__global__ void phased_becke_indices(size_t atoms, uint2* indices) {
++  const size_t first = blockIdx.x;
++  for (size_t second = threadIdx.x; second < first; second += blockDim.x)
++    indices[generativeqc_grid_adjoint::center_pair_index(first, second)] =
++        make_uint2(first, second);
++}
++
++template <int Phase>
++__global__ void phased_becke_atom(PhasedBeckeInput input) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  const size_t atom = blockIdx.y;
++  if (point >= input.work.points || input.failed()) return;
++  using namespace generativeqc_grid_phased;
++  bool valid = true;
++  if constexpr (Phase == 0)
++    valid = distance_phase(input.work, point, atom, input.points, input.centers, local_norm);
++  if constexpr (Phase == 1) atom_logs_phase(input.work, point, atom, local_log);
++  if constexpr (Phase == 2) atom_gather_phase(input.work, point, atom);
++  if constexpr (Phase == 3) {
++    valid = point_motion_phase(input.work, point, atom, input.owner(point));
++    // One point per admitted geometry lane. The existing all-source reduction
++    // is the publication gate and runs only after this entire phase succeeds.
++    for (size_t axis = 0; axis < 3; ++axis)
++      input.partial[point * 9 * input.work.atoms + 6 * input.work.atoms + 3 * atom + axis] =
++          input.work.field(8 + axis, point)[atom];
++  }
++  if (!valid) atomicExch(input.error, 1);
++}
++
++template <bool Reverse>
++__global__ void phased_becke_pair(PhasedBeckeInput input) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  if (point >= input.work.points || input.failed()) return;
++  using namespace generativeqc_grid_adjoint;
++  using namespace generativeqc_grid_phased;
++  const auto indices = input.indices[blockIdx.y];
++  const PreparedCenterGeometry<decltype(&local_ratio_prepared)> geometry{
++      input.center_pairs, local_ratio_prepared};
++  bool valid;
++  if constexpr (Reverse)
++    valid = pair_reverse_phase(input.work, point, indices.x, indices.y, geometry, local_log);
++  else
++    valid = pair_primal_phase(input.work, point, indices.x, indices.y, geometry, local_log, local_becke);
++  if (!valid) atomicExch(input.error, 1);
++}
++
++__global__ void phased_becke_normalize(PhasedBeckeInput input) {
++  const size_t point = blockIdx.x * blockDim.x + threadIdx.x;
++  if (point >= input.work.points || input.failed()) return;
++  if (!generativeqc_grid_phased::point_normalize_phase(input.work, point,
++          input.owner(point), input.seeds[point], local_ratio)) atomicExch(input.error, 1);
++}
++} // namespace generativeqc_stationary_cuda
++"""
++
++
++def emit_stationary_phased_becke_cuda() -> str:
++    """Emit the plan's iteration domains and ordered source-panel consumption."""
++    return emit_phased_becke() + _KERNELS
+diff --git a/python/generativeqc_compiler/method/stationary_cuda.py b/python/generativeqc_compiler/method/stationary_cuda.py
+index 66712a36c..6bcf13668 100644
+--- a/python/generativeqc_compiler/method/stationary_cuda.py
++++ b/python/generativeqc_compiler/method/stationary_cuda.py
+@@ -43,6 +43,7 @@ from generativeqc_compiler.tensor.cuda_inline import (
+ from generativeqc_compiler.xc.geometry_cuda import emit_geometry_cuda
+ 
+ from .spec import SemilocalXCPrimitive, resolve_method
++from .stationary_becke_phased import emit_stationary_phased_becke_cuda
+ from .stationary_gradient import (
+     SCF_POINT_MODEL,
+     StationaryGradientPlan,
+@@ -523,7 +524,8 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
+                                 const double* raw, const double* external,
+                                 size_t external_stride, size_t external_offset,
+                                 size_t geometry_lanes, double* partial, double* scratch,
+-                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
++                                const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
++                                double* phase_seeds = nullptr) {
+   // Lanes remain point workers. A whole block cooperates on one worker's panel.
+   const size_t lane = blockIdx.x;
+   if (lane >= geometry_lanes) return;
+@@ -603,6 +605,10 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
+       // Every reader must finish before Becke overwrites the aliased panel.
+       __syncthreads();
+     }
++    if (phase_seeds) {
++      if (threadIdx.x == 0) phase_seeds[p] = control.seed;
++      continue;
++    }
+     const bool valid = na <= stationary_becke_retained_max_atoms
+         ? generativeqc_grid_adjoint::contract_point_cooperative(
+             view.points + 3 * p, centers, na, owner, control.seed, grad + 6 * na, ws, ws + na,
+@@ -1434,6 +1440,7 @@ def emit_stationary_wrapper_cuda(
+         + ";\n"
+         + "}\n"
+         + _runtime_layout_cuda(plan)
++        + emit_stationary_phased_becke_cuda()
+         + '#include "dft/stationary_gradient_cuda.cuh"\n'
+         + emit_stationary_scientific_kernels(plan)
+     )
+diff --git a/python/generativeqc_compiler/method/stationary_resources.py b/python/generativeqc_compiler/method/stationary_resources.py
+index 3b31c3373..1844b03c1 100644
+--- a/python/generativeqc_compiler/method/stationary_resources.py
++++ b/python/generativeqc_compiler/method/stationary_resources.py
+@@ -10,6 +10,7 @@ from dataclasses import dataclass
+ from typing import TypeVar
+ 
+ from generativeqc_compiler.common.cuda_target import CudaTargetInfo
++from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
+ 
+ GEOMETRY_MAX_LANES = 2048
+ GEOMETRY_MAX_SCRATCH_BYTES = 8 << 20
+@@ -225,6 +226,7 @@ class StationaryCudaResources:
+     center_geometry_bytes: int
+     becke_threads_per_point: int = 1
+     becke_shared_bytes: int = 0
++    phased_becke_bytes: int = 0
+ 
+ 
+ def plan_stationary_cuda_resources(
+@@ -239,6 +241,7 @@ def plan_stationary_cuda_resources(
+     target: CudaTargetInfo,
+     budget_bytes: int,
+     cooperative_becke: bool | None = None,
++    phased_becke: bool = False,
+ ) -> StationaryCudaResources:
+     """Choose up to one lane per point within the admitted owner's byte budget.
+ 
+@@ -258,6 +261,8 @@ def plan_stationary_cuda_resources(
+         )
+     if type(cooperative_becke) is not bool:
+         raise ValueError("cooperative Becke selection must be boolean")
++    if type(phased_becke) is not bool:
++        raise ValueError("phased Becke selection must be boolean")
+     if type(budget_bytes) is not int or not 0 <= budget_bytes <= _SIZE_MAX:
+         raise ValueError("stationary CUDA byte budget is not representable")
+     minimum = stationary_cuda_allocation_bytes(
+@@ -306,14 +311,31 @@ def plan_stationary_cuda_resources(
+         <= min(target.shared_memory_per_block, target.tuning_maximum_shared_bytes)
+     ):
+         becke_threads, shared_bytes = BECKE_COOPERATIVE_THREADS, required_shared
++    phase_bytes = 0
++    # Qualification-only opt-in. Preserve the lane count, integral reserve and
++    # bounded route; never evict a concurrent owner to admit a pair cache.
++    if (
++        phased_becke
++        and atoms > BECKE_RETAINED_MAX_ATOMS
++        and lanes == points
++        and center_bytes
++        and becke_threads > 1
++        and target.compute_capability == (12, 0)
++        and target.maximum_threads_per_block >= 128
++    ):
++        phase_plan = PhasedBeckePlan(atoms, points)
++        required = phase_plan.scratch_bytes + 8 * points + 8 * phase_plan.pairs
++        if required <= budget_bytes - allocation - center_bytes:
++            phase_bytes = required
+     return StationaryCudaResources(
+         lanes,
+         threads,
+         per_lane * lanes,
+-        allocation + center_bytes,
++        allocation + center_bytes + phase_bytes,
+         center_bytes,
+         becke_threads,
+         shared_bytes,
++        phase_bytes,
+     )
+ 
+ 
+diff --git a/python/generativeqc_compiler/xc/grid_native.py b/python/generativeqc_compiler/xc/grid_native.py
+index 9c57c0b90..11cf6c53c 100644
+--- a/python/generativeqc_compiler/xc/grid_native.py
++++ b/python/generativeqc_compiler/xc/grid_native.py
+@@ -150,10 +150,10 @@ GENERATIVEQC_GRID_HD PointPair point_pair(double difference, size_t a, size_t b,
+   }
+   return result;
+ }
+-template <bool RetainedLogs, class Log>
++template <bool RetainedLogs, class Logs, class Products, class Bars, class Zeros, class Log>
+ GENERATIVEQC_GRID_HD inline double pair_adjoint(const PointPair& state, size_t a, size_t b,
+-                                                const double* logs, const double* products,
+-                                                const double* bar_product, const size_t* zeros,
++                                                Logs logs, Products products,
++                                                Bars bar_product, Zeros zeros,
+                                                 double maximum, Log logarithm) {
+   // Saturated branches have exactly zero pullback. Skip before exponentiation
+   // to avoid inf*0. One exact zero leaves the other factors; two kill the JVP.
+@@ -174,16 +174,16 @@ GENERATIVEQC_GRID_HD inline double pair_adjoint(const PointPair& state, size_t a
+   return bar_mu;
+ }
+ 
+-GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, const double* logs,
+-                                                          const size_t* zeros) {
++template <class Logs, class Zeros>
++GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, Logs logs, Zeros zeros) {
+   double maximum = -std::numeric_limits<double>::infinity();
+   for (size_t a = 0; a < na; ++a)
+     if (!zeros[a]) maximum = std::max(maximum, logs[a]);
+   return maximum;
+ }
+-template <class Ratio>
++template <class Logs, class Products, class Bars, class Zeros, class Ratio>
+ GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, double seed,
+-    const double* logs, double* products, double* bar_product, const size_t* zeros,
++    Logs logs, Products products, Bars bar_product, Zeros zeros,
+     double maximum, Ratio ratio) {
+   double total = 0;
+   for (size_t a = 0; a < na; ++a) {
+diff --git a/python/generativeqc_compiler/xc/grid_phased.py b/python/generativeqc_compiler/xc/grid_phased.py
+new file mode 100644
+index 000000000..8101055b4
+--- /dev/null
++++ b/python/generativeqc_compiler/xc/grid_phased.py
+@@ -0,0 +1,231 @@
++"""Experimental bounded lifetime plan for the shared Becke reverse graph.
++
++Not a production route. The owner must admit this entire scratch reservation in
++addition to its other live storage, or use the existing bounded strip schedule.
++All scalar mathematics comes from grid_native/grid_response. Only the storage,
++phase boundaries, and independent iteration domains differ here.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++from generativeqc_compiler.dft.grid import checked_int
++
++
++@dataclass(frozen=True)
++class PhasedBeckePlan:
++    """Scratch and semantic work for one tile, not endpoint FLOPs or peak usage.
++
++    Pair primal storage is overwritten by its four pullbacks only after every
++    atom log-product and point normalization consumer has completed. Same-stream
++    phase boundaries protect this alias. Point lanes are contiguous in all fields.
++    Center preparation and deterministic output reduction belong to the owner.
++    """
++
++    atoms: int
++    points: int
++
++    @property
++    def pairs(self) -> int:
++        return self.atoms * (self.atoms - 1) // 2
++
++    @property
++    def pair_bytes(self) -> int:
++        return 4 * 8 * self.pairs * self.points
++
++    @property
++    def scratch_bytes(self) -> int:
++        return self.pair_bytes + (12 * self.atoms + 1) * self.points * 8
++
++    @property
++    def pair_evaluations(self) -> int:
++        return self.pairs * self.points
++
++    @property
++    def phases(self) -> tuple[str, ...]:
++        return (
++            "distance",
++            "pair_primal",
++            "atom_logs",
++            "point_normalize",
++            "pair_reverse",
++            "atom_gather",
++            "point_motion",
++        )
++
++
++def plan_phased_becke(
++    *, atoms: int, points: int, budget_bytes: int, occupied_bytes: int = 0
++) -> PhasedBeckePlan | None:
++    """Admit a whole tile; None requires the caller's bounded strip fallback.
++
++    Occupied bytes must include input/output, center metadata, and all concurrent
++    endpoint owners. No claim that this isolated plan is an endpoint admission.
++    """
++    for name, value, low in (
++        ("atoms", atoms, 1),
++        ("points", points, 0),
++        ("budget_bytes", budget_bytes, 0),
++        ("occupied_bytes", occupied_bytes, 0),
++    ):
++        checked_int(value, name, low=low, high=(1 << 63) - 1)
++    plan = PhasedBeckePlan(atoms, points)
++    return plan if occupied_bytes + plan.scratch_bytes <= budget_bytes else None
++
++
++_PHASED_SOURCE = r"""
++#if defined(__CUDACC__)
++#define GENERATIVEQC_PHASE_HD __host__ __device__
++#else
++#define GENERATIVEQC_PHASE_HD
++#endif
++namespace generativeqc_grid_phased {
++using namespace generativeqc_grid_adjoint;
++
++template <class Value> struct Strided {
++  Value* data;
++  size_t stride;
++  GENERATIVEQC_PHASE_HD Value& operator[](size_t index) const {
++    return data[index * stride];
++  }
++};
++
++// Distances[4], logs, products, bar_product, bar_distance, gradient[3].
++// Zeros use a separate size_t panel; maximum is one double per point. Owners
++// allocate all panels, and must not publish any output after a failed phase.
++struct Workspace {
++  size_t atoms, points;
++  double* pairs;
++  double* fields;
++  size_t* zeros;
++  double* maximum;
++  GENERATIVEQC_PHASE_HD Strided<double> field(size_t word, size_t point) const {
++    return {fields + word * atoms * points + point, points};
++  }
++  GENERATIVEQC_PHASE_HD Strided<size_t> zero_counts(size_t point) const {
++    return {zeros + point, points};
++  }
++  GENERATIVEQC_PHASE_HD double& pair(size_t word, size_t index, size_t point) const {
++    return pairs[(word * (atoms * (atoms - 1) / 2) + index) * points + point];
++  }
++};
++
++template <class Norm>
++GENERATIVEQC_PHASE_HD bool distance_phase(Workspace work, size_t point, size_t atom,
++    const double* points, const double* centers, Norm norm) {
++  bool valid = true;
++  const auto values = distance(points + 3 * point, centers + 3 * atom, norm, valid);
++  for (size_t word = 0; word < 4; ++word) work.field(word, point)[atom] = values[word];
++  return valid;
++}
++
++template <class Geometry, class Log, class Pair>
++GENERATIVEQC_PHASE_HD bool pair_primal_phase(Workspace work, size_t point,
++    size_t first, size_t second, Geometry geometry, Log logarithm, Pair pair) {
++  bool valid = true;
++  const auto separation = geometry.separation(first, second, valid);
++  const auto state = point_pair<false>(work.field(0, point)[first] -
++      work.field(0, point)[second], first, second, separation[0], geometry, logarithm, pair);
++  const size_t index = center_pair_index(first, second);
++  work.pair(0, index, point) = state.ratio[0];
++  work.pair(1, index, point) = state.ratio[1];
++  work.pair(2, index, point) = state.factor[0];
++  work.pair(3, index, point) = state.factor[1];
++  return valid && std::isfinite(state.factor[0]);
++}
++
++template <class Log>
++GENERATIVEQC_PHASE_HD void atom_logs_phase(Workspace work, size_t point,
++    size_t atom, Log logarithm) {
++  double sum = 0;
++  size_t zeros = 0;
++  // Lower neighbors followed by upper neighbors reproduce triangular order.
++  for (size_t neighbor = 0; neighbor < work.atoms; ++neighbor) {
++    if (neighbor == atom) continue;
++    const bool upper = neighbor > atom;
++    const size_t index = center_pair_index(std::max(atom, neighbor), std::min(atom, neighbor));
++    const double factor = work.pair(2, index, point);
++    const double value = upper ? 1 - factor : factor;
++    if (value > 0) sum += logarithm(value)[0];
++    else ++zeros;
++  }
++  work.field(4, point)[atom] = sum;
++  work.zero_counts(point)[atom] = zeros;
++}
++
++template <class Ratio>
++GENERATIVEQC_PHASE_HD bool point_normalize_phase(Workspace work, size_t point,
++    size_t owner, double seed, Ratio ratio) {
++  if (owner >= work.atoms || !std::isfinite(seed)) return false;
++  const double maximum = maximum_log_product(work.atoms, work.field(4, point),
++                                             work.zero_counts(point));
++  if (!std::isfinite(maximum)) return false;
++  work.maximum[point] = maximum;
++  normalized_product_adjoint(work.atoms, owner, seed, work.field(4, point),
++      work.field(5, point), work.field(6, point), work.zero_counts(point), maximum, ratio);
++  return true;
++}
++
++template <class Geometry, class Log>
++GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
++    size_t first, size_t second, Geometry geometry, Log logarithm) {
++  const size_t index = center_pair_index(first, second);
++  const PointPair state{{work.pair(0, index, point), work.pair(1, index, point)},
++                        {work.pair(2, index, point), work.pair(3, index, point)}, {}};
++  std::array<double, 4> pullback{};
++  bool valid = true;
++  if (state.factor[1] != 0) {
++    const double bar_mu = pair_adjoint<false>(state, first, second,
++        work.field(4, point), work.field(5, point), work.field(6, point),
++        work.zero_counts(point), work.maximum[point], logarithm);
++    const auto separation = geometry.separation(first, second, valid);
++    pullback[0] = bar_mu * state.ratio[0];
++    for (size_t axis = 0; axis < 3; ++axis)
++      pullback[axis + 1] = bar_mu * state.ratio[1] * separation[axis + 1];
++  }
++  // All primal consumers finished at the normalization boundary. Reuse storage.
++  for (size_t word = 0; word < 4; ++word) {
++    work.pair(word, index, point) = pullback[word];
++    valid = valid && std::isfinite(pullback[word]);
++  }
++  return valid;
++}
++
++GENERATIVEQC_PHASE_HD void atom_gather_phase(Workspace work, size_t point, size_t atom) {
++  std::array<double, 4> pullback{};
++  for (size_t neighbor = 0; neighbor < work.atoms; ++neighbor) {
++    if (neighbor == atom) continue;
++    const size_t index = center_pair_index(std::max(atom, neighbor), std::min(atom, neighbor));
++    const double sign = neighbor > atom ? -1 : 1;
++    for (size_t word = 0; word < 4; ++word)
++      pullback[word] += sign * work.pair(word, index, point);
++  }
++  for (size_t word = 0; word < 4; ++word) work.field(7 + word, point)[atom] = pullback[word];
++}
++
++GENERATIVEQC_PHASE_HD bool point_motion_phase(Workspace work, size_t point,
++    size_t atom, size_t owner) {
++  bool valid = true;
++  for (size_t axis = 0; axis < 3; ++axis) {
++    double result = work.field(8 + axis, point)[atom];
++    if (atom == owner) {
++      for (size_t source = 0; source < work.atoms; ++source) {
++        const double value = work.field(7, point)[source] * work.field(axis + 1, point)[source];
++        if (source == owner) result -= value;
++        result += value;
++      }
++    } else result -= work.field(7, point)[atom] * work.field(axis + 1, point)[atom];
++    work.field(8 + axis, point)[atom] = result;
++    valid = valid && std::isfinite(result);
++  }
++  return valid;
++}
++} // namespace generativeqc_grid_phased
++#undef GENERATIVEQC_PHASE_HD
++"""
++
++
++def emit_phased_becke() -> str:
++    """Emit schedule-only helpers after emit_grid_adjoint; never load a runtime."""
++    return _PHASED_SOURCE
+diff --git a/src/dft/cuda_ks.cpp b/src/dft/cuda_ks.cpp
+index 449f6a862..80fc5637f 100644
+--- a/src/dft/cuda_ks.cpp
++++ b/src/dft/cuda_ks.cpp
+@@ -722,17 +722,33 @@ struct CudaKsPlan::Impl : KsStateStorage {
+                                options.semilocal_correlation_scale, borrow_resident_grid);
+     const bool host_unfused =
+         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
+-    // Explicit qualification-only switch; the ordinary SCF default is dense.
++    // Qualified local AO maps are the ordinary default. Keep the environment
++    // variable as a compatibility/debug override: 0 disables selection, while
++    // 1 explicitly requests it and still fails closed for unsupported paths.
+     // Fixed geometry maps belong to this owner, so a coordinate/grid rebuild
+     // necessarily reruns discovery rather than reusing a pointer-based mask.
+     const char* ao_selection = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
+-    const bool select_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
+-    if (ao_selection && !select_ao && std::strcmp(ao_selection, "0") != 0)
++    const bool disable_ao = ao_selection && std::strcmp(ao_selection, "0") == 0;
++    const bool request_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
++    if (ao_selection && !disable_ao && !request_ao)
+       throw std::invalid_argument("GENERATIVEQC_CUDA_KS_ACTIVE_AO accepts only 0 or 1");
+-    if (select_ao && (host_unfused || precision_schedule.any_lower_precision() ||
+-                      !is_semilocal_family(functional, SemilocalFamily::Wb97mv)))
++    // PBE0 uses the scaled PBE graph, not a separate XC functional code. Keep
++    // admission tied to its exact composition; this does not qualify arbitrary
++    // PBE hybrids, DF, ECP, spin or range-separated SCF trajectories.
++    const bool local_pbe0_ao =
++        spins == 1 && has_exchange && !has_range_correction && !fitted_coulomb &&
++        !fitted_exchange && !nonlocal_correlation && provider.system().ecp_terms.empty() &&
++        is_semilocal_family(functional, SemilocalFamily::Pbe) &&
++        options.semilocal_exchange_scale == 0.75 && options.semilocal_correlation_scale == 1.0 &&
++        exchange_coefficient == -0.125;
++    const bool qualified_local_ao =
++        !host_unfused && !precision_schedule.any_lower_precision() &&
++        (is_semilocal_family(functional, SemilocalFamily::Wb97mv) || local_pbe0_ao);
++    if (request_ao && !qualified_local_ao)
+       throw std::invalid_argument(
+-          "experimental local SCF AO maps require device-fused FP64 WB97M-V");
++          "local SCF AO maps require device-fused FP64 WB97M-V or "
++          "all-electron direct RKS-PBE0");
++    const bool select_ao = !disable_ao && qualified_local_ao;
+     constexpr std::size_t ao_map_host_budget = 64U << 20;
+     CudaXcAoSelectionResources ao_selection_bound;
+     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
+diff --git a/src/dft/stationary_gradient_cuda.cuh b/src/dft/stationary_gradient_cuda.cuh
+index d9c815d2f..8a43b3407 100644
+--- a/src/dft/stationary_gradient_cuda.cuh
++++ b/src/dft/stationary_gradient_cuda.cuh
+@@ -15,10 +15,11 @@ using namespace generativeqc_tensor;
+ constexpr size_t record_stride = 26, task_stride = 9;
+ struct Owner {
+   Context context;
++  generativeqc::runtime::OwnedCudaBuffer<unsigned char> phased_storage;
+   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
+       max_page_primitive_work{}, bytes{}, geometry_lanes{}, geometry_threads{},
+       geometry_peak_lanes{}, center_geometry_bytes{}, becke_threads_per_point{1},
+-      becke_shared_bytes{};
++      becke_shared_bytes{}, byte_budget{}, phased_bytes{};
+   bool failed = true, topology_ready = false;
+   bool profile = false, geometry_pending = false;
+   cudaStream_t geometry_stream{};
+@@ -34,7 +35,11 @@ struct Owner {
+       task_count{}, task_batches{};
+   uint64_t h2d_calls{}, d2h_calls{}, synchronizations{}, geometry_batches{};
+   uint64_t center_distance_evaluations{}, center_geometry_preparations{},
+-      becke_pair_state_evaluations{};
++      becke_pair_state_evaluations{}, phased_batches{};
++  bool retains_becke_pair_state() const {
++    return bool(phased_storage) ||
++           (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
++  }
+   // Primitive metrics are cumulative across one reset/force execution. Admission
+   // is page-local so arbitrarily many bounded pages may contribute to one force.
+   void check_page_primitive_work(size_t work) const {
+@@ -47,6 +52,23 @@ struct Owner {
+     primitive_count += work;
+   }
+ };
++size_t phased_allocation(size_t atoms, size_t points) {
++  static_assert(sizeof(size_t) == 8 && sizeof(double) == 8 && sizeof(uint2) == 8);
++  const size_t pairs = atoms * (atoms - 1) / 2;
++  return 8 * (4 * pairs * points + (12 * atoms + 2) * points + pairs);
++}
++PhasedBeckeInput phased_input(Owner& owner, size_t points) {
++  const size_t pairs = owner.atoms * (owner.atoms - 1) / 2;
++  auto* pair_storage = reinterpret_cast<double*>(owner.phased_storage.get());
++  double* fields = pair_storage + 4 * pairs * owner.points;
++  auto* zeros = reinterpret_cast<size_t*>(fields + 11 * owner.atoms * owner.points);
++  double* maximum = reinterpret_cast<double*>(zeros + owner.atoms * owner.points);
++  PhasedBeckeInput input{};
++  input.work = {owner.atoms, points, pair_storage, fields, zeros, maximum};
++  input.seeds = maximum + owner.points;
++  input.indices = reinterpret_cast<uint2*>(input.seeds + owner.points);
++  return input;
++}
+ // Caps make all products below representable before any allocation or pointer
+ // dereference. D/W and AO metadata have no fixed-size AO array; 2048 admits
+ // full 96-atom def2-TZVPD without changing allocation formulas. Compiler-planned
+@@ -159,7 +181,8 @@ __global__ void geometry_cooperative_kernel(
+     const int64_t* owners, size_t owner_offset, size_t points_per_atom, const double* centers,
+     size_t na, const double* weights, const double* raw, const double* external,
+     size_t external_stride, size_t external_offset, size_t geometry_lanes, double* partial,
+-    double* scratch, const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error);
++    double* scratch, const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
++    double* phase_seeds);
+ __global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
+                                 double* output, int* error);
+ __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
+@@ -170,19 +193,46 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
+                      size_t external_stride, size_t external_offset, size_t geometry_lanes,
+                      double* partial, double* scratch,
+                      const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
++  PhasedBeckeInput phased{};
++  if (owner.phased_storage) {
++    if (geometry_lanes != view.npoint || !center_pairs || owner.becke_threads_per_point <= 1)
++      throw std::invalid_argument("phased Becke lane/cache contract changed");
++    phased = phased_input(owner, view.npoint);
++    phased.points = view.points;
++    phased.centers = centers;
++    phased.owners = owners;
++    phased.owner_offset = owner_offset;
++    phased.points_per_atom = points_per_atom;
++    phased.center_pairs = center_pairs;
++    phased.partial = partial;
++    phased.error = error;
++  }
+   if (owner.becke_threads_per_point > 1)
+     geometry_cooperative_kernel<<<geometry_lanes, owner.becke_threads_per_point,
+                                   owner.becke_shared_bytes - stationary_becke_control_bytes,
+                                   stream>>>(view, work, ao_atoms, owners, owner_offset,
+                                             points_per_atom, centers, na, weights, raw, external,
+                                             external_stride, external_offset, geometry_lanes,
+-                                            partial, scratch, center_pairs, error);
++                                            partial, scratch, center_pairs, error, phased.seeds);
+   else
+     geometry_kernel<<<blocks(geometry_lanes, owner.geometry_threads), owner.geometry_threads, 0,
+                       stream>>>(view, work, ao_atoms, owners, owner_offset, points_per_atom,
+                                 centers, na, weights, raw, external, external_stride,
+                                 external_offset, geometry_lanes, partial, scratch, center_pairs,
+                                 error);
++  if (owner.phased_storage) {
++    const dim3 atom_blocks(blocks(view.npoint, 128), na);
++    const dim3 pair_blocks(blocks(view.npoint, 128), na * (na - 1) / 2);
++    phased_becke_atom<0><<<atom_blocks, 128, 0, stream>>>(phased);
++    phased_becke_pair<false><<<pair_blocks, 128, 0, stream>>>(phased);
++    phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
++    phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
++    phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
++    phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
++    phased_becke_atom<3><<<atom_blocks, 128, 0, stream>>>(phased);
++    owner.launches += 7;
++    ++owner.phased_batches;
++  }
+ }
+ }  // namespace generativeqc_stationary_cuda
+ 
+@@ -237,6 +287,7 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
+     p->spin_blocks = ns;
+     p->max_page_primitive_work = max_primitive_work;
+     p->bytes = bytes;
++    p->byte_budget = budget;
+     p->geometry_lanes = geometry_lanes;
+     p->geometry_threads = geometry_threads;
+     p->center_geometry_bytes = center_bytes;
+@@ -305,6 +356,52 @@ int stationary_configure_becke(void* pointer, size_t threads, size_t shared_byte
+     p->becke_shared_bytes = shared_bytes;
+   });
+ }
++int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* error, size_t size) {
++  using namespace generativeqc_stationary_cuda;
++  auto* owner = static_cast<Owner*>(pointer);
++  return guarded(owner, error, size, [&] {
++    if (!owner || owner->topology_ready || owner->phased_storage)
++      throw std::invalid_argument("phased Becke must be configured once before topology");
++    owner->context.check_device();
++    if (bytes != phased_allocation(owner->atoms, owner->points) ||
++        bytes > owner->byte_budget - owner->bytes)
++      throw std::invalid_argument("phased Becke concurrent byte budget mismatch");
++    if (owner->atoms <= stationary_becke_retained_max_atoms ||
++        owner->geometry_lanes != owner->points || !owner->center_pairs ||
++        owner->becke_threads_per_point <= 1)
++      return;
++    cudaDeviceProp property{};
++    cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
++    const size_t pairs = owner->atoms * (owner->atoms - 1) / 2;
++    if (property.major != 12 || property.minor != 0 || property.maxThreadsPerBlock < 128 ||
++        property.maxThreadsDim[0] < 128 || pairs > size_t(property.maxGridSize[1]) ||
++        blocks(owner->points, 128) > size_t(property.maxGridSize[0]))
++      return;
++    try {
++      owner->phased_storage.allocate(owner->context.device, bytes, owner->context.stream);
++    } catch (const std::bad_alloc&) {
++      // Optional retention must not revoke the already admitted bounded path.
++      (void)cudaGetLastError();
++      return;
++    }
++    auto input = phased_input(*owner, owner->points);
++    phased_becke_indices<<<owner->atoms, 128, 0, owner->context.stream>>>(
++        owner->atoms, const_cast<uint2*>(input.indices));
++    cuda_check(cudaGetLastError());
++    cuda_check(cudaStreamSynchronize(owner->context.stream));
++    owner->phased_bytes = bytes;
++    owner->bytes += bytes;
++    ++owner->launches;
++    ++owner->synchronizations;
++  });
++}
++int stationary_phased_becke_metrics_v1(void* pointer, uint64_t* output, size_t count) {
++  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
++  if (!owner || !output || count != 2) return 1;
++  output[0] = owner->phased_bytes;
++  output[1] = owner->phased_batches;
++  return 0;
++}
+ int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
+                         const double* ao_norms, const int64_t* ao_atoms, char* error, size_t size) {
+   using namespace generativeqc_stationary_cuda;
+@@ -566,9 +663,7 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
+       p->point_count += view->npoint;
+       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+       p->becke_pair_state_evaluations +=
+-          view->npoint * p->atoms * (p->atoms - 1) /
+-          (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2
+-                                                                                             : 1);
++          view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+       if (!p->center_pairs)
+         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+       ++p->geometry_batches;
+@@ -633,9 +728,7 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
+       p->point_count += view->npoint;
+       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+       p->becke_pair_state_evaluations +=
+-          view->npoint * p->atoms * (p->atoms - 1) /
+-          (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2
+-                                                                                             : 1);
++          view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+       if (!p->center_pairs)
+         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+       ++p->geometry_batches;
+@@ -696,8 +789,7 @@ int stationary_geometry_external_device_enqueue(
+     p->point_count += view->npoint;
+     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+     p->becke_pair_state_evaluations +=
+-        view->npoint * p->atoms * (p->atoms - 1) /
+-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
++        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+     if (!p->center_pairs)
+       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+     ++p->geometry_batches;
+@@ -744,8 +836,7 @@ int stationary_geometry_external_device_molecular_enqueue(
+     p->point_count += view->npoint;
+     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+     p->becke_pair_state_evaluations +=
+-        view->npoint * p->atoms * (p->atoms - 1) /
+-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
++        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+     if (!p->center_pairs)
+       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+     ++p->geometry_batches;
+@@ -791,8 +882,7 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
+     p->point_count += view->npoint;
+     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+     p->becke_pair_state_evaluations +=
+-        view->npoint * p->atoms * (p->atoms - 1) /
+-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
++        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+     if (!p->center_pairs)
+       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+     ++p->geometry_batches;
+@@ -834,8 +924,7 @@ int stationary_geometry_molecular_resident_weights_enqueue(
+     p->point_count += view->npoint;
+     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+     p->becke_pair_state_evaluations +=
+-        view->npoint * p->atoms * (p->atoms - 1) /
+-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
++        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+     if (!p->center_pairs)
+       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+     ++p->geometry_batches;
+@@ -880,8 +969,7 @@ int stationary_geometry_molecular_enqueue(void* pointer,
+     p->point_count += view->npoint;
+     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+     p->becke_pair_state_evaluations +=
+-        view->npoint * p->atoms * (p->atoms - 1) /
+-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
++        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+     if (!p->center_pairs)
+       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+     ++p->geometry_batches;
+@@ -926,8 +1014,7 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
+     p->point_count += view->npoint;
+     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
+     p->becke_pair_state_evaluations +=
+-        view->npoint * p->atoms * (p->atoms - 1) /
+-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
++        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
+     if (!p->center_pairs)
+       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
+     ++p->geometry_batches;
+diff --git a/tests/native/dft_pbe0_ao_discovery_cases.cuh b/tests/native/dft_pbe0_ao_discovery_cases.cuh
+new file mode 100644
+index 000000000..6eeb0f8da
+--- /dev/null
++++ b/tests/native/dft_pbe0_ao_discovery_cases.cuh
+@@ -0,0 +1,85 @@
++/** Compare scaled-PBE local panels with independent full-AO CPU integration.
++ * These are XC component gates, not a complete PBE0 SCF/force qualification.
++ */
++void pbe0_ao_discovery_cases() {
++  for (bool spherical : {false, true}) {
++    generativeqc::core::System molecule;
++    molecule.atoms = {{1, {0, 0, 0}}, {1, {0.1, 0.2, 8.0}}};
++    molecule.electron_count = 2;
++    molecule.basis_representation =
++        spherical ? GENERATIVEQC_BASIS_SPHERICAL : GENERATIVEQC_BASIS_CARTESIAN;
++    for (unsigned center = 0; center < 2; ++center)
++      for (unsigned angular = 0; angular < 4; ++angular)
++        molecule.shells.push_back({center, angular, {{0.7 + 0.1 * angular, 1.0}}});
++    molecule.shells.push_back({0, 0, {{0.23, 1.0}}});
++    std::string detail;
++    require(generativeqc::molecule::validate_and_normalize(molecule, detail) ==
++                GENERATIVEQC_STATUS_SUCCESS,
++            detail);
++    const AoBasis basis(molecule);
++    const MolecularGrid grid(molecule, {1, 6, 5, 8, 3, 1e-12});
++    const auto matrix = basis.nao * basis.nao;
++    require(basis.nao > 32 && basis.nao % 32, "scaled-PBE oracle must cross AO block tails");
++    std::vector<double> alpha(matrix), beta(matrix);
++    for (std::size_t index = 0; index < basis.nao; ++index) {
++      alpha[index * basis.nao + index] = 0.7 / basis.nao;
++      beta[index * basis.nao + index] = 0.3 / basis.nao;
++    }
++    // Positive rank-one updates exercise gathering off-diagonal density entries
++    // without admitting negative densities to the independent XC oracle.
++    for (std::size_t row = 0; row < basis.nao; ++row)
++      for (std::size_t column = 0; column < basis.nao; ++column) {
++        const auto alpha_row = std::sin(static_cast<double>(row + 1));
++        const auto alpha_column = std::sin(static_cast<double>(column + 1));
++        const auto beta_row = std::cos(static_cast<double>(row + 1));
++        const auto beta_column = std::cos(static_cast<double>(column + 1));
++        alpha[row * basis.nao + column] += 0.2 * alpha_row * alpha_column / basis.nao;
++        beta[row * basis.nao + column] += 0.1 * beta_row * beta_column / basis.nao;
++      }
++    for (bool unrestricted : {false, true}) {
++      std::vector<double> input(matrix * (unrestricted ? 2 : 1));
++      for (std::size_t index = 0; index < matrix; ++index) {
++        input[index] = unrestricted ? alpha[index] : alpha[index] + beta[index];
++        if (unrestricted) input[matrix + index] = beta[index];
++      }
++      double energy{};
++      std::vector<double> expected;
++      if (unrestricted) {
++        const auto reference = integrate_pbe_uks_scaled(basis, grid, alpha, beta, 19, 0.75, 1.0);
++        energy = reference.energy;
++        expected = reference.potential[0];
++        expected.insert(expected.end(), reference.potential[1].begin(),
++                        reference.potential[1].end());
++      } else {
++        const auto reference =
++            integrate_pbe_rks_with_tail_scaled(basis, grid, input, 19, {}, 0.75, 1.0);
++        energy = reference.energy;
++        expected = reference.potential;
++      }
++      for (double cutoff : {1e-16, 1e8}) {
++        Fixture selected(basis, grid, 1U, unrestricted, 19, CudaXcAoPrecision::Fp64, false, 0.75,
++                         1.0, nullptr, true);
++        const auto bound = cuda_xc_ao_selection_resources(selected.layout);
++        require(!selected.plan->select_local_ao(cutoff, bound.host_peak_bytes - 1),
++                "scaled-PBE discovery exceeded host admission");
++        require(!selected.plan->layout().local_ao, "budget miss installed a partial map");
++        require(selected.plan->select_local_ao(cutoff, bound.host_peak_bytes),
++                "scaled-PBE local AO admission failed");
++        selected.submit(input);
++        const auto scalar = selected.scalars();
++        const auto potential = selected.potential();
++        require(scalar.error == 0, "scaled-PBE local evaluation failed");
++        require(potential.size() == expected.size(), "scaled-PBE potential shape changed");
++        close(scalar.energy, cutoff > 1 ? 0 : energy, "scaled-PBE CPU/local energy", 1e-10);
++        for (std::size_t index = 0; index < potential.size(); ++index)
++          close(potential[index], cutoff > 1 ? 0 : expected[index],
++                "scaled-PBE CPU/local potential", 1e-10);
++        const auto& work = selected.plan->ao_selection_work();
++        require(work.selected && work.point_ao_square_sum < work.dense_point_ao_square_sum,
++                "scaled-PBE gate did not exercise reduced maps");
++        if (cutoff > 1) require(work.empty_tiles == work.tiles, "empty-map oracle was not empty");
++        selected.canary();
++      }
++    }
++  }
++}
+diff --git a/tests/native/test_dft_cuda.cu b/tests/native/test_dft_cuda.cu
+index f5303bd83..c9c10ecf2 100644
+--- a/tests/native/test_dft_cuda.cu
++++ b/tests/native/test_dft_cuda.cu
+@@ -830,6 +830,7 @@ void matrix_schedule_cases() {
+ // clang-format off
+ #include "dft_local_ao_cases.cuh"
+ #include "dft_ao_discovery_cases.cuh"
++#include "dft_pbe0_ao_discovery_cases.cuh"
+ // clang-format on
+ }  // namespace
+ 
+@@ -837,6 +838,11 @@ int main(int argc, char** argv) {
+   int devices = 0;
+   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
+   try {
++    pbe0_ao_discovery_cases();
++    if (argc == 2 && std::string(argv[1]) == "--pbe0-local-ao") {
++      std::cout << "CUDA scaled-PBE local-AO independent CPU E/V and budget gates passed\n";
++      return 0;
++    }
+     ao_discovery_cases();
+     if (argc == 2 && std::string(argv[1]) == "--ao-discovery") {
+       std::cout << "CUDA XC AO discovery, independent CPU E/V and bounded fallback gates passed\n";
+diff --git a/tools/dft_mp_v1/qualify_capacity.py b/tools/dft_mp_v1/qualify_capacity.py
+index 2b3d554bc..e019e9d2f 100644
+--- a/tools/dft_mp_v1/qualify_capacity.py
++++ b/tools/dft_mp_v1/qualify_capacity.py
+@@ -302,7 +302,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
+     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
+ )
+ STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
+-    "7bb03b7286a5868527104420a74f4749c8af92360f17ad12ced31051a7ae9d75"
++    "7b3e71ce4e3821ee697ce52c9770263858c094b90cf263e9a7507bcd8f9aee78"
+ )
+ STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
+     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
+@@ -335,7 +335,13 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
+     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
+ )
+ STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
+-    "f94b63e26682a0796fe28b145885c1d9bae20d4147b6bc2e7f6cd6b8fc0e8af3"
++    "257568550c1fdb0d338f386efee67093d51741c7780b5944f35d02f83e6c0a30"
++)
++STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
++    "c2ba1b47e5655f75196c79384079d4ecd9c1edf9fe9aa1e97e339e96cbbaad0a"
++)
++STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
++    "dcf02f08e8d0279dcb49f2093d0ac3bf023523a7519a0faf6537fc9140711c9f"
+ )
+ STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
+     "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
+@@ -353,16 +359,16 @@ SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
+     "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
+ )
+ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
+-    "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
++    "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
+ )
+ NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
+-    "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
++    "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
+ )
+ NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
+     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
+ )
+ NATIVE_STATIONARY_CREATE_CONTRACT_SHA256 = (
+-    "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
++    "4e0dfc6c59fa2358a0cc8c1ca20f00853f294c5632b72089dfac6ab9360239d1"
+ )
+ NATIVE_STATIONARY_RESET_CONTRACT_SHA256 = (
+     "e0bdfb373199c744de1dea05e912f7bbd24dff59b7e9a27e08e899bcaec8c1fc"
+@@ -381,16 +387,16 @@ NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256 = (
+     "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
+ )
+ NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
+-    "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
++    "7270f2f21f44baf101f9e503f9238dd972f729e431a95b3dd0212311014fe601"
+ )
+ NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
+-    "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
++    "ff5b6e5a6790cc2a75d29906011cf863e04dac04930205d09fc36dcacdaac9e1"
+ )
+ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
+     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
+ )
+ NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
+-    "7a06757b893e51c6924675c88c66c6d0817923904283bf48378fb4e8302f47be"
++    "a6f197f1ac3fa905f87a8b1d29b083fa51af9c14f57afabb05ad1376a1496264"
+ )
+ NATIVE_STATIONARY_CONFIGURE_BECKE_CONTRACT_SHA256 = (
+     "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
+@@ -402,7 +408,10 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
+     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
+ )
+ PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
+-    "d63c25b8993857082f2d6792bcd591b78a63cfde49a9be1fa69b11d7e3359649"
++    "f5d57af10bcfa552eaa6f2ec5d6b968bf516f846b031a99361ea39dce746d807"
++)
++PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
++    "b120d127aede406557e2647defd00cc44ae6621d6f7ecf113334ab55e6121802"
+ )
+ PRIMITIVE_SUM_DEFINITION = (
+     "sum((int(row[2]) * len(expansion) for row, expansion in "
+@@ -435,7 +444,7 @@ GRID_PLAN_DEFINITION = (
+     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
+ )
+ GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
+-    "7949d2b5f585c0f5cadeaa8a6f52426355821046b209422d0947835093eb0da4"
++    "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a"
+ )
+ MINIMUM_SOURCE_BYTES_DEFINITION = (
+     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
+@@ -1098,6 +1107,59 @@ def _source_limits(repository: Path) -> dict[str, Any]:
+         raise RuntimeError("stationary CUDA ordinary tile-resource contract changed")
+     page_contract["ordinary_tile_resources_sha256"] = resource_owner_digest
+     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
++    if signature.parameters["resident_ao_cutoff"].default is not None:
++        raise RuntimeError("stationary CUDA default AO membership changed")
++    ao_reserves = [
++        node
++        for node in owner.body
++        if isinstance(node, ast.Assign)
++        and len(node.targets) == 1
++        and ast.unparse(node.targets[0]) == "ao_map_reserve"
++    ]
++    ao_charges = [
++        node
++        for node in owner.body
++        if isinstance(node, ast.AugAssign)
++        and ast.unparse(node.target) == "host_bound"
++        and isinstance(node.op, ast.Add)
++        and ast.unparse(node.value) == "ao_map_reserve"
++    ]
++    cache_paths = [
++        node
++        for node in owner.body
++        if isinstance(node, ast.Assign)
++        and len(node.targets) == 1
++        and ast.unparse(node.targets[0]) == "cache"
++    ]
++    expected_ao_reserve = ast.parse(
++        "_stationary_ao_map_reserve(resident_ao_cutoff, resident_ao_cache_bytes, "
++        "host_bound + (sum(value.host_bytes for value in tensor_plans.values()) "
++        "if prepared is not None else 0), max_host_bytes)",
++        mode="eval",
++    ).body
++    if (
++        len(ao_reserves) != 1
++        or ast.dump(ao_reserves[0].value) != ast.dump(expected_ao_reserve)
++        or len(ao_charges) != 1
++        or len(cache_paths) != 1
++        or not selections[0].end_lineno
++        < ao_reserves[0].lineno
++        < ao_charges[0].lineno
++        < cache_paths[0].lineno
++    ):
++        raise RuntimeError("stationary CUDA AO-map reserve admission changed")
++    for name, expected in (
++        ("_stationary_ao_map_reserve", STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256),
++        ("_stationary_resident_ao_cache", STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256),
++    ):
++        helpers = [
++            node
++            for node in tree.body
++            if isinstance(node, ast.FunctionDef) and node.name == name
++        ]
++        if len(helpers) != 1 or _source_node_sha256(source, helpers[0]) != expected:
++            raise RuntimeError(f"stationary CUDA {name} contract changed")
++        page_contract[f"{name.removeprefix('_stationary_')}_sha256"] = expected
+ 
+     def default(name: str) -> int:
+         value = signature.parameters[name].default
+@@ -2026,6 +2088,17 @@ def _prepared_aot_route_contract(repository: Path) -> str:
+     digest = _source_node_sha256(source, methods[0])
+     if digest != PREPARED_AOT_SELECTION_CONTRACT_SHA256:
+         raise RuntimeError("prepared stationary AOT selection contract changed")
++    requests = [
++        node
++        for node in classes[0].body
++        if isinstance(node, ast.FunctionDef) and node.name == "_request"
++    ]
++    if (
++        len(requests) != 1
++        or _source_node_sha256(source, requests[0])
++        != PREPARED_AO_REQUEST_CONTRACT_SHA256
++    ):
++        raise RuntimeError("prepared stationary AO request contract changed")
+     return digest
+ 
+ 

@@ -206,8 +206,8 @@ def test_actual_candidate_page_partition_preserves_tails(tmp_path: Path) -> None
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_schedule_policy_requires_explicit_opt_in(tmp_path: Path) -> None:
-    """Compile the real selector so an absent override cannot promote the route."""
+def test_schedule_policy_defaults_on_with_explicit_opt_out(tmp_path: Path) -> None:
+    """Compile the real selector so the qualified route is automatic but reversible."""
     compiler = shutil.which("c++")
     cache = shutil.which("ccache")
     if compiler is None or cache is None:
@@ -228,11 +228,12 @@ def test_schedule_policy_requires_explicit_opt_in(tmp_path: Path) -> None:
 int main() {
   constexpr auto variable = "GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE";
   unsetenv(variable);
-  assert(!bounded_schwarz_schedule_requested());
+  assert(bounded_schwarz_schedule_requested());
   const char* values[] = {"", "0", "none", "auto", "invalid", "1", "indexed"};
   for (const auto* value : values) {
     setenv(variable, value, 1);
-    const bool expected = std::strcmp(value, "1") == 0 || std::strcmp(value, "indexed") == 0;
+    const bool expected = std::strcmp(value, "auto") == 0 || std::strcmp(value, "1") == 0 ||
+                          std::strcmp(value, "indexed") == 0;
     assert(bounded_schwarz_schedule_requested() == expected);
   }
 }
