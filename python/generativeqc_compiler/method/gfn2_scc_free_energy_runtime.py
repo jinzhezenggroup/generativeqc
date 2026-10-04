@@ -11,7 +11,7 @@ from generativeqc_compiler.tensor.ir import Node, add, input_tensor, multiply
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
-GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION = "gfn2-scc-free-energy-runtime-ir-v1"
+GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION = "gfn2-scc-free-energy-runtime-ir-v2"
 
 _INTERNAL_COMPONENTS = (
     "core",
@@ -64,5 +64,21 @@ def build_gfn2_scc_free_energy_program() -> Program:
             "kind": "gfn2-scc-free-energy",
             "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
             "rounding": "fma(-electronic_temperature, entropy, internal_energy)",
+        },
+    )
+
+
+def build_gfn2_component_energy_accumulate_program() -> Program:
+    """Accumulate one enabled terminal energy component in caller-defined order."""
+
+    current_energy = _input("current_energy")
+    component_energy = _input("component_energy")
+    updated = add(current_energy, component_energy)
+    return Program(
+        {"updated_energy": updated},
+        provenance={
+            "kind": "gfn2-component-energy-accumulate",
+            "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
+            "ordering": "caller-owned component schedule",
         },
     )

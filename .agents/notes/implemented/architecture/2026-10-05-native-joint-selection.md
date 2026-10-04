@@ -2,6 +2,7 @@
 
 Status: implemented
 Date: 2026-10-05
+Agent: dot
 
 ## Problem
 
@@ -63,3 +64,23 @@ ownership migration without improving numerical safety.
 Native consumers can supply complete target-specific phase evidence and typed
 prepared executions for all competing candidates. Such evidence may enable
 cost ranking; it must not change the scientific identity or admission boundary.
+
+## Admission repair evidence
+
+Cross-portfolio probes showed why the semantic digest cannot bind native offers:
+two valid requests for the same operation may admit different precision variants,
+whose canonical ordering changes the meaning of a positional index. Native
+records therefore retain the existing full request and precision digests and
+check both before selection. This extends the native projection without changing
+the Python request/candidate payload schemas or their canonical identities.
+Missing execution remains explicit rejected evidence, not an admitted precision.
+
+All emitted integer literals now pass the existing portable signed-64-bit check.
+In particular, Python candidate workspace/provider sizes previously accepted by
+the metadata constructor could exceed a C++ literal's range and wrap to zero
+with a compiler warning. Emission rejects those values before returning source;
+the native selector's checked arithmetic remains in place for resolved sums.
+The focused 37-test compiler/native/provider suite covers crossed precision and
+effect portfolios, an incorrect precision index, missing execution, the valid
+resource upper bound and pre-emission overflow rejection. These are bounded host
+checks and do not establish device execution or scientific endpoint performance.

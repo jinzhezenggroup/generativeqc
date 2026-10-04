@@ -683,10 +683,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool requested_incremental_direct_jk =
       options.incremental_direct_jk && requested_quartet_direct && !requested_mixed_precision_fock;
   // A mixed item is promoted to exact FP64 by the target refinement before any
-  // consumer runs, so the matrix it retains is target precision. The density
-  // criterion and convergence check below still decide each item's reuse.
-  const bool requested_reuse_converged_fock =
-      reuse_converged_fock_requested() && !options.export_physical_reference;
+  // consumer runs, so the matrix it retains is target precision. The convergence
+  // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item
+  // stops; no Fock matrix is ever reused across executions or geometries.
+  //
+  // Physical-reference export has an additional proof obligation: the final
+  // physical-Fock eigenframe must reconstruct this same retained density and be
+  // canonical. That independent check runs after final diagonalization below;
+  // a rejected retained candidate advances to P_{n+1} and rebuilds normally.
+  const bool requested_reuse_converged_fock = reuse_converged_fock_requested();
   // Direct consumers expand each compact logical tile into one-warp blocks;
   // validate the resulting fixed Graph grid before narrowing it to unsigned.
   if (total_shell_pairs > std::numeric_limits<unsigned>::max() ||
@@ -3499,6 +3504,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   std::uint32_t post_scf_physical_fock_builds = 0;
   std::uint32_t post_scf_final_eigen_solves = 0;
+  // Keep the final selection count through reference publication so diagnostics
+  // can distinguish retained-Fock finalization from an explicit final rebuild.
+  std::uint32_t host_final_fock_rebuild_count = static_cast<std::uint32_t>(batch_size);
   if (scf_force_ready_state) {
     // Convergence already certified the un-extrapolated physical F(P_n)
     // commutator before DIIS and RetainConvergedDensity kept P_n paired with
@@ -3544,7 +3552,6 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         static_cast<std::uint64_t>(spin_matrix_elements * sizeof(double)));
     trace.finish("submitted");
   } else {
-    std::uint32_t host_final_fock_rebuild_count = static_cast<std::uint32_t>(batch_size);
     if (reuse_converged_fock) {
       // Partition on the device because density RMS is already per-system. This
       // permits a mixed bucket: tight systems retain P_n/F(P_n), while only
@@ -3874,14 +3881,98 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
   }
   if (options.export_physical_reference) {
-    outputs[0].status = reference_detail::download(
-        resources.stream_, nbf, host.occupied[0], resources.reference_peak_bytes_,
-        {overlap, hcore, fock, coefficients, density}, eigenvalues,
-        {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
+    const auto download_reference = [&]() {
+      return reference_detail::download(
+          resources.stream_, nbf, host.occupied[0], resources.reference_peak_bytes_,
+          {overlap, hcore, fock, coefficients, density}, eigenvalues,
+          {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
+    };
+    bool retained_reference_rejected = false;
+    try {
+      outputs[0].status = download_reference();
+    } catch (const reference_detail::PhysicalReferenceValidationError&) {
+      if (!reuse_converged_fock || host_final_fock_rebuild_count != 0U) throw;
+      // The retained P_n/F(P_n) pair had valid operator provenance, but its
+      // physical-Fock eigenframe failed the stronger reference reconstruction /
+      // canonicality contract. Promote the already available P_{n+1}, rebuild
+      // F(P_{n+1}) once, and execute exactly the legacy finalization sequence.
+      retained_reference_rejected = true;
+      launch_copy_selected_matrices_kernel(
+          blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
+          static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
+          static_cast<std::int32_t>(nbf), active, next_density, density);
+      cuda_error = launch_fock_builder(density, false, false);
+      if (cuda_error == cudaSuccess) {
+        ++post_scf_physical_fock_builds;
+        host_final_fock_rebuild_count = 1U;
+      }
+      if (cuda_error != cudaSuccess) {
+        fill_global_failure(outputs, cuda_status(cuda_error));
+        return outputs;
+      }
+
+      status = multiply_matrices(fock, false, orthogonalizer, temporary);
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
+        status = multiply_matrices(orthogonalizer, true, temporary, eigensystem);
+      }
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
+        status = launch_solver(resources.eigensolver_view(), ordinary_eigensolver_family,
+                               static_cast<int>(nbf), static_cast<int>(batch_size), eigensystem,
+                               temporary, eigenvalues, lwork, solver_info, active);
+      }
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
+        fill_global_failure(outputs, status);
+        return outputs;
+      }
+      ++post_scf_final_eigen_solves;
+      launch_inspect_solver_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
+                                   static_cast<std::int32_t>(batch_size), solver_info, active,
+                                   failed, converged);
+      status = multiply_matrices(orthogonalizer, false, eigensystem, coefficients);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
+        fill_global_failure(outputs, status);
+        return outputs;
+      }
+      launch_compute_energy_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
+                                   resources.stream_, static_cast<std::int32_t>(batch_size),
+                                   static_cast<std::int32_t>(nbf), density, hcore, fock,
+                                   nuclear_repulsion, active, energy);
+      cuda_error = cudaPeekAtLastError();
+      if (cuda_error != cudaSuccess) {
+        fill_global_failure(outputs, cuda_status(cuda_error));
+        return outputs;
+      }
+      outputs[0].status = download_reference();
+    }
     if (outputs[0].status == GENERATIVEQC_STATUS_SUCCESS) {
+      const bool reused_final_physical_fock =
+          reuse_converged_fock && host_final_fock_rebuild_count == 0U;
+      // Reference download has independently checked F/P/C/epsilon,
+      // reconstructed density, the physical commutator, F C = S C epsilon and
+      // C^T F C canonicality before anything is published. Expose the final
+      // operator work as ordinary SCF provenance too, not only as trace text.
+      outputs[0].scf.precision.requested_mode =
+          options.precision_mode.value_or(GENERATIVEQC_PRECISION_FP64);
+      // Strict-FP64 reference work is fully reconstructible from the SCF
+      // iteration count plus this finalization counter. A mixed candidate keeps
+      // its existing conservative provenance until per-item mixed accounting is
+      // exported here too.
+      if (!mixed_precision_fock) {
+        outputs[0].scf.precision.operator_work_counters_valid = 1U;
+        outputs[0].scf.precision.effective_bits = 64U;
+        outputs[0].scf.precision.strict_stage_fock_builds = outputs[0].scf.iterations;
+      }
+      outputs[0].scf.precision.post_scf_fock_builds = post_scf_physical_fock_builds;
+      outputs[0].scf.precision.skipped_final_fock_builds = reused_final_physical_fock ? 1U : 0U;
       // Download has synchronized the stream. Report semantic completed work,
       // not the one-time host graph-capture calls or allocator pool rounding.
       runtime::df_progress::Scope trace("cuda_rhf_reference_completed", "cuda_completed");
+      runtime::df_progress::Scope::label("final_physical_fock",
+                                         reused_final_physical_fock ? "reused" : "rebuilt");
+      runtime::df_progress::Scope::number("final_physical_fock_rebuilds",
+                                          post_scf_physical_fock_builds);
+      runtime::df_progress::Scope::number("retained_reference_rejections",
+                                          retained_reference_rejected ? 1U : 0U);
       runtime::df_progress::Scope::number("ao_functions", nbf);
       runtime::df_progress::Scope::number("scf_iterations", outputs[0].scf.iterations);
       runtime::df_progress::Scope::number(
@@ -4646,10 +4737,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         final_density, active, forces);
   }
 
-  if (reuse_converged_fock && !stationary_force_required) {
-    // Energy-only execution may keep its historical warm-start advancement.
-    // A force result must return exactly the density generation consumed by
-    // energy/force/Pulay, so the force-ready path never swaps in P_{n+1}.
+  if (reuse_converged_fock && !stationary_force_required && !options.export_physical_reference) {
+    // Ordinary energy-only execution may keep its historical warm-start
+    // advancement. A physical-reference export must instead publish the retained
+    // P_n/F(P_n) pair that licensed reuse; swapping only P to P_{n+1} would
+    // destroy the reference's density/Fock provenance. Force-ready publication
+    // likewise never swaps in P_{n+1}.
     launch_copy_selected_matrices_kernel(
         blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
         static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),

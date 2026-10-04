@@ -28,6 +28,7 @@ PRELUDE = r"""
 #include "cc/df_source.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "scf/cuda/topology.hpp"
+#include "scf/cuda/df_source_domain.hpp"
 #include "scf/df_source_capacity.hpp"
 #include <generated_df_cc_source_cpu.hpp>
 #include <df_mo_source_generated.hpp>
@@ -107,11 +108,13 @@ FACTORY_END = r"""
 generativeqc_status create_cuda_density_fitting_integral_source(
     int device, const std::vector<core::System>& orbital, const std::vector<core::System>& auxiliary,
     CudaDensityFittingIntegralSource**, std::vector<double>& metric,
-    std::size_t& n, std::size_t& q, std::string& detail) {
+    std::size_t& n, std::size_t& q, std::string& detail,
+    const cuda_execution::CudaDfSourcePolicy* policy) {
+  assert(policy && policy->value_math == 0 && policy->requested_value_mapping == 1);
   ++factory_entries;
   cuda_execution::CudaDensityFittingIntegralSourceImpl* source = nullptr;
   return cuda_execution::create_cuda_density_fitting_integral_source_impl(
-      device, orbital, auxiliary, &source, metric, n, q, detail);
+      device, orbital, auxiliary, &source, metric, n, q, detail, *policy);
 }
 }  // namespace scf
 namespace cc {
@@ -156,6 +159,14 @@ std::size_t external(const core::System& o, const core::System& a, const hf::Phy
 int main(int argc, char** argv) {
   if (argc!=2) return 1;
   const int mode=std::atoi(argv[1]);
+  scf::cuda_execution::CudaDfSourcePolicy policy;
+  std::string detail;
+  setenv("GENERATIVEQC_DF_VALUE_MATH", "generic", 1);
+  setenv("GENERATIVEQC_DF_VALUE_MAPPING", "component", 1);
+  assert(scf::cuda_execution::resolve_cuda_df_source_policy(policy, detail));
+  // Source packing must consume the admitted snapshot, even after an environment change.
+  setenv("GENERATIVEQC_DF_VALUE_MATH", "invalid-after-admission", 1);
+  setenv("GENERATIVEQC_DF_VALUE_MAPPING", "primitive", 1);
   auto orbital=system(2), auxiliary=system(100);
   auto ref=reference(orbital);
   auto p=capacity(orbital,auxiliary);
@@ -174,7 +185,7 @@ int main(int argc, char** argv) {
     assert(100*100*sizeof(double)>legacy_budget);
     try {
       allocation_probe::enabled=true;
-      (void)cc::build_df_source_cuda(orbital,auxiliary,ref,budget,1e-10,0,0);
+      (void)cc::build_df_source_cuda(orbital,auxiliary,ref,budget,1e-10,0,0,false,&policy);
       allocation_probe::enabled=false;
       if (mode!=2 || factory_entries!=1 || device_entries!=1) return 2;
       if (allocation_probe::peak>p.numeric_bytes || allocation_probe::live) return 3;
@@ -197,7 +208,7 @@ int main(int argc, char** argv) {
       auto r=reference(o); auto bound=capacity(o,a);
       allocation_probe::peak=0;
       allocation_probe::enabled=true;
-      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0);
+      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0,false,&policy);
       allocation_probe::enabled=false;
       if (allocation_probe::peak>bound.numeric_bytes || allocation_probe::live) return 7;
     }
@@ -223,7 +234,7 @@ int main(int argc, char** argv) {
       auto r=reference(o); auto bound=capacity(o,a);
       allocation_probe::peak=0;
       allocation_probe::enabled=true;
-      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0);
+      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0,false,&policy);
       allocation_probe::enabled=false;
       if (allocation_probe::peak>bound.numeric_bytes || allocation_probe::live) return 11;
     }
@@ -243,6 +254,14 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     for generator, arguments in (
         ("generate_df_cc_source.py", ["--output-dir", str(directory)]),
         (
+            "generate_one_electron_kernels.py",
+            [
+                "--derivatives",
+                "--derivative-policy-output",
+                str(directory / "generated_one_electron_derivative_policy.cuh"),
+            ],
+        ),
+        (
             "generate_df_mo_source.py",
             ["--output", str(directory / "df_mo_source_generated.hpp")],
         ),
@@ -261,11 +280,6 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             timeout=60,
         )
     setup = (ROOT / "src/scf/cuda/df_source_setup.cpp").read_text()
-    domain = setup[
-        setup.index("bool cuda_df_shell_domain(") : setup.index(
-            "namespace {", setup.index("bool cuda_df_shell_domain(")
-        )
-    ]
     transform = setup[
         setup.index(
             "std::vector<DfPublicAoExpansion> make_public_to_cartesian_transform("
@@ -312,7 +326,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     prelude = PRELUDE.replace("__DF_PUBLIC_EXPANSION__", constants + "\n" + expansion)
     prelude = prelude.replace("__DEVICE_OBSERVER__", observer)
-    program = prelude + domain + transform + factory + FACTORY_END + helpers + prefix
+    program = prelude + transform + factory + FACTORY_END + helpers + prefix
     program += (
         "check_status(source_status, detail);\n"
         "(void)started; (void)stage; (void)work; return result;\n}\n" + MAIN
@@ -321,7 +335,13 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     path.write_text(program)
     objects = []
     for i, cpp in enumerate(
-        (path, ROOT / "src/molecule/basis.cpp", ROOT / "src/scf/cuda/topology.cpp")
+        (
+            path,
+            ROOT / "src/molecule/basis.cpp",
+            ROOT / "src/scf/cuda/topology.cpp",
+            ROOT / "src/scf/cuda/df_source_domain.cpp",
+            ROOT / "src/scf/cuda/rhf_policy.cpp",
+        )
     ):
         obj = directory / f"part-{i}.o"
         compiled = subprocess.run(
@@ -333,6 +353,8 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
                 "-Wall",
                 "-Wextra",
                 "-Werror",
+                "-ffunction-sections",
+                "-fdata-sections",
                 "-I" + str(ROOT / "src"),
                 "-I" + str(ROOT / "include"),
                 "-isystem",
@@ -351,7 +373,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         objects.append(str(obj))
     executable = directory / "admission"
     subprocess.run(
-        [compiler, *objects, "-o", str(executable)],
+        [compiler, *objects, "-Wl,--gc-sections", "-o", str(executable)],
         check=True,
         capture_output=True,
         timeout=30,

@@ -67,6 +67,6 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems,
     CudaDensityFittingIntegralSourceImpl** source, std::vector<double>& metrics, std::size_t& nbf,
-    std::size_t& naux, std::string& detail);
+    std::size_t& naux, std::string& detail, const CudaDfSourcePolicy& policy);
 
 }  // namespace generativeqc::scf::cuda_execution

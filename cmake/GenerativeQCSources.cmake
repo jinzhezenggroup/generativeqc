@@ -154,6 +154,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/initial_guess/density.cpp
     src/scf/preliminary_guess.cpp
     src/tensor/symmetric_matrix_function.cpp
+    src/scf/cuda/df_source_domain.cpp
     src/scf/cuda/rhf_policy.cpp)
 
   if(GENERATIVEQC_ENABLE_CUDA)
