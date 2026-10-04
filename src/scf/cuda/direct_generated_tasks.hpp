@@ -10,6 +10,15 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+/** Scatter retained classifications into compact raw-pair slices, without
+ * re-screening or canonicalizing away the bounded owner's task orientation. */
+void launch_materialize_compact_force_tiles(unsigned blocks, unsigned threads, cudaStream_t stream,
+                                            std::size_t capacity,
+                                            const ActiveShellQuartetTile* input,
+                                            const std::uint8_t* classes,
+                                            const std::uint32_t* offsets, std::uint32_t* writes,
+                                            ActiveShellQuartetTile* tasks);
+
 /** Forward resolved queue policy with unchanged geometry, stream and buffers. */
 void launch_classify_generated_shell_tasks_kernel(
     dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream, DeviceBatch batch,

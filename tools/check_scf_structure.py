@@ -241,6 +241,7 @@ CUDA_MODULES["cuda_direct_queues"] = (
 CUDA_ALLOWED["cuda_direct_queues"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_direct_queues"]
 ) + (
+    "scf/direct_block_domain.hpp",
     "scf/cuda/direct_metadata.",
     "scf/cuda/direct_constants.",
     "scf/cuda/matrix_index.",
@@ -261,6 +262,12 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_coulomb.",
     "scf/cuda/basis_transform_kernels.hpp",
     "scf/cuda/df_jk_kernels.hpp",
+    # The provider composes queue/consumer launch interfaces, never their device
+    # definitions. These shared primitives also serve the RHF orchestration.
+    "scf/cuda/direct_metadata.hpp",
+    "scf/cuda/direct_angular_force.hpp",
+    "scf/cuda/direct_bounded_tasks.hpp",
+    "scf/cuda/direct_generated_tasks.hpp",
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",
     "scf/cuda/direct_density_bounds.hpp",

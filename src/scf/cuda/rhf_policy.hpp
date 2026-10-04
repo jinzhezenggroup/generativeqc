@@ -258,6 +258,9 @@ bool bounded_schwarz_schedule_requested() noexcept;
 bool bounded_angular_force_requested() noexcept;
 /** Qualification only: evaluate the exact Cartesian Coulomb dependency domain. */
 bool direct_coulomb_reachable_requested() noexcept;
+
+/** Opt-in bounded class pages, resolved once when the force owner is prepared. */
+bool compact_bounded_force_requested() noexcept;
 bool resident_ppps_bra_requested() noexcept;
 bool ppps_signature_bucketing_requested() noexcept;
 bool psps_signature_bucketing_requested() noexcept;

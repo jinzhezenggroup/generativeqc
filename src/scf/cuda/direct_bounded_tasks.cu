@@ -2,6 +2,7 @@
 
 #include "scf/cuda/direct_bounded_tasks.hpp"
 #include "scf/cuda/direct_constants.hpp"
+#include "scf/cuda/direct_queue_profile.cuh"
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_task_encoding.cuh"
 
@@ -15,7 +16,8 @@ namespace generativeqc::scf::cuda_execution {
  * page stream can recover only that class without discarding unrelated
  * generated routes or repeating a whole-topology integral evaluation.
  */
-template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Materialize>
+template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Materialize,
+          bool RetainPage = false>
 __global__ void compact_bounded_generated_tasks_kernel(
     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
@@ -23,10 +25,14 @@ __global__ void compact_bounded_generated_tasks_kernel(
     const std::uint8_t* active, const std::uint64_t* enabled_mask_pointer,
     std::uint64_t enabled_mask, std::uint64_t excluded_mask, const std::uint32_t* selected_classes,
     const std::uint32_t* selected_any, unsigned long long* global_cursor, GeneratedShellTask* tasks,
-    std::uint32_t* task_counts, const std::uint32_t* task_offsets, std::uint32_t* overflow) {
+    std::uint32_t* task_counts, const std::uint32_t* task_offsets, std::uint32_t* overflow,
+    detail::BoundedDirectBlockDomain domain = {}, std::size_t page_begin = 0,
+    std::size_t page_end = 0, BoundedForcePage page = {}) {
   __shared__ unsigned long long block_quartet;
   if (selected_any != nullptr && *selected_any == 0U) return;
-  const std::size_t total = static_cast<std::size_t>(batch.total_shell_pair_block_quartets);
+  const std::size_t total = RetainPage
+                                ? page_end - page_begin
+                                : static_cast<std::size_t>(batch.total_shell_pair_block_quartets);
   while (true) {
     // Complete every previous claim read, including inactive/screened skips,
     // before the leader publishes another block quartet.
@@ -35,19 +41,31 @@ __global__ void compact_bounded_generated_tasks_kernel(
     __syncthreads();
     if (block_quartet >= total) return;
 
-    const std::size_t packed_block_quartet = static_cast<std::size_t>(block_quartet);
-    const std::int32_t system = shell_pair_block_quartet_system(batch, packed_block_quartet);
+    const std::size_t packed_block_quartet =
+        static_cast<std::size_t>(block_quartet) + (RetainPage ? page_begin : 0U);
+    std::int32_t system;
+    std::size_t first_block, second_block;
+    if (RetainPage && domain.prefix) {
+      first_block = bounded_direct_block_row(domain.prefix, domain.row_count, packed_block_quartet);
+      system = static_cast<std::int32_t>(bounded_direct_block_row(
+          batch.system_shell_pair_block_offsets, batch.batch_size, first_block));
+      second_block = static_cast<std::size_t>(batch.system_shell_pair_block_offsets[system]) +
+                     packed_block_quartet - domain.prefix[first_block];
+    } else {
+      system = shell_pair_block_quartet_system(batch, packed_block_quartet);
+      const auto local =
+          packed_block_quartet -
+          static_cast<std::size_t>(batch.system_shell_pair_block_quartet_offsets[system]);
+      decode_lower_triangle(local, first_block, second_block);
+      const auto begin = static_cast<std::size_t>(batch.system_shell_pair_block_offsets[system]);
+      first_block += begin;
+      second_block += begin;
+    }
     if (active != nullptr && active[system] == 0) continue;
-    const std::size_t local_block_quartet =
-        packed_block_quartet -
-        static_cast<std::size_t>(batch.system_shell_pair_block_quartet_offsets[system]);
-    std::size_t first_block_local = 0;
-    std::size_t second_block_local = 0;
-    decode_lower_triangle(local_block_quartet, first_block_local, second_block_local);
     const std::size_t system_block_begin =
         static_cast<std::size_t>(batch.system_shell_pair_block_offsets[system]);
-    const std::size_t first_block = system_block_begin + first_block_local;
-    const std::size_t second_block = system_block_begin + second_block_local;
+    const auto first_block_local = first_block - system_block_begin;
+    const auto second_block_local = second_block - system_block_begin;
     if (!bounded_direct_block_pair_survives_screening<Purpose>(
             first_block, second_block, system, screening_tolerance, shell_pair_block_bounds,
             system_density_bounds)) {
@@ -79,8 +97,12 @@ __global__ void compact_bounded_generated_tasks_kernel(
         first_local = candidate / second_count;
         second_local = candidate % second_count;
       }
-      const std::size_t first_pair = shell_pair_order[first_ordered_begin + first_local];
-      const std::size_t second_pair = shell_pair_order[second_ordered_begin + second_local];
+      const auto first_candidate = shell_pair_order[first_ordered_begin + first_local];
+      const auto second_candidate = shell_pair_order[second_ordered_begin + second_local];
+      const std::size_t first_pair =
+          RetainPage ? max(first_candidate, second_candidate) : first_candidate;
+      const std::size_t second_pair =
+          RetainPage ? min(first_candidate, second_candidate) : second_candidate;
       if (!direct_shell_quartet_survives_screening<Unrestricted, Purpose>(
               batch, first_pair, second_pair, screening_tolerance, shell_pair_bounds,
               shell_pair_density_bounds)) {
@@ -102,7 +124,18 @@ __global__ void compact_bounded_generated_tasks_kernel(
       if (selected_classes != nullptr && selected_classes[shell_class] == 0U) {
         continue;
       }
-      if constexpr (Materialize) {
+      if constexpr (RetainPage) {
+        // Candidate slots are injective within the page. Retaining the raw
+        // pair and its class lets prefix/scatter reuse screening, not repeat it.
+        constexpr auto stride =
+            detail::kBoundedDirectShellPairBlockSize * detail::kBoundedDirectShellPairBlockSize;
+        const auto slot = static_cast<std::size_t>(block_quartet) * stride + candidate;
+        page.input[slot] = {static_cast<std::uint32_t>(first_pair),
+                            static_cast<std::uint32_t>(second_pair), 0U};
+        page.classes[slot] = static_cast<std::uint8_t>(shell_class);
+        atomicAdd(page.counts + shell_class, 1U);
+        profile_bounded_direct_shell_quartet(batch, page.input[slot], page.profile);
+      } else if constexpr (Materialize) {
         const std::uint32_t class_slot = atomicAdd(task_counts + shell_class, 1U);
         const std::uint32_t class_capacity =
             task_offsets[shell_class + 1U] - task_offsets[shell_class];
@@ -120,6 +153,29 @@ __global__ void compact_bounded_generated_tasks_kernel(
     }
     __syncthreads();
   }
+}
+
+void launch_classify_bounded_force_page(bool unrestricted, unsigned workers, cudaStream_t stream,
+                                        DeviceBatch batch, double screening_tolerance,
+                                        const double* shell_pair_bounds,
+                                        const ShellPairDensityBounds* density_bounds,
+                                        const std::uint32_t* pair_order, const double* block_bounds,
+                                        const double* system_bounds, const std::uint8_t* active,
+                                        detail::BoundedDirectBlockDomain domain, std::size_t begin,
+                                        std::size_t end, unsigned long long* cursor,
+                                        BoundedForcePage page) {
+#define GENERATIVEQC_CLASSIFY_FORCE_PAGE(spin)                                                     \
+  compact_bounded_generated_tasks_kernel<spin, DirectScreeningPurpose::Force, true, true>          \
+      <<<workers, kBoundedDirectThreads, 0, stream>>>(                                             \
+          batch, screening_tolerance, shell_pair_bounds, density_bounds, pair_order, block_bounds, \
+          system_bounds, active, nullptr, ~std::uint64_t{0}, 0, nullptr, nullptr, cursor, nullptr, \
+          nullptr, nullptr, nullptr, domain, begin, end, page)
+  if (unrestricted) {
+    GENERATIVEQC_CLASSIFY_FORCE_PAGE(true);
+  } else {
+    GENERATIVEQC_CLASSIFY_FORCE_PAGE(false);
+  }
+#undef GENERATIVEQC_CLASSIFY_FORCE_PAGE
 }
 
 void launch_compact_bounded_generated_tasks_kernel(

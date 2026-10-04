@@ -35,6 +35,7 @@ macro(generativeqc_configure_cuda_backend target)
   # linking even when the caller enables whole-library separable compilation.
   add_library(generativeqc_direct_angular_force OBJECT
     src/scf/cuda/direct_angular_force.cu
+    "${GENERATIVEQC_DIRECT_FORCE_PAGE_HEADER}"
     "${GENERATIVEQC_WEIGHTED_ERI_HEADER}"
     "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
     "${GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER}"

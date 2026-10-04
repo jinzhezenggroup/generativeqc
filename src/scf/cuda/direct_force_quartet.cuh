@@ -25,7 +25,8 @@
 
 namespace generativeqc::scf::cuda_execution {
 
-template <bool Unrestricted, unsigned AngularOrder, bool SeparateSources = false>
+template <bool Unrestricted, unsigned AngularOrder, bool SeparateSources = false,
+          int ExactShellClass = -1>
 __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scaled(
     DeviceBatch batch, const std::uint32_t* active_shell_quartet_tile_count,
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
@@ -168,11 +169,17 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
         derivative_y = explicit_unique_gradient[center][1];
         derivative_z = explicit_unique_gradient[center][2];
       } else {
-        const Dual3 derivative =
-            dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
-                shell_class, batch, system, static_cast<std::int32_t>(i),
-                static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
-                static_cast<std::int32_t>(l), coordinate);
+        Dual3 derivative;
+        if constexpr (ExactShellClass >= 0) {
+          derivative = contracted_eri_cartesian_source_shell_class<ExactShellClass, Dual3>(
+              batch, system, static_cast<std::int32_t>(i), static_cast<std::int32_t>(j),
+              static_cast<std::int32_t>(k), static_cast<std::int32_t>(l), coordinate);
+        } else {
+          derivative = dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, Dual3>(
+              shell_class, batch, system, static_cast<std::int32_t>(i),
+              static_cast<std::int32_t>(j), static_cast<std::int32_t>(k),
+              static_cast<std::int32_t>(l), coordinate);
+        }
         derivative_x = derivative.derivative_x;
         derivative_y = derivative.derivative_y;
         derivative_z = derivative.derivative_z;

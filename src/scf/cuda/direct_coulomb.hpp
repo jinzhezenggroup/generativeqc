@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "scf/cuda/direct_jk_kernels.hpp"
+#include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/direct_block_schedule.hpp"
@@ -86,6 +87,10 @@ struct GeneratedExchangePlan {
   std::uint32_t* bounded_value_overflow{};
   double *shell_pair_block_bounds{}, *force{};
   unsigned long long* force_cursor{};
+  /** Optional admitted page; zero capacity preserves the mixed bounded route. */
+  BoundedForcePage force_page{};
+  std::uint64_t force_page_class_mask{};
+  std::size_t last_force_page_count{};
   ~GeneratedExchangePlan();
 };
 

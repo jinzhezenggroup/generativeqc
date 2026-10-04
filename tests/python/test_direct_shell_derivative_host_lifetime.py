@@ -251,7 +251,12 @@ struct GeneratedExchangePlan {
   double *shell_pair_density_bounds=nullptr, *system_density_bounds=nullptr;
   double* direct_spin=nullptr;
   int bounded_block_domain=0;
+  struct { std::size_t block_capacity=0; } force_page;
+  std::size_t last_force_page_count=0;
 };
+int enqueue_compact_full_range_force(GeneratedExchangePlan&,bool,double,double) {
+  throw std::logic_error("mixed-route lifetime fixture must not use compact pages");
+}
 // PRODUCTION_DENSITY_COEFFICIENT
 int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const double* alpha,const double*) {
   if(density_fixture) plan.direct_spin=const_cast<double*>(alpha);

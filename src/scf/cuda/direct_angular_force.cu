@@ -7,10 +7,12 @@
 #include <cstdint>
 #include <type_traits>
 
+#include "generated_direct_force_pages.hpp"
 #include "generated_direct_resident_psss_schedule.cuh"
 #include "scf/cuda/direct_angular_force.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_force_low_order.cuh"
+#include "scf/cuda/direct_force_low_order_sources.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_order3.cuh"
 #include "scf/cuda/direct_force_quartet.cuh"
@@ -19,6 +21,87 @@
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+/** One homogeneous slice, with no shell classification or shell screening.
+ * Warp-local tile staging preserves the established AO-screening and gradient
+ * consumer. All lanes own the same shell task; different warps need no barrier.
+ */
+template <bool Unrestricted, unsigned ShellClass, unsigned AngularOrder, unsigned Threads,
+          unsigned TasksPerWarp>
+__global__ __launch_bounds__(Threads, 1) void compact_force_class_kernel(
+    DeviceBatch batch, double screening_tolerance, const double* schwarz, const double* density,
+    const std::uint8_t* active, double* forces, double coulomb_coefficient,
+    double exchange_coefficient, BoundedForcePage page) {
+  static_assert(TasksPerWarp == 1 || TasksPerWarp == 32);
+  static_assert((TasksPerWarp == 32) == (AngularOrder <= 3));
+  static_assert(Threads % detail::kDirectQuartetThreads == 0);
+  const auto count = page.counts[ShellClass];
+  const auto offset = page.offsets[ShellClass];
+  if constexpr (TasksPerWarp == 32) {
+    for (std::size_t task = blockIdx.x * blockDim.x + threadIdx.x; task < count;
+         task += gridDim.x * blockDim.x) {
+      contract_two_electron_force_low_order_sources_task<Unrestricted, ShellClass>(
+          batch, page.tasks[offset + task], screening_tolerance, schwarz, density, active, forces,
+          coulomb_coefficient, exchange_coefficient);
+    }
+  } else {
+    constexpr auto lanes = detail::kDirectQuartetThreads;
+    constexpr auto warps = Threads / lanes;
+    __shared__ ActiveShellQuartetTile tiles[warps];
+    const unsigned lane = threadIdx.x % lanes;
+    const unsigned warp = threadIdx.x / lanes;
+    for (std::size_t task = blockIdx.x * warps + warp; task < count; task += gridDim.x * warps) {
+      const auto raw = page.tasks[offset + task];
+      const auto first_count = shell_ao_pair_count(batch, raw.first_pair);
+      const auto second_count = shell_ao_pair_count(batch, raw.second_pair);
+      const auto components = raw.first_pair == raw.second_pair
+                                  ? first_count * (first_count + 1) / 2
+                                  : first_count * second_count;
+      for (std::size_t tile = 0; tile * detail::kDirectQuartetTileSize < components; ++tile) {
+        if (lane == 0)
+          tiles[warp] = {raw.first_pair, raw.second_pair, static_cast<std::uint32_t>(tile)};
+        __syncwarp();
+        for (std::size_t subtile = 0;
+             subtile < detail::direct_quartet_subtiles_per_tile(AngularOrder); ++subtile) {
+          contract_two_electron_force_quartet_subtile_scaled<Unrestricted, AngularOrder, true,
+                                                             static_cast<int>(ShellClass)>(
+              batch, page.counts + ShellClass, tiles + warp, screening_tolerance, schwarz, density,
+              active, forces, 0U, coulomb_coefficient, exchange_coefficient, subtile, lane);
+        }
+        __syncwarp();
+      }
+    }
+  }
+}
+
+cudaError_t launch_compact_force_class(bool unrestricted, unsigned shell_class, unsigned workers,
+                                       cudaStream_t stream, DeviceBatch batch,
+                                       double screening_tolerance, const double* schwarz,
+                                       const double* density, const std::uint8_t* active,
+                                       double* forces, double coulomb_coefficient,
+                                       double exchange_coefficient, BoundedForcePage page) {
+#define GENERATIVEQC_FORCE_PAGE_CASE(shell, order, threads, tasks_per_warp)                       \
+  case shell:                                                                                     \
+    if (unrestricted) {                                                                           \
+      compact_force_class_kernel<true, shell, order, threads, tasks_per_warp>                     \
+          <<<workers, threads, 0, stream>>>(batch, screening_tolerance, schwarz, density, active, \
+                                            forces, coulomb_coefficient, exchange_coefficient,    \
+                                            page);                                                \
+    } else {                                                                                      \
+      compact_force_class_kernel<false, shell, order, threads, tasks_per_warp>                    \
+          <<<workers, threads, 0, stream>>>(batch, screening_tolerance, schwarz, density, active, \
+                                            forces, coulomb_coefficient, exchange_coefficient,    \
+                                            page);                                                \
+    }                                                                                             \
+    break;
+  switch (shell_class) {
+    GENERATIVEQC_FOR_EACH_FORCE_PAGE_CLASS(GENERATIVEQC_FORCE_PAGE_CASE)
+    default:
+      return cudaErrorInvalidValue;
+  }
+#undef GENERATIVEQC_FORCE_PAGE_CASE
+  return cudaGetLastError();
+}
 
 /** Fixed-capacity wrapper for the small generic high-order force grids. */
 template <bool Unrestricted, unsigned AngularOrder>

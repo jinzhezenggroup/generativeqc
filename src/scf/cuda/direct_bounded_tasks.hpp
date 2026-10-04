@@ -7,8 +7,20 @@
 
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/packed_basis.hpp"
+#include "scf/direct_block_domain.hpp"
 
 namespace generativeqc::scf::cuda_execution {
+
+/** Screen each candidate in a disjoint block-product page exactly once. */
+void launch_classify_bounded_force_page(bool unrestricted, unsigned workers, cudaStream_t stream,
+                                        DeviceBatch batch, double screening_tolerance,
+                                        const double* shell_pair_bounds,
+                                        const ShellPairDensityBounds* density_bounds,
+                                        const std::uint32_t* pair_order, const double* block_bounds,
+                                        const double* system_bounds, const std::uint8_t* active,
+                                        detail::BoundedDirectBlockDomain domain, std::size_t begin,
+                                        std::size_t end, unsigned long long* cursor,
+                                        BoundedForcePage page);
 
 /** Materialize the bounded queue with unchanged geometry, stream and buffers.
  * This launch exposes only the materializing specializations used by the

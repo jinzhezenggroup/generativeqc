@@ -1,5 +1,6 @@
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_generated_tasks.hpp"
@@ -117,11 +118,12 @@ __global__ void prefix_low_order_signature_counts_kernel(
 }
 
 /** Canonicalize classified quartets into contiguous exact-class slices. */
+template <typename Task>
 __global__ void materialize_generated_shell_tasks_kernel(
     DeviceBatch batch, std::size_t total_tile_capacity,
     const ActiveShellQuartetTile* active_shell_quartet_tiles,
     const std::uint8_t* generated_shell_classes, const std::uint32_t* generated_task_offsets,
-    std::uint32_t* generated_task_write_counts, GeneratedShellTask* generated_tasks,
+    std::uint32_t* generated_task_write_counts, Task* generated_tasks,
     std::uint64_t low_order_signature_mask, const std::uint32_t* low_order_signature_offsets,
     std::uint32_t* low_order_signature_write_counts) {
   const std::size_t active_tile = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -141,7 +143,21 @@ __global__ void materialize_generated_shell_tasks_kernel(
     task_index = generated_task_offsets[shell_class] +
                  atomicAdd(generated_task_write_counts + shell_class, 1U);
   }
-  populate_generated_shell_task(batch, tile, generated_tasks[task_index]);
+  if constexpr (std::is_same_v<Task, ActiveShellQuartetTile>) {
+    generated_tasks[task_index] = tile;
+  } else {
+    populate_generated_shell_task(batch, tile, generated_tasks[task_index]);
+  }
+}
+
+void launch_materialize_compact_force_tiles(unsigned blocks, unsigned threads, cudaStream_t stream,
+                                            std::size_t capacity,
+                                            const ActiveShellQuartetTile* input,
+                                            const std::uint8_t* classes,
+                                            const std::uint32_t* offsets, std::uint32_t* writes,
+                                            ActiveShellQuartetTile* tasks) {
+  materialize_generated_shell_tasks_kernel<<<blocks, threads, 0, stream>>>(
+      DeviceBatch{}, capacity, input, classes, offsets, writes, tasks, 0U, nullptr, nullptr);
 }
 
 void launch_classify_generated_shell_tasks_kernel(

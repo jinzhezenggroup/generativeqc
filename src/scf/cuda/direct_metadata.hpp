@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 
@@ -79,6 +80,18 @@ struct DeviceShellClassProfileEntry {
 };
 
 static_assert(sizeof(DeviceShellClassProfileEntry) == sizeof(CudaRhfShellClassProfileEntry));
+
+/** Borrowed page views; the prepared owner admits and retains their storage.
+ * Classification tags survive the prefix/scatter boundary. The optional
+ * profile is caller-owned diagnostic storage, never an execution prerequisite.
+ */
+struct BoundedForcePage {
+  std::size_t block_capacity{}, candidate_capacity{};
+  ActiveShellQuartetTile *input{}, *tasks{};
+  std::uint8_t* classes{};
+  std::uint32_t *counts{}, *offsets{}, *writes{}, *heads{};
+  DeviceShellClassProfileEntry* profile{};
+};
 
 /** Raw spin-resolved density magnitudes for one direct-AO shell block. */
 struct ShellPairDensityBounds {

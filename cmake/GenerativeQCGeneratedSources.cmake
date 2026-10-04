@@ -797,6 +797,21 @@ macro(generativeqc_register_cuda_generated_sources target)
     ARGS --output "${GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER}"
     COMMENT "Generating compiler-owned Direct-HF resident-PSSS schedule")
 
+  set(GENERATIVEQC_DIRECT_FORCE_PAGE_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_force_pages.hpp")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_direct_force_page_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_direct_force_pages.py"
+    OUTPUTS "${GENERATIVEQC_DIRECT_FORCE_PAGE_HEADER}"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/direct_force_pages.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/cuda_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/shell_spec.py"
+    ARGS --output "${GENERATIVEQC_DIRECT_FORCE_PAGE_HEADER}"
+    COMMENT "Generating compiler-owned bounded force page schedule")
+
   set(GENERATIVEQC_DIRECT_HIGH_ORDER_PAIR_GRADIENT_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_high_order_pair_gradient.cuh")
   generativeqc_register_generated_sources(

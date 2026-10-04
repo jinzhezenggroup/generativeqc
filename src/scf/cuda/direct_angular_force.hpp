@@ -11,6 +11,14 @@
 
 namespace generativeqc::scf::cuda_execution {
 
+/** Fixed exact-class derivative consumers; separate J/K share their recurrence. */
+cudaError_t launch_compact_force_class(bool unrestricted, unsigned shell_class, unsigned workers,
+                                       cudaStream_t stream, DeviceBatch batch,
+                                       double screening_tolerance, const double* schwarz,
+                                       const double* density, const std::uint8_t* active,
+                                       double* forces, double coulomb_coefficient,
+                                       double exchange_coefficient, BoundedForcePage page);
+
 /** Method-neutral resident-bra force route with explicit J/K coefficients. */
 void launch_two_electron_force_psss_resident_bra_kernel_scaled(
     bool unrestricted, dim3 grid, dim3 block, std::size_t shared_bytes, cudaStream_t stream,

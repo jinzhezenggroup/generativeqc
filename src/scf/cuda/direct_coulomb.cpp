@@ -6,6 +6,7 @@
 #include <numeric>
 #include <stdexcept>
 
+#include "generated_direct_force_pages.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/cuda_target_info.hpp"
 #include "runtime/resource_cuda.cuh"
@@ -13,9 +14,12 @@
 #include "scf/aot_shell_registry.hpp"
 #include "scf/cuda/basis_transform_kernels.hpp"
 #include "scf/cuda/df_jk_kernels.hpp"
+#include "scf/cuda/direct_angular_force.hpp"
 #include "scf/cuda/direct_bounded_dddd.hpp"
+#include "scf/cuda/direct_bounded_tasks.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
+#include "scf/cuda/direct_generated_tasks.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
@@ -432,6 +436,50 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   check(cudaStreamSynchronize(stream));
   if (plan->device_bytes != runtime::size_add(plan->shared->device_bytes, additional))
     throw std::logic_error("generated K inventory drift");
+  if (force_capability && cuda_policy::compact_bounded_force_requested()) {
+    static_assert(sizeof(ActiveShellQuartetTile) == 12);
+    static_assert(sizeof(std::uint32_t) == 4);
+    static_assert(kForcePageClassCount == detail::kDirectQuartetShellClassCount);
+    static_assert(kForcePageBlockCandidates == detail::kBoundedDirectShellPairBlockSize *
+                                                   detail::kBoundedDirectShellPairBlockSize);
+    const auto products =
+        plan->bounded_block_domain.prefix
+            ? plan->bounded_block_domain.quartet_count
+            : static_cast<std::size_t>(plan->shared->batch.total_shell_pair_block_quartets);
+    const auto layout = plan_force_page(products, budget - plan->device_bytes);
+    if (layout.bytes) {
+      void* storage{};
+      bool host_oom = false;
+      const auto status = runtime::resource_cuda_malloc(&storage, layout.bytes, &host_oom);
+      if (status == cudaErrorMemoryAllocation && !host_oom) {
+        // Optional storage must not turn a valid bounded owner into an OOM.
+        // Clear only the matching allocation error; other CUDA failures survive.
+        const auto pending = cudaGetLastError();
+        if (pending != cudaSuccess && pending != cudaErrorMemoryAllocation) check(pending);
+      } else {
+        check(status);
+        try {
+          plan->allocations.push_back(storage);
+        } catch (...) {
+          (void)runtime::resource_cuda_free(storage);
+          throw;
+        }
+        auto* bytes = static_cast<std::byte*>(storage);
+        plan->force_page = {layout.blocks,
+                            layout.candidates,
+                            reinterpret_cast<ActiveShellQuartetTile*>(bytes + layout.input),
+                            reinterpret_cast<ActiveShellQuartetTile*>(bytes + layout.tasks),
+                            reinterpret_cast<std::uint8_t*>(bytes + layout.classes),
+                            reinterpret_cast<std::uint32_t*>(bytes + layout.counts),
+                            reinterpret_cast<std::uint32_t*>(bytes + layout.offsets),
+                            reinterpret_cast<std::uint32_t*>(bytes + layout.writes),
+                            reinterpret_cast<std::uint32_t*>(bytes + layout.heads),
+                            nullptr};
+        plan->force_page_class_mask = present_direct_shell_class_mask(host);
+        plan->device_bytes = runtime::size_add(plan->device_bytes, layout.bytes);
+      }
+    }
+  }
   plan->host_preparation_bytes = runtime::size_add(
       plan->shared->host_preparation_bytes,
       sizeof(*plan) + runtime::vector_capacities(plan->allocations, bounded_pair_order,
@@ -640,6 +688,60 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
                               : error;
 }
 
+/** Compose existing classification, prefix and scatter over disjoint pages.
+ * All launches share the prepared stream. No host count readback, overflow
+ * retry or class-specific re-screen is needed: even an unscreened page fits.
+ */
+static cudaError_t enqueue_compact_full_range_force(GeneratedExchangePlan& plan, bool unrestricted,
+                                                    double coulomb, double exchange) {
+  auto& shared = *plan.shared;
+  const auto page = plan.force_page;
+  const auto products =
+      plan.bounded_block_domain.prefix
+          ? plan.bounded_block_domain.quartet_count
+          : static_cast<std::size_t>(shared.batch.total_shell_pair_block_quartets);
+  for (std::size_t begin = 0; begin < products;) {
+    const auto count = std::min(page.block_capacity, products - begin);
+    const auto end = begin + count;
+    const auto capacity = count * kForcePageBlockCandidates;
+    auto error = cudaMemsetAsync(page.counts, 0, kForcePageClassCount * sizeof(std::uint32_t),
+                                 shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(page.classes, 0xff, capacity, shared.stream);
+    if (error != cudaSuccess) return error;
+    error = cudaMemsetAsync(plan.force_cursor, 0, sizeof(unsigned long long), shared.stream);
+    if (error != cudaSuccess) return error;
+    launch_classify_bounded_force_page(
+        unrestricted, shared.worker_blocks, shared.stream, shared.batch, shared.screening,
+        shared.shell_bounds, plan.shell_pair_density_bounds, plan.bounded_pair_order,
+        plan.shell_pair_block_bounds, plan.system_density_bounds, shared.active,
+        plan.bounded_block_domain, begin, end, plan.force_cursor, page);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    launch_prefix_generated_shell_task_counts_kernel(1, 1, 0, shared.stream, page.counts,
+                                                     page.offsets, page.writes, page.heads);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    launch_materialize_compact_force_tiles(
+        static_cast<unsigned>((capacity + kForcePageThreads - 1) / kForcePageThreads),
+        kForcePageThreads, shared.stream, capacity, page.input, page.classes, page.offsets,
+        page.writes, page.tasks);
+    error = cudaGetLastError();
+    if (error != cudaSuccess) return error;
+    for (unsigned shell_class = 0; shell_class < kForcePageClassCount; ++shell_class) {
+      if (!(plan.force_page_class_mask & (std::uint64_t{1} << shell_class))) continue;
+      error = launch_compact_force_class(unrestricted, shell_class, shared.worker_blocks,
+                                         shared.stream, shared.batch, shared.screening,
+                                         shared.schwarz, plan.direct_spin, shared.active,
+                                         plan.force, coulomb, exchange, page);
+      if (error != cudaSuccess) return error;
+    }
+    ++plan.last_force_page_count;
+    begin = end;
+  }
+  return cudaSuccess;
+}
+
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
     double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives) {
@@ -653,6 +755,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   auto& shared = *p.shared;
   const auto b = shared.batch;
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
+  p.last_force_page_count = 0;
   std::vector<double> result(2U * coordinates);
   // Drain any pending D2H before result is destroyed on failure or exception.
   struct HostResultDrain {
@@ -670,14 +773,16 @@ cudaError_t execute_generated_full_range_energy_derivatives(
   error = cudaMemsetAsync(p.force_cursor, 0, sizeof(unsigned long long), shared.stream);
   if (error != cudaSuccess) return error;
   if (coulomb_coefficient != 0.0 || exchange_coefficient != 0.0) {
-    if (p.angular_force_opt_in) {
+    if (p.force_page.block_capacity) {
+      error = enqueue_compact_full_range_force(p, unrestricted, coulomb_coefficient,
+                                               exchange_coefficient);
+    } else if (p.angular_force_opt_in) {
       error = launch_bounded_shell_angular_energy_derivative(
           unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Full, 0.0,
           coulomb_coefficient, exchange_coefficient, p.bounded_block_domain);
-      if (error != cudaSuccess) return error;
     } else {
       launch_bounded_shell_energy_derivative(
           unrestricted, shared.worker_blocks, shared.stream, b, shared.screening,
@@ -686,8 +791,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
           p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
           exchange_coefficient, p.bounded_block_domain);
       error = cudaGetLastError();
-      if (error != cudaSuccess) return error;
     }
+    if (error != cudaSuccess) return error;
   }
   error = cudaMemcpyAsync(result.data(), p.force, result.size() * sizeof(double),
                           cudaMemcpyDeviceToHost, shared.stream);

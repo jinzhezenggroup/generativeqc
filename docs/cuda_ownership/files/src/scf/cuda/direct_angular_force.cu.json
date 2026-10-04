@@ -2,6 +2,6 @@
   "path": "src/scf/cuda/direct_angular_force.cu",
   "role": "runtime",
   "subsystem": "runtime",
-  "reason": "Existing angular queue consumers and recursive launch policy, previously classified as runtime around separately owned scientific contractions. Original template instantiations and launch bounds are retained.",
+  "reason": "Runtime launch and warp-local queue consumers around separately owned scientific contractions. Legacy angular consumers remain; optional exact-class consumers take class/order metadata from the compiler-owned direct_force_pages schedule and consume retained compact slices without repeating shell screening.",
   "regions": []
 }

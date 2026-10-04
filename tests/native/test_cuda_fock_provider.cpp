@@ -1887,18 +1887,22 @@ void shell_range_four_center_derivatives() {
 void full_range_shell_source_oracles(const generativeqc::core::System& system,
                                      std::span<const double> eri_derivatives,
                                      const std::vector<double>& alpha,
-                                     const std::vector<double>& beta) {
+                                     const std::vector<double>& beta, double screening = 0.0) {
   const auto dimension = generativeqc::molecule::ao_count(system);
   const auto matrix_size = dimension * dimension;
   const auto coordinates = system.atoms.size() * 3U;
   CudaDirectJkPlan* raw{};
   CudaDirectJkDiagnostic diagnostic;
   std::string detail;
-  require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, 64U << 20, &raw, diagnostic, detail) ==
-              GENERATIVEQC_STATUS_SUCCESS,
+  require(create_cuda_direct_jk_plan(0, {system}, 1, screening, 64U << 20, &raw, diagnostic,
+                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
           detail.c_str());
   std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
       raw, &destroy_cuda_direct_jk_plan);
+  if (generativeqc::scf::cuda_policy::compact_bounded_force_requested()) {
+    require(plan->generated_exchange && plan->generated_exchange->force_page.block_capacity > 0,
+            "source oracle did not admit requested compact page");
+  }
   for (const bool unrestricted : {false, true}) {
     for (const bool opposing : {false, true}) {
       auto selected_alpha = alpha;
@@ -1923,6 +1927,16 @@ void full_range_shell_source_oracles(const generativeqc::core::System& system,
                     detail) == GENERATIVEQC_STATUS_SUCCESS,
                 detail.c_str());
         require(actual.size() == 2U * coordinates, "full-range J/K source shape changed");
+        if (generativeqc::scf::cuda_policy::compact_bounded_force_requested()) {
+          const auto& owner = *plan->generated_exchange;
+          const auto products = owner.bounded_block_domain.prefix
+                                    ? owner.bounded_block_domain.quartet_count
+                                    : owner.shared->batch.total_shell_pair_block_quartets;
+          const auto capacity = owner.force_page.block_capacity;
+          const auto expected_pages = mask ? (products + capacity - 1U) / capacity : 0U;
+          require(owner.last_force_page_count == expected_pages,
+                  "source oracle bypassed requested compact traversal");
+        }
         for (unsigned source = 0; source < 2U; ++source) {
           auto spec = make_hf_fock_spec(spin);
           spec.derivative_order = 1;
@@ -2051,7 +2065,8 @@ void bounded_schwarz_schedule_budget() {
   std::cout << "CUDA indexed Schwarz batch and prefix-budget gates PASS\n";
 }
 
-void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
+void direct_providers(bool through_f_response, bool eri_tiles_only = false,
+                      bool shell_sources_only = false) {
   for (unsigned angular : {0U, 1U, 2U, 3U})
     for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
       // Noncoincident centers and unequal primitive/basis metadata distinguish
@@ -2088,6 +2103,12 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
       if (derivatives) {
         full_range_shell_source_oracles(first, ints.eri_derivative, a, b);
         full_range_shell_source_oracles(second, other.eri_derivative, a, b);
+        if (shell_sources_only) {
+          full_range_shell_source_oracles(first, ints.eri_derivative, a, b, 1e-14);
+          std::cout << "full-range shell sources angular=" << angular
+                    << " representation=" << representation << " PASS\n";
+          continue;
+        }
       }
       packed_a = a;
       packed_a.insert(packed_a.end(), a.begin(), a.end());
@@ -2331,6 +2352,11 @@ int main(int argc, char** argv) {
       mixed_coulomb_work_census(true);
       mixed_coulomb_preserves_strict_exchange();
       std::cout << "CUDA mixed Coulomb work census and strict exchange PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--full-range-shell-sources-only") {
+      direct_providers(true, false, true);
+      std::cout << "CUDA independent full-range J/K shell sources through-f PASS\n";
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {

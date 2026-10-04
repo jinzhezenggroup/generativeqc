@@ -22,6 +22,26 @@
   },
   "entries": [
     {
+      "id": "hf.bounded-force-compact-pages",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_BOUNDED_FORCE_SCHEDULE"
+      ],
+      "owner_issues": [
+        1423,
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py"
+      ],
+      "rationale": "The compact full-range force schedule is explicitly opt-in. Disjoint bounded pages retain one shell classification for exact-class consumers; host coverage and budget proofs do not qualify CUDA derivative numerics, concurrency or endpoint performance.",
+      "revisit_condition": "Require independent J/K derivative gates, exact-once per-class work, linked resource evidence and same-GPU complete cold/warm/changed-geometry endpoints before any automatic admission. Retain mixed execution for resource decline and unprofitable shapes.",
+      "evidence": [
+        "issue:#1423",
+        "docs:docs/developer/direct_force_pages.md"
+      ]
+    },
+    {
       "id": "scf.incremental-direct-jk",
       "classification": "needs-qualification",
       "controls": [

@@ -1,0 +1,7 @@
+{
+  "name": "direct_force_pages",
+  "outputs": [
+    "generated/generated_direct_force_pages.hpp"
+  ],
+  "owner": "python/generativeqc_compiler/integral/direct_force_pages.py"
+}

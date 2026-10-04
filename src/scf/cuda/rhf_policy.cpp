@@ -456,6 +456,10 @@ bool direct_coulomb_reachable_requested() noexcept {
   return selected("GENERATIVEQC_DIRECT_COULOMB_REACHABLE", "reachable");
 }
 
+bool compact_bounded_force_requested() noexcept {
+  return selected("GENERATIVEQC_BOUNDED_FORCE_SCHEDULE", "compact");
+}
+
 bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }
 
 bool ppps_signature_bucketing_requested() noexcept {
