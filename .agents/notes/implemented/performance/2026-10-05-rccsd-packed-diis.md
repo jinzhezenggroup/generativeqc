@@ -1,6 +1,6 @@
 # Decision: restrict pair packing to DIIS storage first
 
-Status: implemented, opt-in; frozen endpoint qualified; current integration refresh pending
+Status: implemented, opt-in; frozen and retained-RHF complete endpoints qualified
 Date: 2026-10-05
 
 ## Representation and scientific boundary
@@ -128,7 +128,32 @@ do not restore the older method-local GEMM callback when resolving the packed
 history merge. Both numeric allocations coexist with descriptor storage, and
 the history-refusal bound includes the retained provider/descriptor capacity.
 The host ownership/lifetime fixtures now audit both allocations. Job2339 passes
-all38 current admission, binding and lifetime cases on each integrated branch,
+all 38 current admission, binding and lifetime cases on each integrated branch,
 plus compiler, SCF and native architecture checks. New real-GPU qualification
 is separate from the frozen2327–2329 endpoint receipts; those receipts keep
 their original binary and source identity.
+
+The prepared-provider version `1b63282e1` subsequently passes build 2334,
+real-device and independent small FD 2341, Lambda/factor 2348, complete
+energy/force/budget 2342–2344 and report 2346. The 251,083,520-byte device/energy
+saving is unchanged, with the same successful bounded endpoint and no
+complete-force capacity reduction. Complete timing differences are dominated by
+unmodified RHF variation; the opt-in capacity policy is unchanged. Its separate
+records and source manifest are retained beside the frozen results.
+
+Retained-RHF ownership from parent `c7486bf2e` is integrated as `d3548f1fd`.
+Preserve the parent's optional reference-plan parameter alongside the packing
+selector, without reinstating obsolete method-local providers. The expanded
+77-case host admission/lifetime suite passes in 2351. Build 2350, real-device
+solver/independent small all-coordinate FD 2353, shared Lambda/factor 2354,
+complete energy/force/budget 2356–2358 and report 2360 subsequently pass.
+
+On this latest version, large energy CCSD medians are 145.958333 / 145.959855 s
+(full / packed). Complete medians 354.075731 / 298.333061 s reflect RHF medians
+199.615963 / 143.875171 s, not a packing speedup. The separate complete-force
+pair is 1336.988423 / 1351.807057 s. Memory savings remain 251,083,520 bytes in
+CCSD/energy, with no complete-force peak reduction. At the unchanged
+2,735,193,944-byte scalar budget, full history refuses while packed converges.
+Maximum force difference is 3.365e-9 Eh/Bohr and all original gates, including
+limited independent large FD re-audits, pass. Preserve the capacity-only opt-in
+selection; do not extend packing to full contraction state without new evidence.

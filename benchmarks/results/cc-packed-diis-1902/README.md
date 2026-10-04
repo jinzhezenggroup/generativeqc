@@ -127,3 +127,75 @@ Raw records remain at
 `n2:/data/jzzeng/cc-1902-20261005/{endpoint-0-2327,endpoint-1-2328,budget-2329}/`.
 The representation/rounding/fallback rationale is in
 [the Agent Note](../../../.agents/notes/implemented/performance/2026-10-05-rccsd-packed-diis.md).
+
+## Prepared-provider integration
+
+Production `1b63282e1` is independently qualified by build 2334, host 2339,
+real-device solver/small all-coordinate FD 2341, shared Lambda/factor 2348 and
+complete energy/force/budget jobs 2342–2344. Report 2346 passes. Records are in
+`prepared-provider-summary.json`; its source-manifest checksum binds this version.
+It predates the subsequent retained-RHF ownership integration.
+
+Ethane energy CCSD medians are 145.659721 / 145.552978 s (full / packed), and
+complete medians 303.653926 / 331.683467 s. RHF medians are 149.477555 /
+177.628133 s. On the separate force allocation, complete time is 1332.151061 /
+1314.441975 s, with RHF 144.472181 / 126.654633 s. The apparent force difference
+is explained by RHF variation; there is still no demonstrated packing endpoint
+speedup. Each comparison stays within its own GPU UUID and source version.
+
+CCSD device bytes remain 4,051,955,712 / 3,800,872,192. Complete energy capacity
+is 4,413,124,536 / 4,162,041,016 bytes, including new prepared descriptors.
+Complete force capacity remains identical at 7,107,772,763 bytes. At the same
+2,735,193,944-byte scalar-schedule budget, full history is refused and packed
+history completes (447.392 s); unpublished rejected-run work remains null.
+Large maximum force difference is 5.309e-9 Eh/Bohr and energy spread at most
+3.269e-13 Eh. All residual/stationarity and existing independent two-coordinate,
+two-step FD re-audits pass. This adds no all-coordinate independent large audit.
+
+Latest parent `c7486bf2e` is composed separately as `d3548f1fd`. It passes the
+expanded 77-case host admission/lifetime suite in 2351; latest GPU and complete
+endpoints have separate manifests and gates below. Earlier measurements are not
+relabeled as that source.
+
+## Retained-RHF integration
+
+Production `d3548f1fdcaa7e4137490f32bf7f4abfdfecbafa` passes build 2350,
+host 2351, real-device solver and independent small all-coordinate FD 2353,
+shared Lambda/factor 2354, complete energy/force/budget 2356–2358 and report 2360.
+`retained-reference-summary.json` and its source-manifest checksum preserve this version,
+including verified source/compiler/policy files and per-allocation GPU UUIDs.
+
+| Ethane230 | Full | Packed |
+| --- | ---: | ---: |
+| Energy CCSD median s | 145.958333 | 145.959855 |
+| Complete energy median s | 354.075731 | 298.333061 |
+| Energy RHF median s | 199.615963 | 143.875171 |
+| Complete force s (separate allocation) | 1336.988423 | 1351.807057 |
+| Force RHF s | 161.158397 | 180.603671 |
+| CCSD device bytes | 4,051,955,712 | 3,800,872,192 |
+| Complete energy capacity bytes | 4,413,131,064 | 4,162,047,544 |
+| Complete force capacity bytes | 7,107,791,849 | 7,107,791,849 |
+
+The apparent energy difference is explained by the unmodified RHF phase;
+CCSD medians are essentially identical. The separate force pair does not show
+a complete speedup. Keep packing opt-in for capacity, not ordinary latency.
+At the unchanged 2,735,193,944-byte scalar-schedule budget, full history refuses
+while packed history converges in 439.607 s. Rejected precursor work remains
+unavailable, not zero. Device/energy capacity still saves 251,083,520 bytes;
+the complete-force peak is unchanged because later response dominates it.
+
+Maximum force difference is 3.365e-9 Eh/Bohr; energy spread is at most
+3.837e-13 Eh, translation residual 1.620e-12 and independent CC replay
+5.317e-13. Original Lambda/Z/stationarity gates and existing independent large
+two-coordinate/two-step FD re-audits pass. The all-coordinate independent force
+audit remains small water only. Both large histories retain 20 iterations and
+38 evaluations. Semantic dot, metric-weight, conversion and full extrapolation
+work counts are unchanged from the frozen comparison; no total FLOP or
+cross-GPU timing claim is introduced.
+
+The complete `current-sources.sha256` and `v2-sources.sha256` lists remain at
+`n2:/data/jzzeng/cc-1902-20261005/` and in ignored local qualification artifacts.
+The tracked summaries retain their checksums, checked file counts, exact Git
+revision, pathspecs and deterministic reconstruction recipe. Existing Git
+history reconstructs the lists without duplicating repository-wide hashes in
+the PR. All numerical observations and binary/probe/input hashes remain tracked.
