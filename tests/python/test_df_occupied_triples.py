@@ -513,3 +513,12 @@ def test_native_pinned_independent_molecular_energies(
     status, values, _, error = run(native_probe, inputs)
     assert status == 0, error
     np.testing.assert_allclose(values[0], expected, atol=3e-12, rtol=3e-12)
+    mixed_status, mixed_values, mixed_counts, mixed_error = run(
+        native_probe, inputs, mixed=True
+    )
+    assert mixed_status == 0, mixed_error
+    np.testing.assert_allclose(
+        mixed_values[0], expected, atol=2e-7, rtol=2e-4
+    )
+    assert mixed_counts[15] > 0
+    assert tuple(mixed_counts[17:20]) == (32, 32, 32)
