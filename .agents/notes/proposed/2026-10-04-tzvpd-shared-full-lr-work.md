@@ -61,6 +61,23 @@ retaining two large Coulomb auxiliary arrays when sequential root consumption
 can retain just geometry/Hermite data; measure the resulting lifetime and
 register/local-memory cost rather than presuming it is smaller.
 
+There is a potentially larger reuse factor across Cartesian AO components of
+one shell/primitive quartet. The canonical kernel currently calls the primitive
+evaluator for each admitted AO quartet. At fixed shell class, primitive indices,
+range and derivative seed, product centers, Hermite coefficient tables and the
+full Coulomb auxiliary depend on those shared inputs, not the selected AO
+component powers. The component powers select the roots and contraction.
+For A admitted components and P primitive products, current repeated setup and
+auxiliary work is of the form A*P*(G+H+R); bounded cooperative source tiles of K
+components could reduce that part toward ceil(A/K)*P*(G+H+R), retaining all
+required component contractions and scatters. A component-specific reachable
+closure may need fewer states than a shared full auxiliary, so that extra work
+must also be counted. These are conditional work formulas, not measured A/P,
+FLOPs or a speedup. This is the structural reuse to examine before assuming
+that sharing only two range launches can close the gap. Per-tile shared memory,
+barriers, primitive accumulation, exact AO-level masks, register residency and
+output atomics all need explicit admission and complete-endpoint validation.
+
 For generic derivatives above order six, include the existing U_q-1 unique
 center seeds in both current and proposed work. Existing all-center 4--6
 consumers must not be counted as newly optimized. Sharing full/LR preparation
