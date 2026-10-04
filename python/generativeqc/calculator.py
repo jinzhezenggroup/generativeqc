@@ -923,7 +923,6 @@ class Calculator:
             self._device_name == "cuda"
             and self._method_name.startswith("wb97m-v")
             and not basis_has_ecp
-            and self._precision_mode == _native.PRECISION_FP64
             and self._ks_options is not None
             and cuda_wb97mv_force_basis_eligible(self._basis)
         )
@@ -1011,7 +1010,7 @@ class Calculator:
                 self._capabilities,
                 supported_second_order=frozenset(("hvp", "hessian")),
             )
-        if self._method in _COUPLED_CLUSTER_METHODS:
+        if self._method in _COUPLED_CLUSTER_METHODS and not intrinsic_df_rccsdt:
             if density_fitting_mode != _native.DENSITY_FITTING_NONE:
                 raise NotImplementedError(
                     "native coupled-cluster density fitting is not implemented"

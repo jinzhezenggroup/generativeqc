@@ -8,7 +8,9 @@
 #include <utility>
 
 #include "api/handles.hpp"
+#if GENERATIVEQC_HAS_CUDA
 #include "methods/df_ccsdt_force.hpp"
+#endif
 #include "methods/rccsd_method.hpp"
 
 namespace generativeqc::methods::detail {

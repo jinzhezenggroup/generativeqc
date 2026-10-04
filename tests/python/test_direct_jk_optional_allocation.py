@@ -1,10 +1,9 @@
 """Host-check the production rollback/fence boundary; native tests execute J/K."""
 
-import shutil
 import subprocess
 from pathlib import Path
 
-import pytest
+from test_coulomb_optional_allocation import compile_cached_probe
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -206,9 +205,6 @@ int main() {
 def test_production_optional_rollback_preserves_owner_and_failure_classification(
     tmp_path: Path,
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++ compiler")
     source = (ROOT / "src/scf/cuda/direct_jk.cpp").read_text()
     definitions = [
         _definition(source, "void direct_jk_check("),
@@ -217,11 +213,5 @@ def test_production_optional_rollback_preserves_owner_and_failure_classification
     ]
     cpp, binary = tmp_path / "probe.cpp", tmp_path / "probe"
     cpp.write_text(STUBS + "\n".join(definitions) + DRIVER)
-    subprocess.run(
-        [compiler, "-std=c++17", str(cpp), "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    compile_cached_probe(cpp, binary)
     subprocess.run([str(binary)], check=True, timeout=10)

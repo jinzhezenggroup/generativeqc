@@ -95,7 +95,8 @@ class DFSourceState {
 DFSourceResult build_df_source_cuda(const core::System& orbital, const core::System& auxiliary,
                                     const hf::PhysicalReference& ref, std::size_t budget,
                                     double relative_threshold, int device, std::size_t caller_bytes,
-                                    bool retain_response_state) {
+                                    bool retain_response_state,
+                                    const scf::cuda_execution::CudaDfSourcePolicy* policy) {
   const auto started = Clock::now();
   const auto n = ref.nbf, o = ref.nocc, q = molecule::ao_count(auxiliary);
   if (!n || !o || o >= n || !q || molecule::ao_count(orbital) != n || device < 0 || !budget ||
@@ -141,7 +142,7 @@ DFSourceResult build_df_source_cuda(const core::System& orbital, const core::Sys
   std::size_t source_n = 0, source_q = 0;
   std::string detail;
   const auto source_status = scf::create_cuda_density_fitting_integral_source(
-      device, {orbital}, {auxiliary}, &raw_source, metric, source_n, source_q, detail);
+      device, {orbital}, {auxiliary}, &raw_source, metric, source_n, source_q, detail, policy);
   std::unique_ptr<scf::CudaDensityFittingIntegralSource, SourceDelete> source(raw_source);
   check_status(source_status, detail);
   if (source_n != n || source_q != q || metric.size() != checked_mul(q, q))
