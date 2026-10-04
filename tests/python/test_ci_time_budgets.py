@@ -50,6 +50,7 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     )
     assert "'tests/**'" not in cache_line
     assert "-DGENERATIVEQC_BUILD_TESTS=OFF" in section
+    assert "-Cbuild-dir=build" in section
     for path_name in (
         "test_cc_complete_gradient.py",
         "test_ecp_heavy.py",
