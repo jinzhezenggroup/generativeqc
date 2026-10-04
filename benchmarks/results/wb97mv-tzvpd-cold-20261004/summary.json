@@ -1,0 +1,816 @@
+{
+  "3": {
+    "protocol": {
+      "case": "water-3",
+      "atoms": 3,
+      "aos": 58,
+      "method": "WB97M-V/RKS",
+      "basis": "def2-TZVPD",
+      "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+      "representation": "spherical",
+      "geometries_bohr": [
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ]
+        ],
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8911348693023315
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ]
+        ]
+      ],
+      "grid": {
+        "radial_points": 48,
+        "angular_polar": 16,
+        "angular_azimuth": 32,
+        "element_radii": [],
+        "partition_iterations": 3,
+        "coincident_tolerance": 1e-12,
+        "version": 1,
+        "radial_rule": "rational-legendre",
+        "angular_rule": "legendre-trapezoid",
+        "partition": "becke-equal-radius",
+        "pruning": "none",
+        "units": "Bohr",
+        "ordering": "atom-radial-polar-azimuth"
+      },
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "force_return": "host_array_in_timed_endpoint",
+      "density_fitting": false,
+      "nonlocal_density_policy": "vv10-molecular-rho-ge-1e-8-v1",
+      "nonlocal_density_threshold": 1e-08,
+      "reference_nonlocal_weight_threshold": 1e-14,
+      "repeats": 5,
+      "energy_tolerance": 1e-12,
+      "density_tolerance": 1e-10,
+      "reference_gradient_tolerance": 1e-10,
+      "screening_tolerance": 1e-12,
+      "reference_direct_scf_tolerance": 1e-14,
+      "reference_fock_policy": "full-density-rebuild",
+      "max_iterations": 100,
+      "energy_gate": 1e-08,
+      "force_gate": 1e-07,
+      "cold_definition": "preparation plus first synchronized energy/force endpoint",
+      "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+      "threads": {
+        "OMP_NUM_THREADS": "8",
+        "OPENBLAS_NUM_THREADS": "8",
+        "MKL_NUM_THREADS": "8"
+      }
+    },
+    "identity": {
+      "source_commit": "20543ad6feeda9bb1649d09fe24233ecbfd0b77f",
+      "master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "current_composition_commit": "e45e29c99c12496a35d24b4f331070252aa21ab2",
+      "current_master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "source_identity": "cfa2c4ba884356aac64d309dbc4b2d8d97748afc395fea5a56124d78169b2e0b",
+      "manifest_inputs": 1368,
+      "source_archive_sha256": "9aab5806160131a74a4ae408a29e3dafa3fe9ba793113526fd8e6f4fcb0e380f",
+      "library_sha256": "db20557ede9cd4471c0bf7659666f01431fda72eae2fc01434551fe90cc62b4c",
+      "native_tests": {
+        "generativeqc_cuda_stream_eigensolver_tests": "64761c4e950b6ec6da8adfad0c4a478a678fbe7724a4f1e5a82c38f45ead6974",
+        "generativeqc_dft_cuda_tests": "d08cb6d8814aa03f3491becd4df81bdc7a7bdd178da4e9802ccaa5fefc389d4e",
+        "generativeqc_scf_proposal_tests": "93a2bdd501866b109bb59f9fc39a2d603fd621bd989e115defa6cbe98004ae96"
+      },
+      "scope": "master d22 composition; full TZVPD original/moved endpoint and private cold-source controls"
+    },
+    "variants": {
+      "reference": {
+        "seconds": {
+          "cold": 48.75633930042386,
+          "warm": 6.597737058997154,
+          "moved": 47.047833260148764,
+          "moved-warm": 6.566894646733999
+        },
+        "iterations": {
+          "cold": [
+            35
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            36
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 8.526512829121202e-14,
+        "max_force_error": 7.048139849530344e-12,
+        "preliminary_density": null,
+        "sha256": "e33c4cc9b4388537b1c0419cb7b6d17e344c50995deb47fe914a36d10e0ed794"
+      },
+      "none": {
+        "seconds": {
+          "cold": 15.094466432929039,
+          "warm": 1.901598710566759,
+          "moved": 10.2233728133142,
+          "moved-warm": 1.9044072292745113
+        },
+        "iterations": {
+          "cold": [
+            17
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            11
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 2.4158453015843406e-13,
+        "max_force_error": 5.882516695976392e-11,
+        "preliminary_density": {
+          "requested": "none",
+          "selected": false,
+          "scope": "private GPU preliminary density; complete lifecycle charged",
+          "source_reference_density_used": false,
+          "public_api_qualification": false,
+          "public_budget_qualification": false,
+          "target_basis_identity": {
+            "name": "def2-TZVPD",
+            "role": "orbital",
+            "mathematical_identity": "5f6f692ab474dbc5bc9d949557fac5780b220e888629ef6a1787a4a65fce8f62",
+            "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+            "representation": "spherical",
+            "provenance": {
+              "source": "MolSSI Basis Set Exchange",
+              "version": "basis_set_exchange 0.12; def2-TZVPD version 1; basis-data=1",
+              "license": "BSD-3-Clause",
+              "checksum": "5d89177dc85b594a590140615bbb7fb33483fc6bbfa2879e185792073deee873"
+            },
+            "electrons": {
+              "atomic_numbers": [
+                8,
+                1,
+                1
+              ],
+              "nuclear_charges": [
+                8,
+                1,
+                1
+              ],
+              "ecp_core_electrons": [
+                0,
+                0,
+                0
+              ],
+              "ionic_charge": 0,
+              "electron_count": 10,
+              "multiplicity": 1,
+              "nalpha": 5,
+              "nbeta": 5
+            },
+            "shell_count": 24,
+            "primitive_count": 37
+          },
+          "target_energy_tolerance": 1e-12,
+          "target_density_tolerance": 1e-10,
+          "source_construct_seconds": null,
+          "source_prepare_seconds": null,
+          "source_solve_seconds": null,
+          "export_seconds": null,
+          "import_seconds": null,
+          "source_destroy_seconds": null,
+          "source_bookkeeping_seconds": null,
+          "complete_source_seconds": null,
+          "source_fock_builds": null
+        },
+        "sha256": "2eb65aed838eee32e074888f9c5f10072bb81b836f53339e8d42b2390c8527b4"
+      },
+      "lda16": {
+        "seconds": {
+          "cold": 15.029038574546576,
+          "warm": 1.9065831042826176,
+          "moved": 10.22964721545577,
+          "moved-warm": 1.9016673602163792
+        },
+        "iterations": {
+          "cold": [
+            14
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            11
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 2.4158453015843406e-13,
+        "max_force_error": 5.324229945813386e-11,
+        "preliminary_density": {
+          "requested": "lda16",
+          "selected": true,
+          "scope": "private GPU preliminary density; complete lifecycle charged",
+          "source_reference_density_used": false,
+          "public_api_qualification": false,
+          "public_budget_qualification": false,
+          "target_basis_identity": {
+            "name": "def2-TZVPD",
+            "role": "orbital",
+            "mathematical_identity": "5f6f692ab474dbc5bc9d949557fac5780b220e888629ef6a1787a4a65fce8f62",
+            "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+            "representation": "spherical",
+            "provenance": {
+              "source": "MolSSI Basis Set Exchange",
+              "version": "basis_set_exchange 0.12; def2-TZVPD version 1; basis-data=1",
+              "license": "BSD-3-Clause",
+              "checksum": "5d89177dc85b594a590140615bbb7fb33483fc6bbfa2879e185792073deee873"
+            },
+            "electrons": {
+              "atomic_numbers": [
+                8,
+                1,
+                1
+              ],
+              "nuclear_charges": [
+                8,
+                1,
+                1
+              ],
+              "ecp_core_electrons": [
+                0,
+                0,
+                0
+              ],
+              "ionic_charge": 0,
+              "electron_count": 10,
+              "multiplicity": 1,
+              "nalpha": 5,
+              "nbeta": 5
+            },
+            "shell_count": 24,
+            "primitive_count": 37
+          },
+          "target_energy_tolerance": 1e-12,
+          "target_density_tolerance": 1e-10,
+          "source_construct_seconds": 0.0034470148384571075,
+          "source_prepare_seconds": 0.0963364988565445,
+          "source_solve_seconds": 1.952346347272396,
+          "export_seconds": 0.00026722997426986694,
+          "import_seconds": 0.006804659962654114,
+          "source_destroy_seconds": 0.0011854767799377441,
+          "source_bookkeeping_seconds": 0.0001548081636428833,
+          "complete_source_seconds": 2.0605420358479023,
+          "source_fock_builds": null,
+          "source_method": "lda-rks",
+          "source_backend": "cuda",
+          "source_grid": [
+            16,
+            8,
+            16
+          ],
+          "source_active_ao_policy": "disabled; experimental maps admit only WB97M-V",
+          "source_energy_tolerance": 1e-06,
+          "source_density_tolerance": 0.0001,
+          "source_max_iterations": 64,
+          "source_diis_history": 8,
+          "source_converged": true,
+          "source_status": 0,
+          "source_iterations": 14,
+          "source_energy_hartree": -75.9045798452565,
+          "source_scf_ao_work": {
+            "requested": 0,
+            "selected": 0,
+            "tiles": 24,
+            "empty_tiles": 0,
+            "min_active": 58,
+            "max_active": 58,
+            "active_sum": 1392,
+            "discovery_ao_jet_values": 0,
+            "point_ao_visits": 356352,
+            "point_ao_square_sum": 20668416,
+            "dense_point_ao_square_sum": 20668416,
+            "discovery_d2h_bytes": 0,
+            "reserved_device_bytes": 282840,
+            "host_peak_bytes": 0,
+            "xc_evaluations": 14,
+            "cutoff": 0.0,
+            "discovery_seconds": 0.0
+          },
+          "seed_density_bytes": 26912,
+          "seed_coordinate_bytes": 72,
+          "export_import_seconds": 0.007074568420648575
+        },
+        "sha256": "9a3e8712445fac6567d89aeffce1bde4e5c6927da17c3e2001502c8f135ea85e"
+      }
+    }
+  },
+  "6": {
+    "protocol": {
+      "case": "water-6",
+      "atoms": 6,
+      "aos": 116,
+      "method": "WB97M-V/RKS",
+      "basis": "def2-TZVPD",
+      "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+      "representation": "spherical",
+      "geometries_bohr": [
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8921348693023314
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.653477530875584,
+              -13.210302597551673,
+              2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -10.03509801091492,
+              -14.557579850656921,
+              3.923524987977727
+            ]
+          ],
+          [
+            "H",
+            [
+              -11.0488257295427,
+              -11.96251960956995,
+              2.8921348693023314
+            ]
+          ]
+        ],
+        [
+          [
+            "O",
+            [
+              -5.68695864870603,
+              -9.653477530875584,
+              -2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -6.934741636687752,
+              -11.0488257295427,
+              -2.8911348693023315
+            ]
+          ],
+          [
+            "H",
+            [
+              -4.339681395600782,
+              -10.03509801091492,
+              -3.923524987977727
+            ]
+          ],
+          [
+            "O",
+            [
+              -9.653477530875584,
+              -13.210302597551673,
+              2.7688817211501036
+            ]
+          ],
+          [
+            "H",
+            [
+              -10.03509801091492,
+              -14.557579850656921,
+              3.923524987977727
+            ]
+          ],
+          [
+            "H",
+            [
+              -11.0488257295427,
+              -11.96251960956995,
+              2.8921348693023314
+            ]
+          ]
+        ]
+      ],
+      "grid": {
+        "radial_points": 48,
+        "angular_polar": 16,
+        "angular_azimuth": 32,
+        "element_radii": [],
+        "partition_iterations": 3,
+        "coincident_tolerance": 1e-12,
+        "version": 1,
+        "radial_rule": "rational-legendre",
+        "angular_rule": "legendre-trapezoid",
+        "partition": "becke-equal-radius",
+        "pruning": "none",
+        "units": "Bohr",
+        "ordering": "atom-radial-polar-azimuth"
+      },
+      "properties": [
+        "energy",
+        "forces"
+      ],
+      "force_return": "host_array_in_timed_endpoint",
+      "density_fitting": false,
+      "nonlocal_density_policy": "vv10-molecular-rho-ge-1e-8-v1",
+      "nonlocal_density_threshold": 1e-08,
+      "reference_nonlocal_weight_threshold": 1e-14,
+      "repeats": 5,
+      "energy_tolerance": 1e-12,
+      "density_tolerance": 1e-10,
+      "reference_gradient_tolerance": 1e-10,
+      "screening_tolerance": 1e-12,
+      "reference_direct_scf_tolerance": 1e-14,
+      "reference_fock_policy": "full-density-rebuild",
+      "max_iterations": 100,
+      "energy_gate": 1e-08,
+      "force_gate": 1e-07,
+      "cold_definition": "preparation plus first synchronized energy/force endpoint",
+      "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+      "threads": {
+        "OMP_NUM_THREADS": "8",
+        "OPENBLAS_NUM_THREADS": "8",
+        "MKL_NUM_THREADS": "8"
+      }
+    },
+    "identity": {
+      "source_commit": "20543ad6feeda9bb1649d09fe24233ecbfd0b77f",
+      "master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "current_composition_commit": "e45e29c99c12496a35d24b4f331070252aa21ab2",
+      "current_master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+      "source_identity": "cfa2c4ba884356aac64d309dbc4b2d8d97748afc395fea5a56124d78169b2e0b",
+      "manifest_inputs": 1368,
+      "source_archive_sha256": "9aab5806160131a74a4ae408a29e3dafa3fe9ba793113526fd8e6f4fcb0e380f",
+      "library_sha256": "db20557ede9cd4471c0bf7659666f01431fda72eae2fc01434551fe90cc62b4c",
+      "native_tests": {
+        "generativeqc_cuda_stream_eigensolver_tests": "64761c4e950b6ec6da8adfad0c4a478a678fbe7724a4f1e5a82c38f45ead6974",
+        "generativeqc_dft_cuda_tests": "d08cb6d8814aa03f3491becd4df81bdc7a7bdd178da4e9802ccaa5fefc389d4e",
+        "generativeqc_scf_proposal_tests": "93a2bdd501866b109bb59f9fc39a2d603fd621bd989e115defa6cbe98004ae96"
+      },
+      "scope": "master d22 composition; full TZVPD original/moved endpoint and private cold-source controls"
+    },
+    "variants": {
+      "reference": {
+        "seconds": {
+          "cold": 82.72507375851274,
+          "warm": 9.365635246038437,
+          "moved": 75.97716330364347,
+          "moved-warm": 9.392081961035728
+        },
+        "iterations": {
+          "cold": [
+            40
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            38
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 1.4210854715202004e-13,
+        "max_force_error": 5.973666006298117e-12,
+        "preliminary_density": null,
+        "sha256": "e5d49392309c7bcd9602e3c63192c3947c3a7df04135a735a630919bf7443bff"
+      },
+      "none": {
+        "seconds": {
+          "cold": 59.49662867560983,
+          "warm": 6.057546034455299,
+          "moved": 35.81097425147891,
+          "moved-warm": 6.054052583873272
+        },
+        "iterations": {
+          "cold": [
+            21
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            12
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 9.663381206337363e-13,
+        "max_force_error": 4.828182298410866e-11,
+        "preliminary_density": {
+          "requested": "none",
+          "selected": false,
+          "scope": "private GPU preliminary density; complete lifecycle charged",
+          "source_reference_density_used": false,
+          "public_api_qualification": false,
+          "public_budget_qualification": false,
+          "target_basis_identity": {
+            "name": "def2-TZVPD",
+            "role": "orbital",
+            "mathematical_identity": "4f6455724f13a64f7045fe104e2d77ddfb0b921463b17e130c0c5e26545ebc22",
+            "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+            "representation": "spherical",
+            "provenance": {
+              "source": "MolSSI Basis Set Exchange",
+              "version": "basis_set_exchange 0.12; def2-TZVPD version 1; basis-data=1",
+              "license": "BSD-3-Clause",
+              "checksum": "5d89177dc85b594a590140615bbb7fb33483fc6bbfa2879e185792073deee873"
+            },
+            "electrons": {
+              "atomic_numbers": [
+                8,
+                1,
+                1,
+                8,
+                1,
+                1
+              ],
+              "nuclear_charges": [
+                8,
+                1,
+                1,
+                8,
+                1,
+                1
+              ],
+              "ecp_core_electrons": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "ionic_charge": 0,
+              "electron_count": 20,
+              "multiplicity": 1,
+              "nalpha": 10,
+              "nbeta": 10
+            },
+            "shell_count": 48,
+            "primitive_count": 74
+          },
+          "target_energy_tolerance": 1e-12,
+          "target_density_tolerance": 1e-10,
+          "source_construct_seconds": null,
+          "source_prepare_seconds": null,
+          "source_solve_seconds": null,
+          "export_seconds": null,
+          "import_seconds": null,
+          "source_destroy_seconds": null,
+          "source_bookkeeping_seconds": null,
+          "complete_source_seconds": null,
+          "source_fock_builds": null
+        },
+        "sha256": "6a73fd1da26ab752ae455f4beaa63fd5c181ff0a52d0ccdd5d121097a17e79b8"
+      },
+      "lda16": {
+        "seconds": {
+          "cold": 57.390845369547606,
+          "warm": 6.059843979775906,
+          "moved": 35.88280572742224,
+          "moved-warm": 6.053345166146755
+        },
+        "iterations": {
+          "cold": [
+            15
+          ],
+          "warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "moved": [
+            12
+          ],
+          "moved-warm": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        "max_energy_error": 1.1937117960769683e-12,
+        "max_force_error": 4.5132897419364326e-11,
+        "preliminary_density": {
+          "requested": "lda16",
+          "selected": true,
+          "scope": "private GPU preliminary density; complete lifecycle charged",
+          "source_reference_density_used": false,
+          "public_api_qualification": false,
+          "public_budget_qualification": false,
+          "target_basis_identity": {
+            "name": "def2-TZVPD",
+            "role": "orbital",
+            "mathematical_identity": "4f6455724f13a64f7045fe104e2d77ddfb0b921463b17e130c0c5e26545ebc22",
+            "basis_identity": "d31ca86767ff87674e1c93f1ec4f874d16d22b187db0b77c0a9af7c2b9a29ad8",
+            "representation": "spherical",
+            "provenance": {
+              "source": "MolSSI Basis Set Exchange",
+              "version": "basis_set_exchange 0.12; def2-TZVPD version 1; basis-data=1",
+              "license": "BSD-3-Clause",
+              "checksum": "5d89177dc85b594a590140615bbb7fb33483fc6bbfa2879e185792073deee873"
+            },
+            "electrons": {
+              "atomic_numbers": [
+                8,
+                1,
+                1,
+                8,
+                1,
+                1
+              ],
+              "nuclear_charges": [
+                8,
+                1,
+                1,
+                8,
+                1,
+                1
+              ],
+              "ecp_core_electrons": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              "ionic_charge": 0,
+              "electron_count": 20,
+              "multiplicity": 1,
+              "nalpha": 10,
+              "nbeta": 10
+            },
+            "shell_count": 48,
+            "primitive_count": 74
+          },
+          "target_energy_tolerance": 1e-12,
+          "target_density_tolerance": 1e-10,
+          "source_construct_seconds": 0.003454681485891342,
+          "source_prepare_seconds": 0.12037241086363792,
+          "source_solve_seconds": 12.951540105044842,
+          "export_seconds": 0.0004371367394924164,
+          "import_seconds": 0.024224337190389633,
+          "source_destroy_seconds": 0.0017311908304691315,
+          "source_bookkeeping_seconds": 0.00022693723440170288,
+          "complete_source_seconds": 13.101986799389124,
+          "source_fock_builds": null,
+          "source_method": "lda-rks",
+          "source_backend": "cuda",
+          "source_grid": [
+            16,
+            8,
+            16
+          ],
+          "source_active_ao_policy": "disabled; experimental maps admit only WB97M-V",
+          "source_energy_tolerance": 1e-06,
+          "source_density_tolerance": 0.0001,
+          "source_max_iterations": 64,
+          "source_diis_history": 8,
+          "source_converged": true,
+          "source_status": 0,
+          "source_iterations": 18,
+          "source_energy_hartree": -151.81020866079845,
+          "source_scf_ao_work": {
+            "requested": 0,
+            "selected": 0,
+            "tiles": 48,
+            "empty_tiles": 0,
+            "min_active": 116,
+            "max_active": 116,
+            "active_sum": 5568,
+            "discovery_ao_jet_values": 0,
+            "point_ao_visits": 1425408,
+            "point_ao_square_sum": 165347328,
+            "dense_point_ao_square_sum": 165347328,
+            "discovery_d2h_bytes": 0,
+            "reserved_device_bytes": 609232,
+            "host_peak_bytes": 0,
+            "xc_evaluations": 18,
+            "cutoff": 0.0,
+            "discovery_seconds": 0.0
+          },
+          "seed_density_bytes": 107648,
+          "seed_coordinate_bytes": 144,
+          "export_import_seconds": 0.024665117263793945
+        },
+        "sha256": "27904d3d12f75e9a4e33abb0d2bbead34111401ba72a8bf54ec82a943833f1c6"
+      }
+    }
+  }
+}

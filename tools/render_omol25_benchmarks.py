@@ -198,10 +198,20 @@ def figure(
         for point in points
         if (entry := point["engines"]["native"])["status"] == "measured"
     )
+    no_preliminary_source = all(
+        point["engines"]["native"]
+        .get("native_experiment", {})
+        .get("preliminary_provider", "none")
+        == "none"
+        for point in points
+        if point["engines"]["native"]["status"] == "measured"
+    )
     for engine, default_label in (
         (
             "native",
-            "GenerativeQC direct (experimental AO/seed policy)"
+            "GenerativeQC direct (experimental AO selection)"
+            if experimental_native and no_preliminary_source
+            else "GenerativeQC direct (experimental AO/seed policy)"
             if experimental_native
             else "GenerativeQC direct (automatic through-f)"
             if automatic_native and not canonical_native
@@ -253,7 +263,8 @@ def figure(
     missing = [
         f"{point['atoms']}: "
         + ", ".join(
-            f"{'GQC' if engine == 'native' else 'GPU4PySCF'} {entry['status']}"
+            f"{'GQC' if engine == 'native' else 'GPU4PySCF'} "
+            + ("not measured" if entry["status"] == "not_run" else entry["status"])
             for engine, entry in point["engines"].items()
             if entry["status"] != "measured"
             and not (engine == "native" and native_unsupported)
