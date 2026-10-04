@@ -568,7 +568,11 @@ jobs:
       - name: Install the Python package and test dependencies
         run: |
           uv venv --python 3.11
-          uv pip install --python .venv/bin/python --editable '.[test,reference-test]'
+          # Reuse the already configured/built native tree instead of letting
+          # scikit-build-core create a fresh temporary CMake tree and compile
+          # the same CPU library a second time for the editable install.
+          uv pip install --python .venv/bin/python --editable '.[test,reference-test]' \
+            -Cbuild-dir=build
           # Exercise the public autograd contracts on every PR without pulling
           # CUDA wheels into this CPU job.
           uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu
