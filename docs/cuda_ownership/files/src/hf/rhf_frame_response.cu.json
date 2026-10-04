@@ -1,0 +1,7 @@
+{
+  "path": "src/hf/rhf_frame_response.cu",
+  "reason": "Owns bounded RHF frame-response storage, generated matrix AD/BLAS callbacks, exact J/K assembly, matrix-free GMRES control and publication audits. Frame/Pulay/orbital derivatives are generated from shared TensorIR; exact integral and nuclear contractions reuse the existing providers.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
