@@ -50,11 +50,23 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     )
     assert "'tests/**'" not in cache_line
     assert "-DGENERATIVEQC_BUILD_TESTS=OFF" in section
+    assert "-DGENERATIVEQC_PYTHON_WHEEL=ON" in section
+    assert "-DPython3_EXECUTABLE=" in section
+    assert 'GENERATIVEQC_ENABLE_CUDA: "OFF"' in section
+    assert 'cache-suffix: "python-cpu-v1"' in section
+    assert "prune-cache: true" in section
+    assert 'if not item.lstrip().startswith("nvidia-")' in section
+    assert "--no-deps --no-build-isolation -Cbuild-dir=build" in section
+    assert ".venv-gfn2-build" not in section
     for path_name in (
         "test_cc_complete_gradient.py",
         "test_ecp_heavy.py",
         "test_codegen.py",
         "test_second_derivatives_inputs.py",
+        "test_derivative_aot_audit.py",
+        "test_eri_cpu_codegen.py",
+        "test_rccsdt_native_codegen_dependencies.py",
+        "test_df_cc_native_codegen.py",
         "test_ecp_public_cpu.py",
         "test_ecp_spd_cartesian_cpu.py",
         "test_ecp_spd_spherical_cpu.py",
@@ -78,6 +90,26 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         "test_cc_lambda_solver.py",
     ):
         assert path_name in section
+
+
+def test_python_ci_keeps_history_for_offline_retention_checks() -> None:
+    # test_retention_20260925_objects.py recovers the actual trimmed inventories
+    # from their recorded historical commit, with network and lazy fetch disabled.
+    # A shallow or blob-filtered checkout cannot provide that mandatory gate.
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
+    section = (
+        path.read_text()
+        .split("\n  python:\n", 1)[1]
+        .split("\n  upload-coverage:\n", 1)[0]
+    )
+    checkout = section.split("      - uses: actions/checkout@", 1)[1]
+    checkout = checkout.split("\n      - ", 1)[0]
+    assert re.search(r"^          fetch-depth: 0$", checkout, re.MULTILINE), (
+        "Python CI needs complete Git history for test_retention_20260925_objects.py"
+    )
+    assert not re.search(r"^          filter:", checkout, re.MULTILINE), (
+        "Offline retention must have the historical blobs before tests run"
+    )
 
 
 def test_f_shell_release_cache_tracks_only_its_generator_dependencies() -> None:

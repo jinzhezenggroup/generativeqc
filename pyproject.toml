@@ -57,6 +57,7 @@ wheel.py-api = "py3"
 "src/tensor/cuda_graph_context.cuh" = "generativeqc_compiler/assets/src/tensor/cuda_graph_context.cuh"
 # JIT templates need their transitive local headers in installed wheels too.
 "src/tensor/cuda_runtime.cuh" = "generativeqc_compiler/assets/src/tensor/cuda_runtime.cuh"
+"src/tensor/cuda_history.cuh" = "generativeqc_compiler/assets/src/tensor/cuda_history.cuh"
 "src/tensor/cuda_resident.cuh" = "generativeqc_compiler/assets/src/tensor/cuda_resident.cuh"
 "src/cc/cuda_state.cuh" = "generativeqc_compiler/assets/src/cc/cuda_state.cuh"
 "src/tensor/cuda_error.hpp" = "generativeqc_compiler/assets/src/tensor/cuda_error.hpp"

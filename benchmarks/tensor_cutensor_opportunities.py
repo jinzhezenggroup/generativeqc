@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from generativeqc_compiler.cc.doubles import build_ccsd_program
@@ -19,6 +18,7 @@ from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.tensor.cuda_cutensor import cutensor_opportunities
 from generativeqc_compiler.tensor.cuda_plan import plan_cuda
 
+from benchmarks._support import raw_output_path, write_result
 from tools.generate_rccsd_native import with_jacobi_update
 
 if TYPE_CHECKING:
@@ -80,7 +80,7 @@ def main() -> None:
     parser.add_argument("--nvir", type=int, default=2)
     parser.add_argument("--architecture", default="sm_120")
     parser.add_argument("--max-bytes", type=int, default=8 << 30)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--output", type=raw_output_path)
     args = parser.parse_args()
     if args.nocc < 1 or args.nvir < 1 or args.max_bytes < 1:
         parser.error("nocc, nvir and max-bytes must be positive")
@@ -89,7 +89,7 @@ def main() -> None:
     if args.output is None:
         print(text)
     else:
-        args.output.write_text(text + "\n")
+        write_result(args.output, result)
 
 
 if __name__ == "__main__":
