@@ -65,7 +65,7 @@ CUDA_MODULES["cuda_df_source"] = (
     "df_integral_export",
     "df_integral_export_batch",
 )
-CUDA_ALLOWED = {
+CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
     "cuda_planning": (
         "runtime/bounded_workspace.hpp",
         "scf/cuda/arena.",
