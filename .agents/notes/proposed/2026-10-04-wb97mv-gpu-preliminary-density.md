@@ -71,6 +71,17 @@ phases and unavailable Fock-build counts remain null. This preserves the earlier
 combined timers as historical measurements rather than retrospectively splitting
 them. The new results are pending; no combined speed gain is yet inferred.
 
+Master subsequently advances to 0fb5fdeea by merging #1756's low-order LR
+roots, already present in this integration. The sole merge conflict is the
+independent four-center derivative fixture: retain the integration's expanded
+d/p/s/s, d/p/p/s, d/d/p/s and d/d/p/p cases, including the original d/p/s/s
+case and repeated-center RKS/UKS checks. After resolution, both all 1,356
+production inputs and the complete native test file are byte-identical to the
+qualified composition. This merge adds lineage, not a new optimization or
+timing claim. The current host selection passes 76 closure/eligibility/stage/
+evidence-verifier cases. Evidence retention passes its unchanged 64 MiB cap;
+the change review remains 17 files / 243,328 bytes under the 2 MiB cap.
+
 ## Motivation and boundary
 
 The [cold-work investigation](2026-10-03-wb97mv-cold-scf-work.md) found that
