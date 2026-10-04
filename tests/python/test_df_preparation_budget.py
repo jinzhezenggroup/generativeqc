@@ -10,7 +10,7 @@ import pytest
 
 
 def test_preparation_shapes_and_resource_policy_envelopes(
-    tmp_path: typing.Any, native_cxx
+    tmp_path: typing.Any, native_cxx: object
 ) -> None:
     source = tmp_path / "budget.cpp"
     source.write_text(
@@ -113,7 +113,7 @@ int main() {
 
 
 def test_constrained_headroom_reports_the_actual_reservation(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     source = tmp_path / "headroom.cpp"
     source.write_text(r"""
@@ -144,7 +144,7 @@ int main() {
 
 
 def test_live_auto_budget_can_retain_large_values_without_widening_caps(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     """The no-probe safety ceiling must not force roomy devices to stream."""
     source = tmp_path / "resident_budget.cpp"
@@ -190,7 +190,7 @@ int main() {
 
 
 def test_roomy_live_budget_admits_the_batch_resident_value_owner(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     """A roomy device must not stream a full resident batch for lack of budget."""
     source = tmp_path / "resident_batch_budget.cpp"
@@ -227,7 +227,7 @@ int main() {
 
 
 def test_single_packed_value_owner_has_distinct_capacity_and_identity(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     """A single fitted owner cannot silently reserve or advertise raw storage."""
     source = tmp_path / "single_packed.cpp"
@@ -269,7 +269,7 @@ int main() {
 
 
 def test_single_packed_96_atom_plan_keeps_values_when_occupied_scratch_does_not_fit(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     """A 96-atom default allowance admits B without forcing raw regeneration."""
     root = Path(__file__).resolve().parents[2]
