@@ -676,7 +676,7 @@ __device__ inline Scalar primitive_eri_cartesian_shell_pairs(
     const Vec3<Scalar>& third, const Angular& angular_third, double delta,
     const Vec3<Scalar>& fourth, const Angular& angular_fourth,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
-    double omega = 0.0) {
+    double omega = 0.0, bool reachable_coulomb = false) {
   constexpr unsigned MaximumAngular =
       FirstShellAngular + SecondShellAngular + ThirdShellAngular + FourthShellAngular;
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
@@ -706,7 +706,8 @@ __device__ inline Scalar primitive_eri_cartesian_shell_pairs(
   }
   return eri_cartesian_value<MaximumAngular>(p, q, rho, product_p, product_q, angular_first,
                                              angular_second, angular_third, angular_fourth,
-                                             first_coefficients, second_coefficients, range, omega);
+                                             first_coefficients, second_coefficients, range, omega,
+                                             reachable_coulomb);
 }
 
 /**
@@ -722,7 +723,8 @@ __device__ inline Scalar primitive_eri_cartesian_shell_class(
     double alpha, const Vec3<Scalar>& first, const Angular& angular_first, double beta,
     const Vec3<Scalar>& second, const Angular& angular_second, double gamma,
     const Vec3<Scalar>& third, const Angular& angular_third, double delta,
-    const Vec3<Scalar>& fourth, const Angular& angular_fourth) {
+    const Vec3<Scalar>& fourth, const Angular& angular_fourth,
+    bool reachable_coulomb = false) {
   constexpr unsigned MaximumAngular =
       FirstShellAngular + SecondShellAngular + ThirdShellAngular + FourthShellAngular;
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
@@ -749,7 +751,8 @@ __device__ inline Scalar primitive_eri_cartesian_shell_class(
     return primitive_eri_cartesian_shell_pairs<FirstShellAngular, SecondShellAngular,
                                                ThirdShellAngular, FourthShellAngular>(
         alpha, first, angular_first, beta, second, angular_second, gamma, third, angular_third,
-        delta, fourth, angular_fourth);
+        delta, fourth, angular_fourth, generativeqc::integrals::CoulombRange::Full, 0.0,
+        reachable_coulomb);
   }
 }
 

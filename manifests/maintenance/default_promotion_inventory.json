@@ -147,6 +147,48 @@
       ]
     },
     {
+      "id": "hf.bounded-angular-force",
+      "classification": "negative-evidence",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_BOUNDED_ANGULAR_FORCE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/direct_bounded_fallback.cu",
+        "src/scf/cuda/direct_coulomb.cpp"
+      ],
+      "rationale": "Same-binary RTX 5090 ABBA diagnostics regress complete TZVPD E/F warm by 29.15% at 3 atoms and 10.063% at 12 atoms despite passing independent numerical gates. Linked registers remain 254-255 and enumeration repeats thirteen times.",
+      "revisit_condition": "Only revisit with a materially different work/resource argument that removes the demonstrated tradeoff; do not retune or promote the unchanged thirteen-scan design.",
+      "evidence": [
+        "pr:#1761",
+        "docs:docs/developer/fock_build.md",
+        "note:.agents/notes/rejected/2026-10-04-tzvpd-angular-force-schedule.md"
+      ]
+    },
+    {
+      "id": "hf.direct-coulomb-reachable",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_COULOMB_REACHABLE"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "src/scf/cuda/coulomb_auxiliary.cuh",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py"
+      ],
+      "rationale": "Off-by-default exact Cartesian component dependency pruning. Primitive/AO counts and reserved auxiliary storage stay unchanged; recurrence state counts are not FLOPs or measured speedups.",
+      "revisit_condition": "Independent full/LR derivative, sanitizer, complete same-binary cold/warm/displaced and larger-size qualification with observed work must precede promotion.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md"
+      ]
+    },
+    {
       "id": "hf.force-density-product-screening",
       "classification": "negative-evidence",
       "controls": [

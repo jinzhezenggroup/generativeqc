@@ -1,0 +1,108 @@
+{
+  "method": "tools/report_cuda_ownership.py semantic ledger and code_lines lexer; unchanged region classifications",
+  "delta": {
+    "runtime": 27,
+    "scientific": 8,
+    "oracle": 0,
+    "fallback": 0,
+    "performance_exception": 0
+  },
+  "files": [
+    {
+      "path": "src/cc/df_source_cuda.cu",
+      "before": {
+        "runtime": 474,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "after": {
+        "runtime": 483,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "delta": {
+        "runtime": 9,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      }
+    },
+    {
+      "path": "src/runtime/cuda_gaussian_products.cuh",
+      "before": {
+        "runtime": 111,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "after": {
+        "runtime": 121,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "delta": {
+        "runtime": 10,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      }
+    },
+    {
+      "path": "src/scf/cuda/df_source_kernels.cu",
+      "before": {
+        "runtime": 154,
+        "scientific": 168,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "after": {
+        "runtime": 161,
+        "scientific": 176,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "delta": {
+        "runtime": 7,
+        "scientific": 8,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      }
+    },
+    {
+      "path": "src/scf/cuda/df_source_kernels.hpp",
+      "before": {
+        "runtime": 37,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "after": {
+        "runtime": 38,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      },
+      "delta": {
+        "runtime": 1,
+        "scientific": 0,
+        "oracle": 0,
+        "fallback": 0,
+        "performance_exception": 0
+      }
+    }
+  ]
+}

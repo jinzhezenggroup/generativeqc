@@ -31,8 +31,9 @@ struct CudaDensityFittingIntegralSourceImpl {
   // Freeze the generated schedule so a warm plan never mixes mapping policies.
   unsigned value_mapping{};
   unsigned raw_value_mapping{};
-  unsigned value_math{};  // Frozen with mapping; only qualified generated math for auxiliary g.
-  bool auxiliary_g_values_only{};  // Immutable basis capability, never a derivative promotion.
+  unsigned value_math{};   // Frozen with mapping; only qualified generated math for auxiliary g.
+  bool has_auxiliary_g{};  // Immutable basis domain; auxiliary g uses explicit polynomial
+                           // value/response lowering.
   std::size_t batch_size{};
   std::size_t public_nbf{};
   std::size_t public_naux{};

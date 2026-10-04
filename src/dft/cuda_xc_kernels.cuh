@@ -33,6 +33,34 @@ __global__ void add_nonlocal_energy(const double* energy, double* totals, int* e
 
 }  // namespace
 
+void select_ao(const CudaXcLayout& l, cudaStream_t stream, const double* basis,
+               const double* points, std::size_t count, double cutoff, double* ao, double* work,
+               int* error, unsigned* host_flags) {
+  // Before first evaluation the dense work panels are dead. Even the smallest
+  // panel holds N doubles, enough for N flags, with no extra device allocation.
+  auto* flags = reinterpret_cast<unsigned*>(work);
+  int failure = 0;
+  try {
+    cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
+    cuda_check(cudaMemsetAsync(flags, 0, l.nao * sizeof(unsigned), stream));
+    scheduled_ao(stream, basis, l.natom, l.nprimitive, l.nao, points, count, l.jets, ao, error,
+                 nullptr);
+    cuda_check(cudaGetLastError());
+    const auto point_blocks = std::min(std::size_t{65535}, (count + 127) / 128);
+    active_ao_columns<<<dim3((l.nao + 31) / 32, point_blocks), 128, 0, stream>>>(
+        ao, count, l.nao, l.jets, cutoff, flags, error);
+    cuda_check(cudaGetLastError());
+    cuda_check(cudaMemcpyAsync(host_flags, flags, l.nao * sizeof(unsigned), cudaMemcpyDeviceToHost,
+                               stream));
+    cuda_check(cudaMemcpyAsync(&failure, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
+    cuda_check(cudaStreamSynchronize(stream));
+  } catch (...) {
+    cudaStreamSynchronize(stream);
+    throw;
+  }
+  if (failure) throw std::runtime_error("nonfinite native XC AO selection output");
+}
+
 void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStream_t stream,
              const double* basis, const double* points, const double* weights,
              const double* density, double* ao, double* work, double* features,

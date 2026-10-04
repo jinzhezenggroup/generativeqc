@@ -19,6 +19,8 @@ from generativeqc_compiler.tensor import (
     add,
     einsum,
     input_tensor,
+    optimize,
+    transpose_program,
 )
 from generativeqc_compiler.tensor.ir import slice_tensor, transpose
 
@@ -30,6 +32,59 @@ BLOCK_FACTORS = {
     "ovoo": ("bov", "boo"),
     "oooo": ("boo", "boo"),
 }
+PHYSICAL_FACTORS = ("boo", "bov", "bvv")
+
+
+def retained_factor_program(occupied: int, virtuals: int, auxiliaries: int) -> Program:
+    """Physical independent sectors feeding retained blocks and virtual actions.
+
+    Boo/Bvv have the symmetric dense Frobenius metric; Bov is independent and
+    Bvo is its transpose. Identity outputs let virtual-only Lambda cotangents
+    compose with the retained Gram pullback exactly once. Fock/reference and
+    triples derivatives are separate consumers, not included implicitly here.
+    """
+    specs = factor_program(occupied, virtuals, auxiliaries).outputs
+    factors = {
+        name: input_tensor(name, replace(specs[name].spec, role="parameter"))
+        for name in PHYSICAL_FACTORS
+    }
+    for name in ("boo", "bvv"):
+        value = factors[name]
+        factors[name] = add(
+            value, transpose(value, (0, 2, 1)), coefficients=(Fraction(1, 2),) * 2
+        )
+    factors["bvo"] = transpose(factors["bov"], (0, 2, 1))
+    return Program(
+        {
+            **{
+                name: einsum("Qpq,Qrs->pqrs", factors[left], factors[right])
+                for name, (left, right) in BLOCK_FACTORS.items()
+            },
+            "bov": factors["bov"],
+            "bvv": factors["bvv"],
+        },
+        provenance={"method": "physical DF-CC retained and virtual factor boundary"},
+    )
+
+
+def retained_factor_vjp(occupied: int, virtuals: int, auxiliaries: int) -> Program:
+    """Return complete compressed factor cotangents from shared TensorIR AD.
+
+    bar_bov contains both ov and transposed vo contributions. An upstream
+    full symmetric BMO embedding must put half in each cross sector; copying
+    it into both sectors would double count the source pair projection.
+    No complete four-index tensor is reconstructed by this derivative.
+    """
+    primal = retained_factor_program(occupied, virtuals, auxiliaries)
+    result = optimize(
+        transpose_program(
+            primal, tuple(primal.outputs), inputs=PHYSICAL_FACTORS
+        ).program
+    )
+    return Program(
+        result.outputs,
+        provenance={**result.provenance, "native_execution_order": "dependencies"},
+    )
 
 
 def factor_program(
@@ -77,6 +132,25 @@ def factor_program(
             if symmetric_pairs
             else "none",
         },
+    )
+
+
+def factor_embedding_vjp(occupied: int, virtuals: int, auxiliaries: int) -> Program:
+    """Embed compressed physical cotangents in the full MO source coordinates.
+
+    Differentiate the actual forward pair projection and sector selection so
+    cross-sector factors receive half the compressed Bov seed on each side.
+    This also projects arbitrary Boo/Bvv seeds in the dense Frobenius metric.
+    The map is linear: it needs no primal BMO values or four-index tensors.
+    """
+    factors = factor_program(occupied, virtuals, auxiliaries, symmetric_pairs=True)
+    primal = Program({name: factors.outputs[name] for name in PHYSICAL_FACTORS})
+    result = optimize(
+        transpose_program(primal, tuple(primal.outputs), inputs=("bmo",)).program
+    )
+    return Program(
+        result.outputs,
+        provenance={**result.provenance, "native_execution_order": "dependencies"},
     )
 
 

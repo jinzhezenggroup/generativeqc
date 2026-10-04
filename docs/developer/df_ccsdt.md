@@ -188,8 +188,10 @@ the entire solve, including convergence replay. Summand counts exclude
 elementwise operations and are not hardware FLOPs or timing predictions.
 
 Conventional admission rejects the DF representation unless an owner explicitly
-opts in. Existing molecular Lambda, triples and force consumers remain conventional;
-the separate internal DF triples energy owner is described below.
+opts in. Native CUDA Lambda accepts the factorized representation as described
+in [DF response composition](df_ccsdt_gradient.md); molecular triples and force
+consumers remain conventional. The separate internal DF triples energy owner
+is described below.
 This internal supplied-Hamiltonian solver does not register a public DF
 Calculator endpoint. Its qualification is
 `tests/python/test_df_cc_native_solver.py`. The supplied-Hamiltonian solver is
@@ -267,12 +269,27 @@ Rys quadrature; g auxiliary values use compiler-generated Gaussian moment
 polynomials with F0–F10 from the shared FP64 Boys evaluator. The generic source
 policy reports `generated_rys_auxiliary_g_polynomial` when g is present; other
 math policies are rejected for such an owner. Raw/transformed three-center and
-metric derivative requests on this owner are rejected before launch. Legacy
-integral exporters and public derivative capabilities retain their f limit.
+metric derivative tiles use the explicit auxiliary-g F0–F11 response policy.
+The standalone weighted DF gradient bridge also accepts auxiliary g: it contracts
+full unit-weight A and M cotangents with all nuclear centers in one traversal.
+It selects six-term expansion metadata for both basis views when g is present;
+through-f calls retain their three-term metadata and original evaluator. Legacy
+integral exporters and public method derivative capabilities retain their f limit.
+These internal source/weight derivatives do not certify a complete CC nuclear force.
+
+`scf::CudaDfNuclearSink` is the internal device-weight consumer for source-response
+callbacks. It uploads basis metadata once, binds one producer stream, and contracts
+raw/metric weight tiles into one compact nuclear gradient. The caller charges its
+combined host/device numeric capacity to the source response and calls `finish`
+only after the complete producer succeeds. Destruction drains borrowed reads
+without publishing a partial result; the producer stream must outlive the sink.
+The caller must supply the exact geometry/basis of its physical source. This
+consumer provides fixed-orbital nuclear response; orbital/Z and Pulay assembly
+remain the method's responsibility.
 
 The DF metadata packer skips SCF warm densities and pair/quartet task tables.
 It uses Cartesian metadata plus a separate six-term public g expansion, leaving
-the legacy three-term SCF topology unchanged. This is an internal value-domain
+the legacy three-term SCF topology unchanged. This is an internal source-domain
 extension; hundreds-AO molecular endpoints still require independent
 conditioning, energy, residual and amplitude qualification.
 

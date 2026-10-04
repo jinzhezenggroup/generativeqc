@@ -165,7 +165,7 @@ int main(int argc, char** argv) {
     const auto legacy_budget=external(orbital,auxiliary,ref)+
         std::max({layout.transform_bytes,layout.packing_bytes,layout.blocks_bytes});
     const auto budget=mode==0 ? legacy_budget : admitted-(mode==1);
-    assert(external(orbital,auxiliary,ref)==15408 && layout.transform_bytes==8032);
+    assert(external(orbital,auxiliary,ref)==15408 && layout.transform_bytes==9632);
     // The original unprojected fixture admitted 24,212 bytes. Physical pair
     // projection now adds exactly two n*n*q FP64 arrays (6,400 bytes here).
     // Both payload-only budgets remain below the metric allocation alone.

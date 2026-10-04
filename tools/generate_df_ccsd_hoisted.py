@@ -54,7 +54,7 @@ def programs() -> dict[str, Program]:
     }
 
 
-def contraction_query(program: Program, name: str) -> str:
+def contraction_query(program: Program, name: str, *, batch_dim: bool = False) -> str:
     """Exact scalar summand count; includes output and all reduction labels.
 
     This is semantic contraction work, not a hardware FLOP or wall-time model.
@@ -65,9 +65,11 @@ def contraction_query(program: Program, name: str) -> str:
         if node.op == "einsum":
             terms[tuple(sorted(_label_dims(node).values()))] += 1
     lines = [
-        f"inline std::size_t {name}(std::size_t o,std::size_t v) {{",
+        f"inline std::size_t {name}(std::size_t o,std::size_t v{',std::size_t q' if batch_dim else ''}) {{",
         "  std::size_t total=0;",
     ]
+    if any("n" in dimensions for dimensions in terms):
+        lines.append("  const auto n=checked_add(o,v);")
     for dimensions, count in sorted(terms.items()):
         factors = ",".join((str(count), *dimensions))
         lines.append(f"  total=checked_add(total,checked_product({{{factors}}}));")
