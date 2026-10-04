@@ -590,8 +590,11 @@ void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bo
     test.plan->enqueue(test.density, d.size(), test.generation + 1,
                        CudaXcDensityPrecision::Fp32ComputeFp64Accumulate);
   } catch (const std::invalid_argument& error) {
-    rejected =
-        std::string(error.what()).find("not qualified for this functional") != std::string::npos;
+    // Physical execution support and formal qualification are independent
+    // gates. Either may reject this request before any generation is consumed.
+    const std::string detail = error.what();
+    rejected = detail == "mixed CUDA XC density precision is unavailable for this layout" ||
+               detail == "mixed CUDA XC density precision is not qualified for this point program";
   }
   require(rejected, "unqualified functional mixed density was not rejected");
   const auto after = test.plan->transfers();
