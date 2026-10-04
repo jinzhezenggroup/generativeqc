@@ -17,8 +17,8 @@ struct CudaState {
   double *ovov{}, *ovvo{}, *oovv{}, *ovvv{}, *ovoo{}, *oooo{}, *vvvv{};
   double *d1{}, *d2{}, *t1{}, *t2{};
   double *iteration_arena{}, *replay_arena{}, *response_arena{};
-  std::function<void(char, char, std::size_t, std::size_t, std::size_t, double,
-                     const double*, const double*, double*)>
+  std::function<void(char, char, std::size_t, std::size_t, std::size_t, double, const double*,
+                     const double*, double*)>
       matrix_gemm;
   double *bar_correlation_energy{}, *bar_singles_residual{}, *bar_doubles_residual{};
   double *bar_foo{}, *bar_fov{}, *bar_fvv{};

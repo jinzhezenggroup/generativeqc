@@ -975,7 +975,10 @@ def cpu_header() -> str:
                 "[[maybe_unused]] const auto n=checked_add(o,v);try{return "
                 "iteration_matrix_gemms!=0 && "
                 + " && ".join(
-                    [f"{dimension}<=2147483647ULL" for dimension in iteration_matrix_dimensions]
+                    [
+                        f"{dimension}<=2147483647ULL"
+                        for dimension in iteration_matrix_dimensions
+                    ]
                     or ["false"]
                 )
                 + ";}catch(const std::length_error&){return false;}}"
@@ -1518,7 +1521,10 @@ def _cuda_program(
         for number, node in enumerate(_execution_nodes(program)):
             if node.op != "input" and not (
                 (matrix_gemm and _packed_matrix_gemm(node) is not None)
-                or (batched_matrix_gemm and _packed_batched_matrix_gemm(node) is not None)
+                or (
+                    batched_matrix_gemm
+                    and _packed_batched_matrix_gemm(node) is not None
+                )
             ):
                 kernels.append(
                     _cuda_kernel(node, number, kernel_name, names, batch_dim=batch_dim)

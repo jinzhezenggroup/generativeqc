@@ -146,9 +146,8 @@ struct Owner {
     naux = p.naux;
     // The compiler derives each flattened dimension from contraction labels;
     // neither tensor rank nor o*v alone bounds the provider's signed extents.
-    conventional_matrix_gemm =
-        !naux && options.conventional_matrix_gemm &&
-        generated::iteration_matrix_dimensions_fit(p.nocc, p.nvir);
+    conventional_matrix_gemm = !naux && options.conventional_matrix_gemm &&
+                               generated::iteration_matrix_dimensions_fit(p.nocc, p.nvir);
     const bool df_matrix_dimensions_fit =
         !naux || (generated::dfhoist::prepare_packed_dimensions_fit(p.nocc, p.nvir) &&
                   generated::dfhoist::auxiliary_packed_dimensions_fit(p.nocc, p.nvir) &&
@@ -371,10 +370,9 @@ struct Owner {
           conventional_matrix_gemm ? kCCBlasProviderAllowance : 0;
       diagnostic.df_matrix_gemm = plan.matrix_gemm;
       diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kCCBlasProviderAllowance : 0;
-      diagnostic.owned_device_bytes =
-          checked_add(layout.total, (conventional_matrix_gemm || plan.matrix_gemm)
-                                        ? kCCBlasProviderAllowance
-                                        : 0);
+      diagnostic.owned_device_bytes = checked_add(
+          layout.total,
+          (conventional_matrix_gemm || plan.matrix_gemm) ? kCCBlasProviderAllowance : 0);
       diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, combined);
     } catch (...) {
       cleanup();
