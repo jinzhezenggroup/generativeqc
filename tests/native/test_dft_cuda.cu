@@ -63,12 +63,13 @@ struct Fixture {
   void* arena{};
   double* density{};
   CudaXcLayout layout;
+  std::size_t allocation_bytes{};
   std::unique_ptr<CudaXcPlan> plan;
   std::uint64_t generation{};
   Fixture(const AoBasis& basis, const MolecularGrid& grid, std::uint32_t functional, bool uks,
           std::size_t tile, CudaXcAoPrecision ao_precision = CudaXcAoPrecision::Fp64,
           bool response = false, double exchange_scale = 1.0, double correlation_scale = 1.0,
-          const CudaXcAoTiles* maps = nullptr)
+          const CudaXcAoTiles* maps = nullptr, bool reserve_selection = false)
       : layout(cuda_xc_layout(basis, grid, functional, uks, tile, ao_precision, exchange_scale,
                               correlation_scale)) {
     try {
@@ -77,13 +78,15 @@ struct Fixture {
                                       functional, uks, tile, true, ao_precision, exchange_scale,
                                       correlation_scale);
       if (maps) layout = cuda_xc_local_ao_layout(layout, *maps);
+      allocation_bytes = reserve_selection ? cuda_xc_ao_selection_resources(layout).device_bytes
+                                           : layout.device_bytes;
       check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-      check(cudaMalloc(&arena, layout.device_bytes + 64));
-      check(cudaMemset(static_cast<char*>(arena) + layout.device_bytes, 0x5a, 64));
+      check(cudaMalloc(&arena, allocation_bytes + 64));
+      check(cudaMemset(static_cast<char*>(arena) + allocation_bytes, 0x5a, 64));
       check(cudaMalloc(&density, layout.spins * layout.nao * layout.nao * sizeof(double)));
       plan =
           std::make_unique<CudaXcPlan>(layout, basis.packed, grid.points(), grid.weights(), arena,
-                                       layout.device_bytes, stream, CudaMolecularGridView{}, maps);
+                                       allocation_bytes, stream, CudaMolecularGridView{}, maps);
     } catch (...) {
       cleanup();
       throw;
@@ -147,7 +150,7 @@ struct Fixture {
   std::vector<double> potential() { return plan->download_potential(generation); }
   void canary() {
     unsigned char bytes[64]{};
-    check(cudaMemcpy(bytes, static_cast<char*>(arena) + layout.device_bytes, 64,
+    check(cudaMemcpy(bytes, static_cast<char*>(arena) + allocation_bytes, 64,
                      cudaMemcpyDeviceToHost));
     require(std::all_of(std::begin(bytes), std::end(bytes), [](auto b) { return b == 0x5a; }),
             "XC arena exceeded its exact resource request");
@@ -173,8 +176,8 @@ void resident_grid_borrow_case(const generativeqc::core::System& molecule, const
       cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, false);
   const auto borrowed_layout =
       cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
-  // XC owns only xyz + partitioned weights. The shared molecular owner also
-  // retains atomic weights, which were never part of this XC allocation.
+  // XC owns xyz plus partitioned weights. The shared grid additionally owns
+  // atomic weights, which were never part of the XC allocation being retired.
   require(borrowed_layout.borrowed_grid &&
               owned_layout.device_bytes ==
                   borrowed_layout.device_bytes + 4 * grid.point_count() * sizeof(double),
@@ -822,13 +825,23 @@ void matrix_schedule_cases() {
         variational_and_state(large_basis, large_grid, functional, 17);
     }
 }
+// Discovery tests reuse the independent bilinear oracle defined by local-map
+// tests; these in-namespace test fragments must retain dependency order.
+// clang-format off
 #include "dft_local_ao_cases.cuh"
+#include "dft_ao_discovery_cases.cuh"
+// clang-format on
 }  // namespace
 
 int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    ao_discovery_cases();
+    if (argc == 2 && std::string(argv[1]) == "--ao-discovery") {
+      std::cout << "CUDA XC AO discovery, independent CPU E/V and bounded fallback gates passed\n";
+      return 0;
+    }
     local_ao_cases();
     if (argc == 2 && std::string(argv[1]) == "--local-ao") {
       std::cout

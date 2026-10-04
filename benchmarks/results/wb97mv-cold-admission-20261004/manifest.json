@@ -1,0 +1,53 @@
+{
+  "schema": "generativeqc.wb97mv-cold-lifecycle-evidence.v1",
+  "source": {
+    "source_commit": "c472684c9a6c680e58a40fb276ff061702b50ace",
+    "master_commit": "fc7d5e2d8b5b81541718605a22993058f455b4a8",
+    "current_composition_commit": "c472684c9a6c680e58a40fb276ff061702b50ace",
+    "current_master_commit": "fc7d5e2d8b5b81541718605a22993058f455b4a8",
+    "source_identity": "e98f295881774f47b077432c61371d38b0d944bf10a7aac4daf79fe31b455f3b",
+    "manifest_inputs": 1356,
+    "source_archive_sha256": "c44eab2b8a832f6b572653c2f96a7a3cbe740506289366b67c3c1869f353700a",
+    "library_sha256": "151af02d58efcec1b9b4567921b12a232b42bc6b233fedcb730edb3b53861d87",
+    "native_tests": {
+      "generativeqc_cuda_stream_eigensolver_tests": "c748d7ed33dea0d60ce47fb6781acfa06e934bf8815f361a2f2dd7669635fa6d",
+      "generativeqc_dft_cuda_tests": "d08cb6d8814aa03f3491becd4df81bdc7a7bdd178da4e9802ccaa5fefc389d4e",
+      "generativeqc_scf_proposal_tests": "b40ee910948ea53e970e0bd05fe3d84d6ac14f17ad7886a16fb0c358a3e4cd29"
+    },
+    "scope": "masterfc7 WB97M-V integration plus checkpoint admission: native, admission, sparse/zero-cache independent E/F qualification; no timing claim"
+  },
+  "scope": "Private GPU LDA source, complete prepared cold E/F; single ordered cold pair per size, no default or large-system promotion",
+  "slurm_job": "5716",
+  "files": {
+    "matched3-none.json.xz": {
+      "bytes": 8748,
+      "sha256": "1bf8a2f4cd94bae116471ab11f5f95520ac44819562e8529bebaab91d90343fa",
+      "decoded_bytes": 77672,
+      "decoded_sha256": "5742c48abe9c30aef17f7e2eb9b69665152d5a318c25409574b448c1229ea2ca"
+    },
+    "matched3-lda16.json.xz": {
+      "bytes": 9120,
+      "sha256": "00db2a8059350e30d7cf4ed25e4b30747a2ec7eae3dc620cfd9b215b017837ff",
+      "decoded_bytes": 84485,
+      "decoded_sha256": "fe508468cf619d4277b8953e827541901229f7304ea4f9575df10d53aa54cc77"
+    },
+    "matched24-none.json.xz": {
+      "bytes": 12208,
+      "sha256": "2fe1cc1a934ccf4d6ada6241eba401c729dbb4c69341e64c6f153ad28bb589d8",
+      "decoded_bytes": 110702,
+      "decoded_sha256": "d63602bfec7c7ebd99c3f77d87c4acb5af89ce072bb0b1a25f88e89db66b7864"
+    },
+    "matched24-lda16.json.xz": {
+      "bytes": 12740,
+      "sha256": "3b4fe13706e574efc7b60087638cf110f54ef29ab8e5ed4504a60634bca4cc6a",
+      "decoded_bytes": 117580,
+      "decoded_sha256": "001d2f5d0f35e7ce36b225df638b8989b077fc9f876ab5bf1c5352c89210a90e"
+    },
+    "support.json.xz": {
+      "bytes": 18552,
+      "sha256": "01837db283d224e3b3d89a2c8a0c50f392ce4b9480af0a0b22d3d3dc1887a2a1",
+      "decoded_bytes": 102939,
+      "decoded_sha256": "0d44b9e5fbd337e5076c3dc5d55eff71069d0a2cac2ca3eda9816b073d4f595e"
+    }
+  }
+}

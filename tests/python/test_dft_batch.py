@@ -100,12 +100,16 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
     with calculator.prepare_batch(
         systems, charges=charges, multiplicities=multiplicities
     ) as prepared:
-        # Omitted properties follow the method's energy-only capability.
-        cold = prepared.execute(strict=True)
+        # This test exercises SCF/checkpoint behavior explicitly; CUDA methods
+        # now also expose complete forces when properties are omitted.
+        cold = prepared.execute(strict=True, properties=("energy",))
         assert all(not item.warm_start_used for item in cold.items)
         for i, item in enumerate(cold.items):
             reference = calculator.singlepoint(
-                systems[i], charge=charges[i], multiplicity=multiplicities[i]
+                systems[i],
+                charge=charges[i],
+                multiplicity=multiplicities[i],
+                properties=("energy",),
             )
             assert item.index == i and item.forces is None
             assert item.energy == pytest.approx(reference.energy, abs=1e-9)
@@ -113,7 +117,7 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
             assert item.executed_backend == (
                 "cuda" if device == "cuda" else "cpu_reference"
             )
-        replay = prepared.execute(strict=True)
+        replay = prepared.execute(strict=True, properties=("energy",))
         assert all(item.warm_start_used for item in replay.items)
         assert all(not item.warm_start_fallback for item in replay.items)
         assert replay.energies == pytest.approx(cold.energies, abs=1e-9)
@@ -122,14 +126,21 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
         before = [warm_snapshot(prepared, i) for i in range(3)]
         changed = np.array([[0, 0, -0.85], [0, 0, 0.85]])
         target = [(atom[0], position) for atom, position in zip(systems[0], changed)]
-        moved = prepared.execute([changed, None, None], strict=True)
+        moved = prepared.execute(
+            [changed, None, None], strict=True, properties=("energy",)
+        )
         independent = calculator.singlepoint(
-            target, charge=charges[0], multiplicity=multiplicities[0]
+            target,
+            charge=charges[0],
+            multiplicity=multiplicities[0],
+            properties=("energy",),
         )
         assert moved.items[0].energy == pytest.approx(independent.energy, abs=1e-9)
         assert abs(moved.items[0].energy - cold.items[0].energy) > 1e-5
         # Repeating a frozen changed-geometry run starts from the same dm0.
-        repeat = prepared.execute([changed, None, None], strict=True)
+        repeat = prepared.execute(
+            [changed, None, None], strict=True, properties=("energy",)
+        )
         assert [item.iterations for item in repeat.items] == [
             item.iterations for item in moved.items
         ]
@@ -140,23 +151,24 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
             assert after[2] == before[i][2]
 
         for invalid in (np.zeros((1, 3)), np.full((2, 3), np.nan), np.zeros((2, 3))):
-            failed = prepared.execute([invalid, None, None])
+            failed = prepared.execute([invalid, None, None], properties=("energy",))
             assert failed.failure_indices == (0,)
             assert failed.items[0].physical_residual_rms is None
             assert failed.items[1].energy == pytest.approx(cold.items[1].energy)
             assert np.array_equal(warm_snapshot(prepared, 0)[0], before[0][0])
         # None means the ORIGINAL prepared geometry even after a moved solve.
-        restored = prepared.execute(strict=True)
+        restored = prepared.execute(strict=True, properties=("energy",))
         assert restored.energies == pytest.approx(cold.energies, abs=1e-9)
-        with pytest.raises((ValueError, RuntimeError), match="forces|gradient"):
-            prepared.execute(properties=("energy", "forces"))
+        if device == "cpu":
+            with pytest.raises((ValueError, RuntimeError), match="forces|gradient"):
+                prepared.execute(properties=("energy", "forces"))
         prepared.clear_warm_starts()
         assert all(warm_snapshot(prepared, i) is None for i in range(3))
-        no_seed = prepared.execute(strict=True)
+        no_seed = prepared.execute(strict=True, properties=("energy",))
         assert all(not item.warm_start_used for item in no_seed.items)
         assert all(warm_snapshot(prepared, i) is None for i in range(3))
         prepared.set_warm_start_updates(True)
-        prepared.execute(strict=True)
+        prepared.execute(strict=True, properties=("energy",))
         assert all(warm_snapshot(prepared, i) is not None for i in range(3))
         snapshots = [warm_snapshot(prepared, i) for i in range(3)]
         invalid = (2 * snapshots[1][0], snapshots[1][1], snapshots[1][2])
@@ -170,7 +182,7 @@ def test_ragged_replay_geometry_failure_and_frozen_seed(
             restore_snapshots(prepared, [before[0], None, None])
             == _native.STATUS_SUCCESS
         )
-        imported = prepared.execute(strict=True)
+        imported = prepared.execute(strict=True, properties=("energy",))
         assert [item.warm_start_used for item in imported.items] == [True, False, False]
         assert not imported.items[0].warm_start_fallback
         assert imported.energies == pytest.approx(cold.energies, abs=1e-9)
@@ -181,12 +193,12 @@ def test_nonconverged_batch_does_not_establish_seed(device: typing.Any) -> None:
     with calculator.prepare_batch(
         [[("H", (0, 0, -0.7)), ("H", (0, 0, 0.7))]]
     ) as prepared:
-        first = prepared.execute()
+        first = prepared.execute(properties=("energy",))
         assert first.failure_indices == (0,)
         assert first.items[0].status == _native.STATUS_NOT_CONVERGED
         assert np.isfinite(first.items[0].physical_residual_rms)
         assert warm_snapshot(prepared, 0) is None
-        assert not prepared.execute().items[0].warm_start_used
+        assert not prepared.execute(properties=("energy",)).items[0].warm_start_used
 
 
 def test_batch_scf_query_abi_and_stale_record() -> None:
@@ -206,7 +218,7 @@ def test_batch_scf_query_abi_and_stale_record() -> None:
             == _native.STATUS_NOT_IMPLEMENTED
         )
         assert bytes(record) == original
-        prepared.execute(strict=True)
+        prepared.execute(strict=True, properties=("energy",))
         assert (
             getter(prepared._batch, 0, ctypes.byref(record)) == _native.STATUS_SUCCESS
         )
@@ -223,7 +235,7 @@ def test_batch_scf_query_abi_and_stale_record() -> None:
                 == _native.STATUS_ABI_MISMATCH
             )
             assert bytes(record) == original
-        prepared.execute([np.zeros((2, 3)), None])
+        prepared.execute([np.zeros((2, 3)), None], properties=("energy",))
         assert getter(prepared._batch, 0, None) == _native.STATUS_NOT_IMPLEMENTED
         assert getter(prepared._batch, 1, None) == _native.STATUS_SUCCESS
         outputs = (_native.BatchItemResultDescriptor * 1)()
@@ -274,7 +286,7 @@ def test_open_shell_large_solver_ragged_replay_and_failure(
         density_tolerance=1e-10,
     )
     with calculator.prepare_batch(systems, multiplicities=[2, 2]) as prepared:
-        cold = prepared.execute(strict=True)
+        cold = prepared.execute(strict=True, properties=("energy",))
         for item in cold.items:
             assert item.physical_residual_rms < 1e-9
             assert item.executed_backend == (
@@ -282,25 +294,29 @@ def test_open_shell_large_solver_ragged_replay_and_failure(
             )
         original_seed = warm_snapshot(prepared, 0)
         assert original_seed[0].size > 2 * 16 * 16
-        replay = prepared.execute(strict=True)
+        replay = prepared.execute(strict=True, properties=("energy",))
         assert all(item.warm_start_used for item in replay.items)
         assert replay.energies == pytest.approx(cold.energies, abs=1e-9)
         prepared.set_warm_start_updates(False)
         moved_coordinates = np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 1.9]])
-        moved = prepared.execute([moved_coordinates, None], strict=True)
+        moved = prepared.execute(
+            [moved_coordinates, None], strict=True, properties=("energy",)
+        )
         fresh = calculator.singlepoint(
-            [("O", moved_coordinates[0]), ("H", moved_coordinates[1])], multiplicity=2
+            [("O", moved_coordinates[0]), ("H", moved_coordinates[1])],
+            multiplicity=2,
+            properties=("energy",),
         )
         assert moved.items[0].energy == pytest.approx(fresh.energy, abs=1e-9)
         assert moved.items[0].physical_residual_rms < 1e-9
         assert abs(moved.items[0].energy - cold.items[0].energy) > 1e-5
         saved_seed = warm_snapshot(prepared, 0)
-        failed = prepared.execute([np.zeros((2, 3)), None])
+        failed = prepared.execute([np.zeros((2, 3)), None], properties=("energy",))
         assert failed.failure_indices == (0,)
         assert failed.items[0].status == _native.STATUS_NUMERICAL_FAILURE
         assert failed.items[0].physical_residual_rms is None
         assert failed.items[1].energy == pytest.approx(cold.items[1].energy, abs=1e-9)
         assert np.array_equal(warm_snapshot(prepared, 0)[0], saved_seed[0])
-        restored = prepared.execute(strict=True)
+        restored = prepared.execute(strict=True, properties=("energy",))
         assert restored.energies == pytest.approx(cold.energies, abs=1e-9)
         assert all(item.physical_residual_rms < 1e-9 for item in restored.items)

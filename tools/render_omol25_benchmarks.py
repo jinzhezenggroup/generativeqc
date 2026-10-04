@@ -107,6 +107,10 @@ def collect(directory: Path, atoms: int, *, schema: str = SCHEMA) -> dict[str, A
                     "source_file_sha256",
                     "native_schedule_settings",
                     "native_schedule_policy",
+                    "native_experiment",
+                    "preliminary_density",
+                    "target_prepare_seconds",
+                    "preliminary_wrapper_seconds",
                 )
                 if key in raw
             }
@@ -157,8 +161,11 @@ def figure(
     *,
     title: str = "OMol25 level: ωB97M-V / def2-TZVPD",
     filename: str = "omol25.svg",
+    phase: str = "warm",
 ) -> None:
-    """Use HF's all-repeat medians/ranges, exposing variable iteration branches."""
+    """Use HF's observations/ranges; cold includes all preparation and seed costs."""
+    if phase not in ("cold", "warm", "moved", "moved-warm"):
+        raise ValueError("unknown complete endpoint phase")
     import matplotlib
 
     matplotlib.use("Agg")
@@ -184,10 +191,37 @@ def figure(
         for point in points
         if point["engines"]["native"]["status"] == "measured"
     )
+    experimental_native = any(
+        entry.get("native_experiment", {}).get("force_active_ao_cutoff") is not None
+        or entry.get("native_experiment", {}).get("preliminary_provider", "none")
+        != "none"
+        for point in points
+        if (entry := point["engines"]["native"])["status"] == "measured"
+    )
+    experimental_capacity = any(
+        entry.get("native_experiment", {}).get(limit) is not None
+        for point in points
+        if (entry := point["engines"]["native"])["status"] == "measured"
+        for limit in ("force_max_device_bytes", "force_max_host_bytes")
+    )
+    no_preliminary_source = all(
+        point["engines"]["native"]
+        .get("native_experiment", {})
+        .get("preliminary_provider", "none")
+        == "none"
+        for point in points
+        if point["engines"]["native"]["status"] == "measured"
+    )
     for engine, default_label in (
         (
             "native",
-            "GenerativeQC direct (automatic through-f)"
+            "GenerativeQC direct (experimental AO selection)"
+            if experimental_native and no_preliminary_source
+            else "GenerativeQC direct (experimental AO/seed policy)"
+            if experimental_native
+            else "GenerativeQC direct (experimental force capacity)"
+            if experimental_capacity
+            else "GenerativeQC direct (automatic through-f)"
             if automatic_native and not canonical_native
             else "GenerativeQC direct (canonical J/K opt-in)"
             if canonical_native
@@ -200,12 +234,14 @@ def figure(
             if engine == "native" and native_unsupported
             else default_label
         )
+        if engine == "native" and experimental_native and experimental_capacity:
+            label += " [explicit force capacity]"
         xs, ys, lows, highs = [], [], [], []
         for point in points:
             entry = point["engines"][engine]
             if entry["status"] != "measured":
                 continue
-            rows = [row for row in entry["records"] if row["phase"] == "warm"]
+            rows = [row for row in entry["records"] if row["phase"] == phase]
             times = [row["complete_seconds"] for row in rows]
             aos = point["protocol"]["aos"]
             center = median(times)
@@ -232,12 +268,13 @@ def figure(
     ax.set_yscale("log")
     ax.set_xticks(ticks, [str(value) for value in ticks])
     ax.set_xlabel("Spherical AOs (3–96 atoms; same water clusters as HF)")
-    ax.set_ylabel("Complete warm SCF energy + analytic forces / s")
+    ax.set_ylabel(f"Complete {phase} SCF energy + analytic forces / s")
     fig.suptitle(title, x=0.105, y=0.98, ha="left", weight="bold")
     missing = [
         f"{point['atoms']}: "
         + ", ".join(
-            f"{'GQC' if engine == 'native' else 'GPU4PySCF'} {entry['status']}"
+            f"{'GQC' if engine == 'native' else 'GPU4PySCF'} "
+            + ("not measured" if entry["status"] == "not_run" else entry["status"])
             for engine, entry in point["engines"].items()
             if entry["status"] != "measured"
             and not (engine == "native" and native_unsupported)
@@ -297,6 +334,7 @@ def main() -> None:
         if source.resolve() != target.resolve():
             shutil.copyfile(source, target)
     figure(points, args.destination)
+    figure(points, args.destination, phase="cold", filename="omol25-cold.svg")
 
 
 if __name__ == "__main__":

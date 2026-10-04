@@ -52,6 +52,9 @@ from generativeqc_compiler.method.stationary_gradient import (
 from generativeqc_compiler.method.stationary_prepared import (
     compile_stationary_prepared_plan,
 )
+from generativeqc_compiler.method.stationary_resources import (
+    stationary_cuda_requires_native_integrals,
+)
 
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
@@ -225,7 +228,13 @@ class PreparedCompositeStationaryCudaGradient:
             raise ValueError("composite stationary stationary basis/geometry mismatch")
         functional = int(source.functional_code)
         n, na, npnt = basis.nao, basis.natom, len(state.grid.points)
-        if not (1 <= n <= 1024 and 1 <= na <= 128 and 1 <= npnt <= 4_000_000):
+        # Share the compiler's shape contract, including its primitive bound.
+        # This composition always uses native integral derivatives, even for
+        # shapes where the small diagnostic AO-descriptor route is admissible.
+        stationary_cuda_requires_native_integrals(
+            atoms=na, aos=n, primitives=basis.nprimitive
+        )
+        if not 1 <= npnt <= 4_000_000:
             raise ValueError(
                 "composite stationary CUDA stationary shape exceeds its bounded domain"
             )

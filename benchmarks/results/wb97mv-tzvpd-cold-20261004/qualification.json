@@ -1,0 +1,69 @@
+{
+  "source_commit": "20543ad6feeda9bb1649d09fe24233ecbfd0b77f",
+  "master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+  "current_composition_commit": "e45e29c99c12496a35d24b4f331070252aa21ab2",
+  "current_master_commit": "d22c92d8fca233e3eb742033e923ed8dac004c42",
+  "source_identity": "cfa2c4ba884356aac64d309dbc4b2d8d97748afc395fea5a56124d78169b2e0b",
+  "manifest_inputs": 1368,
+  "source_archive_sha256": "9aab5806160131a74a4ae408a29e3dafa3fe9ba793113526fd8e6f4fcb0e380f",
+  "library_sha256": "db20557ede9cd4471c0bf7659666f01431fda72eae2fc01434551fe90cc62b4c",
+  "native_tests": {
+    "generativeqc_cuda_stream_eigensolver_tests": "64761c4e950b6ec6da8adfad0c4a478a678fbe7724a4f1e5a82c38f45ead6974",
+    "generativeqc_dft_cuda_tests": "d08cb6d8814aa03f3491becd4df81bdc7a7bdd178da4e9802ccaa5fefc389d4e",
+    "generativeqc_scf_proposal_tests": "93a2bdd501866b109bb59f9fc39a2d603fd621bd989e115defa6cbe98004ae96"
+  },
+  "scope": "master d22 composition; full TZVPD original/moved endpoint and private cold-source controls",
+  "slurm_job": "5718",
+  "full_native_dft": true,
+  "admission_cases": 4,
+  "modes": {
+    "sparse": {
+      "endpoint_cases": 7,
+      "successful_calls": 66,
+      "xc_submissions": 467
+    },
+    "zero": {
+      "endpoint_cases": 7,
+      "successful_calls": 66,
+      "xc_submissions": 467
+    }
+  },
+  "hashes": {
+    "results/admission.log": "c6056c0c1694552fd5a206e1f87ffd8910065d893b6cf0b2be666d9f8ccc2c19",
+    "results/native-full.log": "31f398e8c4b5015b4d1950d08b428064c2463b2edeb8d7f0f8354593494dceec",
+    "results/ordinary-eigen.log": "89a1013c13a41548d31cf8a44b4dab5730217e37d88a6e85a082b5c0d107b16f",
+    "results/qualify-scf-sparse.log": "f4fecb05d5ae8c25435d5fbb3be1639c517f2fd94c2d9f0471ad5e6cbbfe3698",
+    "results/qualify-scf-zero.log": "cecf6aa13449f2e02e1af431ec0db6c50003197fade8efcb5941e44710645744",
+    "results/seed-gates.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results/native-outcomes.json": "06b3acdb0e787e94cb967ce5eaa7685a22949d326a838a26ec523ba4ae9125bf",
+    "results/outcome.json": "2d95344f971bfa7b505fdafc65f424bf31e20082c97eac45a23c194809c712ec",
+    "results/qualify-scf-sparse-work.json": "8c1584f8636c81724ce008b93005656a9153bfc7879829ad346be42d43f0a6b9",
+    "results/qualify-scf-zero-work.json": "6f79c5344bbf72ac122f6571ed325804bc1838edca53e97f693e132047603faa",
+    "remote-receipts/ccache-after.txt": "eb3d9491a31cb57f697a000faf6c3d52d6bfdffd2f39b599f3f76adf6a54455e",
+    "remote-receipts/ccache-before.txt": "f0e98c2dae3ec528bc9347a854661f4cce5760d405d6667aa41f6ce6dcfe4a51",
+    "remote-receipts/ccache-version.txt": "9c3008378530cbe9a300ccd0d037e839ac82210a5303bf17d06d315be562c10b",
+    "remote-receipts/device.txt": "70ab5020a6a2e63113bd800e9ba1159fca26d6db79c8678601634c262aab175b",
+    "remote-receipts/slurm.txt": "4e25117ced3d90f50996c12815a287a95b816cca9d3aaa3df93670a8c37c6087",
+    "remote-receipts/source-identity.json": "82e07e7b44224583d8c1fe7a764b893ed68862d90cd8693751d451f2687792c1",
+    "qualify-scf.py": "3479de968965f1a2f4088ca1d2c9053f49e220f00274527afab811dabb2456a0",
+    "ao-work.py": "d339758940a82237cc97a69c0e9f84fe81a42885d0787833b6bf75ababe80fe2",
+    "verify-identity.py": "728743c5362001b7aa40e18e4b2ca2d9ed34232044c25c34ef39455aa42df94d",
+    "environment.sh": "201338c34173166268ef42930bb56213295e758366192186d32b043e101c4fa9",
+    "verify-qualification.py": "c31b7b3c841088a21b7e7ce85825b4562b31457d8a498394e531ad32788d3444"
+  },
+  "validator_correction": {
+    "gpu_outcomes": {
+      "reference": 0,
+      "none": 0,
+      "lda16": 0
+    },
+    "original_validator_status": "failed: compared full basis metadata to protocol identity string",
+    "correction": "compare stored orbital metadata basis_identity field with protocol basis_identity; numerical gates and measurements unchanged",
+    "original_verifier_sha256": "78c8fd4ebba41c631045bb4d6a03b2d32207d9f32d631fab4565b7d2ae273c71",
+    "corrected_verifier_sha256": "a8bec33fdbf06dcca23e50b6e27cfc0e7dd12e619ebc4c99ce5ef2f196134e03"
+  },
+  "compiler_commands_with_ccache": 458,
+  "host_selection_passed": 55,
+  "build_ccache_before": "Summary:\n  Hits:             67708 / 234575 (28.86 %)\n    Direct:         55464 / 235706 (23.53 %)\n    Preprocessed:   12244 / 180193 (6.79 %)\n  Misses:          166867\n    Direct:        180242\n    Preprocessed:  167949\n  Errors:             922\n  Uncacheable:       4125\nPrimary storage:\n  Hits:            137089 / 471363 (29.08 %)\n  Misses:          334274\n  Cache size (GB):   5.79 /  30.00 (19.29 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+  "build_ccache_after": "Summary:\n  Hits:             67762 / 234730 (28.87 %)\n    Direct:         55518 / 235861 (23.54 %)\n    Preprocessed:   12244 / 180294 (6.79 %)\n  Misses:          166968\n    Direct:        180343\n    Preprocessed:  168050\n  Errors:             922\n  Uncacheable:       4125\nPrimary storage:\n  Hits:            137288 / 471673 (29.11 %)\n  Misses:          334385\n  Cache size (GB):   5.83 /  30.00 (19.43 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n"
+}

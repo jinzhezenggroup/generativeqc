@@ -38,6 +38,12 @@ struct Problem {
   // retain the explicitly selected reference contract (conventional RHF here).
   std::size_t naux{};
   std::vector<double> df_bov, df_bvv;
+  // Optional for supplied energy/Lambda inputs; required by the physical
+  // retained-block pullback. Native molecular sources always publish Boo.
+  std::vector<double> df_boo;
+  // Binds native physical factor derivatives to their immutable source/frame.
+  // Supplied algebraic problems may leave this zero.
+  std::uint64_t df_source_identity{};
 };
 
 enum class SolveStatus { Converged, NotConverged, NumericalFailure };
