@@ -3567,9 +3567,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       if (cuda_error == cudaSuccess) {
         launch_select_final_fock_rebuild_kernel(
             blocks_for(batch_size), threads, 0, resources.stream_,
-            static_cast<std::int32_t>(batch_size),
-            final_fock_reuse_density_rms, density_rms, converged, failed, final_fock_reuse_mask,
-            active, final_fock_rebuild_count);
+            static_cast<std::int32_t>(batch_size), final_fock_reuse_density_rms, density_rms,
+            converged, failed, final_fock_reuse_mask, active, final_fock_rebuild_count);
         launch_copy_selected_matrices_kernel(
             blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
             static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
@@ -3910,8 +3909,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         outputs[0].scf.precision.strict_stage_fock_builds = outputs[0].scf.iterations;
       }
       outputs[0].scf.precision.post_scf_fock_builds = post_scf_physical_fock_builds;
-      outputs[0].scf.precision.skipped_final_fock_builds =
-          reused_final_physical_fock ? 1U : 0U;
+      outputs[0].scf.precision.skipped_final_fock_builds = reused_final_physical_fock ? 1U : 0U;
       // Download has synchronized the stream. Report semantic completed work,
       // not the one-time host graph-capture calls or allocator pool rounding.
       runtime::df_progress::Scope trace("cuda_rhf_reference_completed", "cuda_completed");
@@ -4683,8 +4681,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         final_density, active, forces);
   }
 
-  if (reuse_converged_fock && !stationary_force_required &&
-      !options.export_physical_reference) {
+  if (reuse_converged_fock && !stationary_force_required && !options.export_physical_reference) {
     // Ordinary energy-only execution may keep its historical warm-start
     // advancement. A physical-reference export must instead publish the retained
     // P_n/F(P_n) pair that licensed reuse; swapping only P to P_{n+1} would

@@ -96,7 +96,9 @@ def test_reference_residency_preserves_physical_frame_and_fallback(
     assert record["forced_post_scf_fock_builds"] == 1
     assert record["cold_reuse_skipped_final_fock_builds"] == 1
     assert record["forced_skipped_final_fock_builds"] == 0
-    assert record["forced_total_fock_builds"] == record["cold_reuse_total_fock_builds"] + 1
+    assert (
+        record["forced_total_fock_builds"] == record["cold_reuse_total_fock_builds"] + 1
+    )
 
 
 CPP = r"""
