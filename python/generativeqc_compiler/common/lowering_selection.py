@@ -75,6 +75,7 @@ class LoweringBinding:
     target: TargetCapabilities
     compilation: CompilationIdentity
     expected_replays: int
+    retained_incumbent: bool = False
 
     @property
     def cache_identity(self) -> str:
@@ -123,6 +124,7 @@ class LoweringBinding:
             "fallbacks": [candidate.identity for candidate in self.fallbacks],
             "rejections": dict(self.rejections),
             "expected_replays": self.expected_replays,
+            "retained_incumbent": self.retained_incumbent,
             "diagnostics": lowering_diagnostics(self.candidates),
         }
 
@@ -134,6 +136,7 @@ def select_lowering_binding(
     candidates: typing.Iterable[LoweringCandidate],
     *,
     expected_replays: int = 1,
+    qualified_incumbent: str | None = None,
 ) -> LoweringBinding:
     """Rank complete prepare + replay costs, preserving a strict fallback.
 
@@ -141,6 +144,13 @@ def select_lowering_binding(
     negative evidence rather than treated as free work. Explicitly estimated
     costs are allowed for planning; only method endpoint qualification can
     promote a performance default. A provider name is never an input policy.
+
+    During migration, a provider adapter may identify an already-qualified
+    incumbent by its complete candidate identity. If its cost is incomplete,
+    retain it without making a profitability claim. All legality gates still
+    apply, including an executable strict fallback. Missing costs stay visible
+    in diagnostics; an unmeasured incumbent cannot be displaced by estimates
+    for a competitor. This option cannot qualify a new implementation.
     """
     if (
         not isinstance(request, LoweringRequest)
@@ -170,8 +180,11 @@ def select_lowering_binding(
     offered = tuple(sorted(offered, key=lambda candidate: candidate.identity))
     rejections = []
     ranked = []
+    legal = []
     for candidate in offered:
         reason = _admission(candidate, target)
+        if reason is None:
+            legal.append(candidate)
         cost = candidate.cost
         if reason is None and (
             cost is None or cost.prepare_ns is None or cost.replay_ns is None
@@ -193,6 +206,44 @@ def select_lowering_binding(
             )
         )
     ranked.sort(key=lambda row: row[:2])
+    if qualified_incumbent is not None:
+        incumbent = next(
+            (
+                candidate
+                for candidate in legal
+                if candidate.identity == qualified_incumbent
+            ),
+            None,
+        )
+        if incumbent is None:
+            raise ValueError("qualified incumbent is absent or fails binding admission")
+        cost = incumbent.cost
+        if cost is None or cost.prepare_ns is None or cost.replay_ns is None:
+            if not any(_strict(candidate) for candidate in legal):
+                raise ValueError(
+                    "incumbent retention requires a legal strict candidate"
+                )
+            assert incumbent.execution is not None
+            fallbacks = tuple(
+                candidate
+                for candidate in legal
+                if candidate != incumbent
+                and candidate.execution is not None
+                and (
+                    _strict(candidate)
+                    or candidate.execution.precision == incumbent.execution.precision
+                )
+            )
+            return LoweringBinding(
+                incumbent,
+                fallbacks,
+                offered,
+                tuple(rejections),
+                target,
+                compilation,
+                expected_replays,
+                retained_incumbent=True,
+            )
     if not ranked:
         raise ValueError(
             "no admitted lowering candidate with complete cost evidence: "

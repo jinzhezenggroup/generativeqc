@@ -1822,6 +1822,17 @@ generativeqc_precision_work_detail query_public_precision_work(const generativeq
               !events.empty() && events.back().kind == GENERATIVEQC_PRECISION_EVENT_FINAL_AUDIT &&
               !operators.empty(),
           "public batch precision-work query lost complete execution evidence");
+  // Count actual Fock-assembly operators. Final-audit events and SCF iteration
+  // metadata cannot substitute for the execution owner's work census.
+  std::uint64_t observed_builds = 0;
+  for (const auto& operation : operators)
+    if (operation.kind == GENERATIVEQC_PRECISION_OPERATOR_FOCK_ASSEMBLY)
+      observed_builds += operation.count;
+  std::uint64_t published_builds = 0;
+  require(generativeqc_batch_get_last_fock_builds(batch, index, &published_builds) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              observed_builds > 0 && published_builds == observed_builds,
+          "public CUDA KS Fock count differs from executed Fock assemblies");
   return summary;
 }
 

@@ -42,6 +42,7 @@ struct Reference {
   double screening_tolerance = 0;
 };
 namespace scf {
+struct CudaRhfBucketPlan;
 namespace cuda_execution = generativeqc::scf::cuda_execution;
 using namespace cuda_execution;
 enum class FockSpin { Restricted };
@@ -90,7 +91,8 @@ RccsdNativeState execute_rccsd_prepared(
     runtime::ExecutionContext&, const core::System& orbital, Reference, SolverOptions options, std::size_t,
     scf::PreparedFockPlan*, const std::vector<double>*, bool* warm_fallback,
     std::unique_ptr<scf::PreparedFockPlan>*, const core::System* auxiliary, bool retain_df_response,
-    const scf::cuda_execution::CudaDfSourcePolicy* policy) {
+    const scf::cuda_execution::CudaDfSourcePolicy* policy, scf::CudaRhfBucketPlan** plan) {
+  assert(plan == nullptr);
   ++rhf_calls;
   assert(auxiliary && policy && retain_df_response && !options.df_matrix_gemm);
   // A mid-RHF diagnostic change must not alter the already admitted source.
@@ -156,7 +158,7 @@ int main(int argc, char** argv) {
     RccsdNativeState output;
     try {
       output = run_rccsd_native_state(execution, orbital, descriptor, &cache, &density,
-                                      &warm_fallback, 0, &auxiliary, true, false);
+                                      &warm_fallback, 0, &auxiliary, true, false, nullptr);
       assert(admitted && rhf_calls == 1 && source_calls == 1);
       assert(!warm_fallback);
     } catch (const MethodError& error) {
