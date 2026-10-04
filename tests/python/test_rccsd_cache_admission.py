@@ -35,7 +35,10 @@ struct MethodError : std::runtime_error {
 struct Reference { std::size_t reference_memory_budget_bytes=100; int diis_history=8; double screening_tolerance=0; };
 namespace scf {
 namespace cuda_execution {
-bool cuda_df_value_domain(const core::System& orbital,const core::System& system,std::string& detail) {
+struct CudaDfSourcePolicy {};
+bool resolve_cuda_df_source_policy(CudaDfSourcePolicy&,std::string&) { return true; }
+bool cuda_df_value_domain(const core::System& orbital,const core::System& system,
+                          const CudaDfSourcePolicy&,std::string& detail) {
   detail="unsupported DF source basis";
   return orbital.df_supported && system.df_supported;
 }
@@ -74,7 +77,8 @@ Reference reference_options(const generativeqc_method_descriptor&,std::size_t) {
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,SolverOptions,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*,
-                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*, bool retain_df_response) {
+                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*, bool retain_df_response,
+                                      const scf::cuda_execution::CudaDfSourcePolicy*) {
   ++executions;
   retained_response=retain_df_response;
   return {p != nullptr,0,{80}};

@@ -1,6 +1,5 @@
 """Full B residency must try smaller J scratch before falling back or rejecting."""
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -18,10 +17,9 @@ def test_full_residency_reduces_j_scratch(nbf: int, virtuals: int, budget: int) 
     assert (plan.virtual_block, plan.j_batch, plan.peak_bytes) == (virtuals, 1, budget)
 
 
-def test_generated_native_full_residency_reduces_j_scratch(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler is unavailable")
+def test_generated_native_full_residency_reduces_j_scratch(
+    tmp_path: Path, native_cxx: object
+) -> None:
     (tmp_path / "schedule.hpp").write_text(native_header())
     source = tmp_path / "check.cpp"
     source.write_text("""#include "schedule.hpp"
@@ -35,20 +33,16 @@ int main() {
 """)
     binary = tmp_path / "check"
     root = Path(__file__).resolve().parents[2]
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        binary,
+        compile_args=(
             "-std=c++20",
             "-O2",
             "-I" + str(root / "src"),
             "-I" + str(root / "include"),
-            str(source),
-            "-o",
-            str(binary),
-        ],
-        check=True,
-        capture_output=True,
-        timeout=60,
+        ),
+        compile_timeout=60,
     )
     result = subprocess.run(
         [str(binary)], capture_output=True, text=True, check=False, timeout=10

@@ -80,6 +80,24 @@ class ExecutionPrecisionSchedule {
   }
 
   bool is_strict_fp64() const noexcept { return !any_lower_precision(); }
+
+  /** Intersect admitted arithmetic with an execution capability without
+   * discarding region identity, retained directives or the strict audit policy.
+   * The predicate sees only lower-precision regions; rejection restores that
+   * region to the common FP64 fallback. This cannot introduce lower precision
+   * or mutate the reusable requested schedule. Numerical qualification and
+   * provider/layout capability remain the caller's responsibility. */
+  template <typename Qualified>
+  ExecutionPrecisionSchedule filter_lower_precision(Qualified&& qualified) const {
+    auto execution = *this;
+    for (std::size_t index = 0; index != size_; ++index) {
+      const auto& region = regions_[index];
+      if (!region.directive.is_strict_fp64() && !qualified(region))
+        execution.regions_[index].directive = strict_fp64_precision();
+    }
+    return execution;
+  }
+
   std::size_t size() const noexcept { return size_; }
   PrecisionDtype strict_audit_dtype() const noexcept { return strict_audit_dtype_; }
   std::string_view audit_owner() const noexcept { return audit_owner_; }
