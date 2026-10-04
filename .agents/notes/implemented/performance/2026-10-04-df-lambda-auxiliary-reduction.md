@@ -67,8 +67,9 @@ H2/water/LiH force finite differences, every water coordinate, exact-budget
 fallback, and failure without publication. Job 12237 passes the seven native
 Lambda tests under Compute Sanitizer memcheck with zero reported errors.
 On n2 PRO6000 job 2196, paired complete water endpoints have identical energy
-and maximum force difference 5.3291e-15. The 230-AO complete force endpoint
-is still running at this checkpoint; these small gates do not qualify it.
+and maximum force difference 5.3291e-15. The existing conventional stack also
+passes six CUDA tests in job 12239: 14/28/56-AO water-cluster complete forces,
+warm/moved geometry, energy directions, and exact/near-degenerate methane.
 
 Frozen library SHA256:
 461bd4f0e7defcc4c513bf1ecb6989ba9dce786cd2552ef6b05c1d1a2b99232a.
@@ -76,6 +77,51 @@ Build source identity:
 1ac0c9753b8ce92a5c2b56ca025921c679391fa935210b788f2418733ca1ebc0.
 The geometry/basis-only ethane230 input SHA256 is
 9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e.
+
+### Completed 230-AO force endpoint
+
+PRO6000 job 2196 (GPU-54595246-dbdc-a633-dc38-7bd8eea3831a) completes the cold
+geometry/basis-only ethane endpoint with all 24 nuclear force components.
+Timings in seconds, from the frozen library above:
+
+| Phase | Seconds |
+| --- | ---: |
+| Exact RHF | 158.875826 |
+| DF source | 0.975416 |
+| CCSD | 264.614006 |
+| (T) amplitude/parameter/Fock response | 110.651630 |
+| Corrected Lambda and parameter response | 681.013329 |
+| DF factor/source/nuclear pullback | 3.691032 |
+| Exact orbital and nuclear response | 671.674373 |
+| Complete force endpoint | 1891.519925 |
+
+The analytic energy derivative along the retained normalized opposing-carbon
+z direction is 0.018085814482828037 Eh/bohr. Independent oracle energy central
+differences at h=1e-4 and 3e-5 bohr are 0.01808580748274835 and
+0.01808581799878084, giving errors 7.0001e-9 and 3.5160e-9 against the 3e-7
+gate. This qualifies that large endpoint and direction, not all large systems
+or a per-factor accuracy gate. The largest translational force sum is 6.8e-12.
+
+Lambda performs 21 iterations/42 reduced actions, one preparation, 22,448 Q
+visits and 1,497,478 generated/accumulation kernels. Its complete reported work
+is 65,352,182,732,706 semantic contraction summands, including audits and
+parameter response. Lambda independent residual is 6.1146e-13; orbital
+residual 1.3606e-13 and maximum stationarity defect 1.0399e-11. There are 28
+exact J/K actions and zero explicit Hessian elements. The reported complete
+numeric bound is 5,741,890,195 bytes; Lambda reports 1,603,607,336 owned device
+bytes and a 5,478,438,027-byte complete numeric bound.
+
+Global RHF stability remains uncertified (flag false), and strict large-factor
+precision/source-provenance gates remain open. The old expanded large-force
+run was cancelled, so no measured large-force speedup is inferred from it.
+After this reduction, Lambda and exact orbital/nuclear response each account
+for about 36% of the completed force endpoint; energy-only (T) priorities do
+not describe this force profile.
+
+The prerequisite was rebased during qualification to 73a14a696. Its incoming
+changes concern range-separated force screening/roots; the CC, methods and
+compiler sources above are unchanged. Frozen measurements retain their exact
+source identity. Refreshed build/regression validation is recorded separately.
 
 Per-action semantic contraction summands, excluding one-time primal staging:
 
