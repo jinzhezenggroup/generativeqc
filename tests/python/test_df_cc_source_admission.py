@@ -166,7 +166,12 @@ int main(int argc, char** argv) {
         std::max({layout.transform_bytes,layout.packing_bytes,layout.blocks_bytes});
     const auto budget=mode==0 ? legacy_budget : admitted-(mode==1);
     assert(external(orbital,auxiliary,ref)==15408 && layout.transform_bytes==8032);
-    assert(legacy_budget==24212 && 100*100*sizeof(double)>legacy_budget);
+    // The original unprojected fixture admitted 24,212 bytes. Physical pair
+    // projection now adds exactly two n*n*q FP64 arrays (6,400 bytes here).
+    // Both payload-only budgets remain below the metric allocation alone.
+    const auto pair_projection_bytes=2*layout.source_values*sizeof(double);
+    assert(pair_projection_bytes==6400 && legacy_budget==24212+pair_projection_bytes);
+    assert(100*100*sizeof(double)>legacy_budget);
     try {
       allocation_probe::enabled=true;
       (void)cc::build_df_source_cuda(orbital,auxiliary,ref,budget,1e-10,0,0);
