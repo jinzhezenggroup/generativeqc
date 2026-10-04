@@ -83,6 +83,18 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
 /** Consume one angular-homogeneous block of symmetry-unique public-AO ERIs.
  * Inputs and outputs use the compiler's interleaved spin scatter ABI. No
  * four-index tensor or device-to-host staging is retained. */
+/** Joint canonical full J/K and range K; strict-FP64 Cartesian sources only.
+ * Outputs are disjoint independently weighted source matrices. Screening and
+ * orbit ownership exactly match the separate canonical launches.
+ */
+void launch_canonical_rsh_values_kernel(
+    cudaStream_t stream, DeviceBatch batch, std::int32_t system, unsigned angular_order,
+    const std::int32_t* pairs, CanonicalPairRows rows, std::size_t first_begin,
+    std::size_t first_count, std::size_t second_begin, std::size_t second_count, bool same_bucket,
+    bool unrestricted, DirectCoulombRange range, double omega, double screening,
+    const double* bounds, const double* density, double* coulomb, double* full_exchange,
+    double* range_exchange, std::uint64_t* work_census);
+
 void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
                                 std::int32_t system, unsigned angular_order,
                                 const std::int32_t* pairs, CanonicalPairRows rows,

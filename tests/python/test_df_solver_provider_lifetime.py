@@ -32,7 +32,7 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     unit.write_text(
         PREFIX + cleanup + "\nvoid retry() {\n" + fallback + "\n}\n};\n}\n" + MAIN
     )
-    subprocess.run(
+    build = subprocess.run(
         [
             cache,
             compiler,
@@ -44,11 +44,12 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "-o",
             str(executable),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=30,
     )
+    assert build.returncode == 0, build.stdout + build.stderr
     return executable
 
 
@@ -93,8 +94,28 @@ int cudaMalloc(void** pointer,std::size_t) {
 void cuda_check(int code) { if(code) throw std::runtime_error("CUDA failure"); }
 void blas_check(int code) { if(code) throw std::runtime_error("BLAS failure"); }
 namespace generativeqc::cc {
+struct Contractions {
+  void *handle=reinterpret_cast<void*>(2), *stream=reinterpret_cast<void*>(1);
+  void release_locked() {
+    if (handle) {
+      if (stream) cuda_check(cudaStreamSynchronize(stream));
+      blas_check(cublasDestroy(handle));
+    }
+    handle=nullptr;
+    stream=nullptr;
+  }
+  void reset_locked() noexcept {
+    if (handle) {
+      if (stream) (void)cudaStreamSynchronize(stream);
+      (void)cublasDestroy(handle);
+    }
+    handle=nullptr;
+    stream=nullptr;
+  }
+};
 struct Owner {
-  void *stream=reinterpret_cast<void*>(1), *blas=reinterpret_cast<void*>(2);
+  void *stream=reinterpret_cast<void*>(1);
+  Contractions contractions;
   void *trial_begin{}, *trial_end{};
   unsigned char *base=reinterpret_cast<unsigned char*>(3);
   struct { bool matrix_gemm=true; } plan;
@@ -126,7 +147,7 @@ int main(int argc,char** argv) {
                  "a 96 MiB release can hide 160 MiB growth as 64 MiB.\n";
     return 1;
   }
-  if(destroys!=1 || owner.blas) return 2;
+  if(destroys!=1 || owner.contractions.handle) return 2;
   if(fallback) {
     if(owner.plan.matrix_gemm || owner.replans!=1 || allocations!=2 || cleared!=1 ||
        owner.layout.total!=512 || owner.base!=reinterpret_cast<unsigned char*>(4)) return 3;

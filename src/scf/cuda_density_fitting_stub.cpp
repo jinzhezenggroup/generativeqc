@@ -78,7 +78,7 @@ CudaDensityFittingSourceDiagnostic cuda_density_fitting_integral_source_diagnost
 generativeqc_status create_cuda_density_fitting_integral_source(
     int, const std::vector<core::System>&, const std::vector<core::System>&,
     CudaDensityFittingIntegralSource** source, std::vector<double>& metrics, std::size_t& nbf,
-    std::size_t& naux, std::string& detail) {
+    std::size_t& naux, std::string& detail, const cuda_execution::CudaDfSourcePolicy*) {
   if (source != nullptr) *source = nullptr;
   metrics.clear();
   nbf = 0;

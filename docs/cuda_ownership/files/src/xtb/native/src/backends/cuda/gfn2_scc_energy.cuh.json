@@ -1,7 +1,7 @@
 {
   "path": "src/xtb/native/src/backends/cuda/gfn2_scc_energy.cuh",
-  "reason": "Vendored transitional GFN2 CUDA source for #560 native backend admission; counted conservatively as handwritten scientific ownership until generated/GenerativeQC-native replacements retire the equivalent path.",
+  "reason": "GFN2 SCC electronic-energy descriptor/workspace/error ABI; scientific scalar energy updates are compiler-owned.",
   "regions": [],
-  "role": "scientific",
+  "role": "runtime",
   "subsystem": "gfn2"
 }

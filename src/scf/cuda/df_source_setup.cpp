@@ -11,35 +11,10 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/df_source_internal.hpp"
 #include "scf/cuda/df_source_kernels.hpp"
-#include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/df_source_capacity.hpp"
 
 namespace generativeqc::scf::cuda_execution {
-
-/** Host topology validation, public-basis transforms, metadata uploads and metric setup. The
- * generated launch boundary alone requires CUDA compilation. */
-bool cuda_df_shell_domain(const core::System& system, const char* role, std::string& detail) {
-  for (const auto& shell : system.shells) {
-    if (shell.angular_momentum > 3U) {
-      detail = std::string("CUDA DF ") + role + " shells beyond f (l > 3) are unsupported";
-      return false;
-    }
-  }
-  return true;
-}
-
-bool cuda_df_value_domain(const core::System& orbital, const core::System& auxiliary,
-                          std::string& detail) {
-  if (!cuda_df_shell_domain(orbital, "orbital", detail)) return false;
-  for (const auto& shell : auxiliary.shells) {
-    if (shell.angular_momentum > 4U) {
-      detail = "CUDA DF auxiliary value shells beyond g (l > 4) are unsupported";
-      return false;
-    }
-  }
-  return true;
-}
 
 namespace {
 
@@ -82,7 +57,7 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
     int device_id, const std::vector<core::System>& orbital_systems,
     const std::vector<core::System>& auxiliary_systems,
     CudaDensityFittingIntegralSourceImpl** source, std::vector<double>& metrics, std::size_t& nbf,
-    std::size_t& naux, std::string& detail) {
+    std::size_t& naux, std::string& detail, const CudaDfSourcePolicy& policy) {
   detail.clear();
   metrics.clear();
   nbf = 0U;
@@ -95,7 +70,7 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   *source = nullptr;
   const std::size_t batch_size = orbital_systems.size();
   for (std::size_t system = 0; system < batch_size; ++system) {
-    if (!cuda_df_value_domain(orbital_systems[system], auxiliary_systems[system], detail)) {
+    if (!cuda_df_value_domain(orbital_systems[system], auxiliary_systems[system], policy, detail)) {
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     }
   }
@@ -199,22 +174,15 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
       new (std::nothrow) CudaDensityFittingIntegralSourceImpl{});
   if (!candidate) return GENERATIVEQC_STATUS_OUT_OF_MEMORY;
   candidate->device_id = device_id;
-  const auto requested_mapping = cuda_policy::df_value_mapping_requested();
+  const auto requested_mapping = policy.requested_value_mapping;
   candidate->value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, true);
   candidate->raw_value_mapping = resolve_cuda_df_source_value_mapping(requested_mapping, false);
-  if (!cuda_policy::df_value_math_requested(candidate->value_math)) {
-    detail = "GENERATIVEQC_DF_VALUE_MATH must be auto, generic, polynomial rys or candidate";
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  }
+  candidate->value_math = policy.value_math;
   // Freeze the angular domain with this immutable basis owner. Auxiliary g
   // retains its explicit value lowering and the separate F11 response policy.
   for (const auto& auxiliary : auxiliary_systems)
     for (const auto& shell : auxiliary.shells)
       candidate->has_auxiliary_g |= shell.angular_momentum == 4U;
-  if (candidate->has_auxiliary_g && candidate->value_math != 0U) {
-    detail = "g auxiliary DF values require the generic generated math policy";
-    return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  }
   candidate->batch_size = batch_size;
   candidate->public_nbf = public_nbf;
   candidate->public_naux = public_naux;
