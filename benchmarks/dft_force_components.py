@@ -435,6 +435,11 @@ def _normalize_stationary(
         "schema": "generativeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
         "grid_work_plan": dict(_mapping(work.get("grid_work_plan"))),
+        "resident_ao_selection": (
+            None
+            if work.get("resident_ao_selection") is None
+            else dict(_mapping(work["resident_ao_selection"]))
+        ),
         "native_integrals_required": work.get("native_integrals_required"),
         "resource_bounds": {
             name: _int_or_none(work.get(name))
