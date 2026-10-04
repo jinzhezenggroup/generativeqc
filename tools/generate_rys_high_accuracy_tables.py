@@ -1,4 +1,4 @@
-"""Regenerate strict three/four-root coefficients for the common Rys evaluator.
+"""Regenerate strict two-through-five-root coefficients for the common evaluator.
 
 The existing degree-13 tables have accurate nodes but weight interpolation
 errors near 1e-12. This offline tool keeps their 2.5-wide intervals, series
@@ -68,7 +68,7 @@ def generate() -> typing.Any:
         count = degree + 1
         angles = [mp.pi * (j + mp.mpf("0.5")) / count for j in range(count)]
         cosines = [[mp.cos(k * angle) for angle in angles] for k in range(count)]
-        for nroots in (3, 4):
+        for nroots in (2, 3, 4, 5):
             intervals = (35 + 5 * nroots) * 2 // 5 + 1
             coefficients = {}
             for interval in range(intervals):
