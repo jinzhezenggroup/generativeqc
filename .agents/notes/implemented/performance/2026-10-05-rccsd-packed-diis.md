@@ -1,6 +1,6 @@
 # Decision: restrict pair packing to DIIS storage first
 
-Status: implemented; real-device and endpoint qualification pending
+Status: implemented, opt-in; frozen endpoint qualified; current integration refresh pending
 Date: 2026-10-05
 
 ## Representation and scientific boundary
@@ -53,8 +53,9 @@ both allocations, stream, events and provider state.
 The source-derived history payload changes from `16*h*F` bytes to
 `16*h*C+C` bytes, before alignment and scalar audit payloads. The C term is the
 one-byte orbit-weight vector, not an omitted conversion scratch. At ethane230,
-m=1989 and h=8, the nominal saving is251,083,404 bytes. This is a formula, not
-a measured allocation result until the retained endpoint exists.
+m=1989 and h=8, the nominal saving is251,083,404 bytes. Frozen endpoint records
+measure251,083,520 bytes after actual alignment; keep model and observation
+distinct.
 
 Initial host symmetry admission makes O(m²) bitwise comparisons. Each packed
 history insertion reads both full amplitude/error tensors and writes the two
@@ -98,6 +99,26 @@ All changed production/compiler/test sources match the frozen n2 checkout by
 SHA-256. Full energy/force/budget-admission evidence is still required.
 
 No performance result or default promotion is inferred from these host gates.
+
+## Frozen endpoint result and selection
+
+Jobs2327–2329 pass complete energy, full force and constrained-budget admission;
+postprocessing2331 passes all-repeat energy/replay, all-component force and the
+independent two-coordinate/two-step large FD re-audit. The complete records,
+identities and work accounting are retained in
+`benchmarks/results/cc-packed-diis-1902/`. Small-water all-coordinate independent
+FD is separate; the large check does not qualify all nuclear coordinates.
+
+Ethane device/complete-energy capacity falls251,083,520 bytes. Complete force
+peak remains7,107,400,123 bytes because later response phases dominate it. Full
+history is refused at a2,735,193,944-byte complete scalar budget, while packed
+history converges there. Unpublished rejected-run work stays null.
+
+There is no complete wall-time benefit: large CCSD medians145.885→145.959 s;
+the tiny-water CCSD/DIIS paths regress slightly. Large DIIS alone saves about
+11 ms. Keep packing opt-in as a capacity tool, preserving full history as the
+ordinary latency choice. Do not extend packing into full contraction state
+without a consumer and new complete-endpoint evidence.
 
 ## Current prepared-provider integration
 
