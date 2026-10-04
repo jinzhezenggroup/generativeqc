@@ -98,6 +98,8 @@ struct LambdaOptions { std::size_t max_bytes=1U<<20; };
 struct LambdaDiagnostic {
   std::size_t owned_device_bytes{},numeric_capacity_bytes{},h2d_bytes{},d2h_bytes{},synchronizations{};
   std::size_t df_auxiliary_slices{},df_contraction_terms{},df_generated_kernels{};
+  bool df_auxiliary_reduction{};
+  std::size_t df_preparation_calls{},df_reduced_actions{};
   const char *shared_program_hash{},*independent_program_hash{};
 };
 struct CudaFixedOrbitalResponseResult { TrackingVector df_bov,df_bvv; };
