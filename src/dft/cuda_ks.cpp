@@ -289,10 +289,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   bool complete_precision_inventory_domain() const noexcept {
     // Version-1 detailed census covers the ordinary host-controlled CUDA-KS
-    // schedule with device-resident semilocal XC. Device chunks have a separate
-    // replay owner, host-unfused XC has CPU arithmetic, and nonlocal correlation
-    // needs its own operator identity before any of them can be certified.
-    return !device_chunk_mode && !nonlocal_correlation &&
+    // schedule with device-resident semilocal XC and, when present, the
+    // device-resident nonlocal owner. Device chunks have a separate replay owner
+    // and host-unfused XC/nonlocal work has arithmetic outside this census.
+    return !device_chunk_mode && (!nonlocal_correlation || device_nonlocal) &&
            options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
   }
 
@@ -346,6 +346,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
                                 scf::PrecisionArithmeticMode::Strict, exchange_builds);
       record_precision_operator(scf::PrecisionOperatorKind::Xc, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
+      if (nonlocal_correlation)
+        record_precision_operator(scf::PrecisionOperatorKind::NonlocalCorrelation,
+                                  scf::PrecisionDtype::Fp64, scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionDtype::Fp64,
                                 scf::PrecisionArithmeticMode::Strict);
       record_precision_operator(scf::PrecisionOperatorKind::PhysicalResidual,
@@ -729,10 +732,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool select_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
     if (ao_selection && !select_ao && std::strcmp(ao_selection, "0") != 0)
       throw std::invalid_argument("GENERATIVEQC_CUDA_KS_ACTIVE_AO accepts only 0 or 1");
-    if (select_ao && (host_unfused || precision_schedule.any_lower_precision() ||
-                      !is_semilocal_family(functional, SemilocalFamily::Wb97mv)))
+    if (select_ao &&
+        (host_unfused || !cuda_xc_execution_capabilities(xc_layout).local_ao_selection))
       throw std::invalid_argument(
-          "experimental local SCF AO maps require device-fused FP64 WB97M-V");
+          "experimental local SCF AO maps require a device-fused physical FP64 XC layout");
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
@@ -1426,11 +1429,13 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_pending = true;  // Any partial CUDA submission is drained on failure.
     try {
       std::string detail;
-      const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
-      pending_mixed_coulomb = mixed_stage && precision_schedule.uses_lower_precision(
-                                                 cuda_ks_precision_region::kCoulombJ);
-      pending_mixed_density = mixed_stage && precision_schedule.uses_lower_precision(
-                                                 cuda_ks_precision_region::kDensityContraction);
+      const auto iteration_precision = resolve_cuda_ks_iteration_precision(
+          precision_schedule, strict_refinement,
+          cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+      pending_mixed_coulomb =
+          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
+      pending_mixed_density =
+          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kDensityContraction);
       // Provider selection stays inside the prepared Fock facade. For a fitted
       // hybrid, the first cold/warm-seed build has no trusted canonical factor
       // and stays dense. After a successful proposal becomes the current density,

@@ -119,6 +119,9 @@ def _stationary_work_counts(
         _store_counter(counts["capacity"], key, executor.get(key))
     for key in ("ordered_quartets", "exchange_ordered_quartets"):
         _store_counter(counts["capacity"], key, work.get(key))
+    _store_counter(
+        counts["capacity"], "phased_becke_bytes", work.get("phased_becke_bytes")
+    )
     for output_key, source_key in (
         ("semilocal_geometry_points", "xc_points"),
         ("partition_grid_pair_visits", "grid_pair_visits"),
@@ -134,6 +137,8 @@ def _stationary_work_counts(
         ("bulk_packed_descriptors", "bulk_packed_descriptors"),
         ("scalar_packed_descriptors", "scalar_packed_descriptors"),
         ("geometry_batches", "geometry_batches"),
+        ("becke_pair_state_evaluations", "becke_pair_state_evaluations"),
+        ("phased_becke_batches", "phased_becke_batches"),
     ):
         _store_counter(counts["observed"], output_key, work.get(source_key))
     return counts
@@ -338,10 +343,13 @@ def _normalize_stationary(
     wall = _empty_components()
     profiled_ms = _empty_components()
 
-    wall["stationary_integral_derivatives"] = _value(
-        phases,
-        "primitive_derivative_reduction_sync",
-        field="timeline.primitive_derivative_reduction_sync",
+    wall["stationary_integral_derivatives"] = _sum_present(
+        (
+            phases.get("prepared_stationary_integral_derivatives"),
+            phases.get("direct_shell_integral_derivatives"),
+            phases.get("primitive_derivative_reduction_sync"),
+        ),
+        field="timeline.stationary_integral_derivatives",
     )
     legacy_geometry = _value(
         phases,
@@ -434,6 +442,7 @@ def _normalize_stationary(
     return {
         "schema": "generativeqc.dft-force-components.v1",
         "source_route": "stationary-exclusive-wall",
+        "source_exclusive_wall_seconds": dict(phases),
         "grid_work_plan": dict(_mapping(work.get("grid_work_plan"))),
         "resident_ao_selection": (
             None

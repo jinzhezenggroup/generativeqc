@@ -109,6 +109,18 @@ _DOUBLE = ct.POINTER(ct.c_double)
 _INT = ct.POINTER(ct.c_int64)
 _SOURCE_NAMES = STATIONARY_RUNTIME_SOURCE_NAMES
 _DEFAULT_MAX_PRIMITIVE_RECORDS = 16_000_000
+_AUTO_PHASED_BECKE_MIN_ATOMS = 48
+
+
+def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
+    """Use the measured large-system phase schedule unless explicitly overridden."""
+    if type(atoms) is not int or atoms < 1:
+        raise ValueError("phased Becke atom count must be a positive integer")
+    if selection is None:
+        return atoms >= _AUTO_PHASED_BECKE_MIN_ATOMS
+    if type(selection) is not bool:
+        raise TypeError("phased Becke selection must be boolean or None")
+    return selection
 
 
 class _StationaryTaskSource(typing.Protocol):
@@ -491,9 +503,11 @@ class _CudaSources:
         source_names: tuple[str, ...] = _SOURCE_NAMES,
         integral_derivatives: bool = True,
         cooperative_becke: bool | None = None,
+        phased_becke: bool | None = None,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
+        phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
         self.source_names = source_names
         self.integral_derivatives = integral_derivatives
         if file_hash(artifact.library) != artifact.metadata["binary_sha256"]:
@@ -714,6 +728,7 @@ class _CudaSources:
             target=compiler.target if target is None else target,
             budget_bytes=budget,
             cooperative_becke=cooperative_becke,
+            phased_becke=phased_becke,
         )
         self._call(
             "stationary_create",
@@ -737,6 +752,19 @@ class _CudaSources:
             self.resources.becke_threads_per_point,
             self.resources.becke_shared_bytes,
         )
+        configure_phased = getattr(lib, "stationary_configure_phased_becke_v1", None)
+        self.phased_becke_supported = configure_phased is not None and hasattr(
+            lib, "stationary_phased_becke_metrics_v1"
+        )
+        if self.resources.phased_becke_bytes and self.phased_becke_supported:
+            configure_phased.argtypes = [ct.c_void_p, ct.c_size_t, *tail]
+            self._call(
+                "stationary_configure_phased_becke_v1",
+                self.handle,
+                self.resources.phased_becke_bytes,
+            )
+        # An older AOT artifact retains its bounded route. The plan reservation
+        # stays conservative; only native metrics report actual phase allocation.
         if profile_device:
             self.enable_profile()
         self._call(
@@ -1550,6 +1578,21 @@ class _CudaSources:
             )
         )
         metrics["primitive_batches"] = metrics["task_batches"]
+        phased_metrics = getattr(
+            self.library, "stationary_phased_becke_metrics_v1", None
+        )
+        if phased_metrics is not None:
+            phased_metrics.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(ct.c_uint64),
+                ct.c_size_t,
+            ]
+            phased_values = (ct.c_uint64 * 2)()
+            if phased_metrics(self.handle, phased_values, 2):
+                raise RuntimeError("stationary phased Becke metrics unavailable")
+            metrics["phased_becke_bytes"], metrics["phased_becke_batches"] = (
+                phased_values
+            )
         profile = (ct.c_double * 10)()
         if self.profile_device:
             self.library.stationary_profile_metrics.argtypes = [
@@ -2091,6 +2134,7 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "center_distance_evaluations",
         "center_geometry_preparations",
         "becke_pair_state_evaluations",
+        "phased_becke_batches",
     ):
         if name in after and name in before:
             result[name] = after[name] - before[name]
@@ -2310,6 +2354,7 @@ def _plan_stationary_cuda_tile(
         - grid_plan.peak_bytes
         - sum(value.peak_bytes for value in tensor_plans.values())
         - native_geometry_reserve,
+        phased_becke=_resolve_phased_becke_policy(na, None),
     )
     return _StationaryCudaTileLayout(
         grid_plan,
@@ -3167,10 +3212,24 @@ def _complete_rks_cuda_gradient_diagnostic(
         # Keep admission/peak accounting conservative, but verify actual storage.
         actual_center_bytes = work["center_geometry_bytes"]
         planned_center_bytes = source_resources.center_geometry_bytes
+        planned_phase_bytes = source_resources.phased_becke_bytes
+        expected_source_bytes = (
+            source_bytes - planned_center_bytes + actual_center_bytes
+        )
+        if "phased_becke_bytes" in work:
+            if work["phased_becke_bytes"] not in (0, planned_phase_bytes):
+                raise RuntimeError(
+                    "stationary phase allocation disagrees with admitted bytes"
+                )
+            expected_source_bytes -= planned_phase_bytes - work["phased_becke_bytes"]
+        elif planned_phase_bytes:
+            if getattr(sources, "phased_becke_supported", True):
+                raise RuntimeError("stationary phase allocation metrics missing")
+            # This is a known old-ABI fallback, not a zero-filled work counter.
+            expected_source_bytes -= planned_phase_bytes
         if (
             actual_center_bytes not in (0, planned_center_bytes)
-            or work["owned_device_bytes"]
-            != source_bytes - planned_center_bytes + actual_center_bytes
+            or work["owned_device_bytes"] != expected_source_bytes
         ):
             raise RuntimeError("stationary allocation disagrees with admitted bytes")
         timeline.switch("owner_cleanup")
