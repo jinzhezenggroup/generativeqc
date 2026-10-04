@@ -166,5 +166,5 @@ def test_cmake_forwards_declared_codegen_dependencies_to_cache() -> None:
     helper = (ROOT / "cmake" / "GenerativeQCGenerated.cmake").read_text()
     assert "_generativeqc_codegen_byproducts" in helper
     assert "_generativeqc_codegen_dependencies" in helper
-    assert '--byproduct "\${_generativeqc_byproduct}"' in helper
-    assert '--dependency "\${_generativeqc_dependency}"' in helper
+    assert '--byproduct "${_generativeqc_byproduct}"' in helper
+    assert '--dependency "${_generativeqc_dependency}"' in helper
