@@ -11,6 +11,7 @@
 
 #include "data/parameters/gfn2.hpp"
 #include "generated_gfn2_pair_native.hpp"
+#include "generated_gfn2_scc_free_energy_native.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
 namespace {
@@ -159,7 +160,13 @@ generativeqc_xtb_status_t add_repulsion_cpu(const RepulsionPlan& plan, const dou
           error = "compiler-generated GFN2 repulsion pair evaluation failed";
           return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
         }
-        energies[batch] += pair.energy;
+        double updated_energy = 0.0;
+        if (!generativeqc::xtb::generated::accumulate_gfn2_component_energy(
+                energies[batch], pair.energy, updated_energy)) {
+          error = "compiler-generated GFN2 repulsion energy accumulation failed";
+          return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
+        }
+        energies[batch] = updated_energy;
 
         if (forces != nullptr) {
           double fx = 0.0;
