@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "molecule/nuclear_gradient.hpp"
 #include "posthf/cuda_derivative.hpp"
 #include "posthf/mp2_derivative.hpp"
 #include "posthf/mp2_derivative_common.hpp"
@@ -21,27 +22,6 @@ void check_cuda_derivative(generativeqc_status status, const std::string& detail
   throw std::runtime_error(message);
 }
 
-void add_nuclear_repulsion_gradient(const core::System& system, std::vector<double>& gradient) {
-  for (std::size_t a = 0; a < system.atoms.size(); ++a)
-    for (std::size_t b = 0; b < a; ++b) {
-      double distance2 = 0.0;
-      std::array<double, 3> displacement{};
-      for (std::size_t axis = 0; axis < 3; ++axis) {
-        displacement[axis] = system.atoms[a].position[axis] - system.atoms[b].position[axis];
-        distance2 += displacement[axis] * displacement[axis];
-      }
-      if (!(distance2 > 0.0) || !std::isfinite(distance2))
-        throw std::invalid_argument("nuclear repulsion derivative has coincident atoms");
-      const double factor =
-          static_cast<double>(system.atoms[a].ionic_charge() * system.atoms[b].ionic_charge()) /
-          (distance2 * std::sqrt(distance2));
-      for (std::size_t axis = 0; axis < 3; ++axis) {
-        const double value = factor * displacement[axis];
-        gradient[3 * a + axis] -= value;
-        gradient[3 * b + axis] += value;
-      }
-    }
-}
 }  // namespace
 #endif
 
@@ -71,7 +51,7 @@ std::vector<double> conventional_derivative_cuda(const core::System& system,
             scf::cuda_policy::one_electron_derivative_mapping_requested(), stage_budget, gradient,
             detail);
         check_cuda_derivative(status, detail);
-        add_nuclear_repulsion_gradient(system, gradient);
+        molecule::add_nuclear_repulsion_gradient(system, gradient);
         return gradient;
       },
       [&](const std::array<std::size_t, 4>& shells, std::span<const double> local,
