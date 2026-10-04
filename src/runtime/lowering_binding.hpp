@@ -45,7 +45,9 @@ struct NativeLoweringConstraints {
 };
 
 struct NativeLoweringRequest {
-  std::string_view scientific_identity, semantic_identity;
+  // Complete canonical request identity includes precision admission and effects;
+  // semantic identity alone only identifies the underlying operation.
+  std::string_view scientific_identity, semantic_identity, identity;
   PrecisionDtype dtype{PrecisionDtype::Fp64}, accumulation_dtype{PrecisionDtype::Fp64};
   std::array<PrecisionDtype, 4> input_dtypes{};
   std::size_t inputs{};
@@ -64,7 +66,7 @@ struct NativeLoweringCost {
 };
 
 struct NativeLoweringCandidate {
-  std::string_view identity, semantic_identity;
+  std::string_view identity, semantic_identity, request_identity, precision_identity;
   std::string_view provider, provider_version, algorithm, layout_identity, fusion_identity;
   std::string_view target_identity, compilation_identity;
   std::size_t precision{};
@@ -140,9 +142,9 @@ inline NativeLoweringDecision select_native_lowering(
       request.precisions.empty() || request.precisions.size() > 16 ||
       request.inputs > request.input_dtypes.size() ||
       !lowering_digest(request.scientific_identity) ||
-      !lowering_digest(request.semantic_identity) || !lowering_digest(target_identity) ||
-      !lowering_digest(compilation_identity) || !lowering_dtype(request.dtype) ||
-      !lowering_dtype(request.accumulation_dtype) ||
+      !lowering_digest(request.semantic_identity) || !lowering_digest(request.identity) ||
+      !lowering_digest(target_identity) || !lowering_digest(compilation_identity) ||
+      !lowering_dtype(request.dtype) || !lowering_dtype(request.accumulation_dtype) ||
       request.constraints.determinism > LoweringDeterminism::ExactOrder ||
       (qualified_incumbent && *qualified_incumbent >= candidates.size()))
     throw std::invalid_argument("invalid or unbounded native lowering request");
@@ -184,10 +186,16 @@ inline NativeLoweringDecision select_native_lowering(
   };
   for (std::size_t i = 0; i != candidates.size(); ++i) {
     const auto& candidate = candidates[i];
-    if (candidate.semantic_identity != request.semantic_identity ||
+    if (candidate.request_identity != request.identity ||
+        candidate.semantic_identity != request.semantic_identity ||
         candidate.precision >= request.precisions.size() || !lowering_digest(candidate.identity) ||
         candidate.determinism > LoweringDeterminism::ExactOrder)
       throw std::invalid_argument("native candidates must consume the same admitted request");
+    // The index is only a lookup aid: it cannot reinterpret another variant.
+    // Offers without typed execution remain explicit negative evidence.
+    if ((!candidate.precision_identity.empty() || candidate.rejection.empty()) &&
+        candidate.precision_identity != request.precisions[candidate.precision].identity)
+      throw std::invalid_argument("native candidate precision identity differs from the request");
     for (std::size_t j = 0; j != i; ++j)
       if (candidates[j].identity == candidate.identity)
         throw std::invalid_argument("duplicate native lowering candidate identity");

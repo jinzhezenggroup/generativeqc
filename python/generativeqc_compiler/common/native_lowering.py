@@ -15,6 +15,7 @@ from dataclasses import asdict
 
 from .lowering_contract import LoweringConstraints
 from .provenance import canonical_hash
+from .resources import checked_bytes
 
 if typing.TYPE_CHECKING:
     from collections.abc import Sequence
@@ -37,8 +38,12 @@ def _dtype(value: str) -> str:
     return _NATIVE + "PrecisionDtype::" + _DTYPE[value]
 
 
+def _integer(value: int) -> str:
+    return f"{checked_bytes(value, 'native lowering integer')}ULL"
+
+
 def _number(value: int | None) -> str:
-    return "std::nullopt" if value is None else f"{value}ULL"
+    return "std::nullopt" if value is None else _integer(value)
 
 
 def _boolean(value: bool) -> str:
@@ -108,7 +113,7 @@ def native_lowering_portfolio(
             + "},{"
             + ",".join(map(_dtype, precision.input_dtypes))
             + "},"
-            + str(len(precision.input_dtypes))
+            + _integer(len(precision.input_dtypes))
             + ","
             + _dtype(precision.publication_dtype)
             + ","
@@ -129,12 +134,12 @@ def native_lowering_portfolio(
     lines += [
         "}};",
         f"static const {_NATIVE}NativeLoweringRequest {name}_request{{",
-        f"{json.dumps(request.scientific_identity)},{json.dumps(request.semantic_identity)},",
+        f"{json.dumps(request.scientific_identity)},{json.dumps(request.semantic_identity)},{json.dumps(request.identity)},",
         f"{_dtype(request.dtype)},{_dtype(request.accumulation_dtype)},",
         "{"
         + ",".join(map(_dtype, request.input_dtypes))
         + "},"
-        + str(len(request.input_dtypes))
+        + _integer(len(request.input_dtypes))
         + f",{name}_precisions,{{",
         ",".join(
             _number(getattr(limits, field))
@@ -149,7 +154,7 @@ def native_lowering_portfolio(
         + _NATIVE
         + "LoweringDeterminism::"
         + _ORDER[limits.determinism]
-        + f",{_boolean(limits.capture_required)},{limits.maximum_candidates}"
+        + f",{_boolean(limits.capture_required)},{_integer(limits.maximum_candidates)}"
         + "}};",
         f"static const std::array<{_NATIVE}NativeLoweringCandidate,{len(candidates)}> {name}_candidates{{{{",
     ]
@@ -163,6 +168,8 @@ def native_lowering_portfolio(
         fields = [
             json.dumps(candidate.identity),
             json.dumps(request.semantic_identity),
+            json.dumps(candidate.request.identity),
+            json.dumps(execution.precision.identity if execution else ""),
             json.dumps("+".join(provider.name for provider in candidate.providers)),
             json.dumps(
                 "+".join(provider.version or "" for provider in candidate.providers)
@@ -182,7 +189,7 @@ def native_lowering_portfolio(
                 canonical_hash(asdict(candidate.target)) if candidate.target else ""
             ),
             json.dumps(compilation_identity),
-            str(request.precisions.index(execution.precision) if execution else 0),
+            _integer(request.precisions.index(execution.precision) if execution else 0),
             "{"
             + ",".join(
                 [
@@ -201,7 +208,7 @@ def native_lowering_portfolio(
                         )
                     ),
                     *(
-                        str(getattr(cost, field) if cost else 0)
+                        _integer(getattr(cost, field) if cost else 0)
                         for field in (
                             "cast_bytes",
                             "pack_bytes",
@@ -213,10 +220,10 @@ def native_lowering_portfolio(
                 ]
             )
             + "}",
-            str(candidate.workspace_bytes),
-            str(candidate.provider_bytes),
+            _integer(candidate.workspace_bytes),
+            _integer(candidate.provider_bytes),
             *(
-                str(getattr(execution, field) if execution else 0)
+                _integer(getattr(execution, field) if execution else 0)
                 for field in ("temporary_bytes", "cache_bytes", "host_bytes")
             ),
             _NATIVE
