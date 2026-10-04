@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-import shutil
 import subprocess
 from itertools import product
 from pathlib import Path
@@ -127,12 +126,10 @@ def test_deterministic_bounded_host_emission(generated_source: str) -> None:
 
 @pytest.fixture(scope="module")
 def compiled_evaluator(
-    generated_source: str, tmp_path_factory: pytest.TempPathFactory
+    generated_source: str,
+    tmp_path_factory: pytest.TempPathFactory,
+    native_cxx,
 ) -> ctypes.CDLL:
-    compiler = shutil.which("c++")
-    launcher = shutil.which("ccache")
-    if compiler is None or launcher is None:
-        pytest.skip("compiled ERI gate requires a C++ compiler and ccache")
     directory = tmp_path_factory.mktemp("eri_cpu")
     (directory / "generated_eri_cpu.hpp").write_text(generated_source)
     source = directory / "probe.cpp"
@@ -224,23 +221,11 @@ def compiled_evaluator(
         "}\n"
     )
     library = directory / "probe.so"
-    subprocess.run(
-        [
-            launcher,
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-ffp-contract=off",
-            "-shared",
-            "-fPIC",
-            str(source),
-            "-o",
-            str(library),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=180,
+    native_cxx.build_shared(
+        [source],
+        library,
+        compile_args=("-std=c++20", "-O2", "-ffp-contract=off"),
+        compile_timeout=180,
     )
     loaded = ctypes.CDLL(str(library))
     loaded.evaluate.argtypes = [ctypes.POINTER(ctypes.c_double)] * 3
@@ -412,17 +397,13 @@ def test_all_ordered_spd_components_match_independent_libcint(
 
 
 def test_native_ao_component_indices_reuse_generated_authority(
-    generated_source: str, tmp_path: Path
+    generated_source: str, tmp_path: Path, native_cxx
 ) -> None:
     """Run the actual AO construction/preparation against generated metadata.
 
     Instrument only classification calls; no recurrence is compiled or mocked.
     Native basis.cpp owns component enumeration and normalization, including f/g.
     """
-    compiler = shutil.which("c++")
-    launcher = shutil.which("ccache")
-    if compiler is None or launcher is None:
-        pytest.skip("native AO metadata gate requires a C++ compiler and ccache")
     root = Path(__file__).resolve().parents[2]
     source = (root / "src/integrals/s_integrals.cpp").read_text()
     ao_helpers = (
@@ -614,34 +595,17 @@ int main() {
     )
     probe = tmp_path / "ao_component_indices.cpp"
     probe.write_text(text)
-    objects = []
-    for path in (probe, root / "src/molecule/basis.cpp"):
-        output = tmp_path / (path.stem + ".o")
-        subprocess.run(
-            [
-                launcher,
-                compiler,
-                "-std=c++20",
-                "-O1",
-                "-ffp-contract=off",
-                "-I" + str(root / "src"),
-                "-I" + str(root / "include"),
-                "-c",
-                str(path),
-                "-o",
-                str(output),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        objects.append(str(output))
     binary = tmp_path / "ao_component_indices"
-    subprocess.run(
-        [compiler, *objects, "-o", str(binary)],
-        check=True,
-        capture_output=True,
-        text=True,
+    native_cxx.build_executable(
+        [probe, root / "src/molecule/basis.cpp"],
+        binary,
+        compile_args=(
+            "-std=c++20",
+            "-O1",
+            "-ffp-contract=off",
+            "-I" + str(root / "src"),
+            "-I" + str(root / "include"),
+        ),
     )
     result = subprocess.run([str(binary)], check=True, capture_output=True, text=True)
     print(result.stdout, end="")
