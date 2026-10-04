@@ -34,6 +34,9 @@ unsigned blocks(std::size_t elements) { return static_cast<unsigned>((elements +
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept {
   batch.direct_coulomb_reachable = cuda_policy::direct_coulomb_reachable_mode();
   batch.direct_hermite_convolution = cuda_policy::direct_hermite_convolution_mode();
+  batch.direct_scalar_center_gradient =
+      cuda_policy::scalar_center_gradient_requested() &&
+      ((batch.direct_coulomb_reachable | batch.direct_hermite_convolution) & 2U) == 0U;
 }
 
 GeneratedCoulombPlan::~GeneratedCoulombPlan() {

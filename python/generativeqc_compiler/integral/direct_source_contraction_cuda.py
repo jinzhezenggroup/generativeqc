@@ -34,6 +34,11 @@ _SOURCE = r"""#pragma once
 // Arithmetic and reduction order are preserved; host plans and queue policy remain native.
 namespace generativeqc::scf::cuda_execution {
 
+/** Result layout follows the explicit consumer; scalar callers remain unchanged. */
+template <typename Scalar, bool PairedRanges, bool AllCenterGradient>
+using CartesianSourceResult = std::conditional_t<AllCenterGradient, CartesianQuartetGradient,
+                                                CartesianRangeResult<Scalar, PairedRanges>>;
+
 /**
  * Contract one quartet of normalized Cartesian source AOs.
  *
@@ -43,8 +48,8 @@ namespace generativeqc::scf::cuda_execution {
  * from the dominant direct Fock and force recurrences.
  */
 template <unsigned FirstShellAngular, unsigned SecondShellAngular, unsigned ThirdShellAngular,
-          unsigned FourthShellAngular, typename Scalar, bool PairedRanges = false>
-__device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cartesian_source_shell_class(
+          unsigned FourthShellAngular, typename Scalar, bool PairedRanges = false, bool AllCenterGradient = false>
+__device__ inline CartesianSourceResult<Scalar, PairedRanges, AllCenterGradient> contracted_eri_cartesian_source_shell_class(
     const DeviceBatch& batch, std::int64_t ao_i, std::int64_t ao_j, std::int64_t ao_k,
     std::int64_t ao_l, std::int32_t shell_i, std::int32_t shell_j, std::int32_t shell_k,
     std::int32_t shell_l, std::int64_t derivative_coordinate,
@@ -78,8 +83,10 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cart
   const bool reachable_coulomb = (batch.direct_coulomb_reachable & source_role) != 0;
   const bool hermite_convolution = !std::is_same_v<Scalar, MixedPrecisionFloat> &&
       (batch.direct_hermite_convolution & source_role) != 0;
-  CartesianRangeResult<Scalar, PairedRanges> result;
-  if constexpr (PairedRanges)
+  CartesianSourceResult<Scalar, PairedRanges, AllCenterGradient> result;
+  if constexpr (AllCenterGradient)
+    result = {};
+  else if constexpr (PairedRanges)
     result = {scalar<Scalar>(0.0), scalar<Scalar>(0.0)};
   else
     result = scalar<Scalar>(0.0);
@@ -95,7 +102,18 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cart
                                            batch.primitive_coefficients[b] *
                                            batch.primitive_coefficients[c] *
                                            batch.primitive_coefficients[d];
-          if constexpr (PairedRanges) {
+          if constexpr (AllCenterGradient) {
+            static_assert(std::is_same_v<Scalar, double> && !PairedRanges);
+            const auto gradient = primitive_eri_scalar_center_gradient<
+                FirstShellAngular, SecondShellAngular, ThirdShellAngular, FourthShellAngular>(
+                batch.primitive_exponents[a], first, angular_first,
+                batch.primitive_exponents[b], second, angular_second,
+                batch.primitive_exponents[c], third, angular_third,
+                batch.primitive_exponents[d], fourth, angular_fourth, range, omega);
+            for (unsigned center = 0; center < 4U; ++center)
+              for (unsigned axis = 0; axis < 3U; ++axis)
+                result.center[center][axis] += weight * gradient.center[center][axis];
+          } else if constexpr (PairedRanges) {
             const auto values = primitive_eri_cartesian_shell_pairs<
                 FirstShellAngular, SecondShellAngular, ThirdShellAngular,
                 FourthShellAngular, Scalar, true>(
@@ -140,8 +158,8 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cart
 }
 
 /** Canonicalize one Cartesian source quartet to its exact shell class. */
-template <unsigned ShellClass, typename Scalar, bool PairedRanges = false>
-__device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cartesian_source_shell_class(
+template <unsigned ShellClass, typename Scalar, bool PairedRanges = false, bool AllCenterGradient = false>
+__device__ inline CartesianSourceResult<Scalar, PairedRanges, AllCenterGradient> contracted_eri_cartesian_source_shell_class(
     const DeviceBatch& batch, std::int32_t system, std::int32_t i, std::int32_t j, std::int32_t k,
     std::int32_t l, std::int64_t derivative_coordinate,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
@@ -166,7 +184,13 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cart
   unsigned angular_k = batch.shell_angular[shell_k];
   unsigned angular_l = batch.shell_angular[shell_l];
 
+  // Scalar values are permutation invariant. Slot gradients also need the
+  // inverse permutation; equal AO IDs cannot recover slot identity afterwards.
+  unsigned slots[4] = {0, 1, 2, 3};
   if (angular_i < angular_j) {
+    if constexpr (AllCenterGradient) {
+      const unsigned slot = slots[0]; slots[0] = slots[1]; slots[1] = slot;
+    }
     const std::int32_t ao = i;
     i = j;
     j = ao;
@@ -178,6 +202,9 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cart
     angular_j = angular;
   }
   if (angular_k < angular_l) {
+    if constexpr (AllCenterGradient) {
+      const unsigned slot = slots[2]; slots[2] = slots[3]; slots[3] = slot;
+    }
     const std::int32_t ao = k;
     k = l;
     l = ao;
@@ -191,6 +218,11 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cart
   const unsigned first_pair_class = direct_shell_pair_class_cuda(angular_i, angular_j);
   const unsigned second_pair_class = direct_shell_pair_class_cuda(angular_k, angular_l);
   if (first_pair_class < second_pair_class) {
+    if constexpr (AllCenterGradient) {
+      const unsigned first_slot = slots[0], second_slot = slots[1];
+      slots[0] = slots[2]; slots[1] = slots[3];
+      slots[2] = first_slot; slots[3] = second_slot;
+    }
     const std::int32_t first_ao = i;
     const std::int32_t second_ao = j;
     i = k;
@@ -258,15 +290,25 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> contracted_eri_cart
     }
   }
 
-  return contracted_eri_cartesian_source_shell_class<FirstShellAngular, SecondShellAngular,
-                                                     ThirdShellAngular, FourthShellAngular, Scalar, PairedRanges>(
+  const auto result = contracted_eri_cartesian_source_shell_class<
+      FirstShellAngular, SecondShellAngular, ThirdShellAngular, FourthShellAngular,
+      Scalar, PairedRanges, AllCenterGradient>(
       batch, base + i, base + j, base + k, base + l, shell_i, shell_j, shell_k, shell_l,
       derivative_coordinate, range, omega);
+  if constexpr (AllCenterGradient) {
+    CartesianQuartetGradient restored{};
+    for (unsigned center = 0; center < 4U; ++center)
+      for (unsigned axis = 0; axis < 3U; ++axis)
+        restored.center[slots[center]][axis] = result.center[center][axis];
+    return restored;
+  } else {
+    return result;
+  }
 }
 
 /** Dispatch one angular-order task to its Cartesian source evaluator. */
-template <unsigned AngularOrder, typename Scalar, bool PairedRanges = false>
-__device__ inline CartesianRangeResult<Scalar, PairedRanges> dispatch_contracted_eri_cartesian_source_shell_class(
+template <unsigned AngularOrder, typename Scalar, bool PairedRanges = false, bool AllCenterGradient = false>
+__device__ inline CartesianSourceResult<Scalar, PairedRanges, AllCenterGradient> dispatch_contracted_eri_cartesian_source_shell_class(
     unsigned runtime_shell_class, const DeviceBatch& batch, std::int32_t system, std::int32_t i,
     std::int32_t j, std::int32_t k, std::int32_t l, std::int64_t derivative_coordinate,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
@@ -275,7 +317,7 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> dispatch_contracted
 #define GENERATIVEQC_DIRECT_SOURCE_SHELL_CLASS_CASE(ShellClass)                         \
   case ShellClass:                                                                \
     if constexpr (direct_shell_class_angular_order(ShellClass) == AngularOrder) { \
-      return contracted_eri_cartesian_source_shell_class<ShellClass, Scalar, PairedRanges>(     \
+      return contracted_eri_cartesian_source_shell_class<ShellClass, Scalar, PairedRanges, AllCenterGradient>(     \
           batch, system, i, j, k, l, derivative_coordinate, range, omega);         \
     }                                                                             \
     break
@@ -337,10 +379,32 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> dispatch_contracted
     GENERATIVEQC_DIRECT_SOURCE_SHELL_CLASS_CASE(54);
   }
 #undef GENERATIVEQC_DIRECT_SOURCE_SHELL_CLASS_CASE
-  if constexpr (PairedRanges)
+  if constexpr (AllCenterGradient)
+    return {};
+  else if constexpr (PairedRanges)
     return {scalar<Scalar>(0.0), scalar<Scalar>(0.0)};
   else
     return scalar<Scalar>(0.0);
+}
+
+/** Isolate the scalar all-center frame from the retained Dual3 force consumer.
+ * Fixed-class queues may bind ShellClass; runtime-class consumers share the
+ * same canonicalizer and primitive source without adding any task traversal.
+ */
+template <unsigned AngularOrder, int ShellClass = -1>
+__device__ inline __noinline__ CartesianQuartetGradient contracted_eri_scalar_center_gradient(
+    unsigned runtime_shell_class, const DeviceBatch& batch, std::int32_t system,
+    std::int32_t i, std::int32_t j, std::int32_t k, std::int32_t l,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
+  static_assert(AngularOrder == 7U || AngularOrder == 8U);
+  if constexpr (ShellClass >= 0)
+    return contracted_eri_cartesian_source_shell_class<
+        static_cast<unsigned>(ShellClass), double, false, true>(
+        batch, system, i, j, k, l, -1, range, omega);
+  else
+    return dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, double, false, true>(
+        runtime_shell_class, batch, system, i, j, k, l, -1, range, omega);
 }
 
 template <typename Scalar>
@@ -390,6 +454,6 @@ __device__ inline Scalar contracted_eri_cartesian_source(const DeviceBatch& batc
 
 
 def emit_direct_source_contraction_header() -> str:
-    """Emit the qualified Direct source-contraction CUDA header unchanged."""
+    """Emit scalar, paired-range and all-center Direct source consumers."""
 
     return _SOURCE

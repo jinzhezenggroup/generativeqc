@@ -1922,118 +1922,166 @@ void range_exchange_derivatives() {
  * f/f/s/s gives order 12 two distinct f centers. Repeated-center geometries
  * bind different shells to one atom. Check every coordinate in both spins.
  */
-void shell_range_four_center_derivatives() {
+void shell_range_four_center_derivatives(bool scalar_only = false) {
+  std::array<unsigned long long, 4> observed{};
   constexpr double omega = 0.3, coefficient = -0.37, step = 1e-4;
-  for (const auto angular :
-       {std::array<unsigned, 4>{2, 1, 0, 0}, std::array<unsigned, 4>{2, 1, 1, 0},
-        std::array<unsigned, 4>{2, 2, 1, 0}, std::array<unsigned, 4>{2, 2, 1, 1},
-        std::array<unsigned, 4>{3, 2, 1, 0}, std::array<unsigned, 4>{3, 3, 0, 0}}) {
-    for (const bool repeated_center : {false, true}) {
-      generativeqc::core::System system;
-      system.atoms = {{1, {0.1, -0.2, -0.8}},
-                      {1, {0.3, 0.1, 0.7}},
-                      {1, {-0.5, 0.6, 0.2}},
-                      {1, {0.8, -0.4, 0.3}}};
-      system.shells = {{0, angular[0], {{0.8, 1.0}}},
-                       {1, angular[1], {{0.6, 1.0}}},
-                       {2, angular[2], {{0.7, 1.0}}},
-                       {repeated_center ? 1 : 3, angular[3], {{0.9, 1.0}}}};
-      system.electron_count = 4;
-      system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
-      std::string detail;
-      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
-                  GENERATIVEQC_STATUS_SUCCESS,
-              detail.c_str());
-      const auto n = generativeqc::molecule::ao_count(system), matrix = n * n;
-      std::vector<double> a(matrix), b(matrix);
-      for (std::size_t i = 0; i < n; ++i)
-        for (std::size_t j = 0; j < n; ++j) {
-          a[i * n + j] = std::cos(0.3 * (i + j)) / n;
-          b[i * n + j] = std::sin(0.4 * (i + j)) / (2 * n);
-        }
-      CudaDirectJkPlan* raw{};
-      CudaDirectJkDiagnostic diagnostic;
-      require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, 64U << 20, &raw, diagnostic,
-                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
-              detail.c_str());
-      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
-          raw, &destroy_cuda_direct_jk_plan);
-      DeviceMatrix device_a(a), device_b(b);
-      // f/d/p/s covers orders 10/11; f/f/s/s admits multi-center order-12
-      // derivatives. Reuse each CPU derivative for both schedules.
-      std::array<std::array<std::vector<double>, 2>, 2> scheduled, full_scheduled;
-      for (unsigned schedule = 0; schedule < 2; ++schedule) {
-        plan->generated_exchange->angular_force_opt_in = schedule != 0;
-        for (unsigned spin = 0; spin < 2; ++spin) {
-          require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
-                      plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 0.0, 0.0,
-                      coefficient, omega, device_a.pointer, spin ? device_b.pointer : nullptr,
-                      matrix, scheduled[schedule][spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
-                  detail.c_str());
-          if (angular[0] == 3U)
-            require(execute_cuda_direct_shell_full_range_derivatives_device(
-                        plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 1.3,
-                        coefficient, device_a.pointer, spin ? device_b.pointer : nullptr, matrix,
-                        full_scheduled[schedule][spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
-                    detail.c_str());
-        }
-      }
-      // The mixed high orders need independent full-range coverage too; LR
-      // correctness alone cannot qualify separate J/K source accumulation.
-      const auto full_derivatives =
-          angular[0] == 3U ? generativeqc::integrals::build_integrals(system, true).eri_derivative
-                           : std::vector<double>{};
-      const auto coordinates = system.atoms.size() * 3U;
-      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
-        auto plus = system, minus = system;
-        plus.atoms[coordinate / 3].position[coordinate % 3] += step;
-        minus.atoms[coordinate / 3].position[coordinate % 3] -= step;
-        auto derivative = generativeqc::integrals::build_range_eri(
-            plus, generativeqc::integrals::CoulombRange::Long, omega);
-        const auto negative = generativeqc::integrals::build_range_eri(
-            minus, generativeqc::integrals::CoulombRange::Long, omega);
-        for (std::size_t index = 0; index < derivative.size(); ++index)
-          derivative[index] = (derivative[index] - negative[index]) / (2 * step);
-        for (unsigned spin = 0; spin < 2; ++spin) {
-          auto spec = make_hf_fock_spec(spin ? FockSpin::Unrestricted : FockSpin::Restricted);
-          spec.derivative_order = 1;
-          spec.coulomb.present = false;
-          spec.exchange.coefficient = coefficient;
-          const auto cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
-          const double expected = contract_exact_direct_energy_derivative(
-              cpu, n, derivative, a, spin ? b : std::vector<double>{});
-          for (const auto& actual : scheduled) {
-            require(actual[spin].size() == 3U * coordinates, "bounded LR source shape changed");
-            require(
-                actual[spin][coordinate] == 0.0 && actual[spin][coordinates + coordinate] == 0.0,
-                "disabled bounded RSH source acquired a contribution");
-            const double value = actual[spin][2U * coordinates + coordinate];
-            require(std::isfinite(value) && std::abs(value - expected) < 3e-8,
-                    "four-center bounded LR derivative differs from displaced CPU ERIs");
+  for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+    if (!scalar_only && representation == GENERATIVEQC_BASIS_CARTESIAN) continue;
+    for (const auto angular :
+         {std::array<unsigned, 4>{2, 1, 0, 0}, std::array<unsigned, 4>{2, 1, 1, 0},
+          std::array<unsigned, 4>{2, 2, 1, 0}, std::array<unsigned, 4>{2, 2, 1, 1},
+          std::array<unsigned, 4>{3, 2, 1, 0}, std::array<unsigned, 4>{3, 3, 0, 0}}) {
+      if (scalar_only && angular[0] != 3U) continue;
+      for (const bool repeated_center : {false, true}) {
+        generativeqc::core::System system;
+        system.atoms = {{1, {0.1, -0.2, -0.8}},
+                        {1, {0.3, 0.1, 0.7}},
+                        {1, {-0.5, 0.6, 0.2}},
+                        {1, {0.8, -0.4, 0.3}}};
+        system.shells = {{0, angular[0], {{0.8, 1.0}}},
+                         {1, angular[1], {{0.6, 1.0}}},
+                         {2, angular[2], {{0.7, 1.0}}},
+                         {repeated_center ? 1 : 3, angular[3], {{0.9, 1.0}}}};
+        system.electron_count = 4;
+        system.basis_representation = representation;
+        std::string detail;
+        require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        const auto n = generativeqc::molecule::ao_count(system), matrix = n * n;
+        std::vector<double> a(matrix), b(matrix);
+        for (std::size_t i = 0; i < n; ++i)
+          for (std::size_t j = 0; j < n; ++j) {
+            a[i * n + j] = std::cos(0.3 * (i + j)) / n;
+            b[i * n + j] = std::sin(0.4 * (i + j)) / (2 * n);
           }
-          if (!full_derivatives.empty()) {
-            for (unsigned source = 0; source < 2; ++source) {
-              spec.coulomb.present = source == 0;
-              spec.exchange.present = source == 1;
-              spec.coulomb.coefficient = 1.3;
-              const auto full_cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
-              const double expected_full = contract_exact_direct_energy_derivative(
-                  full_cpu, n,
-                  std::span<const double>(full_derivatives)
-                      .subspan(coordinate * matrix * matrix, matrix * matrix),
-                  a, spin ? b : std::vector<double>{});
-              for (const auto& actual : full_scheduled) {
-                require(actual[spin].size() == 2U * coordinates,
-                        "mixed full-range source shape changed");
-                const double value = actual[spin][source * coordinates + coordinate];
-                require(std::isfinite(value) && std::abs(value - expected_full) < 3e-10,
-                        "mixed full-range J/K derivative differs from independent CPU ERIs");
+        CudaDirectJkPlan* raw{};
+        CudaDirectJkDiagnostic diagnostic;
+        require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, 64U << 20, &raw, diagnostic,
+                                           detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+            raw, &destroy_cuda_direct_jk_plan);
+        DeviceMatrix device_a(a), device_b(b), scalar_census(std::vector<double>(4U, 0.0));
+        // The plan borrows this device census only for the gate. Fence and
+        // restore the pointer before DeviceMatrix frees storage, even if an
+        // assertion or native call throws while work remains in flight.
+        struct CensusLease {
+          CudaDirectJkPlan* plan;
+          unsigned long long* previous;
+          bool active;
+          ~CensusLease() {
+            if (active) {
+              cudaStreamSynchronize(cuda_direct_jk_stream(plan));
+              plan->generated_exchange->shared->batch.direct_scalar_center_gradient_counts =
+                  previous;
+            }
+          }
+        } census_lease{plan.get(), nullptr, false};
+        if (scalar_only) {
+          require(plan->generated_exchange && plan->generated_exchange->shared &&
+                      plan->generated_exchange->shared->batch.direct_scalar_center_gradient,
+                  "scalar gradient gate missed frozen preparation admission");
+          census_lease.previous =
+              plan->generated_exchange->shared->batch.direct_scalar_center_gradient_counts;
+          census_lease.active = true;
+          plan->generated_exchange->shared->batch.direct_scalar_center_gradient_counts =
+              reinterpret_cast<unsigned long long*>(scalar_census.pointer);
+        }
+        // f/d/p/s covers orders 10/11; f/f/s/s admits multi-center order-12
+        // derivatives. Reuse each CPU derivative for both schedules.
+        std::array<std::array<std::vector<double>, 2>, 2> scheduled, full_scheduled;
+        for (unsigned schedule = 0; schedule < 2; ++schedule) {
+          plan->generated_exchange->angular_force_opt_in = schedule != 0;
+          for (unsigned spin = 0; spin < 2; ++spin) {
+            require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
+                        plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 0.0, 0.0,
+                        coefficient, omega, device_a.pointer, spin ? device_b.pointer : nullptr,
+                        matrix, scheduled[schedule][spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
+                    detail.c_str());
+            if (angular[0] == 3U)
+              require(execute_cuda_direct_shell_full_range_derivatives_device(
+                          plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 1.3,
+                          coefficient, device_a.pointer, spin ? device_b.pointer : nullptr, matrix,
+                          full_scheduled[schedule][spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
+                      detail.c_str());
+          }
+        }
+        if (scalar_only) {
+          check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+          std::array<unsigned long long, 4> counts{};
+          check(cudaMemcpy(counts.data(), scalar_census.pointer, sizeof(counts),
+                           cudaMemcpyDeviceToHost));
+          for (unsigned category = 0; category < counts.size(); ++category)
+            observed[category] += counts[category];
+          plan->generated_exchange->shared->batch.direct_scalar_center_gradient_counts =
+              census_lease.previous;
+          census_lease.active = false;
+        }
+        // The mixed high orders need independent full-range coverage too; LR
+        // correctness alone cannot qualify separate J/K source accumulation.
+        const auto full_derivatives =
+            angular[0] == 3U ? generativeqc::integrals::build_integrals(system, true).eri_derivative
+                             : std::vector<double>{};
+        const auto coordinates = system.atoms.size() * 3U;
+        for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+          auto plus = system, minus = system;
+          plus.atoms[coordinate / 3].position[coordinate % 3] += step;
+          minus.atoms[coordinate / 3].position[coordinate % 3] -= step;
+          auto derivative = generativeqc::integrals::build_range_eri(
+              plus, generativeqc::integrals::CoulombRange::Long, omega);
+          const auto negative = generativeqc::integrals::build_range_eri(
+              minus, generativeqc::integrals::CoulombRange::Long, omega);
+          for (std::size_t index = 0; index < derivative.size(); ++index)
+            derivative[index] = (derivative[index] - negative[index]) / (2 * step);
+          for (unsigned spin = 0; spin < 2; ++spin) {
+            auto spec = make_hf_fock_spec(spin ? FockSpin::Unrestricted : FockSpin::Restricted);
+            spec.derivative_order = 1;
+            spec.coulomb.present = false;
+            spec.exchange.coefficient = coefficient;
+            const auto cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+            const double expected = contract_exact_direct_energy_derivative(
+                cpu, n, derivative, a, spin ? b : std::vector<double>{});
+            for (const auto& actual : scheduled) {
+              require(actual[spin].size() == 3U * coordinates, "bounded LR source shape changed");
+              require(
+                  actual[spin][coordinate] == 0.0 && actual[spin][coordinates + coordinate] == 0.0,
+                  "disabled bounded RSH source acquired a contribution");
+              const double value = actual[spin][2U * coordinates + coordinate];
+              require(std::isfinite(value) && std::abs(value - expected) < 3e-8,
+                      "four-center bounded LR derivative differs from displaced CPU ERIs");
+            }
+            if (!full_derivatives.empty()) {
+              for (unsigned source = 0; source < 2; ++source) {
+                spec.coulomb.present = source == 0;
+                spec.exchange.present = source == 1;
+                spec.coulomb.coefficient = 1.3;
+                const auto full_cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+                const double expected_full = contract_exact_direct_energy_derivative(
+                    full_cpu, n,
+                    std::span<const double>(full_derivatives)
+                        .subspan(coordinate * matrix * matrix, matrix * matrix),
+                    a, spin ? b : std::vector<double>{});
+                for (const auto& actual : full_scheduled) {
+                  require(actual[spin].size() == 2U * coordinates,
+                          "mixed full-range source shape changed");
+                  const double value = actual[spin][source * coordinates + coordinate];
+                  require(std::isfinite(value) && std::abs(value - expected_full) < 3e-10,
+                          "mixed full-range J/K derivative differs from independent CPU ERIs");
+                }
               }
             }
           }
         }
       }
     }
+  }
+  if (scalar_only) {
+    for (auto count : observed)
+      require(count > 0, "scalar gradient gate did not execute both orders and radial consumers");
+    std::cout << "CUDA scalar all-center order7/full=" << observed[0]
+              << ", order7/LR=" << observed[1] << ", order8/full=" << observed[2]
+              << ", order8/LR=" << observed[3] << " independent force gates PASS\n";
   }
 }
 
@@ -2502,6 +2550,12 @@ int main(int argc, char** argv) {
       mixed_coulomb_work_census(true);
       mixed_coulomb_preserves_strict_exchange();
       std::cout << "CUDA mixed Coulomb work census and strict exchange PASS\n";
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--scalar-center-forces-only") {
+      require(generativeqc::scf::cuda_policy::scalar_center_gradient_requested(),
+              "scalar center gate requires its explicit preparation policy");
+      shell_range_four_center_derivatives(true);
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {

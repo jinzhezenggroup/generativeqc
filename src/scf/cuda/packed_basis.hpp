@@ -84,6 +84,12 @@ struct DeviceBatch {
   // Frozen strict-FP64 Hermite reassociation: bit 0 values, bit 1 derivatives.
   // Mixed precision and the public-AO fallback do not consume this experiment.
   unsigned direct_hermite_convolution{};
+  // Default-off order-7/8 all-center FP64 auxiliary. Existing derivative
+  // recurrence/convolution experiments retain priority when explicitly selected.
+  bool direct_scalar_center_gradient{};
+  // Borrowed diagnostic counters: order 7/8 x full/LR all-center AO contractions.
+  // Null in production; the observer owns stream ordering and storage lifetime.
+  unsigned long long* direct_scalar_center_gradient_counts{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

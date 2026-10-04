@@ -529,6 +529,28 @@
       "evidence": [
         "note:.agents/notes/proposed/2026-10-04-canonical-shared-rsh-values.md"
       ]
+    },
+    {
+      "id": "hf.scalar-center-gradient",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_SCALAR_CENTER_GRADIENT"
+      ],
+      "owner_issues": [
+        1598,
+        1787
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py",
+        "src/scf/cuda/direct_force_quartet.cuh"
+      ],
+      "rationale": "Default-off order7/8 full/LR derivative consumer shares scalar Coulomb roots across centers. Existing coefficient contractions, native queues and independent force sources remain. Raised/lowered derivative arithmetic and GPU frames require independent qualification.",
+      "revisit_condition": "Independent primitive and contracted gradients with slot permutations, both spins and AO representations; actual full/LR order7/8 native execution, sanitizers, linked resources and same-binary complete cold/warm/displaced/larger endpoint evidence.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-scalar-all-center-gradients.md"
+      ]
     }
   ]
 }

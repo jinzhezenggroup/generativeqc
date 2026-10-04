@@ -651,6 +651,7 @@ __device__ inline Scalar primitive_eri_order4(
 #include "generated_direct_eri_order3.cuh"
 #include "generated_direct_eri_order4.cuh"
 #include "generated_direct_shell_pair_hermite.cuh"
+#include "scf/cuda/direct_gradient_types.cuh"
 #include "scf/cuda/gaussian_geometry.cuh"
 #include "scf/cuda/integral_limits.hpp"
 #include "scf/cuda/packed_basis.hpp"
@@ -734,6 +735,100 @@ __device__ inline CartesianRangeResult<Scalar, PairedRanges> primitive_eri_carte
         angular_fourth, first_coefficients, second_coefficients, range, omega,
         reachable_coulomb, hermite_convolution);
   }
+}
+
+/** Differentiate one prepared Hermite axis by the Gaussian raising/lowering
+ * identity. The contraction sees the selected center's power raised by one;
+ * this view combines its raised and lowered coefficients before consumption.
+ * Other axes retain their ordinary coefficients and established sum order.
+ */
+template <typename Coefficients>
+struct CartesianDerivativeAxis {
+  const Coefficients* coefficients;
+  unsigned selected;  // 0: ordinary; 1: first center; 2: second center.
+  double twice_exponent;
+
+  __device__ inline double at(unsigned i, unsigned j, unsigned t) const {
+    const double raised = coefficients->at(i, j, t);
+    if (selected == 1U)
+      return twice_exponent * raised -
+             (i > 1U ? (i - 1U) * coefficients->at(i - 2U, j, t) : 0.0);
+    if (selected == 2U)
+      return twice_exponent * raised -
+             (j > 1U ? (j - 1U) * coefficients->at(i, j - 2U, t) : 0.0);
+    return raised;
+  }
+};
+
+/** Share one scalar radial auxiliary across all order-seven/eight centers.
+ * d_A g_a = 2 alpha g_(a+1) - a g_(a-1) differentiates the primitive, including
+ * its Gaussian, without a Dual3 auxiliary or a separate recurrence per atom.
+ * The first three slot gradients determine the fourth by translation symmetry.
+ * Physical shell normalization remains the contracted consumer's responsibility.
+ * Full, SR and LR use their existing independent radial-moment owners.
+ */
+template <unsigned A, unsigned B, unsigned C, unsigned D>
+__device__ inline CartesianQuartetGradient primitive_eri_scalar_center_gradient(
+    double alpha, const Vec3<double>& first, const Angular& angular_first, double beta,
+    const Vec3<double>& second, const Angular& angular_second, double gamma,
+    const Vec3<double>& third, const Angular& angular_third, double delta,
+    const Vec3<double>& fourth, const Angular& angular_fourth,
+    generativeqc::integrals::CoulombRange range, double omega) {
+  constexpr unsigned Order = A + B + C + D;
+  static_assert(Order == 7U || Order == 8U);
+  static_assert(A <= 3U && B <= 3U && C <= 3U && D <= 3U);
+  constexpr unsigned RootOrder = Order + 1U;
+  const double p = alpha + beta, q = gamma + delta, rho = p * q / (p + q);
+  const auto product_p = product_center(alpha, first, beta, second);
+  const auto product_q = product_center(gamma, third, delta, fourth);
+  const Angular angular[4] = {angular_first, angular_second, angular_third, angular_fourth};
+  const double exponents[3] = {alpha, beta, gamma};
+  using Left = ShellPairHermiteCoefficients<double, A + 1U, B + 1U>;
+  using Right = ShellPairHermiteCoefficients<double, C + 1U, D>;
+  Left first_coefficients[3];
+  Right second_coefficients[3];
+  for (unsigned axis = 0; axis < 3U; ++axis) {
+    fill_shell_pair_hermite<A + 1U, B + 1U>(
+        angular_axis(angular_first, axis) + 1U, angular_axis(angular_second, axis) + 1U,
+        vec_axis(product_p, axis), vec_axis(first, axis), vec_axis(second, axis), alpha, beta,
+        first_coefficients[axis]);
+    // The fourth slot is recovered, so its coefficient bound needs no raise.
+    fill_shell_pair_hermite<C + 1U, D>(
+        angular_axis(angular_third, axis) + 1U, angular_axis(angular_fourth, axis),
+        vec_axis(product_q, axis), vec_axis(third, axis), vec_axis(fourth, axis), gamma, delta,
+        second_coefficients[axis]);
+  }
+  CoulombAuxiliary<double, RootOrder> auxiliary;
+  CartesianQuartetGradient result{};
+  if (range == generativeqc::integrals::CoulombRange::Full) {
+    fill_coulomb<RootOrder>(rho, product_p, product_q, auxiliary);
+  } else if (!fill_range_coulomb<RootOrder>(rho, product_p, product_q, range, omega, auxiliary)) {
+    for (unsigned center = 0; center < 4U; ++center)
+      for (unsigned axis = 0; axis < 3U; ++axis) result.center[center][axis] = NAN;
+    return result;
+  }
+  const double prefactor = 2.0 * pow(kPi, 2.5) / (p * q * sqrt(p + q));
+  for (unsigned center = 0; center < 3U; ++center)
+    for (unsigned axis = 0; axis < 3U; ++axis) {
+      Angular raised[4] = {angular[0], angular[1], angular[2], angular[3]};
+      add_angular_axis(raised[center], axis, 1U);
+      CartesianDerivativeAxis<Left> left[3];
+      CartesianDerivativeAxis<Right> right[3];
+      for (unsigned component = 0; component < 3U; ++component) {
+        left[component] = {first_coefficients + component,
+                           center < 2U && component == axis ? center + 1U : 0U,
+                           2.0 * exponents[center]};
+        right[component] = {second_coefficients + component,
+                            center == 2U && component == axis ? 1U : 0U,
+                            2.0 * exponents[center]};
+      }
+      result.center[center][axis] = prefactor * prepared_cartesian_contraction<RootOrder>(
+          raised[0], raised[1], raised[2], raised[3], left, right, auxiliary);
+    }
+  for (unsigned axis = 0; axis < 3U; ++axis)
+    result.center[3][axis] =
+        -result.center[0][axis] - result.center[1][axis] - result.center[2][axis];
+  return result;
 }
 
 /**
