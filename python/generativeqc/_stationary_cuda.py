@@ -1646,6 +1646,8 @@ class PreparedStationaryCudaExecution:
         self._stack: ExitStack | None = None
         self._lease = PreparedExecutionLease()
         self.preparation_seconds = 0.0
+        self._resident_ao_maps = None
+        self._resident_ao_map_key = None
 
     @property
     def identity(self) -> str | None:
@@ -1681,6 +1683,8 @@ class PreparedStationaryCudaExecution:
         primitive_tile: int,
         integral_terms: int,
         page_work_budget: int,
+        resident_ao_cutoff: float | None = None,
+        resident_ao_cache_bytes: int = 0,
         integral_derivatives: bool = True,
     ) -> PreparedExecutionRequest:
         topology = _basis_topology_identity(basis)
@@ -1712,6 +1716,8 @@ class PreparedStationaryCudaExecution:
                 "primitive_page_work_budget": page_work_budget,
                 "primitive_integral_derivatives": integral_derivatives,
                 "grid_allocation_bytes": grid_plan.allocation_bytes,
+                "resident_ao_cutoff": resident_ao_cutoff,
+                "resident_ao_cache_bytes": resident_ao_cache_bytes,
                 "tensor_plans": [
                     (name, value.identity)
                     for name, value in sorted(tensor_plans.items())
@@ -1775,6 +1781,8 @@ class PreparedStationaryCudaExecution:
         max_host_bytes: int,
         host_bound: int,
         profile_device: bool = False,
+        resident_ao_cutoff: float | None = None,
+        resident_ao_cache_bytes: int = 0,
         integral_derivatives: bool = True,
     ) -> None:
         if not integral_derivatives and (
@@ -1807,6 +1815,8 @@ class PreparedStationaryCudaExecution:
             primitive_tile=primitive_tile,
             integral_terms=integral_terms,
             page_work_budget=page_work_budget,
+            resident_ao_cutoff=resident_ao_cutoff,
+            resident_ao_cache_bytes=resident_ao_cache_bytes,
             integral_derivatives=integral_derivatives,
         )
         if self._lease.contract is not None:
@@ -1834,6 +1844,8 @@ class PreparedStationaryCudaExecution:
                 ):
                     raise ValueError("stationary CUDA prepared artifact hash mismatch")
                 self.sources.rebind_geometry(basis)
+                self._resident_ao_maps = None
+                self._resident_ao_map_key = None
                 self.grid._rebind_centers(
                     np.ascontiguousarray(
                         basis.packed[: 3 * basis.natom].reshape(basis.natom, 3)
@@ -1993,6 +2005,8 @@ class PreparedStationaryCudaExecution:
                     "integral_terms": integral_terms,
                     "primitive_page_work_budget": page_work_budget,
                     "grid_allocation_bytes": grid_plan.allocation_bytes,
+                    "resident_ao_cutoff": resident_ao_cutoff,
+                    "resident_ao_cache_bytes": resident_ao_cache_bytes,
                     "geometry_resources": asdict(sources.resources),
                 },
                 "tensor_plans": tuple(
@@ -2014,6 +2028,8 @@ class PreparedStationaryCudaExecution:
 
     def close(self) -> None:
         with self._lock:
+            self._resident_ao_maps = None
+            self._resident_ao_map_key = None
             if self._stack is not None:
                 self._stack.close()
                 self._stack = None
@@ -2307,6 +2323,70 @@ def _plan_stationary_cuda_tile(
     )
 
 
+def _stationary_ao_map_reserve(
+    cutoff: float | None, requested_bytes: int, host_bound: int, max_host_bytes: int
+) -> int:
+    """Admit optional mask storage without stealing the dense fallback's budget."""
+    if cutoff is not None and (
+        type(cutoff) not in (int, float) or not np.isfinite(cutoff) or cutoff <= 0
+    ):
+        raise ValueError("resident AO cutoff must be finite and positive")
+    if type(requested_bytes) is not int or not 0 <= requested_bytes <= 1 << 40:
+        raise ValueError("resident AO cache budget must be an integer in [0,2**40]")
+    if host_bound > max_host_bytes:
+        raise ValueError("stationary additional-host byte budget exceeded")
+    return 0 if cutoff is None else min(requested_bytes, max_host_bytes - host_bound)
+
+
+def _stationary_resident_ao_cache(
+    prepared: PreparedStationaryCudaExecution | None,
+    grid: typing.Any,
+    state: typing.Any,
+    resident: typing.Any,
+    *,
+    cutoff: float | None,
+    budget_bytes: int,
+) -> typing.Any:
+    """Bind optional force masks to the current token-checked resident grid."""
+    if cutoff is None or resident is None:
+        if prepared is not None:
+            prepared._resident_ao_maps = None
+            prepared._resident_ao_map_key = None
+        return None
+    from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
+
+    state._source.check_current()
+    domain = ResidentAoMapDomain(
+        basis_identity=grid.basis_identity,
+        geometry_identity=state.identity.geometry_identity,
+        grid_identity=state.identity.grid_identity,
+        device=resident.device,
+        point_pointer=resident.points,
+        point_count=resident.point_count,
+        tile_points=grid.plan.tile_points,
+        derivative_order=grid.plan.order,
+    )
+    key = (
+        domain,
+        id(grid),
+        grid.geometry_generation,
+        grid.basis_generation,
+        float(cutoff),
+        budget_bytes,
+    )
+    owner = None if prepared is None else prepared._resident_ao_maps
+    if owner is None or prepared._resident_ao_map_key != key:
+        if prepared is not None:
+            prepared._resident_ao_maps = None
+            prepared._resident_ao_map_key = None
+        owner = ResidentAoMapCache(grid, domain, cutoff=cutoff, budget_bytes=budget_bytes)
+        if prepared is not None:
+            prepared._resident_ao_maps = owner
+            prepared._resident_ao_map_key = key
+    owner.reset_work()
+    return owner
+
+
 def _complete_rks_cuda_gradient_diagnostic(
     state: typing.Any,
     basis: typing.Any,
@@ -2329,6 +2409,8 @@ def _complete_rks_cuda_gradient_diagnostic(
     max_ecp_pair_samples: int = 100_000_000,
     prepared: PreparedStationaryCudaExecution | None = None,
     profile_device: bool = False,
+    resident_ao_cutoff: float | None = None,
+    resident_ao_cache_bytes: int = 16 << 20,
 ) -> typing.Any:
     """Consume a current native CUDA RKS/UKS snapshot with every plan source.
 
@@ -2526,6 +2608,13 @@ def _complete_rks_cuda_gradient_diagnostic(
     tile_points = grid_plan.tile_points
     pair_visits = grid_work.grid_pair_visits
     source_bytes = source_resources.allocation_bytes
+    ao_map_reserve = _stationary_ao_map_reserve(
+        resident_ao_cutoff,
+        resident_ao_cache_bytes,
+        host_bound + (sum(value.host_bytes for value in tensor_plans.values()) if prepared is not None else 0),
+        max_host_bytes,
+    )
+    host_bound += ao_map_reserve
     cache = Path(cache)
     spec = state._source.grid_spec
     if prepared is None:
@@ -2598,6 +2687,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                 max_host_bytes=max_host_bytes,
                 host_bound=host_bound,
                 profile_device=profile_device,
+                resident_ao_cutoff=resident_ao_cutoff,
+                resident_ao_cache_bytes=ao_map_reserve,
                 integral_derivatives=primitive_demand.integral_derivatives,
             )
         artifact = prepared.stationary_artifact
@@ -2905,16 +2996,24 @@ def _complete_rks_cuda_gradient_diagnostic(
                 "grid_atomic_measure_source": "host-grid-atomic-measures",
                 "grid_atomic_measure_h2d_bytes": grid_points * 8,
             }
+        ao_maps = _stationary_resident_ao_cache(
+            prepared, ao, state, resident_grid,
+            cutoff=resident_ao_cutoff, budget_bytes=ao_map_reserve,
+        )
         for chunk_begin, chunk_end in grid_work.chunks():
             with timeline.phase("xc_geometry_enqueue"):
                 for begin in range(chunk_begin, chunk_end, tile_points):
                     end = min(begin + tile_points, chunk_end)
                     if resident_grid is not None:
                         point_pointer = resident_grid.points + 3 * begin * 8
+                        selected_ao_ids = (
+                            None if ao_maps is None
+                            else ao_maps.select(ao, ao_maps.domain, begin, end - begin)
+                        )
                         with ao.feature_task_device_points(
                             point_pointer,
                             end - begin,
-                            None,
+                            selected_ao_ids,
                             ingredients,
                         ) as task:
                             sources.geometry_molecular_resident_weights(
@@ -3096,6 +3195,16 @@ def _complete_rks_cuda_gradient_diagnostic(
         grid_work_plan={
             "schema": "generativeqc.stationary-grid-work.v1",
             **asdict(grid_work),
+        },
+        resident_ao_selection={
+            "schema": "generativeqc.stationary-resident-ao-selection.v1",
+            "mode": "disabled" if resident_ao_cutoff is None else ("dense-no-resident-grid" if ao_maps is None else "sampled-jet-cutoff"),
+            "cutoff": resident_ao_cutoff,
+            "cache_budget_requested_bytes": resident_ao_cache_bytes,
+            "cache_host_reserve_bytes": ao_map_reserve,
+            "full_ao_capacity": n,
+            "derivative_order": grid_plan.order,
+            "work": None if ao_maps is None else ao_maps.work,
         },
         grid_tile_schedule=(
             "budget-auto" if requested_tile_points is None else "explicit"
@@ -3306,6 +3415,8 @@ def complete_rks_cuda_gradient_diagnostic(
     max_ecp_pair_samples: int = 100_000_000,
     prepared: PreparedStationaryCudaExecution | None = None,
     profile_device: bool = False,
+    resident_ao_cutoff: float | None = None,
+    resident_ao_cache_bytes: int = 16 << 20,
 ) -> typing.Any:
     """Execute once, optionally retaining validated CUDA owners for later replay."""
     kwargs = {
@@ -3327,6 +3438,8 @@ def complete_rks_cuda_gradient_diagnostic(
         "max_ecp_pair_samples": max_ecp_pair_samples,
         "prepared": prepared,
         "profile_device": profile_device,
+        "resident_ao_cutoff": resident_ao_cutoff,
+        "resident_ao_cache_bytes": resident_ao_cache_bytes,
     }
     if prepared is None:
         return _complete_rks_cuda_gradient_diagnostic(state, basis, **kwargs)

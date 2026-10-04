@@ -335,7 +335,13 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "f94b63e26682a0796fe28b145885c1d9bae20d4147b6bc2e7f6cd6b8fc0e8af3"
+    "2ca2be2e2233f9745f58bd009e847f1a804b1f12b261f99a7108423f3088ed0a"
+)
+STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
+    "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
+)
+STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
+    "bf827756260ddd3809d8ec6b4afc2e262795ff0115b17975f87dec75e3142f4b"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
     "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
@@ -353,7 +359,7 @@ SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
     "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
+    "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -402,7 +408,10 @@ NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256 = (
     "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
 )
 PREPARED_AOT_SELECTION_CONTRACT_SHA256 = (
-    "d63c25b8993857082f2d6792bcd591b78a63cfde49a9be1fa69b11d7e3359649"
+    "543a82fd68894b485deb025825efb2e93ae61a0942a2da6f0326ddbd5937da27"
+)
+PREPARED_AO_REQUEST_CONTRACT_SHA256 = (
+    "a241beee3699b72cc945c162e6422a658381cd30c1dbfe37606ee704d95d521b"
 )
 PRIMITIVE_SUM_DEFINITION = (
     "sum((int(row[2]) * len(expansion) for row, expansion in "
@@ -1098,6 +1107,16 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         raise RuntimeError("stationary CUDA ordinary tile-resource contract changed")
     page_contract["ordinary_tile_resources_sha256"] = resource_owner_digest
     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
+    if signature.parameters["resident_ao_cutoff"].default is not None:
+        raise RuntimeError("stationary CUDA default AO membership changed")
+    for name, expected in (
+        ("_stationary_ao_map_reserve", STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256),
+        ("_stationary_resident_ao_cache", STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256),
+    ):
+        helpers = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name]
+        if len(helpers) != 1 or _source_node_sha256(source, helpers[0]) != expected:
+            raise RuntimeError(f"stationary CUDA {name} contract changed")
+        page_contract[f"{name.removeprefix('_stationary_')}_sha256"] = expected
 
     def default(name: str) -> int:
         value = signature.parameters[name].default
@@ -2026,6 +2045,9 @@ def _prepared_aot_route_contract(repository: Path) -> str:
     digest = _source_node_sha256(source, methods[0])
     if digest != PREPARED_AOT_SELECTION_CONTRACT_SHA256:
         raise RuntimeError("prepared stationary AOT selection contract changed")
+    requests = [node for node in classes[0].body if isinstance(node, ast.FunctionDef) and node.name == "_request"]
+    if len(requests) != 1 or _source_node_sha256(source, requests[0]) != PREPARED_AO_REQUEST_CONTRACT_SHA256:
+        raise RuntimeError("prepared stationary AO request contract changed")
     return digest
 
 
