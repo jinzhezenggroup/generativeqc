@@ -878,7 +878,8 @@ enum {
   GENERATIVEQC_PRECISION_OPERATOR_DIAGNOSTICS = 10,
   GENERATIVEQC_PRECISION_OPERATOR_OCCUPATION_STABILIZATION = 11,
   GENERATIVEQC_PRECISION_OPERATOR_COULOMB_RECURRENCE = 12,
-  GENERATIVEQC_PRECISION_OPERATOR_EXCHANGE_RECURRENCE = 13
+  GENERATIVEQC_PRECISION_OPERATOR_EXCHANGE_RECURRENCE = 13,
+  GENERATIVEQC_PRECISION_OPERATOR_NONLOCAL_CORRELATION = 14
 };
 
 typedef int32_t generativeqc_precision_dtype;
@@ -1016,6 +1017,13 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t ccsd_t_workspace_bytes;
   /** Audited standard-(T) inventory identity; empty for non-RCCSD(T) methods. */
   char ccsd_t_equation_hash[65];
+  /** Nonzero only when the successful RHF attempt for this complete correlated
+   * endpoint used a compatible caller-retained CUDA executable plan. This is
+   * independent of warm-density/reference-state reuse. */
+  int32_t reference_execution_plan_reused;
+  /** Numeric device bytes retained by that CUDA RHF executable owner while
+   * post-HF work runs. Zero for CPU/DF or when no CUDA plan is retained. */
+  uint64_t reference_execution_plan_owned_device_bytes;
 } generativeqc_correlation_diagnostic;
 
 /** Additive observational RCCSD/RCCSD(T) phase/work record.
@@ -1308,10 +1316,12 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_one_electron_gradient_c
     unsigned schedule, size_t maximum_bytes, double* gradient, size_t gradient_count,
     generativeqc_one_electron_gradient_resources* resources);
 
-/** Physical Fock builds in the last CPU batch execution, including final
- * rebuilds. A joint UHF alpha/beta J/K evaluation counts once. Returns
- * NOT_IMPLEMENTED for an unexecuted item, CUDA, or an incompletely counted
- * warm-to-cold retry. The result is never inferred from iteration count. */
+/** Physical Fock builds in the last counted batch execution, including final
+ * rebuilds. CPU owners and CUDA KS owners with a complete operator census are
+ * supported. A joint UHF alpha/beta J/K evaluation counts once. Returns
+ * NOT_IMPLEMENTED for unexecuted items, uninstrumented CUDA paths (including
+ * chunk/replay), or incompletely counted warm-to-cold retries. The result is
+ * never inferred from iteration count. */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_fock_builds(
     const generativeqc_batch* batch, uint32_t index, uint64_t* builds);
 

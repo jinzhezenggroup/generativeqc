@@ -842,6 +842,7 @@ void matrix_schedule_cases() {
 // clang-format off
 #include "dft_local_ao_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
+#include "dft_pbe0_ao_discovery_cases.cuh"
 // clang-format on
 }  // namespace
 
@@ -849,6 +850,11 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    pbe0_ao_discovery_cases();
+    if (argc == 2 && std::string(argv[1]) == "--pbe0-local-ao") {
+      std::cout << "CUDA scaled-PBE local-AO independent CPU E/V and budget gates passed\n";
+      return 0;
+    }
     ao_discovery_cases();
     if (argc == 2 && std::string(argv[1]) == "--ao-discovery") {
       std::cout << "CUDA XC AO discovery, independent CPU E/V and bounded fallback gates passed\n";
