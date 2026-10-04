@@ -1308,10 +1308,12 @@ GENERATIVEQC_API generativeqc_status generativeqc_system_one_electron_gradient_c
     unsigned schedule, size_t maximum_bytes, double* gradient, size_t gradient_count,
     generativeqc_one_electron_gradient_resources* resources);
 
-/** Physical Fock builds in the last CPU batch execution, including final
- * rebuilds. A joint UHF alpha/beta J/K evaluation counts once. Returns
- * NOT_IMPLEMENTED for an unexecuted item, CUDA, or an incompletely counted
- * warm-to-cold retry. The result is never inferred from iteration count. */
+/** Physical Fock builds in the last counted batch execution, including final
+ * rebuilds. CPU owners and CUDA KS owners with a complete operator census are
+ * supported. A joint UHF alpha/beta J/K evaluation counts once. Returns
+ * NOT_IMPLEMENTED for unexecuted items, uninstrumented CUDA paths (including
+ * chunk/replay), or incompletely counted warm-to-cold retries. The result is
+ * never inferred from iteration count. */
 GENERATIVEQC_API generativeqc_status generativeqc_batch_get_last_fock_builds(
     const generativeqc_batch* batch, uint32_t index, uint64_t* builds);
 
