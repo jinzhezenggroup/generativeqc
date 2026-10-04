@@ -1,4 +1,4 @@
-// Complete cold DF-CCSD(T) force benchmark; optional expanded Lambda baseline.
+// Complete cold DF-CCSD(T) energy/force benchmark with explicit schedule selectors.
 // The input contains no orbitals, Fock matrix, factors or amplitudes from an oracle.
 #include <chrono>
 #include <fstream>
@@ -34,11 +34,20 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc != 4)
-      throw std::invalid_argument("usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1");
+    if (argc < 4 || argc > 6)
+      throw std::invalid_argument(
+          "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
+          "[FORCES_0_OR_1]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
+    const auto selector = [&](int index) {
+      if (argc <= index) return true;
+      const std::string value(argv[index]);
+      if (value != "0" && value != "1") throw std::invalid_argument("invalid endpoint selector");
+      return value == "1";
+    };
+    const bool matrix = selector(4), forces = selector(5);
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -74,7 +83,7 @@ int main(int argc, char** argv) {
               << generativeqc::molecule::ao_count(orbital)
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
-        execution, orbital, auxiliary, descriptor, true, true, reduction);
+        execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix);
     std::ofstream output(argv[2]);
     if (!output) throw std::runtime_error("cannot open completed force output");
     output << std::setprecision(17) << "{\n";
@@ -83,6 +92,10 @@ int main(int argc, char** argv) {
     };
     field("nbf", generativeqc::molecule::ao_count(orbital));
     field("naux", generativeqc::molecule::ao_count(auxiliary));
+    // Distinguish phases absent by request from measured zero-cost phases.
+    field("forces_requested", forces ? 1 : 0);
+    field("lambda_reduction_requested", reduction ? 1 : 0);
+    field("matrix_gemm_requested", matrix ? 1 : 0);
     field("total_energy", result.energy);
     field("reference_energy", result.reference_energy);
     field("correlation_energy", result.correlation_energy);
@@ -95,6 +108,14 @@ int main(int argc, char** argv) {
     field("reference_seconds", result.primal.reference_seconds);
     field("source_seconds", result.primal.problem_seconds);
     field("ccsd_seconds", result.primal.solver_seconds);
+    field("ccsd_matrix_gemm", result.solver.df_matrix_gemm ? 1 : 0);
+    field("ccsd_gemm_calls", result.solver.df_gemm_calls);
+    field("ccsd_gemm_summands", result.solver.df_gemm_summands);
+    field("ccsd_packing_bytes", result.solver.df_packing_bytes);
+    field("ccsd_provider_capacity", result.solver.df_provider_capacity_bytes);
+    field("ccsd_contraction_terms", result.solver.df_contraction_terms);
+    field("ccsd_evaluations", result.solver.iteration_graph_calls);
+    field("ccsd_capacity", result.solver.numeric_capacity_bytes);
     field("triples_seconds", result.triples_seconds);
     field("lambda_seconds", result.lambda_seconds);
     field("source_response_seconds", result.source_response_seconds);
@@ -126,7 +147,8 @@ int main(int argc, char** argv) {
     output << "]\n}\n";
     output.close();
     if (!output) throw std::runtime_error("failed publishing completed force output");
-    std::cout << "Complete force endpoint in " << result.total_seconds << " seconds\n";
+    std::cout << "Complete " << (forces ? "force" : "energy") << " endpoint in "
+              << result.total_seconds << " seconds\n";
     return 0;
   } catch (const std::exception& error) {
     std::cerr << error.what() << std::endl;
