@@ -1017,6 +1017,13 @@ typedef struct generativeqc_correlation_diagnostic {
   uint64_t ccsd_t_workspace_bytes;
   /** Audited standard-(T) inventory identity; empty for non-RCCSD(T) methods. */
   char ccsd_t_equation_hash[65];
+  /** Nonzero only when the successful RHF attempt for this complete correlated
+   * endpoint used a compatible caller-retained CUDA executable plan. This is
+   * independent of warm-density/reference-state reuse. */
+  int32_t reference_execution_plan_reused;
+  /** Numeric device bytes retained by that CUDA RHF executable owner while
+   * post-HF work runs. Zero for CPU/DF or when no CUDA plan is retained. */
+  uint64_t reference_execution_plan_owned_device_bytes;
 } generativeqc_correlation_diagnostic;
 
 /** Additive observational RCCSD/RCCSD(T) phase/work record.
