@@ -1,6 +1,6 @@
 # Decision: share bounded Q tiles between DF primal and Lambda consumers
 
-Status: implemented; energy qualified, complete large-force qualification in progress
+Status: implemented; energy/force comparison qualified with explicit independent-audit scope
 Date: 2026-10-05
 
 ## Problem and existing work
@@ -88,11 +88,16 @@ slightly increase despite fewer launches. See
 normalization of unavailable counters, numerical gates and reproduction.
 
 Job2289 passed independent all-coordinate small-water energy differences at
-both steps, retaining atol=rtol=3e-7. Complete small/large force pairs and two
-large finite-difference coordinates at those same steps remain in separate
-finite allocations (jobs2287/2288). The two large coordinate checks cannot be
-relabeled as an all-coordinate independent force audit; no completed large-force
-qualification is claimed until those records pass.
+both steps, retaining atol=rtol=3e-7. Jobs2287/2288 completed small/large force
+pairs and two large finite-difference coordinates at those steps. Large
+all-component baseline/candidate force difference is at most 5.620e-9 Eh/Bohr;
+the four large FD errors are below 3.062e-8. Candidate Lambda/Z/stationarity
+and translational gates pass. The large complete force pair is
+1391.235 -> 1349.685 seconds, with 24.401 seconds saved in CCSD and 17.740 seconds
+of unrelated RHF variation. Lambda and exact orbital-response times stay
+approximately 273/669 seconds. These records use separate GPU allocations
+and are never pooled to infer an energy/force split. The two large coordinate
+checks cannot be relabeled as an all-coordinate independent force audit.
 
 ## Revisit conditions
 

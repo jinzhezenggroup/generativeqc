@@ -67,10 +67,46 @@ nonzero.
 
 Job2289 passed small-water complete energy/force behavior and independent PySCF
 finite differences for all nuclear coordinates at both 1e-4 and 3e-5 Bohr.
-The existing atol=rtol=3e-7 force gate is unchanged. Jobs2287/2288 are qualifying
-the complete large-force pair and two nonzero large-force components at both
-steps. Those two components are not an all-coordinate independent force audit.
-No completed large-force result is claimed by this energy-only report.
+The existing atol=rtol=3e-7 force gate is unchanged. Job2287 completed one full
+baseline/candidate force pair per molecule on GPU
+`GPU-4b4be14f-ec84-6736-a7d8-968d62900c72`. Its times are a separate measurement
+group from job2284; neither GPU is used to calibrate the other.
+
+| Ethane230 full-force phase, seconds | Baseline | Tile8 |
+| --- | ---: | ---: |
+| Process wall | 1391.54 | 1350.00 |
+| Complete native | 1391.235311 | 1349.685283 |
+| RHF | 161.765296 | 144.025037 |
+| Source | 3.592322 | 3.628883 |
+| CCSD | 170.481750 | 146.080942 |
+| (T) pullback plus Fock response | 109.930732 | 110.117274 |
+| Lambda | 272.789455 | 272.939885 |
+| Source response | 3.713752 | 3.724383 |
+| Orbital/nuclear response | 668.933803 | 669.137991 |
+
+The force pair saves 24.401 seconds in CCSD; 17.740 seconds of its 41.550-second
+complete difference comes from RHF. One pair does not establish statistical
+endpoint performance. The force-path `triples_seconds` includes pullback and
+Fock response, so it cannot be labeled pure triples energy. Within this force
+run RHF/source/CCSD total 293.735 seconds; the remaining 1055.950 seconds include
+both (T) energy/pullback and response. Subtracting a standalone energy time from
+another GPU would not yield a calibrated energy/force split.
+
+The maximum all-component force difference is 5.620e-9 Eh/Bohr (water: 7.994e-15).
+Candidate Lambda residual is 6.116e-13, Z residual 1.360e-13, maximum stationarity
+7.155e-12, and translational residual 6.109e-12. Both variants use 21 Lambda
+iterations/42 actions and 28 exact J/K actions. Complete force capacity stays
+7,170,696,275 bytes because another phase dominates the peak; the primal phase's
+capacity increases by the separately reported tile storage.
+
+Job2288 evaluates independent central energy differences for two nonzero
+components using the same candidate source and original geometry/bases, with
+no oracle orbitals/amplitudes. At 1e-4/3e-5 Bohr, C0-z errors are
+1.929e-9/1.655e-8 Eh/Bohr; H1-x errors are 5.301e-10/3.062e-8. Every unchanged
+atol=rtol=3e-7 gate passes (maximum allowance ratio 0.102). All energies,
+analytical values and gate ratios are retained in `summary.json`. These two
+components are not an all-coordinate independent large-force audit and do not
+establish benzene264 or global reference stability.
 
 ## Reproduction and retained artifacts
 
@@ -89,6 +125,8 @@ variant's own headers/library. Run all energy comparisons in one finite n2
 Frozen inputs are `../rccsd-diis-ring-1900/{ethane230,water7}.input`. Full source,
 build/test logs, toolchain/device records, binaries and hashes remain at
 `n2:/data/jzzeng/cc-1903-20261005/`, with endpoint records in `endpoint-2284/`.
-Local ignored copies are in `.artifacts/1903/endpoint-2284/`. The nine normalized
-observations, all paired medians and numerical spreads are in `summary.json`.
+Local ignored copies are in `.artifacts/1903/{endpoint-2284,force-2287,fd-2288}/`.
+Every changed production/compiler/test file was hash-compared with the tested
+remote source. The nine normalized energy observations, four force observations,
+paired medians, spreads and large FD comparisons are in `summary.json`.
 No external archive, release or release tag was published.
