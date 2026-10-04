@@ -185,7 +185,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
         ),
         "prepared_aot_selection_sha256": (
-            "a9d5f920839f2a020b17addaddb8e00c674bf78e37f112a113751d67ef336224"
+            "543a82fd68894b485deb025825efb2e93ae61a0942a2da6f0326ddbd5937da27"
         ),
     }
 
@@ -259,7 +259,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
 
     assert result["admission_limits"]["native_owner_capacity"] == {
         "atom_count": 128,
-        "ao_count": 1024,
+        "ao_count": 2048,
         "basis_primitive_count": 16384,
     }
     assert result["admission_limits"]["ao_task_fallback_capacity"] == {
@@ -284,9 +284,12 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
         "task_executor.execute_pages(domain, submit_page)"
     )
     assert result["admission_limits"]["primitive_page_contract_sha256"] == {
-        "geometry_resources_sha256": "0addc7ec684aa1e2116fb0f52d328a9717484b79009e9c236107f4f55bb19563",
+        "geometry_resources_sha256": "7949d2b5f585c0f5cadeaa8a6f52426355821046b209422d0947835093eb0da4",
         "public_wrapper_sha256": (
-            "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
+            "7b9a82b259fc652a6a10a2ea90020dec5afeca904f4679baaf8cf31d0bf268dd"
+        ),
+        "resident_ao_cutoff_sha256": (
+            "3fbe16f8daf3e331d36a7178a60bab68fcd597a438a46f92b51fd6fe09f52834"
         ),
         "ao_map_reserve_sha256": (
             "c2ba1b47e5655f75196c79384079d4ecd9c1edf9fe9aa1e97e339e96cbbaad0a"
@@ -337,13 +340,13 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "67552ed943569e291d37524644d7311d77b9c8cda133d91f6107817d2d66b385"
+            "30bfb80d163919deb7d0ca906bedd6b651d90e17b43ce630989e7c428b0dd0f1"
         ),
         "native_owner_sha256": (
             "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
         ),
         "native_allocation_sha256": (
-            "b0e739be97cb1048b86efeaa5c9b116cce1ac76f056e1ac610971f91df08129e"
+            "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
         ),
         "native_create_sha256": (
             "e3c05c687211842a710c0cada57e96b787992389c5e9a8799191655d07ae05b3"
@@ -453,6 +456,8 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
     assert result["admission_limits"]["tile_points"] == 256
     assert result["admission_limits"]["primitive_tile"] == 4096
     assert result["admission_limits"]["integral_terms"] == 32
+    assert result["admission_limits"]["resident_ao_cutoff"] == "auto"
+    assert result["admission_limits"]["resident_ao_cache_bytes"] == 16 << 20
     assert result["admission_limits"]["diagnostic_work_limits"] == {
         "grid_points": 1_000_000,
         "grid_pair_visits": 100_000_000,
@@ -650,7 +655,7 @@ def test_report_covers_every_required_fp64_force_row_and_aot_route(
         "stationary_center_geometry_bytes"
     ] == 48 * (96 * 95 // 2)
     assert water32["resource_requirements"]["additional_host_numeric_bound"] == (
-        192_187_488 + 4_851_008
+        192_187_488 + 4_851_008 + (16 << 20)
     )
     assert water32["resource_requirements"]["additional_device_budget"] == 512 << 20
     assert water32["resource_requirements"]["additional_host_budget"] == 256 << 20
@@ -1294,8 +1299,18 @@ def test_native_finish_span_fails_closed_on_contract_drift(
         qualify_capacity._source_limits(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+            "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na",
+        ),
+        ("n > 2048", "n > 2049"),
+    ],
+)
 def test_memory_bounds_fail_closed_when_native_allocation_moves(
-    tmp_path: Path,
+    tmp_path: Path, old: str, new: str
 ) -> None:
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text(
         encoding="utf-8"
@@ -1303,14 +1318,8 @@ def test_memory_bounds_fail_closed_when_native_allocation_moves(
     stationary_contract_tree(tmp_path, source)
     target = tmp_path / "src/dft/stationary_gradient_cuda.cuh"
     native = target.read_text(encoding="utf-8")
-    old = "(3 + 18 * geometry_lanes + 3 * stationary_source_count) * na"
     assert old in native
-    target.write_text(
-        native.replace(
-            old, "(4 + 18 * geometry_lanes + 3 * stationary_source_count) * na", 1
-        ),
-        encoding="utf-8",
-    )
+    target.write_text(native.replace(old, new, 1), encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="native_allocation_sha256 contract changed"):
         qualify_capacity._source_limits(tmp_path)
@@ -2071,7 +2080,7 @@ def test_device_budget_requires_a_positive_minimum_remainder(
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2117,7 +2126,7 @@ def test_primitive_descriptor_budget_is_page_local_and_ordered_after_host() -> N
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2160,7 +2169,7 @@ def test_logical_primitive_metric_retains_uint64_range_gate() -> None:
     limits = {
         "native_owner_capacity": {
             "atom_count": 128,
-            "ao_count": 1024,
+            "ao_count": 2048,
             "basis_primitive_count": 16384,
         },
         "ao_task_fallback_capacity": {
@@ -2292,7 +2301,7 @@ def current_admission_fixture() -> tuple[dict, dict, dict, dict]:
     "key,cap",
     [
         ("atom_count", 128),
-        ("ao_count_spherical", 1024),
+        ("ao_count_spherical", 2048),
         ("basis_primitive_count", 16384),
     ],
 )
@@ -2359,8 +2368,28 @@ def test_public_work_retains_representable_capacity(key: str, cap: int) -> None:
     assert [failure["gate"] for failure in failures] == ["grid_work_capacity"]
 
 
-def test_native_required_domain_never_admits_ao_descriptor_fallback_work() -> None:
+@pytest.mark.parametrize(
+    "key,cap,native_value",
+    [
+        ("atom_count", 32, 33),
+        ("ao_count_spherical", 128, 129),
+        ("ao_count_spherical", 128, 1024),
+        ("ao_count_spherical", 128, 1025),
+        ("ao_count_spherical", 128, 1856),
+        ("ao_count_spherical", 128, 2048),
+        ("basis_primitive_count", 4096, 4097),
+    ],
+)
+def test_native_required_domain_never_admits_ao_descriptor_fallback_work(
+    key: str, cap: int, native_value: int
+) -> None:
     limits, shape, requirements, memory = current_admission_fixture()
+    shape[key] = cap
+    assert not qualify_capacity.stationary_cuda_requires_native_integrals(
+        atoms=shape["atom_count"],
+        aos=shape["ao_count_spherical"],
+        primitives=shape["basis_primitive_count"],
+    )
     requirements["primitive_descriptor_peak_records"] = limits["primitive_records"] + 1
     assert [
         failure["gate"]
@@ -2370,8 +2399,88 @@ def test_native_required_domain_never_admits_ao_descriptor_fallback_work() -> No
     ] == ["primitive_descriptor_page_budget"]
     # The public larger-domain route must succeed through complete native sources
     # or fail at runtime; the unused AO descriptor page is not its capacity gate.
-    shape["ao_count_spherical"] = 129
+    shape[key] = native_value
+    assert qualify_capacity.stationary_cuda_requires_native_integrals(
+        atoms=shape["atom_count"],
+        aos=shape["ao_count_spherical"],
+        primitives=shape["basis_primitive_count"],
+    )
     assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
+
+
+def ao_map_resource_fixture(atom_count: int = 24) -> tuple[SimpleNamespace, dict]:
+    # A fixed synthetic s/p/d shape isolates the automatic atom-count boundary.
+    basis = SimpleNamespace(
+        natom=atom_count,
+        nao=192,
+        nprimitive=176,
+        numeric_bytes=0,
+        packed=SimpleNamespace(size=0),
+    )
+    limits, _, _, _ = current_admission_fixture()
+    return basis, limits
+
+
+@pytest.mark.parametrize("atoms,reserve", [(23, 0), (24, 16 << 20), (48, 16 << 20)])
+def test_automatic_ao_map_reserve_is_included_in_host_bound(
+    atoms: int, reserve: int
+) -> None:
+    basis, limits = ao_map_resource_fixture(atoms)
+    limits.update(resident_ao_cutoff=None, resident_ao_cache_bytes=16 << 20)
+    dense, _ = qualify_capacity._method_resources(
+        basis, atom_count=atoms, functional=1, spin="unpolarized", limits=limits
+    )
+    limits["resident_ao_cutoff"] = "auto"
+    automatic, _ = qualify_capacity._method_resources(
+        basis, atom_count=atoms, functional=1, spin="unpolarized", limits=limits
+    )
+    assert automatic["additional_host_numeric_bound"] == (
+        dense["additional_host_numeric_bound"] + reserve
+    )
+    assert automatic["stationary_resident_ao_map_host_reserve_bytes"] == reserve
+    assert automatic["stationary_resident_ao_cutoff"] == (None if atoms < 24 else 1e-16)
+    assert dense["stationary_resident_ao_map_host_reserve_bytes"] == 0
+
+
+@pytest.mark.parametrize("spare", [-1, 0, 1, (16 << 20) - 1, 16 << 20, (16 << 20) + 1])
+def test_optional_ao_map_reserve_preserves_exact_host_admission(spare: int) -> None:
+    basis, limits = ao_map_resource_fixture()
+    limits.update(resident_ao_cutoff=None, resident_ao_cache_bytes=16 << 20)
+    dense, _ = qualify_capacity._method_resources(
+        basis, atom_count=24, functional=1, spin="unpolarized", limits=limits
+    )
+    mandatory = dense["additional_host_numeric_bound"]
+    limits.update(resident_ao_cutoff="auto", additional_host_bytes=mandatory + spare)
+    memory, _ = qualify_capacity._method_resources(
+        basis, atom_count=24, functional=1, spin="unpolarized", limits=limits
+    )
+    expected_reserve = max(0, min(spare, 16 << 20))
+    assert memory["stationary_resident_ao_map_host_reserve_bytes"] == expected_reserve
+    assert memory["additional_host_numeric_bound"] == mandatory + expected_reserve
+    _, _, requirements, _ = current_admission_fixture()
+    failures = qualify_capacity._case_failures(
+        {"atom_count": 24, "ao_count_spherical": 192, "basis_primitive_count": 176},
+        requirements,
+        memory,
+        limits,
+    )
+    assert [failure["gate"] for failure in failures] == (
+        ["additional_host_budget"] if spare < 0 else []
+    )
+    if spare < 0:
+        assert failures[0]["required"] == mandatory
+
+
+@pytest.mark.parametrize("selection,budget", [(None, 16 << 20), ("auto", 0)])
+def test_dense_ao_policy_does_not_reserve_optional_host_storage(
+    selection: str | None, budget: int
+) -> None:
+    basis, limits = ao_map_resource_fixture()
+    limits.update(resident_ao_cutoff=selection, resident_ao_cache_bytes=budget)
+    memory, _ = qualify_capacity._method_resources(
+        basis, atom_count=24, functional=1, spin="unpolarized", limits=limits
+    )
+    assert memory["stationary_resident_ao_map_host_reserve_bytes"] == 0
 
 
 def test_paired_host_reserve_is_charged_before_inclusive_host_admission() -> None:
@@ -2383,7 +2492,8 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission() -> Non
     )
     memory = row["resource_requirements"]
     assert memory["stationary_native_integral_host_reserve_bytes"] == 4_851_008
-    assert memory["additional_host_numeric_bound"] == 197_047_712
+    assert memory["stationary_resident_ao_map_host_reserve_bytes"] == 16 << 20
+    assert memory["additional_host_numeric_bound"] == 213_824_928
     assert memory["additional_device_peak_bound"] == (
         memory["stationary_grid_device_peak_bound"]
         + memory["stationary_native_pair_reserve_bytes"]
@@ -2419,7 +2529,7 @@ def test_logical_primitive_work_and_native_work_are_method_specific() -> None:
     "old,new",
     [
         ("STATIONARY_MAX_ATOMS = 128", "STATIONARY_MAX_ATOMS = 129"),
-        ("STATIONARY_MAX_AOS = 1024", "STATIONARY_MAX_AOS = 1025"),
+        ("STATIONARY_MAX_AOS = 2048", "STATIONARY_MAX_AOS = 2049"),
         ("STATIONARY_MAX_PRIMITIVES = 16384", "STATIONARY_MAX_PRIMITIVES = 16385"),
         (
             "return atoms > 32 or aos > 128 or primitives > 4096",
@@ -2595,6 +2705,63 @@ def test_optional_resident_ao_admission_and_lifetime_fail_closed(
     tmp_path: Path, old: str, new: str, message: str
 ) -> None:
     """Optional maps cannot escape the original cap or stale-owner checks."""
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert old in source
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match=message):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize("default", [None, 1e-16, "on"])
+def test_default_resident_ao_policy_must_remain_automatic(
+    monkeypatch: pytest.MonkeyPatch, default: float | str | None
+) -> None:
+    defaults = qualify_capacity.complete_rks_cuda_gradient_diagnostic.__kwdefaults__
+    assert defaults is not None
+    monkeypatch.setitem(defaults, "resident_ao_cutoff", default)
+    with pytest.raises(RuntimeError, match="default AO membership changed"):
+        qualify_capacity._source_limits(ROOT)
+
+
+@pytest.mark.parametrize(
+    "old,new,message",
+    [
+        (
+            "_AUTO_RESIDENT_AO_MIN_ATOMS = 24",
+            "_AUTO_RESIDENT_AO_MIN_ATOMS = 1",
+            "automatic AO policy constant changed",
+        ),
+        (
+            "_AUTO_RESIDENT_AO_CUTOFF = 1e-16",
+            "_AUTO_RESIDENT_AO_CUTOFF = 1e-12",
+            "automatic AO policy constant changed",
+        ),
+        (
+            "if auto_qualified and atoms >= _AUTO_RESIDENT_AO_MIN_ATOMS",
+            "if atoms >= _AUTO_RESIDENT_AO_MIN_ATOMS",
+            "_resolve_resident_ao_cutoff contract changed",
+        ),
+        (
+            "atoms >= _AUTO_RESIDENT_AO_MIN_ATOMS",
+            "atoms > _AUTO_RESIDENT_AO_MIN_ATOMS",
+            "_resolve_resident_ao_cutoff contract changed",
+        ),
+        (
+            "    return selection\n",
+            "    return _AUTO_RESIDENT_AO_CUTOFF\n",
+            "_resolve_resident_ao_cutoff contract changed",
+        ),
+        (
+            "basis.natom, resident_ao_cutoff, auto_qualified=not ecp",
+            "basis.natom, resident_ao_cutoff, auto_qualified=True",
+            "endpoint owner contract changed",
+        ),
+    ],
+)
+def test_automatic_resident_ao_policy_changes_fail_closed(
+    tmp_path: Path, old: str, new: str, message: str
+) -> None:
+    """Automatic membership retains its measured domain and explicit opt-out."""
     source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, new, 1))

@@ -213,10 +213,14 @@ def test_closing_prepared_owner_releases_maps(bindings: typing.Any) -> None:
     ("atoms", "qualified", "selection", "expected"),
     [
         (23, True, "auto", None),
+        (23, False, "auto", None),
         (24, True, "auto", 1e-16),
+        (24, False, "auto", None),
         (96, True, "auto", 1e-16),
         (96, False, "auto", None),
         (12, True, 1e-18, 1e-18),
+        (96, False, 1e-18, 1e-18),
+        (24, True, None, None),
         (96, True, None, None),
     ],
 )
@@ -237,8 +241,10 @@ def test_resident_ao_policy_rejects_unknown_string() -> None:
         runtime._resolve_resident_ao_cutoff(96, "on", auto_qualified=True)
 
 
+@pytest.mark.parametrize("cutoff", [None, 1e-16, "auto"])
 def test_default_and_public_forwarding_use_automatic_screening_policy(
     monkeypatch: pytest.MonkeyPatch,
+    cutoff: float | None | str,
 ) -> None:
     calls = []
     monkeypatch.setattr(
@@ -253,10 +259,10 @@ def test_default_and_public_forwarding_use_automatic_screening_policy(
         None,
         compiler=None,
         cache=None,
-        resident_ao_cutoff=1e-16,
+        resident_ao_cutoff=cutoff,
         resident_ao_cache_bytes=0,
     )
-    assert calls[-1]["resident_ao_cutoff"] == 1e-16
+    assert calls[-1]["resident_ao_cutoff"] == cutoff
     assert calls[-1]["resident_ao_cache_bytes"] == 0
 
 
