@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "backends/cuda/gfn2_total_energy.cuh"
+#include "generated_gfn2_scc_free_energy_native.hpp"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace {
@@ -193,25 +194,31 @@ __global__ void compose_total_energy_kernel(Gfn2TotalEnergyDeviceBatch batch,
     return;
   }
 
-  double total = scc + repulsion;
-  if (!isfinite(total)) {
-    record_system_error(system_errors, system, device_error,
-                        Gfn2TotalEnergyDeviceError::kNonfiniteSccRepulsionSum);
-    return;
-  }
+  double d4_atm = 0.0;
   if (component_enabled(batch.enabled_components, Gfn2TotalEnergyComponent::kD4Atm)) {
-    const double d4_atm = input.d4_atm[system];
+    d4_atm = input.d4_atm[system];
     if (!isfinite(d4_atm)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2TotalEnergyDeviceError::kNonfiniteD4Atm);
       return;
     }
-    total += d4_atm;
-    if (!isfinite(total)) {
+  }
+  double total = 0.0;
+  if (!generativeqc::xtb::generated::accumulate_gfn2_component_energy(
+          scc, repulsion, total)) {
+    record_system_error(system_errors, system, device_error,
+                        Gfn2TotalEnergyDeviceError::kNonfiniteSccRepulsionSum);
+    return;
+  }
+  if (component_enabled(batch.enabled_components, Gfn2TotalEnergyComponent::kD4Atm)) {
+    double with_d4 = 0.0;
+    if (!generativeqc::xtb::generated::accumulate_gfn2_component_energy(
+            total, d4_atm, with_d4)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2TotalEnergyDeviceError::kNonfiniteTotalArithmetic);
       return;
     }
+    total = with_d4;
   }
   results.total_energy[system] = total;
 }

@@ -70,3 +70,12 @@ The preserved native selector and canonical request should then be reused.
 
 Related: #1886, #1889, #1899;
 [shared selector rationale](2026-10-05-native-joint-selection.md).
+
+## Integration with component precision admission
+
+The landed local-AO composition intersects method admission with compiler-owned
+XC execution capabilities. Preserve that intersection before preparing density
+bindings: AUTO may retain mixed Direct J while a mapped density contraction stays
+strict. Preparation validates the same capability instead of functional ordinals;
+iteration accounting reads the bound density arithmetic. A host executable checks
+dense/local capability, AUTO/FP64 admission and admitted/strict-audit phases together.

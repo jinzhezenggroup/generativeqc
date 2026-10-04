@@ -18,7 +18,7 @@ from .gfn2_electronic_contract import (
     GFN2_QUADRUPOLE_COMPONENTS,
 )
 
-GFN2_ELECTRONIC_RUNTIME_VERSION = "gfn2-electronic-runtime-ir-v2"
+GFN2_ELECTRONIC_RUNTIME_VERSION = "gfn2-electronic-runtime-ir-v4"
 
 
 def _input(name: str, *, differentiable: bool = False) -> Node:
@@ -62,6 +62,107 @@ def build_gfn2_core_energy_update_program() -> Program:
             "kind": "gfn2-runtime-core-energy-update",
             "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
             "source": "#505 Gfn2PopulationProgram",
+        },
+    )
+
+
+def build_gfn2_energy_weight_program() -> Program:
+    """One orbital energy weight, f * epsilon, shared by CPU/CUDA schedules."""
+
+    occupation = _input("occupation")
+    eigenvalue = _input("eigenvalue")
+    energy_weight = multiply(occupation, eigenvalue)
+    return Program(
+        {"energy_weight": energy_weight},
+        provenance={
+            "kind": "gfn2-runtime-energy-weight",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "tensor.scf weighted_density_program",
+        },
+    )
+
+
+def build_gfn2_weighted_coefficient_program() -> Program:
+    """One backend-independent C*f coefficient update."""
+
+    coefficient = _input("coefficient")
+    weight = _input("weight")
+    weighted_coefficient = multiply(coefficient, weight)
+    return Program(
+        {"weighted_coefficient": weighted_coefficient},
+        provenance={
+            "kind": "gfn2-runtime-weighted-coefficient",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "tensor.scf density_program/weighted_density_program schedule lowering",
+        },
+    )
+
+
+def build_gfn2_density_contribution_program() -> Program:
+    """One explicit (C*f)*C product retained for CUDA finite-range gates."""
+
+    weighted_coefficient = _input("weighted_coefficient")
+    coefficient = _input("coefficient")
+    contribution = multiply(weighted_coefficient, coefficient)
+    return Program(
+        {"contribution": contribution},
+        provenance={
+            "kind": "gfn2-runtime-density-contribution",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "tensor.scf density_program/weighted_density_program schedule lowering",
+        },
+    )
+
+
+def build_gfn2_density_update_program() -> Program:
+    """One ordered density reduction update: accumulator + (C*f)*C."""
+
+    weighted_coefficient = _input("weighted_coefficient")
+    coefficient = _input("coefficient")
+    accumulator = _input("accumulator")
+    updated = add(accumulator, multiply(weighted_coefficient, coefficient))
+    return Program(
+        {"updated": updated},
+        provenance={
+            "kind": "gfn2-runtime-density-update",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "tensor.scf density_program/weighted_density_program schedule lowering",
+        },
+    )
+
+
+def build_gfn2_restricted_population_publish_program() -> Program:
+    """Add the reference shell occupation to one electronic population."""
+
+    electronic = _input("electronic")
+    reference = _input("reference")
+    charge = add(electronic, reference)
+    return Program(
+        {"charge": charge},
+        provenance={
+            "kind": "gfn2-runtime-restricted-population-publish",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "#505 Gfn2PopulationProgram",
+        },
+    )
+
+
+def build_gfn2_spin_population_publish_program() -> Program:
+    """Convert raw alpha/beta populations to charge and pinned magnetization."""
+
+    alpha = _input("alpha")
+    beta = _input("beta")
+    reference = _input("reference")
+    charge = add(alpha, beta)
+    charge = add(charge, reference)
+    magnetization = add(alpha, beta, coefficients=(1, -1))
+    return Program(
+        {"charge": charge, "magnetization": magnetization},
+        provenance={
+            "kind": "gfn2-runtime-spin-population-publish",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "#505 Gfn2PopulationProgram",
+            "magnetization": "raw_alpha-raw_beta=N_beta-N_alpha",
         },
     )
 

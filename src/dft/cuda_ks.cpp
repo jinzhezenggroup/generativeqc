@@ -729,10 +729,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
     const bool select_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
     if (ao_selection && !select_ao && std::strcmp(ao_selection, "0") != 0)
       throw std::invalid_argument("GENERATIVEQC_CUDA_KS_ACTIVE_AO accepts only 0 or 1");
-    if (select_ao && (host_unfused || precision_schedule.any_lower_precision() ||
-                      !is_semilocal_family(functional, SemilocalFamily::Wb97mv)))
+    if (select_ao &&
+        (host_unfused || !cuda_xc_execution_capabilities(xc_layout).local_ao_selection))
       throw std::invalid_argument(
-          "experimental local SCF AO maps require device-fused FP64 WB97M-V");
+          "experimental local SCF AO maps require a device-fused physical FP64 XC layout");
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
@@ -842,7 +842,10 @@ struct CudaKsPlan::Impl : KsStateStorage {
             throw std::logic_error("admitted native SCF AO selection failed its resource check");
           xc_layout = xc->layout();
         }
-        xc->prepare_density(*precision_schedule.find(cuda_ks_precision_region::kDensityContraction),
+        const auto admitted_precision = resolve_cuda_ks_iteration_precision(
+            precision_schedule, false,
+            cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+        xc->prepare_density(*admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
                             options.max_iterations);
         prepared_ao_work = xc->ao_selection_work();
         prepared_ao_work.requested = select_ao;
@@ -1429,9 +1432,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
     is_pending = true;  // Any partial CUDA submission is drained on failure.
     try {
       std::string detail;
-      const bool mixed_stage = precision_schedule.any_lower_precision() && !strict_refinement;
-      pending_mixed_coulomb = mixed_stage && precision_schedule.uses_lower_precision(
-                                                 cuda_ks_precision_region::kCoulombJ);
+      const auto iteration_precision = resolve_cuda_ks_iteration_precision(
+          precision_schedule, strict_refinement,
+          cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+      pending_mixed_coulomb =
+          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
       const auto density_phase = strict_refinement
                                      ? generativeqc::runtime::PrecisionPhase::StrictAudit
                                      : generativeqc::runtime::PrecisionPhase::Admitted;
