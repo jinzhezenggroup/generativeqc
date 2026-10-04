@@ -73,7 +73,7 @@ class ConventionalProvider:
             raise ValueError("cache policy must be pin or lru")
         if (
             snapshot.hamiltonian_id != "conventional-unscreened"
-            or snapshot.screening_tolerance != 0
+            or getattr(snapshot, "screening_tolerance", 0.0) != 0
         ):
             raise ValueError(
                 "conventional source implements only the unscreened Hamiltonian"
@@ -123,7 +123,12 @@ class ConventionalProvider:
                 raise MemoryError(
                     f"MO block needs {plan.peak_bytes} numeric bytes, budget is {self.budget_bytes}"
                 )
-            key = (self.snapshot.identity, self.source.identity, block.slots)
+            key = (
+                self.snapshot.identity,
+                self.source.identity,
+                block.slots,
+                getattr(block, "spins", None),
+            )
             if key in self._cache:
                 self._cache.move_to_end(key)
                 self.statistics["hits"] += 1
@@ -156,9 +161,15 @@ class ConventionalProvider:
                 )
             self.statistics["peak_bytes"] = max(self.statistics["peak_bytes"], peak)
             setup = time.perf_counter()
+            spins = getattr(block, "spins", None)
+            matrices = (
+                [self.snapshot.coefficients] * 4
+                if spins is None
+                else [getattr(self.snapshot, f"coefficients_{spin}") for spin in spins]
+            )
             coefficients = [
-                np.ascontiguousarray(self.snapshot.coefficients[:, slot])
-                for slot in block.slots
+                np.ascontiguousarray(matrix[:, slot])
+                for matrix, slot in zip(matrices, block.slots, strict=True)
             ]
             if plan.output_elements == 0:
                 values = immutable(np.zeros(block.shape))

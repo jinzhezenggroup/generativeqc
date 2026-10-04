@@ -2,6 +2,7 @@
 
 from .complete_gradient import CompleteGradientValidation, complete_gradient_validation
 from .energy import PreparedMP2Energy
+from .unrestricted import PreparedUMP2Energy, UMP2EnergyResult, denominator_check_ump2
 from .gradient import (
     MP2AOLagrangianWeights,
     MP2EnergyAdjoint,
@@ -34,6 +35,8 @@ __all__ = [
     "MP2RILagrangianWeights",
     "MP2ResponseResult",
     "PreparedMP2Energy",
+    "PreparedUMP2Energy",
+    "UMP2EnergyResult",
     "TileEnergyAdjoint",
     "ao_lagrangian_weights",
     "canonical_energy_adjoint",
@@ -49,4 +52,5 @@ __all__ = [
     "fused_cuda_ri_molecular_gradient",
     "solve_canonical_orbital_response",
     "tile_energy_adjoint",
+    "denominator_check_ump2",
 ]

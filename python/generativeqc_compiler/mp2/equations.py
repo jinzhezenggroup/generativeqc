@@ -68,6 +68,89 @@ def energy_program(
     )
 
 
+
+def unrestricted_energy_program(
+    shape: typing.Any,
+    *,
+    channel: typing.Any,
+    differentiable: typing.Any = False,
+) -> typing.Any:
+    """Build one spin-resolved canonical UMP2 tile energy.
+
+    channel is alpha_alpha, beta_beta, or alpha_beta.
+    Same-spin tiles use 1/4 * |g-x|^2 / D over ordered ijab tuples; the
+    opposite-spin tile uses g^2 / D. Spin labels are part of every TensorIR
+    index-space identity, so alpha/beta spaces cannot alias merely because
+    their tile extents happen to match.
+    """
+    if len(shape) != 4 or any(type(n) is not int or n < 1 for n in shape):
+        raise ValueError("UMP2 tile must have four positive integer dimensions")
+    spins = {
+        "alpha_alpha": ("alpha", "alpha", "alpha", "alpha"),
+        "beta_beta": ("beta", "beta", "beta", "beta"),
+        "alpha_beta": ("alpha", "beta", "alpha", "beta"),
+    }
+    if channel not in spins:
+        raise ValueError("unknown UMP2 spin channel")
+    axis_spins = spins[channel]
+    axes = tuple(
+        Index(
+            name,
+            IndexSpace(
+                f"{name}_{spin}_tile",
+                kind,
+                n,
+                spin=spin,
+            ),
+        )
+        for name, kind, n, spin in zip(
+            "ijab",
+            ("occupied", "occupied", "virtual", "virtual"),
+            shape,
+            axis_spins,
+        )
+    )
+
+    def tensor(name: typing.Any, indices: typing.Any) -> typing.Any:
+        return input_tensor(
+            name,
+            TensorSpec(
+                indices,
+                representation="spin_orbital",
+                role="input",
+                differentiable=differentiable,
+            ),
+        )
+
+    g = tensor("g", axes)
+    eps = [tensor("e" + name, (axis,)) for name, axis in zip("ijab", axes)]
+    denominator = add(
+        *(broadcast(e, axes, (k,)) for k, e in enumerate(eps)),
+        coefficients=(1, 1, -1, -1),
+    )
+    if channel == "alpha_beta":
+        energy = reduce_sum(multiply(divide(g, denominator), g), (0, 1, 2, 3))
+    else:
+        x = tensor("x", axes)
+        antisymmetrized = add(g, x, coefficients=(1, -1))
+        raw = reduce_sum(
+            multiply(divide(antisymmetrized, denominator), antisymmetrized),
+            (0, 1, 2, 3),
+        )
+        energy = add(raw, coefficients=("1/4",))
+    return Program(
+        {"energy": energy},
+        provenance={
+            "issue": "1820",
+            "reference": "real all-electron canonical UHF",
+            "channel": channel,
+            "integrals": "unscreened conventional chemists ERIs; all ordered ijab",
+            "units": "Hartree",
+            "amplitudes": "spin-orbital canonical MP2; tile temporary only",
+        },
+    )
+
+
 def pair_energy_program() -> Program:
     """Return one ordered RHF-MP2 (i,j,a,b) contribution.
 

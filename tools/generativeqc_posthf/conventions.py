@@ -47,6 +47,41 @@ class MOBlock:
             raise ValueError("MO index outside the reference snapshot")
 
 
+
+@dataclass(frozen=True)
+class SpinMOBlock:
+    """Chemists-ERI MO slots with an explicit alpha/beta owner per axis."""
+
+    slots: tuple[tuple[int, ...], ...]
+    spins: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "slots", tuple(tuple(x) for x in self.slots))
+        object.__setattr__(self, "spins", tuple(self.spins))
+        if len(self.slots) != 4 or len(self.spins) != 4:
+            raise ValueError("spin-resolved chemists' ERIs require four slots/spins")
+        if any(spin not in ("alpha", "beta") for spin in self.spins):
+            raise ValueError("MO slot spin must be alpha or beta")
+        for slot in self.slots:
+            if len(set(slot)) != len(slot) or any(
+                type(i) is not int or i < 0 for i in slot
+            ):
+                raise ValueError("MO slots require unique nonnegative integer indices")
+
+    @property
+    def shape(self) -> typing.Any:
+        return tuple(map(len, self.slots))
+
+    def validate(self, snapshot: typing.Any) -> None:
+        if any(i >= snapshot.nmo for slot in self.slots for i in slot):
+            raise ValueError("MO index outside the unrestricted reference snapshot")
+        for spin in set(self.spins):
+            coefficients = getattr(snapshot, f"coefficients_{spin}", None)
+            if coefficients is None or coefficients.shape != (snapshot.nmo, snapshot.nmo):
+                raise ValueError(f"reference lacks canonical {spin} coefficients")
+
+
+
 def ovov_to_ijab(ovov: typing.Any) -> typing.Any:
     """Explicit adapter: chemists' (i a|j b) -> G[i,j,a,b], no antisymmetry."""
     value = np.asarray(ovov)
