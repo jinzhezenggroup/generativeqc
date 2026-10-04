@@ -58,7 +58,8 @@ stream, while shell enumeration is repeated per order. The purpose is to qualify
 the tradeoff between compiled kernel resources and repeated scanning, not to
 assume less integral work. The switch is recorded in resource and checkpoint
 identity; differing or missing historical policy needs explicit warm admission.
-See the [experiment and acceptance gates](../../.agents/notes/proposed/2026-10-04-tzvpd-angular-force-schedule.md).
+The retained diagnostic has negative endpoint evidence and is not a promotion
+candidate; see the [rejected experiment](../../.agents/notes/rejected/2026-10-04-tzvpd-angular-force-schedule.md).
 
 `GENERATIVEQC_DIRECT_COULOMB_REACHABLE=1` (or `reachable`) is a separate,
 **off-by-default** Cartesian-source experiment. The compiler passes each AO

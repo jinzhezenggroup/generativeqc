@@ -1,11 +1,11 @@
 # Experiment: partition bounded full/LR force work by angular order
 
-Status: proposed (implemented opt-in; qualification pending)
+Status: rejected for promotion (diagnostic implementation remains off)
 Date: 2026-10-04
 
 ## Motivation
 
-The [12-atom full-TZVPD diagnosis](2026-10-04-tzvpd-warm-integral-diagnosis.md)
+The [12-atom full-TZVPD diagnosis](../proposed/2026-10-04-tzvpd-warm-integral-diagnosis.md)
 records 33.264 s in the two bounded derivative launches, with 255 registers per
 thread and 256 threads per CTA. This is evidence of a theoretical register
 occupancy limit, not measured spills or proof that increasing occupancy helps.
@@ -148,3 +148,34 @@ Promote only after independent numerical gates, observed semantic work and
 complete cold/warm/moved results show a useful tradeoff. If repeated scans or
 unchanged register pressure erase the gain, retain the evidence as a rejected
 experiment instead of carrying an unqualified default.
+
+## Final 12-atom disposition
+
+Slurm 5734 finishes with exit zero, including 3/12-atom ABBA controls and the
+12-atom Nsight diagnostic. Twelve-atom native donor SHA-256 is
+`714f5291c2b81b7ac3156b1983f34925ccd0f6f85d26587ae3d6f0e6104cebb5`.
+Each variant performs one real three-iteration prime before five fixed-density,
+one-iteration warm calls. All 24 prime/replay E/F gates pass; independent
+read-only rechecking gives maximum errors 5.457e-12 Eh / 7.019e-11 Eh/Bohr.
+The donor, source/library, physical device, runner and semantic SCF AO work
+match between variants. Ten-sample off/angular warm medians are
+**63.464031 / 69.850530 s**, a **10.063% regression**. Derivative-stage medians
+are 33.638288 / 40.003016 s. This complements the 3-atom 29.15% regression.
+
+The final angular profile passes its own E/F gates and measures 69.819515 s.
+Its 26 full/LR launches total 39.780743 s of device duration; orders 7/8 account
+for 18.283767 s and orders 7--12 for 28.070415 s. Every class duration includes
+that pass's enumeration, screening and consumption, so these are not original
+monolithic force-class fractions or pure recurrence times. In particular,
+this does not isolate the cause of the regression or measure scan traffic.
+Shell/primitive executions and FLOPs stay null. The SQLite digest is
+`18369c9573ce4cb38455eeb94deb89307c7c34fd6b00ed7e23502e58f96353d1`.
+
+Reject angular partition alone as a performance route and do not spend larger
+endpoint campaigns tuning the same thirteen-scan design. Its control remains
+registered as negative evidence and off; the final device trace is useful for
+choosing a different source algorithm. The separate
+[exact dependency-pruning experiment](../proposed/2026-10-04-reachable-coulomb-states.md)
+removes unused primitive recurrence states while retaining one force traversal.
+Any revisit of angular scheduling requires a materially different work or
+resource argument, not another default-on trial of this rejected schedule.

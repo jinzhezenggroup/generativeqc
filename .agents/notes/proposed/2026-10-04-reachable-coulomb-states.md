@@ -8,9 +8,10 @@ Date: 2026-10-04
 The accepted full-TZVPD 12-atom diagnostic attributes 89.49% of warm device
 duration to full/LR values and derivatives. Total orders 5--8 account for
 76.04% of **value** duration, not a measured force-class distribution. The
-[angular-pass experiment](2026-10-04-tzvpd-angular-force-schedule.md) retains
+[angular-pass experiment](../rejected/2026-10-04-tzvpd-angular-force-schedule.md) retains
 254--255 linked registers/thread and already regresses the complete 3-atom
-diagnostic by 29.15%. Splitting the launch does not remove recurrence work.
+diagnostic by 29.15% and the 12-atom diagnostic by 10.063%. Splitting the
+launch does not remove recurrence work.
 
 `direct_cartesian_contraction_cuda.py::eri_cartesian_value` reads only
 `R(0,t,u,v)` through the current component's total axis powers `(X,Y,Z)`.
