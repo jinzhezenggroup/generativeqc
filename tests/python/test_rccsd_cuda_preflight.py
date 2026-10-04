@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from tools.generate_rccsd_native import canonical_denominators_cpp
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -22,13 +24,15 @@ def _function(source: str, signature: str) -> str:
 
 def test_all_problem_fields_rejected_before_cuda_owner(tmp_path: Path) -> None:
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
+    cache = shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("C++ compiler and ccache required")
     cpu = (ROOT / "src/cc/solver.cpp").read_text()
     cuda = (ROOT / "src/cc/cuda_solver.cu").read_text()
     # Extract current production validators and the entry through construction.
     # CUDA kernels never execute in this device-free boundary regression.
-    validators = _function(cpu, "void validate_problem(")
+    validators = _function(cpu, "double validate_canonical_spectrum(")
+    validators += _function(cpu, "void validate_problem(")
     validators += _function(cpu, "void validate_options(")
     if "void validate_problem_cuda(" in cuda:
         validators += _function(cuda, "void validate_problem_cuda(")
@@ -36,14 +40,30 @@ def test_all_problem_fields_rejected_before_cuda_owner(tmp_path: Path) -> None:
     stop = cuda.index("Owner owner(p, options, device);", start)
     entry = cuda[start : stop + len("Owner owner(p, options, device);")]
     source = tmp_path / "preflight.cpp"
+    (tmp_path / "denominators.hpp").write_text(
+        "#include <cstddef>\n#include <cmath>\n" + canonical_denominators_cpp()
+    )
     source.write_text(PREFIX + validators + entry + "return {}; }\n}\n" + MAIN)
     exe = tmp_path / "preflight"
+    obj = tmp_path / "preflight.o"
     subprocess.run(
-        [compiler, "-std=c++20", "-I" + str(ROOT / "src"), str(source), "-o", str(exe)],
+        [
+            cache,
+            compiler,
+            "-std=c++20",
+            "-I" + str(ROOT / "src"),
+            "-c",
+            str(source),
+            "-o",
+            str(obj),
+        ],
         check=True,
         capture_output=True,
         text=True,
         timeout=60,
+    )
+    subprocess.run(
+        [compiler, str(obj), "-o", str(exe)], check=True, capture_output=True
     )
     result = subprocess.run(
         [str(exe)], capture_output=True, text=True, timeout=10, check=False
@@ -53,6 +73,7 @@ def test_all_problem_fields_rejected_before_cuda_owner(tmp_path: Path) -> None:
 
 PREFIX = r"""
 #include "cc/solver.hpp"
+#include "denominators.hpp"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -60,6 +81,10 @@ PREFIX = r"""
 #include <stdexcept>
 namespace generativeqc::cc {
 int owners = 0;
+std::size_t checked_add(std::size_t a, std::size_t b) {
+  if (b > std::numeric_limits<std::size_t>::max()-a) throw std::length_error("overflow");
+  return a+b;
+}
 std::size_t checked_mul(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max()/a) throw std::length_error("overflow");
   return a*b;

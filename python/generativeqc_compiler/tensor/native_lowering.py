@@ -1,0 +1,94 @@
+"""Project canonical TensorIR lowering requests into native AOT descriptors.
+
+Runtime extents are supplied by the existing native emitter; this adapter owns
+no orbital/method policy and does not construct an alternative scientific IR.
+Representative request hashes identify the AOT template, while native binding
+compatibility additionally includes every resolved operand extent and stride.
+"""
+
+from __future__ import annotations
+
+import json
+import typing
+
+if typing.TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from .ir import Node
+    from .lowering import TensorLoweringAdapter
+    from .types import Index
+
+
+def contraction_initializer(
+    adapter: TensorLoweringAdapter,
+    node: Node,
+    dimension: Callable[[Index], str],
+    *,
+    transpose: tuple[str, str],
+    extents: tuple[str, str, str, str],
+    coefficient: str,
+) -> str:
+    """Emit a typed descriptor for an already recognized dense binary einsum.
+
+    Matrix recognition belongs to the existing physical lowerer. The descriptor
+    retains original mode labels and operand shapes, so provider execution can
+    validate its matrix recipe against that same semantic request. No provider
+    or execution precision choice is made by a scientific/method owner here.
+    """
+    if node.op != "einsum" or len(node.inputs) != 2:
+        raise ValueError("native contraction projection requires binary einsum")
+    request = adapter.request(node, backend="cuda")
+    precision = request.precisions[0]
+    directive = precision.directive
+    if (
+        len(request.precisions) != 1
+        or precision.casts
+        or precision.refinement
+        or precision.audit
+        or len({*precision.input_dtypes, precision.publication_dtype}) != 1
+        or directive.storage_dtype != directive.compute_dtype
+        or directive.compute_dtype != directive.accumulation_dtype
+    ):
+        raise ValueError(
+            "native dense candidate does not implement requested precision"
+        )
+
+    def dtype(name: str) -> str:
+        return (
+            "generativeqc::runtime::PrecisionDtype::"
+            + {
+                "float64": "Fp64",
+                "float32": "Fp32",
+            }[name]
+        )
+
+    operands = []
+    for value, layout in zip((*node.inputs, node), request.operands, strict=True):
+        modes = ",".join(map(str, layout.modes))
+        shape = ",".join(dimension(index) for index in value.spec.indices)
+        operands.append(
+            "generativeqc::tensor::ContractionOperand::dense("
+            f"{{{modes}}},{{{shape}}},{dtype(value.spec.dtype)})"
+        )
+    arithmetic = ",".join(
+        (
+            dtype(directive.storage_dtype),
+            dtype(directive.compute_dtype),
+            dtype(directive.accumulation_dtype),
+            json.dumps(directive.qualification or ""),
+            json.dumps(directive.math_mode),
+        )
+    )
+    return (
+        "generativeqc::tensor::ContractionRequest{"
+        f'"{request.scientific_identity}","{request.semantic_identity}",'
+        f'"{precision.identity}",'
+        "{" + ",".join(operands) + "},"
+        "{"
+        + arithmetic
+        + "},"
+        + dtype(precision.publication_dtype)
+        + f",'{transpose[0]}','{transpose[1]}',"
+        + ",".join((*extents, coefficient))
+        + "}"
+    )

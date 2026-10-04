@@ -1,6 +1,6 @@
 # Decision: fuse canonical doubles denominators into their consumers
 
-Status: implemented; qualification in progress
+Status: implemented and qualified; no endpoint speedup established
 Date: 2026-10-05
 
 ## Problem
@@ -61,11 +61,32 @@ passed three admission/owner tests and 18 CPU solver cases, including all early
 trajectory prefixes, independent determinant replay and exact/one-byte-short
 canonical capacity admission (five CUDA-only cases skipped). Compiler, SCF,
 cross-method ownership, promotion inventory and metadata checks passed.
-Additional mixed/stale representation and independent noninteracting Lambda
-coverage runs in job2295. The full CUDA build and complete endpoint gates are
-pending. No GPU memory/timing result is represented here as measured until the
-corresponding record exists. The CUDA ownership ledger remains unchanged for
-handwritten scientific lines; runtime lines increase by 13 with no reclassification.
+Job2295 additionally passes mixed/stale representation and independent
+noninteracting Lambda coverage. CUDA build2292, 23 real-device solver cases and
+18 Lambda/factor cases in2296 pass. Job2300 passes independent small-water
+all-coordinate FD and failure-publication gates. The ownership ledger has no
+new scientific lines; runtime lines increase by13 with no reclassification.
+
+Complete energy2298 (two alternating pairs) and force2299 (one pair) establish
+31,646,976 bytes less device allocation for ethane230, approximately one d2
+tensor. Complete force capacity decreases63,296,152 bytes. Energy-run CCSD
+medians147.256→146.944 s do not establish an endpoint win; full times vary with
+unmodified RHF. Water CCSD's0.000719 s median regression is retained explicitly,
+and the explicit selector remains available for this observed latency-losing
+domain. Two repeats do not justify a universal size cutoff. This is a capacity
+optimization; no bandwidth or whole-endpoint acceleration claim follows.
+
+Large forces agree within4.371e-9 Eh/Bohr and pass independent two-coordinate,
+two-step central-energy re-audit using existing2288 values. That audit does not
+qualify all large coordinates or benzene264. Full raw and normalized evidence:
+[`cc-derived-denominators-1904`](../../../../benchmarks/results/cc-derived-denominators-1904/README.md).
+
+A follow-up device-free CUDA-admission sentinel exposed a stale test harness:
+it extracted `validate_problem` without the newly called canonical validator.
+The harness now compiles the actual canonical validator and shared generated
+denominator expression, with ccache, before checking that invalid fields never
+reach the allocation owner. This follow-up passes on n2 through Slurm and
+changes no production source or endpoint results above.
 
 ## Revisit
 

@@ -165,6 +165,7 @@ hessian
 tensor_cuda
 cuda_time_estimator
 tensor_precision
+lowering_providers
 state_transport
 opencl_backend
 extensions

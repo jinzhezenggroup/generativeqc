@@ -12,6 +12,7 @@ import typing
 from dataclasses import dataclass
 
 from .provenance import canonical_hash
+from .resources import checked_bytes
 
 DTYPES = frozenset(("float32", "float64"))
 STRICT_MATH_MODE = "ieee-rn-no-tf32"
@@ -28,6 +29,51 @@ def _name(value: typing.Any, label: str) -> str:
     if type(value) is not str or not value.strip():
         raise ValueError(f"{label} must be a nonempty string")
     return value
+
+
+@dataclass(frozen=True)
+class CastBoundary:
+    """One explicit conversion and its logical traffic, shared by IR lowerers.
+
+    These are reads/writes, not a measured memory bandwidth or a claim that
+    conversion is free when fused. Allocation liveness belongs to the planner.
+    """
+
+    name: str
+    source_dtype: str
+    target_dtype: str
+    elements: int
+    read_bytes: int
+    write_bytes: int
+
+    def __post_init__(self) -> None:
+        _name(self.name, "cast name")
+        _dtype(self.source_dtype, "cast source dtype")
+        _dtype(self.target_dtype, "cast target dtype")
+        for label in ("elements", "read_bytes", "write_bytes"):
+            checked_bytes(getattr(self, label), label)
+        sizes = {"float32": 4, "float64": 8}
+        if self.read_bytes != self.elements * sizes[self.source_dtype] or (
+            self.write_bytes != self.elements * sizes[self.target_dtype]
+        ):
+            raise ValueError("cast traffic must match its element count and dtypes")
+
+    @property
+    def simultaneous_bytes(self) -> int:
+        return checked_bytes(
+            self.read_bytes + self.write_bytes, "cast simultaneous bytes"
+        )
+
+    def to_payload(self) -> dict:
+        return {
+            "name": self.name,
+            "source_dtype": self.source_dtype,
+            "target_dtype": self.target_dtype,
+            "elements": self.elements,
+            "read_bytes": self.read_bytes,
+            "write_bytes": self.write_bytes,
+            "simultaneous_bytes": self.simultaneous_bytes,
+        }
 
 
 @dataclass(frozen=True, slots=True)

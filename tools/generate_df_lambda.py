@@ -86,7 +86,7 @@ def _accumulation(name: str) -> tuple[str, str]:
         name,
         "StagedCudaState",
         staged_type(name),
-        "s.gemm?s.q:1" if name in BATCHED_STAGES else "1",
+        f"s.{name}_contractions?s.q:1" if name in BATCHED_STAGES else "1",
     )
 
 
@@ -202,9 +202,28 @@ def cuda_header() -> str:
             "namespace generativeqc::cc::generated::dflambda {",
             "using CudaState = dfcore::CudaState;",
             "struct StagedCudaState : dfhoist::CudaState {",
+            *(
+                f"  generativeqc::tensor::PreparedContractions {name}_contractions;"
+                for name in staged_programs()
+            ),
             "  const double *bar_df_tau{}, *bar_df_Lvv{}, *bar_df_Wvoov{},",
             "      *bar_df_Wvovo{}, *bar_df_Xv{}, *bar_df_D05_vv_ladder{}, *bar_df_singles_residual{};",
             "};",
+            "inline std::size_t contraction_host_bytes(std::size_t variants,bool parameters){",
+            "  std::size_t bytes=0;",
+            *(
+                (
+                    "  if(parameters) "
+                    if name == "staged_factors" or "parameter_" in name
+                    else "  "
+                )
+                + f"bytes+=generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(n) is not None or _packed_batched_matrix_gemm(n) is not None for n in p.live_nodes)},"
+                + ("variants" if name in BATCHED_STAGES else "1")
+                + ");"
+                for name, p in matrix_programs().items()
+            ),
+            "  return bytes; }",
+            "void prepare_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,bool parameters,std::size_t& calls,std::size_t& summands);",
             "// Caller clears the sticky flag at each complete core-plus-Q action boundary.",
             *(
                 f"{output_type(name)} run_{name}_cuda(CudaState& state);"
@@ -268,12 +287,27 @@ def cuda_source() -> str:
                 state_type="StagedCudaState",
                 output_fields=tuple(program.outputs),
                 reset_error=False,
-                matrix_gemm="s.gemm",
-                batched_matrix_gemm="s.batched_gemm",
+                prepared_contractions=f"s.{name}_contractions",
                 batch_dim=True,
             ),
-            f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return state.gemm ? run_{name}_matrix(state) : run_{name}_scalar(state); }}",
+            f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return state.{name}_contractions ? run_{name}_matrix(state) : run_{name}_scalar(state); }}",
         ]
+    lines.append(
+        "void prepare_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,bool parameters,std::size_t& calls,std::size_t& summands){"
+    )
+    for name in staged_programs():
+        optional = name == "staged_factors" or "parameter_" in name
+        if optional:
+            lines.append("  if(parameters){")
+        extent = "batch" if name in BATCHED_STAGES else "1"
+        lines.append(f"  bind_{name}_matrix(s,context,{extent},calls,summands);")
+        if name in BATCHED_STAGES:
+            lines.append(
+                f"  if(tail && tail != batch) bind_{name}_matrix(s,context,tail,calls,summands);"
+            )
+        if optional:
+            lines.append("  }")
+    lines.append("}")
     lines.extend(accumulation_source(name) for name in ACCUMULATED_STAGES)
     return "\n".join([*lines, "}", ""])
 
