@@ -110,6 +110,30 @@ def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
     assert "fma(weighted_left, second, weighted_density)" not in cuda
 
 
+def test_gfn2_cpu_generated_density_failures_mark_staging_status() -> None:
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "src/xtb/native/src/model/gfn2/eigensolver.cpp").read_text()
+    begin = source.index("  double band_energy = 0.0;")
+    end = source.index("  const std::size_t spin_matrix_count", begin)
+    publication = source[begin:end]
+    failure = "return NumericalResult::kDataFailure;"
+    status = (
+        "thermodynamics.system_statuses[system] = "
+        "GENERATIVEQC_XTB_STATUS_EIGENSOLVER_FAILED;"
+    )
+    failure_lines = [
+        index
+        for index, line in enumerate(publication.splitlines())
+        if failure in line
+    ]
+    assert failure_lines
+    lines = publication.splitlines()
+    for index in failure_lines:
+        assert status in "\n".join(lines[max(0, index - 2) : index])
+
+
+
+
 def test_gfn2_mulliken_publication_consumers_use_generated_transforms() -> None:
     root = Path(__file__).resolve().parents[2]
     cpu = (root / "src/xtb/native/src/model/gfn2/mulliken.cpp").read_text()
