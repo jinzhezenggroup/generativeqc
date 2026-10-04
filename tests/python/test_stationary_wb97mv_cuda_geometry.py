@@ -115,6 +115,42 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
     with NativeAO(atoms, basis=native_basis, representation=representation) as basis:
         if large_basis:
             assert basis.nao == 1856 and basis.natom == 96
+        # PySCF stably groups shells by angular momentum on each atom. The
+        # TZVPD snapshot appends diffuse s/p/d shells after f, while NativeAO
+        # preserves snapshot order. This fixed-density oracle must map both
+        # density indices; independently reconverged SCF does not share D.
+        offsets = np.concatenate(
+            ([0], np.cumsum([2 * s.angular_momentum + 1 for s in basis.shells]))
+        )
+        oracle_order = (
+            np.array(
+                [
+                    ao
+                    for shell in sorted(
+                        range(len(basis.shells)),
+                        key=lambda i: (
+                            basis.shells[i].atom_index,
+                            basis.shells[i].angular_momentum,
+                        ),
+                    )
+                    for ao in range(offsets[shell], offsets[shell + 1])
+                ]
+            )
+            if large_basis
+            else np.arange(basis.nao)
+        )
+        if large_basis:
+            oracle_mol = gto.M(
+                atom=atoms, basis=reference_basis, unit="Bohr", cart=False, verbose=0
+            )
+            # Check all AO jets independently before using the metadata map;
+            # do not infer a representation change from the force results.
+            np.testing.assert_allclose(
+                basis.evaluate(points, 2)[:, :, oracle_order],
+                numint.eval_ao(oracle_mol, points, deriv=2),
+                atol=3e-12,
+                rtol=3e-12,
+            )
         rng = np.random.default_rng(1389)
         matrices = rng.normal(
             size=(plan.spin_blocks, basis.nao, 8 if large_basis else basis.nao)
@@ -143,6 +179,9 @@ __device__ bool first_derivative(unsigned, const double*, const double*, double*
             omitted[selected] = False
             oracle_density[:, omitted, :] = 0
             oracle_density[:, :, omitted] = 0
+        oracle_density = np.ascontiguousarray(
+            oracle_density[:, oracle_order, :][:, :, oracle_order]
+        )
         device_points = cp.asarray(points) if ao_route.startswith("resident") else None
         with (
             _CudaSources(
