@@ -126,6 +126,8 @@ def test_per_window_work_cap_cannot_be_disabled_with_whole_grid_guards() -> None
         ((32, 129, 4096), True),
         ((32, 128, 4097), True),
         ((128, 1024, 16384), True),
+        ((96, 1856, 16384), True),
+        ((128, 2048, 16384), True),
     ],
 )
 def test_native_owner_required_only_beyond_legacy_diagnostic_shape(
@@ -140,7 +142,7 @@ def test_native_owner_required_only_beyond_legacy_diagnostic_shape(
 
 
 @pytest.mark.parametrize(
-    "shape", [(129, 1024, 16384), (128, 1025, 16384), (128, 1024, 16385)]
+    "shape", [(129, 2048, 16384), (128, 2049, 16384), (128, 2048, 16385)]
 )
 def test_native_owner_caps_remain_fail_closed(shape: tuple[int, int, int]) -> None:
     with pytest.raises(ValueError, match="resource caps"):
