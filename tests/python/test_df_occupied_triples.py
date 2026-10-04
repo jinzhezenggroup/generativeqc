@@ -239,6 +239,19 @@ def test_w_fp32_candidate_keeps_sensitive_triples_algebra_fp64(
     assert actual["w"].dtype == np.float64
 
 
+def test_generated_native_w_fp32_contract_uses_candidate_precision_identity() -> None:
+    candidate = w_fp32_candidate_program(2, 3)
+    schedule = describe_precision(candidate)
+    generated = header()
+    assert schedule.identity in generated
+    assert schedule.request_identity is not None
+    assert schedule.request_identity in generated
+    assert "build_w_fp32" in generated
+    assert "const float* ovoo" in generated
+    assert "const float* t2" in generated
+    assert "accumulate(scratch" in generated
+
+
 @pytest.fixture(scope="module")
 def native_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
     if not GPU:
@@ -291,6 +304,7 @@ def native_probe(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
         ct.c_double,
         ct.c_size_t,
         ct.c_size_t,
+        ct.c_int,
         ct.POINTER(ct.c_double),
         ct.POINTER(ct.c_size_t),
         ct.c_void_p,
@@ -306,6 +320,7 @@ def run(
     budget: int = 1 << 30,
     panels: int = 3,
     threshold: float = 1e-10,
+    mixed: bool = False,
 ) -> tuple:
     q, o, v = inputs[0].shape
     arrays = [np.ascontiguousarray(x) for x in inputs]
@@ -313,7 +328,7 @@ def run(
         *(x.ctypes.data_as(ct.POINTER(ct.c_double)) for x in arrays)
     )
     values = np.full(3, np.nan)
-    counts = np.zeros(14, dtype=np.uintp)
+    counts = np.zeros(20, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = call(
         o,
@@ -323,6 +338,7 @@ def run(
         threshold,
         budget,
         panels,
+        int(mixed),
         values.ctypes.data_as(ct.POINTER(ct.c_double)),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
         error,
@@ -382,6 +398,30 @@ def test_native_energy_work_budget_fallback_and_repeatability(
     )
 
 
+def test_native_w_fp32_matches_strict_and_reports_actual_precision(
+    native_probe: typing.Any,
+) -> None:
+    inputs, _ = case(2, 3, 4)
+    strict_status, strict_values, strict_counts, strict_error = run(native_probe, inputs)
+    mixed_status, mixed_values, mixed_counts, mixed_error = run(
+        native_probe, inputs, mixed=True
+    )
+    assert strict_status == 0, strict_error
+    assert mixed_status == 0, mixed_error
+    np.testing.assert_allclose(
+        mixed_values[0], strict_values[0], atol=2e-7, rtol=2e-4
+    )
+    assert strict_counts[15] == 0
+    assert strict_counts[14] == strict_counts[6] + strict_counts[7]
+    assert tuple(strict_counts[17:20]) == (64, 64, 64)
+    assert mixed_counts[14] == mixed_counts[6]
+    assert mixed_counts[15] == mixed_counts[7]
+    assert mixed_counts[15] > 0
+    assert mixed_counts[16] > 0
+    assert tuple(mixed_counts[17:20]) == (32, 32, 32)
+    assert mixed_counts[2] > strict_counts[2]
+
+
 @pytest.mark.parametrize("bad", ["nan", "pair", "gap", "threshold", "overflow"])
 def test_native_failure_does_not_publish(native_probe: typing.Any, bad: str) -> None:
     inputs, _ = case(2, 3)
@@ -409,7 +449,7 @@ def test_dimension_and_complete_work_preflight_precedes_input_access(
     """Huge logical shapes must fail before dereferencing even null inputs."""
     pointers = (ct.POINTER(ct.c_double) * 9)()
     values = np.full(3, np.nan)
-    counts = np.full(14, 17, dtype=np.uintp)
+    counts = np.full(20, 17, dtype=np.uintp)
     error = ct.create_string_buffer(2048)
     status = native_probe(
         o,
@@ -419,6 +459,7 @@ def test_dimension_and_complete_work_preflight_precedes_input_access(
         1e-10,
         ct.c_size_t(-1).value,
         3,
+        0,
         values.ctypes.data_as(ct.POINTER(ct.c_double)),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
         error,
