@@ -7,7 +7,7 @@ import pytest
 
 
 @pytest.fixture(scope="module")
-def budget_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx) -> Path:
+def budget_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) -> Path:
     directory = tmp_path_factory.mktemp("empty-df-budget")
     source = directory / "probe.cpp"
     source.write_text(
@@ -64,7 +64,7 @@ def test_explicit_cap_is_not_changed_by_probe(budget_probe: Path, force: bool) -
 
 
 def test_roomy_automatic_budget_retains_source_backed_device_value_floor(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     source = tmp_path / "automatic.cpp"
     source.write_text(r"""
@@ -104,7 +104,7 @@ int main() {
 
 
 def test_resolved_subbudget_preserves_origin_and_cannot_reopen_auto(
-    tmp_path: Path, native_cxx
+    tmp_path: Path, native_cxx: object
 ) -> None:
     source = tmp_path / "subbudget.cpp"
     source.write_text(r"""
