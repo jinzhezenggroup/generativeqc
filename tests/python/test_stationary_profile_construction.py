@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("call_index", (0, 1))
 @pytest.mark.parametrize("profile_device", (False, True))
+@pytest.mark.parametrize("integral_derivatives", (False, True))
 def test_cold_constructor_receives_requested_profile(
-    call_index: int, profile_device: bool
+    call_index: int, profile_device: bool, integral_derivatives: bool
 ) -> None:
     tree = ast.parse((ROOT / "python/generativeqc/_stationary_cuda.py").read_text())
     calls = sorted(
@@ -29,13 +30,23 @@ def test_cold_constructor_receives_requested_profile(
     call = calls[call_index]
     names = {node.id for node in ast.walk(call) if isinstance(node, ast.Name)}
     context = {name: None for name in names}
-    context.update(plan=SimpleNamespace(spin_blocks=1), profile_device=profile_device)
+    context.update(
+        plan=SimpleNamespace(spin_blocks=1),
+        profile_device=profile_device,
+        integral_derivatives=integral_derivatives,
+        primitive_demand=SimpleNamespace(
+            integral_derivatives=integral_derivatives
+        ),
+    )
 
     def construct(
-        *args: object, profile_device: bool = False, **kwargs: object
-    ) -> bool:
+        *args: object,
+        profile_device: bool = False,
+        integral_derivatives: bool = True,
+        **kwargs: object,
+    ) -> tuple[bool, bool]:
         # The real constructor performs topology work before it returns.
-        return profile_device
+        return profile_device, integral_derivatives
 
     def argument(node: ast.expr) -> object:
         if isinstance(node, ast.Name):
@@ -49,4 +60,4 @@ def test_cold_constructor_receives_requested_profile(
     positional = [argument(node) for node in call.args]
     keywords = {item.arg: argument(item.value) for item in call.keywords}
     result = construct(*positional, **keywords)
-    assert result is profile_device
+    assert result == (profile_device, integral_derivatives)
