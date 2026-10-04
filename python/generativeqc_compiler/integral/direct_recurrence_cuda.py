@@ -676,7 +676,7 @@ __device__ inline Scalar primitive_eri_cartesian_shell_pairs(
     const Vec3<Scalar>& third, const Angular& angular_third, double delta,
     const Vec3<Scalar>& fourth, const Angular& angular_fourth,
     generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
-    double omega = 0.0, bool reachable_coulomb = false) {
+    double omega = 0.0, bool reachable_coulomb = false, bool hermite_convolution = false) {
   constexpr unsigned MaximumAngular =
       FirstShellAngular + SecondShellAngular + ThirdShellAngular + FourthShellAngular;
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
@@ -707,7 +707,7 @@ __device__ inline Scalar primitive_eri_cartesian_shell_pairs(
   return eri_cartesian_value<MaximumAngular>(p, q, rho, product_p, product_q, angular_first,
                                              angular_second, angular_third, angular_fourth,
                                              first_coefficients, second_coefficients, range, omega,
-                                             reachable_coulomb);
+                                             reachable_coulomb, hermite_convolution);
 }
 
 /**
@@ -724,7 +724,7 @@ __device__ inline Scalar primitive_eri_cartesian_shell_class(
     const Vec3<Scalar>& second, const Angular& angular_second, double gamma,
     const Vec3<Scalar>& third, const Angular& angular_third, double delta,
     const Vec3<Scalar>& fourth, const Angular& angular_fourth,
-    bool reachable_coulomb = false) {
+    bool reachable_coulomb = false, bool hermite_convolution = false) {
   constexpr unsigned MaximumAngular =
       FirstShellAngular + SecondShellAngular + ThirdShellAngular + FourthShellAngular;
   static_assert(MaximumAngular <= kMaximumCoulombOrder);
@@ -752,7 +752,7 @@ __device__ inline Scalar primitive_eri_cartesian_shell_class(
                                                ThirdShellAngular, FourthShellAngular>(
         alpha, first, angular_first, beta, second, angular_second, gamma, third, angular_third,
         delta, fourth, angular_fourth, generativeqc::integrals::CoulombRange::Full, 0.0,
-        reachable_coulomb);
+        reachable_coulomb, hermite_convolution);
   }
 }
 
