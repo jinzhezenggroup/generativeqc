@@ -14,6 +14,7 @@ if __package__ in (None, ""):
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_RUNTIME_VERSION,
     build_gfn2_core_energy_update_program,
+    build_gfn2_density_contribution_program,
     build_gfn2_density_update_program,
     build_gfn2_energy_weight_program,
     build_gfn2_multipole_hamiltonian_update_program,
@@ -36,6 +37,7 @@ POPULATION_INPUTS = ("density", "integral", "accumulator")
 CORE_ENERGY_INPUTS = ("density", "h0", "accumulator")
 ENERGY_WEIGHT_INPUTS = ("occupation", "eigenvalue")
 WEIGHTED_COEFFICIENT_INPUTS = ("coefficient", "weight")
+DENSITY_CONTRIBUTION_INPUTS = ("weighted_coefficient", "coefficient")
 DENSITY_UPDATE_INPUTS = ("weighted_coefficient", "coefficient", "accumulator")
 RESTRICTED_POPULATION_PUBLISH_INPUTS = ("electronic", "reference")
 SPIN_POPULATION_PUBLISH_INPUTS = ("alpha", "beta", "reference")
@@ -72,6 +74,9 @@ def native_header() -> str:
     )
     weighted_coefficient = prepare_for_backend(
         build_gfn2_weighted_coefficient_program(), backend="cpu"
+    )
+    density_contribution = prepare_for_backend(
+        build_gfn2_density_contribution_program(), backend="cpu"
     )
     density_update = prepare_for_backend(
         build_gfn2_density_update_program(), backend="cpu"
@@ -119,6 +124,12 @@ def native_header() -> str:
             function_name="gfn2_weighted_coefficient_tensor",
             input_order=WEIGHTED_COEFFICIENT_INPUTS,
             output_order=("weighted_coefficient",),
+        ),
+        emit_scalar_cpp(
+            density_contribution,
+            function_name="gfn2_density_contribution_tensor",
+            input_order=DENSITY_CONTRIBUTION_INPUTS,
+            output_order=("contribution",),
         ),
         emit_scalar_cpp(
             density_update,
@@ -192,6 +203,8 @@ inline constexpr const char* gfn2_energy_weight_logical_hash =
     "{energy_weight.logical_hash}";
 inline constexpr const char* gfn2_weighted_coefficient_logical_hash =
     "{weighted_coefficient.logical_hash}";
+inline constexpr const char* gfn2_density_contribution_logical_hash =
+    "{density_contribution.logical_hash}";
 inline constexpr const char* gfn2_density_update_logical_hash =
     "{density_update.logical_hash}";
 inline constexpr const char* gfn2_restricted_population_publish_logical_hash =

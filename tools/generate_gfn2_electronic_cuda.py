@@ -16,6 +16,7 @@ from generativeqc_compiler.method.gfn2_electronic_contract import (
 from generativeqc_compiler.method.gfn2_electronic_runtime import (
     GFN2_ELECTRONIC_PAIR_VERSION,
     build_gfn2_core_energy_update_program,
+    build_gfn2_density_contribution_program,
     build_gfn2_density_update_program,
     build_gfn2_energy_weight_program,
     build_gfn2_population_update_program,
@@ -155,6 +156,9 @@ def cuda_header() -> str:
     weighted_coefficient = prepare_for_backend(
         build_gfn2_weighted_coefficient_program(), backend="cuda"
     )
+    density_contribution = prepare_for_backend(
+        build_gfn2_density_contribution_program(), backend="cuda"
+    )
     density_update = prepare_for_backend(
         build_gfn2_density_update_program(), backend="cuda"
     )
@@ -241,6 +245,15 @@ def cuda_header() -> str:
         ),
         "gfn2_weighted_coefficient_cuda_tensor",
     )
+    density_contribution_source = _device(
+        emit_scalar_cpp(
+            density_contribution,
+            function_name="gfn2_density_contribution_cuda_tensor",
+            input_order=("weighted_coefficient", "coefficient"),
+            output_order=("contribution",),
+        ),
+        "gfn2_density_contribution_cuda_tensor",
+    )
     density_update_source = _device(
         emit_scalar_cpp(
             density_update,
@@ -323,6 +336,7 @@ struct Gfn2ElectronicPairAdjoint {{
 {core_energy_source}
 {energy_weight_source}
 {weighted_coefficient_source}
+{density_contribution_source}
 {density_update_source}
 {restricted_publish_source}
 {spin_publish_source}

@@ -98,6 +98,22 @@ def build_gfn2_weighted_coefficient_program() -> Program:
     )
 
 
+def build_gfn2_density_contribution_program() -> Program:
+    """One explicit (C*f)*C product retained for CUDA finite-range gates."""
+
+    weighted_coefficient = _input("weighted_coefficient")
+    coefficient = _input("coefficient")
+    contribution = multiply(weighted_coefficient, coefficient)
+    return Program(
+        {"contribution": contribution},
+        provenance={
+            "kind": "gfn2-runtime-density-contribution",
+            "version": GFN2_ELECTRONIC_RUNTIME_VERSION,
+            "source": "tensor.scf density_program/weighted_density_program schedule lowering",
+        },
+    )
+
+
 def build_gfn2_density_update_program() -> Program:
     """One ordered density reduction update: accumulator + (C*f)*C."""
 

@@ -61,8 +61,10 @@ int main() {
   if(!gfn2_energy_weight_tensor(0.25,-2.,ew) || ew!=-0.5) return 8;
   double wc=0.;
   if(!gfn2_weighted_coefficient_tensor(3.,0.25,wc) || wc!=0.75) return 9;
+  double contribution=0.;
+  if(!gfn2_density_contribution_tensor(wc,2.,contribution) || contribution!=1.5) return 10;
   out=0.1;
-  if(!gfn2_density_update_tensor(wc,2.,out,out) || out!=std::fma(wc,2.,0.1)) return 10;
+  if(!gfn2_density_update_tensor(wc,2.,out,out) || out!=std::fma(wc,2.,0.1)) return 11;
   double charge=0.,mag=0.;
   if(!gfn2_restricted_population_publish_tensor(-0.3,1.0,charge) || charge!=0.7) return 11;
   if(!gfn2_spin_population_publish_tensor(-0.3,-0.2,1.0,charge,mag) ||
@@ -100,6 +102,7 @@ def test_gfn2_density_consumers_share_generated_scalar_science() -> None:
     assert "gfn2_weighted_coefficient_tensor(" in cpu
     assert "gfn2_energy_weight_tensor(" in cpu
     assert "gfn2_weighted_coefficient_cuda_tensor(" in cuda
+    assert "gfn2_density_contribution_cuda_tensor(" in cuda
     assert "gfn2_density_update_cuda_tensor(" in cuda
     assert "gfn2_energy_weight_cuda_tensor(" in cuda
     assert "fma(density_left, second, density)" not in cuda

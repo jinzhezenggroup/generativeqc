@@ -269,9 +269,12 @@ __global__ void contract_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceI
       const double first = input.coefficients[matrix_begin + indices.row * count + local];
       const double second = input.coefficients[matrix_begin + indices.column * count + local];
       double density_left = 0.0;
+      double density_contribution = 0.0;
       double density_updated = 0.0;
       if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
               first, workspace.weights[orbital_begin + local], density_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              density_left, second, density_contribution) ||
           !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
               density_left, second, density, density_updated)) {
         record_system_error(system_errors, system, device_error,
@@ -280,9 +283,12 @@ __global__ void contract_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceI
         break;
       }
       double weighted_left = 0.0;
+      double weighted_contribution = 0.0;
       double weighted_updated = 0.0;
       if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
               first, workspace.energy_weights[orbital_begin + local], weighted_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              weighted_left, second, weighted_contribution) ||
           !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
               weighted_left, second, weighted_density, weighted_updated)) {
         record_system_error(system_errors, system, device_error,
@@ -595,9 +601,12 @@ __global__ void spin_contract_kernel(Gfn2DensityDeviceBatch batch,
       const double first = input.coefficients[matrix_begin + indices.row * count + local];
       const double second = input.coefficients[matrix_begin + indices.column * count + local];
       double density_left = 0.0;
+      double density_contribution = 0.0;
       double density_updated = 0.0;
       if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
               first, workspace.weights[orbital_begin + local], density_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              density_left, second, density_contribution) ||
           !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
               density_left, second, density, density_updated)) {
         record_system_error(system_errors, system, device_error,
@@ -606,9 +615,12 @@ __global__ void spin_contract_kernel(Gfn2DensityDeviceBatch batch,
         break;
       }
       double weighted_left = 0.0;
+      double weighted_contribution = 0.0;
       double weighted_updated = 0.0;
       if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
               first, workspace.energy_weights[orbital_begin + local], weighted_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              weighted_left, second, weighted_contribution) ||
           !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
               weighted_left, second, weighted_density, weighted_updated)) {
         record_system_error(system_errors, system, device_error,
