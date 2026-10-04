@@ -1,6 +1,5 @@
 """An exhausted automatic envelope is infeasible, not a new zero/default request."""
 
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -8,10 +7,7 @@ import pytest
 
 
 @pytest.fixture(scope="module")
-def budget_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def budget_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx) -> Path:
     directory = tmp_path_factory.mktemp("empty-df-budget")
     source = directory / "probe.cpp"
     source.write_text(
@@ -31,19 +27,16 @@ def budget_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     )
     executable = directory / "probe"
     root = Path(__file__).resolve().parents[2]
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I" + str(root / "src"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
     )
     return executable
 
@@ -71,11 +64,8 @@ def test_explicit_cap_is_not_changed_by_probe(budget_probe: Path, force: bool) -
 
 
 def test_roomy_automatic_budget_retains_source_backed_device_value_floor(
-    tmp_path: Path,
+    tmp_path: Path, native_cxx
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = tmp_path / "automatic.cpp"
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
@@ -99,29 +89,23 @@ int main() {
 """)
     root = Path(__file__).resolve().parents[2]
     executable = tmp_path / "automatic"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             f"-I{root / 'src'}",
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
     )
     subprocess.run([str(executable)], check=True)
 
 
 def test_resolved_subbudget_preserves_origin_and_cannot_reopen_auto(
-    tmp_path: Path,
+    tmp_path: Path, native_cxx
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = tmp_path / "subbudget.cpp"
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
@@ -150,19 +134,16 @@ int main() {
 """)
     root = Path(__file__).resolve().parents[2]
     executable = tmp_path / "subbudget"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             f"-I{root / 'src'}",
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
     )
     subprocess.run([str(executable)], check=True)
     production = (root / "src/scf/fock_prepared.cpp").read_text()
