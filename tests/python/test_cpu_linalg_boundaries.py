@@ -1,7 +1,6 @@
 """Compile the actual scalar provider and check independent boundary results."""
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -11,26 +10,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 @pytest.fixture(scope="module")
-def boundary_binary(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
+def boundary_binary(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx
+) -> Path:
     output = tmp_path_factory.mktemp("cpu-linalg") / "boundaries"
-    subprocess.run(
+    native_cxx.build_executable(
         [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-I" + str(ROOT / "src"),
-            str(ROOT / "tests/native/cpu_linalg_boundary_cases.cpp"),
-            str(ROOT / "src/tensor/cpu_linalg.cpp"),
-            "-o",
-            str(output),
+            ROOT / "tests/native/cpu_linalg_boundary_cases.cpp",
+            ROOT / "src/tensor/cpu_linalg.cpp",
         ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=90,
+        output,
+        compile_args=("-std=c++20", "-O2", "-I" + str(ROOT / "src")),
+        compile_timeout=90,
     )
     return output
 
@@ -80,26 +71,18 @@ def test_cpu_linalg_boundary(boundary_binary: Path, mode: str) -> None:
 
 
 @pytest.fixture(scope="module")
-def probe_binary(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("C++ compiler unavailable")
+def probe_binary(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx
+) -> Path:
     output = tmp_path_factory.mktemp("cpu-probe") / "probe"
-    subprocess.run(
+    native_cxx.build_executable(
         [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-I" + str(ROOT / "src"),
-            str(ROOT / "benchmarks/cpu_linalg_probe.cpp"),
-            str(ROOT / "src/tensor/cpu_linalg.cpp"),
-            "-o",
-            str(output),
+            ROOT / "benchmarks/cpu_linalg_probe.cpp",
+            ROOT / "src/tensor/cpu_linalg.cpp",
         ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=90,
+        output,
+        compile_args=("-std=c++20", "-O2", "-I" + str(ROOT / "src")),
+        compile_timeout=90,
     )
     return output
 
