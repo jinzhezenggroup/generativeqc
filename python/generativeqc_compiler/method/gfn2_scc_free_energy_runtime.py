@@ -11,7 +11,7 @@ from generativeqc_compiler.tensor.ir import Node, add, input_tensor, multiply
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import TensorSpec
 
-GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION = "gfn2-scc-free-energy-runtime-ir-v1"
+GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION = "gfn2-scc-free-energy-runtime-ir-v2"
 
 _INTERNAL_COMPONENTS = (
     "core",
@@ -64,5 +64,23 @@ def build_gfn2_scc_free_energy_program() -> Program:
             "kind": "gfn2-scc-free-energy",
             "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
             "rounding": "fma(-electronic_temperature, entropy, internal_energy)",
+        },
+    )
+
+
+def build_gfn2_total_energy_program() -> Program:
+    """Build E_total = E_SCC + E_repulsion + E_D4^ATM in production order."""
+
+    scc_free_energy = _input("scc_free_energy")
+    repulsion = _input("repulsion")
+    d4_atm = _input("d4_atm")
+    total = add(scc_free_energy, repulsion)
+    total = add(total, d4_atm)
+    return Program(
+        {"total_energy": total},
+        provenance={
+            "kind": "gfn2-total-energy",
+            "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
+            "component_order": ["scc_free_energy", "repulsion", "d4_atm"],
         },
     )

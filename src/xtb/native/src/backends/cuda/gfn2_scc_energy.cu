@@ -6,6 +6,8 @@
 #include <limits>
 
 #include "backends/cuda/gfn2_scc_energy.cuh"
+#include "generated_gfn2_electronic_native.cuh"
+#include "generated_gfn2_scc_free_energy_native.hpp"
 
 namespace generativeqc::xtb::detail::cuda {
 namespace {
@@ -253,8 +255,9 @@ __global__ void reduce_electronic_energy_kernel(Gfn2SccEnergyDeviceBatch batch,
       atomicExch(&valid, 0);
       continue;
     }
-    const double updated = fma(h0_value, density_value, local);
-    if (!isfinite(updated)) {
+    double updated = 0.0;
+    if (!generativeqc::xtb::generated::gfn2_core_energy_update_cuda_tensor(
+            density_value, h0_value, local, updated)) {
       record_system_error(system_errors, system, device_error,
                           Gfn2SccEnergyDeviceError::kNonfiniteCoreArithmetic);
       atomicExch(&valid, 0);
@@ -285,8 +288,9 @@ __global__ void reduce_electronic_energy_kernel(Gfn2SccEnergyDeviceBatch batch,
       record_system_error(system_errors, system, device_error,
                           Gfn2SccEnergyDeviceError::kNonfiniteEntropy);
     } else {
-      const double free_energy = fma(-electronic_temperature, entropy, partial[0]);
-      if (!isfinite(free_energy)) {
+      double free_energy = 0.0;
+      if (!generativeqc::xtb::generated::compose_gfn2_scc_free_energy(
+              electronic_temperature, entropy, partial[0], free_energy)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2SccEnergyDeviceError::kNonfiniteFreeEnergy);
       } else {
@@ -338,7 +342,14 @@ __global__ void reduce_spin_electronic_energy_kernel(
       atomicCAS(&failure_code, 0, static_cast<int>(Gfn2SccEnergyDeviceError::kNonfiniteH0));
       continue;
     }
-    local_sum = fma(h0_value, density_value, local_sum);
+    double updated = 0.0;
+    if (!generativeqc::xtb::generated::gfn2_core_energy_update_cuda_tensor(
+            density_value, h0_value, local_sum, updated)) {
+      atomicCAS(&failure_code, 0,
+                static_cast<int>(Gfn2SccEnergyDeviceError::kNonfiniteCoreArithmetic));
+      continue;
+    }
+    local_sum = updated;
   }
   if (!isfinite(local_sum)) {
     atomicCAS(&failure_code, 0,
@@ -373,8 +384,9 @@ __global__ void reduce_spin_electronic_energy_kernel(
                         Gfn2SccEnergyDeviceError::kNonfiniteEntropy);
     return;
   }
-  const double free_energy = fma(-electronic_temperature, entropy, core_energy);
-  if (!isfinite(free_energy)) {
+  double free_energy = 0.0;
+  if (!generativeqc::xtb::generated::compose_gfn2_scc_free_energy(
+          electronic_temperature, entropy, core_energy, free_energy)) {
     record_system_error(system_errors, system, device_error,
                         Gfn2SccEnergyDeviceError::kNonfiniteFreeEnergy);
     return;

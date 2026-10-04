@@ -9,6 +9,7 @@
 #include <limits>
 
 #include "generated_gfn2_electronic_native.hpp"
+#include "generated_gfn2_scc_free_energy_native.hpp"
 
 namespace generativeqc::xtb::detail::gfn2 {
 namespace {
@@ -435,7 +436,7 @@ generativeqc_xtb_status_t evaluate_restricted_gfn2_energy_forces_cpu(
     return status;
   }
 
-  std::copy_n(input.scc_energies, static_cast<std::size_t>(batch), workspace.energy_scratch);
+  std::fill_n(workspace.energy_scratch, static_cast<std::size_t>(batch), 0.0);
   double* repulsion_gradient = nullptr;
   if (force_requested) {
     if (!valid_scratch(workspace.total_gradient, workspace.coordinate_elements, coordinates) ||
@@ -469,15 +470,17 @@ generativeqc_xtb_status_t evaluate_restricted_gfn2_energy_forces_cpu(
     if (status != GENERATIVEQC_XTB_STATUS_SUCCESS) {
       return status;
     }
-    for (std::int64_t system = 0; system < batch; ++system) {
-      const double updated =
-          workspace.energy_scratch[system] + workspace.component_energy_scratch[system];
-      if (!std::isfinite(updated)) {
-        error = "restricted GFN2 D4 ATM energy accumulation overflowed";
-        return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-      }
-      workspace.energy_scratch[system] = updated;
+  }
+
+  for (std::int64_t system = 0; system < batch; ++system) {
+    const double d4_atm = d4 == nullptr ? 0.0 : workspace.component_energy_scratch[system];
+    double total_energy = 0.0;
+    if (!::generativeqc::xtb::generated::compose_gfn2_total_energy(
+            input.scc_energies[system], workspace.energy_scratch[system], d4_atm, total_energy)) {
+      error = "restricted GFN2 terminal energy composition overflowed";
+      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
+    workspace.energy_scratch[system] = total_energy;
   }
 
   if (!force_requested) {
