@@ -691,10 +691,8 @@ class PreparedBatch:
                         active_ao_cache_bytes=decision.cache_bytes,
                     )
                     work = dict(work)
-                    work["force_active_ao_policy"] = (
-                        force_active_ao_policy_record(
-                            decision, work.get("active_ao_maps")
-                        )
+                    work["force_active_ao_policy"] = force_active_ao_policy_record(
+                        decision, work.get("active_ao_maps")
                     )
                     return forces, work
 
@@ -707,8 +705,7 @@ class PreparedBatch:
                 native_library = Path(str(self._library._name)).resolve()
                 all_electron = source.hamiltonian == "all-electron"
                 packaged = (
-                    all_electron
-                    and not source.method_ir.full_range_exact_exchange
+                    all_electron and not source.method_ir.full_range_exact_exchange
                 )
                 kwargs = {
                     "compiler": (
@@ -743,9 +740,7 @@ class PreparedBatch:
                 work = dict(result.work)
                 selection = work.get("resident_ao_selection")
                 map_work = (
-                    selection.get("work")
-                    if isinstance(selection, dict)
-                    else None
+                    selection.get("work") if isinstance(selection, dict) else None
                 )
                 work["force_active_ao_policy"] = force_active_ao_policy_record(
                     decision, map_work
@@ -753,6 +748,7 @@ class PreparedBatch:
                 return -np.asarray(result.gradient).copy(), work
             finally:
                 state._source.close()
+
     def _public_dft_cpu_force(self, index: typing.Any, atoms: typing.Any) -> typing.Any:
         """Bounded CPU stationary force for qualified ECP or named direct hybrids."""
         from generativeqc_compiler.dft import NativeAO

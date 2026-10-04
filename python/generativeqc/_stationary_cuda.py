@@ -2379,7 +2379,9 @@ def _stationary_resident_ao_cache(
         if prepared is not None:
             prepared._resident_ao_maps = None
             prepared._resident_ao_map_key = None
-        owner = ResidentAoMapCache(grid, domain, cutoff=cutoff, budget_bytes=budget_bytes)
+        owner = ResidentAoMapCache(
+            grid, domain, cutoff=cutoff, budget_bytes=budget_bytes
+        )
         if prepared is not None:
             prepared._resident_ao_maps = owner
             prepared._resident_ao_map_key = key
@@ -2611,7 +2613,12 @@ def _complete_rks_cuda_gradient_diagnostic(
     ao_map_reserve = _stationary_ao_map_reserve(
         resident_ao_cutoff,
         resident_ao_cache_bytes,
-        host_bound + (sum(value.host_bytes for value in tensor_plans.values()) if prepared is not None else 0),
+        host_bound
+        + (
+            sum(value.host_bytes for value in tensor_plans.values())
+            if prepared is not None
+            else 0
+        ),
         max_host_bytes,
     )
     host_bound += ao_map_reserve
@@ -2997,8 +3004,12 @@ def _complete_rks_cuda_gradient_diagnostic(
                 "grid_atomic_measure_h2d_bytes": grid_points * 8,
             }
         ao_maps = _stationary_resident_ao_cache(
-            prepared, ao, state, resident_grid,
-            cutoff=resident_ao_cutoff, budget_bytes=ao_map_reserve,
+            prepared,
+            ao,
+            state,
+            resident_grid,
+            cutoff=resident_ao_cutoff,
+            budget_bytes=ao_map_reserve,
         )
         for chunk_begin, chunk_end in grid_work.chunks():
             with timeline.phase("xc_geometry_enqueue"):
@@ -3007,7 +3018,8 @@ def _complete_rks_cuda_gradient_diagnostic(
                     if resident_grid is not None:
                         point_pointer = resident_grid.points + 3 * begin * 8
                         selected_ao_ids = (
-                            None if ao_maps is None
+                            None
+                            if ao_maps is None
                             else ao_maps.select(ao, ao_maps.domain, begin, end - begin)
                         )
                         with ao.feature_task_device_points(
@@ -3198,7 +3210,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         },
         resident_ao_selection={
             "schema": "generativeqc.stationary-resident-ao-selection.v1",
-            "mode": "disabled" if resident_ao_cutoff is None else ("dense-no-resident-grid" if ao_maps is None else "sampled-jet-cutoff"),
+            "mode": "disabled"
+            if resident_ao_cutoff is None
+            else (
+                "dense-no-resident-grid" if ao_maps is None else "sampled-jet-cutoff"
+            ),
             "cutoff": resident_ao_cutoff,
             "cache_budget_requested_bytes": resident_ao_cache_bytes,
             "cache_host_reserve_bytes": ao_map_reserve,

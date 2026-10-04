@@ -114,9 +114,7 @@ def test_same_resolver_can_cover_composite_without_method_identity() -> None:
         ({"resident_grid": False}, "resident-grid-unavailable"),
     ],
 )
-def test_capability_miss_is_dense(
-    updates: dict[str, object], reason: str
-) -> None:
+def test_capability_miss_is_dense(updates: dict[str, object], reason: str) -> None:
     decision = resolve_force_active_ao_policy(
         _workload(**updates),
         profiles=(_profile(),),
@@ -186,6 +184,5 @@ def test_missing_map_work_never_invents_sparse_execution() -> None:
         profiles=(_profile(),),
     )
     assert (
-        force_active_ao_policy_record(selected, None)["actual_mode"]
-        == "dense-fallback"
+        force_active_ao_policy_record(selected, None)["actual_mode"] == "dense-fallback"
     )

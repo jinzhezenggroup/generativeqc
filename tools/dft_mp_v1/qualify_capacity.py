@@ -1113,7 +1113,11 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         ("_stationary_ao_map_reserve", STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256),
         ("_stationary_resident_ao_cache", STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256),
     ):
-        helpers = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == name]
+        helpers = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        ]
         if len(helpers) != 1 or _source_node_sha256(source, helpers[0]) != expected:
             raise RuntimeError(f"stationary CUDA {name} contract changed")
         page_contract[f"{name.removeprefix('_stationary_')}_sha256"] = expected
@@ -2045,8 +2049,16 @@ def _prepared_aot_route_contract(repository: Path) -> str:
     digest = _source_node_sha256(source, methods[0])
     if digest != PREPARED_AOT_SELECTION_CONTRACT_SHA256:
         raise RuntimeError("prepared stationary AOT selection contract changed")
-    requests = [node for node in classes[0].body if isinstance(node, ast.FunctionDef) and node.name == "_request"]
-    if len(requests) != 1 or _source_node_sha256(source, requests[0]) != PREPARED_AO_REQUEST_CONTRACT_SHA256:
+    requests = [
+        node
+        for node in classes[0].body
+        if isinstance(node, ast.FunctionDef) and node.name == "_request"
+    ]
+    if (
+        len(requests) != 1
+        or _source_node_sha256(source, requests[0])
+        != PREPARED_AO_REQUEST_CONTRACT_SHA256
+    ):
         raise RuntimeError("prepared stationary AO request contract changed")
     return digest
 

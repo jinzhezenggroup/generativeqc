@@ -6,8 +6,8 @@ source/device workload evidence; every miss retains the dense AO domain.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import typing
+from dataclasses import asdict, dataclass
 
 DEFAULT_FORCE_ACTIVE_AO_POLICY = "auto"
 _SUPPORTED_DERIVATIVE_ORDERS = frozenset((1, 2))
@@ -98,10 +98,7 @@ class QualifiedForceActiveAoProfile:
             raise ValueError("profile derivative order is unsupported")
         if any(value not in (1, 2) for value in self.spin_blocks):
             raise ValueError("profile spin scope is invalid")
-        if any(
-            value not in ("ordinary", "composite")
-            for value in self.compositions
-        ):
+        if any(value not in ("ordinary", "composite") for value in self.compositions):
             raise ValueError("profile composition scope is invalid")
         if self.density_fitted is not None and type(self.density_fitted) is not bool:
             raise TypeError("profile density-fitting scope must be bool or None")
@@ -148,10 +145,7 @@ class QualifiedForceActiveAoProfile:
             and self.min_aos <= workload.aos <= self.max_aos
             and self.min_grid_points <= workload.grid_points <= self.max_grid_points
             and workload.tile_policy == self.tile_policy
-            and (
-                self.tile_points is None
-                or workload.tile_points == self.tile_points
-            )
+            and (self.tile_points is None or workload.tile_points == self.tile_points)
             and workload.max_device_bytes >= self.min_device_bytes
             and workload.max_host_bytes >= self.min_host_bytes
         )
@@ -185,13 +179,9 @@ def resolve_force_active_ao_policy(
         raise RuntimeError("force active-AO production policy is not automatic")
     candidates = QUALIFIED_FORCE_ACTIVE_AO_PROFILES if profiles is None else profiles
     if not candidates:
-        return ForceActiveAoDecision(
-            workload, None, "no-qualified-profile", None, 0
-        )
+        return ForceActiveAoDecision(workload, None, "no-qualified-profile", None, 0)
     if workload.hamiltonian != "all-electron":
-        return ForceActiveAoDecision(
-            workload, None, "unsupported-hamiltonian", None, 0
-        )
+        return ForceActiveAoDecision(workload, None, "unsupported-hamiltonian", None, 0)
     if workload.derivative_order not in _SUPPORTED_DERIVATIVE_ORDERS:
         return ForceActiveAoDecision(
             workload, None, "unsupported-derivative-order", None, 0
@@ -202,9 +192,7 @@ def resolve_force_active_ao_policy(
         )
     matched = tuple(profile for profile in candidates if profile.matches(workload))
     if not matched:
-        return ForceActiveAoDecision(
-            workload, None, "no-qualified-profile", None, 0
-        )
+        return ForceActiveAoDecision(workload, None, "no-qualified-profile", None, 0)
     if len(matched) != 1:
         raise RuntimeError("overlapping qualified force active-AO profiles")
     profile = matched[0]
@@ -222,12 +210,8 @@ def force_active_ao_policy_record(
     map_work: typing.Mapping[str, typing.Any] | None,
 ) -> dict[str, typing.Any]:
     observed = None if map_work is None else dict(map_work)
-    selected_work = (
-        None if observed is None else observed.get("point_ao_square_sum")
-    )
-    dense_work = (
-        None if observed is None else observed.get("dense_point_ao_square_sum")
-    )
+    selected_work = None if observed is None else observed.get("point_ao_square_sum")
+    dense_work = None if observed is None else observed.get("dense_point_ao_square_sum")
     if not decision.selected:
         actual = "dense"
     elif observed is None:
