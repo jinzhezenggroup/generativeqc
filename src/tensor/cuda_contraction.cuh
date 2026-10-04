@@ -116,7 +116,7 @@ template <class T>
 static __global__ void audit_contraction(const T* values, std::size_t count, int* error) {
   for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
        i += std::size_t(blockDim.x) * gridDim.x)
-    if (!isfinite(values[i])) atomicExch(error, 1);
+    if (!isfinite(values[i])) atomicCAS(error, 0, 1);
 }
 
 /** Prepared projection of the canonical compiler requests for one AOT stage.

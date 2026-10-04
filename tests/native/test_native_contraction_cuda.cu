@@ -101,6 +101,13 @@ void check(char ta, char tb, std::size_t batch) {
   cuda_check(cudaMemcpyAsync(&status, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
   cuda_check(cudaStreamSynchronize(stream));
   if (!status) throw std::runtime_error("nonfinite provider output escaped the sticky audit");
+  status = 7;
+  cuda_check(cudaMemcpyAsync(error, &status, sizeof(int), cudaMemcpyHostToDevice, stream));
+  run();
+  cuda_check(cudaMemcpyAsync(&status, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
+  cuda_check(cudaStreamSynchronize(stream));
+  if (status != 7)
+    throw std::runtime_error("provider audit overwrote the first arithmetic failure");
   context.reset();
   rejected(run);
   cuda_check(cudaFree(error));

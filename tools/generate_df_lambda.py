@@ -131,7 +131,7 @@ def accumulation_source(name: str) -> str:
         f"  accumulate_{name}_kernel<<<generativeqc_tensor::blocks(count,256),256,0,s.stream>>>(values,"
         + ",".join("target_" + field for field in fields)
         + ",o,v,"
-        + ("s.gemm?s.q:1" if name in BATCHED_STAGES else "1")
+        + (f"s.{name}_contractions?s.q:1" if name in BATCHED_STAGES else "1")
         + ",s.error);",
         "  generativeqc_tensor::cuda_check(cudaGetLastError());",
         "}",
