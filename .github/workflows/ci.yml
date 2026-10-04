@@ -590,10 +590,25 @@ jobs:
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-d3
       - name: Show ccache statistics
         run: ccache --show-stats
+      # Probe objects are produced after the shared library cache is saved.
+      # Keep them small and shard-local; actions/cache saves only on job success.
+      - name: Cache native Python probes
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache-python-probes
+          key: ccache-python-probes-v1-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: |
+            ccache-python-probes-v1-${{ matrix.shard }}-
+      - name: Reset native probe ccache statistics
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+        run: ccache --zero-stats
       - name: Run Python tests with coverage
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
         run: |
           extra_args=()
           coverage_args=()
@@ -928,6 +943,9 @@ jobs:
             "${extra_args[@]}"
       - name: Show post-test ccache statistics
         if: always()
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
         run: ccache --show-stats
       - name: Preserve transient benchmark/debug artifacts
         if: always()

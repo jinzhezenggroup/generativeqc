@@ -9,13 +9,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_native_split_hybrid_descriptor_gate(
-    tmp_path: Path, native_cxx: object
+    tmp_path: Path, required_native_cxx: object
 ) -> None:
     (tmp_path / "generated_split_hybrid_registry.cuh").write_text(
         emit_registry(), encoding="utf-8"
     )
     executable = tmp_path / "split-hybrid-admission"
-    native_cxx.build_executable(
+    required_native_cxx.build_executable(
         [ROOT / "tests/native/split_hybrid_admission_probe.cpp"],
         executable,
         compile_args=(
