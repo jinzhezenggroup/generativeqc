@@ -257,6 +257,34 @@ int main() {
     const bool density_mixed = family != SemilocalFamily::B3lyp;
     assert(automatic.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
            density_mixed);
+    const auto dense_execution =
+        resolve_cuda_ks_iteration_precision(automatic, false, true);
+    assert(dense_execution.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    assert(dense_execution.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
+           density_mixed);
+    const auto local_execution =
+        resolve_cuda_ks_iteration_precision(automatic, false, false);
+    assert(local_execution.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    assert(!local_execution.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
+    // Layout fallback cannot erase a qualified J directive or mutate the input.
+    const auto* executed_j = local_execution.find(cuda_ks_precision_region::kCoulombJ);
+    const auto* requested_j = automatic.find(cuda_ks_precision_region::kCoulombJ);
+    assert(executed_j && requested_j);
+    assert(executed_j->storage_dtype == requested_j->storage_dtype);
+    assert(executed_j->compute_dtype == requested_j->compute_dtype);
+    assert(executed_j->accumulation_dtype == requested_j->accumulation_dtype);
+    assert(executed_j->qualification == requested_j->qualification);
+    assert(executed_j->math_mode == requested_j->math_mode);
+    assert(local_execution.size() == automatic.size());
+    assert(local_execution.audit_owner() == automatic.audit_owner());
+    assert(local_execution.strict_audit_dtype() == automatic.strict_audit_dtype());
+    assert(automatic.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
+           density_mixed);
+    const auto refinement =
+        resolve_cuda_ks_iteration_precision(automatic, true, true);
+    assert(refinement.is_strict_fp64() && refinement.size() == automatic.size());
+    assert(refinement.find(cuda_ks_precision_region::kCoulombJ)->qualification.empty());
+    assert(resolve_cuda_ks_iteration_precision(strict, false, true).is_strict_fp64());
     for (const auto region : {cuda_ks_precision_region::kExactExchange,
                               cuda_ks_precision_region::kTau,
                               cuda_ks_precision_region::kXcPointAlgebra,
@@ -284,6 +312,23 @@ int main() {
       assert(rejected);
     }
   }
+  // Refinement must include future regions, not just today's J/density pair.
+  auto extended = resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO,
+      semilocal_family_code(SemilocalFamily::Pbe), false, false);
+  extended.add_region("extra.component", runtime::fp32_compute_fp64_accumulation("extra-gate"));
+  const auto local = resolve_cuda_ks_iteration_precision(extended, false, false);
+  assert(local.uses_lower_precision("extra.component"));
+  assert(local.find("extra.component")->qualification == "extra-gate");
+  const auto refinement = resolve_cuda_ks_iteration_precision(extended, true, false);
+  assert(refinement.size() == 7 && refinement.is_strict_fp64());
+  assert(extended.uses_lower_precision("extra.component"));
+  // Strict regions never invoke the predicate or become candidates for lowering.
+  unsigned visits = 0;
+  const auto unchanged = refinement.filter_lower_precision([&](const runtime::PrecisionRegion&) {
+    ++visits;
+    return true;
+  });
+  assert(visits == 0 && unchanged.is_strict_fp64());
   bool rejected = false;
   try {
     resolve_cuda_ks_precision_schedule(static_cast<generativeqc_precision_mode>(999), 0, false,

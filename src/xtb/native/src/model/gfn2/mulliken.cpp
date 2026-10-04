@@ -911,9 +911,10 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
           static_cast<std::size_t>(qsh_base + shells + local_shell);
       const double alpha = qsh_scratch[charge_index];
       const double beta = qsh_scratch[magnetization_index];
-      const double charge = alpha + beta;
-      const double magnetization = alpha - beta;
-      if (!std::isfinite(charge) || !std::isfinite(magnetization)) {
+      double charge = 0.0;
+      double magnetization = 0.0;
+      if (!::generativeqc::xtb::generated::gfn2_spin_population_publish_tensor(
+              alpha, beta, 0.0, charge, magnetization)) {
         error = "Mulliken target spin conversion exceeded floating-point range";
         return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
       }
@@ -926,21 +927,13 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
     const std::size_t charge_index = static_cast<std::size_t>(qsh_base + local_shell);
     const double reference =
         data.reference_shell_occupations[static_cast<std::size_t>(shell_begin + local_shell)];
-    if (nspin == 1) {
-      const double charge = qsh_scratch[charge_index] + reference;
-      if (!std::isfinite(charge)) {
-        error = "Mulliken target reference-charge addition exceeded floating-point range";
-        return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-      }
-      qsh_scratch[charge_index] = charge;
-    } else {
-      const double charge = qsh_scratch[charge_index] + reference;
-      if (!std::isfinite(charge)) {
-        error = "Mulliken target reference-charge addition exceeded floating-point range";
-        return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
-      }
-      qsh_scratch[charge_index] = charge;
+    double charge = 0.0;
+    if (!::generativeqc::xtb::generated::gfn2_restricted_population_publish_tensor(
+            qsh_scratch[charge_index], reference, charge)) {
+      error = "Mulliken target reference-charge addition exceeded floating-point range";
+      return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
     }
+    qsh_scratch[charge_index] = charge;
   }
 
   if (nspin == 2) {
@@ -952,9 +945,10 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
             static_cast<std::size_t>(dipole_base + (atoms + local_atom) * 3 + component);
         const double alpha = dipole_scratch[charge_index];
         const double beta = dipole_scratch[magnetization_index];
-        const double charge = alpha + beta;
-        const double magnetization = alpha - beta;
-        if (!std::isfinite(charge) || !std::isfinite(magnetization)) {
+        double charge = 0.0;
+        double magnetization = 0.0;
+        if (!::generativeqc::xtb::generated::gfn2_spin_population_publish_tensor(
+                alpha, beta, 0.0, charge, magnetization)) {
           error = "Mulliken target dipole spin conversion exceeded floating-point range";
           return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
         }
@@ -968,9 +962,10 @@ generativeqc_xtb_status_t evaluate_mulliken_population_system_cpu(
             static_cast<std::size_t>(quadrupole_base + (atoms + local_atom) * 6 + component);
         const double alpha = quadrupole_scratch[charge_index];
         const double beta = quadrupole_scratch[magnetization_index];
-        const double charge = alpha + beta;
-        const double magnetization = alpha - beta;
-        if (!std::isfinite(charge) || !std::isfinite(magnetization)) {
+        double charge = 0.0;
+        double magnetization = 0.0;
+        if (!::generativeqc::xtb::generated::gfn2_spin_population_publish_tensor(
+                alpha, beta, 0.0, charge, magnetization)) {
           error = "Mulliken target quadrupole spin conversion exceeded floating-point range";
           return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
         }
@@ -1208,8 +1203,9 @@ generativeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& p
       const double reference =
           data.reference_shell_occupations[static_cast<std::size_t>(shell_begin + local_shell)];
       if (nspin == 1) {
-        const double charge = qsh_scratch[charge_index] + reference;
-        if (!std::isfinite(charge)) {
+        double charge = 0.0;
+        if (!::generativeqc::xtb::generated::gfn2_restricted_population_publish_tensor(
+                qsh_scratch[charge_index], reference, charge)) {
           error = "Mulliken reference-charge addition exceeded floating-point range";
           return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
         }
@@ -1219,9 +1215,10 @@ generativeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& p
             static_cast<std::size_t>(qsh_base + shells + local_shell);
         const double alpha = qsh_scratch[charge_index];
         const double beta = qsh_scratch[magnetization_index];
-        const double charge = alpha + beta + reference;
-        const double magnetization = alpha - beta;
-        if (!std::isfinite(charge) || !std::isfinite(magnetization)) {
+        double charge = 0.0;
+        double magnetization = 0.0;
+        if (!::generativeqc::xtb::generated::gfn2_spin_population_publish_tensor(
+                alpha, beta, reference, charge, magnetization)) {
           error = "Mulliken spin conversion exceeded floating-point range";
           return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
         }
@@ -1239,9 +1236,10 @@ generativeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& p
               static_cast<std::size_t>(dipole_base + (atoms + local_atom) * 3 + component);
           const double alpha = dipole_scratch[charge_index];
           const double beta = dipole_scratch[magnetization_index];
-          const double charge = alpha + beta;
-          const double magnetization = alpha - beta;
-          if (!std::isfinite(charge) || !std::isfinite(magnetization)) {
+          double charge = 0.0;
+          double magnetization = 0.0;
+          if (!::generativeqc::xtb::generated::gfn2_spin_population_publish_tensor(
+                  alpha, beta, 0.0, charge, magnetization)) {
             error = "Mulliken dipole spin conversion exceeded floating-point range";
             return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
           }
@@ -1255,9 +1253,10 @@ generativeqc_xtb_status_t evaluate_mulliken_population_cpu(const MullikenPlan& p
               static_cast<std::size_t>(quadrupole_base + (atoms + local_atom) * 6 + component);
           const double alpha = quadrupole_scratch[charge_index];
           const double beta = quadrupole_scratch[magnetization_index];
-          const double charge = alpha + beta;
-          const double magnetization = alpha - beta;
-          if (!std::isfinite(charge) || !std::isfinite(magnetization)) {
+          double charge = 0.0;
+          double magnetization = 0.0;
+          if (!::generativeqc::xtb::generated::gfn2_spin_population_publish_tensor(
+                  alpha, beta, 0.0, charge, magnetization)) {
             error = "Mulliken quadrupole spin conversion exceeded floating-point range";
             return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
           }

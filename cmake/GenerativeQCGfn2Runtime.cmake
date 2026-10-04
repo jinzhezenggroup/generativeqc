@@ -104,8 +104,11 @@ function(generativeqc_add_gfn2_runtime target)
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_electronic_contract.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_electronic_runtime.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_electronic_schedule.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/provenance.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ad_program.py"
         "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scf_cuda.py"
       ARGS --output "${GENERATIVEQC_GFN2_ELECTRONIC_CUDA_HEADER}"
       COMMENT "Generating compiler-owned GFN2 CUDA electronic pair science")
     # Both CPU and CUDA consume the one compiler-owned pair artifact.

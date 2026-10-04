@@ -1,7 +1,6 @@
 """Public uint64 byte diagnostics need not share the platform size_t typedef."""
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -12,12 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("diagnostic_type", ("unsigned long", "unsigned long long"))
 def test_df_source_device_capacity_accepts_distinct_unsigned_types(
-    tmp_path: Path, diagnostic_type: str
+    tmp_path: Path, diagnostic_type: str, native_cxx: object
 ) -> None:
     """Compile the DF owner assignment with both LP64 uint64_t conventions."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     statement = re.search(
         r"metrics\.owned_device_bytes\s*=\s*std::max.*?;", source, re.DOTALL
@@ -40,23 +36,19 @@ int main() {{
     }}
 }}
 """)
-    subprocess.run(
-        [compiler, "-std=c++20", "-Wall", "-Werror", str(path), "-o", str(executable)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=("-std=c++20", "-Wall", "-Werror"),
+        compile_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
 @pytest.mark.parametrize("diagnostic_type", ("unsigned long", "unsigned long long"))
 def test_triples_capacity_maximum_accepts_distinct_unsigned_types(
-    tmp_path: Path, diagnostic_type: str
+    tmp_path: Path, diagnostic_type: str, native_cxx: object
 ) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
     statement = re.search(
         r"diagnostic\.numeric_capacity_bytes\s*=\s*std::max.*?;", source, re.DOTALL
@@ -103,12 +95,10 @@ int main() {{
 """
     path, executable = tmp_path / "capacity.cpp", tmp_path / "capacity"
     path.write_text(harness)
-    compiled = subprocess.run(
-        [compiler, "-std=c++20", "-Wall", "-Werror", str(path), "-o", str(executable)],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [path],
+        executable,
+        compile_args=("-std=c++20", "-Wall", "-Werror"),
+        compile_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stderr
     subprocess.run([str(executable)], check=True, timeout=10)

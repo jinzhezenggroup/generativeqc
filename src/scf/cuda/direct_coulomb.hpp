@@ -19,6 +19,11 @@ struct ShellPairDensityBounds;
  */
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
 
+/** Query the opt-in at preparation only; optional retained storage freezes it.
+ * This adapter keeps canonical providers independent of HF policy headers.
+ */
+bool direct_shared_rsh_values_requested() noexcept;
+
 /** Optional geometry owner for the generated pure-J consumer. It borrows the
  * direct provider's stream and public basis metadata, and owns bounded shell
  * topology, Cartesian transforms and scratch. No quartet list is materialized.
@@ -41,6 +46,12 @@ struct GeneratedCoulombPlan {
   const std::uint32_t* pair_order{};
   const std::uint32_t* pair_class_offsets{};
   GeneratedShellPairStream* topology{};
+  /** Optional borrowed profiler array, one entry per direct shell class.
+   * Counts admitted streaming J task dispatches, not primitive recurrences or
+   * rejected candidates. Bounded fallback classes are unobserved. The caller
+   * owns zeroing, charged storage and stream-ordered lifetime; null in normal
+   * execution. These intrusive observations must not supply clean timing. */
+  unsigned long long* admitted_shell_counts{};
   ~GeneratedCoulombPlan();
 };
 
@@ -86,6 +97,9 @@ struct GeneratedExchangePlan {
   std::uint32_t* bounded_value_overflow{};
   double *shell_pair_block_bounds{}, *force{};
   unsigned long long* force_cursor{};
+  /** Same borrowed streaming-task census as the J owner, but for raw K.
+   * The separate array prevents a J traversal being mislabeled as K work. */
+  unsigned long long* admitted_shell_counts{};
   ~GeneratedExchangePlan();
 };
 
