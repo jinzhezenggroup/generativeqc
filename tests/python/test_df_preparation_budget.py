@@ -2,7 +2,6 @@
 
 import json
 import os
-import shutil
 import subprocess
 import typing
 from pathlib import Path
@@ -11,11 +10,8 @@ import pytest
 
 
 def test_preparation_shapes_and_resource_policy_envelopes(
-    tmp_path: typing.Any,
+    tmp_path: typing.Any, native_cxx
 ) -> None:
-    compiler = shutil.which("c++")
-    if not compiler:
-        pytest.skip("host C++ compiler unavailable")
     source = tmp_path / "budget.cpp"
     source.write_text(
         r"""
@@ -70,16 +66,10 @@ int main() {
     )
     root = Path(__file__).resolve().parents[2]
     executable = tmp_path / "budget"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-I" + str(root / "src"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=("-std=c++20", "-I" + str(root / "src")),
     )
     values = json.loads(subprocess.check_output([str(executable)], text=True))
     energy, force, generated, cartesian, retained, overflow = values[:6]
@@ -122,10 +112,9 @@ int main() {
     assert [impossible, impossible_value, impossible_response] == [0, 1, 0]
 
 
-def test_constrained_headroom_reports_the_actual_reservation(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def test_constrained_headroom_reports_the_actual_reservation(
+    tmp_path: Path, native_cxx
+) -> None:
     source = tmp_path / "headroom.cpp"
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
@@ -146,27 +135,18 @@ int main() {
 """)
     output = tmp_path / "headroom"
     root = Path(__file__).resolve().parents[2]
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-I" + str(root / "src"),
-            str(source),
-            "-o",
-            str(output),
-        ],
-        check=True,
+    native_cxx.build_executable(
+        [source],
+        output,
+        compile_args=("-std=c++20", "-I" + str(root / "src")),
     )
     subprocess.run([str(output)], check=True)
 
 
 def test_live_auto_budget_can_retain_large_values_without_widening_caps(
-    tmp_path: Path,
+    tmp_path: Path, native_cxx
 ) -> None:
     """The no-probe safety ceiling must not force roomy devices to stream."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = tmp_path / "resident_budget.cpp"
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
@@ -201,27 +181,18 @@ int main() {
 """)
     executable = tmp_path / "resident_budget"
     root = Path(__file__).resolve().parents[2]
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-I" + str(root / "src"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=("-std=c++20", "-I" + str(root / "src")),
     )
     subprocess.run([str(executable)], check=True)
 
 
 def test_roomy_live_budget_admits_the_batch_resident_value_owner(
-    tmp_path: Path,
+    tmp_path: Path, native_cxx
 ) -> None:
     """A roomy device must not stream a full resident batch for lack of budget."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = tmp_path / "resident_batch_budget.cpp"
     source.write_text(r"""
 #include "scf/df_preparation_budget.hpp"
@@ -241,30 +212,24 @@ int main() {
 """)
     executable = tmp_path / "resident_batch_budget"
     root = Path(__file__).resolve().parents[2]
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I" + str(root / "src"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
     )
     subprocess.run([str(executable)], check=True)
 
 
 def test_single_packed_value_owner_has_distinct_capacity_and_identity(
-    tmp_path: Path,
+    tmp_path: Path, native_cxx
 ) -> None:
     """A single fitted owner cannot silently reserve or advertise raw storage."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     source = tmp_path / "single_packed.cpp"
     source.write_text(r"""
 #include "scf/df_value_storage.hpp"
@@ -289,30 +254,24 @@ int main() {
 """)
     executable = tmp_path / "single_packed"
     root = Path(__file__).resolve().parents[2]
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
             "-I" + str(root / "src"),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
     )
     subprocess.run([str(executable)], check=True)
 
 
 def test_single_packed_96_atom_plan_keeps_values_when_occupied_scratch_does_not_fit(
-    tmp_path: Path,
+    tmp_path: Path, native_cxx
 ) -> None:
     """A 96-atom default allowance admits B without forcing raw regeneration."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     root = Path(__file__).resolve().parents[2]
     # CI passes the binary directory of its CPU build. Local preset/out-of-tree
     # builds can supply the same variable; never borrow another preset's output.
@@ -370,22 +329,19 @@ int main() {
 }
 """)
     executable = tmp_path / "single_packed_plan"
-    subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [source],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-O0",
             "-ffunction-sections",
             "-fdata-sections",
-            "-Wl,--gc-sections",
             "-I" + str(root),
             "-I" + str(root / "include"),
             "-I" + str(root / "src"),
             "-I" + str(generated),
-            str(source),
-            "-o",
-            str(executable),
-        ],
-        check=True,
+        ),
+        link_args=("-Wl,--gc-sections",),
     )
     subprocess.run([str(executable)], check=True)
