@@ -41,8 +41,14 @@ def execute_df_gradient(
     device_id: typing.Any = 0,
     charge: typing.Any = 0,
     multiplicity: typing.Any = 1,
+    host_metadata: typing.Any = False,
 ) -> typing.Any:
-    """Keep weights fixed while measuring the standalone synchronous bridge."""
+    """Keep weights fixed while measuring the standalone synchronous bridge.
+
+    host_metadata uses a CPU context only to validate/normalize basis handles
+    for internal domains wider than public CUDA method admission. Every numeric
+    value/derivative operation still executes in the explicit CUDA context.
+    """
     if type(device_id) is not int or device_id < 0:
         raise ValueError("device_id must be a nonnegative integer")
     library = orbital._library
@@ -82,9 +88,28 @@ def execute_df_gradient(
             ctypes.byref(descriptor), ctypes.byref(context)
         ),
     )
+    metadata_context = ctypes.c_void_p()
     try:
-        o = orbital._create_native_system(context, atoms, charge, multiplicity)
-        x = auxiliary._create_native_system(context, atoms, charge, multiplicity)
+        if host_metadata:
+            metadata_descriptor = _native.ContextDescriptor(
+                ctypes.sizeof(_native.ContextDescriptor),
+                _native.ABI_VERSION,
+                0,
+                _native.BACKEND_CPU_REFERENCE,
+            )
+            _native.check(
+                library,
+                library.generativeqc_context_create(
+                    ctypes.byref(metadata_descriptor), ctypes.byref(metadata_context)
+                ),
+            )
+        construction_context = metadata_context if host_metadata else context
+        o = orbital._create_native_system(
+            construction_context, atoms, charge, multiplicity
+        )
+        x = auxiliary._create_native_system(
+            construction_context, atoms, charge, multiplicity
+        )
         resources = DfGradientResources(
             ctypes.sizeof(DfGradientResources), _native.ABI_VERSION
         )
@@ -115,6 +140,8 @@ def execute_df_gradient(
             library.generativeqc_system_destroy(x)
         if o:
             library.generativeqc_system_destroy(o)
+        if metadata_context:
+            library.generativeqc_context_destroy(metadata_context)
         library.generativeqc_context_destroy(context)
 
 

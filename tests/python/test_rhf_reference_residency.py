@@ -199,13 +199,32 @@ int main(int argc,char** argv) {
   system.atoms[1].position[2]+=0.01;
   require(molecule::validate_and_normalize(system,detail)==GENERATIVEQC_STATUS_SUCCESS,"changed geometry");
   Owner changed;compare(solve(changed,system,options),scf::run_rhf(system,options));
-  // Higher angular momentum keeps the same independent matrix-direct fallback.
-  core::System helium;helium.atoms={{2,{0.,0.,0.}}};
-  helium.shells={{0,0,{{1.5,1.0}}},{0,2,{{0.8,1.0}}}};
-  helium.basis_representation=system.basis_representation;
-  require(molecule::validate_and_normalize(helium,detail)==GENERATIVEQC_STATUS_SUCCESS,"d-shell fixture");
-  Owner angular;compare(solve(angular,helium,options),scf::run_rhf(helium,options));
-  require(angular.plan->resources.reference_eri_bytes_==0,"unqualified d-shell cache selected");
+  // d/f references use bounded exact quartets, including the public/Cartesian
+  // transform for small spherical systems below ordinary HF's cache threshold.
+  for(unsigned l : {2U,3U}) {
+    core::System helium;helium.atoms={{2,{0.,0.,0.}}};
+    helium.shells={{0,0,{{1.5,1.0}}},{0,l,{{0.8,1.0}}}};
+    helium.basis_representation=system.basis_representation;
+    require(molecule::validate_and_normalize(helium,detail)==GENERATIVEQC_STATUS_SUCCESS,"angular fixture");
+    options.reference_memory_budget_bytes=512ULL<<20;
+    const auto cpu=scf::run_rhf(helium,options);
+    Owner angular;const auto result=solve(angular,helium,options);compare(result,cpu);
+    require(angular.plan->resources.reference_eri_bytes_==0,"angular ERI cache selected");
+    require(angular.plan->quartet_direct && angular.plan->bounded_direct_streaming,
+            "angular reference did not use bounded quartets");
+    require(angular.plan->transformed_direct==bool(spherical),"angular frame transform selection");
+    const auto bound=result.reference->numeric_capacity_bytes;
+    {
+      Owner exact;options.reference_memory_budget_bytes=bound;
+      compare(solve(exact,helium,options),cpu);
+    }
+    {
+      Owner rejected;options.reference_memory_budget_bytes=bound-1;bool refused=false;
+      try { (void)solve(rejected,helium,options); }
+      catch(const std::length_error&) { refused=true; }
+      require(refused,"quartet reference minimum-minus-one was admitted");
+    }
+  }
   std::cout<<"{\"resident_bytes\":"<<resident<<",\"minimum_budget\":"<<minimum
            <<",\"tight_peak\":"<<tight_peak<<",\"allocation_rejections\":"<<ledger->rejected
            <<",\"live_after_release\":"<<ledger->live<<"}\n";

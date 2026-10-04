@@ -67,8 +67,11 @@ void read_shells(std::istream& input, System& system, std::size_t count) {
 
 int main(int argc, char** argv) {
   try {
-    require(argc == 5 || (argc == 6 && std::string(argv[5]) == "--derivatives"),
-            "usage: probe input output-prefix pair-tile auxiliary-tile [--derivatives]");
+    const bool source_derivatives = argc == 6 && std::string(argv[5]) == "--source-derivatives";
+    require(
+        argc == 5 || (argc == 6 && std::string(argv[5]) == "--derivatives") || source_derivatives,
+        "usage: probe input output-prefix pair-tile auxiliary-tile "
+        "[--derivatives|--source-derivatives]");
     const bool derivatives = argc == 6;
     require(std::getenv("SLURM_JOB_ID") != nullptr, "native DF probe requires a Slurm allocation");
     const std::string prefix = argv[2];
@@ -143,34 +146,6 @@ int main(int argc, char** argv) {
         generate_cuda_density_fitting_raw_tile(source.get(), count, 0, 1, 0, 1, -1, stream, device,
                                                detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
         "invalid batch offset accepted");
-    const bool has_g = std::any_of(auxiliary.begin(), auxiliary.end(), [](const auto& system) {
-      return std::any_of(system.shells.begin(), system.shells.end(),
-                         [](const auto& shell) { return shell.angular_momentum == 4U; });
-    });
-    if (has_g) {
-      // A g owner is value-only, even when the requested derivative tile
-      // happens to select lower shells. Failure must not launch or publish.
-      const double sentinel = 17.25;
-      check(cudaMemcpyAsync(device, &sentinel, sizeof(double), cudaMemcpyHostToDevice, stream));
-      check(cudaStreamSynchronize(stream));
-      require(generate_cuda_density_fitting_raw_tile(source.get(), 0, 0, 1, 0, 1, 0, stream, device,
-                                                     detail) == GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "g raw derivative was not rejected");
-      require(generate_cuda_density_fitting_transformed_tile(source.get(), 0, 0, 1, 0, 1, 0, device,
-                                                             stream, device, detail) ==
-                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "g transformed derivative was not rejected");
-      require(generate_cuda_density_fitting_metric_derivative_tile(source.get(), 0, 0, 1, 0, stream,
-                                                                   device, detail) ==
-                  GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-              "g metric derivative was not rejected");
-      double after = 0;
-      check(cudaMemcpyAsync(&after, device, sizeof(double), cudaMemcpyDeviceToHost, stream));
-      check(cudaStreamSynchronize(stream));
-      require(after == sentinel, "rejected g derivative changed output");
-      const auto counters = cuda_density_fitting_integral_source_counters(source.get());
-      require(counters.generated_value_tiles == 0, "rejected g derivative generated source work");
-    }
     auto unsupported_auxiliary = auxiliary;
     unsupported_auxiliary[0].shells[0].angular_momentum = 5U;
     CudaDensityFittingIntegralSource* unsupported = nullptr;
@@ -182,6 +157,14 @@ int main(int argc, char** argv) {
             unsupported_naux, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
             unsupported == nullptr && detail.find("beyond g") != std::string::npos,
         "unsupported auxiliary h shell was not explicitly rejected");
+    auto unsupported_orbital = orbital;
+    unsupported_orbital[0].shells[0].angular_momentum = 4U;
+    require(
+        create_cuda_density_fitting_integral_source(
+            0, unsupported_orbital, auxiliary, &unsupported, unsupported_metric, unsupported_nbf,
+            unsupported_naux, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT &&
+            unsupported == nullptr && detail.find("orbital") != std::string::npos,
+        "unsupported orbital g shell was not explicitly rejected");
     std::vector<double> values(count * pairs * naux), tile(tile_elements);
     start = Clock::now();
     for (std::size_t system = 0; system < count; ++system) {
@@ -208,22 +191,52 @@ int main(int argc, char** argv) {
       // Exercise both bulk and bounded public-basis APIs against independent
       // libcint center derivatives. The second system catches accidental use
       // of a local coordinate as a packed fleet-global derivative seed.
-      std::vector<double> da, dm, bulk_da, bulk_dm;
+      std::vector<double> da, dm, bulk_da, bulk_dm, transformed_da;
+      // A fixed symmetric transform isolates dA * X from metric response dX.
+      // It is deliberately dense, so a wrong auxiliary offset cannot hide.
+      std::vector<double> transform(naux * naux);
+      double* device_transform = nullptr;
+      if (source_derivatives) {
+        for (std::size_t p = 0; p < naux; ++p)
+          for (std::size_t q = 0; q < naux; ++q)
+            transform[p * naux + q] = (p == q ? 0.7 : 0.02 / (1 + p + q));
+        check(cudaMalloc(reinterpret_cast<void**>(&device_transform),
+                         transform.size() * sizeof(double)));
+        check(cudaMemcpyAsync(device_transform, transform.data(), transform.size() * sizeof(double),
+                              cudaMemcpyHostToDevice, stream));
+      }
       std::vector<generativeqc::integrals::DensityFittingIntegralData> bulk;
-      require(build_cuda_density_fitting_integrals_batch(0, orbital, auxiliary, bulk, detail) ==
-                  GENERATIVEQC_STATUS_SUCCESS,
-              detail);
+      if (!source_derivatives)
+        require(build_cuda_density_fitting_integrals_batch(0, orbital, auxiliary, bulk, detail) ==
+                    GENERATIVEQC_STATUS_SUCCESS,
+                detail);
       for (std::size_t system = 0; system < count; ++system) {
-        const auto projected = generativeqc::integrals::transform_density_fitting_integrals(
-            bulk[system], orbital[system], auxiliary[system]);
-        bulk_da.insert(bulk_da.end(), projected.three_center_derivative.begin(),
-                       projected.three_center_derivative.end());
-        bulk_dm.insert(bulk_dm.end(), projected.metric_derivative.begin(),
-                       projected.metric_derivative.end());
+        if (!source_derivatives) {
+          const auto projected = generativeqc::integrals::transform_density_fitting_integrals(
+              bulk[system], orbital[system], auxiliary[system]);
+          bulk_da.insert(bulk_da.end(), projected.three_center_derivative.begin(),
+                         projected.three_center_derivative.end());
+          bulk_dm.insert(bulk_dm.end(), projected.metric_derivative.begin(),
+                         projected.metric_derivative.end());
+        }
         const auto coordinates = 3 * orbital[system].atoms.size();
         const auto abase = da.size(), mbase = dm.size();
         da.resize(abase + coordinates * pairs * naux);
         dm.resize(mbase + coordinates * naux * naux);
+        if (source_derivatives) transformed_da.resize(da.size());
+        require(generate_cuda_density_fitting_raw_tile(source.get(), system, 0, 1, 0, 1,
+                                                       coordinates, stream, device, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "out-of-range raw derivative coordinate accepted");
+        require(generate_cuda_density_fitting_metric_derivative_tile(
+                    source.get(), system, 0, 1, coordinates, stream, device, detail) ==
+                    GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                "out-of-range metric derivative coordinate accepted");
+        if (source_derivatives)
+          require(generate_cuda_density_fitting_transformed_tile(
+                      source.get(), system, 0, 1, 0, 1, coordinates, device_transform, stream,
+                      device, detail) == GENERATIVEQC_STATUS_INVALID_ARGUMENT,
+                  "out-of-range transformed derivative coordinate accepted");
         for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
           for (std::size_t pair = 0; pair < pairs; pair += pair_tile) {
             const auto pcount = std::min(pair_tile, pairs - pair);
@@ -239,6 +252,20 @@ int main(int argc, char** argv) {
               for (std::size_t p = 0; p < pcount; ++p)
                 std::copy_n(tile.data() + p * acount, acount,
                             da.data() + abase + (coordinate * pairs + pair + p) * naux + aux);
+              if (source_derivatives) {
+                require(
+                    generate_cuda_density_fitting_transformed_tile(
+                        source.get(), system, pair, pcount, aux, acount, coordinate,
+                        device_transform, stream, device, detail) == GENERATIVEQC_STATUS_SUCCESS,
+                    detail);
+                check(cudaMemcpyAsync(tile.data(), device, pcount * acount * sizeof(double),
+                                      cudaMemcpyDeviceToHost, stream));
+                check(cudaStreamSynchronize(stream));
+                for (std::size_t p = 0; p < pcount; ++p)
+                  std::copy_n(
+                      tile.data() + p * acount, acount,
+                      transformed_da.data() + abase + (coordinate * pairs + pair + p) * naux + aux);
+              }
             }
           }
           for (std::size_t row = 0; row < naux; row += auxiliary_tile) {
@@ -255,14 +282,21 @@ int main(int argc, char** argv) {
       }
       write_values(prefix + "-raw_derivative.bin", da);
       write_values(prefix + "-metric_derivative.bin", dm);
-      write_values(prefix + "-bulk_raw_derivative.bin", bulk_da);
-      write_values(prefix + "-bulk_metric_derivative.bin", bulk_dm);
+      if (source_derivatives) {
+        write_values(prefix + "-transformed_derivative.bin", transformed_da);
+        check(cudaFree(device_transform));
+      } else {
+        write_values(prefix + "-bulk_raw_derivative.bin", bulk_da);
+        write_values(prefix + "-bulk_metric_derivative.bin", bulk_dm);
+      }
     }
     check(cudaFree(device));
     check(cudaStreamDestroy(stream));
     write_values(prefix + "-metric.bin", metric);
     write_values(prefix + "-raw.bin", values);
 
+    // The source-only qualification must not imply bulk-export or HF support.
+    if (source_derivatives) return 0;
     CudaDensityFittingJkPlan* raw_plan = nullptr;
     std::vector<CudaDensityFittingMetricDiagnostic> diagnostics;
     // Raw writes deliberately split individual AO rows. For the independent

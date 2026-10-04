@@ -44,7 +44,8 @@ __device__ auto contracted_df(const DeviceBatch& batch, std::int32_t system, std
   namespace products = runtime::cuda_gaussian_products;
   using ValuePolicy = std::conditional_t<Compensated, generated_df_policy::CompensatedValue<Math>,
                                          generated_df_policy::ValueMath<Math>>;
-  using Policy = std::conditional_t<Derivative, generated_df_policy::Derivative, ValuePolicy>;
+  using Policy =
+      std::conditional_t<Derivative, generated_df_policy::AuxiliaryGDerivative, ValuePolicy>;
   constexpr unsigned rank = Metric ? 2 : 3;
   const auto basis = df_basis_view(batch);
   const std::int64_t base = static_cast<std::int64_t>(system) * batch.nbf;
