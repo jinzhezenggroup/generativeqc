@@ -90,8 +90,14 @@ qualified reservation for context-retained module storage. It resolves lazy
 kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
 release does not zero this charge. This native slice has no production profile
-or registry selection yet. The opt-in `test_native_cutlass_binding.py` probe uses
-an external CUTLASS 3.9.2 include tree and hashes its contents, owned source,
+or registry selection yet. The enclosing context/build owner must retain the
+reservation after a local binding is destroyed. Loading failures preserve the
+known charge and permanently poison that binding's admission, including warm
+retries. Observed growth accumulates across released plans and different kernels
+within the reserved envelope. A binding with a retained charge cannot change
+device or artifact. Fixed-family admission also bounds CUTLASS's signed-integer rounded dimensions
+before constructing its parameters. The opt-in `test_native_cutlass_binding.py`
+probe uses an external CUTLASS 3.9.2 include tree and hashes its contents, owned source,
 toolchain and flags into the actual validation artifact.
 
 `tensor.matrix_view` and `src/tensor/native_matrix_view.hpp` prove the direct
