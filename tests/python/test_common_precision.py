@@ -1,8 +1,12 @@
 """Cross-IR execution-precision contracts for TensorIR, DFT, and integrals."""
 
+from pathlib import Path
+
 import pytest
 from generativeqc_compiler.common.cuda_target import cuda_target_info
 from generativeqc_compiler.common.precision import (
+    PRECISION_SCHEDULE_SCHEMA,
+    STRICT_MATH_MODE,
     ExecutionPrecisionSchedule,
     PrecisionDirective,
     uniform_precision_schedule,
@@ -31,6 +35,23 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor import (
     PrecisionDirective as TensorPrecisionDirective,
 )
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_native_execution_precision_contract_matches_common_identity_vocabulary() -> (
+    None
+):
+    source = (ROOT / "src/runtime/execution_precision.hpp").read_text(encoding="utf-8")
+    assert f'"{PRECISION_SCHEDULE_SCHEMA}"' in source
+    assert f'"{STRICT_MATH_MODE}"' in source
+    for field in (
+        "storage_dtype",
+        "compute_dtype",
+        "accumulation_dtype",
+        "qualification",
+    ):
+        assert field in source
 
 
 def _dft_scientific() -> GridXcScientificIdentity:
@@ -140,7 +161,9 @@ def test_integral_schedule_contract_uses_common_precision_identity() -> None:
     assert contract.profitability.precision_widened_accumulation_terms == 0
 
 
-def test_generated_fock_mixed_schedule_records_fp32_eri_fp64_accumulation() -> None:
+def test_generated_fock_mixed_schedule_records_fp32_eri_product_fp64_accumulation() -> (
+    None
+):
     strict = generated_fock_precision_schedule()
     assert strict.is_strict_fp64
 
@@ -154,7 +177,13 @@ def test_generated_fock_mixed_schedule_records_fp32_eri_fp64_accumulation() -> N
     regions = dict(mixed.regions)
     assert regions["eri_recurrence"].compute_dtype == "float32"
     assert regions["eri_recurrence"].accumulation_dtype == "float32"
+    product = regions["density_integral_product"]
+    assert product.storage_dtype == "float64"
+    assert product.compute_dtype == "float32"
+    assert product.accumulation_dtype == "float64"
+    assert product.qualification == "scf-mixed-fock-qualified-domain"
     assert regions["fock_accumulation"].storage_dtype == "float64"
+    assert regions["fock_accumulation"].compute_dtype == "float64"
     assert regions["fock_accumulation"].accumulation_dtype == "float64"
     assert mixed.strict_audit_dtype == "float64"
     assert not mixed.is_strict_fp64

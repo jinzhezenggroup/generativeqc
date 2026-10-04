@@ -13,6 +13,7 @@
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_tile_validation.hpp"
 #include "scf/cuda/eigensolver_types.hpp"
+#include "scf/cuda/reference_eri_policy.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
 #include "scf/cuda/rhf_policy.hpp"
 #include "scf/cuda/topology.hpp"
@@ -349,8 +350,19 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     return outputs;
   }
   HostBatch candidate;
+  unsigned reference_max_angular = 0;
+  if (!systems.empty())
+    for (const auto& shell : systems.front().shells)
+      reference_max_angular = std::max(reference_max_angular, shell.angular_momentum);
+  const bool reference_quartets =
+      options.export_physical_reference && !systems.empty() &&
+      reference_quartet_direct(molecule::ao_count(systems.front()), reference_max_angular);
+  // The same decision must select both the Cartesian density/Fock transforms
+  // here and the quartet device arena in execute_hf_cuda_bucket. A reference
+  // export is a physical-state contract, not a matrix-direct packing request.
   if (!pack_host_batch(systems, initial_densities, candidate, unrestricted,
-                       options.export_physical_reference, options.compute_forces)) {
+                       options.export_physical_reference && !reference_quartets,
+                       options.compute_forces || reference_quartets)) {
     std::vector<RhfBucketItem> outputs(systems.size());
     fill_global_failure(outputs, GENERATIVEQC_STATUS_INVALID_ARGUMENT);
     return outputs;

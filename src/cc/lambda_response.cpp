@@ -165,7 +165,8 @@ bool fill_lambda_diagonal_preconditioner(const Problem& p,
 void validate_lambda_options(const LambdaOptions& options) {
   if (!std::isfinite(options.cc_tolerance) || options.cc_tolerance <= 0.0 ||
       options.cc_tolerance > 1e-9 || !std::isfinite(options.lambda_tolerance) ||
-      options.lambda_tolerance <= 0.0 || options.lambda_tolerance > 1e-9 || !options.max_bytes)
+      options.lambda_tolerance <= 0.0 || options.lambda_tolerance > 1e-9 || !options.max_bytes ||
+      !options.df_auxiliary_batch_limit)
     throw std::invalid_argument("invalid RCCSD Lambda tolerance/budget");
   (void)response::prepare_gmres(1, options.gmres);
 }
