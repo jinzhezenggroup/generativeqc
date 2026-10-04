@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 from typing import TYPE_CHECKING
 
-import pytest
 from generativeqc_compiler.integral.df_policy import emit_df_value_source_schedule_cuda
 
 if TYPE_CHECKING:
