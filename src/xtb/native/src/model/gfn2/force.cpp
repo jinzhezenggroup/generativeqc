@@ -473,12 +473,20 @@ generativeqc_xtb_status_t evaluate_restricted_gfn2_energy_forces_cpu(
   }
 
   for (std::int64_t system = 0; system < batch; ++system) {
-    const double d4_atm = d4 == nullptr ? 0.0 : workspace.component_energy_scratch[system];
     double total_energy = 0.0;
-    if (!::generativeqc::xtb::generated::compose_gfn2_total_energy(
-            input.scc_energies[system], workspace.energy_scratch[system], d4_atm, total_energy)) {
-      error = "restricted GFN2 terminal energy composition overflowed";
+    if (!::generativeqc::xtb::generated::compose_gfn2_scc_repulsion_energy(
+            input.scc_energies[system], workspace.energy_scratch[system], total_energy)) {
+      error = "restricted GFN2 total energy or gradient overflowed";
       return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
+    }
+    if (d4 != nullptr) {
+      double with_d4 = 0.0;
+      if (!::generativeqc::xtb::generated::compose_gfn2_total_energy_d4(
+              total_energy, workspace.component_energy_scratch[system], with_d4)) {
+        error = "restricted GFN2 D4 ATM energy accumulation overflowed";
+        return GENERATIVEQC_XTB_STATUS_INTERNAL_ERROR;
+      }
+      total_energy = with_d4;
     }
     workspace.energy_scratch[system] = total_energy;
   }

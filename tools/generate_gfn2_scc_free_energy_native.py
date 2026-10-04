@@ -13,7 +13,8 @@ from generativeqc_compiler.method.gfn2_scc_free_energy_runtime import (
     GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
     build_gfn2_scc_free_energy_program,
     build_gfn2_scc_internal_energy_program,
-    build_gfn2_total_energy_program,
+    build_gfn2_scc_repulsion_energy_program,
+    build_gfn2_total_energy_d4_program,
 )
 from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
 
@@ -29,7 +30,8 @@ _INTERNAL_INPUTS = (
     "periodic_embedding",
 )
 _FREE_INPUTS = ("electronic_temperature", "entropy", "internal_energy")
-_TOTAL_INPUTS = ("scc_free_energy", "repulsion", "d4_atm")
+_SCC_REPULSION_INPUTS = ("scc_free_energy", "repulsion")
+_TOTAL_D4_INPUTS = ("scc_repulsion_energy", "d4_atm")
 
 
 def _host_device(source: str, function_name: str) -> str:
@@ -43,7 +45,8 @@ def _host_device(source: str, function_name: str) -> str:
 def native_header() -> str:
     internal = build_gfn2_scc_internal_energy_program()
     free = build_gfn2_scc_free_energy_program()
-    total = build_gfn2_total_energy_program()
+    scc_repulsion = build_gfn2_scc_repulsion_energy_program()
+    total_d4 = build_gfn2_total_energy_d4_program()
     internal_body = _host_device(
         emit_scalar_cpp(
             internal,
@@ -63,15 +66,25 @@ def native_header() -> str:
         ),
         "compose_gfn2_scc_free_energy",
     )
-    total_body = _host_device(
+    scc_repulsion_body = _host_device(
         emit_scalar_cpp(
-            total,
-            function_name="compose_gfn2_total_energy",
-            input_order=_TOTAL_INPUTS,
+            scc_repulsion,
+            function_name="compose_gfn2_scc_repulsion_energy",
+            input_order=_SCC_REPULSION_INPUTS,
+            output_order=("scc_repulsion_energy",),
+            ordered_native_sums=True,
+        ),
+        "compose_gfn2_scc_repulsion_energy",
+    )
+    total_d4_body = _host_device(
+        emit_scalar_cpp(
+            total_d4,
+            function_name="compose_gfn2_total_energy_d4",
+            input_order=_TOTAL_D4_INPUTS,
             output_order=("total_energy",),
             ordered_native_sums=True,
         ),
-        "compose_gfn2_total_energy",
+        "compose_gfn2_total_energy_d4",
     )
     return "\n".join(
         [
@@ -87,10 +100,12 @@ def native_header() -> str:
             f'inline constexpr const char* gfn2_scc_free_energy_runtime_version = "{GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION}";',
             f'inline constexpr const char* gfn2_scc_internal_energy_hash = "{internal.logical_hash}";',
             f'inline constexpr const char* gfn2_scc_free_energy_hash = "{free.logical_hash}";',
-            f'inline constexpr const char* gfn2_total_energy_hash = "{total.logical_hash}";',
+            f'inline constexpr const char* gfn2_scc_repulsion_energy_hash = "{scc_repulsion.logical_hash}";',
+            f'inline constexpr const char* gfn2_total_energy_d4_hash = "{total_d4.logical_hash}";',
             internal_body,
             free_body,
-            total_body,
+            scc_repulsion_body,
+            total_d4_body,
             "}  // namespace generativeqc::xtb::generated",
             "#undef GENERATIVEQC_GFN2_SCC_FREE_ENERGY_HD",
             "",

@@ -68,19 +68,33 @@ def build_gfn2_scc_free_energy_program() -> Program:
     )
 
 
-def build_gfn2_total_energy_program() -> Program:
-    """Build E_total = E_SCC + E_repulsion + E_D4^ATM in production order."""
+def build_gfn2_scc_repulsion_energy_program() -> Program:
+    """Build the first terminal stage E_SCC + E_repulsion."""
 
     scc_free_energy = _input("scc_free_energy")
     repulsion = _input("repulsion")
+    subtotal = add(scc_free_energy, repulsion)
+    return Program(
+        {"scc_repulsion_energy": subtotal},
+        provenance={
+            "kind": "gfn2-scc-repulsion-energy",
+            "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
+            "component_order": ["scc_free_energy", "repulsion"],
+        },
+    )
+
+
+def build_gfn2_total_energy_d4_program() -> Program:
+    """Add D4 ATM only when that component is enabled by the runtime."""
+
+    scc_repulsion_energy = _input("scc_repulsion_energy")
     d4_atm = _input("d4_atm")
-    total = add(scc_free_energy, repulsion)
-    total = add(total, d4_atm)
+    total = add(scc_repulsion_energy, d4_atm)
     return Program(
         {"total_energy": total},
         provenance={
-            "kind": "gfn2-total-energy",
+            "kind": "gfn2-total-energy-d4",
             "version": GFN2_SCC_FREE_ENERGY_RUNTIME_VERSION,
-            "component_order": ["scc_free_energy", "repulsion", "d4_atm"],
+            "component_order": ["scc_repulsion_energy", "d4_atm"],
         },
     )

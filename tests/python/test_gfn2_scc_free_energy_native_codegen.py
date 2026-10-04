@@ -10,7 +10,8 @@ import pytest
 from generativeqc_compiler.method.gfn2_scc_free_energy_runtime import (
     build_gfn2_scc_free_energy_program,
     build_gfn2_scc_internal_energy_program,
-    build_gfn2_total_energy_program,
+    build_gfn2_scc_repulsion_energy_program,
+    build_gfn2_total_energy_d4_program,
 )
 from generativeqc_compiler.tensor import execute
 
@@ -58,15 +59,16 @@ def test_scc_energy_tensorir_preserves_component_order_and_free_energy() -> None
     ).outputs["free_energy"]
     assert free == pytest.approx(internal - 0.02 * 0.125, rel=0, abs=2e-16)
 
+    subtotal = execute(
+        build_gfn2_scc_repulsion_energy_program(),
+        {"scc_free_energy": np.asarray(free), "repulsion": np.asarray(0.17)},
+    ).outputs["scc_repulsion_energy"]
+    assert subtotal == free + 0.17
     total = execute(
-        build_gfn2_total_energy_program(),
-        {
-            "scc_free_energy": np.asarray(free),
-            "repulsion": np.asarray(0.17),
-            "d4_atm": np.asarray(-0.003),
-        },
+        build_gfn2_total_energy_d4_program(),
+        {"scc_repulsion_energy": np.asarray(subtotal), "d4_atm": np.asarray(-0.003)},
     ).outputs["total_energy"]
-    assert total == (free + 0.17) - 0.003
+    assert total == subtotal - 0.003
 
 
 def _generate(output: Path) -> bytes:
@@ -95,11 +97,13 @@ def test_scc_energy_codegen_is_deterministic_and_keeps_fma_contract(
     assert second == first
     assert b"compose_gfn2_scc_internal_energy" in first
     assert b"compose_gfn2_scc_free_energy" in first
-    assert b"compose_gfn2_total_energy" in first
+    assert b"compose_gfn2_scc_repulsion_energy" in first
+    assert b"compose_gfn2_total_energy_d4" in first
     assert b"std::fma" in first
     assert b"gfn2_scc_internal_energy_hash" in first
     assert b"gfn2_scc_free_energy_hash" in first
-    assert b"gfn2_total_energy_hash" in first
+    assert b"gfn2_scc_repulsion_energy_hash" in first
+    assert b"gfn2_total_energy_d4_hash" in first
 
 
 def test_generated_scc_energy_host_rounding_contract(tmp_path: Path) -> None:
@@ -128,8 +132,11 @@ int main() {
   if (!compose_gfn2_scc_free_energy(largest, 2.0, largest, free_energy)) return 5;
   if (free_energy != -largest) return 6;
   double total_energy = 0.0;
-  if (!compose_gfn2_total_energy(4.0, 3.0, -0.5, total_energy)) return 7;
-  if (total_energy != 6.5) return 8;
+  if (!compose_gfn2_scc_repulsion_energy(4.0, 3.0, total_energy)) return 7;
+  if (total_energy != 7.0) return 8;
+  double with_d4 = 0.0;
+  if (!compose_gfn2_total_energy_d4(total_energy, -0.5, with_d4)) return 9;
+  if (with_d4 != 6.5) return 10;
   return 0;
 }
 """,
@@ -176,7 +183,8 @@ def test_native_scc_energy_consumers_use_generated_composition() -> None:
     assert "fma(h0_value, density_value" not in cuda_electronic
     assert "fma(-electronic_temperature" not in cuda_electronic
     for source in (cuda_total, cpu_total):
-        assert "compose_gfn2_total_energy(" in source
+        assert "compose_gfn2_scc_repulsion_energy(" in source
+    assert "compose_gfn2_total_energy_d4(" in cuda_total
     assert "total = scc + repulsion" not in cuda_total
     assert "std::fma(-data.electronic_temperature" not in cpu
     assert "fma(-batch.electronic_temperature" not in cuda_free
