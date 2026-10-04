@@ -19,10 +19,15 @@ panels and transfers only flags/errors; sorted host maps are copied once into
 an appended, caller-owned device arena. A plan cannot change maps after any
 physical or replay body has started, including unpublished replay work.
 
-The SCF experiment is opt-in with `GENERATIVEQC_CUDA_KS_ACTIVE_AO=1`, admitted
-only for device-fused FP64 WB97M-V, with an explicit sampled-jet cutoff of
-1e-16. Unset or 0 retains dense SCF. Invalid switch values are rejected.
-This is an experimental qualification control, not a promoted product default.
+The SCF experiment is opt-in with `GENERATIVEQC_CUDA_KS_ACTIVE_AO=1`, with an
+explicit sampled-jet cutoff of 1e-16. Admission is owned by the physical XC
+layout: device-fused, non-response FP64 AO layouts may select maps regardless of
+unrelated Fock-provider identity or another component's precision schedule.
+AUTO precision is then composed per consumer. In particular, a qualified mixed
+Direct J does not veto local XC maps, while the local density contraction stays
+strict FP64 until that exact local arithmetic is independently qualified.
+Unset or 0 retains dense SCF. Invalid switch values are rejected. This remains
+an experimental qualification control, not a promoted product default.
 The native owner is rebuilt on changed basis/geometry/grid; density updates
 reuse its immutable map. The force caller has a separate order-2 map and must
 still pass complete energy/force gates when composed with this order-1 SCF map.
@@ -193,3 +198,24 @@ capacity policy, scientific tolerance or default is changed by the repair.
 The fixed 64 MiB experiment cap remains distinct from public remaining-budget
 admission, and unset/0 still selects dense execution. Historical qualification
 and timing identities above remain separate from current integration checks.
+
+## 2026-10-04 component-wise precision composition (#1852)
+
+The CUDA KS owner now asks the XC layout for local-map and density-contraction
+capabilities instead of rejecting the experiment when any unrelated precision
+region is mixed. Those capabilities are emitted beside the resolved point
+program; the runtime no longer infers mixed-density support from functional-code
+ordering. The iteration resolver intersects the requested component schedule
+with the actual consumer capability before publishing precision work.
+Consequently PBE0 AUTO may execute mixed Direct J together with local-AO XC,
+while local density contraction, exact K, XC point algebra and final audit stay
+FP64. The work census records only arithmetic that actually executed.
+
+Native coverage keeps local mixed-density fail-closed, executes strict local-AO
+LDA/PBE/r2SCAN/B3LYP/WB97M-V for RKS and UKS, exercises scaled PBE, and rebuilds
+a PBE0 AUTO local-AO owner after a geometry change. This changes neither the
+opt-in switch nor the promotion requirement: complete matched cold/warm/moved
+endpoint evidence remains necessary before making local-AO selection a default.
+
+Agent: ChatGPT
+Model: GPT-5.6 Sol

@@ -123,7 +123,7 @@
     "src/backends/cuda/gfn2_density.cu": {
       "adapted": true,
       "upstream_sha256": "22e2f182a418ddf43834578605ba913c9e9e043f491e0f95f2f7ec6f16735a34",
-      "vendored_sha256": "9e7f41984ba90bc3fb4940244bc45fbdd7094e268f6f863669799df9c5e4aa24"
+      "vendored_sha256": "c365f5b227d63400827440eff384aad412fd2c0a281ad90fd4c0a82990d0b706"
     },
     "src/backends/cuda/gfn2_density.cuh": {
       "adapted": true,
@@ -288,7 +288,7 @@
     "src/backends/cuda/gfn2_mulliken.cu": {
       "adapted": true,
       "upstream_sha256": "a38ac9d9b567181add01e2dbfa4c3955497b0035a774abc4ff3f62bde4124ad1",
-      "vendored_sha256": "c48caec09e9e92a44e3e139d8252703da6e83d7b2e0f21cb504754d403554ffa"
+      "vendored_sha256": "4c08ecfa242433fafc2dc7aabe2179f517da836ad69293b99f28ba9746f236ee"
     },
     "src/backends/cuda/gfn2_mulliken.cuh": {
       "adapted": true,
@@ -418,7 +418,7 @@
     "src/backends/cuda/gfn2_scc_energy.cu": {
       "adapted": true,
       "upstream_sha256": "ae7ac935fa377b9ae59d36c9ddef41905cc48ebaee4b6a917992d41f87389641",
-      "vendored_sha256": "e2af39a5c5f6c5a0b4513203cecd9a01063765787a334add3ec7857d7fbe0303"
+      "vendored_sha256": "7d0f7b434b87deb13efaeaa1e4035045bca95b53425a57f9583c57b25d77faca"
     },
     "src/backends/cuda/gfn2_scc_energy.cuh": {
       "adapted": true,
@@ -583,7 +583,7 @@
     "src/backends/cuda/gfn2_total_energy.cu": {
       "adapted": true,
       "upstream_sha256": "af65a0738e4e207b5d31c205b7e8924791b441897226bd666a3ddf8df609a6ff",
-      "vendored_sha256": "e2cd35e9e0686497265fa1ee26900948a6bd63e2baaf96248a3b11aa9f428b61"
+      "vendored_sha256": "c364e30a44da93a84e9942a7820e697585ad9bc1b4d5988ca36db6d600f71272"
     },
     "src/backends/cuda/gfn2_total_energy.cuh": {
       "adapted": true,
