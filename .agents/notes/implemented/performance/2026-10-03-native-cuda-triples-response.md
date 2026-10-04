@@ -120,3 +120,7 @@ order. None is needed for this native TensorIR lowering.
 This change does not enlarge the 28-AO force qualification boundary or resolve
 the 56-AO same-space degeneracy/gauge problem. Revisit page scheduling or kernel
 fusion only if complete endpoint profiles show that this phase is again material.
+
+## Lossless receipt storage (2026-10-03)
+
+These receipts retain the exact original public bytes from `5a5fa24e4442711e9ddee055a14686eb05da618c` through ordinary gzip; scientific values, row order, failures and measured identities are unchanged. [storage.json](../../../../benchmarks/results/cc-triples-response-cuda-20261003/storage.json) pins every original Git blob, original/stored SHA-256 and byte count. The complete original envelope is `evidence.original.json.gz`; the active `evidence.json.gz` only rebinds attachment paths and checksums. Use `tools.generativeqc_validation.record.load_publication_record` for publication-bound records or `load_json` / `gzip -cd` for individual members, and decode `source.patch.gz` before applying the unchanged patch. Storage provenance is not a measured build identity. The historical whitespace-compaction discussion, where present, is not an instruction to overwrite earlier families; their current mainline bytes remain untouched. No new experiment or performance claim is introduced.

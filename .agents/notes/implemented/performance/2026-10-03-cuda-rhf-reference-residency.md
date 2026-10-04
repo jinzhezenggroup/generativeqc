@@ -38,7 +38,7 @@ route does not mean zero integral work; that route recomputes during Fock builds
 
 ## Evidence
 
-The [retained final-binary evidence](../../../../benchmarks/results/cc-rhf-resident-20261003/summary.json)
+The [retained final-binary evidence](../../../../benchmarks/results/cc-rhf-resident-20261003/summary.json.gz)
 contains every cold, twice-warm and changed-geometry endpoint, immutable
 source/binary identities, Slurm provenance, work observations and independent
 exact-basis PySCF 2.14.0 gates. Warm 28-AO energy decreases from 13.61 to 4.25
@@ -94,3 +94,14 @@ The later [bounded reference-quartet decision](2026-10-03-reference-bounded-quar
 supersedes the matrix-direct choice for d/f references and s/p topologies beyond
 the cache ceiling. It preserves the optional-cache policy and low-budget
 fallback documented here for cache-eligible s/p systems.
+
+## Lossless evidence storage
+
+The original records and summary use deterministic gzip. The
+[storage map](../../../../benchmarks/results/cc-rhf-resident-20261003/storage.json)
+pins their original Git blobs, original/stored SHA-256 hashes and byte counts.
+Read either JSON with `tools.generativeqc_validation.record.load_json`, or recover
+its exact original bytes with `gzip -cd FILE.json.gz`. Historical paths inside
+the unchanged records resolve through this map; historical Git objects remain
+available. This changes storage only, with no new experiment, measured build,
+scientific value, failure record or performance claim.

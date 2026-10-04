@@ -162,7 +162,8 @@ generativeqc_status create_cuda_density_fitting_integral_source_impl(
   try {
     // Reuse normalized basis packing, explicitly omitting SCF density and
     // pair/quartet task construction. Public transforms are owned below.
-    if (!pack_host_batch(combined, no_warm, host, false, true, false, HostBasisPacking::DfValues) ||
+    if (!pack_host_batch(combined, no_warm, host, false, true, false, ResidentPsssPolicy::Skip,
+                         HostBasisPacking::DfValues) ||
         host.nbf != cartesian_nbf + cartesian_naux + 1U) {
       detail = "bounded DF source Cartesian packing failed";
       return GENERATIVEQC_STATUS_INVALID_ARGUMENT;

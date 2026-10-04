@@ -23,6 +23,8 @@ using PairKernelValues = generated::PairValues;
 template <Vv10Variant Variant, bool Features, bool Geometry>
 __device__ PairKernelValues pair_kernel_values(double r2, double wi, double wj, double ki,
                                                double kj, double row_inverse_kappa) {
+  if constexpr (Variant == Vv10Variant::vv10 && Features)
+    return generated::pair_values_vv10_rational<Geometry>(r2, wi, wj, ki, kj, row_inverse_kappa);
   return generated::pair_values<Variant, Features, Geometry, true>(r2, wi, wj, ki, kj,
                                                                    row_inverse_kappa);
 }
@@ -129,14 +131,42 @@ __global__ void scatter_active_partners_ordered_kernel(std::size_t npoint,
   active_indices[block_offsets[blockIdx.x] + rank] = static_cast<std::uint64_t>(j);
 }
 
-template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows>
+// A positive-zero row is still observable through potential/weight response;
+// only the negative-zero density-screen marker is excluded. Absolute coordinate
+// bounds imply r2 <= 3*2^30 < 2^32 for every admitted pair, including roundoff.
+// This is sufficient, not necessary: translated/extreme grids use the fallback.
+__global__ void admit_molecular_pair_domain_kernel(std::size_t npoint, const double* points,
+                                                   const double* density, const double* omega,
+                                                   const double* kappa, const double* domega_drho,
+                                                   const double* domega_dsigma,
+                                                   const double* dkappa_drho,
+                                                   const double* weighted_density, int* rejected) {
+  const auto i = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= npoint) return;
+  const double factor = weighted_density[i];
+  if (factor == 0.0 && signbit(factor)) return;
+  const bool admitted = fabs(points[3 * i]) <= 0x1p14 && fabs(points[3 * i + 1]) <= 0x1p14 &&
+                        fabs(points[3 * i + 2]) <= 0x1p14 && omega[i] >= 0x1p-32 &&
+                        omega[i] <= 0x1p32 && kappa[i] >= 0x1p-32 && kappa[i] <= 0x1p32 &&
+                        fabs(factor) <= 0x1p64 && fabs(density[i]) <= 0x1p128 &&
+                        fabs(domega_drho[i]) <= 0x1p128 && fabs(domega_dsigma[i]) <= 0x1p128 &&
+                        fabs(dkappa_drho[i]) <= 0x1p128;
+  if (!admitted) atomicExch(rejected, 1);
+}
+
+template <Vv10Variant Variant, bool Features, bool Geometry, bool MaskZeroRows,
+          bool Prevalidated = false>
 __global__ void pair_kernel_ordered(
     std::size_t row_offset, std::size_t row_count, double coefficient, const double* points,
     const double* density, const double* omega, const double* kappa, const double* domega_drho,
     const double* domega_dsigma, const double* dkappa_drho, const double* weighted_density,
     const std::uint64_t* active_indices, const std::uint64_t* active_count, double beta,
     double* energy_terms, double* vrho, double* vsigma, double* point_derivative,
-    double* weight_derivative, int* failed) {
+    double* weight_derivative, int* failed, const int* bounds_rejected = nullptr) {
+  static_assert(!Prevalidated || (Variant == Vv10Variant::vv10 && Features && MaskZeroRows));
+  // Both launch variants read the same stream-ordered device predicate. Exactly
+  // one traverses pairs, with no host readback or change to reduction order.
+  if (bounds_rejected != nullptr && ((*bounds_rejected == 0) != Prevalidated)) return;
   const auto lane = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (lane >= row_count) return;
   const auto i = row_offset + lane;
@@ -178,6 +208,9 @@ __global__ void pair_kernel_ordered(
   double sum_sigma = 0.0;
   double coordinate_sum[3]{0.0, 0.0, 0.0};
   const auto nactive = *active_count;
+  // The preflight proved every pair and row-chain bound. Only this admitted
+  // specialization changes feature summation rounding; the general route keeps
+  // its original one-pass chain, without a rejected-prefix replay.
   for (std::uint64_t slot = 0; slot < nactive; ++slot) {
     const auto j = static_cast<std::size_t>(active_indices[slot]);
     const double factor = weighted_density[j];
@@ -185,14 +218,24 @@ __global__ void pair_kernel_ordered(
     const double dy = points[3 * j + 1] - yi;
     const double dz = points[3 * j + 2] - zi;
     const double r2 = dx * dx + dy * dy + dz * dz;
-    const auto pair = pair_kernel_values<Variant, Features, Geometry>(r2, wi, omega[j], ki,
-                                                                      kappa[j], row_inverse_kappa);
+    const auto pair = [&]() {
+      if constexpr (Prevalidated)
+        return generated::pair_values_vv10_admitted<Geometry>(r2, wi, omega[j], ki, kappa[j]);
+      else
+        return pair_kernel_values<Variant, Features, Geometry>(r2, wi, omega[j], ki, kappa[j],
+                                                               row_inverse_kappa);
+    }();
     sum_phi += factor * pair.phi;
     if constexpr (Features) {
-      const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
-      const double dphi_dsigma = pair.dphi_domega * domega_sigmai;
-      sum_rho += factor * dphi_drho;
-      sum_sigma += factor * dphi_dsigma;
+      if constexpr (Prevalidated) {
+        sum_rho += factor * pair.dphi_dkappa;
+        sum_sigma += factor * pair.dphi_domega;
+      } else {
+        const double dphi_drho = pair.dphi_domega * domega_rhoi + pair.dphi_dkappa * dkappa_rhoi;
+        const double dphi_dsigma = pair.dphi_domega * domega_sigmai;
+        sum_rho += factor * dphi_drho;
+        sum_sigma += factor * dphi_dsigma;
+      }
     }
     if constexpr (Geometry) {
       const double radial = -2.0 * factor * pair.dphi_dr2;
@@ -205,8 +248,13 @@ __global__ void pair_kernel_ordered(
   energy_terms[i] = coefficient * weighted_i * (beta + 0.5 * sum_phi);
   bool nonfinite = !isfinite(energy_terms[i]);
   if constexpr (Features) {
-    vrho[i] = coefficient * (beta + sum_phi + rhoi * sum_rho);
-    vsigma[i] = coefficient * rhoi * sum_sigma;
+    if constexpr (Prevalidated) {
+      generated::row_feature_values(sum_phi, sum_sigma, sum_rho, rhoi, domega_rhoi, domega_sigmai,
+                                    dkappa_rhoi, beta, coefficient, vrho[i], vsigma[i]);
+    } else {
+      vrho[i] = coefficient * (beta + sum_phi + rhoi * sum_rho);
+      vsigma[i] = coefficient * rhoi * sum_sigma;
+    }
     nonfinite = nonfinite || !isfinite(vrho[i]) || !isfinite(vsigma[i]);
   }
   if constexpr (Geometry) {
@@ -229,7 +277,8 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
                            const double* weighted_density, const std::uint64_t* active_indices,
                            const std::uint64_t* active_count, double beta, double* energy_terms,
                            double* vrho, double* vsigma, double* point_derivative,
-                           double* weight_derivative, int* failed) {
+                           double* weight_derivative, int* failed,
+                           const int* bounds_rejected = nullptr) {
   constexpr unsigned threads = 128;
   const auto max_rows_per_launch =
       static_cast<std::size_t>(std::numeric_limits<int>::max()) * threads;
@@ -239,8 +288,19 @@ void launch_pair_rows_impl(const Vv10CudaDeviceLayout& layout, cudaStream_t stre
     pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows><<<blocks, threads, 0, stream>>>(
         first, count, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
         dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed);
+        vsigma, point_derivative, weight_derivative, failed, bounds_rejected);
     runtime::cuda_resource_check(cudaGetLastError());
+    if constexpr (Variant == Vv10Variant::vv10 && Features && MaskZeroRows) {
+      if (bounds_rejected != nullptr) {
+        pair_kernel_ordered<Variant, Features, Geometry, MaskZeroRows, true>
+            <<<blocks, threads, 0, stream>>>(first, count, coefficient, points, density, omega,
+                                             kappa, domega_drho, domega_dsigma, dkappa_drho,
+                                             weighted_density, active_indices, active_count, beta,
+                                             energy_terms, vrho, vsigma, point_derivative,
+                                             weight_derivative, failed, bounds_rejected);
+        runtime::cuda_resource_check(cudaGetLastError());
+      }
+    }
   }
 }
 
@@ -251,17 +311,18 @@ void launch_pair_rows(const Vv10CudaDeviceLayout& layout, cudaStream_t stream, d
                       const double* dkappa_drho, const double* weighted_density,
                       const std::uint64_t* active_indices, const std::uint64_t* active_count,
                       double beta, double* energy_terms, double* vrho, double* vsigma,
-                      double* point_derivative, double* weight_derivative, int* failed) {
+                      double* point_derivative, double* weight_derivative, int* failed,
+                      const int* bounds_rejected = nullptr) {
   if (layout.mask_zero_weight_rows)
     launch_pair_rows_impl<Variant, Features, Geometry, true>(
         layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
         dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed);
+        vsigma, point_derivative, weight_derivative, failed, bounds_rejected);
   else
     launch_pair_rows_impl<Variant, Features, Geometry, false>(
         layout, stream, coefficient, points, density, omega, kappa, domega_drho, domega_dsigma,
         dkappa_drho, weighted_density, active_indices, active_count, beta, energy_terms, vrho,
-        vsigma, point_derivative, weight_derivative, failed);
+        vsigma, point_derivative, weight_derivative, failed, bounds_rejected);
 }
 
 constexpr unsigned kOrderedEnergyLoadThreads = 128U;
@@ -297,6 +358,8 @@ __global__ void molecular_domain_kernel(std::size_t npoint, double threshold, co
                                         double* effective_gradient, int* failed) {
   for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < npoint;
        i += std::size_t(blockDim.x) * gridDim.x) {
+    // The private force owner uses in-place effective rho/gradient storage.
+    // Keep every input load before the first output store for this point.
     const double rho = density[i];
     const double gx = gradient[3 * i];
     const double gy = gradient[3 * i + 1];
@@ -553,6 +616,20 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
       npoint, weighted_density, block_offsets, active_indices);
   runtime::cuda_resource_check(cudaGetLastError());
 
+  // Compaction's block offsets are dead after scatter, and one slot always
+  // exists. Borrow its first word for a predicate on this same stream. No new
+  // allocation, retained state, or cross-invocation identity is introduced.
+  int* bounds_rejected = nullptr;
+  if (parameters.variant == Vv10Variant::vv10 && layout.features && layout.mask_zero_weight_rows &&
+      npoint <= (std::uint64_t{1} << 32) && std::fabs(parameters.coefficient) <= 0x1p32) {
+    bounds_rejected = reinterpret_cast<int*>(block_offsets);
+    runtime::cuda_resource_check(cudaMemsetAsync(bounds_rejected, 0, sizeof(int), stream));
+    admit_molecular_pair_domain_kernel<<<blocks, threads, 0, stream>>>(
+        npoint, points_xyz, density, omega, kappa, domega_drho, domega_dsigma, dkappa_drho,
+        weighted_density, bounds_rejected);
+    runtime::cuda_resource_check(cudaGetLastError());
+  }
+
   const double beta = std::pow(3.0 / (parameters.b * parameters.b), 0.75) / 32.0;
 
   // Specialize the O(N^2) pair loop by scientific variant and requested
@@ -565,22 +642,26 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
         launch_pair_rows<Vv10Variant::rvv10, true, true>(
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+            bounds_rejected);
       else
         launch_pair_rows<Vv10Variant::rvv10, true, false>(
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+            bounds_rejected);
     } else if (layout.geometry) {
       launch_pair_rows<Vv10Variant::rvv10, false, true>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+          bounds_rejected);
     } else {
       launch_pair_rows<Vv10Variant::rvv10, false, false>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+          bounds_rejected);
     }
   } else {
     if (layout.features) {
@@ -588,22 +669,26 @@ void enqueue_vv10_cuda_device(const Vv10CudaDeviceLayout& layout, Vv10Parameters
         launch_pair_rows<Vv10Variant::vv10, true, true>(
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+            bounds_rejected);
       else
         launch_pair_rows<Vv10Variant::vv10, true, false>(
             layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
             domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+            energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+            bounds_rejected);
     } else if (layout.geometry) {
       launch_pair_rows<Vv10Variant::vv10, false, true>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+          bounds_rejected);
     } else {
       launch_pair_rows<Vv10Variant::vv10, false, false>(
           layout, stream, parameters.coefficient, points_xyz, density, omega, kappa, domega_drho,
           domega_dsigma, dkappa_drho, weighted_density, active_indices, active_count, beta,
-          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error);
+          energy_terms, vrho, vsigma, point_derivative, weight_derivative, numerical_error,
+          bounds_rejected);
     }
   }
   reduce_energy_ordered_kernel<<<1, kOrderedEnergyLoadThreads, 0, stream>>>(

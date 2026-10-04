@@ -662,6 +662,53 @@ __device__ inline Scalar primitive_eri_order4(
 // Arithmetic/workspace order is preserved; host plans and queue policy remain native.
 namespace generativeqc::scf::cuda_execution {
 
+/** Evaluate the shared Hermite contraction with shell-bounded storage.
+ * Radial identity changes only the Coulomb moments, not the Hermite bounds.
+ * Dual geometry seeds also keep these bounds: they differentiate coefficients
+ * without raising the stored AO powers. Full/SR/LR share the established
+ * contraction and moment owners; no full-minus-long subtraction is introduced.
+ */
+template <unsigned FirstShellAngular, unsigned SecondShellAngular, unsigned ThirdShellAngular,
+          unsigned FourthShellAngular, typename Scalar>
+__device__ inline Scalar primitive_eri_cartesian_shell_pairs(
+    double alpha, const Vec3<Scalar>& first, const Angular& angular_first, double beta,
+    const Vec3<Scalar>& second, const Angular& angular_second, double gamma,
+    const Vec3<Scalar>& third, const Angular& angular_third, double delta,
+    const Vec3<Scalar>& fourth, const Angular& angular_fourth,
+    generativeqc::integrals::CoulombRange range = generativeqc::integrals::CoulombRange::Full,
+    double omega = 0.0) {
+  constexpr unsigned MaximumAngular =
+      FirstShellAngular + SecondShellAngular + ThirdShellAngular + FourthShellAngular;
+  static_assert(MaximumAngular <= kMaximumCoulombOrder);
+  using Real = EvaluationReal<Scalar>;
+  const Real alpha_value{alpha};
+  const Real beta_value{beta};
+  const Real gamma_value{gamma};
+  const Real delta_value{delta};
+  const Real p = alpha_value + beta_value;
+  const Real q = gamma_value + delta_value;
+  const Real rho = p * q / (p + q);
+  const Vec3<Scalar> product_p = product_center(alpha, first, beta, second);
+  const Vec3<Scalar> product_q = product_center(gamma, third, delta, fourth);
+  ShellPairHermiteCoefficients<Scalar, FirstShellAngular, SecondShellAngular>
+      first_coefficients[3];
+  ShellPairHermiteCoefficients<Scalar, ThirdShellAngular, FourthShellAngular>
+      second_coefficients[3];
+  for (int axis = 0; axis < 3; ++axis) {
+    fill_shell_pair_hermite<FirstShellAngular, SecondShellAngular>(
+        angular_axis(angular_first, axis), angular_axis(angular_second, axis),
+        vec_axis(product_p, axis), vec_axis(first, axis), vec_axis(second, axis), alpha, beta,
+        first_coefficients[axis]);
+    fill_shell_pair_hermite<ThirdShellAngular, FourthShellAngular>(
+        angular_axis(angular_third, axis), angular_axis(angular_fourth, axis),
+        vec_axis(product_q, axis), vec_axis(third, axis), vec_axis(fourth, axis), gamma, delta,
+        second_coefficients[axis]);
+  }
+  return eri_cartesian_value<MaximumAngular>(p, q, rho, product_p, product_q, angular_first,
+                                             angular_second, angular_third, angular_fourth,
+                                             first_coefficients, second_coefficients, range, omega);
+}
+
 /**
  * Evaluate one Cartesian primitive quartet with exact shell-pair workspaces.
  *
@@ -699,33 +746,10 @@ __device__ inline Scalar primitive_eri_cartesian_shell_class(
                                                     angular_second, gamma, third, angular_third,
                                                     delta, fourth, angular_fourth);
   } else {
-    using Real = EvaluationReal<Scalar>;
-    const Real alpha_value{alpha};
-    const Real beta_value{beta};
-    const Real gamma_value{gamma};
-    const Real delta_value{delta};
-    const Real p = alpha_value + beta_value;
-    const Real q = gamma_value + delta_value;
-    const Real rho = p * q / (p + q);
-    const Vec3<Scalar> product_p = product_center(alpha, first, beta, second);
-    const Vec3<Scalar> product_q = product_center(gamma, third, delta, fourth);
-    ShellPairHermiteCoefficients<Scalar, FirstShellAngular, SecondShellAngular>
-        first_coefficients[3];
-    ShellPairHermiteCoefficients<Scalar, ThirdShellAngular, FourthShellAngular>
-        second_coefficients[3];
-    for (int axis = 0; axis < 3; ++axis) {
-      fill_shell_pair_hermite<FirstShellAngular, SecondShellAngular>(
-          angular_axis(angular_first, axis), angular_axis(angular_second, axis),
-          vec_axis(product_p, axis), vec_axis(first, axis), vec_axis(second, axis), alpha, beta,
-          first_coefficients[axis]);
-      fill_shell_pair_hermite<ThirdShellAngular, FourthShellAngular>(
-          angular_axis(angular_third, axis), angular_axis(angular_fourth, axis),
-          vec_axis(product_q, axis), vec_axis(third, axis), vec_axis(fourth, axis), gamma, delta,
-          second_coefficients[axis]);
-    }
-    return eri_cartesian_value<MaximumAngular>(p, q, rho, product_p, product_q, angular_first,
-                                               angular_second, angular_third, angular_fourth,
-                                               first_coefficients, second_coefficients);
+    return primitive_eri_cartesian_shell_pairs<FirstShellAngular, SecondShellAngular,
+                                               ThirdShellAngular, FourthShellAngular>(
+        alpha, first, angular_first, beta, second, angular_second, gamma, third, angular_third,
+        delta, fourth, angular_fourth);
   }
 }
 

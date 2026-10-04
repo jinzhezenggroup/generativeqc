@@ -1,0 +1,46 @@
+{
+  "records": [
+    {
+      "encoding": "gzip",
+      "original_bytes": 57100,
+      "original_git_blob": "47ccf39702925832b6e3cc9f7f994758f1641b83",
+      "original_path": "cpu-records.json",
+      "original_sha256": "ffdaa95c31a7b88e7eda919813961c365a01b9ffb0637959296254bc734511ab",
+      "stored_bytes": 7837,
+      "stored_path": "cpu-records.json.gz",
+      "stored_sha256": "3ebdc95243a3c27f885ed31d411a28ca892b0a22ea6dfadf5c70f185a1dd4407"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 73348,
+      "original_git_blob": "34235536c9b1753cfc3c4c7e1d4e2401924d036d",
+      "original_path": "cuda-records.json",
+      "original_sha256": "946c3f538e7f7dae78b4615e2ec6491d1d18a7cb09a2d2c7189ffe40cd8e77e7",
+      "stored_bytes": 11018,
+      "stored_path": "cuda-records.json.gz",
+      "stored_sha256": "7560e8778adc496f67d6d86e3e0289eb3e1d3b96802f34029fe02232b229c619"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 13556,
+      "original_git_blob": "c4865c4248f5f82ef5783d80c3a0a3a766f7f70b",
+      "original_path": "experimental-comparator.patch",
+      "original_sha256": "5dd3ca84b4a9d8d4a9b0fec75cd7605464fe541ab6eea7ff0ab5426a6ff89f27",
+      "stored_bytes": 4273,
+      "stored_path": "experimental-comparator.patch.gz",
+      "stored_sha256": "60064a66846e1495d8480167d0f84d05a5c018c078595da7a59e93720c7f6116"
+    },
+    {
+      "encoding": "gzip",
+      "original_bytes": 17722,
+      "original_git_blob": "061079a3aae04b130be801a4be7c23cdcc3c0cba",
+      "original_path": "summary.json",
+      "original_sha256": "78b76dcdf3c6deb06bc7edac4c26526ed76e54599a0603d1c829b7c276112ef4",
+      "stored_bytes": 4858,
+      "stored_path": "summary.json.gz",
+      "stored_sha256": "01e4854a6eeac54245defa94b744e455ea46066be5fabb4bd558d313efacadd3"
+    }
+  ],
+  "schema": "generativeqc.cc-evidence-storage.v1",
+  "storage_source_revision": "9e9b938239d31564d6f92e9b99b922aee0dbb1cc"
+}

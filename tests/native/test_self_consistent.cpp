@@ -240,11 +240,140 @@ void verify_terminal_accept_can_keep_current_state() {
   require(outcome.state == 1.0, "driver replaced a method-retained terminal state");
 }
 
+struct MoveOnlyState {
+  int value;
+  inline static unsigned moves = 0;
+  explicit MoveOnlyState(int initial) : value(initial) {}
+  MoveOnlyState(const MoveOnlyState&) = delete;
+  MoveOnlyState& operator=(const MoveOnlyState&) = delete;
+  MoveOnlyState(MoveOnlyState&& other) noexcept : value(other.value) { ++moves; }
+  MoveOnlyState& operator=(MoveOnlyState&& other) noexcept {
+    value = other.value;
+    ++moves;
+    return *this;
+  }
+};
+
+void verify_default_eligibility_preserves_moves_and_order() {
+  const SelfConsistentPolicy policy{4, 1e-12, 1e-12, 1e-12, true};
+  std::vector<unsigned> default_trace;
+  for (bool explicit_gate : {false, true}) {
+    MoveOnlyState::moves = 0;
+    std::vector<unsigned> trace;
+    unsigned eligible_calls = 0;
+    const auto evaluate = [&](const MoveOnlyState& state, unsigned iteration) {
+      trace.push_back(10 * iteration + 1);
+      require(state.value == static_cast<int>(iteration - 1), "state update order changed");
+      return ScalarEvaluation{double(iteration), 0.0, 0.0, 0.0};
+    };
+    const auto record = [&](const SelfConsistentProgress& progress, const ScalarEvaluation&) {
+      trace.push_back(10 * progress.iteration + 2);
+      require(progress.converged == (progress.iteration == 2), "record convergence changed");
+    };
+    const auto accept = [&](MoveOnlyState&, ScalarEvaluation evaluation,
+                            const SelfConsistentProgress& progress) {
+      trace.push_back(10 * progress.iteration + 3);
+      return MoveOnlyState(static_cast<int>(evaluation.proposed_state));
+    };
+    const auto eligible = [&](const SelfConsistentProgress& progress, const ScalarEvaluation&) {
+      ++eligible_calls;
+      require(progress.iteration == 2 && progress.converged, "eligibility ran before scalar pass");
+      require(trace.back() == 21, "eligibility ran after record/accept");
+      return true;
+    };
+    auto outcome =
+        explicit_gate
+            ? run_self_consistent(MoveOnlyState(0), policy, evaluate, accept, record, eligible)
+            : run_self_consistent(MoveOnlyState(0), policy, evaluate, accept, record);
+    require(outcome.converged && outcome.progress.iteration == 2 && outcome.state.value == 2,
+            "default/always-true state or outcome changed");
+    require(MoveOnlyState::moves == 4, "eligibility introduced a state move");
+    require(eligible_calls == unsigned(explicit_gate), "wrong eligibility invocation count");
+    if (!explicit_gate) default_trace = trace;
+    require(trace == default_trace && trace == std::vector<unsigned>({11, 12, 13, 21, 22, 23}),
+            "default/always-true evaluate-record-accept ordering changed");
+  }
+}
+
+void verify_eligibility_veto_and_current_retention() {
+  for (unsigned allow_at : {3U, 99U}) {
+    const SelfConsistentPolicy policy{4, 1e-12, 1e-12, 1e-12, true};
+    unsigned eligible_calls = 0, records = 0, accepts = 0;
+    const auto outcome = run_self_consistent(
+        0.0, policy,
+        [](double state, unsigned) { return ScalarEvaluation{state + 1.0, 0.0, 0.0, 0.0}; },
+        [&](double& current, ScalarEvaluation evaluation, const SelfConsistentProgress& progress) {
+          ++accepts;
+          require(records == accepts, "accept ran before record");
+          if (progress.converged || progress.iteration == policy.max_iterations) return current;
+          return evaluation.proposed_state;
+        },
+        [&](const SelfConsistentProgress& progress, const ScalarEvaluation&) {
+          ++records;
+          require(progress.converged == (progress.iteration >= allow_at), "record missed veto");
+        },
+        [&](const SelfConsistentProgress& progress, const ScalarEvaluation& evaluation) {
+          ++eligible_calls;
+          require(progress.iteration > 1 && progress.converged, "first/scalar failure eligible");
+          require(records + 1 == progress.iteration && accepts == records,
+                  "eligibility order changed");
+          require(evaluation.proposed_state == double(progress.iteration),
+                  "eligibility did not receive CURRENT evaluation");
+          return progress.iteration >= allow_at;
+        });
+    const unsigned expected = std::min(allow_at, policy.max_iterations);
+    require(outcome.converged == (allow_at <= policy.max_iterations), "veto convergence wrong");
+    require(outcome.progress.iteration == expected && records == expected && accepts == expected &&
+                eligible_calls == expected - 1,
+            "veto extended budget or skipped controller work");
+    require(outcome.state == double(expected - 1), "terminal CURRENT state was replaced");
+  }
+}
+
+void verify_eligibility_cannot_override_scalar_failure() {
+  for (unsigned failure = 0; failure < 4; ++failure) {
+    const SelfConsistentPolicy policy{3, 1.0, 1.0, 1.0, true};
+    unsigned calls = 0;
+    const auto outcome = run_self_consistent(
+        0.0, policy,
+        [failure](double, unsigned iteration) {
+          return ScalarEvaluation{
+              42.0, failure == 0 ? double(iteration) : 0.0, failure == 1 ? 1.0 : 0.0,
+              failure == 2 ? 1.0 : (failure == 3 ? std::numeric_limits<double>::quiet_NaN() : 0.0)};
+        },
+        [](double state, ScalarEvaluation, const SelfConsistentProgress&) { return state; },
+        [](const SelfConsistentProgress&, const ScalarEvaluation&) {},
+        [&](const SelfConsistentProgress&, const ScalarEvaluation&) {
+          ++calls;
+          return true;
+        });
+    require(!outcome.converged && outcome.progress.iteration == 3 && calls == 0,
+            "eligibility overrode a scalar gate or ran on iteration one");
+  }
+  for (unsigned budget : {0U, 1U}) {
+    unsigned calls = 0;
+    const auto outcome = run_self_consistent(
+        0.0, SelfConsistentPolicy{budget, 1.0, 1.0, 1.0, false},
+        [](double, unsigned) { return ScalarEvaluation{}; },
+        [](double state, ScalarEvaluation, const SelfConsistentProgress&) { return state; },
+        [](const SelfConsistentProgress&, const ScalarEvaluation&) {},
+        [&](const SelfConsistentProgress&, const ScalarEvaluation&) {
+          ++calls;
+          return true;
+        });
+    require(!outcome.converged && outcome.progress.iteration == budget && calls == 0,
+            "zero/first iteration invoked eligibility");
+  }
+}
+
 }  // namespace
 
 int main() {
   try {
     verify_bounded_iteration_control();
+    verify_default_eligibility_preserves_moves_and_order();
+    verify_eligibility_veto_and_current_retention();
+    verify_eligibility_cannot_override_scalar_failure();
     verify_basic_convergence();
     verify_residual_gate();
     verify_nonconverged_state_retention();

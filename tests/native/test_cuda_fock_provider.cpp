@@ -15,6 +15,7 @@
 
 #include "integrals/s_integrals.hpp"
 #include "molecule/basis.hpp"
+#include "runtime/resource_ledger.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_jk_plan.hpp"
 #include "scf/cuda_density_fitting.hpp"
@@ -557,6 +558,260 @@ std::vector<double> reference_range_exchange(const generativeqc::core::System& s
                        ? generativeqc::integrals::build_integrals(system, false, true).eri
                        : generativeqc::integrals::build_range_eri(system, range, omega);
   return reference_exchange_from_eri(eri, generativeqc::molecule::ao_count(system), density);
+}
+
+/** Deny each real optional allocation through the external resource ledger,
+ * while leaving the provider's own budget unchanged. Check the usable fallback
+ * and its retained charge, rather than only exercising shape-budget rejection.
+ */
+void spd_optional_allocation_fallback() {
+  namespace runtime = generativeqc::runtime;
+  struct LedgerScope {
+    std::shared_ptr<runtime::DeviceResourceLedger> previous{runtime::active_device_resource_ledger};
+    std::shared_ptr<runtime::DeviceResourceLedger> ledger{
+        std::make_shared<runtime::DeviceResourceLedger>()};
+    explicit LedgerScope(std::size_t limit) {
+      ledger->limit = limit;
+      ledger->device = 0;
+      runtime::active_device_resource_ledger = ledger;
+    }
+    ~LedgerScope() { runtime::active_device_resource_ledger = previous; }
+  };
+  generativeqc::core::System system;
+  system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 2, {{0.5, 1.0}}}};
+  system.electron_count = 2;
+  system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+  std::string detail;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  constexpr std::size_t budget = 64U << 20;
+  using Plan = std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)>;
+  std::vector<std::size_t> limits;
+  std::size_t canonical_begin{}, rows_begin{}, metadata_begin{};
+  {
+    LedgerScope scope(budget);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    Plan plan(raw, &destroy_cuda_direct_jk_plan);
+    require(plan->generated_exchange && plan->canonical_cartesian && plan->canonical_pairs &&
+                plan->canonical_row_prefix && plan->batch.shell_ao_offsets,
+            "allocation fault baseline lacks SPD/canonical/row/derivative storage");
+    std::size_t prefix = plan->generated_exchange->device_bytes;
+    for (std::size_t index = 0; index < plan->allocations.size(); ++index) {
+      const auto* pointer = plan->allocations[index];
+      if (pointer == plan->canonical_batch.shell_direct_ao_offsets) canonical_begin = index;
+      if (pointer == plan->canonical_exchange) rows_begin = index + 1U;
+      if (pointer == plan->batch.shell_ao_offsets) metadata_begin = index;
+      std::lock_guard<std::mutex> lock(runtime::device_resource_mutex);
+      const auto found = runtime::device_allocation_owners.find(plan->allocations[index]);
+      require(found != runtime::device_allocation_owners.end(), "unregistered provider allocation");
+      prefix += found->second.bytes;
+      limits.push_back(prefix - 1U);
+    }
+    require(canonical_begin && canonical_begin < rows_begin && rows_begin < metadata_begin &&
+                metadata_begin < limits.size() && prefix == diagnostic.device_bytes &&
+                prefix == scope.ledger->live,
+            "provider allocation inventory does not match its retained charge");
+    plan.reset();
+    require(scope.ledger->live == 0, "baseline provider leaked tracked device storage");
+  }
+  const auto n = generativeqc::molecule::ao_count(system);
+  std::vector<double> density(n * n);
+  for (std::size_t index = 0; index < density.size(); ++index)
+    density[index] = std::cos(0.31 * (index / n) + 0.17 * (index % n)) / n;
+  const std::array<std::vector<double>, 3> eri{
+      generativeqc::integrals::build_integrals(system, false).eri,
+      generativeqc::integrals::build_range_eri(system, generativeqc::integrals::CoulombRange::Short,
+                                               0.37),
+      generativeqc::integrals::build_range_eri(system, generativeqc::integrals::CoulombRange::Long,
+                                               0.37)};
+  for (std::size_t index = canonical_begin; index < limits.size(); ++index) {
+    LedgerScope scope(limits[index]);
+    CudaDirectJkPlan* raw{};
+    CudaDirectJkDiagnostic diagnostic;
+    require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail) ==
+                GENERATIVEQC_STATUS_SUCCESS,
+            detail.c_str());
+    Plan plan(raw, &destroy_cuda_direct_jk_plan);
+    require(scope.ledger->rejected > 0 && detail.empty() &&
+                diagnostic.device_bytes == scope.ledger->live &&
+                diagnostic.device_bytes <= limits[index] && plan->generated_exchange &&
+                plan->generated_exchange->force_capability &&
+                direct_jk_generated_full_range_value_available(*plan),
+            "optional allocation failure lost the generated owner or its resource accounting");
+    require(bool(plan->canonical_pairs) == (index >= rows_begin) &&
+                bool(plan->canonical_row_prefix) == (index >= metadata_begin),
+            "optional allocation failure left a partial source or discarded its earlier owner");
+    if (index < rows_begin)
+      require(!plan->canonical_cartesian && !plan->canonical_transform &&
+                  !plan->canonical_density && plan->canonical_pair_offsets.empty(),
+              "failed canonical source retained stale availability metadata");
+    if (index >= metadata_begin)
+      require(!plan->batch.shell_ao_offsets && !plan->batch.shell_pair_first &&
+                  !plan->batch.shell_pair_second && !plan->batch.total_shell_pairs,
+              "failed derivative metadata retained dangling pointers");
+    std::size_t op_index = 0;
+    for (auto op : {FockOperator::FullRange, FockOperator::ShortRange, FockOperator::LongRange}) {
+      auto spec = make_hf_fock_spec(FockSpin::Restricted);
+      spec.coulomb.present = false;
+      spec.exchange.op = op;
+      spec.exchange.omega = op == FockOperator::FullRange ? 0.0 : 0.37;
+      const auto expected = reference_exchange_from_eri(eri[op_index++], n, density);
+      direct_device(plan.get(), spec, density, {}, {}, expected, {});
+    }
+    plan.reset();
+    require(scope.ledger->live == 0, "failed optional preparation leaked tracked device storage");
+  }
+  // Through-f canonical preparation retains its established required behavior.
+  system.shells[1].angular_momentum = 3;
+  require(
+      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+      detail.c_str());
+  const auto minimum = cuda_direct_jk_device_bytes(1, generativeqc::molecule::ao_count(system), 2,
+                                                   system.shells.size(), 2, 1);
+  LedgerScope scope(minimum);
+  CudaDirectJkPlan* raw{};
+  CudaDirectJkDiagnostic diagnostic;
+  const auto status =
+      create_cuda_direct_jk_plan(0, {system}, 1, 0.0, budget, &raw, diagnostic, detail);
+  Plan plan(raw, &destroy_cuda_direct_jk_plan);
+  require(status == GENERATIVEQC_STATUS_OUT_OF_MEMORY && !plan && scope.ledger->rejected > 0 &&
+              scope.ledger->live == 0,
+          "through-f required allocation failure was hidden or leaked storage");
+}
+
+/** SPD full-range coverage must not send SR/LR back to ordered AO^4 work.
+ * Compare independently formed CPU ERIs at two geometries, including arbitrary
+ * density orientation. Count actual source work separately from endpoint time.
+ */
+void spd_canonical_range_values() {
+  for (unsigned angular : {0U, 1U, 2U}) {
+    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
+      generativeqc::core::System first;
+      first.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7}}};
+      first.shells = {{0, 0, {{0.8, 0.7}, {0.2, 0.3}}}, {1, angular, {{0.5, 1.0}}}};
+      if (angular == 2U) first.shells.push_back({0, 1, {{0.7, 1.0}}});
+      first.electron_count = 2;
+      first.basis_representation = representation;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(first, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      auto second = first;
+      second.atoms[1].position[2] += 0.17;
+      const auto n = generativeqc::molecule::ao_count(first);
+      const auto matrix = n * n;
+      std::vector<double> alpha(2U * matrix), beta(2U * matrix);
+      for (std::size_t index = 0; index < alpha.size(); ++index) {
+        alpha[index] = std::cos(0.31 * (index / n) + 0.17 * (index % n)) / n;
+        beta[index] = std::sin(0.23 * (index / n) - 0.37 * (index % n)) / n;
+      }
+      CudaDirectJkPlan* raw{};
+      CudaDirectJkDiagnostic diagnostic;
+      constexpr std::size_t budget = 64U << 20;
+      require(create_cuda_direct_jk_plan(0, {first, second}, 1, 0.0, budget, &raw, diagnostic,
+                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+          raw, &destroy_cuda_direct_jk_plan);
+      require(plan->canonical_pairs && plan->canonical_cartesian && plan->canonical_row_prefix &&
+                  plan->generated_exchange && plan->generated_exchange->force_capability &&
+                  direct_jk_generated_full_range_value_available(*plan) &&
+                  diagnostic.device_bytes <= budget,
+              "SPD range source displaced generated full-range ownership or exceeded budget");
+      std::size_t primitives = 0;
+      for (const auto& shell : first.shells) primitives += 2U * shell.primitives.size();
+      const auto minimum =
+          cuda_direct_jk_device_bytes(2, n, 4, 2U * first.shells.size(), primitives, 1);
+      // At the exact old generated-owner capacity, the new optional source
+      // must disappear while the full-range value/force owner remains intact.
+      const auto generated_budget = minimum + plan->generated_exchange->device_bytes;
+      CudaDirectJkPlan* constrained_raw{};
+      CudaDirectJkDiagnostic constrained_diagnostic;
+      require(
+          create_cuda_direct_jk_plan(0, {first, second}, 1, 0.0, generated_budget, &constrained_raw,
+                                     constrained_diagnostic, detail) == GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> constrained(
+          constrained_raw, &destroy_cuda_direct_jk_plan);
+      require(!constrained->canonical_pairs &&
+                  direct_jk_generated_full_range_value_available(*constrained) &&
+                  constrained->generated_exchange->force_capability &&
+                  constrained_diagnostic.device_bytes == generated_budget,
+              "optional canonical range storage displaced the constrained SPD owner");
+      DeviceMatrix census(std::vector<double>(2U, 0.0));
+      plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(census.pointer);
+      const auto source_n = static_cast<std::size_t>(plan->canonical_batch.nbf);
+      const auto pairs = source_n * (source_n + 1U) / 2U;
+      const auto quartets = 2U * pairs * (pairs + 1U) / 2U;
+      const std::array<std::vector<double>, 2> full_eri{
+          generativeqc::integrals::build_integrals(first, false).eri,
+          generativeqc::integrals::build_integrals(second, false).eri};
+      for (auto op : {FockOperator::FullRange, FockOperator::ShortRange, FockOperator::LongRange}) {
+        constexpr double omega = 0.37;
+        const auto range = op == FockOperator::ShortRange
+                               ? generativeqc::integrals::CoulombRange::Short
+                               : generativeqc::integrals::CoulombRange::Long;
+        const std::array<std::vector<double>, 2> range_eri{
+            op == FockOperator::FullRange
+                ? full_eri[0]
+                : generativeqc::integrals::build_range_eri(first, range, omega),
+            op == FockOperator::FullRange
+                ? full_eri[1]
+                : generativeqc::integrals::build_range_eri(second, range, omega)};
+        for (auto spin : {FockSpin::Restricted, FockSpin::Unrestricted})
+          for (bool want_j : {false, true})
+            for (bool want_k : {false, true}) {
+              auto spec = make_hf_fock_spec(spin);
+              spec.coulomb.present = want_j;
+              spec.exchange.present = want_k;
+              spec.exchange.op = op;
+              spec.exchange.omega = op == FockOperator::FullRange ? 0.0 : omega;
+              std::vector<double> expected_j, expected_a, expected_b;
+              for (std::size_t item = 0; item < 2U; ++item) {
+                const std::vector<double> a(alpha.begin() + item * matrix,
+                                            alpha.begin() + (item + 1U) * matrix);
+                const std::vector<double> b(beta.begin() + item * matrix,
+                                            beta.begin() + (item + 1U) * matrix);
+                if (want_j) {
+                  auto j_spec = make_hf_fock_spec(spin);
+                  j_spec.exchange.present = false;
+                  const auto j = build_exact_direct_jk(
+                      resolve_fock_build(j_spec, FockBackend::Cpu, 0.0), n, full_eri[item], a,
+                      spin == FockSpin::Unrestricted ? b : std::vector<double>{});
+                  expected_j.insert(expected_j.end(), j.coulomb.begin(), j.coulomb.end());
+                }
+                if (want_k) {
+                  const auto ka = reference_exchange_from_eri(range_eri[item], n, a);
+                  expected_a.insert(expected_a.end(), ka.begin(), ka.end());
+                  if (spin == FockSpin::Unrestricted) {
+                    const auto kb = reference_exchange_from_eri(range_eri[item], n, b);
+                    expected_b.insert(expected_b.end(), kb.begin(), kb.end());
+                  }
+                }
+              }
+              direct_device(plan.get(), spec, alpha, beta, expected_j, expected_a, expected_b);
+              std::array<std::uint64_t, 2> work{};
+              check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                               cudaMemcpyDeviceToHost));
+              const bool canonical = want_k && op != FockOperator::FullRange;
+              require(work[0] == (canonical ? quartets : 0U) &&
+                          work[1] == (canonical ? quartets * (want_j ? 2U : 1U) : 0U),
+                      "SPD generated/canonical selection disagrees with actual source work");
+              direct_device(constrained.get(), spec, alpha, beta, expected_j, expected_a,
+                            expected_b);
+            }
+      }
+      std::cout << "{\"spd_source_aos\":" << source_n << ",\"batch\":2,\"lr_quartets\":" << quartets
+                << ",\"device_bytes\":" << diagnostic.device_bytes
+                << ",\"generated_only_bytes\":" << generated_budget << "}\n";
+    }
+  }
 }
 
 /** Qualify the through-f shell value owner and retain the canonical source as
@@ -1215,10 +1470,12 @@ void canonical_work_census() {
         int numerical_error{};
         check(cudaMemcpy(&numerical_error, error.pointer, sizeof(int), cudaMemcpyDeviceToHost));
         require(numerical_error == 0, "census source produced nonfinite values");
-        const bool bounded_route = bounded_opt_in && operation == FockOperator::FullRange;
+        // This fixture admits both full and positive-omega range value sources
+        // to the bounded provider. Neither opt-in route visits canonical AOs.
+        const bool bounded_route = bounded_opt_in;
         if (bounded_route) {
           require(work[0] == 0U && work[1] == 0U,
-                  "full-range through-f value unexpectedly entered the canonical AO source");
+                  "bounded through-f value unexpectedly entered the canonical AO source");
         } else {
           require(work[0] == quartets && work[1] == quartets,
                   "canonical values repeated or omitted a candidate/radial evaluation");
@@ -1452,6 +1709,29 @@ void range_exchange_derivatives() {
                   detail.c_str());
           require(fused.size() == 18 && j_gradient.size() == 6,
                   "fused CUDA RSH derivative returned the wrong source shape");
+          // The public generic provider above can choose canonical derivatives.
+          // Qualify the distinct bounded shell route used by molecular WB97M-V
+          // as well, including its full-minus-LR reconstruction of the SR source.
+          CudaDirectJkPlan* shell_raw{};
+          CudaDirectJkDiagnostic shell_diagnostic;
+          require(create_cuda_direct_jk_plan(0, {item == 0 ? first : second}, 1, 0.0, 64U << 20,
+                                             &shell_raw, shell_diagnostic,
+                                             detail) == GENERATIVEQC_STATUS_SUCCESS,
+                  detail.c_str());
+          std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> shell_plan(
+              shell_raw, &destroy_cuda_direct_jk_plan);
+          DeviceMatrix device_a(a), device_b(b);
+          std::vector<double> shell;
+          require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
+                      shell_plan.get(), spin, 1.0, coefficient, coefficient, omega,
+                      device_a.pointer, spin == FockSpin::Unrestricted ? device_b.pointer : nullptr,
+                      matrix, shell, detail) == GENERATIVEQC_STATUS_SUCCESS,
+                  detail.c_str());
+          require(shell.size() == fused.size(), "bounded shell RSH source shape changed");
+          for (std::size_t coordinate = 0; coordinate < shell.size(); ++coordinate)
+            require(std::isfinite(shell[coordinate]) &&
+                        std::abs(shell[coordinate] - fused[coordinate]) < 3e-10,
+                    "bounded shell RSH derivative differs from CPU-qualified canonical source");
           for (std::size_t coordinate = 0; coordinate < 6; ++coordinate) {
             require(std::abs(fused[coordinate] - j_gradient[coordinate]) < 2e-11,
                     "fused CUDA RSH Coulomb derivative changed");
@@ -1465,6 +1745,154 @@ void range_exchange_derivatives() {
           require(std::abs(gradients[0][coordinate] - gradients[1][coordinate] -
                            gradients[2][coordinate]) < 2e-11,
                   "CUDA radial full derivative is not short plus long range");
+      }
+    }
+  }
+}
+
+/** Four-center CPU displaced values qualify bounded LR accumulation.
+ * d/p/s/s covers weighted low orders; d/p/p/s, d/d/p/s and d/d/p/p bind
+ * distinct centers at total orders 4, 5 and 6. Repeated-center geometries
+ * bind different shells to one atom. Check every coordinate in both spins.
+ */
+void shell_range_four_center_derivatives() {
+  constexpr double omega = 0.3, coefficient = -0.37, step = 1e-4;
+  for (const auto angular :
+       {std::array<unsigned, 4>{2, 1, 0, 0}, std::array<unsigned, 4>{2, 1, 1, 0},
+        std::array<unsigned, 4>{2, 2, 1, 0}, std::array<unsigned, 4>{2, 2, 1, 1}}) {
+    for (const bool repeated_center : {false, true}) {
+      generativeqc::core::System system;
+      system.atoms = {{1, {0.1, -0.2, -0.8}},
+                      {1, {0.3, 0.1, 0.7}},
+                      {1, {-0.5, 0.6, 0.2}},
+                      {1, {0.8, -0.4, 0.3}}};
+      system.shells = {{0, angular[0], {{0.8, 1.0}}},
+                       {1, angular[1], {{0.6, 1.0}}},
+                       {2, angular[2], {{0.7, 1.0}}},
+                       {repeated_center ? 1 : 3, angular[3], {{0.9, 1.0}}}};
+      system.electron_count = 4;
+      system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+      std::string detail;
+      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
+                  GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      const auto n = generativeqc::molecule::ao_count(system), matrix = n * n;
+      std::vector<double> a(matrix), b(matrix);
+      for (std::size_t i = 0; i < n; ++i)
+        for (std::size_t j = 0; j < n; ++j) {
+          a[i * n + j] = std::cos(0.3 * (i + j)) / n;
+          b[i * n + j] = std::sin(0.4 * (i + j)) / (2 * n);
+        }
+      CudaDirectJkPlan* raw{};
+      CudaDirectJkDiagnostic diagnostic;
+      require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, 64U << 20, &raw, diagnostic,
+                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
+              detail.c_str());
+      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+          raw, &destroy_cuda_direct_jk_plan);
+      DeviceMatrix device_a(a), device_b(b);
+      std::array<std::vector<double>, 2> actual;
+      for (unsigned spin = 0; spin < 2; ++spin)
+        require(execute_cuda_direct_shell_rsh_energy_derivatives_device(
+                    plan.get(), spin ? FockSpin::Unrestricted : FockSpin::Restricted, 0.0, 0.0,
+                    coefficient, omega, device_a.pointer, spin ? device_b.pointer : nullptr, matrix,
+                    actual[spin], detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+      const auto coordinates = system.atoms.size() * 3U;
+      for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+        auto plus = system, minus = system;
+        plus.atoms[coordinate / 3].position[coordinate % 3] += step;
+        minus.atoms[coordinate / 3].position[coordinate % 3] -= step;
+        auto derivative = generativeqc::integrals::build_range_eri(
+            plus, generativeqc::integrals::CoulombRange::Long, omega);
+        const auto negative = generativeqc::integrals::build_range_eri(
+            minus, generativeqc::integrals::CoulombRange::Long, omega);
+        for (std::size_t index = 0; index < derivative.size(); ++index)
+          derivative[index] = (derivative[index] - negative[index]) / (2 * step);
+        for (unsigned spin = 0; spin < 2; ++spin) {
+          auto spec = make_hf_fock_spec(spin ? FockSpin::Unrestricted : FockSpin::Restricted);
+          spec.derivative_order = 1;
+          spec.coulomb.present = false;
+          spec.exchange.coefficient = coefficient;
+          const auto cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+          const double expected = contract_exact_direct_energy_derivative(
+              cpu, n, derivative, a, spin ? b : std::vector<double>{});
+          require(actual[spin].size() == 3U * coordinates, "bounded LR source shape changed");
+          require(actual[spin][coordinate] == 0.0 && actual[spin][coordinates + coordinate] == 0.0,
+                  "disabled bounded RSH source acquired a contribution");
+          const double value = actual[spin][2U * coordinates + coordinate];
+          require(std::isfinite(value) && std::abs(value - expected) < 3e-8,
+                  "four-center bounded LR derivative differs from displaced CPU ERIs");
+        }
+      }
+    }
+  }
+}
+
+/** Independent CPU ERIs qualify both public source channels, not their sum.
+ * Opposing UKS spins make J exactly zero while K remains live; each coefficient
+ * mask must also preserve the disabled channel without contaminating its peer.
+ */
+void full_range_shell_source_oracles(const generativeqc::core::System& system,
+                                     std::span<const double> eri_derivatives,
+                                     const std::vector<double>& alpha,
+                                     const std::vector<double>& beta) {
+  const auto dimension = generativeqc::molecule::ao_count(system);
+  const auto matrix_size = dimension * dimension;
+  const auto coordinates = system.atoms.size() * 3U;
+  CudaDirectJkPlan* raw{};
+  CudaDirectJkDiagnostic diagnostic;
+  std::string detail;
+  require(create_cuda_direct_jk_plan(0, {system}, 1, 0.0, 64U << 20, &raw, diagnostic, detail) ==
+              GENERATIVEQC_STATUS_SUCCESS,
+          detail.c_str());
+  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+      raw, &destroy_cuda_direct_jk_plan);
+  for (const bool unrestricted : {false, true}) {
+    for (const bool opposing : {false, true}) {
+      auto selected_alpha = alpha;
+      auto selected_beta = beta;
+      if (opposing) {
+        if (unrestricted) {
+          for (std::size_t pair = 0; pair < matrix_size; ++pair)
+            selected_beta[pair] = -selected_alpha[pair];
+        } else {
+          std::fill(selected_alpha.begin(), selected_alpha.end(), 0.0);
+        }
+      }
+      DeviceMatrix device_alpha(selected_alpha), device_beta(selected_beta);
+      const auto spin = unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted;
+      for (unsigned mask = 0; mask < 4; ++mask) {
+        const double coulomb = mask & 1U ? 1.7 : 0.0;
+        const double exchange = mask & 2U ? -0.23 : 0.0;
+        std::vector<double> actual;
+        require(execute_cuda_direct_shell_full_range_derivatives_device(
+                    plan.get(), spin, coulomb, exchange, device_alpha.pointer,
+                    unrestricted ? device_beta.pointer : nullptr, matrix_size, actual,
+                    detail) == GENERATIVEQC_STATUS_SUCCESS,
+                detail.c_str());
+        require(actual.size() == 2U * coordinates, "full-range J/K source shape changed");
+        for (unsigned source = 0; source < 2U; ++source) {
+          auto spec = make_hf_fock_spec(spin);
+          spec.derivative_order = 1;
+          spec.coulomb.present = source == 0U && coulomb != 0.0;
+          spec.exchange.present = source == 1U && exchange != 0.0;
+          spec.coulomb.coefficient = coulomb;
+          spec.exchange.coefficient = exchange;
+          const auto cpu = resolve_fock_build(spec, FockBackend::Cpu, 0.0);
+          for (std::size_t coordinate = 0; coordinate < coordinates; ++coordinate) {
+            const auto expected = contract_exact_direct_energy_derivative(
+                cpu, dimension,
+                eri_derivatives.subspan(coordinate * matrix_size * matrix_size,
+                                        matrix_size * matrix_size),
+                selected_alpha, unrestricted ? selected_beta : std::vector<double>{});
+            const auto value = actual[source * coordinates + coordinate];
+            require(std::isfinite(value) && std::abs(value - expected) < 3e-10,
+                    "independent full-range shell J/K derivative differs from CPU ERIs");
+            if (!(mask & (1U << source)))
+              require(value == 0.0, "disabled full-range source acquired a contribution");
+          }
+        }
       }
     }
   }
@@ -1503,6 +1931,10 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
       for (std::size_t ij = 0; ij < matrix; ++ij) {
         a[ij] = std::cos(0.3 * (ij / n) + 0.7 * (ij % n)) / n;
         b[ij] = std::sin(0.8 * (ij / n) - 0.2 * (ij % n)) / n;
+      }
+      if (derivatives) {
+        full_range_shell_source_oracles(first, ints.eri_derivative, a, b);
+        full_range_shell_source_oracles(second, other.eri_derivative, a, b);
       }
       packed_a = a;
       packed_a.insert(packed_a.end(), a.begin(), a.end());
@@ -1716,6 +2148,12 @@ void direct_providers(bool through_f_response, bool eri_tiles_only = false) {
 }  // namespace
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::string(argv[1]) == "--spd-range-only") {
+      spd_optional_allocation_fallback();
+      spd_canonical_range_values();
+      std::cout << "CUDA SPD generated/full and canonical/SR/LR value gates PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--eri-tiles-only") {
       direct_providers(false, true);
       std::cout << "CUDA s/p/d/f full and rectangular ERI tiles, both batch items PASS\n";
@@ -1726,6 +2164,8 @@ int main(int argc, char** argv) {
       return 0;
     }
     if (argc == 2 && std::string(argv[1]) == "--canonical-values-only") {
+      spd_optional_allocation_fallback();
+      spd_canonical_range_values();
       canonical_screening_rows();
       canonical_screened_values();
       canonical_one_electron_reuse();
@@ -1742,6 +2182,7 @@ int main(int argc, char** argv) {
     }
     if (argc == 2 && std::string(argv[1]) == "--range-response-only") {
       range_exchange_derivatives();
+      shell_range_four_center_derivatives();
       canonical_order_two_derivatives();
       std::cout << "CUDA s/p/d/f SR/LR derivative gates PASS\n";
       return 0;
@@ -1750,6 +2191,8 @@ int main(int argc, char** argv) {
             "expected optional --mixed-census-only, --range-response-only, or "
             "--through-f-response");
     const bool through_f_response = argc == 2;
+    spd_optional_allocation_fallback();
+    spd_canonical_range_values();
     direct_value_dispatch_selection();
     mixed_coulomb_work_census();
     mixed_coulomb_work_census(true);
@@ -1757,6 +2200,7 @@ int main(int argc, char** argv) {
     device_selection();
     range_exchange_provider();
     range_exchange_derivatives();
+    shell_range_four_center_derivatives();
     canonical_order_two_derivatives();
     direct_providers(through_f_response);
     std::cout << "CUDA independent J/K: DF layouts/selection and direct through-f values, "

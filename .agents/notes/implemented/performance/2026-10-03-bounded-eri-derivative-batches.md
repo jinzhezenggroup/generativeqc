@@ -138,3 +138,7 @@ larger fractions of force time and remain separate optimization targets.
 
 The public CCSD(T) force domain remains at 28 AOs. This scheduling change does not
 resolve the independently documented 56-AO degenerate orbital-response problem.
+
+## Lossless receipt storage (2026-10-03)
+
+These receipts retain the exact original public bytes from `c56f33452ad43187cc949d3319e4f7a07e500086` through ordinary gzip; scientific values, row order, failures and measured identities are unchanged. [storage.json](../../../../benchmarks/results/cc-derivative-batches-20261003/storage.json) pins every original Git blob, original/stored SHA-256 and byte count. The complete original envelope is `evidence.original.json.gz`; the active `evidence.json.gz` only rebinds attachment paths and checksums. Use `tools.generativeqc_validation.record.load_publication_record` for publication-bound records or `load_json` / `gzip -cd` for individual members, and decode `source.patch.gz` before applying the unchanged patch. Storage provenance is not a measured build identity. The historical whitespace-compaction discussion, where present, is not an instruction to overwrite earlier families; their current mainline bytes remain untouched. No new experiment or performance claim is introduced.

@@ -1,1 +1,65 @@
-{"archives":[],"decision":{"reason":"All twelve completed CPU/CUDA endpoint calls pass independent energy/triples/force/residual gates and trace work invariants. This is a diagnosis; no speedup is claimed.","scope":"numerical","status":"accepted"},"files":[{"bytes":12549,"path":"evidence.json","role":"evidence","sha256":"a9cd5608a2d6781f894df33ee58d83b8dd48c78d6f0bfefa61e5b31628e30c52"},{"bytes":7828,"path":"summary.json.gz","role":"summary","sha256":"d17b2cc6090361b26c0ad040112731d8be6100c0436d0d646a1bd876dea1e99a"},{"bytes":7217,"path":"records.json.gz","role":"samples","sha256":"2d9e7d46c96d62382d4b394b83ab97d945f1d58746042a76584b0da063040083"},{"bytes":3447,"path":"source.patch.gz","role":"source-patch","sha256":"9626ba323509485119f42613770ffdd7e23fcb68c061dba17233101f08664931"}],"reproduction":{"command":["python","benchmarks/ccsdt_prepared_endpoint.py","--device","cuda","--atoms","12","--forces","--output",".artifacts/cc-force-phases-reproduction.json"],"instructions":"Apply gzip -dc source.patch.gz | git apply to revision; compile CUDA 12.9 sm_120 Release with explicit CXX/CUDA ccache launchers and checkout-root CCACHE_BASEDIR. Run via finite Slurm main allocation --gres=gpu:5090:1, preserve CUDA_VISIBLE_DEVICES, set GENERATIVEQC_LIBRARY/PYTHONPATH=python:., CPU thread limits=1, and GENERATIVEQC_DF_PROGRESS_TRACE to a fresh path. Also run --atoms 6 on CPU/CUDA. Traces are nested; use phase_interpretation from gzip-decoded summary.json.gz."},"schema":"generativeqc.benchmark-publication.v1","source":{"dirty":true,"revision":"2d2b649516886671b09f3de4cf8e217c37d199da"}}
+{
+  "archives": [],
+  "decision": {
+    "reason": "All twelve completed CPU/CUDA endpoint calls pass independent energy/triples/force/residual gates and trace work invariants. This is a diagnosis; no speedup is claimed.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 2887,
+      "path": "evidence.json.gz",
+      "role": "evidence",
+      "sha256": "1fd1676707fcf1b84be18e682538c3d4f1c7a3e5b5f9d03ba276d6b584a6add3"
+    },
+    {
+      "bytes": 8274,
+      "path": "summary.json.gz",
+      "role": "summary",
+      "sha256": "63bcbc51ae6837aa86be28d09c4a9772e2d469ed88e6a7ef9f4e12a98474d37f"
+    },
+    {
+      "bytes": 7598,
+      "path": "records.json.gz",
+      "role": "samples",
+      "sha256": "a18bfc7affe91efa4c04c136a72682accd6aa71e278d81712d2c773df6a8fe41"
+    },
+    {
+      "bytes": 3447,
+      "path": "source.patch.gz",
+      "role": "source-patch",
+      "sha256": "727eb10b5271ad6a4aa2da390a48ebeaee160373bcf6610f58e38ef8e4d8031e"
+    },
+    {
+      "bytes": 3017,
+      "path": "evidence.original.json.gz",
+      "role": "reproduction",
+      "sha256": "04fe8b6cfaccb9f465b2fa86fd9dad249bae691a44641dc854474698b6de0232"
+    },
+    {
+      "bytes": 1881,
+      "path": "storage.json",
+      "role": "reproduction",
+      "sha256": "c5213df1d38890c4c67ba50ae9c73c5fbf0024684381eac91689b21dc62d8f53"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/ccsdt_prepared_endpoint.py",
+      "--device",
+      "cuda",
+      "--atoms",
+      "12",
+      "--forces",
+      "--output",
+      ".artifacts/cc-force-phases-reproduction.json"
+    ],
+    "instructions": "Decode source.patch.gz byte-for-byte before applying the unchanged patch. Apply source.patch to revision; compile CUDA 12.9 sm_120 Release with explicit CXX/CUDA ccache launchers and checkout-root CCACHE_BASEDIR. Run via finite Slurm main allocation --gres=gpu:5090:1, preserve CUDA_VISIBLE_DEVICES, set GENERATIVEQC_LIBRARY/PYTHONPATH=python:., CPU thread limits=1, and GENERATIVEQC_DF_PROGRESS_TRACE to a fresh path. Also run --atoms 6 on CPU/CUDA. Traces are nested; use phase_interpretation from summary.json."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "2d2b649516886671b09f3de4cf8e217c37d199da"
+  }
+}

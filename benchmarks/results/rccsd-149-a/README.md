@@ -7,24 +7,35 @@ or complete GPU molecular convergence. B/C remain unverified.
 
 ## Archived raw records
 
-The expanded numerical traces, frozen source files, and historical execution
-records are preserved byte for byte in [raw-evidence.zip](raw-evidence.zip).
-The [manifest](raw-evidence.manifest.json) binds the archive, every member's
-size/SHA-256, and migration source commit. Paths below such as `numerical/`,
-`frozen-source/`, `window/`, and `minimum-window/` refer to the restored tree;
-`source-snapshot.json`, the review, and acceptance summary remain readable here.
+This is a historical acceptance/diagnostic report, not an active numerical
+fixture. Its conclusions, failures, source identities and limits remain below;
+current independent fixtures remain under `tests/reference_data/`. The raw ZIP
+is no longer required in the normal checkout. Its exact bytes are pinned to
+commit `1a4acc519eb881cc19d418de65ecca72324359d4` by the
+[shared recovery manifest](../retention-reports-20261003/snapshot.manifest.json).
+The original [member manifest](raw-evidence.manifest.json) still verifies every
+extracted member and preserves the earlier storage/source provenance.
 
-Verify or restore into a new directory with the standard-library verifier:
+Restore the ZIP from locally available Git history, then verify or unpack it
+into a new directory (Python standard library only):
 
 ```bash
-python -m tools.unpack_evidence benchmarks/results/rccsd-149-a
+python tools/restore_retained_evidence.py \
+  benchmarks/results/rccsd-149-a/raw-evidence.zip \
+  --manifest benchmarks/results/retention-reports-20261003/snapshot.manifest.json \
+  --output .artifacts/rccsd-149-a/raw-evidence.zip
 python -m tools.unpack_evidence benchmarks/results/rccsd-149-a \
-  --output build/cc149-history
+  --archive .artifacts/rccsd-149-a/raw-evidence.zip \
+  --output .artifacts/rccsd-149-a/unpacked
 ```
 
-Restoration refuses an existing destination and validates every byte before
-writing. Frozen files remain historical records; current source fixes do not
-rewrite their recorded validation identity.
+Both operations refuse an existing destination. Omit `--output` from the
+unpack command to verify without extracting. Names of archived members below
+refer to the unpacked directory; scripts there are records, not commands to
+execute. No implicit network fetch occurs. For source archives or shallow
+clones missing the recorded objects, see the
+[history availability instructions](../retention-reports-20261003/README.md#recovery).
+Restoration proves storage integrity, not a fresh scientific acceptance run.
 
 ## Source and scope
 

@@ -97,6 +97,7 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_DF_EXCHANGE_SCHEDULE_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_exchange_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/df_occupied_gram_cuda.py"
     ARGS --output "${GENERATIVEQC_DF_EXCHANGE_SCHEDULE_HEADER}"
     COMMENT "Generating compiler-owned DF source-reuse schedule")
 
@@ -316,6 +317,7 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_GFN2_AES2_CPU_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_aes2.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_aes2_schedule.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ad_program.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
     ARGS --cpu-output "${GENERATIVEQC_GFN2_AES2_CPU_HEADER}"
@@ -358,6 +360,8 @@ macro(generativeqc_register_host_generated_sources target)
     OUTPUTS "${GENERATIVEQC_GFN2_H0_NATIVE_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_h0_force_runtime.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/gfn2_h0_force_schedule.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/schedule.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ad_program.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
     ARGS --output "${GENERATIVEQC_GFN2_H0_NATIVE_HEADER}"
@@ -667,6 +671,7 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_rys_policy.hpp"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_production.hpp"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_screening.cuh"
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_pair_screening.cuh"
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_rys_shell.cuh")
   generativeqc_register_generated_sources(
     TARGET ${target}
@@ -746,6 +751,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_gfn2_sdq_native.py"
     OUTPUTS "${GENERATIVEQC_GFN2_SDQ_CUDA_HEADER}"
     DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/gfn2_force_schedule.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/gfn2_sdq.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/gfn2_sdq_cpu.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/one_electron_values.py"

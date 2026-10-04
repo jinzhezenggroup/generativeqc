@@ -51,8 +51,9 @@ provided scale. The six original `*-tuning.json` ledgers retain accepted and rej
 all raw samples, compiler identities and resource records. To keep the normal
 checkout compact, their exact bytes are hash-pinned by
 [the 2026-09-25 retention manifest](../retention-2026-09-25/migration.json) and
-restorable from existing Git history; the equation files, validation envelope
-and this decision summary remain tracked. The measurements are warmed
+restorable from existing Git history. The equation files, allocation audit
+source and this decision summary remain tracked; the historical validation
+envelope is separately recoverable as described below. The measurements are warmed
 complete-program timings including validation, host layout staging, transfers,
 packing, cuBLAS, generated kernels, result allocation and error checks.
 Startup and synchronized section profiles are reported separately and do not
@@ -139,3 +140,30 @@ python tools/restore_retained_evidence.py --all \
   --manifest benchmarks/results/retention-2026-09-25/migration.json \
   --output .artifacts/retention-2026-09-25
 ```
+
+## Historical validation report recovery
+
+The 18-record `evidence.json` is the frozen #146 acceptance report for the
+implementation and GPU identified above. It is not a current autotuning input,
+active publication, or scientific regression fixture. The selected/rejected
+plans, accuracy gates, resource limits and architecture restriction remain in
+this summary. Current CUDA tests use their own independent fixtures; the
+retained equation files and allocation-audit source are unchanged. Historical
+speedup ranges above describe that original campaign, not a present-device
+performance guarantee.
+
+The exact validation envelope moved to existing Git history in the
+[shared recovery manifest](../retention-reports-20261003/snapshot.manifest.json),
+anchored at `1a4acc519eb881cc19d418de65ecca72324359d4`:
+
+```bash
+python tools/restore_retained_evidence.py \
+  benchmarks/results/tensor-cuda-146/evidence.json \
+  --manifest benchmarks/results/retention-reports-20261003/snapshot.manifest.json \
+  --output .artifacts/tensor-cuda-146/evidence.json
+```
+
+For complete historical reanalysis, also restore the tuning ledgers and raw
+samples with the earlier retention command above. Missing local history
+requires an explicit user-controlled fetch or a full clone; see
+[recovery](../retention-reports-20261003/README.md#recovery).

@@ -214,6 +214,11 @@ class CudaGrid:
         super().__setattr__(name, value)
 
     @property
+    def geometry_generation(self) -> int:
+        """Monotonic center-rebind epoch for geometry-bound resident consumers."""
+        return self._geometry_generation
+
+    @property
     def source_stamp(self) -> typing.Any:
         """Read-only identity of the successfully uploaded current source."""
         return self._source_stamp
@@ -255,6 +260,7 @@ class CudaGrid:
         self._density_ready = False
         self._borrowed = False
         self._natom = basis.natom
+        self._geometry_generation = 0
         self._source_stamp = None
         self._source_kind = "density_matrix"
         self._fallback_reason = "missing_orbitals"
@@ -387,6 +393,18 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        # Older artifact libraries retain the identity/explicit-map routes.
+        # Discovery is an optional capability, checked only when requested.
+        if hasattr(lib, "grid_cuda_select_ao_device_v1"):
+            lib.grid_cuda_select_ao_device_v1.argtypes = [
+                ct.c_void_p,
+                ct.c_void_p,
+                ct.c_size_t,
+                ct.c_double,
+                ct.POINTER(ct.c_uint),
+                ct.c_char_p,
+                ct.c_size_t,
+            ]
         lib.grid_cuda_view_v1.argtypes = [
             ct.c_void_p,
             ct.POINTER(GridTaskView),
@@ -480,6 +498,9 @@ class CudaGrid:
             self._source_kind = "density_matrix"
             self._fallback_reason = "missing_orbitals"
             self._source_statistics = {}
+            # Revoke cached geometry even when the native update fails: a failed
+            # device call cannot establish that the old centers remain intact.
+            self._geometry_generation += 1
             self._call("grid_cuda_centers_v1", self._handle, pointer(value), value.size)
 
     def set_density(self, density: typing.Any) -> None:
@@ -649,6 +670,45 @@ class CudaGrid:
             }
             self._density_ready = True
 
+    def _selected_ao_map(self, ao_ids: typing.Any) -> tuple[int, typing.Any]:
+        """Validate a host AO map shared by host-point and resident-point leases.
+
+        The native owner copies selected indices into its charged device buffer
+        and gathers the complete D[I,I] panel. None retains the identity fast
+        path; an empty explicit map publishes zero features.
+        """
+        active = self.plan.nao
+        selected = None
+        if self.plan.active_ao_capacity is None:
+            if ao_ids is not None:
+                raise ValueError("active AO maps require a local CUDA plan")
+        else:
+            if ao_ids is None:
+                if self.plan.active_ao_capacity < self.plan.nao:
+                    raise ValueError(
+                        "identity AO map exceeds the prepared local capacity"
+                    )
+                active = self.plan.nao
+            else:
+                raw_ids = np.asarray(ao_ids)
+                if raw_ids.ndim != 1 or (
+                    raw_ids.size
+                    and (
+                        raw_ids.dtype.kind not in "iu"
+                        or np.any(raw_ids < 0)
+                        or np.any(raw_ids >= self.plan.nao)
+                        or np.any(raw_ids[1:] <= raw_ids[:-1])
+                    )
+                ):
+                    raise ValueError(
+                        "active AO IDs must be sorted unique in-range integers"
+                    )
+                active = len(raw_ids)
+                if active > self.plan.active_ao_capacity:
+                    raise ValueError("active AO map exceeds the prepared capacity")
+                selected = np.array(raw_ids, dtype=np.uintp, copy=True)
+        return active, selected
+
     def evaluate(
         self,
         points: typing.Any,
@@ -694,36 +754,7 @@ class CudaGrid:
             ):
                 raise ValueError("stale or missing current CUDA density source stamp")
             points = immutable(raw)
-            active = self.plan.nao
-            selected = None
-            if self.plan.active_ao_capacity is None:
-                if ao_ids is not None:
-                    raise ValueError("active AO maps require a local CUDA plan")
-            else:
-                if ao_ids is None:
-                    if self.plan.active_ao_capacity < self.plan.nao:
-                        raise ValueError(
-                            "identity AO map exceeds the prepared local capacity"
-                        )
-                    active = self.plan.nao
-                else:
-                    raw_ids = np.asarray(ao_ids)
-                    if raw_ids.ndim != 1 or (
-                        raw_ids.size
-                        and (
-                            raw_ids.dtype.kind not in "iu"
-                            or np.any(raw_ids < 0)
-                            or np.any(raw_ids >= self.plan.nao)
-                            or np.any(raw_ids[1:] <= raw_ids[:-1])
-                        )
-                    ):
-                        raise ValueError(
-                            "active AO IDs must be sorted unique in-range integers"
-                        )
-                    active = len(raw_ids)
-                    if active > self.plan.active_ao_capacity:
-                        raise ValueError("active AO map exceeds the prepared capacity")
-                    selected = np.array(raw_ids, dtype=np.uintp, copy=True)
+            active, selected = self._selected_ao_map(ao_ids)
             values = (
                 np.empty((13, len(points))) if features and download_features else None
             )
@@ -897,18 +928,11 @@ class CudaGrid:
                 raise ValueError("native CUDA XC requires a local CUDA plan")
             if not required.issubset(self.ingredients):
                 raise ValueError("prepared CUDA features do not cover native XC")
-            if ao_ids is not None:
-                raise ValueError(
-                    "resident device-point tasks currently require the full identity AO map"
-                )
+            active, selected = self._selected_ao_map(ao_ids)
             point_count = checked_int(point_count, "resident grid point count", low=1)
             if point_count > self.plan.tile_points:
                 raise ValueError("resident grid points exceed the prepared tile shape")
-            if (
-                type(device_points) is not int
-                or device_points <= 0
-                or self.plan.active_ao_capacity < self.plan.nao
-            ):
+            if type(device_points) is not int or device_points <= 0:
                 raise ValueError("invalid resident CUDA point binding")
             if not self._density_ready:
                 raise ValueError("resident grid features require supplied density")
@@ -920,13 +944,61 @@ class CudaGrid:
                 ct.c_void_p(device_points),
                 point_count,
                 1,
-                None,
-                self.plan.nao,
+                None if selected is None else selected.ctypes.data_as(SIZE),
+                active,
                 None,
                 None,
             )
             with self._borrow_current_task() as lease:
                 yield lease
+
+    def select_ao_device_points(
+        self, device_points: int, point_count: int, *, cutoff: float
+    ) -> np.ndarray:
+        """Discover a sorted AO map from all configured jets on a resident tile.
+
+        An AO is retained if any sampled jet has magnitude greater than cutoff.
+        This explicit threshold is not a bound on density, energy, or forces.
+        Callers own numerical qualification, geometry identity, mask storage,
+        and its budget; no map is cached or automatically used by this owner.
+        Discovery uses the existing full AO arena without density work and
+        invalidates the previous tile. Resident points must remain immutable
+        until this synchronous call returns. Capability misses stay explicit.
+        """
+        with self._lock:
+            self._check_open()
+            if not hasattr(self._library, "grid_cuda_select_ao_device_v1"):
+                raise NotImplementedError(
+                    "CUDA grid artifact lacks resident AO selection"
+                )
+            if self.plan.active_ao_capacity != self.plan.nao:
+                raise ValueError(
+                    "AO selection requires a full-capacity local grid plan"
+                )
+            count = checked_int(point_count, "resident grid point count", low=1)
+            if count > self.plan.tile_points:
+                raise ValueError("resident grid points exceed the prepared tile shape")
+            if type(device_points) is not int or device_points <= 0:
+                raise ValueError("invalid resident CUDA point binding")
+            if (
+                type(cutoff) not in (int, float)
+                or not np.isfinite(cutoff)
+                or cutoff <= 0
+            ):
+                raise ValueError("resident AO cutoff must be finite and positive")
+            selected = np.empty(self.plan.nao, dtype=np.uint32)
+            self._call(
+                "grid_cuda_select_ao_device_v1",
+                self._handle,
+                ct.c_void_p(device_points),
+                count,
+                float(cutoff),
+                selected.ctypes.data_as(ct.POINTER(ct.c_uint)),
+            )
+            # Irreversibly immutable numeric ownership; the caller may retain
+            # these indices after the discovery arena is reused by a grid run.
+            ids = np.flatnonzero(selected).astype(np.uintp)
+            return np.frombuffer(ids.tobytes(), dtype=np.uintp)
 
     @contextmanager
     def feature_task(

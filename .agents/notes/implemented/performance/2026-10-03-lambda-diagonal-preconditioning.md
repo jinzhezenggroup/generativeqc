@@ -111,3 +111,8 @@ an independently validated gauge-invariant triples/orbital response; a better
 Lambda solver does not resolve that frontier. Revisit the preconditioner if
 strongly coupled systems worsen convergence, retaining the explicit original
 path and both independent acceptance gates.
+
+## Lossless receipt storage (2026-10-03)
+
+These receipts retain the exact original public bytes from `bda12d40d2e579bdfb9d4469f3baf652344ac233` through ordinary gzip; scientific values, row order, failures and measured identities are unchanged. [storage.json](../../../../benchmarks/results/cc-lambda-preconditioner-20261003/storage.json) pins every original Git blob, original/stored SHA-256 and byte count. The complete original envelope is `evidence.original.json.gz`; the active `evidence.json.gz` only rebinds attachment paths and checksums. Use `tools.generativeqc_validation.record.load_publication_record` for publication-bound records or `load_json` / `gzip -cd` for individual members, and decode `source.patch.gz` before applying the unchanged patch. Storage provenance is not a measured build identity. The historical whitespace-compaction discussion, where present, is not an instruction to overwrite earlier families; their current mainline bytes remain untouched. No new experiment or performance claim is introduced.
+The later `603b1995515601c67f6e974f33a712178a5cdff0` binding of `records.json.gz` is reconciled explicitly: that exact public gzip member is retained byte-for-byte and decompresses to the original records. Its attachment/publication path and checksum updates contain no scientific delta; the final active envelope binds the same record plus the remaining approved gzip members.

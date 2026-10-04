@@ -1,7 +1,7 @@
 #include <cuda_runtime_api.h>
 
 #include "runtime/context.hpp"
-#include "runtime/cuda_target_info.hpp"
+#include "runtime/cuda_device_facts.hpp"
 #include "scf/aot_shell_registry.hpp"
 
 namespace generativeqc::runtime {
@@ -22,8 +22,9 @@ generativeqc_status initialize_cuda_context(core::ContextState& state, std::stri
     detail = cudaGetErrorString(error);
     return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
-  cudaDeviceProp properties{};
-  error = cudaGetDeviceProperties(&properties, state.device_id);
+  CudaTargetInfo target{};
+  char device_name[256]{};
+  error = cuda_device_facts(state.device_id, target, device_name);
   if (error != cudaSuccess) {
     detail = cudaGetErrorString(error);
     return GENERATIVEQC_STATUS_CUDA_ERROR;
@@ -35,8 +36,7 @@ generativeqc_status initialize_cuda_context(core::ContextState& state, std::stri
     detail = cudaGetErrorString(error);
     return GENERATIVEQC_STATUS_CUDA_ERROR;
   }
-  const CudaTargetInfo target = cuda_target_info_from_properties(properties);
-  state.device_name = properties.name;
+  state.device_name = device_name;
   state.compute_capability_major = target.compute_capability_major;
   state.compute_capability_minor = target.compute_capability_minor;
   state.warp_size = static_cast<int>(target.warp_size);
@@ -53,7 +53,8 @@ generativeqc_status initialize_cuda_context(core::ContextState& state, std::stri
   // Resolve the generated kernel set once for this context/device. Unknown
   // devices retain the generic implementation instead of borrowing a tuned
   // schedule compiled and measured for another compute capability.
-  scf::generated::select_profile_for_device(state.device_id, properties.major, properties.minor);
+  scf::generated::select_profile_for_device(state.device_id, target.compute_capability_major,
+                                            target.compute_capability_minor);
   const scf::generated::ProfileInfo& profile = scf::generated::selected_profile();
   state.aot_profile_name = profile.name;
   state.aot_profile_tuned = profile.tuned;

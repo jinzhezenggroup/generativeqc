@@ -269,7 +269,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "b0f74c3900d7754fc9a2b4c25878c4e82ea2586aaa4578d3559f22a67c083cde"
+    "dcfcbef93e798c62cc5669e93190a9b73184ffe120a8afc43730a9dbc74cb448"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -302,7 +302,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "c29ed5e27de74d03e92e035fdba81f745e1f4f608fa6b175cdf9ca315402a5b5"
+    "7bb03b7286a5868527104420a74f4749c8af92360f17ad12ced31051a7ae9d75"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -335,16 +335,25 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "1b4e6a5979f74cfe8afd8e4df20c4be3614bdc7bf80fe683c64aa57db953e389"
+    "7916c0f782cb6e40882144c091887bb57cb67cdc12ad733531a1d79c9df87d8a"
+)
+STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
+    "5e6761e56e54ac7720a3c215cf524a93024de0df00ed9b33e83c8a32ffda2b3f"
+)
+STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
+    "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
 )
 NATIVE_KS_SNAPSHOT_INIT_CONTRACT_SHA256 = (
     "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
 )
 NATIVE_KS_SNAPSHOT_DECODE_CONTRACT_SHA256 = (
-    "3be5a1d91f0a06839c54ba39a9995b9f0915cb179ece4e1ad882272773555f93"
+    "5bd874ce5ba8d4d5d78eb282244144052822bb2f0266d40d33361735302b1a97"
+)
+SNAPSHOT_GRID_CACHE_CONTRACT_SHA256 = (
+    "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
 )
 STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
-    "ded1b7e2cc0a93881cc17b4da32a3695bdbaf05421535ac3dcc4efb646da003b"
+    "662fbb487b1bb881be4fff18b177f1965094dc81e6f1b5800116ac34de7b5e2b"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
     "47af7a99e4aadfe4386e1a798e619ff52aea3143a254c7cbffcca08ee9b1c1db"
@@ -364,11 +373,18 @@ NATIVE_STATIONARY_TASKS_CONTRACT_SHA256 = (
 NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256 = (
     "be4a553ba6117c7f772882a551d50817935954c5c4d66190e86d9bf2be043902"
 )
+# Local AO admission changes only collocation/contraction domain. The census
+# still charges global n AO capacity and every molecular-grid/Becke point pair.
+# Bind the out-of-line predicate itself so later weakening cannot hide behind
+# unchanged callers and stale favorable memory/work bounds.
+NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256 = (
+    "d4830d6d9695219f4bf4c59611717b943c7aa1da016fdba67ceb6036241f1dc0"
+)
 NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256 = (
-    "921968008bc12d0db34531e3d7a89b8b8e1ef9869117a95225435c33ed7ebcd9"
+    "e5a36f9b80f332b1e03a48e2b3c066e583b1ba9340b7a5feab4dab3d292be236"
 )
 NATIVE_STATIONARY_GEOMETRY_ENQUEUE_CONTRACT_SHA256 = (
-    "818ae8e365333ad7265f3bb49957b58d3b5ac9c705231f854c4af7763e8aa602"
+    "cdac623e8296338a03b3b81bd3e77fbacb36730d4fb4502a2adbb6921a5f9544"
 )
 NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
@@ -399,7 +415,7 @@ PRIMITIVE_RECORDS_DEFINITION = (
 GRID_PAIR_VISITS_DEFINITION = "grid_work.grid_pair_visits"
 GRID_WORK_DEFINITION = (
     "plan_stationary_cuda_grid_work(atoms=na, grid_points=len(state.grid.points), "
-    "tile_points=tile_points, max_grid_points=max_grid_points, "
+    "tile_points=points, max_grid_points=max_grid_points, "
     "max_grid_pair_visits=max_grid_pair_visits, "
     "max_pending_tiles=max_pending_grid_tiles, "
     "max_pending_pair_visits=max_pending_grid_pair_visits)"
@@ -419,7 +435,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "681474a5c9456a76db9059e48fcfd1447289b455d9291a6df80951789a231589"
+    "0addc7ec684aa1e2116fb0f52d328a9717484b79009e9c236107f4f55bb19563"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -634,6 +650,13 @@ def _snapshot_functional_contract(repository: Path) -> dict[str, str]:
             raise RuntimeError("native KS snapshot functional contract changed")
         key = "init_sha256" if name == "__init__" else f"{name}_sha256"
         methods[key] = digest
+    # Decode now delegates exact grid reuse. Bind the delegated content proof
+    # and retention cap as well as the caller; a caller hash alone is insufficient.
+    cache_source = repository / "python/generativeqc/_snapshot_grid_cache.py"
+    cache_digest = _lf_sha256(cache_source.read_bytes())
+    if cache_digest != SNAPSHOT_GRID_CACHE_CONTRACT_SHA256:
+        raise RuntimeError("native KS snapshot grid-cache contract changed")
+    methods["grid_cache_sha256"] = cache_digest
     return methods
 
 
@@ -669,6 +692,27 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     if wrapper_digest != STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA public wrapper contract changed")
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
+    resource_owners = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_plan_stationary_cuda_tile"
+    ]
+    tile_callbacks = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.FunctionDef) and node.name == "admit_tile"
+    ]
+    if len(resource_owners) != 1 or len(tile_callbacks) != 1:
+        raise RuntimeError("stationary CUDA tile admission owners are ambiguous")
+    resource_owner, tile_callback = resource_owners[0], tile_callbacks[0]
+    layout_node = classes.get("_StationaryCudaTileLayout")
+    if (
+        layout_node is None
+        or _source_node_sha256(source, layout_node)
+        != STATIONARY_TILE_LAYOUT_CONTRACT_SHA256
+    ):
+        raise RuntimeError("stationary CUDA tile layout contract changed")
     page_methods = {
         "initializer": (
             "_CudaSources",
@@ -721,6 +765,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     page_contract = {
         "public_wrapper_sha256": wrapper_digest,
         "geometry_resources_sha256": resource_digest,
+        "ordinary_tile_layout_sha256": STATIONARY_TILE_LAYOUT_CONTRACT_SHA256,
     }
     for label, (class_name, method_name, expected_digest) in page_methods.items():
         class_node = classes.get(class_name)
@@ -778,6 +823,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "int stationary_nuclear(",
             NATIVE_STATIONARY_NUCLEAR_CONTRACT_SHA256,
         ),
+        "native_geometry_ao_map_sha256": (
+            "bool valid_geometry_ao_map(",
+            NATIVE_STATIONARY_GEOMETRY_AO_MAP_CONTRACT_SHA256,
+        ),
         "native_geometry_external_sha256": (
             "int stationary_geometry_external(",
             NATIVE_STATIONARY_GEOMETRY_EXTERNAL_CONTRACT_SHA256,
@@ -814,14 +863,31 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         page_contract[label] = digest
     if tuple(COMPONENT_LABELS) != tuple(QUALIFIED_SPD_COMPONENTS):
         raise RuntimeError("stationary CUDA component-label capacity changed")
+    # Arithmetic remains owned by the dry resource helper. The endpoint binds
+    # the selected layout, and the callback supplies the actual candidate size.
+    # Audit all three owners rather than treating layout attributes as equations.
+    resource_names = {
+        "native_integral_host_reserve",
+        "grid_plan",
+        "minimum_source_bytes",
+        "source_resources",
+        "available",
+        "host_bound",
+    }
     definition_nodes = {
         name: [
             node
-            for node in owner.body
+            for node in (
+                resource_owner.body
+                if name in resource_names
+                else tile_callback.body
+                if name == "grid_work"
+                else owner.body
+            )
             if isinstance(node, ast.Assign)
             and len(node.targets) == 1
             and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id == name
+            and node.targets[0].id == ("work" if name == "grid_work" else name)
         ]
         for name in (
             "requires_native_integrals",
@@ -891,7 +957,9 @@ def _source_limits(repository: Path) -> dict[str, Any]:
                 f"stationary CUDA {definition_labels[name]} definition changed"
             )
     direct_if_tests = [
-        ast.unparse(node.test) for node in owner.body if isinstance(node, ast.If)
+        ast.unparse(node.test)
+        for node in (*owner.body, *resource_owner.body)
+        if isinstance(node, ast.If)
     ]
     gate_labels = {
         "primitive_metric_range": "logical primitive metric range",
@@ -947,14 +1015,26 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ]
     host_gates = [
         node
-        for node in owner.body
+        for node in resource_owner.body
         if isinstance(node, ast.If)
         and ast.unparse(node.test) == GATE_PREDICATES["additional_host"]
     ]
+    selections = [
+        node
+        for node in owner.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and ast.unparse(node.targets[0]) == "(layout, grid_work)"
+    ]
+    if len(selections) != 1 or ast.unparse(selections[0].value) != (
+        "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
+        "tile_points=tile_points, admit=admit_tile)"
+    ):
+        raise RuntimeError("stationary CUDA tile schedule binding changed")
     if (
         len(page_execution_calls) != 1
         or len(host_gates) != 1
-        or page_execution_calls[0].lineno <= host_gates[0].end_lineno
+        or page_execution_calls[0].lineno <= selections[0].end_lineno
     ):
         raise RuntimeError("stationary CUDA primitive descriptor page order changed")
     submit_pages = [
@@ -991,13 +1071,14 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     grid_work = definition_nodes["grid_work"][0]
     if (
         not native_requirement.lineno
-        < grid_work.lineno
         < definition_nodes["records"][0].lineno
+        < grid_work.lineno
+        < selections[0].lineno
     ):
         raise RuntimeError("stationary CUDA admission gate order changed")
     reserve_additions = [
         node
-        for node in owner.body
+        for node in resource_owner.body
         if isinstance(node, ast.AugAssign)
         and ast.unparse(node.target) == "host_bound"
         and isinstance(node.op, ast.Add)
@@ -1012,6 +1093,10 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         raise RuntimeError(
             "stationary CUDA native host-reserve admission order changed"
         )
+    resource_owner_digest = _source_node_sha256(source, resource_owner)
+    if resource_owner_digest != STATIONARY_TILE_RESOURCE_CONTRACT_SHA256:
+        raise RuntimeError("stationary CUDA ordinary tile-resource contract changed")
+    page_contract["ordinary_tile_resources_sha256"] = resource_owner_digest
     signature = inspect.signature(complete_rks_cuda_gradient_diagnostic)
 
     def default(name: str) -> int:
@@ -1031,8 +1116,13 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     positions = [source.find(message) for message in messages]
     if any(position < 0 for position in positions):
         raise RuntimeError("stationary CUDA admission messages are incomplete")
-    if positions != sorted(positions):
-        raise RuntimeError("stationary CUDA admission gate order changed")
+    # The helper is declared before its caller; source-file order no longer
+    # represents execution. Preserve order within each owner and bind the
+    # actual selection-before-execution ordering separately above.
+    for indices in ((0, 1, 4, 5), (2, 3)):
+        ordered = [positions[index] for index in indices]
+        if ordered != sorted(ordered):
+            raise RuntimeError("stationary CUDA admission gate order changed")
     endpoint_owner_digest = _source_node_sha256(source, owner)
     if endpoint_owner_digest != STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256:
         raise RuntimeError("stationary CUDA endpoint owner contract changed")
@@ -1102,12 +1192,12 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "additional_host_bytes": default("max_host_bytes"),
         "gate_order": [
             "native_owner_capacity",
+            "native_integral_provider_required",
+            "primitive_logical_metric_range",
             "grid_work_capacity",
             "grid_point_work_budget",
             "grid_pair_work_budget",
             "pending_grid_pair_budget",
-            "native_integral_provider_required",
-            "primitive_logical_metric_range",
             "additional_device_budget",
             "additional_host_budget",
             "native_integral_result_required",
@@ -2467,6 +2557,9 @@ def _build_report(
 
     owner_files = (
         "python/generativeqc/_stationary_cuda.py",
+        "python/generativeqc/_ks_snapshot.py",
+        "python/generativeqc/_snapshot_grid_cache.py",
+        "python/generativeqc/resources_ks.py",
         "python/generativeqc/calculator.py",
         "python/generativeqc/batch.py",
         "python/generativeqc/ks.py",

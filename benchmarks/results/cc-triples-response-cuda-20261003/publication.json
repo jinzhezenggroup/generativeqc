@@ -7,34 +7,46 @@
   },
   "files": [
     {
-      "bytes": 2837,
-      "path": "evidence.json",
+      "bytes": 1390,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "c8711a1da03eb7f0b6dfe01d138a57113772c8d1e40488496b4e079a73d62966"
+      "sha256": "977aba0ea31a3bd792bf2b11141232cb38f27c049aa6f89f67c6dca006aab7e9"
     },
     {
-      "bytes": 11676,
-      "path": "summary.json",
+      "bytes": 4879,
+      "path": "summary.json.gz",
       "role": "summary",
-      "sha256": "99e77da30f5c7151b82892defa89b4b9246d59426ed5385143026da5f6709c18"
+      "sha256": "fa424d901066cec0f7f9c33bb9638733ed5d505c7ccaef10da0dd3ba09f6a76c"
     },
     {
-      "bytes": 152952,
-      "path": "records.json",
+      "bytes": 33445,
+      "path": "records.json.gz",
       "role": "samples",
-      "sha256": "0d1d562b6676d2d81be44abff0566aa9d5aff60f624a77a94cf43b5b9cf0e520"
+      "sha256": "f039d4e68c5f293a6c370b0cdcaa4e0cdf3d671f43d727b35757ad7e0a36d9a1"
     },
     {
-      "bytes": 25693,
-      "path": "work.json",
+      "bytes": 9189,
+      "path": "work.json.gz",
       "role": "summary",
-      "sha256": "4af06ebaaa10538b1456b6275abc00b0469b35dfe2fb5537b5355886500a8a6b"
+      "sha256": "6f2e4f84dee65dc3ab5d47095503878608be5496dc20ff502ffdbed69a87ea88"
     },
     {
-      "bytes": 77644,
-      "path": "source.patch",
+      "bytes": 23139,
+      "path": "source.patch.gz",
       "role": "source-patch",
-      "sha256": "2af0d7b4e51ef785b1b6d9fc511e514d64f8a0e6010761cd40ddb29b8d98b95d"
+      "sha256": "10a0b8948d4ae146075bec6f4d783dd4c2d3f52c3e7701d275434b2f10a48601"
+    },
+    {
+      "bytes": 1389,
+      "path": "evidence.original.json.gz",
+      "role": "reproduction",
+      "sha256": "8ffccc341b2720093d9f7a27544fb3fb43baf5e71bf67d84d1b084724e747bc9"
+    },
+    {
+      "bytes": 2308,
+      "path": "storage.json",
+      "role": "reproduction",
+      "sha256": "ac03ef3be694b76a98b88f501c104932f6163a69b6cbf8324240d0f3dd023f3b"
     }
   ],
   "reproduction": {
@@ -49,7 +61,7 @@
       "--output",
       ".artifacts/cc-triples-response-reproduction.json"
     ],
-    "instructions": "Apply source.patch to the parent revision. Configure Release CUDA 12.9 sm_120 with explicit CXX/CUDA ccache launchers, checkout-root CCACHE_BASEDIR and fast_compile=false. Build generativeqc_triples_response_cuda_tests. Use finite Slurm main allocations (gpu:5090:1 on n1; gpu:pro6000:1 on n2), preserve CUDA_VISIBLE_DEVICES. Set GENERATIVEQC_LIBRARY, PYTHONPATH=python:., CPU library threads=1 and a new GENERATIVEQC_DF_PROGRESS_TRACE path. Alternate parent/candidate processes in six AB/BA pairs for --atoms 6 and 12; retain cold, warm, warm-repeat and changed calls. Run native test plus test_rccsdt_public.py/test_rccsd_public.py with CUDA opt-in environment variables. Memcheck native probe and all four complete 14-AO calls. Profile four 28-AO calls with Nsight CUDA tracing to verify launches and copies."
+    "instructions": "Decode source.patch.gz byte-for-byte before applying the unchanged patch. Apply source.patch to the parent revision. Configure Release CUDA 12.9 sm_120 with explicit CXX/CUDA ccache launchers, checkout-root CCACHE_BASEDIR and fast_compile=false. Build generativeqc_triples_response_cuda_tests. Use finite Slurm main allocations (gpu:5090:1 on n1; gpu:pro6000:1 on n2), preserve CUDA_VISIBLE_DEVICES. Set GENERATIVEQC_LIBRARY, PYTHONPATH=python:., CPU library threads=1 and a new GENERATIVEQC_DF_PROGRESS_TRACE path. Alternate parent/candidate processes in six AB/BA pairs for --atoms 6 and 12; retain cold, warm, warm-repeat and changed calls. Run native test plus test_rccsdt_public.py/test_rccsd_public.py with CUDA opt-in environment variables. Memcheck native probe and all four complete 14-AO calls. Profile four 28-AO calls with Nsight CUDA tracing to verify launches and copies."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

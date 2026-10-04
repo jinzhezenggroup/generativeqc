@@ -431,10 +431,52 @@ def test_sbatch_spool_copy_uses_submission_checkout(tmp_path: typing.Any) -> Non
     ]
 
 
-def test_published_archive_uses_verified_repository_format() -> None:
+def test_matrix_archive_preserves_failed_and_pending_status(tmp_path: Path) -> None:
+    """Storage recovery cannot turn an unqualified run into a successful one."""
+    from zipfile import ZipFile
+
     from tools.unpack_evidence import unpack
 
-    assert unpack(matrix.ROOT / "benchmarks/results/issue206-df-a") == 9
+    payload = matrix.manifest_payload(
+        cases=matrix.MATRIX[:2],
+        repeats=1,
+        python=sys.executable,
+        library=tmp_path / "missing.so",
+        output_dir=tmp_path / "run",
+    )
+    payload["matrix"][0]["status"] = "failed"
+    members = {
+        "manifest.json": json.dumps(payload).encode(),
+        "failed.log": b"endpoint failed before producing a result\n",
+    }
+    archive = tmp_path / "raw-evidence.zip"
+    with ZipFile(archive, "w") as stream:
+        for name, data in members.items():
+            stream.writestr(name, data)
+    (tmp_path / "raw-evidence.manifest.json").write_text(
+        json.dumps(
+            {
+                "schema": "generativeqc.evidence-archive.v1",
+                "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+                "files": [
+                    {
+                        "path": name,
+                        "bytes": len(data),
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                    }
+                    for name, data in members.items()
+                ],
+            }
+        )
+    )
+    output = tmp_path / "restored"
+    assert unpack(tmp_path, output) == len(members)
+    restored = json.loads((output / "manifest.json").read_text())
+    assert restored == payload
+    assert [row["status"] for row in restored["matrix"]] == ["failed", "pending"]
+    assert all(row["result"] is None for row in restored["matrix"])
+    assert restored["source"]["native_library"]["status"] == "missing"
+    assert (output / "failed.log").read_bytes() == members["failed.log"]
 
 
 @pytest.mark.parametrize(

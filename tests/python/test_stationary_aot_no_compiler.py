@@ -8,6 +8,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 from generativeqc import _dft_gradient, _stationary_cuda
+from generativeqc._snapshot_grid_cache import SnapshotGridCache
 from generativeqc.batch import PreparedBatch
 from generativeqc_compiler import dft
 from generativeqc_compiler.common.cuda_target import cuda_target_info
@@ -178,6 +179,7 @@ def test_public_aot_force_does_not_probe_nvcc(
             _capabilities=SimpleNamespace(supported_properties={"energy", "forces"}),
         ),
         _stationary_cuda_execution=None,
+        _snapshot_grid_cache=None,
         _charges=[0],
         _multiplicities=[1],
         _library=SimpleNamespace(_name=str(tmp_path / "libgenerativeqc.so")),
@@ -192,6 +194,7 @@ def test_public_aot_force_does_not_probe_nvcc(
         np.testing.assert_array_equal(force, -np.ones((2, 3)))
         assert work["tensor_executions"] == 0
     source.close.assert_called_once()
+    assert isinstance(batch._snapshot_grid_cache, SnapshotGridCache)
 
 
 def test_public_d_shell_force_uses_component_aot_without_nvcc(
@@ -236,6 +239,7 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
             _capabilities=SimpleNamespace(supported_properties={"energy", "forces"}),
         ),
         _stationary_cuda_execution=None,
+        _snapshot_grid_cache=None,
         _charges=[0],
         _multiplicities=[1],
         _library=SimpleNamespace(_name=str(tmp_path / "libgenerativeqc.so")),
@@ -250,3 +254,4 @@ def test_public_d_shell_force_uses_component_aot_without_nvcc(
     np.testing.assert_array_equal(force, -np.ones((2, 3)))
     assert work["tensor_executions"] == 0
     source.close.assert_called_once()
+    assert isinstance(batch._snapshot_grid_cache, SnapshotGridCache)

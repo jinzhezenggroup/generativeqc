@@ -66,6 +66,29 @@ std::span<T> optional_span(T* pointer, std::uint32_t count, const char* label) {
 }
 
 #if GENERATIVEQC_HAS_CUDA
+// The dry query and allocating owner share this inventory. Fifteen full-grid
+// arrays cover xyz(3), immutable weights(1), rho/gradient(4), effective weights(1)
+// and seeds(6). Domain preparation overwrites private rho/gradient in place;
+// the later pair kernels reuse the dead gradient panel for point derivatives.
+// Pair workspace and three sticky error flags remain separately charged.
+std::size_t nonlocal_force_arena_doubles(
+    const generativeqc::dft::nlc::Vv10CudaDeviceLayout& layout) {
+  using generativeqc::runtime::size_add;
+  using generativeqc::runtime::size_mul;
+  return size_add(
+      size_mul(std::size_t{15}, layout.point_count, "resident nonlocal force extent overflow"),
+      layout.workspace_bytes / sizeof(double), "resident nonlocal force extent overflow");
+}
+
+std::size_t nonlocal_force_device_bytes(
+    const generativeqc::dft::nlc::Vv10CudaDeviceLayout& layout) {
+  using generativeqc::runtime::size_add;
+  using generativeqc::runtime::size_mul;
+  return size_add(size_mul(nonlocal_force_arena_doubles(layout), sizeof(double),
+                           "resident nonlocal force byte extent overflow"),
+                  std::size_t{3} * sizeof(int), "resident nonlocal force error extent overflow");
+}
+
 void drain_failed_seed_source(cudaStream_t stream) noexcept {
   if (stream) (void)cudaStreamSynchronize(stream);
 }
@@ -180,6 +203,21 @@ generativeqc_status generativeqc_nonlocal_plan_execute(
 }
 
 #if GENERATIVEQC_HAS_CUDA
+/** Query the exact numeric device allocation without a CUDA context or work. */
+GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_bytes_v1(
+    std::uint32_t point_count, std::uint32_t tile_points, std::uint64_t* bytes) {
+  if (!bytes) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  *bytes = 0;
+  try {
+    const auto layout =
+        generativeqc::dft::nlc::vv10_cuda_device_layout(point_count, tile_points, true, true, true);
+    *bytes = nonlocal_force_device_bytes(layout);
+    return GENERATIVEQC_STATUS_SUCCESS;
+  } catch (...) {
+    return generativeqc::api::map_exception(nullptr);
+  }
+}
+
 GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_create_v1(
     generativeqc_context* context, const generativeqc_nonlocal_descriptor* model,
     const double* coordinates, std::size_t coordinate_count, const double* weights,
@@ -217,22 +255,9 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_c
     result->layout =
         generativeqc::dft::nlc::vv10_cuda_device_layout(n, model->tile_points, true, true, true);
 
-    using generativeqc::runtime::size_add;
-    using generativeqc::runtime::size_mul;
     const auto workspace_doubles = result->layout.workspace_bytes / sizeof(double);
-    std::size_t doubles = 0;
-    for (const auto arrays :
-         {std::size_t{3}, std::size_t{1}, std::size_t{1}, std::size_t{3}, std::size_t{1},
-          std::size_t{1}, std::size_t{3}, std::size_t{6}, std::size_t{3}})
-      doubles = size_add(doubles, size_mul(arrays, n, "resident nonlocal force extent overflow"),
-                         "resident nonlocal force extent overflow");
-    doubles = size_add(doubles, workspace_doubles, "resident nonlocal force extent overflow");
-    const auto arena_bytes =
-        size_mul(doubles, sizeof(double), "resident nonlocal force byte extent overflow");
-    result->device_bytes = size_add(
-        arena_bytes,
-        size_mul(std::size_t{3}, sizeof(int), "resident nonlocal force error extent overflow"),
-        "resident nonlocal force byte extent overflow");
+    const auto doubles = nonlocal_force_arena_doubles(result->layout);
+    result->device_bytes = nonlocal_force_device_bytes(result->layout);
     if (!model->maximum_bytes || result->device_bytes > model->maximum_bytes)
       throw std::bad_alloc();
 
@@ -252,10 +277,15 @@ GENERATIVEQC_API generativeqc_status generativeqc_internal_nonlocal_cuda_force_c
     result->raw_density = take(n);
     result->raw_gradient = take(3 * n);
     result->effective_weights = take(n);
-    result->effective_density = take(n);
-    result->effective_gradient = take(3 * n);
+    // MolecularV1 loads a point's rho/gradient before replacing those values.
+    // Keep original weights separate: a reset may unscreen an earlier row.
+    result->effective_density = result->raw_density;
+    result->effective_gradient = result->raw_gradient;
     result->seeds = take(6 * n);
-    result->point_derivative = take(3 * n);
+    // Local-scale construction is the last gradient reader. Ordered later
+    // pair kernels may overwrite it; packing then reads this AoS panel into
+    // the separate SoA seeds. Aliasing the seeds themselves would race.
+    result->point_derivative = result->raw_gradient;
     result->workspace = take(workspace_doubles);
     if (cursor != result->arena.get() + doubles)
       throw std::logic_error("resident nonlocal CUDA force arena partition mismatch");

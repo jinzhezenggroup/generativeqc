@@ -123,6 +123,17 @@ The caller's existing SCF owner/snapshot, Python object headers, compiler
 processes/graphs, mapped code and CUDA context/module/stack overhead remain
 explicit exclusions. This is not a global SCF-plus-derivative reservation.
 
+The ordinary diagnostic retains its explicit 256-point default. Passing
+`tile_points=None` opts into the same compiler tile search used by the composite
+semilocal/nonlocal consumer: try 1024, then 256, 128 and successively smaller
+bounded tiles. Every candidate must admit the complete concurrent source,
+AO, native-provider, host and submission-window inventory before allocation or
+compilation. Explicit integer requests either fit unchanged or fail; no budget
+is increased implicitly. The selected size appears in `grid_work_plan`, and
+`grid_tile_schedule`/`grid_tile_points_requested` distinguish automatic selection
+from explicit capacity. This changes scheduling, not AO screening or the total
+point/Becke-pair domain. Larger tiles are not guaranteed to fit or to be faster.
+
 The source arena has one private stream and retains no borrowed grid pointers.
 Geometry work finishes on the grid owner's stream before releasing its lease,
 including exceptional exits. Device ordinal comes from the actual snapshot and

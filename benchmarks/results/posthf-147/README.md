@@ -22,8 +22,8 @@ metadata capacity model and the actual f-shell partial-tile/full DF MP2 tests.
 | MP2 correlation-energy gate | `1e-9` Eh |
 | Raw conventional timing samples | 180: 30 cold and 150 reuse |
 
-The six shared-schema conventional records in `evidence.json` compare CPU
-and cuBLAS providers with identical pinned orbitals and Hamiltonians. The six
+The six shared-schema conventional records in [evidence.json.gz](evidence.json.gz)
+compare CPU and cuBLAS providers with identical pinned orbitals and Hamiltonians. The six
 `*-df-*.json` files compare CPU and generated CUDA raw sources using the same
 DF Hamiltonian. Conventional-versus-DF fitting differences appear separately.
 The six `*-native-*.json` files exercise native CPU/CUDA HF, owned canonical
@@ -115,3 +115,18 @@ outside the separate C++ coverage instrumentation reported by Codecov.
 Routine log/XML files named in this historical account are now represented in
 [the retention audit](../retention-238/migration.json), with extracted measurements,
 diagnostic conclusions, and exact original Git/checksum identities.
+
+## Lossless retained storage
+
+[storage.json](storage.json) maps the original `evidence.json` to its gzip
+member, with original and stored byte counts and SHA-256 hashes. Decompression
+recovers every original byte, including all six records and their sample order.
+The historical [manifest.json](manifest.json) remains unchanged; its original
+filenames and hashes identify the decompressed bytes. Other retained members
+and the historical log recovery references are unchanged.
+
+Inspect the record list with `gzip -dc evidence.json.gz | python -m json.tool`
+or `tools.generativeqc_validation.record.load_json`. The offline
+`tests/python/test_posthf_evidence_storage.py` check pins both representations
+and the complete original manifest. This storage-only change does not add
+scientific qualification or change the acceptance scope above.

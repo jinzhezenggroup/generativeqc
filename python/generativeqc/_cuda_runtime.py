@@ -65,10 +65,15 @@ def preload_cuda_runtime_libraries() -> tuple[str, ...]:
         return ()
 
     loaded: list[str] = []
-    search_dirs = _runtime_search_dirs()
+    # Retained handles already keep successfully loaded providers alive. Only
+    # discover directories when a group is missing; retry missing providers on
+    # every call so a later installation or repaired library remains visible.
+    search_dirs: list[Path] | None = None
     for alternatives in _CUDA_RUNTIME_LIBRARY_GROUPS:
         if any(name in _cuda_runtime_handles for name in alternatives):
             continue
+        if search_dirs is None:
+            search_dirs = _runtime_search_dirs()
         for name in alternatives:
             for directory in search_dirs:
                 candidate = directory / name

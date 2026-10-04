@@ -170,8 +170,11 @@ void resident_grid_borrow_case(const generativeqc::core::System& molecule, const
       cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, false);
   const auto borrowed_layout =
       cuda_xc_layout(basis, grid, 1U, false, 7, CudaXcAoPrecision::Fp64, 1.0, 1.0, true);
+  // XC owns xyz plus partitioned weights. The shared grid additionally owns
+  // atomic weights, which were never part of the XC allocation being retired.
   require(borrowed_layout.borrowed_grid &&
-              owned_layout.device_bytes == borrowed_layout.device_bytes + resident.device_bytes,
+              owned_layout.device_bytes ==
+                  borrowed_layout.device_bytes + 4 * grid.point_count() * sizeof(double),
           "resident-grid XC layout did not retire duplicate point/weight storage");
 
   cudaStream_t stream{};
@@ -558,10 +561,11 @@ void mixed_density_contraction(const AoBasis& basis, const MolecularGrid& grid,
   mixed.canary();
 }
 
-/** omegaB97M-V has no mixed-density qualification. Reject that request without
+/** B3LYP and omegaB97M-V have no mixed-density qualification. Reject the request without
  * invalidating an existing FP64 result or consuming the next generation. */
-void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bool uks) {
-  Fixture test(basis, grid, 4U, uks, 13);
+void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bool uks,
+                             std::uint32_t functional) {
+  Fixture test(basis, grid, functional, uks, 13);
   const auto d = density(basis.nao, uks ? 2 : 1);
   compare(test, basis, grid, d);
   const auto previous = test.scalars();
@@ -575,7 +579,7 @@ void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bo
     rejected =
         std::string(error.what()).find("not qualified for this functional") != std::string::npos;
   }
-  require(rejected, "unqualified omegaB97M-V mixed density was not rejected");
+  require(rejected, "unqualified functional mixed density was not rejected");
   const auto after = test.plan->transfers();
   require(after.setup_h2d_bytes == before.setup_h2d_bytes &&
               after.output_d2h_bytes == before.output_d2h_bytes &&
@@ -922,8 +926,8 @@ int main(int argc, char** argv) {
         }
       }
       for (bool uks : {false, true}) {
-        if (functional == 4U)
-          mixed_density_rejection(basis, grid, uks);
+        if (functional > 2U)
+          mixed_density_rejection(basis, grid, uks, functional);
         else
           mixed_density_contraction(basis, grid, functional, uks);
       }

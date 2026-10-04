@@ -26,6 +26,9 @@ ALLOWED = {
         "scf/fock_prepared.hpp",
         "scf/fock_build.hpp",
         "scf/density_factor.hpp",
+        # The checked CPU target adapter owns only shared dense algebra. The
+        # independent reference/initial-guess layers retain their old boundary.
+        "tensor/cpu_linalg.hpp",
         "core/",
         "integrals/",
         "runtime/",
@@ -382,6 +385,7 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_density",
     "direct_force_scatter",
     "direct_force_low_order",
+    "direct_force_low_order_sources",
     "direct_force_order2",
     "direct_force_order3",
     "direct_force_quartet",
@@ -393,6 +397,9 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         "scf/cuda/" + stem + ".cuh" for stem in CUDA_MODULES["cuda_direct_contractions"]
     )
     + (
+        # Weighted LR force consumers reuse the shared scalar moment primitive;
+        # this exact dependency does not admit integral tensors or CPU oracles.
+        "integrals/range_moments.hpp",
         "scf/cuda/direct_constants.hpp",
         "scf/cuda/direct_metadata.hpp",
         "scf/cuda/packed_basis.hpp",

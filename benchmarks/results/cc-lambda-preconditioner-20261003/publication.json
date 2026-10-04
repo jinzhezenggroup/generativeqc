@@ -7,16 +7,16 @@
   },
   "files": [
     {
-      "bytes": 2871,
-      "path": "evidence.json",
+      "bytes": 1378,
+      "path": "evidence.json.gz",
       "role": "evidence",
-      "sha256": "18e9c56396e016f80c0dbd5b0bd52407968d387c8b6d8ca73180545c4e4e32d2"
+      "sha256": "17d27f9b2758f04517a7bf4accec70a1af83f3771816a3365bd82e2741378cbf"
     },
     {
-      "bytes": 23286,
-      "path": "summary.json",
+      "bytes": 7714,
+      "path": "summary.json.gz",
       "role": "summary",
-      "sha256": "9db50ef58513931dd2152e93aa1d9e1b308a6c67122ca0aaa5603cbdf1a6fda3"
+      "sha256": "c55145c31528d75a3a501c4acacf49f8cedaeb83de96a438b395f53052d32b11"
     },
     {
       "bytes": 34232,
@@ -25,16 +25,28 @@
       "sha256": "3ad9c6883d9f7f8ff0050ca4976ef0be66cf1010d287a9f6d96210dd8bf1c5f2"
     },
     {
-      "bytes": 26092,
-      "path": "work.json",
+      "bytes": 8994,
+      "path": "work.json.gz",
       "role": "summary",
-      "sha256": "020012fb7068e123d6418ce28f5762efc4774aef2b02217645c96f3b19eb2be1"
+      "sha256": "55c961e0c3de7fbe855f6d2dacfdaf9b846d1e8a2825bef6722c069f0eeab845"
     },
     {
-      "bytes": 15399,
-      "path": "source.patch",
+      "bytes": 4272,
+      "path": "source.patch.gz",
       "role": "source-patch",
-      "sha256": "79007d9dc8e1c1a51b53e0dec5516367a32605380b7d2667c12d0ad27f4681a0"
+      "sha256": "7b92e3c4096030277a705d0e5146a93430bb067623590e91c2d746818ccc2dce"
+    },
+    {
+      "bytes": 1374,
+      "path": "evidence.original.json.gz",
+      "role": "reproduction",
+      "sha256": "bc565f97364b5a15b2caad2fc36ca890d19d6d52e58929607688386d2872c267"
+    },
+    {
+      "bytes": 2543,
+      "path": "storage.json",
+      "role": "reproduction",
+      "sha256": "48cb1698e3ed9f5d52267d43e56238f6edc68736a81678bb027a68de22ed9e5f"
     }
   ],
   "reproduction": {
@@ -49,7 +61,7 @@
       "--output",
       ".artifacts/cc-lambda-preconditioner-reproduction.json"
     ],
-    "instructions": "Apply source.patch to the parent revision. Configure Release CUDA 12.9 sm_120 with explicit CXX/CUDA ccache launchers, checkout-root CCACHE_BASEDIR and fast_compile=false. Build generativeqc_cc_lambda_preconditioner_tests. Use finite Slurm main allocations (gpu:5090:1 on n5; gpu:pro6000:1 on n2), preserve CUDA_VISIBLE_DEVICES. Set GENERATIVEQC_LIBRARY, PYTHONPATH=python:., CPU library threads=1 and a new GENERATIVEQC_DF_PROGRESS_TRACE path. Use NumPy, SciPy, PySCF 2.14 and threadpoolctl; ensure the Python runtime preloads CUDA 12.9 libraries matching the linked library (runtime-libraries manifest in summary). Alternate parent/candidate processes in six AB/BA pairs for --atoms 6 and 12; retain cold, warm, warm-repeat and changed calls. Run native test with and without --cuda plus test_rccsdt_public.py/test_rccsd_public.py with CUDA opt-in environment variables. Memcheck native probe and all four complete 14-AO calls. Profile four 28-AO calls with Nsight CUDA tracing to verify launches and copies. Stored records.json.gz decompresses to the exact original UTF-8 JSON bytes."
+    "instructions": "Decode source.patch.gz byte-for-byte before applying the unchanged patch. Apply source.patch to the parent revision. Configure Release CUDA 12.9 sm_120 with explicit CXX/CUDA ccache launchers, checkout-root CCACHE_BASEDIR and fast_compile=false. Build generativeqc_cc_lambda_preconditioner_tests. Use finite Slurm main allocations (gpu:5090:1 on n5; gpu:pro6000:1 on n2), preserve CUDA_VISIBLE_DEVICES. Set GENERATIVEQC_LIBRARY, PYTHONPATH=python:., CPU library threads=1 and a new GENERATIVEQC_DF_PROGRESS_TRACE path. Use NumPy, SciPy, PySCF 2.14 and threadpoolctl; ensure the Python runtime preloads CUDA 12.9 libraries matching the linked library (runtime-libraries manifest in summary). Alternate parent/candidate processes in six AB/BA pairs for --atoms 6 and 12; retain cold, warm, warm-repeat and changed calls. Run native test with and without --cuda plus test_rccsdt_public.py/test_rccsd_public.py with CUDA opt-in environment variables. Memcheck native probe and all four complete 14-AO calls. Profile four 28-AO calls with Nsight CUDA tracing to verify launches and copies."
   },
   "schema": "generativeqc.benchmark-publication.v1",
   "source": {

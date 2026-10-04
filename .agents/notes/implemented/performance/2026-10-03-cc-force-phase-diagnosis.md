@@ -97,3 +97,7 @@ endpoint measurements of a qualified batching change, not after a microbenchmark
 
 This diagnosis does not broaden force support beyond 28 AOs. The 56-AO degenerate
 same-space response still requires the separately documented scientific solution.
+
+## Lossless storage (2026-10-03)
+
+The retained records use deterministic gzip of the exact public originals, preserving every original byte, scientific value, failure and measured identity. [storage.json](../../../../benchmarks/results/cc-force-phases-20261003/storage.json) pins original Git blobs, original/stored SHA-256 and byte counts. The complete original validation envelope is retained as `evidence.original.json.gz`; the active `evidence.json.gz` changes only attachment paths and checksums to bind the stored members. The storage revision is provenance for these retained bytes, not a new measured build. Read JSON with `tools.generativeqc_validation.record.load_json` or `gzip -cd FILE.json.gz`, and decode `source.patch.gz` before applying it. No new experiment or performance claim is added.
