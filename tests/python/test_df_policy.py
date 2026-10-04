@@ -1,11 +1,8 @@
 """Link the exact shared DF headers from independent consumer translation units."""
 
 import ctypes
-import shutil
-import subprocess
 import typing
 
-import pytest
 from generativeqc_compiler.integral.df_cuda import emit_df_values_cuda
 from generativeqc_compiler.integral.df_derivatives_cuda import emit_df_derivatives_cuda
 from generativeqc_compiler.integral.df_policy import emit_df_policy_cuda
@@ -15,7 +12,7 @@ from generativeqc_compiler.integral.df_value_candidates import (
 
 
 def test_shared_df_headers_have_translation_unit_safe_linkage(
-    tmp_path: typing.Any,
+    tmp_path: typing.Any, native_cxx: object
 ) -> None:
     """Catch duplicate functions/tables without requiring a CUDA device or SDK.
 
@@ -23,9 +20,6 @@ def test_shared_df_headers_have_translation_unit_safe_linkage(
     and policy headers are the actual emitted bytes. Numerical family tests
     separately validate those expressions against libcint and finite differences.
     """
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
     (tmp_path / "cuda_runtime.h").write_text("")
     for name, source in (
         ("df_values.cuh", emit_df_values_cuda()),
@@ -58,25 +52,12 @@ extern "C" double ENTRY(double exponent) {
     for path in paths:
         path.write_text(source.replace("ENTRY", path.stem))
     output = tmp_path / "consumers.so"
-    compiled = subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-O2",
-            "-shared",
-            "-fPIC",
-            *map(str, paths),
-            "-I",
-            str(tmp_path),
-            "-o",
-            str(output),
-        ],
-        capture_output=True,
-        check=False,
-        text=True,
-        timeout=240,
+    native_cxx.build_shared(
+        paths,
+        output,
+        compile_args=("-std=c++17", "-O2", "-I", str(tmp_path)),
+        compile_timeout=240,
     )
-    assert compiled.returncode == 0, compiled.stderr
     library = ctypes.CDLL(str(output))
     for name in ("first", "second"):
         function = getattr(library, name)

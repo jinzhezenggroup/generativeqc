@@ -48,6 +48,8 @@ from generativeqc_compiler.tensor.ir import (
     divide,
     input_tensor,
 )
+from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
@@ -668,7 +670,10 @@ def _cpu_function(
             lines += _cpu_node(
                 node, number, names, storage=f"slot{arena_plan.node_slots[number]}"
             )
-    outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
+    outputs = {
+        key: names[typing.cast("typing.Any", value)._emit_index]
+        for key, value in program.outputs.items()
+    }
     if output_fields is not None:
         returned = [outputs[key] for key in output_fields]
     elif output_type == "IterationOutputs":
@@ -807,13 +812,14 @@ def _independent_cpu(
 def cpu_header() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
     iteration_cuda = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
-    iteration_matrix = [
-        g
+    iteration_bindings = [
+        recipe
         for node in iteration_cuda.live_nodes
-        if (g := _packed_matrix_gemm(node)) is not None
+        if (recipe := (_packed_matrix_gemm(node) or _packed_batched_matrix_gemm(node)))
+        is not None
     ]
-    iteration_matrix_dimensions = sorted(
-        {dimension for g in iteration_matrix for dimension in g[2:]}
+    iteration_dimensions = sorted(
+        {dimension for recipe in iteration_bindings for dimension in recipe[2:]}
     )
     expanded = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
     replay = _prepare_production(expanded, "cpu", preserve_reduction_order=True)
@@ -968,21 +974,17 @@ def cpu_header() -> str:
             *[f"  const double* {name}{{}};" for name in TRIPLES_RESPONSE_INPUTS],
             "};",
             f'inline constexpr const char* iteration_equation_hash="{iteration.provenance["physical_equation"]}";',
-            f'inline constexpr const char* iteration_program_hash="{iteration.logical_hash}";',
-            f"inline constexpr std::size_t iteration_matrix_gemms={len(iteration_matrix)};",
+            f"inline constexpr std::size_t iteration_prepared_contractions={len(iteration_bindings)};",
             (
-                "inline bool iteration_matrix_dimensions_fit(std::size_t o,std::size_t v){"
+                "inline bool iteration_prepared_dimensions_fit(std::size_t o,std::size_t v){"
                 "[[maybe_unused]] const auto n=checked_add(o,v);try{return "
-                "iteration_matrix_gemms!=0 && "
+                "iteration_prepared_contractions!=0 && "
                 + " && ".join(
-                    [
-                        f"{dimension}<=2147483647ULL"
-                        for dimension in iteration_matrix_dimensions
-                    ]
-                    or ["false"]
+                    f"{dimension}<=2147483647ULL" for dimension in iteration_dimensions
                 )
                 + ";}catch(const std::length_error&){return false;}}"
             ),
+            f'inline constexpr const char* iteration_program_hash="{iteration.logical_hash}";',
             f'inline constexpr const char* replay_equation_hash="{replay.logical_hash}";',
             f'inline constexpr const char* lambda_rhs_program_hash="{lambda_rhs.logical_hash}";',
             f'inline constexpr const char* lambda_transpose_program_hash="{lambda_transpose.logical_hash}";',
@@ -1507,28 +1509,34 @@ def _cuda_program(
     batch_dim: bool = False,
     output_fields: tuple[str, ...] | None = None,
     reset_error: bool = True,
+    prepared_contractions: str | None = None,
     matrix_gemm: str | None = None,
-    batched_matrix_gemm: str | None = None,
     kernel_prefix: str | None = None,
     emit_kernels: bool = True,
 ) -> str:
     names = _prepare_program(program)
     arena_plan = _arena_plan(program)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
-    kernel_name = prefix if kernel_prefix is None else kernel_prefix
     kernels = []
-    if emit_kernels:
-        for number, node in enumerate(_execution_nodes(program)):
-            if node.op != "input" and not (
-                (matrix_gemm and _packed_matrix_gemm(node) is not None)
+    kernel_name = prefix if kernel_prefix is None else kernel_prefix
+    for number, node in enumerate(_execution_nodes(program)):
+        if (
+            emit_kernels
+            and node.op != "input"
+            and not (
+                (
+                    (prepared_contractions or matrix_gemm)
+                    and _packed_matrix_gemm(node) is not None
+                )
                 or (
-                    batched_matrix_gemm
+                    prepared_contractions
                     and _packed_batched_matrix_gemm(node) is not None
                 )
-            ):
-                kernels.append(
-                    _cuda_kernel(node, number, kernel_name, names, batch_dim=batch_dim)
-                )
+            )
+        ):
+            kernels.append(
+                _cuda_kernel(node, number, kernel_name, names, batch_dim=batch_dim)
+            )
     uses_complete_orbital = any(
         _dim(index) == "n"
         for node in _execution_nodes(program)
@@ -1566,6 +1574,8 @@ def _cuda_program(
             else []
         ),
     ]
+    bindings = []
+    adapter = TensorLoweringAdapter(program) if prepared_contractions else None
     for number, node in enumerate(_execution_nodes(program)):
         if node.op == "input":
             input_name = node.attrs["name"]
@@ -1579,22 +1589,43 @@ def _cuda_program(
             continue
         lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         sources = [names[x._emit_index] for x in node.inputs]
-        gemm = _packed_matrix_gemm(node) if matrix_gemm else None
-        batch_gemm = _packed_batched_matrix_gemm(node) if batched_matrix_gemm else None
-        if batch_gemm is not None:
-            ta, tb, batch, m, columns, k = batch_gemm
-            coefficient = _fraction(node.attrs["coefficient"])
-            lines.append(
-                f"  {batched_matrix_gemm}('{ta}','{tb}',{batch},{m},{columns},{k},{coefficient},"
-                f"{sources[0]},{sources[1]},{names[number]});"
-            )
-            continue
-        if gemm is not None:
-            ta, tb, m, columns, k = gemm
+        if matrix_gemm and (legacy_gemm := _packed_matrix_gemm(node)) is not None:
+            # The RHF frame-response owner still uses the legacy callback until
+            # its resource/response migration under #1890 is qualified.
+            ta, tb, m, columns, k = legacy_gemm
             coefficient = _fraction(node.attrs["coefficient"])
             lines.append(
                 f"  {matrix_gemm}('{ta}','{tb}',{m},{columns},{k},{coefficient},"
                 f"{sources[0]},{sources[1]},{names[number]});"
+            )
+            continue
+        gemm = _packed_matrix_gemm(node) if prepared_contractions else None
+        batch_gemm = (
+            _packed_batched_matrix_gemm(node) if prepared_contractions else None
+        )
+        if gemm is not None or batch_gemm is not None:
+            assert adapter is not None
+            if batch_gemm is not None:
+                ta, tb, batch, m, columns, k = batch_gemm
+            else:
+                assert gemm is not None
+                ta, tb, m, columns, k = gemm
+                batch = "1"
+            slot = len(bindings)
+            bindings.append(
+                contraction_initializer(
+                    adapter,
+                    node,
+                    _dim,
+                    transpose=(ta, tb),
+                    extents=(batch, m, columns, k),
+                    coefficient=_fraction(node.attrs["coefficient"]),
+                )
+            )
+            shape_q = "q" if batch_dim else "1"
+            lines.append(
+                f"  {prepared_contractions}.execute({slot},o,v,{shape_q},s.stream,"
+                f"{sources[0]},{sources[1]},{names[number]},s.error);"
             )
             continue
         count = _size(node.spec)
@@ -1611,8 +1642,24 @@ def _cuda_program(
         lines += [
             f"  {kernel_name}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
         ]
+    if prepared_contractions:
+        # Build descriptors once per owner and batch/tail shape, never in run().
+        declarations = [
+            f"static void bind_{prefix}({state_type}& s,generativeqc::tensor::CudaContractionContext& context,",
+            "    std::size_t q,std::size_t& calls,std::size_t& summands){",
+            "  const auto o=s.o,v=s.v;",
+            *(["  const auto n=checked_add(o,v);"] if uses_complete_orbital else []),
+            f"  {prepared_contractions}.add(o,v,q,{{",
+            ",\n".join(bindings),
+            "  },context,calls,summands);",
+            "}",
+        ]
+        lines = declarations + lines
     lines.append("  generativeqc_tensor::cuda_check(cudaGetLastError());")
-    outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
+    outputs = {
+        key: names[typing.cast("typing.Any", value)._emit_index]
+        for key, value in program.outputs.items()
+    }
     if output_fields is not None:
         returned = [outputs[key] for key in output_fields]
     elif output_type == "DeviceIterationOutputs":
@@ -1783,12 +1830,14 @@ def cuda_source() -> str:
             '#include "generated_rccsd_cpu.hpp"',
             "namespace generativeqc::cc::generated {",
             _cuda_program(iteration, "iteration", "DeviceIterationOutputs"),
+            # Reuse the original scalar kernels for non-contraction nodes;
+            # only the traversal and immutable typed bindings differ.
             _cuda_program(
                 iteration,
-                "iteration_matrix",
+                "iteration_prepared",
                 "DeviceIterationOutputs",
                 arena_field="iteration_arena",
-                matrix_gemm="s.matrix_gemm",
+                prepared_contractions="(*s.conventional_contractions)",
                 kernel_prefix="iteration",
                 emit_kernels=False,
             ),
@@ -1865,7 +1914,8 @@ def cuda_source() -> str:
                 input_overrides={name: f"s.{name}" for name in orbital_jvp_input_names},
             ),
             "DeviceIterationOutputs run_iteration_cuda(CudaState& state){return run_iteration(state);}",
-            "DeviceIterationOutputs run_iteration_matrix_cuda(CudaState& state){return run_iteration_matrix(state);}",
+            "DeviceIterationOutputs run_iteration_prepared_cuda(CudaState& state){return run_iteration_prepared(state);}",
+            "void prepare_iteration_contractions(CudaState& state,tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){bind_iteration_prepared(state,context,1,calls,summands);}",
             "DeviceReplayOutputs run_replay_cuda(CudaState& state){return run_replay(state);}",
             "DeviceLambdaOutputs run_lambda_rhs_cuda(CudaState& state){return run_lambda_rhs(state);}",
             "DeviceLambdaOutputs run_lambda_transpose_cuda(CudaState& state){return run_lambda_transpose(state);}",

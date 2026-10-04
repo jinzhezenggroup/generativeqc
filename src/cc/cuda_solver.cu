@@ -23,17 +23,16 @@
 #include "generated_df_ccsd_hoisted_cuda.cuh"
 #include "generated_rccsd_cpu.hpp"
 #include "runtime/allocation_measurement.hpp"
+#include "solver/diis_ring.hpp"
 #include "tensor/cuda_error.hpp"
 #include "tensor/cuda_runtime.cuh"
 
 namespace generativeqc::cc {
 namespace {
 
-using generativeqc_tensor::blas_check;
 using generativeqc_tensor::cuda_check;
-// Provider handle storage is admitted separately from the IR arenas. Explicit
-// zero workspace keeps GEMM from adding an unbounded implicit workspace.
-constexpr std::size_t kCCBlasProviderAllowance = 96ULL << 20;
+// Shared provider storage is charged separately from the compiler's IR arena.
+constexpr auto kContractionProviderAllowance = tensor::CudaContractionContext::kProviderAllowance;
 
 std::size_t checked_mul(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max() / a)
@@ -63,41 +62,12 @@ __global__ void damped_advance(const double* current, const double* undamped, st
         __dadd_rn(current[i], __dmul_rn(factor, __dsub_rn(undamped[i], current[i]))), error, 0);
 }
 
-__global__ void gram_kernel(const double* errors, std::size_t elements, int history, double* gram) {
-  const int pair = static_cast<int>(blockIdx.x);
-  const int row = pair / history, col = pair % history;
-  if (row > col) return;
-  __shared__ double values[256];
-  double sum = 0.0;
-  for (std::size_t i = threadIdx.x; i < elements; i += blockDim.x)
-    sum = __dadd_rn(sum, __dmul_rn(errors[std::size_t(row) * elements + i],
-                                   errors[std::size_t(col) * elements + i]));
-  values[threadIdx.x] = sum;
-  __syncthreads();
-  for (int stride = 128; stride; stride /= 2) {
-    if (threadIdx.x < stride)
-      values[threadIdx.x] = __dadd_rn(values[threadIdx.x], values[threadIdx.x + stride]);
-    __syncthreads();
-  }
-  if (!threadIdx.x) {
-    gram[std::size_t(row) * history + col] = values[0];
-    if (row != col) gram[std::size_t(col) * history + row] = values[0];
-  }
-}
-
 // A Q slice is consumed before its borrowed action arena is reused. Preserve
 // the first arithmetic failure across every slice and the subsequent core.
 __global__ void accumulate_df(const double* values, std::size_t count, double* sum, int* error) {
   for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
        i += std::size_t(blockDim.x) * gridDim.x)
     sum[i] = generativeqc_tensor::finite(__dadd_rn(sum[i], values[i]), error, 0);
-}
-
-// Audit before any later kernel can overwrite or mask a nonfinite BLAS result.
-__global__ void audit_matrix(const double* values, std::size_t count, int* error) {
-  for (std::size_t i = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; i < count;
-       i += std::size_t(blockDim.x) * gridDim.x)
-    if (!isfinite(values[i])) atomicExch(error, 1);
 }
 
 struct Layout {
@@ -120,21 +90,23 @@ struct Owner {
   int device{};
   cudaStream_t stream{};
   cudaEvent_t trial_begin{}, trial_end{};
-  cublasHandle_t blas{};
+  tensor::CudaContractionContext contractions;
+  tensor::PreparedContractions conventional_contractions;
+  bool conventional_prepared{};
   unsigned char* base{};
   Layout layout;
   generated::dfcore::CudaState state;
   generated::df::CudaState df_state;
   generated::dfhoist::CudaState hoisted_state;
   DFIterationPlan plan;
-  bool conventional_matrix_gemm{};
   double *df_bov{}, *df_bvv{}, *df_sum{};
   std::size_t naux{};
   double *last_t1{}, *last_t2{}, *vectors{}, *errors{}, *gram{}, *system{}, *coefficients{};
   double *r1_partials{}, *r2_partials{}, *scalars{};
   int *status{}, *arithmetic{};
   std::size_t n1{}, n2{}, elements{}, partial1{}, partial2{};
-  unsigned history{}, restarts{};
+  solver::DiisRing history;
+  unsigned restarts{};
   SolverDiagnostic diagnostic;
 
   Owner(const Problem& p, const SolverOptions& options, int ordinal)
@@ -142,19 +114,19 @@ struct Owner {
         device(ordinal),
         n1(checked_mul(p.nocc, p.nvir)),
         n2(checked_mul(checked_mul(p.nocc, p.nocc), checked_mul(p.nvir, p.nvir))),
-        elements(checked_add(n1, n2)) {
+        elements(checked_add(n1, n2)),
+        history(options.diis_size) {
     naux = p.naux;
+    conventional_prepared = !naux && generated::iteration_prepared_dimensions_fit(p.nocc, p.nvir);
     // The compiler derives each flattened dimension from contraction labels;
     // neither tensor rank nor o*v alone bounds the provider's signed extents.
-    conventional_matrix_gemm = !naux && options.conventional_matrix_gemm &&
-                               generated::iteration_matrix_dimensions_fit(p.nocc, p.nvir);
-    const bool df_matrix_dimensions_fit =
+    const bool matrix_dimensions_fit =
         !naux || (generated::dfhoist::prepare_packed_dimensions_fit(p.nocc, p.nvir) &&
                   generated::dfhoist::auxiliary_packed_dimensions_fit(p.nocc, p.nvir) &&
                   generated::dfhoist::iteration_packed_dimensions_fit(p.nocc, p.nvir));
     if (naux)
       plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction,
-                               options.df_matrix_gemm && df_matrix_dimensions_fit);
+                               options.df_matrix_gemm && matrix_dimensions_fit);
     const std::array<const std::vector<double>*, 14> host = {
         &p.foo,  &p.fov,  &p.fvv,  &p.ovov, &p.ovvo, &p.oovv,       &p.ovvv,
         &p.ovoo, &p.oooo, &p.vvvv, &p.d1,   &p.d2,   &p.initial_t1, &p.initial_t2};
@@ -211,28 +183,29 @@ struct Owner {
       auto total = checked_add(
           checked_add(p.reference_retained_bytes, checked_add(problem_host_bytes(p), layout.total)),
           checked_mul(elements, sizeof(double)));
-      return (conventional_matrix_gemm || plan.matrix_gemm)
-                 ? checked_add(total, kCCBlasProviderAllowance)
-                 : total;
+      if (conventional_prepared)
+        return checked_add(checked_add(total, kContractionProviderAllowance),
+                           tensor::PreparedContractions::storage_bytes(
+                               generated::iteration_prepared_contractions));
+      return plan.matrix_gemm ? checked_add(checked_add(total, kContractionProviderAllowance),
+                                            generated::dfhoist::contraction_host_bytes)
+                              : total;
     };
     auto combined = build_layout();
     const auto scalar_plan = [&]() {
-      if (!naux) {
-        conventional_matrix_gemm = false;
-        combined = build_layout();
-      } else {
+      if (!naux)
+        conventional_prepared = false;
+      else
         plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
+      combined = build_layout();
+      if (plan.hoisted && combined > options.max_bytes) {
+        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
         combined = build_layout();
-        if (plan.hoisted && combined > options.max_bytes) {
-          plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
-          combined = build_layout();
-        }
       }
       if (combined > options.max_bytes)
         throw std::length_error("RCCSD CUDA scalar fallback exceeds correlation memory budget");
     };
-    if ((conventional_matrix_gemm || plan.matrix_gemm) && combined > options.max_bytes)
-      scalar_plan();
+    if ((conventional_prepared || plan.matrix_gemm) && combined > options.max_bytes) scalar_plan();
     if (plan.hoisted && combined > options.max_bytes) {
       plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
       combined = build_layout();
@@ -245,40 +218,17 @@ struct Owner {
         cuda_check(cudaEventCreate(&trial_begin));
         cuda_check(cudaEventCreate(&trial_end));
       }
-      if (conventional_matrix_gemm || plan.matrix_gemm) {
-        std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
-        std::size_t before = 0, after = 0, total = 0;
-        cuda_check(cudaMemGetInfo(&before, &total));
-        const auto code = cublasCreate(&blas);
-        if (code == CUBLAS_STATUS_ALLOC_FAILED) {
-          if (blas) blas_check(cublasDestroy(blas));
-          blas = nullptr;
-          scalar_plan();
-        } else {
-          blas_check(code);
-          blas_check(cublasSetStream(blas, stream));
-          blas_check(cublasSetPointerMode(blas, CUBLAS_POINTER_MODE_HOST));
-          blas_check(cublasSetMathMode(blas, CUBLAS_PEDANTIC_MATH));
-          blas_check(cublasSetWorkspace(blas, nullptr, 0));
-          cuda_check(cudaMemGetInfo(&after, &total));
-          if (before > after && before - after > kCCBlasProviderAllowance) {
-            blas_check(cublasDestroy(blas));
-            blas = nullptr;
-            scalar_plan();
-          }
-        }
-      }
+      if ((conventional_prepared || plan.matrix_gemm) && !contractions.prepare(stream))
+        scalar_plan();
       auto allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
-      if (allocation == cudaErrorMemoryAllocation &&
-          (conventional_matrix_gemm || plan.matrix_gemm)) {
+      if (allocation == cudaErrorMemoryAllocation && (conventional_prepared || plan.matrix_gemm)) {
         // Only optional-resource failure permits retry. Arithmetic and driver
         // failures are propagated, and a retry never changes the equations.
         (void)cudaGetLastError();
         {
           // A release can hide another owner's measured provider growth.
           std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
-          blas_check(cublasDestroy(blas));
-          blas = nullptr;
+          contractions.release_locked();
         }
         scalar_plan();
         allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
@@ -302,31 +252,12 @@ struct Owner {
       state.iteration_arena = reinterpret_cast<double*>(base + layout.iteration);
       state.replay_arena = reinterpret_cast<double*>(base + layout.replay);
       state.error = reinterpret_cast<int*>(base + layout.generated_error);
-      auto gemm = [this](char ta, char tb, std::size_t m, std::size_t cols, std::size_t k,
-                         double alpha, const double* a, const double* b, double* output) {
-        if (std::max({m, cols, k}) > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-          throw std::length_error("CC matrix dimension exceeds provider integer range");
-        const double beta = 0.0;
-        // Row-major C=A*B is column-major C^T=B^T*A^T.
-        blas_check(cublasDgemm(blas, tb == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T,
-                               ta == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T, int(cols), int(m), int(k),
-                               &alpha, b, int(tb == 'N' ? cols : k), a, int(ta == 'N' ? k : m),
-                               &beta, output, int(cols)));
-        const auto count = checked_mul(m, cols);
-        audit_matrix<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(count), 256),
-                       256, 0, stream>>>(output, count, state.error);
-        cuda_check(cudaGetLastError());
-        if (naux) {
-          ++diagnostic.df_gemm_calls;
-          diagnostic.df_gemm_summands =
-              checked_add(diagnostic.df_gemm_summands, checked_mul(count, k));
-        } else {
-          ++diagnostic.conventional_gemm_calls;
-          diagnostic.conventional_gemm_summands =
-              checked_add(diagnostic.conventional_gemm_summands, checked_mul(count, k));
-        }
-      };
-      if (conventional_matrix_gemm) state.matrix_gemm = gemm;
+      if (conventional_prepared) {
+        state.conventional_contractions = &conventional_contractions;
+        generated::prepare_iteration_contractions(state, contractions,
+                                                  diagnostic.conventional_contraction_calls,
+                                                  diagnostic.conventional_contraction_summands);
+      }
       if (naux) {
         df_bov = reinterpret_cast<double*>(base + layout.df_bov);
         df_bvv = reinterpret_cast<double*>(base + layout.df_bvv);
@@ -345,7 +276,14 @@ struct Owner {
         df_state.response_arena = reinterpret_cast<double*>(base + layout.df_arena);
         hoisted_state.prepare_arena = reinterpret_cast<double*>(base + layout.df_prepare);
         hoisted_state.auxiliary_arena = df_state.response_arena;
-        if (plan.matrix_gemm) hoisted_state.gemm = gemm;
+        if (plan.matrix_gemm) {
+          // Symbolic TensorIR requests are resolved/prepared once at owner
+          // construction. Every iteration reuses these immutable bindings.
+          hoisted_state.o = p.nocc;
+          hoisted_state.v = p.nvir;
+          generated::dfhoist::prepare_contractions(
+              hoisted_state, contractions, diagnostic.df_gemm_calls, diagnostic.df_gemm_summands);
+        }
       }
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
       last_t2 = reinterpret_cast<double*>(base + layout.last_t2);
@@ -365,14 +303,18 @@ struct Owner {
                                  stream));
       cuda_check(cudaStreamSynchronize(stream));
       ++diagnostic.synchronizations;
-      diagnostic.conventional_matrix_gemm = conventional_matrix_gemm;
-      diagnostic.conventional_provider_capacity_bytes =
-          conventional_matrix_gemm ? kCCBlasProviderAllowance : 0;
       diagnostic.df_matrix_gemm = plan.matrix_gemm;
-      diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kCCBlasProviderAllowance : 0;
-      diagnostic.owned_device_bytes = checked_add(
-          layout.total,
-          (conventional_matrix_gemm || plan.matrix_gemm) ? kCCBlasProviderAllowance : 0);
+      diagnostic.conventional_prepared_contractions = conventional_prepared;
+      diagnostic.conventional_provider_capacity_bytes =
+          conventional_prepared ? kContractionProviderAllowance : 0;
+      diagnostic.conventional_binding_host_bytes =
+          conventional_prepared ? tensor::PreparedContractions::storage_bytes(
+                                      generated::iteration_prepared_contractions)
+                                : 0;
+      diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kContractionProviderAllowance : 0;
+      diagnostic.owned_device_bytes =
+          checked_add(layout.total, checked_add(diagnostic.df_provider_capacity_bytes,
+                                                diagnostic.conventional_provider_capacity_bytes));
       diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, combined);
     } catch (...) {
       cleanup();
@@ -407,8 +349,8 @@ struct Owner {
 
   generated::DeviceIterationOutputs iteration() {
     if (!naux)
-      return conventional_matrix_gemm ? generated::run_iteration_matrix_cuda(state)
-                                      : generated::run_iteration_cuda(state);
+      return conventional_prepared ? generated::run_iteration_prepared_cuda(state)
+                                   : generated::run_iteration_cuda(state);
     if (plan.hoisted) {
       cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream));
       cuda_check(cudaMemsetAsync(df_sum, 0, plan.accumulation * sizeof(double), stream));
@@ -482,8 +424,7 @@ struct Owner {
     // Serialize every owned release against provider/graph allocation deltas.
     std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     if (stream) cudaStreamSynchronize(stream);
-    if (blas) cublasDestroy(blas);
-    blas = nullptr;
+    contractions.reset_locked();
     if (trial_begin) cudaEventDestroy(trial_begin);
     if (trial_end) cudaEventDestroy(trial_end);
     trial_begin = nullptr;
@@ -555,19 +496,11 @@ struct Owner {
 bool run_diis(Owner& s, const SolverOptions& options,
               const generated::DeviceIterationOutputs& trial) {
   if (!options.diis_size) return false;
-  int count = static_cast<int>(s.history);
-  if (count == static_cast<int>(options.diis_size)) {
-    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
-                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
-                                      256, 0, s.stream>>>(
-        s.vectors, static_cast<generativeqc_tensor::I>(s.elements), count);
-    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
-                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
-                                      256, 0, s.stream>>>(
-        s.errors, static_cast<generativeqc_tensor::I>(s.elements), count);
-    --count;
-  }
-  const int slot = count++;
+  // Appending to a full ring overwrites the oldest physical row. The live
+  // chronological view advances without copying either complete history.
+  const auto slot = s.history.push();
+  int count = static_cast<int>(s.history.size());
+  const int capacity = static_cast<int>(s.history.capacity());
   cuda_check(cudaMemcpyAsync(s.vectors + std::size_t(slot) * s.elements, s.state.t1,
                              s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
   cuda_check(cudaMemcpyAsync(s.vectors + std::size_t(slot) * s.elements + s.n1, s.state.t2,
@@ -576,36 +509,46 @@ bool run_diis(Owner& s, const SolverOptions& options,
                              s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
   cuda_check(cudaMemcpyAsync(s.errors + std::size_t(slot) * s.elements + s.n1, trial.r2,
                              s.n2 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
+  s.diagnostic.diis_history_insert_bytes = checked_add(s.diagnostic.diis_history_insert_bytes,
+                                                       checked_mul(2 * sizeof(double), s.elements));
+  // Compute the first self norm too: a subsequent insertion reuses it. Retries
+  // below only retire a logical row; no old-old residual dot is recomputed.
+  generativeqc_tensor::history_gram_row<<<count, 256, 0, s.stream>>>(
+      s.errors, static_cast<generativeqc_tensor::I>(s.elements), capacity,
+      static_cast<int>(s.history.first()), count, static_cast<int>(slot), s.gram);
+  ++s.diagnostic.diis_gram_calls;
+  s.diagnostic.diis_residual_dot_terms =
+      checked_add(s.diagnostic.diis_residual_dot_terms, checked_mul(count, s.elements));
+  s.diagnostic.diis_gram_updates = checked_add(s.diagnostic.diis_gram_updates, 2 * count - 1);
   if (count == 1) {
     s.check_generated_error();
-    s.history = 1;
     return false;
   }
   bool state_modified = false;
   bool generated_error_checked = false;
   int generated_error = 0;
   while (count > 1) {
-    gram_kernel<<<count * count, 256, 0, s.stream>>>(s.errors, s.elements, count, s.gram);
-    ++s.diagnostic.diis_gram_calls;
     generativeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system,
-                                                               s.coefficients, s.status);
+                                                               s.coefficients, s.status, capacity,
+                                                               static_cast<int>(s.history.first()));
     ++s.diagnostic.diis_coefficient_calls;
     // The combine kernels already guard on the device-side DIIS status. Queue
     // them before publishing control state so a successful extrapolation needs
     // only one host fence instead of one fence for coefficients and another
     // for arithmetic validation.
     cuda_check(cudaMemsetAsync(s.arithmetic, 0, sizeof(int), s.stream));
-    generativeqc::cc::diis_combine_slice<<<generativeqc_tensor::blocks(
-                                               static_cast<generativeqc_tensor::I>(s.n1), 256),
-                                           256, 0, s.stream>>>(
+    generativeqc_tensor::diis_combine_slice<<<generativeqc_tensor::blocks(
+                                                  static_cast<generativeqc_tensor::I>(s.n1), 256),
+                                              256, 0, s.stream>>>(
         s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.elements), 0,
-        static_cast<generativeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic);
-    generativeqc::cc::diis_combine_slice<<<generativeqc_tensor::blocks(
-                                               static_cast<generativeqc_tensor::I>(s.n2), 256),
-                                           256, 0, s.stream>>>(
+        static_cast<generativeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic,
+        capacity, static_cast<int>(s.history.first()));
+    generativeqc_tensor::diis_combine_slice<<<generativeqc_tensor::blocks(
+                                                  static_cast<generativeqc_tensor::I>(s.n2), 256),
+                                              256, 0, s.stream>>>(
         s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.elements),
         static_cast<generativeqc_tensor::I>(s.n1), static_cast<generativeqc_tensor::I>(s.n2), count,
-        s.status, s.state.t2, s.arithmetic);
+        s.status, s.state.t2, s.arithmetic, capacity, static_cast<int>(s.history.first()));
     s.diagnostic.diis_combine_calls += 2;
     int host_status = 1, arithmetic = 0;
     if (!generated_error_checked)
@@ -627,21 +570,15 @@ bool run_diis(Owner& s, const SolverOptions& options,
     if (host_status == 2) break;
     if (host_status == 0) {
       if (arithmetic) throw std::runtime_error("nonfinite RCCSD CUDA DIIS extrapolation");
+      s.diagnostic.diis_combine_terms =
+          checked_add(s.diagnostic.diis_combine_terms, checked_mul(count, s.elements));
       state_modified = true;
       break;
     }
-    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
-                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
-                                      256, 0, s.stream>>>(
-        s.vectors, static_cast<generativeqc_tensor::I>(s.elements), count);
-    generativeqc::cc::history_shift<<<generativeqc_tensor::blocks(
-                                          static_cast<generativeqc_tensor::I>(s.elements), 256),
-                                      256, 0, s.stream>>>(
-        s.errors, static_cast<generativeqc_tensor::I>(s.elements), count);
+    s.history.retire_oldest();
     --count;
     ++s.restarts;
   }
-  s.history = static_cast<unsigned>(count);
   cuda_check(cudaGetLastError());
   return state_modified;
 }

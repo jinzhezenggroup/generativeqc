@@ -1,4 +1,4 @@
-"""Keep unqualified automatic selection separate from explicit matrix probes."""
+"""Protect matrix Lambda defaults and explicit scalar fallback selection."""
 
 import shutil
 import subprocess
@@ -56,9 +56,9 @@ std::array<bool,3> select(int argc,const char** argv) {
 }
 int main() {
   generativeqc::cc::LambdaOptions options;
-  if(options.df_matrix_gemm || !options.df_auxiliary_reduction) return 1;
-  options.df_matrix_gemm=true;
-  if(!options.df_matrix_gemm) return 2;
+  if(!options.df_matrix_gemm || !options.df_auxiliary_reduction) return 1;
+  options.df_matrix_gemm=false;
+  if(options.df_matrix_gemm) return 2;
   generativeqc::runtime::ExecutionContext context;
   generativeqc::core::System system;
   generativeqc_method_descriptor descriptor;
@@ -66,12 +66,12 @@ int main() {
   auto ordinary=run_df_ccsdt_native(context,system,system,descriptor);
   auto explicit_matrix=run_df_ccsdt_native(context,system,system,descriptor,
                                          true,true,true,true,true,8);
-  if(!ordinary.primal || ordinary.lambda || !explicit_matrix.lambda) return 3;
+  if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda) return 3;
   const char* missing[]{"endpoint","input","output","1"};
   const char* matrix[]{"endpoint","input","output","1","1","1","1"};
   const char* scalar[]{"endpoint","input","output","1","1","1","0"};
   const char* invalid[]{"endpoint","input","output","1","1","1","x"};
-  if(select(4,missing)!=std::array<bool,3>{true,true,false}) return 4;
+  if(select(4,missing)!=std::array<bool,3>{true,true,true}) return 4;
   if(!select(7,matrix)[2] || select(7,scalar)[2]) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
@@ -96,12 +96,10 @@ int main() {
     subprocess.run([str(executable)], check=True, capture_output=True, timeout=10)
 
 
-def test_shared_state_probe_explicitly_selects_both_schedules() -> None:
+def test_shared_state_probe_keeps_a_scalar_control() -> None:
     source = (ROOT / "benchmarks/df_lambda_shared_state.cpp").read_text()
-    first = source.index("options.df_matrix_gemm = true;")
+    first = source.index("generativeqc::cc::LambdaOptions options;")
     matrix = source.index("const auto matrix =", first)
-    second = source.index("options.df_matrix_gemm = false;", matrix)
-    scalar = source.index("const auto scalar =", second)
-    assert first < matrix < second < scalar
-    complete = (ROOT / "tests/native/df_complete_force_probe.cpp").read_text()
-    assert "descriptor,forces,triples,true,true,true)" in "".join(complete.split())
+    scalar_option = source.index("options.df_matrix_gemm = false;", matrix)
+    scalar = source.index("const auto scalar =", scalar_option)
+    assert first < matrix < scalar_option < scalar

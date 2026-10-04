@@ -163,7 +163,14 @@ __global__ void preflight_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDevice
       continue;
     }
     const double weight = alpha + beta;
-    const double energy_weight = weight * eigenvalue;
+    double energy_weight = 0.0;
+    if (!generativeqc::xtb::generated::gfn2_energy_weight_cuda_tensor(
+            weight, eigenvalue, energy_weight)) {
+      record_system_error(system_errors, system, device_error,
+                          Gfn2DensityDeviceError::kNonfiniteWeightArithmetic);
+      atomicExch(&valid, 0);
+      continue;
+    }
     const double updated_occupation = local_occupation + weight;
     const double updated_band = local_band + energy_weight;
     if (!isfinite(weight) || !isfinite(energy_weight) || !isfinite(updated_occupation)) {
@@ -261,21 +268,29 @@ __global__ void contract_kernel(Gfn2DensityDeviceBatch batch, Gfn2DensityDeviceI
     for (std::int64_t local = 0; local < count; ++local) {
       const double first = input.coefficients[matrix_begin + indices.row * count + local];
       const double second = input.coefficients[matrix_begin + indices.column * count + local];
-      const double density_left = first * workspace.weights[orbital_begin + local];
-      const double density_contribution = density_left * second;
-      const double density_updated = fma(density_left, second, density);
-      if (!isfinite(density_left) || !isfinite(density_contribution) ||
-          !isfinite(density_updated)) {
+      double density_left = 0.0;
+      double density_contribution = 0.0;
+      double density_updated = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
+              first, workspace.weights[orbital_begin + local], density_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              density_left, second, density_contribution) ||
+          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
+              density_left, second, density, density_updated)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2DensityDeviceError::kNonfiniteDensityArithmetic);
         finite = false;
         break;
       }
-      const double weighted_left = first * workspace.energy_weights[orbital_begin + local];
-      const double weighted_contribution = weighted_left * second;
-      const double weighted_updated = fma(weighted_left, second, weighted_density);
-      if (!isfinite(weighted_left) || !isfinite(weighted_contribution) ||
-          !isfinite(weighted_updated)) {
+      double weighted_left = 0.0;
+      double weighted_contribution = 0.0;
+      double weighted_updated = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
+              first, workspace.energy_weights[orbital_begin + local], weighted_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              weighted_left, second, weighted_contribution) ||
+          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
+              weighted_left, second, weighted_density, weighted_updated)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2DensityDeviceError::kNonfiniteWeightedDensityArithmetic);
         finite = false;
@@ -499,7 +514,14 @@ __global__ void spin_preflight_kernel(Gfn2DensityDeviceBatch batch,
         atomicExch(&valid, 0);
         continue;
       }
-      const double energy_weight = occupation * eigenvalue;
+      double energy_weight = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_energy_weight_cuda_tensor(
+              occupation, eigenvalue, energy_weight)) {
+        record_system_error(system_errors, system, device_error,
+                            Gfn2DensityDeviceError::kNonfiniteWeightArithmetic);
+        atomicExch(&valid, 0);
+        continue;
+      }
       const double updated_occupation = local_occupation + occupation;
       const double updated_band = local_band + energy_weight;
       if (!isfinite(occupation) || !isfinite(energy_weight) || !isfinite(updated_occupation)) {
@@ -578,21 +600,29 @@ __global__ void spin_contract_kernel(Gfn2DensityDeviceBatch batch,
     for (std::int64_t local = 0; local < count; ++local) {
       const double first = input.coefficients[matrix_begin + indices.row * count + local];
       const double second = input.coefficients[matrix_begin + indices.column * count + local];
-      const double density_left = first * workspace.weights[orbital_begin + local];
-      const double density_contribution = density_left * second;
-      const double density_updated = fma(density_left, second, density);
-      if (!isfinite(density_left) || !isfinite(density_contribution) ||
-          !isfinite(density_updated)) {
+      double density_left = 0.0;
+      double density_contribution = 0.0;
+      double density_updated = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
+              first, workspace.weights[orbital_begin + local], density_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              density_left, second, density_contribution) ||
+          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
+              density_left, second, density, density_updated)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2DensityDeviceError::kNonfiniteDensityArithmetic);
         finite = false;
         break;
       }
-      const double weighted_left = first * workspace.energy_weights[orbital_begin + local];
-      const double weighted_contribution = weighted_left * second;
-      const double weighted_updated = fma(weighted_left, second, weighted_density);
-      if (!isfinite(weighted_left) || !isfinite(weighted_contribution) ||
-          !isfinite(weighted_updated)) {
+      double weighted_left = 0.0;
+      double weighted_contribution = 0.0;
+      double weighted_updated = 0.0;
+      if (!generativeqc::xtb::generated::gfn2_weighted_coefficient_cuda_tensor(
+              first, workspace.energy_weights[orbital_begin + local], weighted_left) ||
+          !generativeqc::xtb::generated::gfn2_density_contribution_cuda_tensor(
+              weighted_left, second, weighted_contribution) ||
+          !generativeqc::xtb::generated::gfn2_density_update_cuda_tensor(
+              weighted_left, second, weighted_density, weighted_updated)) {
         record_system_error(system_errors, system, device_error,
                             Gfn2DensityDeviceError::kNonfiniteWeightedDensityArithmetic);
         finite = false;

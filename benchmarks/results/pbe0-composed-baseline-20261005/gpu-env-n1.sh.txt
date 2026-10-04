@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Source only after entering the finite Slurm allocation and the frozen checkout.
+: "${SLURM_JOB_ID:?finite Slurm allocation required}"
+: "${CUDA_VISIBLE_DEVICES:?preserve scheduler GPU visibility}"
+environment=/home/jzzeng/codes/wb97m-20261002
+export CUDA_PATH=/group/software/cuda-12.9.1
+export PATH="$PWD/.artifacts/bin:$environment/ccache/usr/bin:$CUDA_PATH/bin:$PATH"
+export LD_LIBRARY_PATH="$PWD/build/cuda-release-sm120:$environment/ccache/usr/lib/x86_64-linux-gnu:$environment/gpu-env/lib/python3.13/site-packages/cutensor/lib:$CUDA_PATH/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_PRELOAD="$CUDA_PATH/lib64/libcudart.so.12:$CUDA_PATH/lib64/libcublas.so.12:$CUDA_PATH/lib64/libcublasLt.so.12:$CUDA_PATH/lib64/libcusolver.so.11:$CUDA_PATH/lib64/libcusparse.so.12${LD_PRELOAD:+:$LD_PRELOAD}"
+export GENERATIVEQC_NVCC="$PWD/.artifacts/bin/nvcc" CUDACXX="$PWD/.artifacts/bin/nvcc" CXX="$PWD/.artifacts/bin/c++"
+export CCACHE_DIR=/data/jzzeng/ccache CCACHE_BASEDIR="$PWD"
+export PYTHONPATH="$PWD/python:$PWD:$PWD/tests/python" PYTHONDONTWRITEBYTECODE=1
+export OMP_NUM_THREADS=8 OPENBLAS_NUM_THREADS=8 MKL_NUM_THREADS=8
+export GENERATIVEQC_STATIONARY_CUDA_SPLIT_COMPILE_THREADS=8
+export GENERATIVEQC_LIBRARY="$PWD/build/cuda-release-sm120/libgenerativeqc.so"
+export GENERATIVEQC_STATIONARY_CACHE="$PWD/.cache/stationary-cuda"
+export TMPDIR="$PWD/.artifacts/tmp"
+mkdir -p "$TMPDIR" "$GENERATIVEQC_STATIONARY_CACHE"
+python="$environment/gpu-env/bin/python"

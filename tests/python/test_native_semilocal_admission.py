@@ -1,6 +1,7 @@
 """Preserve native KS admission while deriving curated families from metadata."""
 
 from fractions import Fraction
+from pathlib import Path
 
 import pytest
 from generativeqc.ks import (
@@ -89,3 +90,42 @@ def test_pure_semilocal_family_does_not_admit_new_nonlocal_contributions(
     )
     with pytest.raises(NotImplementedError, match="unsupported native KS"):
         ks_coefficients(graph)
+
+
+def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
+    source = (
+        Path(__file__).resolve().parents[2] / "src" / "methods" / "dft_method.cpp"
+    ).read_text()
+    options_begin = source.index("scf::ScfOptions dft_options(")
+    options_end = source.index("/** Copy every pointee", options_begin)
+    options = source[options_begin:options_end]
+    assert (
+        "CUDA range-separated KS is qualified only for complete WB97M-V" not in options
+    )
+
+    scaled_begin = options.index("if (scaled_or_hybrid")
+    scaled_end = options.index("if (execution_plan.nonlocal_correlation", scaled_begin)
+    scaled_gate = options[scaled_begin:scaled_end]
+    assert "!execution_plan.range_exchange" in scaled_gate
+
+    helper_begin = source.index("bool cuda_rsh_provider_compatible(")
+    helper_end = source.index("#endif", helper_begin)
+    helper = source[helper_begin:helper_end]
+    for fact in (
+        "provider.strategy()",
+        "prepared_cuda_fock_binding(provider)",
+        "FockBackend::Cuda",
+        "FockApproximation::Exact",
+        "FockOperator::FullRange",
+        "FockOperator::LongRange",
+        "correction_spec.spin == primary_spec.spin",
+        "correction.screening_tolerance == primary.screening_tolerance",
+    ):
+        assert fact in helper
+    assert "Wb97mv" not in helper
+    assert "descriptor.method" not in helper
+
+    constructor_begin = source.index("KsPreparedCalculation(")
+    constructor_end = source.index("std::size_t atom_count()", constructor_begin)
+    constructor = source[constructor_begin:constructor_end]
+    assert "cuda_rsh_provider_compatible(fock_, *range_strategy_)" in constructor

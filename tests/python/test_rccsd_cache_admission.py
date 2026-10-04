@@ -34,8 +34,12 @@ struct MethodError : std::runtime_error {
 };
 struct Reference { std::size_t reference_memory_budget_bytes=100; int diis_history=8; double screening_tolerance=0; };
 namespace scf {
+struct CudaRhfBucketPlan;
 namespace cuda_execution {
-bool cuda_df_value_domain(const core::System& orbital,const core::System& system,std::string& detail) {
+struct CudaDfSourcePolicy {};
+bool resolve_cuda_df_source_policy(CudaDfSourcePolicy&,std::string&) { return true; }
+bool cuda_df_value_domain(const core::System& orbital,const core::System& system,
+                          const CudaDfSourcePolicy&,std::string& detail) {
   detail="unsupported DF source basis";
   return orbital.df_supported && system.df_supported;
 }
@@ -74,7 +78,10 @@ Reference reference_options(const generativeqc_method_descriptor&,std::size_t) {
 RccsdNativeState execute_rccsd_prepared(runtime::ExecutionContext&,const core::System&,
                                       Reference,SolverOptions,std::size_t,scf::PreparedFockPlan* p,
                                       const std::vector<double>*, bool*,
-                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*, bool retain_df_response) {
+                                      std::unique_ptr<scf::PreparedFockPlan>*, const core::System*,
+                                      bool retain_df_response,
+                                      const scf::cuda_execution::CudaDfSourcePolicy*,
+                                      scf::CudaRhfBucketPlan**) {
   ++executions;
   retained_response=retain_df_response;
   return {p != nullptr,0,{80}};
@@ -96,7 +103,7 @@ int main(int argc,char** argv) {
     execution.cuda=true;
     core::System auxiliary; auxiliary.df_supported=false;
     try {
-      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,true);
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,false,true,nullptr);
       return 9;
     } catch (const MethodError&) {
       return executions || allocations ? 10 : 0;
@@ -105,7 +112,7 @@ int main(int argc,char** argv) {
   if (mode == 6) {
     execution.cuda=true;
     try {
-      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,true,true);
+      (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,true,true,nullptr);
       return 11;
     } catch (const MethodError&) {
       return executions || allocations || retained_response ? 12 : 0;
@@ -114,12 +121,12 @@ int main(int argc,char** argv) {
   if (mode == 7) {
     execution.cuda=true;
     core::System auxiliary;
-    (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,true,true);
+    (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,&auxiliary,true,true,nullptr);
     return !retained_response || executions != 1 || allocations || cache ? 13 : 0;
   }
   try {
     auto result=run_rccsd_native_state(execution,system,descriptor,mode==3 ? nullptr : &cache,
-                                        nullptr,nullptr,0,nullptr,false,true);
+                                        nullptr,nullptr,0,nullptr,false,true,nullptr);
     if (mode < 2) return 2;
     // CUDA source preparation belongs after native RHF, inside execution.
     const bool expect_cache = mode >= 4;
@@ -127,10 +134,10 @@ int main(int argc,char** argv) {
     if (allocations != (expect_cache ? 1 : 0) || executions != 1 || retained_response) return 4;
     if (expect_cache) {
       auto* first=cache.get();
-      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true);
+      result=run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true,nullptr);
       if (!result.cached || cache.get()!=first || allocations!=1 || executions!=2) return 5;
       descriptor.budget=79;
-      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true); return 6; }
+      try { (void)run_rccsd_native_state(execution,system,descriptor,&cache,nullptr,nullptr,0,nullptr,false,true,nullptr); return 6; }
       catch (const MethodError&) {}
       if (cache.get()!=first || allocations!=1 || executions!=2) return 7;
     }
@@ -187,8 +194,5 @@ def test_rccsd_admits_before_creating_or_reusing_exact_cache(tmp_path: Path) -> 
         )
         assert result.returncode == 0, (mode, result.returncode, result.stderr)
     consumer = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
-    assert (
-        "run_rccsd_native_state(execution_, system_, descriptor_, &cpu_exact_plan_,"
-        in consumer
-    )
+    assert "execution_, system_, descriptor_, &cpu_exact_plan_," in consumer
     assert "make_unique<scf::PreparedFockPlan>" not in consumer

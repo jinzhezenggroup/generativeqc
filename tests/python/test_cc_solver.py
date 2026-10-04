@@ -3,6 +3,7 @@
 import json
 import typing
 from dataclasses import replace
+from itertools import product
 from types import SimpleNamespace
 
 import numpy as np
@@ -249,7 +250,7 @@ def test_collective_provider_budget_rejects_before_any_read_and_accepts_cache_hi
     source = SimpleNamespace(
         nbf=s.nmo,
         shell_sizes=(1,) * s.nmo,
-        numeric_bytes=0,
+        numeric_bytes=a["ao"].nbytes,
         geometry_hash=s.geometry_hash,
         basis_hash=s.basis_hash,
         representation=s.representation,
@@ -271,18 +272,38 @@ def test_collective_provider_budget_rejects_before_any_read_and_accepts_cache_hi
         and provider.statistics["source_tiles"] == 0
     )
     assert provider._retained == 0 and not provider._cache
-    # An already warm cache fits the same budget and must not be rejected by
-    # a cold-cache worst-case estimate. Actual provider.get serves all hits.
+    # Warm the real provider with tiny independent AO fixture tiles. Returning
+    # to the tight budget must admit the retained cache without another read.
+    tight_budget = provider.budget_bytes
+    provider.budget_bytes += sum(8 * int(np.prod(b.shape)) for b in blocks)
+    reject_read = source.requests
+    source.backend = "dense-test-oracle"
+    source.requests = lambda *args, **kwargs: product(range(s.nmo), repeat=4)
+    source.tile = lambda request: np.ascontiguousarray(
+        a["ao"][tuple(slice(i, i + 1) for i in request)]
+    )
+    source.global_offsets = lambda request: request
     for block in blocks:
-        values = a["g"][np.ix_(*block.slots)]
-        provider._cache[(s.identity, source.identity, block.slots)] = (
-            BlockResult(block, values, s.identity, s.hamiltonian_id, {}),
-            values.nbytes,
+        np.testing.assert_allclose(
+            provider.get(block).to_host(),
+            a["g"][np.ix_(*block.slots)],
+            atol=1e-12,
         )
-        provider._retained += values.nbytes
+    transformations, tiles = (
+        provider.statistics["transformations"],
+        provider.statistics["source_tiles"],
+    )
+    provider.budget_bytes = tight_budget
+    source.requests = reject_read
     prepared = PreparedCCSD(s, provider)
     assert provider.statistics["hits"] == 7
     assert np.isfinite(prepared.evaluate(*prepared.initial)["correlation_energy"])
+    repeated = PreparedCCSD(s, provider)
+    assert provider.statistics["hits"] == 14
+    assert provider.statistics["transformations"] == transformations
+    assert provider.statistics["source_tiles"] == tiles
+    np.testing.assert_array_equal(prepared.initial[0], repeated.initial[0])
+    np.testing.assert_array_equal(prepared.initial[1], repeated.initial[1])
 
 
 @pytest.mark.parametrize("name", ["h2", "he", "h2o", "nh3", "ch4"])

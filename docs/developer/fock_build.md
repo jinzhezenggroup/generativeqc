@@ -29,25 +29,28 @@ the existing strict-FP64 value mathematics and derivative ownership. The
 [bounded value policy note](../../.agents/notes/implemented/performance/2026-10-02-through-f-value-policy.md)
 records the measured regression and requirements for future default promotion.
 
-## Experimental bounded force schedule
+## Bounded indexed force schedule
 
-`GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=1` (or `indexed`) opts derivative-capable
-generated exchange owners into per-system descending Schwarz pair order.
-It is **off by default**. Preparation reuses the existing geometry-bound
-readback; no density-dependent index is retained. Independent full-range J/K
-force sources use an exclusive prefix over geometry-live block rows, with
-16 independently claimed 64-candidate pages per admitted block product.
-Density, exact shell and AO screening and physical quartet orientation are
-unchanged. Other consumers retain triangular traversal, although consumers
-sharing an opted-in derivative owner see its sorted pair order.
+Derivative-capable generated exchange owners use the per-system descending
+Schwarz pair order by default. `GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=0` (or
+`none`) explicitly restores the triangular schedule for debugging and paired
+benchmarking; `1`, `indexed`, and `auto` select the default indexed route.
+Invalid nonempty values fail closed to the triangular route. Preparation reuses
+the existing geometry-bound readback; no density-dependent index is retained.
+Independent full-range J/K force sources use an exclusive prefix over
+geometry-live block rows, with 16 independently claimed 64-candidate pages per
+admitted block product. Density, exact shell and AO screening and physical
+quartet orientation are unchanged. Other consumers retain triangular traversal,
+although consumers sharing an indexed derivative owner see its sorted pair order.
 
 The optional device prefix costs `(pair_blocks + 1) * sizeof(uint64_t)` within
 the owner's existing budget. Insufficient prefix capacity retains sorted
 triangular traversal; inability to admit the owner retains the existing generic
 fallback. Sorting and paging reduce candidate amplification and improve load
-balance, not the dense worst-case scaling. Sparse-density cases can be slower;
-this switch is a qualification control, not a universal speedup or default
-promotion. See the [schedule decision](../../.agents/notes/implemented/performance/2026-10-03-schwarz-indexed-independent-force-domain.md).
+balance, not the dense worst-case scaling. Complete same-binary qualification
+showed warm wins from 3 through 96 atoms; the retained moved-geometry timing
+negative remains documented and is not erased by this default promotion. See
+the [schedule decision](../../.agents/notes/implemented/performance/2026-10-03-schwarz-indexed-independent-force-domain.md).
 
 `GENERATIVEQC_BOUNDED_ANGULAR_FORCE=1` (or `angular`) separately opts full-range
 J/K and omega=0.3 LR force sources into thirteen total-angular-order passes.
@@ -70,6 +73,22 @@ policy is frozen when the native J/K provider is prepared and is included in
 resource/checkpoint identity. The public-AO fallback and specialized low-order
 workers retain their existing evaluation. Host arithmetic checks do not qualify
 CUDA execution or performance; see the [recurrence experiment](../../.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md).
+
+The recurrence control also accepts `values` or `forces` to qualify either
+consumer independently; `1`, `reachable` and `all` select both. This selection
+is frozen with each source owner. It does not adapt to molecule size or current
+SCF iteration.
+
+`GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION=values`, `forces`, or `all` (`1`)
+separately selects experimental pair-axis coefficient convolution in generic
+strict-FP64 Cartesian contractions of total order five or higher. This replaces
+the six pair-index loops with three axis convolutions and a three-axis root
+contraction. It retains radial moments, primitive/AO admission and the original
+Coulomb workspace; floating-point accumulation order changes. Specialized
+low-order/all-center consumers, mixed precision and public-AO fallback keep
+their existing contraction. The switch defaults off and participates in
+resource/checkpoint identity. It establishes no automatic policy or performance
+claim; see the [reassociation experiment](../../.agents/notes/proposed/2026-10-04-hermite-axis-convolution.md).
 
 ## Public prepared API
 
@@ -522,3 +541,13 @@ included in complete endpoint cost.
 
 See the [device-validation decision](../../.agents/notes/implemented/performance/2026-09-16-device-final-validation.md)
 for ownership rationale, resource tradeoffs and qualification evidence.
+
+`GENERATIVEQC_CANONICAL_RSH_VALUES=shared` (or `1`) is a default-off canonical
+full J/K plus SR/LR K value experiment. Eligible strict-FP64 Cartesian sources
+share density preparation and one canonical traversal; generic orders >=5
+also share primitive geometry/Hermite preparation. Radial moments and all
+three source outputs remain separate. The extra two-spin Cartesian output
+matrix costs `2 * batch * cartesian_aos**2 * sizeof(double)` and is admitted
+after existing source/force owners within the same budget. Its absence retains
+the separate paths. This does not enable bounded through-f values, change
+force consumers, or establish an endpoint speedup.

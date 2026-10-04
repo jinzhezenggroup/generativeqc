@@ -9,6 +9,95 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_fock_counts_require_complete_cuda_ks_work(tmp_path: Path) -> None:
+    """Exercise production publication with counts distinct from iterations.
+
+    A complete final attempt cannot legitimize a partial retry total. A CUDA
+    owner also needs the KS diagnostic and both independent census flags.
+    """
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("requires ccache and a host C++20 compiler")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
+    source = (ROOT / "src/api/c_api_batch.cpp").read_text()
+    begin = source.index("      const auto& work = item.calculation.precision_work;")
+    end = source.index("      const std::uint32_t required_forces", begin)
+    publication = source[begin:end]
+    cpp, binary = tmp_path / "counts.cpp", tmp_path / "counts"
+    cpp.write_text(
+        r"""
+#include <cassert>
+#include <cstdint>
+#include <optional>
+#include <vector>
+#include "generativeqc/generativeqc.h"
+struct Work { bool complete{}, operator_inventory_complete{}; };
+struct Calculation {
+  generativeqc_backend executed_backend;
+  Work precision_work;
+  std::uint64_t fock_builds{53};
+  unsigned iterations{4};
+};
+struct Item { Calculation calculation; bool warm_start_fallback{}; };
+struct Batch {
+  std::vector<std::optional<int>> ks_diagnostics;
+  std::vector<std::uint64_t> last_fock_builds{0};
+};
+void publish(Batch* batch, const Item& item) {
+  const unsigned i = 0;
+"""
+        + publication
+        + r"""
+}
+struct Case {
+  generativeqc_backend backend;
+  bool ks, complete, operators, retry;
+  std::uint64_t expected;
+};
+int main() {
+  // CPU counters retain their existing contract. Other CUDA methods, both
+  // incomplete-census cases, and retries retain the unavailable sentinel.
+  const Case cases[] = {
+    {GENERATIVEQC_BACKEND_CPU_REFERENCE, false, false, false, false, 53},
+    {GENERATIVEQC_BACKEND_CPU_REFERENCE, true, true, true, true, 0},
+    {GENERATIVEQC_BACKEND_CUDA, true, true, true, false, 53},
+    {GENERATIVEQC_BACKEND_CUDA, true, true, true, true, 0},
+    {GENERATIVEQC_BACKEND_CUDA, false, true, true, false, 0},
+    {GENERATIVEQC_BACKEND_CUDA, true, false, true, false, 0},
+    {GENERATIVEQC_BACKEND_CUDA, true, true, false, false, 0},
+    {GENERATIVEQC_BACKEND_CUDA, true, false, false, false, 0},
+  };
+  for (const auto& test : cases) {
+    Batch batch{{test.ks ? std::optional<int>{1} : std::nullopt}};
+    Item item{{test.backend, {test.complete, test.operators}}, test.retry};
+    publish(&batch, item);
+    assert(batch.last_fock_builds[0] == test.expected);
+  }
+}
+"""
+    )
+    subprocess.run(
+        [
+            cache,
+            compiler,
+            "-std=c++20",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-I",
+            str(ROOT / "include"),
+            str(cpp),
+            "-o",
+            str(binary),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=45,
+    )
+    subprocess.run([str(binary)], check=True, timeout=10)
+
+
 def definition(source: str, marker: str) -> str:
     """Extract the production function, including its actual invalidation order."""
     begin = source.index(marker)

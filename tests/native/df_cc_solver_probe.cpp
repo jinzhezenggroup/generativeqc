@@ -68,7 +68,11 @@ int main() {
               << d.tensor_seconds << ' ' << d.df_hoisted_evaluations << ' '
               << d.df_preparation_calls << ' ' << d.df_contraction_terms << ' ' << d.df_matrix_gemm
               << ' ' << d.df_gemm_calls << ' ' << d.df_gemm_summands << ' ' << d.df_packing_bytes
-              << ' ' << d.df_provider_capacity_bytes << '\n';
+              << ' ' << d.df_provider_capacity_bytes << ' ' << d.conventional_prepared_contractions
+              << ' ' << d.conventional_contraction_calls << ' '
+              << d.conventional_contraction_summands << ' '
+              << d.conventional_provider_capacity_bytes << ' ' << d.conventional_binding_host_bytes
+              << '\n';
     for (double x : result.t1) std::cout << x << ' ';
     for (double x : result.t2) std::cout << x << ' ';
     std::cout << '\n' << result.reason << '\n';

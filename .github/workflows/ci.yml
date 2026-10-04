@@ -181,6 +181,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Add NVIDIA CUDA repository
@@ -396,8 +397,86 @@ jobs:
           include-hidden-files: true
           compression-level: 0
           retention-days: 1
-      # This is release resource evidence. The production compile-only step
-      # above uses fast compilation and cannot supply acceptance resources.
+      - name: Preserve opted-in AO radial resource reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ao-radial-release-compile
+          path: build/ao-radial-compile
+
+  # Resource qualification must complete even when production compilation
+  # starts cold. Both required jobs check out the exact same event commit;
+  # generate the native grid through its original CMake dependency graph here.
+  cuda-resources:
+    name: CUDA 12.9 release resources (sm_120)
+    needs: merge_queue_liveness
+    if: needs.merge_queue_liveness.outputs.active != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CUDACXX: /usr/local/cuda-12.9/bin/nvcc
+      LD_LIBRARY_PATH: /usr/local/cuda-12.9/lib64
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Add NVIDIA CUDA repository
+        run: |
+          curl --fail --silent --show-error --location --output cuda-keyring.deb \
+            https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring.deb
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              exit 1
+            fi
+            sleep $((attempt * 2))
+          done
+      - name: Install CUDA 12.9 build dependencies
+        run: |
+          sudo apt-get install --yes \
+            cuda-nvcc-12-9 \
+            cuda-cuobjdump-12-9 \
+            cuda-cudart-dev-12-9 \
+            cuda-cccl-12-9 \
+            libcublas-dev-12-9 \
+            libcusolver-dev-12-9 \
+            libcusparse-12-9 \
+            libnvjitlink-12-9 \
+            python3-numpy \
+            python3-pytest
+          "$CUDACXX" --version
+      - name: Install ccache 4.14
+        run: |
+          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
+          curl --fail --silent --show-error --location \
+            --output "/tmp/${archive}" \
+            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
+          tar -xJf "/tmp/${archive}" -C /tmp
+          sudo install -m 0755 \
+            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
+            /usr/local/bin/ccache
+          ccache --version
+      - name: Configure native grid source generation
+        run: >-
+          cmake --preset cuda-release-sm120
+          -DGENERATIVEQC_BUILD_TESTS=ON
+          -DGENERATIVEQC_CUDA_FAST_COMPILE=ON
+          -DGENERATIVEQC_CUDA_COMPILE_JOBS=3
+          -DGENERATIVEQC_COMPILER_CACHE=ccache
+      - name: Generate exact native grid source and prerequisite headers
+        # Build only this generated-file target, never the library again.
+        # The validator below checks these bytes against compiler emission and
+        # still uses release flags, independently of the fast compile preset.
+        run: >-
+          cmake --build --preset cuda-release-sm120
+          --target generated/generated_grid_policy.cu --parallel 2
+      # This is release resource evidence. The separate production compile-only
+      # job uses fast compilation and cannot supply acceptance resources.
       - name: Restore f-shell release objects
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -468,7 +547,6 @@ jobs:
           path: |
             build/xc-compile
             build/native-xc-resource
-            build/ao-radial-compile
       - name: Preserve f-shell release resource report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -498,9 +576,13 @@ jobs:
       OPENBLAS_NUM_THREADS: 1
       MKL_NUM_THREADS: 1
       NUMEXPR_NUM_THREADS: 1
+      # This job validates the CPU runtime; CUDA provider packaging/runtime has
+      # dedicated CI. Keep the editable scikit-build reconfigure CPU-only too.
+      GENERATIVEQC_ENABLE_CUDA: "OFF"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Offline retention tests recover real artifacts from historical commits.
           fetch-depth: 0
           persist-credentials: false
       - name: Install uv and Python 3.11
@@ -509,6 +591,8 @@ jobs:
           version: "0.10.7"
           python-version: "3.11"
           enable-cache: true
+          cache-suffix: "python-cpu-v1"
+          prune-cache: true
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
@@ -531,12 +615,34 @@ jobs:
             ccache-python-
       - name: Reset ccache statistics
         run: ccache --zero-stats
-      - name: Prepare GFN2 CPU linear algebra runtime
+      - name: Prepare CPU Python test environment
         run: |
-          uv venv --python 3.11 .venv-gfn2-build
-          uv pip install --python .venv-gfn2-build/bin/python scipy
+          uv venv --python 3.11
+          mapfile -t ci_requirements < <(
+            .venv/bin/python - <<'PY_INNER'
+          import tomllib
+
+          with open("pyproject.toml", "rb") as handle:
+              config = tomllib.load(handle)
+          requirements = [
+              item
+              for item in config["project"]["dependencies"]
+              if not item.lstrip().startswith("nvidia-")
+          ]
+          requirements += config["project"]["optional-dependencies"]["test"]
+          requirements += config["project"]["optional-dependencies"]["reference-test"]
+          requirements += config["build-system"]["requires"]
+          for item in dict.fromkeys(requirements):
+              print(item)
+          PY_INNER
+          )
+          uv pip install --python .venv/bin/python "${ci_requirements[@]}"
+          # Exercise public autograd contracts without pulling CUDA-enabled
+          # PyTorch wheels or project-declared NVIDIA runtime providers.
+          uv pip install --python .venv/bin/python torch \
+            --index-url https://download.pytorch.org/whl/cpu
           xtb_linalg="$(
-            .venv-gfn2-build/bin/python - <<'PY_INNER'
+            .venv/bin/python - <<'PY_INNER'
           from pathlib import Path
           import scipy
 
@@ -553,7 +659,10 @@ jobs:
           cmake -S . -B build -G Ninja \
             -DGENERATIVEQC_ENABLE_CUDA=OFF \
             -DGENERATIVEQC_BUILD_TESTS=OFF \
+            -DGENERATIVEQC_PYTHON_WHEEL=ON \
+            -DGENERATIVEQC_BUNDLE_XTB_OPENBLAS=OFF \
             -DGENERATIVEQC_XTB_CPU_LINALG_LIBRARY="$GENERATIVEQC_XTB_CPU_LINALG_LIBRARY" \
+            -DPython3_EXECUTABLE="$PWD/.venv/bin/python" \
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build --parallel
@@ -565,13 +674,13 @@ jobs:
         with:
           path: ~/.cache/ccache
           key: ${{ steps.python_ccache.outputs.cache-primary-key }}
-      - name: Install the Python package and test dependencies
+      - name: Install GenerativeQC editable package
         run: |
-          uv venv --python 3.11
-          uv pip install --python .venv/bin/python --editable '.[test,reference-test]'
-          # Exercise the public autograd contracts on every PR without pulling
-          # CUDA wheels into this CPU job.
-          uv pip install --python .venv/bin/python torch --index-url https://download.pytorch.org/whl/cpu
+          # Dependencies and build requirements are already present. Reuse the
+          # native tree above so editable installation does not repeat codegen,
+          # compilation, or the large CUDA-provider dependency installation.
+          uv pip install --python .venv/bin/python --editable . \
+            --no-deps --no-build-isolation -Cbuild-dir=build
       # Core and compiler-heavy reference tests need the external oracle inputs.
       # Builds and installed production paths above remain completely offline.
       - name: Cache pinned GFN1 and D3 reference inputs
@@ -590,10 +699,25 @@ jobs:
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-d3
       - name: Show ccache statistics
         run: ccache --show-stats
+      # Probe objects are produced after the shared library cache is saved.
+      # Keep them small and shard-local; actions/cache saves only on job success.
+      - name: Cache native Python probes
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache-python-probes
+          key: ccache-python-probes-v1-${{ matrix.shard }}-${{ github.sha }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py', 'tests/python/**', 'tests/native/**', 'benchmarks/**') }}
+          restore-keys: |
+            ccache-python-probes-v1-${{ matrix.shard }}-
+      - name: Reset native probe ccache statistics
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+        run: ccache --zero-stats
       - name: Run Python tests with coverage
         env:
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build/libgenerativeqc.so
           GENERATIVEQC_BUILD_DIR: ${{ github.workspace }}/build
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
         run: |
           extra_args=()
           coverage_args=()
@@ -816,6 +940,15 @@ jobs:
             tests/python/test_one_electron_cpu_codegen.py
             tests/python/test_cc_solver.py
             tests/python/test_cc_lambda_solver.py
+            # These compiler/code-generation audits dominated core-a on the
+            # 2026-10-04 routine PR run (~347s derivative AOT audit, ~199s
+            # deterministic ERI CPU emission, plus native CC codegen). Keep
+            # them off the broad core parity split and co-locate them with the
+            # existing compiler-heavy shard.
+            tests/python/test_derivative_aot_audit.py
+            tests/python/test_eri_cpu_codegen.py
+            tests/python/test_rccsdt_native_codegen_dependencies.py
+            tests/python/test_df_cc_native_codegen.py
           )
           case "${{ matrix.shard }}" in
             core-a|core-b)
@@ -914,6 +1047,10 @@ jobs:
                 tests/python/test_one_electron_derivatives.py
                 tests/python/test_range_separation.py
                 tests/python/test_second_derivatives_inputs.py
+                tests/python/test_derivative_aot_audit.py
+                tests/python/test_eri_cpu_codegen.py
+                tests/python/test_rccsdt_native_codegen_dependencies.py
+                tests/python/test_df_cc_native_codegen.py
               )
               ;;
             *)
@@ -926,6 +1063,12 @@ jobs:
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
             "${extra_args[@]}"
+      - name: Show post-test ccache statistics
+        if: always()
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
+          CCACHE_MAXSIZE: 256M
+        run: ccache --show-stats
       - name: Preserve transient benchmark/debug artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -1117,7 +1260,7 @@ jobs:
   pass:
     name: Pass CI checks
     timeout-minutes: 5
-    needs: [merge_queue_liveness, cpu, cuda-compile, python]
+    needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
     runs-on: ubuntu-24.04
     if: ${{ !cancelled() }}
     steps:
