@@ -12,7 +12,7 @@ from generativeqc_compiler.integral.df_value_candidates import (
 
 
 def test_shared_df_headers_have_translation_unit_safe_linkage(
-    tmp_path: typing.Any, native_cxx
+    tmp_path: typing.Any, native_cxx: object
 ) -> None:
     """Catch duplicate functions/tables without requiring a CUDA device or SDK.
 
