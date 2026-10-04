@@ -583,18 +583,30 @@ RHFFrameResponseResult rhf_frame_response_cuda(const core::System& system,
     require(cross.size() == result.gradient.size(), "RHF bilinear derivative dimensions differ");
     for (std::size_t i = 0; i < cross.size(); ++i) result.gradient[i] += cross[i];
   } else {
-    // Polarization of E2(D)=D:G(D)/2 supplies P:G'(D) in three bounded passes.
-    // Retain the fast specialized SPD consumer and the capacity fallback.
+    // G is the fixed unscreened linear provider, so E2 is homogeneous quadratic.
+    // Symmetric polarization removes one source traversal while retaining the
+    // admitted shell consumer's primitive/component reuse. Keep the old three
+    // passes for independent schedule comparisons and bounded compatibility.
     auto combined = ref.density;
     for (std::size_t i = 0; i < nn; ++i) combined[i] += result.fock_ao_weights[i];
     auto cross = owner.quadratic_derivative(combined);
-    auto density_part = owner.quadratic_derivative(ref.density);
-    auto seed_part = owner.quadratic_derivative(result.fock_ao_weights);
-    require(cross.size() == result.gradient.size() && density_part.size() == cross.size() &&
-                seed_part.size() == cross.size(),
-            "RHF nuclear derivative dimensions differ");
-    for (std::size_t i = 0; i < cross.size(); ++i)
-      result.gradient[i] += cross[i] - density_part[i] - seed_part[i];
+    require(cross.size() == result.gradient.size(), "RHF nuclear derivative dimensions differ");
+    if (options.symmetric_polarization) {
+      // The previous consumer drained before reusing this host input buffer.
+      for (std::size_t i = 0; i < nn; ++i) combined[i] = ref.density[i] - result.fock_ao_weights[i];
+      auto difference = owner.quadratic_derivative(combined);
+      require(difference.size() == cross.size(), "RHF polarization dimensions differ");
+      for (std::size_t i = 0; i < cross.size(); ++i)
+        result.gradient[i] += 0.5 * (cross[i] - difference[i]);
+      result.symmetric_polarization_used = true;
+    } else {
+      auto density_part = owner.quadratic_derivative(ref.density);
+      auto seed_part = owner.quadratic_derivative(result.fock_ao_weights);
+      require(density_part.size() == cross.size() && seed_part.size() == cross.size(),
+              "RHF nuclear derivative dimensions differ");
+      for (std::size_t i = 0; i < cross.size(); ++i)
+        result.gradient[i] += cross[i] - density_part[i] - seed_part[i];
+    }
   }
   result.two_electron_seconds = seconds(phase);
   require(finite(result.gradient), "nonfinite RHF electronic gradient");

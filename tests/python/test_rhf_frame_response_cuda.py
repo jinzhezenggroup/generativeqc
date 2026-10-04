@@ -36,7 +36,7 @@ def probe() -> typing.Any:
         ct.c_size_t,
         ct.c_size_t,
         ct.c_double,
-        ct.c_bool,
+        ct.c_uint,
         ct.POINTER(dp),
         ct.POINTER(ct.c_size_t),
         dp,
@@ -97,6 +97,7 @@ def run(
     iterations: int = 200,
     screening: float = 0.0,
     bilinear: bool = True,
+    symmetric: bool = False,
 ) -> tuple:
     n = len(arrays[0])
     o = metadata["records"]["conventional"]["electron_count"] // 2
@@ -120,7 +121,7 @@ def run(
             budget,
             iterations,
             screening,
-            bilinear,
+            2 if symmetric else int(bilinear),
             destinations,
             counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
             values.ctypes.data_as(dp),
@@ -165,6 +166,12 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     assert bool(counts[4]) == blas
     assert max(values) < 1e-8
     assert n > o
+    symmetric = run(
+        probe, metadata, arrays, sources, blas=blas, bilinear=False, symmetric=True
+    )
+    assert symmetric[0] == 0, symmetric[1]
+    assert symmetric[3][2] == 2
+    np.testing.assert_allclose(symmetric[2][0], output[0], atol=3e-10, rtol=3e-10)
 
 
 @pytest.mark.parametrize("name", ["water", "lih"])
@@ -182,6 +189,12 @@ def test_nonzero_z_response_matches_complete_energy_directions(
     assert status == 0, error
     assert counts[10] > 0 and counts[9] == 0
     assert values[0] < 1e-10 and values[1] < 1e-8
+    symmetric = run(
+        probe, metadata, arrays, sources, blas=blas, bilinear=False, symmetric=True
+    )
+    assert symmetric[0] == 0, symmetric[1]
+    assert symmetric[3][2] == 2
+    np.testing.assert_allclose(symmetric[2][0], output[0], atol=3e-9, rtol=3e-10)
     gradient = output[0] + mf.nuc_grad_method().grad_nuc()
     direction = np.random.default_rng(1765).normal(size=gradient.shape)
     direction /= np.linalg.norm(direction)
@@ -331,16 +344,30 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
 
 @pytest.mark.parametrize("through_f", [False, True])
 @pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+@pytest.mark.parametrize("centers", [2, 4])
 def test_bilinear_derivative_signed_density_oracle(
-    through_f: bool, representation: str
+    through_f: bool, representation: str, centers: int
 ) -> None:
     """Independent libcint nuclear derivatives and FD of signed P:G(D)."""
     metadata, _ = load_fixture("h2")
     metadata = copy.deepcopy(metadata)
     metadata["inputs"]["basis_representation"] = representation
+    if centers == 4:
+        # Nonplanar centers exercise all three explicit center jets and
+        # translation reconstruction of the fourth atom.
+        metadata["inputs"]["atomic_numbers"].extend([1, 1])
+        metadata["inputs"]["coordinates"].extend([[0.7, 1.2, -0.3], [-1.1, 0.4, 0.8]])
+        metadata["inputs"]["shells"].extend(
+            {"atom_index": atom, "angular_momentum": 0, "primitives": [[0.9, 1.0]]}
+            for atom in (2, 3)
+        )
     if through_f:
         metadata["inputs"]["shells"].append(
-            {"atom_index": 1, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
+            {
+                "atom_index": centers - 1,
+                "angular_momentum": 3,
+                "primitives": [[0.8, 1.0]],
+            }
         )
     mol, scale, _ = pyscf_molecule(metadata["inputs"])
     n = len(scale)
@@ -398,9 +425,7 @@ def test_bilinear_derivative_signed_density_oracle(
             assert code == 0, error.value.decode()
             np.testing.assert_allclose(output, oracle, atol=2e-11, rtol=2e-10)
             np.testing.assert_allclose(output.sum(axis=0), 0, atol=2e-12)
-            assert (
-                counts[0] >= counts[1] > 0
-            )  # only two atoms, at most one jet per orbit
+            assert 0 < counts[1] <= (centers - 1) * counts[0]
     for step in (1e-4, 3e-5):
         energies = []
         for sign in (-1, 1):

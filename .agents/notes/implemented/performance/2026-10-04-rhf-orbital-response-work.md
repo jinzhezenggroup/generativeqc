@@ -1,4 +1,4 @@
-# Decision: measure physical response and contract nuclear cross terms directly
+# Decision: preserve shell reuse in physical nuclear response
 
 Status: implemented, qualification in progress
 Date: 2026-10-04
@@ -23,7 +23,15 @@ source, independently audit the zero-screening physical Z residual at 1e-10,
 and refine with exact GMRES if necessary. An additional live warm-start vector
 is included in complete admission. Missing canonical capacity retains exact work.
 
-For nuclear P:G'(D), the compiler emits the distinct-orbit sum of
+The default nuclear schedule is symmetric polarization
+`[E2'(D+P)-E2'(D-P)]/2`, using the same admitted unscreened provider in both
+passes. E2 is homogeneous quadratic in its density, so this removes one
+traversal without changing the source or losing shell-level primitive/component
+reuse. Reuse the old combined host matrix after the first consumer drains;
+the existing three-pass capacity bound still covers all live payloads. Keep
+legacy three-pass polarization as a validation selector.
+
+For the separate experimental canonical P:G'(D), the compiler emits the distinct-orbit sum of
 `P_ab D_cd - P_ac D_bd/2`. Reuse existing canonical RSH derivative traversal,
 full-range recurrence, public-to-Cartesian projection and translation
 reconstruction. Only the first derivative output is consumed. Both operands
@@ -31,10 +39,11 @@ fit in the provider's pre-admitted two density slots; no four-index tensor or
 additional scientific recurrence is introduced. Input, transformed-input,
 weight, derivative/product and final-result finite audits precede publication.
 
-Prefer this consumer over the generic and bounded through-f fallbacks. Retain
-SPD's specialized three-pass path until a measured crossover supports changing
-it, and keep an explicit selector for matched fallback checks. Shell/generic
-pass counters identify the actual old consumer under the admitted budget.
+Do not enable this canonical consumer by default: the measured bounded-shell
+crossover below rejects that promotion. Keep it as an explicit experiment over
+generic/bounded through-f consumers, preserving specialized SPD leases.
+Shell/generic pass counters identify the actual old consumer under the admitted
+budget. The ordinary two-pass schedule preserves those leases in every domain.
 
 ## Work and memory
 
@@ -70,6 +79,32 @@ not be added to enclosing phase wall times.
   derivative source work and introduce subtractive cancellation.
 - New recurrence code, an N^4 derivative tensor or a CPU oracle in production
   would violate ownership or capacity requirements.
+
+## Measured rejection of canonical AO promotion
+
+On n2 PRO6000 UUID `GPU-54595246-dbdc-a633-dc38-7bd8eea3831a`, Slurm job2226,
+source211d9fce2, the same frozen binary/input measured:
+
+- Three-pass shell polarization: complete force1352.438s; response668.733s,
+  including J/K512.631s and nuclear two-electron155.771s.
+- Canonical bilinear: complete force1486.362s; response771.432s,
+  including J/K512.460s and nuclear two-electron258.643s.
+- The independent RHF start differed by31.178s; the102.872s nuclear regression
+  remains after separating that variability. One pass was slower than three.
+- The old consumer was three **shell** passes, not the generic N^4 fallback.
+  Its internal quartet/jet work was not measured and must remain missing.
+- Canonical counts were575639415 quartet visits and1276669675 three-axis jets.
+  These match the geometry-derived bounds and are not FLOPs.
+- Both force results pass the retained independent directional FD gate3e-7 at
+  h1e-4 and3e-5. Their cold-pair force difference2.5505e-9 passes the unchanged
+  extra3e-9 gate. The canonical path is numerically qualified here but rejected
+  for performance. Energy-only is325.026s; subtracting cold totals is not an
+  exact incremental force cost.
+
+Amdahl bounds from the measured baseline are1.130x for eliminating the whole
+nuclear two-electron phase, and1.481x for eliminating the entire Z solve.
+These are idealized limits, not achieved speedups. Fixed screening remains an
+experiment with a mandatory unscreened audit; the default threshold is zero.
 
 ## Evidence
 

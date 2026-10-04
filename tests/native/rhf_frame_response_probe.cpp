@@ -15,8 +15,9 @@
 extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
                                         const double* const* inputs, bool blas, bool relax,
                                         std::size_t budget, std::size_t max_iterations,
-                                        double screening, bool bilinear, double* const* outputs,
-                                        std::size_t* counts, double* diagnostics, char* error,
+                                        double screening, unsigned nuclear_schedule,
+                                        double* const* outputs, std::size_t* counts,
+                                        double* diagnostics, char* error,
                                         std::size_t error_size) noexcept {
   using namespace generativeqc;
   try {
@@ -34,7 +35,8 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
     options.matrix_blas = blas;
     options.orbital_screening_tolerance = screening;
     options.profile_jk = true;
-    options.bilinear_derivative = bilinear;
+    options.bilinear_derivative = nuclear_schedule == 1;
+    options.symmetric_polarization = nuclear_schedule == 2;
     options.relax_orbitals = relax;
     options.maximum_bytes = budget;
     options.gmres.max_iterations = max_iterations;

@@ -78,16 +78,21 @@ sources always use the original unscreened Hamiltonian. Positive thresholds
 are experimental solver controls, not promoted force approximations.
 
 The reference nuclear branch contracts AO hcore and Pulay weights with existing
-CUDA derivative providers. Its two-electron source `P:G'(D)` uses a direct
-compiler-owned bilinear weight when canonical storage is admitted and the old
-consumer is generic or bounded through-f. Specialized SPD leases retain their
-existing consumer. The bilinear path reuses
-the Cartesian projection, symmetry-unique angular buckets and translation
-reconstruction of the existing integral derivative provider. No derivative ERI
-tensor is materialized. The specialized SPD route and capacity fallback retain
-the bounded polarization identity `E2'(D+P)-E2'(D)-E2'(P)`, with `E2(D)=D:G(D)/2`.
-The internal `bilinear_derivative=false` selector retains those three passes for
-matched validation. All routes are independent of orbital-response dimension.
+CUDA derivative providers. Its two-electron source `P:G'(D)` defaults to
+symmetric polarization `[E2'(D+P)-E2'(D-P)]/2`, with `E2(D)=D:G(D)/2`. This
+retains the admitted shell consumer and its primitive/component reuse in two
+bounded passes. The identity requires the same fixed unscreened linear source
+for both operands. Set `symmetric_polarization=false` to retain the original
+three-pass identity `E2'(D+P)-E2'(D)-E2'(P)` for matched validation.
+
+The separate `bilinear_derivative` opt-in uses compiler-owned direct weights,
+Cartesian projection, symmetry-unique angular buckets and translation
+reconstruction. It can replace generic or bounded through-f consumers when
+canonical storage is admitted; specialized SPD leases retain their existing
+consumer. This experimental route requires a measured crossover: a single
+canonical AO pass can lose reuse present in a shell consumer. Neither route
+materializes a derivative ERI tensor, and both retain explicit capacity
+fallbacks. All routes are independent of orbital-response dimension.
 The result is an
 **electronic gradient**: the final method must add the correlation-source and
 nuclear-repulsion gradients, then negate once to publish forces.
@@ -112,9 +117,9 @@ separate closure validation.
 The internal interfaces admit complete numeric payloads before execution;
 outer callers must charge all other live owners. Matrix response reports zero
 explicit Hessian elements, J/K actions, derivative passes, generated contraction
-summands, BLAS calls and matrix-owner transfers. Integral-provider setup and
-nuclear-consumer transfers are separate; these counters are not a complete
-endpoint traffic ledger.
+summands, BLAS calls and owner-managed transfers, including derivative operand
+uploads. Provider-internal setup and execution transfers are excluded; these
+counters are not a complete endpoint traffic ledger.
 
 Response wall times separately report setup, reference audit, weight assembly,
 Z solve, independent residual audit, one-electron and two-electron derivatives.
@@ -123,8 +128,8 @@ integral counts. It selects the canonical provider where available, so compare
 matched selectors and hardware. J/K times are subsets of the phase times;
 quartet visits, contracted ERI values and three-axis derivative jets are distinct
 work units and are not FLOPs. Census/timing flags and action counts distinguish
-unmeasured fields from measured zeros. Integral-provider transfers remain outside
-the matrix-map traffic counters.
+unmeasured fields from measured zeros. Provider-internal transfers remain outside
+the owner-managed traffic counters.
 
 Relevant validation modules include `test_df_cc_lambda.py`,
 `test_df_source_metric_response.py`, `test_df_nuclear_sink.py`,

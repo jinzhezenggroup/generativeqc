@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [ORBITAL_SCHWARZ "
-          "[PROFILE_JK_0_OR_1 [BILINEAR_DERIVATIVE_0_OR_1]]]]]]]");
+          "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -53,7 +53,12 @@ int main(int argc, char** argv) {
     generativeqc::hf::RHFFrameResponseOptions frame_options;
     frame_options.orbital_screening_tolerance = argc > 8 ? std::stod(argv[8]) : 0.0;
     frame_options.profile_jk = argc > 9 && selector(9);
-    frame_options.bilinear_derivative = selector(10);
+    const std::string nuclear_selector = argc > 10 ? argv[10] : "2";
+    if (nuclear_selector != "0" && nuclear_selector != "1" && nuclear_selector != "2")
+      throw std::invalid_argument("invalid nuclear response selector");
+    const auto nuclear_schedule = nuclear_selector[0] - '0';
+    frame_options.bilinear_derivative = nuclear_schedule == 1;
+    frame_options.symmetric_polarization = nuclear_schedule == 2;
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -136,6 +141,7 @@ int main(int argc, char** argv) {
     field("orbital_one_electron_seconds", result.orbital.one_electron_seconds);
     field("orbital_two_electron_seconds", result.orbital.two_electron_seconds);
     field("orbital_bilinear_derivative_used", result.orbital.bilinear_derivative_used);
+    field("orbital_symmetric_polarization_used", result.orbital.symmetric_polarization_used);
     field("orbital_derivative_census_measured", result.orbital.derivative_census_measured);
     field("orbital_derivative_quartet_visits", result.orbital.derivative_quartet_visits);
     field("orbital_derivative_jet_evaluations", result.orbital.derivative_jet_evaluations);

@@ -32,9 +32,12 @@ struct RHFFrameResponseOptions {
   // Optional synchronized J/K timing and canonical integral census. Phase wall
   // times are always reported; J/K times are subsets, not additive phases.
   bool profile_jk{false};
-  // Prefer canonical P:G'(D) over generic or bounded through-f fallback.
-  // Specialized SPD keeps its lease. False retains three-pass polarization.
-  bool bilinear_derivative{true};
+  // Experimental canonical P:G'(D). Fewer passes can lose shell-level reuse,
+  // so this consumer requires an explicit opt-in and a measured crossover.
+  bool bilinear_derivative{false};
+  // Preserve the admitted shell consumer and contract the cross term as
+  // [E2'(D+P)-E2'(D-P)]/2. Both false retains legacy three-pass polarization.
+  bool symmetric_polarization{true};
   response::GmresOptions gmres{};
 };
 
@@ -51,8 +54,9 @@ struct RHFFrameResponseResult {
   std::size_t numeric_capacity_bytes{}, direct_device_bytes{}, owned_device_bytes{};
   std::size_t jk_actions{}, derivative_passes{}, orbital_actions{}, gemms{};
   std::size_t shell_derivative_passes{}, generic_derivative_passes{};
-  // Generated matrix-map work and its host boundary only. These transfer
-  // counters exclude integral-provider setup and nuclear derivative consumers.
+  // Generated matrix-map work and owner-managed transfers (including derivative
+  // operand uploads). Provider-internal setup/execution traffic is excluded;
+  // this is not a complete endpoint transfer ledger.
   std::size_t contraction_terms{}, h2d_bytes{}, d2h_bytes{}, synchronizations{};
   std::size_t explicit_hessian_elements{};  // Always zero.
   bool matrix_blas{};
@@ -64,7 +68,7 @@ struct RHFFrameResponseResult {
   std::size_t screened_iterations{}, screened_operator_actions{};
   std::uint64_t jk_quartet_visits{}, jk_eri_evaluations{};
   std::uint64_t derivative_quartet_visits{}, derivative_jet_evaluations{};
-  bool bilinear_derivative_used{}, derivative_census_measured{};
+  bool bilinear_derivative_used{}, symmetric_polarization_used{}, derivative_census_measured{};
   bool jk_timing_measured{}, linear_screening_available{}, screened_converged{};
   std::string operator_hash;
 };
