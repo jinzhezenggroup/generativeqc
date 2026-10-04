@@ -1,6 +1,6 @@
 # Decision: amortize intermediate exact-response residual actions
 
-Status: implemented; complete endpoint qualification pending
+Status: implemented; frozen complete endpoint qualified, newer parent integration pending
 Date: 2026-10-05
 
 ## Diagnosis
@@ -33,7 +33,31 @@ ccache shared-library path was repaired. New tests compare every-step versus
 deferred actions, host versus resident controllers and an independent dense
 residual. An intentionally inconsistent operator predicts convergence but fails
 the true residual, proving the estimate cannot publish a result. The native
-workspace bound is unchanged. Full molecular action counts/times are pending.
+workspace bound is unchanged. The complete molecular results below supersede
+the original pending measurement status.
+
+### Complete endpoint evidence
+
+Frozen production `95c71862f`, Slurm 2321 on one n2 RTX PRO 6000, compares
+complete native ethane230 force calls with every-action and checkpoint residuals.
+Both use 12 Arnoldi iterations; candidate residual actions fall from 12 to 1
+and total exact J/K calls from 28 to 17. Orbital/nuclear time is
+669.660284 → 472.719821 s and complete time 1333.307518 → 1162.576380 s.
+These are single observations. Unrelated RHF variation is retained separately,
+not assigned to checkpoint savings. The physical operator and final independent
+scalar residual/stationarity audits are unchanged.
+
+All five diagonal/stronger/cold/warm variants pass the force and residual gates;
+the maximum force difference is 4.684e-9 Eh/Bohr. Independent small all-coordinate
+FD and existing large two-coordinate/two-step FD re-audits pass. The stronger
+inverse and recycling do not further reduce large actions. Retain checkpoints
+as the default and the other accelerators as opt-in. Full records and source,
+binary, GPU and input identities are in
+`benchmarks/results/rhf-response-accelerators-1901/`.
+
+The subsequently integrated prepared-provider branch passes build 2333,
+response/independent small FD 2340, common host 2339 and shared Lambda 2348.
+Its separate complete endpoint qualification does not inherit the old timings.
 
 ## Next bounded experiment
 

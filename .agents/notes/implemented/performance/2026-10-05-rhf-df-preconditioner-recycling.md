@@ -1,6 +1,6 @@
 # Decision: exact orbital response with bounded numerical accelerators
 
-Status: implemented; complete endpoint qualification pending
+Status: implemented; frozen complete endpoint qualified, optional selection retained
 Date: 2026-10-05
 
 ## Problem and decision
@@ -85,3 +85,33 @@ and CUDA ownership checks pass. The ledger has no added scientific CUDA lines;
 runtime CUDA grows172 lines net relative to #1904. The failed2316 dependency
 was cancelled; same-GPU complete comparisons run in2321. Large results remain
 pending and no large action-count or speedup claim is made yet.
+
+### Completed frozen qualification and selection
+
+Slurm 2321 and report 2330 qualify frozen source `95c71862f` on one n2 GPU.
+Ethane230 checkpoint-diagonal and stronger inverse both use 17 exact J/K calls
+and 12 Arnoldi iterations. Orbital time is 472.719821 versus 468.831745 s;
+complete time is 1162.576380 versus 1188.277176 s, with separately recorded RHF
+variation. Inverse setup takes 0.213 s and its response allowance is 19,609,168
+bytes. There is no demonstrated representative large convergence benefit.
+
+The large cold/warm pair also uses 17 calls in both endpoints. The fresh native
+RHF frame fails exact identity matching, so `z_recycled_guess=0` on the warm
+call. Do not relax identity to obtain a hit. Small water's identical operator
+does hit and uses five total exact J/K calls (one true Z action), but its much
+shorter complete warm call also contains RHF/context reuse. It does not establish
+a large or changed-geometry recycling win.
+
+All five large variants pass the original energy, force, translation, Lambda,
+Z and stationarity gates. Maximum force spread is 4.684e-9 Eh/Bohr and energy
+spread 8.527e-13 Eh. Independent small all-coordinate FD and large two-coordinate,
+two-step FD re-audits pass; no all-coordinate independent large-force claim is
+made. See `benchmarks/results/rhf-response-accelerators-1901/` for complete
+records, including work counts, capacities and exact binary/source identities.
+
+Keep both accelerators opt-in. Checkpoint amortization is the demonstrated
+large-endpoint improvement. Revisit this inverse only with a case that reduces
+exact actions enough to repay setup; revisit recycling for genuinely identical
+physical operators with different right-hand sides, not approximate frame reuse.
+The newer parent integration has separate build/small-force gates and pending
+complete endpoints; these frozen timings must not be relabeled as that version.
