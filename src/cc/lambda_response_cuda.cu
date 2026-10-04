@@ -272,6 +272,9 @@ class CudaLambdaActions {
     target.df_auxiliary_slices = d.df_auxiliary_slices;
     target.df_contraction_terms = d.df_contraction_terms;
     target.df_generated_kernels = d.df_generated_kernels;
+    target.df_auxiliary_reduction = d.df_auxiliary_reduction;
+    target.df_preparation_calls = d.df_preparation_calls;
+    target.df_reduced_actions = d.df_reduced_actions;
     target.shared_program_hash = d.shared_program_hash;
     target.independent_program_hash = d.independent_program_hash;
   }
