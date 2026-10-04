@@ -452,6 +452,11 @@ bool bounded_angular_force_requested() noexcept {
   return selected("GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "angular");
 }
 
+bool canonical_rsh_values_requested() noexcept {
+  const char* mode = std::getenv("GENERATIVEQC_CANONICAL_RSH_VALUES");
+  return mode && (std::strcmp(mode, "1") == 0 || std::strcmp(mode, "shared") == 0);
+}
+
 unsigned direct_coulomb_reachable_mode() noexcept {
   const char* mode = std::getenv("GENERATIVEQC_DIRECT_COULOMB_REACHABLE");
   if (mode == nullptr) return 0;

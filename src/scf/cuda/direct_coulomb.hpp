@@ -19,6 +19,11 @@ struct ShellPairDensityBounds;
  */
 void configure_direct_coulomb_recurrence(DeviceBatch& batch) noexcept;
 
+/** Query the opt-in at preparation only; optional retained storage freezes it.
+ * This adapter keeps canonical providers independent of HF policy headers.
+ */
+bool direct_shared_rsh_values_requested() noexcept;
+
 /** Optional geometry owner for the generated pure-J consumer. It borrows the
  * direct provider's stream and public basis metadata, and owns bounded shell
  * topology, Cartesian transforms and scratch. No quartet list is materialized.
