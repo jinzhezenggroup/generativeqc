@@ -27,7 +27,16 @@ def test_df_rccsdt_manifest_is_distinct_energy_only_method() -> None:
 
 def test_df_rccsdt_public_owner_stays_force_fail_closed() -> None:
     source = (ROOT / "src/methods/df_rccsdt_method.cpp").read_text()
-    assert "run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, false)" in source
+    assert (
+        "run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, false)"
+        in source
+    )
     assert "public DF-RCCSD(T) forces remain unqualified" in source
     assert "descriptor_.density_fitting_mode = GENERATIVEQC_DENSITY_FITTING_NONE" in source
     assert "descriptor_.density_fitting_auxiliary_basis = nullptr" in source
+
+
+def test_df_rccsdt_calculator_treats_method_as_intrinsic_df() -> None:
+    source = (ROOT / "python/generativeqc/calculator.py").read_text()
+    assert "intrinsic_df_rccsdt = method_id == _native.METHOD_DF_RCCSD_T" in source
+    assert 'density_fitting = "cuda"' in source

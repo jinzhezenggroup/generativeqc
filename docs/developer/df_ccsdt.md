@@ -116,8 +116,11 @@ merely enabling the existing conventional RCCSD(T) owner.
 C2b registers a distinct `df-rccsd(t)` / `df-ccsd(t)` public method. It is
 CUDA/FP64, energy-only, requires an explicit auxiliary basis and keeps the
 reference conventional RHF while passing that auxiliary only to the correlation
-Hamiltonian. The existing `rccsd(t)` method remains conventional and unchanged.
-Prepared batches and force requests remain fail-closed.
+Hamiltonian. The method selector is intrinsically DF: the Python Calculator
+promotes its default fitting mode to CUDA, while an explicitly requested CPU
+fitting mode remains unsupported. The existing `rccsd(t)` method remains
+conventional and unchanged. Prepared batches and force requests remain
+fail-closed.
 
 Remaining Slice-C work is C3 production performance/memory qualification; DF
 force promotion remains #158.

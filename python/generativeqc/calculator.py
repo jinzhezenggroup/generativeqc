@@ -559,6 +559,16 @@ class Calculator:
                     )
                     else basis_representation,
                 )
+        intrinsic_df_rccsdt = method_id == _native.METHOD_DF_RCCSD_T
+        if intrinsic_df_rccsdt:
+            if device != "cuda":
+                raise NotImplementedError("df-rccsd(t) currently requires device='cuda'")
+            if auxiliary_basis is None:
+                raise ValueError("df-rccsd(t) requires an explicit auxiliary_basis")
+            if density_fitting is True or density_fitting is False:
+                density_fitting = "cuda"
+            elif str(density_fitting).lower() == "none":
+                density_fitting = "cuda"
         if isinstance(density_fitting, bool):
             density_fitting = "cpu" if density_fitting else "none"
         density_fitting_modes = {
@@ -574,6 +584,13 @@ class Calculator:
             raise ValueError(
                 "density_fitting must be 'none', 'cpu', 'cuda', or 'auto'"
             ) from error
+        if intrinsic_df_rccsdt and density_fitting_mode not in (
+            _native.DENSITY_FITTING_CUDA,
+            _native.DENSITY_FITTING_AUTO,
+        ):
+            raise NotImplementedError(
+                "df-rccsd(t) currently requires CUDA density fitting"
+            )
         if (
             auxiliary_basis is not None
             and density_fitting_mode == _native.DENSITY_FITTING_NONE
