@@ -686,18 +686,12 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   // consumer runs, so the matrix it retains is target precision. The convergence
   // kernel keeps P_n paired with the F(P_n) that was just evaluated when an item
   // stops; no Fock matrix is ever reused across executions or geometries.
+  //
+  // Physical-reference export has an additional proof obligation: the final
+  // physical-Fock eigenframe must reconstruct this same retained density and be
+  // canonical. That independent check runs after final diagonalization below;
+  // a rejected retained candidate advances to P_{n+1} and rebuilds normally.
   const bool requested_reuse_converged_fock = reuse_converged_fock_requested();
-  // Physical-reference export independently validates max|P(C)-P| <= 1e-8.
-  // density_rms is RMS over n^2 AO entries, hence
-  //   ||delta P||_inf <= ||delta P||_F = n * density_rms.
-  // Cap the ordinary profitability/accuracy threshold so admission itself proves
-  // the retained P_n can pass that stronger reconstruction gate. Items without
-  // this proof take the existing P_{n+1}/F(P_{n+1}) rebuild path.
-  const double final_fock_reuse_density_rms =
-      options.export_physical_reference
-          ? std::min(converged_fock_reuse_density_rms(options.density_tolerance),
-                     1.0e-8 / static_cast<double>(nbf))
-          : converged_fock_reuse_density_rms(options.density_tolerance);
   // Direct consumers expand each compact logical tile into one-warp blocks;
   // validate the resulting fixed Graph grid before narrowing it to unsigned.
   if (total_shell_pairs > std::numeric_limits<unsigned>::max() ||
@@ -3567,8 +3561,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       if (cuda_error == cudaSuccess) {
         launch_select_final_fock_rebuild_kernel(
             blocks_for(batch_size), threads, 0, resources.stream_,
-            static_cast<std::int32_t>(batch_size), final_fock_reuse_density_rms, density_rms,
-            converged, failed, final_fock_reuse_mask, active, final_fock_rebuild_count);
+            static_cast<std::int32_t>(batch_size),
+            converged_fock_reuse_density_rms(options.density_tolerance), density_rms, converged,
+            failed, final_fock_reuse_mask, active, final_fock_rebuild_count);
         launch_copy_selected_matrices_kernel(
             blocks_for(spin_matrix_elements), threads, 0, resources.stream_,
             static_cast<std::int32_t>(batch_size), static_cast<std::int32_t>(spin_count),
@@ -3886,10 +3881,69 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     }
   }
   if (options.export_physical_reference) {
-    outputs[0].status = reference_detail::download(
-        resources.stream_, nbf, host.occupied[0], resources.reference_peak_bytes_,
-        {overlap, hcore, fock, coefficients, density}, eigenvalues,
-        {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
+    const auto download_reference = [&]() {
+      return reference_detail::download(
+          resources.stream_, nbf, host.occupied[0], resources.reference_peak_bytes_,
+          {overlap, hcore, fock, coefficients, density}, eigenvalues,
+          {energy, energy_change, density_rms}, converged, failed, iterations, outputs[0].scf);
+    };
+    bool retained_reference_rejected = false;
+    try {
+      outputs[0].status = download_reference();
+    } catch (const reference_detail::PhysicalReferenceValidationError&) {
+      if (!reuse_converged_fock || host_final_fock_rebuild_count != 0U) throw;
+      // The retained P_n/F(P_n) pair had valid operator provenance, but its
+      // physical-Fock eigenframe failed the stronger reference reconstruction /
+      // canonicality contract. Promote the already available P_{n+1}, rebuild
+      // F(P_{n+1}) once, and execute exactly the legacy finalization sequence.
+      retained_reference_rejected = true;
+      launch_copy_selected_matrices_kernel(
+          blocks_for(matrix_elements), threads, 0, resources.stream_,
+          static_cast<std::int32_t>(batch_size), 1, static_cast<std::int32_t>(nbf), active,
+          next_density, density);
+      cuda_error = launch_fock_builder(density, false, false);
+      if (cuda_error == cudaSuccess) {
+        ++post_scf_physical_fock_builds;
+        host_final_fock_rebuild_count = 1U;
+      }
+      if (cuda_error != cudaSuccess) {
+        fill_global_failure(outputs, cuda_status(cuda_error));
+        return outputs;
+      }
+
+      status = multiply_matrices(fock, false, orthogonalizer, temporary);
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
+        status = multiply_matrices(orthogonalizer, true, temporary, eigensystem);
+      }
+      if (status == GENERATIVEQC_STATUS_SUCCESS) {
+        status = launch_solver(resources.eigensolver_view(), ordinary_eigensolver_family,
+                               static_cast<int>(nbf), static_cast<int>(batch_size), eigensystem,
+                               temporary, eigenvalues, lwork, solver_info, active);
+      }
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
+        fill_global_failure(outputs, status);
+        return outputs;
+      }
+      ++post_scf_final_eigen_solves;
+      launch_inspect_solver_kernel(blocks_for(batch_size), threads, 0, resources.stream_,
+                                   static_cast<std::int32_t>(batch_size), solver_info, active,
+                                   failed, converged);
+      status = multiply_matrices(orthogonalizer, false, eigensystem, coefficients);
+      if (status != GENERATIVEQC_STATUS_SUCCESS) {
+        fill_global_failure(outputs, status);
+        return outputs;
+      }
+      launch_compute_energy_kernel(static_cast<unsigned>(batch_size), matrix_reduction_threads, 0,
+                                   resources.stream_, static_cast<std::int32_t>(batch_size),
+                                   static_cast<std::int32_t>(nbf), density, hcore, fock,
+                                   nuclear_repulsion, active, energy);
+      cuda_error = cudaPeekAtLastError();
+      if (cuda_error != cudaSuccess) {
+        fill_global_failure(outputs, cuda_status(cuda_error));
+        return outputs;
+      }
+      outputs[0].status = download_reference();
+    }
     if (outputs[0].status == GENERATIVEQC_STATUS_SUCCESS) {
       const bool reused_final_physical_fock =
           reuse_converged_fock && host_final_fock_rebuild_count == 0U;
@@ -3917,6 +3971,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
                                          reused_final_physical_fock ? "reused" : "rebuilt");
       runtime::df_progress::Scope::number("final_physical_fock_rebuilds",
                                           post_scf_physical_fock_builds);
+      runtime::df_progress::Scope::number("retained_reference_rejections",
+                                          retained_reference_rejected ? 1U : 0U);
       runtime::df_progress::Scope::number("ao_functions", nbf);
       runtime::df_progress::Scope::number("scf_iterations", outputs[0].scf.iterations);
       runtime::df_progress::Scope::number(
