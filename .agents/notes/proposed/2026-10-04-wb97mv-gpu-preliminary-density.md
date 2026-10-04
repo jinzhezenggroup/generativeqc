@@ -82,6 +82,47 @@ timing claim. The current host selection passes 76 closure/eligibility/stage/
 evidence-verifier cases. Evidence retention passes its unchanged 64 MiB cap;
 the change review remains 17 files / 243,328 bytes under the 2 MiB cap.
 
+## Completed admission-union lifecycle control
+
+Finite n1 RTX 5090 Slurm 5716 completes all four no-source/LDA reports at
+3 and 24 atoms. All 20 cold/priming/warm E/F pairs pass the unchanged
+1e-8 Eh / 1e-7 Eh/Bohr gates; maxima are 2.956e-12 Eh / 1.177e-9 Eh/Bohr.
+Every reference XC component runs on GPU. The source converges, its density is
+actually used without target fallback, and every priming/warm replay uses one
+iteration. This is the c472684c9 binary qualified above, not the older frozen
+96-atom source. The full endpoint protocol and allocation are retained with
+the raw reports in `benchmarks/results/wb97mv-cold-admission-20261004/`.
+
+At 24 atoms, no-source/LDA complete cold is 242.278002 / 192.881119 s: an
+observed 20.3885% reduction after all source costs. Target iterations are
+18 / 13; paired reference cold is 118.652617 / 117.618048 s. Native warm
+medians are 26.063857 / 26.088192 s versus reference 27.672955 / 27.719961 s.
+The preliminary source improves cold, with no observed warm benefit, and cold
+still trails the reference. These are single ordered cold samples in an
+eight-CPU, 16-GiB allocation; reverse-order repetition and larger combined
+controls remain necessary before general/default promotion.
+
+The LDA lifecycle is 12.213284 s: construction 0.002748 s, owner preparation
+0.114243 s, solve 12.033391 s, export 0.000640 s, import 0.055422 s, owner
+destruction 0.006478 s and bookkeeping 0.000363 s. The source takes 18
+iterations/18 XC submissions; unavailable Fock-build count remains null. Each
+source XC has point-AO-square domain 1,811,939,328, not a FLOP count. Exported
+density/coordinates are 294,912 / 576 bytes. Target first E/F execution falls
+from 241.421601 to 179.812750 s, saving 61.608851 s before charging the source;
+this timer includes forces and must not be relabeled as isolated SCF time.
+The measured source cost is therefore recovered by fewer target iterations,
+while checkpoint import is now only 55 ms at this size. The older 48-atom
+admission percentage is not added to this combined result.
+
+The 3-atom control has cold 10.432424 / 8.742931 s, target iterations 15 / 12
+and LDA lifecycle 0.665268 s. Independent verification checks every raw pair,
+phase sum, source/library identity, actual seed use, AO work and reference
+backend. The retained verifier is read-only and keeps all gates under Python
+optimization; corrupt phase totals, forces, source identity, target fallback,
+qualification and compressed hashes are rejected by subprocess controls.
+The public CUDA source capacity/lifetime API and the published large-system
+README curve remain unchanged.
+
 ## Motivation and boundary
 
 The [cold-work investigation](2026-10-03-wb97mv-cold-scf-work.md) found that
