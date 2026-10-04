@@ -6,6 +6,8 @@ import argparse
 import hashlib
 import json
 import sys
+import typing
+from functools import cache
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,6 +15,9 @@ if __package__ in (None, ""):
     sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
 from generativeqc_compiler.cc.df_lambda import retained_response_programs
+from generativeqc_compiler.cc.df_lambda_reduction import (
+    build_df_lambda_reduction_programs,
+)
 
 from tools.generate_df_ccsd_core import programs as core_programs
 from tools.generate_df_ccsd_hoisted import contraction_query
@@ -22,6 +27,28 @@ from tools.generate_rccsd_native import (
     _cuda_program,
     _required_function,
 )
+
+if typing.TYPE_CHECKING:
+    from generativeqc_compiler.tensor import Program
+
+
+@cache
+def staged_programs() -> dict[str, Program]:
+    """Use the same prepare/reduce/core cuts for the primal and its adjoint."""
+    p = build_df_lambda_reduction_programs(*REPRESENTATIVE)
+    return {
+        "staged_primal_prepare": p.primal.prepare,
+        "staged_primal_auxiliary": p.primal.auxiliary,
+        "staged_core": p.core,
+        "staged_auxiliary": p.auxiliary,
+        "staged_prepare": p.prepare,
+        "staged_factors": p.factors,
+        **{"staged_parameter_" + name: value for name, value in p.parameters.items()},
+    }
+
+
+def staged_type(name: str) -> str:
+    return "DeviceParameterOutput" if "parameter_" in name else name + "_outputs"
 
 
 def output_type(name: str) -> str:
@@ -72,6 +99,22 @@ def header() -> str:
         lines.append(
             contraction_query(program, "virtual_" + name + "_contraction_terms")
         )
+    staged = staged_programs()
+    identity = hashlib.sha256(
+        json.dumps(
+            {name: p.logical_hash for name, p in staged.items()}, sort_keys=True
+        ).encode()
+    ).hexdigest()
+    lines.append(f'inline constexpr const char* staged_operator_hash="{identity}";')
+    for name, program in staged.items():
+        if "parameter_" not in name:
+            fields = ",".join("*" + field for field in program.outputs)
+            lines.append(f"struct {staged_type(name)} {{ const double {fields}; }};")
+        lines += [
+            f"inline constexpr std::size_t {name}_operations={sum(n.op != 'input' for n in program.live_nodes)};",
+            _required_function(program, name + "_arena_elements"),
+            contraction_query(program, name + "_contraction_terms"),
+        ]
     return "\n".join([*lines, "}", ""])
 
 
@@ -82,12 +125,21 @@ def cuda_header() -> str:
             "#pragma once",
             '#include "generated_df_lambda.hpp"',
             '#include "generated_df_ccsd_core_cuda.cuh"',
+            '#include "generated_df_ccsd_hoisted_cuda.cuh"',
             "namespace generativeqc::cc::generated::dflambda {",
             "using CudaState = dfcore::CudaState;",
+            "struct StagedCudaState : dfhoist::CudaState {",
+            "  const double *bar_df_tau{}, *bar_df_Lvv{}, *bar_df_Wvoov{},",
+            "      *bar_df_Wvovo{}, *bar_df_Xv{}, *bar_df_D05_vv_ladder{}, *bar_df_singles_residual{};",
+            "};",
             "// Caller clears the sticky flag at each complete core-plus-Q action boundary.",
             *(
                 f"{output_type(name)} run_{name}_cuda(CudaState& state);"
                 for name in retained_response_programs(*REPRESENTATIVE)
+            ),
+            *(
+                f"{staged_type(name)} run_{name}_cuda(StagedCudaState& state);"
+                for name in staged_programs()
             ),
             "}",
             "",
@@ -115,6 +167,25 @@ def cuda_source() -> str:
                 reset_error=False,
             ),
             f"{output_type(name)} run_{name}_cuda(CudaState& state) {{ return run_{name}(state); }}",
+        ]
+    for name, program in staged_programs().items():
+        inputs = {
+            n.attrs["name"]: "s." + n.attrs["name"]
+            for n in program.live_nodes
+            if n.op == "input"
+        }
+        kind = staged_type(name)
+        lines += [
+            _cuda_program(
+                program,
+                name,
+                kind,
+                input_overrides=inputs,
+                state_type="StagedCudaState",
+                output_fields=tuple(program.outputs),
+                reset_error=False,
+            ),
+            f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return run_{name}(state); }}",
         ]
     return "\n".join([*lines, "}", ""])
 

@@ -39,7 +39,7 @@ std::size_t difference(std::size_t total, std::size_t included) {
 DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const core::System& system,
                                   const core::System& auxiliary,
                                   const generativeqc_method_descriptor& descriptor, bool forces,
-                                  bool with_triples) {
+                                  bool with_triples, bool df_auxiliary_reduction) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -115,6 +115,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   phase = Clock::now();
   if (trace.enabled()) Trace::label("phase", "corrected_lambda");
   cc::LambdaOptions lambda_options;
+  lambda_options.df_auxiliary_reduction = df_auxiliary_reduction;
   lambda_options.cc_tolerance = 1e-9;
   lambda_options.lambda_tolerance = 1e-9;
   const auto lambda_external = checked_add(tbytes, fbytes);
