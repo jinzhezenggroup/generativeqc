@@ -14,6 +14,17 @@ rounding-projection expression; generic CUDA history consumers own execution.
 This uses the same physical orbit as Lambda's packed coordinates, without
 changing Lambda's ordering or independently qualified solver.
 
+For spin-summed excitations E_ai, the commutator with E_bj is
+`delta_ib E_aj - delta_ja E_bi = 0`, since occupied and virtual domains are
+disjoint. Thus the two simultaneous-pair orderings are the same excitation;
+the restricted symmetric T2 coordinates and physical projected R2 have this
+involution. A linear DIIS amplitude combination preserves it. The full
+Frobenius error metric contains each non-fixed orbit twice, proving the one/two
+weights for history errors; the same storage orbit and direct expansion serve
+amplitude histories. This statement assumes a physical restricted Hamiltonian,
+not arbitrary supplied blocks or exact bitwise symmetry of lowered arithmetic.
+Those separate input and rounding domains are audited below.
+
 For symmetric tensors the weighted packed dot is exactly the full metric in
 real arithmetic. The changed FP64 summation order needs independent numerical
 gates. Initial supplied amplitudes require bitwise symmetry: an arbitrary
@@ -79,7 +90,11 @@ GPU skip), compiler/SCF/native architecture, promotion, metadata and CUDA
 ownership checks. The owner tests include packed/full setup failures and
 full-history/Jacobi resource refusal. Initial build2317 caught a non-rational
 TensorIR coefficient; use exact Fraction(1,2) before rebuilding in2325.
-Real-device history, trajectory, budget and complete-force FD gates are pending
-in2326, with full energy/force/budget-admission evidence still required.
+Build2325 passes. Job2326 passes29 real-device solver/generated-consumer cases,
+two Gram/ring cases, and both independent small-water all-coordinate force FD
+and failure-publication cases. The complete-force probe requires packing to
+remain active, so these gates cannot silently qualify a full-layout fallback.
+All changed production/compiler/test sources match the frozen n2 checkout by
+SHA-256. Full energy/force/budget-admission evidence is still required.
 
 No performance result or default promotion is inferred from these host gates.
