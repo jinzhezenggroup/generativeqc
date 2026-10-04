@@ -231,6 +231,7 @@ def test_component_schedule_limits_lowering_to_qualified_density_families(
 #include <optional>
 #include <stdexcept>
 #include "dft/cuda_ks_precision.hpp"
+#include "dft/semilocal_family.hpp"
 using namespace generativeqc;
 using namespace generativeqc::dft;
 
@@ -239,22 +240,24 @@ int main() {
   assert(runtime::kExecutionPrecisionSchema == "generativeqc.compiler.execution-precision.v1");
   assert(runtime::kStrictPrecisionMathMode == "ieee-rn-no-tf32");
   for (const auto family : {SemilocalFamily::Lda, SemilocalFamily::Pbe,
-                            SemilocalFamily::R2scan, SemilocalFamily::B3lyp}) {
-    const auto code = semilocal_family_code(family);
-    const auto strict =
-        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_FP64, code, false, false);
+                            SemilocalFamily::R2scan, SemilocalFamily::B3lyp,
+                            SemilocalFamily::Wb97mv}) {
+    const auto capabilities = semilocal_family_metadata(family).cuda_fast_paths;
+    const auto strict = resolve_cuda_ks_precision_schedule(
+        GENERATIVEQC_PRECISION_FP64, capabilities, false, false);
     assert(strict.size() == 6 && strict.is_strict_fp64() && !strict.any_lower_precision());
     assert(strict.strict_audit_dtype() == PrecisionDtype::Fp64);
     assert(strict.audit_owner() == "method-controller");
     assert(strict.math_mode() == runtime::kStrictPrecisionMathMode);
-    assert(!resolve_cuda_ks_precision_schedule(std::nullopt, code, false, false)
+    assert(!resolve_cuda_ks_precision_schedule(std::nullopt, capabilities, false, false)
                 .any_lower_precision());
 
-    const auto automatic =
-        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, false, false);
+    const auto automatic = resolve_cuda_ks_precision_schedule(
+        GENERATIVEQC_PRECISION_AUTO, capabilities, false, false);
     assert(automatic.any_lower_precision());
     assert(automatic.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
-    const bool density_mixed = family != SemilocalFamily::B3lyp;
+    const bool density_mixed =
+        cuda_xc_capability_qualified(capabilities.mixed_density_precision);
     assert(automatic.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
            density_mixed);
     for (const auto region : {cuda_ks_precision_region::kExactExchange,
@@ -277,7 +280,8 @@ int main() {
     for (const bool fitted : {false, true}) {
       bool rejected = false;
       try {
-        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, fitted, !fitted);
+        resolve_cuda_ks_precision_schedule(
+            GENERATIVEQC_PRECISION_AUTO, capabilities, fitted, !fitted);
       } catch (const std::invalid_argument&) {
         rejected = true;
       }
@@ -286,8 +290,8 @@ int main() {
   }
   bool rejected = false;
   try {
-    resolve_cuda_ks_precision_schedule(static_cast<generativeqc_precision_mode>(999), 0, false,
-                                       false);
+    resolve_cuda_ks_precision_schedule(static_cast<generativeqc_precision_mode>(999),
+                                       CudaXcFastPathCapabilities{}, false, false);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }
