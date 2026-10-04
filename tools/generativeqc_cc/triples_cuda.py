@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 
 from .triples import _check_denominators, _validate
 from .triples_tiles import (
+    RUNTIME_TRIPLES_PRECISION_MODES,
     TriplesTileEnumerator,
     build_runtime_tile_triples_program,
     lower_runtime_tile_triples_precision,
@@ -55,8 +56,11 @@ class TriplesTileConfig:
             raise ValueError("max_bytes must be positive")
         if type(self.device) is not int or self.device < 0:
             raise ValueError("device must be a nonnegative visible CUDA ordinal")
-        if self.precision_mode not in ("fp64", "mixed-wv"):
-            raise ValueError("triples precision_mode must be fp64 or mixed-wv")
+        if self.precision_mode not in RUNTIME_TRIPLES_PRECISION_MODES:
+            raise ValueError(
+                "triples precision_mode must be one of "
+                + ", ".join(sorted(RUNTIME_TRIPLES_PRECISION_MODES))
+            )
 
 
 @dataclass
