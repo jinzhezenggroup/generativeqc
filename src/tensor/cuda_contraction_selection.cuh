@@ -96,4 +96,91 @@ ContractionRegionPlan select_contraction_region(
   return {algorithm, reservation, i, complete_bytes[i], decision.retained_incumbent};
 }
 
+/** Provider-owned lifetime of one homogeneous compiler region. The compiler
+ * supplies immutable descriptors and a semantic variant key; this layer owns
+ * context setup, transactional preparation, same-precision fallback and replay.
+ * Factories run only during construction and are never retained for replay. */
+class PreparedContractionRegion {
+ public:
+  static std::size_t storage_bytes(std::size_t requests) {
+    const auto base = PreparedContractions::storage_bytes(0);
+    const auto per_request = PreparedContractions::storage_bytes(1) - base;
+    return ContractionProviderReservation::checked_add(
+        sizeof(PreparedContractionRegion), ContractionProviderReservation::checked_add(
+                                               base, contraction_product(requests, per_request)));
+  }
+
+  template <std::size_t N, class MakeRequests>
+  PreparedContractionRegion(ContractionRegionPlan admitted,
+                            const runtime::NativeLoweringRequest& request,
+                            const std::array<runtime::NativeLoweringCandidate, N>& candidates,
+                            std::string_view target, std::string_view compilation,
+                            std::size_t requests, std::array<std::size_t, 3> shape,
+                            cudaStream_t stream, std::size_t& calls, std::size_t& summands,
+                            MakeRequests&& make_requests)
+      : plan_(admitted), shape_(shape) {
+    auto minimum = storage_bytes(requests);
+    if (!requests || std::any_of(shape.begin(), shape.end(), [](auto n) { return n == 0; }))
+      throw std::invalid_argument("empty prepared contraction region");
+    if (plan_.algorithm == ContractionAlgorithm::PedanticBlas)
+      minimum = ContractionProviderReservation::checked_add(
+          minimum, CudaContractionContext::kProviderAllowance);
+    else if (plan_.algorithm == ContractionAlgorithm::CutensorAffine)
+      minimum = ContractionProviderReservation::checked_add(
+          minimum, plan_.reservation.total_bytes(requests));
+    else if (plan_.algorithm != ContractionAlgorithm::GeneratedOrdered)
+      throw std::invalid_argument("invalid prepared contraction region algorithm");
+    if (minimum > plan_.binding_bytes)
+      throw std::length_error("prepared contraction region exceeds binding reservation");
+    const auto fallback = [&] {
+      plan_ = select_contraction_region(request, candidates, target, compilation, requests,
+                                        storage_bytes(requests), plan_.binding_bytes, false);
+    };
+    if (plan_.algorithm == ContractionAlgorithm::PedanticBlas) {
+      if (!context_.prepare(stream)) {
+        context_.prepare_generated(stream);
+        fallback();
+      }
+    } else {
+      context_.prepare_generated(stream);
+    }
+    const auto bind = [&] {
+      auto descriptors = make_requests();
+      if (descriptors.size() != requests)
+        throw std::logic_error("prepared region descriptor count differs from admission");
+      table_.add(shape_[0], shape_[1], shape_[2], std::move(descriptors), context_, calls, summands,
+                 std::vector<ContractionAlgorithm>(requests, plan_.algorithm), plan_.reservation);
+    };
+    try {
+      bind();
+    } catch (const ContractionPreparationUnavailable&) {
+      table_.release();
+      fallback();
+      bind();
+    }
+  }
+
+  template <class T>
+  void execute(std::size_t slot, cudaStream_t stream, const T* a, const T* b, T* c, int* error) {
+    table_.execute(slot, shape_[0], shape_[1], shape_[2], stream, a, b, c, error);
+  }
+  ContractionProviderReservation optional_resources() const { return table_.optional_resources(); }
+  std::size_t retained_provider_bytes() const {
+    return ContractionProviderReservation::checked_add(context_.retained_bytes(),
+                                                       table_.optional_resources().provider_bytes);
+  }
+  const ContractionRegionPlan& selected() const noexcept { return plan_; }
+  std::size_t provider_version() const noexcept {
+    return plan_.algorithm == ContractionAlgorithm::CutensorAffine
+               ? cutensor_provider_version()
+               : std::size_t(context_.provider_version());
+  }
+
+ private:
+  ContractionRegionPlan plan_;
+  std::array<std::size_t, 3> shape_;
+  CudaContractionContext context_;
+  PreparedContractions table_;
+};
+
 }  // namespace generativeqc::tensor
