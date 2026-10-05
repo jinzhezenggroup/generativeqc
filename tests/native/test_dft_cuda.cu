@@ -865,6 +865,7 @@ void matrix_schedule_cases() {
 #include "dft_pbe0_ao_discovery_cases.cuh"
 #include "dft_potential_lowering_cases.cuh"
 #include "dft_indexed_potential_cases.cuh"
+#include "dft_mapped_potential_benchmark.cuh"
 #include "dft_density_provider_cases.cuh"
 #include "dft_density_provider_benchmark.cuh"
 #include "dft_indexed_density_cases.cuh"
@@ -876,6 +877,10 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 4 && std::string(argv[1]) == "--indexed-potential-benchmark") {
+      mapped_potential_benchmark(argv[2], argv[3]);
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--indexed-potential") {
       indexed_potential_cases();
       return 0;
