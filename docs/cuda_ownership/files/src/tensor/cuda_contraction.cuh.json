@@ -1,6 +1,6 @@
 {
   "path": "src/tensor/cuda_contraction.cuh",
-  "reason": "Prepared execution of compiler-owned semantic contraction requests; shared cuBLAS/generated/cuTENSOR/cuBLASLt resource lifetime, transactional optional preparation, exact dtype checks, finite audit, bounded batch variants and context invalidation. Compiler-owned batch weighting preserves fused generated publication or a charged split library publication pass. TensorIR owns equations and layout recognition.",
+  "reason": "Prepared execution of compiler-owned semantic contraction requests; shared cuBLAS/generated/cuTENSOR/cuBLASLt resource lifetime, transactional optional preparation, exact dtype checks, finite audit, bounded batch variants and context invalidation. Batch weighting preserves fused generated or charged split library publication. Ordered checked regions invoke the original compiler scalar helpers at each reduction step and reject missing/mismatched helpers or unsupported provider recipes. TensorIR owns equations and layout recognition.",
   "regions": [],
   "role": "runtime",
   "subsystem": "runtime"

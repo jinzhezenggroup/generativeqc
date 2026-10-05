@@ -18,11 +18,13 @@ from generativeqc_compiler.tensor import (
 from generativeqc_compiler.tensor.batch_scaled_contraction import (
     batch_scaled_contraction_request,
 )
+from generativeqc_compiler.tensor.checked_contraction import checked_contraction_request
 from generativeqc_compiler.tensor.contraction_update import contraction_update_request
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import (
     contraction_initializer,
     emit_contraction_region_portfolio,
+    projected_contraction_request,
 )
 
 
@@ -56,6 +58,138 @@ def cosx_esp_program(points: int, columns: int) -> Program:
     weight = input_tensor("weight", TensorSpec((point,), role="input"))
     product = einsum("pmn,pn->pm", esp, projected)
     return Program({"result": einsum("p,pm->pm", weight, product)})
+
+
+def cosx_jet_projection_program(points: int, columns: int) -> Program:
+    """Project three spatial AO jets; the axis is a borrowed leading slice."""
+    if any(type(extent) is not int or extent < 1 for extent in (points, columns)):
+        raise ValueError("COSX projection dimensions must be positive integers")
+    axis = Index("a", IndexSpace("axis", "batch", 3))
+    point = Index("p", IndexSpace("points", "batch", points))
+    ao = IndexSpace("columns", "ao", columns)
+    row, column = Index("m", ao), Index("n", ao)
+    jets = input_tensor("jets", TensorSpec((axis, point, row), role="input"))
+    density = input_tensor("density", TensorSpec((row, column), role="input"))
+    return Program({"result": einsum("apm,mn->apn", jets, density)})
+
+
+def emit_cosx_derivative_contractions(update: Program, publication: Program) -> str:
+    """Prepare derivative sites around the existing checked scalar programs.
+
+    The generator supplies method-owned scalar programs; this component does
+    not import the method owner or change their arithmetic. Jet-axis traversal
+    belongs to the compiler, while all matrix reduction loops share the runtime.
+    """
+    pieces = [
+        """
+#if defined(__CUDACC__)
+#include "tensor/cuda_contraction_sites.cuh"
+namespace generativeqc::dft::cosx_derivative_lowering {
+"""
+    ]
+    for name, program, weighted, jet in (
+        ("projection", cosx_matrix_program(3, 2, update=False), False, False),
+        ("jet_projection", cosx_jet_projection_program(3, 2), False, True),
+        ("esp_application", cosx_esp_program(3, 2), True, False),
+    ):
+        root = program.outputs["result"]
+        adapter = TensorLoweringAdapter(program)
+        product = next(n for n in root.inputs if n.op == "einsum") if weighted else root
+        fixed = (
+            (adapter.request(root, backend="cuda").operands[0].modes[0],) if jet else ()
+        )
+        request = (
+            batch_scaled_contraction_request(adapter, root, backend="cuda")
+            if weighted
+            else projected_contraction_request(adapter, product, fixed_modes=fixed)
+        )
+        request = checked_contraction_request(
+            request, update, publication if weighted else None, contraction=product
+        )
+        descriptor = contraction_initializer(
+            adapter,
+            product,
+            lambda index: index.space.name,
+            transpose=("N", "N"),
+            extents=("points", "columns", "1", "columns")
+            if weighted
+            else ("1", "points", "columns", "columns"),
+            coefficient="1.0",
+            fixed_modes=fixed,
+            batch_scale=root if weighted else None,
+            checked_update=update,
+            checked_publication=publication if weighted else None,
+        )
+        pieces.append(
+            emit_contraction_region_portfolio(
+                request,
+                canonical_hash({"descriptor": descriptor}),
+                name=name,
+            )
+        )
+        scale = (
+            ",tensor::ContractionOperand::dense({0},{points},runtime::PrecisionDtype::Fp64)"
+            if weighted
+            else ""
+        )
+        pieces.append(f"""
+inline auto {name}(std::size_t points, std::size_t columns) {{
+  return tensor::ContractionSite{{{name}_request,{name}_candidates,
+      {name}_target,{name}_compilation,{descriptor}{scale}}};
+}}
+""")
+    pieces.append(f"""
+template <bool Weighted> struct ScalarStep {{
+  static constexpr std::string_view update_identity = "{update.logical_hash}";
+  static constexpr std::string_view publication_identity = Weighted ? "{publication.logical_hash}" : "";
+  __device__ static bool update(double a, double b, double& value) noexcept {{
+    return generated_cosx_derivative::accumulate_projection(a,b,value);
+  }}
+  __device__ static bool publish(double weight, double value, double& output) noexcept {{
+    return generated_cosx_derivative::scale(weight,value,output);
+  }}
+}};
+using MolecularPrepared = tensor::PreparedContractionSites<2>;
+using PointPrepared = tensor::PreparedContractionSites<6>;
+inline auto prepare_molecular(std::size_t columns, std::size_t full, std::size_t tail,
+                              cudaStream_t stream) {{
+  if (!columns || !full || tail > full) throw std::invalid_argument("invalid derivative tile domain");
+  return std::make_unique<MolecularPrepared>(std::array{{
+      projection(full,columns),projection(tail ? tail : full,columns)}},stream,0);
+}}
+inline auto prepare_point(std::size_t columns, std::size_t full, std::size_t tail,
+                          cudaStream_t stream) {{
+  if (!columns || !full || tail > full) throw std::invalid_argument("invalid derivative tile domain");
+  const auto short_tile = tail ? tail : full;
+  return std::make_unique<PointPrepared>(std::array{{
+      projection(full,columns),projection(short_tile,columns),
+      jet_projection(full,columns),jet_projection(short_tile,columns),
+      esp_application(full,columns),esp_application(short_tile,columns)}},stream,0);
+}}
+template <std::size_t Sites>
+inline void project(tensor::PreparedContractionSites<Sites>& plan, bool tail,
+                    cudaStream_t stream, const double* ao, const double* density,
+                    double* output, int* error) {{
+  plan.template execute_checked<ScalarStep<false>>(tail ? 1 : 0,stream,ao,density,output,error);
+}}
+inline void project_jets(PointPrepared& plan, bool tail, cudaStream_t stream,
+                         const double* jets, const double* density, double* output, int* error) {{
+  const auto slot = tail ? 3 : 2;
+  const auto stride = plan.diagnostics()[slot].resolved.output_elements();
+  // Three original leading axis slices, without broadcast packing or allocation.
+  for (std::size_t axis = 0; axis < 3; ++axis)
+    plan.execute_checked<ScalarStep<false>>(slot,stream,jets+axis*stride,density,
+                                           output+axis*stride,error);
+}}
+inline void apply_esp(PointPrepared& plan, bool tail, cudaStream_t stream,
+                      const double* esp, const double* projected, const double* weights,
+                      double* output, int* error) {{
+  plan.execute_checked<ScalarStep<true>>(tail ? 5 : 4,stream,esp,projected,output,error,weights);
+}}
+}} // namespace generativeqc::dft::cosx_derivative_lowering
+#endif
+""")
+    return "\n".join(pieces)
 
 
 def emit_cosx_contractions() -> str:

@@ -81,6 +81,7 @@ def current_receipts(tmp_path_factory: pytest.TempPathFactory) -> list[dict]:
 #include <string>
 #include <string_view>
 using namespace generativeqc;
+using tensor::contraction_sites_host_reservation;
 namespace cosx_lowering = generativeqc::dft::cosx_lowering;
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);

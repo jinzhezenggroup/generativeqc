@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 
+from generativeqc_compiler.dft.cosx_contraction import emit_cosx_derivative_contractions
 from generativeqc_compiler.method.cosx_derivative_runtime import (
     COSX_DERIVATIVE_RUNTIME_VERSION,
     build_cosx_bidirectional_update_program,
@@ -272,7 +273,7 @@ GENERATIVEQC_COSX_DERIVATIVE_HD inline bool scale_pair(
 }}  // namespace generativeqc::dft::generated_cosx_derivative
 
 #undef GENERATIVEQC_COSX_DERIVATIVE_HD
-"""
+""" + emit_cosx_derivative_contractions(projection, scale)
 
 
 def main() -> None:

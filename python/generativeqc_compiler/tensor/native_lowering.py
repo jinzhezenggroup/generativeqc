@@ -20,6 +20,7 @@ if typing.TYPE_CHECKING:
 
     from .ir import Node
     from .lowering import TensorLoweringAdapter
+    from .program import Program
     from .types import Index
 
 
@@ -59,6 +60,7 @@ def emit_contraction_region_portfolio(
     )
     candidates = []
     batch_scaled = "batch_scale_mode" in dict(request.semantics)
+    checked = "scalar_update_hash" in dict(request.semantics)
     for precision in request.precisions:
         d = precision.directive
         if (
@@ -88,7 +90,11 @@ def emit_contraction_region_portfolio(
                     execution=CandidateExecution(
                         precision,
                         (
-                            "batch-scaled-fused"
+                            "ordered-checked-scalar"
+                            if checked and provider.name == "generated.cuda"
+                            else "ordered-checked-scalar-unimplemented"
+                            if checked
+                            else "batch-scaled-fused"
                             if batch_scaled and provider.name == "generated.cuda"
                             else "batch-scaled-contraction-and-publication"
                             if batch_scaled
@@ -97,9 +103,17 @@ def emit_contraction_region_portfolio(
                         request.operands,
                         ScheduleTopology(
                             materialization="compiler-owned-liveness",
-                            reduction="provider-reproducible",
+                            reduction=(
+                                "increasing-logical-index"
+                                if checked and provider.name == "generated.cuda"
+                                else "provider-reproducible"
+                            ),
                         ),
-                        determinism="reproducible",
+                        determinism=(
+                            "exact-order"
+                            if checked and provider.name == "generated.cuda"
+                            else "reproducible"
+                        ),
                         capture_safe=False,
                     ),
                     target=target,
@@ -231,6 +245,8 @@ def contraction_initializer(
     beta: str = "0.0",
     accumulation: Node | None = None,
     batch_scale: Node | None = None,
+    checked_update: Program | None = None,
+    checked_publication: Program | None = None,
     fixed_modes: tuple[int, ...] = (),
     operand_order: tuple[int, int] = (0, 1),
 ) -> str:
@@ -275,6 +291,16 @@ def contraction_initializer(
         if node not in accumulation.inputs or beta != "1.0":
             raise ValueError("native update must preserve its unit seed contribution")
         request = contraction_update_request(adapter, accumulation, backend="cuda")
+    if checked_update is not None:
+        from .checked_contraction import checked_contraction_request
+
+        if accumulation is not None or beta != "0.0" or coefficient != "1.0":
+            raise ValueError("checked scalar contraction requires a fresh unit result")
+        request = checked_contraction_request(
+            request, checked_update, checked_publication, contraction=node
+        )
+    elif checked_publication is not None:
+        raise ValueError("checked publication requires its scalar update")
     precision = request.precisions[0]
     directive = precision.directive
     if (
@@ -352,7 +378,19 @@ def contraction_initializer(
         + ",".join((*extents, coefficient))
         + (
             ",{" + ",".join(leading_dimensions or ()) + "}," + beta
-            if leading_dimensions is not None or beta != "0.0"
+            if leading_dimensions is not None
+            or beta != "0.0"
+            or checked_update is not None
+            else ""
+        )
+        + (
+            ","
+            + json.dumps(checked_update.logical_hash)
+            + ","
+            + json.dumps(
+                checked_publication.logical_hash if checked_publication else ""
+            )
+            if checked_update is not None
             else ""
         )
         + "}"

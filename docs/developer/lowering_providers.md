@@ -36,8 +36,26 @@ increasing-column FMA chain and zero-on-invalid publication with a sticky error.
 The library candidate performs a batched contraction and one in-place combined
 weight/finite publication pass, without a separate numeric buffer. The canonical
 request binds the existing two-node TensorIR region and all three external inputs.
-Derivative projections and composed endpoint
-qualification remain separate consumers under #1884.
+Production SCF/force endpoint qualification remains under #1884.
+
+COSX derivative value projection, three spatial AO-jet projections and weighted
+value ESP also bind shared prepared sites. `tensor.checked_contraction` retains
+the existing scalar update/publication program hashes and declares exact-order
+reduction with finite input/update checks. The common generated executor invokes
+those original helpers at every increasing-column step; invalid intermediate
+work publishes zero and preserves a sticky error before any later cancellation
+or zero weighting. A final-only audit cannot implement this request. Optional
+provider recipes are explicitly rejected until they preserve the complete
+checked contract, including when test qualification is requested.
+
+Molecular derivative projection uses two full/tail sites with a 96 KiB host
+reservation; explicit-point derivative assembly uses six with 160 KiB. Neither
+reserves a library device allowance or adds numeric buffers. The compiler
+traverses the three borrowed leading jet-axis slices without packing. Optional
+derivative diagnostics publish the prepared identities and actual work only
+after the complete response succeeds. Composed ESP response, symmetric
+projection and molecular pullback contractions retain their existing scalar
+helpers and require further shared-region migration.
 
 `common.lowering_provider.LoweringRequest` carries one bounded set of admitted
 `LoweringPrecision` variants. These refer directly to

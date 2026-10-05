@@ -63,6 +63,8 @@ def test_molecular_cosx_diagnostic_accounts_for_all_device_buffers(
 #include <type_traits>
 #include <utility>
 #include "dft/grid.hpp"
+#include "tensor/contraction_sites.hpp"
+namespace tensor = generativeqc::tensor;
 using GridOwner = std::remove_cvref_t<decltype(
     std::declval<const generativeqc::dft::MolecularGrid&>().owners())>::value_type;
 struct System { std::size_t natom=3, nprimitive=8, nao=5; };
@@ -90,6 +92,7 @@ int main() {
   }
   if (report.device_bytes != report.grid_device_bytes + expected) return 2;
   if (report.tile_points != t) return 3;
+  if (report.contraction_host_bytes != (96U << 10) || report.provider_allowance) return 4;
 }
 """
     harness = (

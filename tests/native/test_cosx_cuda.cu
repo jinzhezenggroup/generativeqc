@@ -1,8 +1,10 @@
 #include <cuda_runtime.h>
 
 #include <algorithm>
+#include <bit>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -18,6 +20,7 @@
 #include "dft/cuda_cosx.hpp"
 #include "dft/grid.hpp"
 #include "generated_cosx_contractions.cuh"
+#include "generated_cosx_derivative_contractions.cuh"
 #include "molecule/basis.hpp"
 
 extern "C" void cosx_contraction_qualification_for_test(unsigned mask, bool unavailable);
@@ -136,6 +139,7 @@ std::vector<double> symmetric_density(std::size_t n) {
 }
 
 // Reuse only fixture construction; arithmetic oracles are independent.
+#include "cosx_checked_contraction_cases.cuh"
 #include "cosx_contraction_cases.cuh"
 #include "cosx_endpoint_benchmark.cuh"
 #include "cosx_weighted_endpoint_benchmark.cuh"
@@ -157,6 +161,7 @@ int main(int argc, char** argv) {
             "usage: [--contractions] or --endpoint-benchmark/--weighted-endpoint-benchmark "
             "original moved radial polar azimuth tile");
     cosx_contraction_cases();
+    cosx_checked_test::cases();
     if (argc == 2 && std::string(argv[1]) == "--contractions") return 0;
     const int device = 0;
     const auto system = h2();
@@ -208,11 +213,25 @@ int main(int argc, char** argv) {
         generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     std::vector<double> first_point_derivative;
     for (std::size_t tile : {std::size_t(1), std::size_t(3), derivative_points}) {
+      generativeqc::dft::CudaCosxPointDerivativeDiagnostic report;
       const auto gpu_point_derivative = generativeqc::dft::cuda_cosx_point_derivative_reference(
           system, derivative_xyz, derivative_weights, density,
-          generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
+          generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device, &report);
       require(max_error(gpu_point_derivative, cpu_point_derivative.point_gradient) < 3.0e-11,
               "bounded CUDA COSX point derivative differs from the CPU analytic oracle");
+      require(!report.provider_allowance && report.contraction_host_bytes == (160U << 10),
+              "point derivative prepared resource mismatch");
+      for (std::size_t slot = 0; slot < report.contractions.size(); ++slot) {
+        const auto& site = report.contractions[slot];
+        const auto count =
+            slot % 2 ? std::size_t(derivative_points % tile != 0) : derivative_points / tile;
+        const auto extent = slot % 2 ? derivative_points % tile : tile;
+        const auto calls = count * (slot >= 2 && slot < 4 ? 3 : 1);
+        require(site.candidate.provider == "generated.cuda" && site.calls == calls &&
+                    site.summands == calls * extent * 4 &&
+                    site.scaled_elements == (slot >= 4 ? calls * extent * 2 : 0),
+                "point derivative lost actual full/tail/jet provenance");
+      }
       if (first_point_derivative.empty())
         first_point_derivative = gpu_point_derivative;
       else
@@ -224,8 +243,10 @@ int main(int argc, char** argv) {
         grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     std::vector<double> first_molecular;
     for (std::size_t tile : {std::size_t(1), std::size_t(7), grid.point_count()}) {
+      generativeqc::dft::CudaCosxMolecularDerivativeDiagnostic info;
       const auto gpu_molecular = generativeqc::dft::cuda_cosx_molecular_energy_derivative(
-          grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
+          grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device,
+          &info);
       require(max_error(gpu_molecular, cpu_molecular.nuclear_gradient) < 2.0e-10,
               "bounded CUDA COSX molecular derivative differs from the CPU analytic oracle");
       if (first_molecular.empty())
@@ -233,7 +254,17 @@ int main(int argc, char** argv) {
       else
         require(max_error(gpu_molecular, first_molecular) < 2.0e-10,
                 "CUDA COSX molecular derivative changed with tile partition");
-      const auto info = generativeqc::dft::cuda_cosx_molecular_derivative_diagnostic(grid, tile);
+      require(!info.provider_allowance && info.contraction_host_bytes == (96U << 10),
+              "molecular derivative prepared resource mismatch");
+      for (std::size_t slot = 0; slot < info.contractions.size(); ++slot) {
+        const auto& site = info.contractions[slot];
+        const auto calls =
+            slot ? std::size_t(grid.point_count() % tile != 0) : grid.point_count() / tile;
+        const auto extent = slot ? grid.point_count() % tile : tile;
+        require(site.candidate.provider == "generated.cuda" && site.calls == calls &&
+                    site.summands == calls * extent * 4,
+                "molecular derivative lost actual prepared projection provenance");
+      }
       require(info.nbf == 2 && info.natom == system.atoms.size() &&
                   info.npoint == grid.point_count() &&
                   info.tile_points == std::min(tile, grid.point_count()) &&
