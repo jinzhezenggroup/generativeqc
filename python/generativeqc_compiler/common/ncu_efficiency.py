@@ -48,6 +48,11 @@ class NcuExecutionEvidence:
     WarpStateStats capture.
     """
 
+    architecture: str
+    source_revision: str
+    kernel_identity: str
+    report_sha256: str
+    device: str
     theoretical_occupancy_fraction: float | None = None
     achieved_occupancy_fraction: float | None = None
     executed_threads_per_warp_instruction: float | None = None
@@ -64,6 +69,28 @@ class NcuExecutionEvidence:
     dram_busy_fraction: float | None = None
 
     def __post_init__(self) -> None:
+        for name in (
+            "architecture",
+            "source_revision",
+            "kernel_identity",
+            "report_sha256",
+            "device",
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not self.architecture.startswith("sm_"):
+            raise ValueError("architecture must use sm_XX notation")
+        revision = self.source_revision.lower()
+        if not 8 <= len(revision) <= 40 or any(
+            char not in "0123456789abcdef" for char in revision
+        ):
+            raise ValueError("source_revision must be an 8-40 digit hexadecimal Git SHA")
+        digest = self.report_sha256.lower()
+        if len(digest) != 64 or any(
+            char not in "0123456789abcdef" for char in digest
+        ):
+            raise ValueError("report_sha256 must be a 64 digit hexadecimal digest")
         for name in (
             "theoretical_occupancy_fraction",
             "achieved_occupancy_fraction",
@@ -122,8 +149,8 @@ class NcuExecutionEvidence:
         return {
             "schema": "generativeqc.compiler.ncu-execution-evidence.v1",
             "scope": (
-                "source-matched measured NCU execution counters; diagnostic only; "
-                "local-memory requests are not spill bytes"
+                "source/report/kernel-bound measured NCU execution counters; "
+                "diagnostic only; local-memory requests are not spill bytes"
             ),
             "evidence": asdict(self),
         }
