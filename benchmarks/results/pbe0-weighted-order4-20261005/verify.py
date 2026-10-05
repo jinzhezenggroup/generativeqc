@@ -6,6 +6,7 @@ This does not qualify an automatic provider/profile or establish direct parity.
 
 from __future__ import annotations
 
+from collections import Counter
 import gzip
 import json
 import statistics
@@ -27,6 +28,28 @@ def read(name: str) -> dict:
     return json.loads(gzip.decompress(data) if name.endswith(".gz") else data)
 
 
+def require_complete_inventory(run: dict) -> None:
+    """Require each intended state exactly once before numerical pairing.
+
+    A total pairing count alone cannot detect missing displaced geometries:
+    duplicating initial references can keep the total while bypassing moved
+    native rows. Bind phase, geometry and repeat together for every arm.
+    """
+    expected = Counter(
+        (phase, geometry, repeat)
+        for phase, geometry, count in (
+            ("cold", 0, 1), ("warm", 0, 5),
+            ("moved", 1, 1), ("moved-warm", 1, 5),
+        )
+        for repeat in range(count)
+    )
+    observed = Counter(
+        (row["phase"], row["geometry"], row["repeat"])
+        for row in run["records"]
+    )
+    require(observed == expected, "incomplete or duplicated geometry/phase/repeat inventory")
+
+
 def verify() -> dict:
     """Recompute numerical maxima and validate work, histories and provenance."""
     manifest = read("publication.json")
@@ -44,12 +67,14 @@ def verify() -> dict:
             reference["status"] == "measured" and len(reference["records"]) == 12,
             "incomplete independent reference",
         )
+        require_complete_inventory(reference)
         for arm in ("control", "candidate"):
             run = read(f"{arm}-{atoms}.json.gz")
             require(
                 run["status"] == "measured" and len(run["records"]) == 12,
                 "incomplete native endpoint",
             )
+            require_complete_inventory(run)
             require(
                 run["protocol"] == reference["protocol"], "scientific protocol differs"
             )

@@ -45,9 +45,10 @@ arms. The 96-atom stationary derivative component falls about 14.34 to 10.68 s;
 grid response remains about 8.8 s.
 
 All 288 independent same-geometry reference pairings pass unchanged energy
-and force gates. The independent host Hermite displaced-value oracle covers
-1,761,696 coordinates, maximum error 3.36e-10; the weight adapter error is
-1.67e-16. Composed native through-f and memcheck/initcheck pass in Slurm5880.
+and force gates. The host gates contain 38,304 independent Hermite displaced-value
+coordinate checks (maximum error 3.36e-10) and 1,723,392 retained-adapter
+comparisons (maximum error 1.67e-16), totaling 1,761,696 checks. Adapter
+comparisons are not independent oracle coverage.
 The master transplant, frozen at `dfeabdc0d`, passes 47 focused host tests,
 native through-f and both sanitizers in Slurm5907, and builds all six stationary
 AOT modules with verified ccache use. The six scientific/dispatch sources are
