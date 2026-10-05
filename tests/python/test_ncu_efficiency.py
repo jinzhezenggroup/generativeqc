@@ -7,11 +7,22 @@ from generativeqc_compiler.common.ncu_efficiency import (
 )
 
 
+def _evidence(**kwargs: object) -> NcuExecutionEvidence:
+    return NcuExecutionEvidence(
+        architecture="sm_120",
+        source_revision="c5ab37ec9e7b3d38d2e06729319f9eef66510e5c",
+        kernel_identity="retained-test-kernel",
+        report_sha256="0" * 64,
+        device="retained-test-device",
+        **kwargs,
+    )
+
+
 def test_direct_force_capture_separates_resource_bound_from_execution_mechanism() -> (
     None
 ):
     assessment = assess_ncu_execution(
-        NcuExecutionEvidence(
+        _evidence(
             theoretical_occupancy_fraction=1 / 6,
             achieved_occupancy_fraction=1 / 6,
             executed_threads_per_warp_instruction=17.91,
@@ -47,7 +58,7 @@ def test_scalar_cc_reduction_is_not_misclassified_as_register_or_spill_problem()
     None
 ):
     assessment = assess_ncu_execution(
-        NcuExecutionEvidence(
+        _evidence(
             theoretical_occupancy_fraction=1 / 48,
             achieved_occupancy_fraction=0.02083339,
             executed_threads_per_warp_instruction=1.0,
@@ -73,7 +84,7 @@ def test_exact_jk_capture_distinguishes_scoreboard_local_state_from_barrier_tail
     None
 ):
     assessment = assess_ncu_execution(
-        NcuExecutionEvidence(
+        _evidence(
             achieved_occupancy_fraction=0.15178221,
             executed_threads_per_warp_instruction=9.79,
             issue_active_fraction=0.13698544,
@@ -95,7 +106,7 @@ def test_exact_jk_capture_distinguishes_scoreboard_local_state_from_barrier_tail
 
 
 def test_payload_round_trip_requires_explicit_fraction_units() -> None:
-    payload = NcuExecutionEvidence(
+    payload = _evidence(
         theoretical_occupancy_fraction=0.25,
         achieved_occupancy_fraction=0.20,
     ).to_payload()
@@ -105,7 +116,7 @@ def test_payload_round_trip_requires_explicit_fraction_units() -> None:
     assert restored.theoretical_occupancy_fraction == 0.25
     assert restored.achieved_occupancy_fraction == 0.20
     with pytest.raises(ValueError):
-        NcuExecutionEvidence(achieved_occupancy_fraction=20.0)
+        _evidence(achieved_occupancy_fraction=20.0)
 
 
 def test_unknown_payload_fields_fail_closed() -> None:
