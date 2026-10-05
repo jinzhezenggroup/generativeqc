@@ -21,5 +21,5 @@ def test_homogeneous_region_does_not_invent_precision_obligations() -> None:
     assert strict.precisions[0].identity in source
     assert all(
         f'"{name}"' in source
-        for name in ("cublas", "generated.cuda", "cutensor", "cublaslt")
+        for name in ("cublas", "generated.cuda", "cutensor", "cublaslt", "cutlass-aot")
     )

@@ -13,6 +13,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.common.paths import source_hashes
+from generativeqc_compiler.common.provenance import (
+    atomic_json,
+    canonical_hash,
+    file_hash,
+    toolchain_identity,
+)
 from generativeqc_compiler.method.df_mo_source import (
     build_df_mo_source_program,
     build_df_mo_source_vjp_program,
@@ -392,6 +399,9 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
     ]
     complete_library = os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY")
     cutensor = os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") == "1"
+    cutlass = os.environ.get("GENERATIVEQC_CUTLASS_CUDA_TEST") == "1"
+    if cutlass and complete_library:
+        pytest.fail("CUTLASS probe requires its qualified standalone artifact")
     provider_link = []
     if not complete_library:
         includes += ["-DGENERATIVEQC_TEST_HOOKS=1", "-DGENERATIVEQC_HAS_CUDA=1"]
@@ -412,7 +422,14 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         provider_link += ["-lcublasLt"]
     else:
         includes += ["-DGENERATIVEQC_HAS_CUBLASLT=0"]
+    sdk = None
+    if cutlass:
+        sdk = Path(os.environ["GENERATIVEQC_CUTLASS_ROOT"]).resolve() / "include"
+        includes += ["-DGENERATIVEQC_HAS_CUTLASS=1", "-I" + str(sdk)]
+    else:
+        includes += ["-DGENERATIVEQC_HAS_CUTLASS=0"]
     objects = []
+    commands = []
     for source, command in (
         (
             ROOT / "src/posthf/df_mo_response.cu",
@@ -433,8 +450,9 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         if complete_library and source.suffix == ".cu":
             continue
         obj = directory / (source.stem + ".o")
+        commands.append([cache, *command, *includes, "-c", str(source), "-o", str(obj)])
         subprocess.run(
-            [cache, *command, *includes, "-c", str(source), "-o", str(obj)],
+            commands[-1],
             check=True,
             capture_output=True,
             timeout=180,
@@ -463,7 +481,42 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         timeout=30,
     )
     dll = ct.CDLL(str(library))
-    call = dll.df_mo_response_probe_v2
+    artifact = ""
+    if sdk is not None:
+        # The production source-response owner is compiled into this artifact.
+        # Pass its real post-link identity to region admission, never a fixture
+        # digest or the scientific equation hash in place of executable provenance.
+        identity = {
+            "binary": file_hash(library),
+            "toolchain": toolchain_identity(Path(nvcc)),
+            "commands": commands,
+            "generated": file_hash(directory / "df_mo_source_generated.hpp"),
+            "sources": source_hashes(
+                "common",
+                "tensor",
+                assets=(
+                    "python/generativeqc_compiler/method/df_mo_source.py",
+                    "src/posthf/df_mo_response.cu",
+                    "tests/native/df_mo_response_probe.cpp",
+                    *sorted(
+                        path.relative_to(ROOT).as_posix()
+                        for owner in (ROOT / "src/tensor", ROOT / "src/runtime")
+                        for path in owner.rglob("*")
+                        if path.is_file() and path.suffix in (".hpp", ".cuh")
+                    ),
+                ),
+            ),
+            "cutlass_headers": {
+                path.relative_to(sdk).as_posix(): file_hash(path)
+                for path in sorted(sdk.rglob("*"))
+                if path.is_file()
+            },
+        }
+        artifact = canonical_hash(identity)
+        atomic_json(
+            directory / "artifact.json", {"key": artifact, "identity": identity}
+        )
+    call = dll.df_mo_response_probe_v3
     dp = ct.POINTER(ct.c_double)
     call.argtypes = [
         ct.c_size_t,
@@ -478,9 +531,10 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         ct.c_size_t,
         ct.c_void_p,
         ct.c_size_t,
+        ct.c_char_p,
     ]
     call.restype = ct.c_int
-    return call
+    return lambda *args: call(*args, artifact.encode())
 
 
 def _run_cuda_source(
@@ -571,7 +625,7 @@ def test_cuda_streamed_source_response_matches_independent_complete_expression(
     assert all(np.isnan(x).all() for x in failed)
 
 
-@pytest.mark.parametrize("provider_test", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("provider_test", [1, 2, 3, 4, 5, 6, 7])
 @pytest.mark.parametrize("n,q", [(1, 1), (2, 3), (5, 4), (3, 7)])
 def test_cuda_source_response_optional_providers(
     cuda_source_response_probe: typing.Any, provider_test: int, n: int, q: int
@@ -588,16 +642,27 @@ def test_cuda_source_response_optional_providers(
         and os.environ.get("GENERATIVEQC_CUBLASLT_CUDA_TEST") != "1"
     ):
         pytest.skip("requires optional provider qualification")
+    if (
+        provider_test in (6, 7)
+        and os.environ.get("GENERATIVEQC_CUTLASS_CUDA_TEST") != "1"
+    ):
+        pytest.skip("requires optional CUTLASS qualification")
     arrays = _response_inputs(n, q, False)
     status, outputs, counts, error = _run_cuda_source(
         cuda_source_response_probe, arrays, budget=8 << 30, provider_test=provider_test
     )
     assert status == 0, error
-    assert counts[11] == 8 and counts[12] == {2: 2, 4: 3}.get(provider_test, 1)
+    assert counts[11] == 8 and counts[12] == {2: 2, 4: 3, 6: 0, 7: 0}.get(
+        provider_test, 1
+    )
     if provider_test == 2:
         assert counts[10] >= 20800 and counts[10] // 10000 == 2
     elif provider_test == 4:
         assert counts[10] > 0 and counts[13] > 0
+    elif provider_test in (6, 7):
+        # A test profile cannot supply ownership beyond a failed region's lifetime.
+        # Both complete and partial CUTLASS qualification retain legal cuBLAS.
+        assert counts[10] > 0 and counts[15] < 256 << 20
     else:
         assert counts[10] == 0
     assert counts[4] == 3 * n + 5 and counts[5] == 6 * n**3 * q + 2 * n * n * q * q
@@ -644,7 +709,9 @@ def test_cuda_source_optional_budget_boundary(
             np.testing.assert_allclose(output, reference, atol=3e-11, rtol=3e-13)
 
 
-@pytest.mark.parametrize("provider_test,capability", [(2, "CUTENSOR"), (4, "CUBLASLT")])
+@pytest.mark.parametrize(
+    "provider_test,capability", [(2, "CUTENSOR"), (4, "CUBLASLT"), (6, "CUTLASS")]
+)
 def test_cuda_source_missing_optional_provider_retains_incumbent(
     cuda_source_response_probe: typing.Any,
     provider_test: int,
@@ -665,7 +732,7 @@ def test_cuda_source_missing_optional_provider_retains_incumbent(
     assert counts[12] == 0 and counts[11] == 8 and counts[10] > 0
 
 
-@pytest.mark.parametrize("provider_test", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("provider_test", [1, 2, 3, 4, 5, 6, 7])
 def test_cuda_source_provider_failure_is_sticky(
     cuda_source_response_probe: typing.Any, provider_test: int
 ) -> None:
@@ -681,6 +748,11 @@ def test_cuda_source_provider_failure_is_sticky(
         and os.environ.get("GENERATIVEQC_CUBLASLT_CUDA_TEST") != "1"
     ):
         pytest.skip("requires optional provider qualification")
+    if (
+        provider_test in (6, 7)
+        and os.environ.get("GENERATIVEQC_CUTLASS_CUDA_TEST") != "1"
+    ):
+        pytest.skip("requires optional CUTLASS qualification")
     raw, c, root, bar = _response_inputs(2, 3, False)
     raw[:] = 1e308
     c[:] = 10

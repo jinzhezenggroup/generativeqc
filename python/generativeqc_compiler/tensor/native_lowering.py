@@ -57,6 +57,7 @@ def emit_contraction_region_portfolio(
             ("generated.cuda", "generated", source_identity),
             ("cutensor", "library", "runtime-bound-qualified-2.x"),
             ("cublaslt", "library", "runtime-bound-qualified-matmul"),
+            ("cutlass-aot", "generated", "runtime-bound-qualified-artifact"),
         )
     )
     candidates = []

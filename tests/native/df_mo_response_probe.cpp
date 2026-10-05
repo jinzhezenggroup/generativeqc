@@ -28,11 +28,11 @@ struct CaptureCleanup {
 };
 }  // namespace
 
-extern "C" int df_mo_response_probe_v2(std::size_t n, std::size_t q, const double* const* input,
+extern "C" int df_mo_response_probe_v3(std::size_t n, std::size_t q, const double* const* input,
                                        double* const* output, std::size_t budget,
                                        std::size_t caller_bytes, int failure, int provider_test,
                                        std::size_t* counts, std::size_t counts_size, char* error,
-                                       std::size_t error_size) noexcept {
+                                       std::size_t error_size, const char* artifact) noexcept {
   using namespace generativeqc;
   try {
     if (!counts || counts_size != 16)
@@ -50,6 +50,13 @@ extern "C" int df_mo_response_probe_v2(std::size_t n, std::size_t q, const doubl
             ? tensor::ContractionProviderReservation{64ULL << 20, 256ULL << 20, 64ULL << 20}
             : tensor::ContractionProviderReservation{};
     tensor::cublaslt_preparations_before_rejection_for_test = provider_test == 5 ? 2 : -1;
+    tensor::cutlass_region_qualification_for_test =
+        (provider_test == 6 || provider_test == 7)
+            ? tensor::CutlassRegionQualification{{0, 0, 1ULL << 20, 256ULL << 20},
+                                                 artifact ? artifact : "",
+                                                 tensor::cutlass_provider_version()}
+            : tensor::CutlassRegionQualification{};
+    tensor::cutlass_preparations_before_rejection_for_test = provider_test == 7 ? 2 : -1;
 #else
     if (provider_test) throw std::invalid_argument("provider qualification requires test hooks");
 #endif
@@ -119,6 +126,7 @@ extern "C" int df_mo_response_probe_v2(std::size_t n, std::size_t q, const doubl
                              result.provider == "cublas"           ? 0UL
                              : result.provider == "generated.cuda" ? 1UL
                              : result.provider == "cublaslt"       ? 3UL
+                             : result.provider == "cutlass-aot"    ? 4UL
                                                                    : 2UL,
                              result.preparation_ns,
                              result.optional_workspace_bytes,

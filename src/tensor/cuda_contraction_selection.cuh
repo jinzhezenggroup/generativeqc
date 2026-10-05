@@ -5,11 +5,40 @@
 
 namespace generativeqc::tensor {
 
+/** Evidence for one compiled AOT family. The profile must qualify simultaneous
+ * per-plan host/module bounds for these exact artifact bytes and header version.
+ * No production profile is installed; a build option alone is insufficient. */
+struct CutlassRegionQualification {
+  ContractionProviderReservation reservation;
+  std::string_view artifact;
+  std::size_t version{};
+};
+
 #if defined(GENERATIVEQC_TEST_HOOKS)
 // Qualification can remove optional implementations at the provider boundary.
 // This is absent from production and is not a scientific method option.
 inline thread_local bool contraction_libraries_unavailable_for_test = false;
+inline thread_local CutlassRegionQualification cutlass_region_qualification_for_test;
 #endif
+
+inline constexpr std::string_view kCutlassRegionUnavailable =
+    "CUTLASS region requires a context-lifetime retention owner";
+
+inline CutlassRegionQualification qualified_cutlass_region() noexcept {
+  // This region and its provider context are call-local. A failed constructor
+  // destroys the table while CUDA can retain unmeasured modules. Neither a
+  // resource profile nor test hooks establish an owner across subsequent calls.
+  // Keep this capability closed until that context/build lifetime is explicit.
+  return {};
+}
+
+inline std::size_t cutlass_provider_version() noexcept {
+#if GENERATIVEQC_HAS_CUTLASS
+  return CUTLASS_VERSION;
+#else
+  return 0;
+#endif
+}
 
 /** One provider implementation of a compiler-owned contraction region. The
  * region owns numerical conversions/traversal; the provider owns all handles
@@ -20,6 +49,8 @@ struct ContractionRegionPlan {
   ContractionProviderReservation reservation;
   std::size_t selected{}, binding_bytes{};
   bool retained_incumbent{};
+  // Own the digest: the qualification record may be temporary after admission.
+  std::array<char, 64> artifact_identity{};
 };
 
 /** Resolve a bounded emitted region portfolio before any method allocation.
@@ -41,6 +72,7 @@ ContractionRegionPlan select_contraction_region(
   auto offers = candidates;
   const auto cutensor_reservation = qualified_cutensor_reservation();
   const auto cublaslt_reservation = qualified_cublaslt_reservation();
+  const auto cutlass = qualified_cutlass_region();
   std::array<ContractionProviderReservation, N> reservations{};
   std::array<std::size_t, N> complete_bytes{};
   std::optional<std::size_t> library, generated;
@@ -67,6 +99,17 @@ ContractionRegionPlan select_contraction_region(
           offer.provider == "cutensor" ? version >= 20800 && version / 10000 == 2 : version != 0;
       if (!reservation.host_bytes || !version_available)
         offer.rejection = "qualified optional contraction resource profile unavailable";
+    } else if (offer.provider == "cutlass-aot") {
+      const auto& reservation = cutlass.reservation;
+      reservations[i] = reservation;
+      offer.workspace_bytes = offer.provider_bytes = 0;
+      offer.cache_bytes = contraction_product(plans, reservation.cache_bytes);
+      offer.host_bytes = ContractionProviderReservation::checked_add(
+          host_bytes, contraction_product(plans, reservation.host_bytes));
+      if (!reservation.host_bytes || !reservation.cache_bytes || reservation.workspace_bytes ||
+          reservation.provider_bytes || !runtime::lowering_digest(cutlass.artifact) ||
+          !cutlass.version || cutlass.version != cutlass_provider_version())
+        offer.rejection = kCutlassRegionUnavailable;
     } else {
       offer.rejection = "contraction region has no prepared implementation";
     }
@@ -86,11 +129,16 @@ ContractionRegionPlan select_contraction_region(
       if (offer.provider == "generated.cuda") generated = i;
     }
 #if defined(GENERATIVEQC_TEST_HOOKS)
-    if (library_available && (cutensor_reservation.host_bytes || cublaslt_reservation.host_bytes)) {
+    if (library_available && (cutensor_reservation.host_bytes || cublaslt_reservation.host_bytes ||
+                              cutlass.reservation.host_bytes)) {
       offer.cost.source = "test-only-provider-ranking";
       offer.cost.prepare_ns = offer.cost.cast_ns = offer.cost.pack_ns = 0;
       offer.cost.refinement_ns = offer.cost.audit_ns = offer.cost.fallback_ns = 0;
-      offer.cost.kernel_ns = reservations[i].host_bytes ? 1 : 100;
+      // Qualification expects an explicit generated fallback ranking. Equal
+      // synthetic scores would let unrelated candidate hashes break the tie.
+      offer.cost.kernel_ns = reservations[i].host_bytes           ? 1
+                             : offer.provider == "generated.cuda" ? 100
+                                                                  : 200;
     }
 #endif
   }
@@ -100,9 +148,14 @@ ContractionRegionPlan select_contraction_region(
   const auto i = decision.selected;
   const auto algorithm = offers[i].provider == "cutensor"   ? ContractionAlgorithm::CutensorAffine
                          : offers[i].provider == "cublaslt" ? ContractionAlgorithm::CublasLtMatmul
+                         : offers[i].provider == "cutlass-aot" ? ContractionAlgorithm::CutlassAot
                          : offers[i].provider == "cublas" ? ContractionAlgorithm::PedanticBlas
                                                           : ContractionAlgorithm::GeneratedOrdered;
-  return {algorithm, reservations[i], i, complete_bytes[i], decision.retained_incumbent};
+  ContractionRegionPlan result{algorithm, reservations[i], i, complete_bytes[i],
+                               decision.retained_incumbent};
+  if (algorithm == ContractionAlgorithm::CutlassAot)
+    std::copy(cutlass.artifact.begin(), cutlass.artifact.end(), result.artifact_identity.begin());
+  return result;
 }
 
 /** Provider-owned lifetime of one homogeneous compiler region. The compiler
@@ -128,6 +181,9 @@ class PreparedContractionRegion {
                             cudaStream_t stream, std::size_t& calls, std::size_t& summands,
                             MakeRequests&& make_requests)
       : plan_(admitted), shape_(shape) {
+    // Reject forged/stale admission too, before context setup or module loading.
+    if (plan_.algorithm == ContractionAlgorithm::CutlassAot)
+      throw std::invalid_argument(std::string(kCutlassRegionUnavailable));
     auto minimum = storage_bytes(requests);
     if (!requests || std::any_of(shape.begin(), shape.end(), [](auto n) { return n == 0; }))
       throw std::invalid_argument("empty prepared contraction region");
@@ -135,7 +191,8 @@ class PreparedContractionRegion {
       minimum = ContractionProviderReservation::checked_add(
           minimum, CudaContractionContext::kProviderAllowance);
     else if (plan_.algorithm == ContractionAlgorithm::CutensorAffine ||
-             plan_.algorithm == ContractionAlgorithm::CublasLtMatmul)
+             plan_.algorithm == ContractionAlgorithm::CublasLtMatmul ||
+             plan_.algorithm == ContractionAlgorithm::CutlassAot)
       minimum = ContractionProviderReservation::checked_add(
           minimum, plan_.reservation.total_bytes(requests));
     else if (plan_.algorithm != ContractionAlgorithm::GeneratedOrdered)
@@ -143,8 +200,20 @@ class PreparedContractionRegion {
     if (minimum > plan_.binding_bytes)
       throw std::length_error("prepared contraction region exceeds binding reservation");
     const auto fallback = [&] {
-      plan_ = select_contraction_region(request, candidates, target, compilation, requests,
-                                        storage_bytes(requests), plan_.binding_bytes, false);
+      // Descriptor cleanup does not free CUDA modules. Admit fallback against
+      // the unconsumed budget and retain those bytes in its complete binding.
+      const auto cache = table_.optional_resources().cache_bytes;
+      const auto admitted_bytes = plan_.binding_bytes;
+      if (cache > plan_.binding_bytes)
+        throw std::length_error("retained contraction modules exceed fallback budget");
+      plan_ =
+          select_contraction_region(request, candidates, target, compilation, requests,
+                                    storage_bytes(requests), plan_.binding_bytes - cache, false);
+      plan_.binding_bytes = ContractionProviderReservation::checked_add(plan_.binding_bytes, cache);
+      // Preserve the preparation ceiling when a partial AOT load occurred:
+      // descriptors and modules coexisted before cleanup. Final live storage
+      // alone is not a complete bound for this preparation-and-replay endpoint.
+      if (cache) plan_.binding_bytes = std::max(plan_.binding_bytes, admitted_bytes);
     };
     if (plan_.algorithm == ContractionAlgorithm::PedanticBlas) {
       if (!context_.prepare(stream)) {
@@ -159,7 +228,8 @@ class PreparedContractionRegion {
       if (descriptors.size() != requests)
         throw std::logic_error("prepared region descriptor count differs from admission");
       table_.add(shape_[0], shape_[1], shape_[2], std::move(descriptors), context_, calls, summands,
-                 std::vector<ContractionAlgorithm>(requests, plan_.algorithm), plan_.reservation);
+                 std::vector<ContractionAlgorithm>(requests, plan_.algorithm), plan_.reservation,
+                 std::string_view(plan_.artifact_identity.data(), plan_.artifact_identity.size()));
     };
     try {
       bind();
@@ -176,14 +246,17 @@ class PreparedContractionRegion {
   }
   ContractionProviderReservation optional_resources() const { return table_.optional_resources(); }
   std::size_t retained_provider_bytes() const {
-    return ContractionProviderReservation::checked_add(context_.retained_bytes(),
-                                                       table_.optional_resources().provider_bytes);
+    const auto resources = table_.optional_resources();
+    return ContractionProviderReservation::checked_add(
+        context_.retained_bytes(), ContractionProviderReservation::checked_add(
+                                       resources.provider_bytes, resources.cache_bytes));
   }
   const ContractionRegionPlan& selected() const noexcept { return plan_; }
   std::size_t provider_version() const noexcept {
-    return plan_.algorithm == ContractionAlgorithm::CutensorAffine ? cutensor_provider_version()
-           : plan_.algorithm == ContractionAlgorithm::CublasLtMatmul
-               ? cublaslt_provider_version()
+    return plan_.algorithm == ContractionAlgorithm::CutensorAffine   ? cutensor_provider_version()
+           : plan_.algorithm == ContractionAlgorithm::CublasLtMatmul ? cublaslt_provider_version()
+           : plan_.algorithm == ContractionAlgorithm::CutlassAot
+               ? cutlass_provider_version()
                : std::size_t(context_.provider_version());
   }
 

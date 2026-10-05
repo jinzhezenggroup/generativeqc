@@ -285,7 +285,9 @@ def test_current_receipts_reject_partial_or_relabelled_work(
     elif mutation == "catalog_provider":
         site["offers"][-1]["provider"] = "unknown"
     elif mutation == "catalog_short":
-        site["offers"].pop()
+        # Both four- and five-offer current receipts are valid. Drop below the
+        # minimum, rather than merely removing the optional CUTLASS offer.
+        site["offers"] = site["offers"][:3]
     elif mutation == "catalog_extra":
         site["offers"].append(site["offers"][-1].copy())
     elif mutation == "selected":
@@ -362,9 +364,12 @@ def test_receipt_verifier_handles_effective_tile(
         assert "AssertionError" in result.stderr
 
 
-@pytest.mark.parametrize("mutation", [None, "identity", "provider", "rejection"])
-def test_current_receipts_preserve_exact_pending_cutlass_offer(
-    current_receipts: list[dict], mutation: str | None
+@pytest.mark.parametrize("catalog_size", [4, 5])
+@pytest.mark.parametrize(
+    "mutation", [None, "identity", "provider", "rejection", "duplicate"]
+)
+def test_current_receipts_preserve_exact_optional_catalog(
+    current_receipts: list[dict], catalog_size: int, mutation: str | None
 ) -> None:
     verifier = runpy.run_path(str(RECEIPTS / "verify.py"))
     provenance = json.loads((RECEIPTS / "provenance.json").read_text())
@@ -372,22 +377,26 @@ def test_current_receipts_preserve_exact_pending_cutlass_offer(
     for record in records:
         for slot, site in enumerate(record["sites"]):
             family = 2 if slot >= 4 else slot % 2
-            site["offers"].append(
-                {
-                    "identity": verifier["CURRENT_OFFER_IDENTITIES"][family][4],
-                    "provider": "cutlass-aot",
-                    "rejection": "unqualified optional",
-                }
+            # Use the actual emitted fifth offer and retain compatibility with
+            # prior four-offer receipts, without appending a duplicate CUTLASS.
+            site["offers"] = site["offers"][:catalog_size]
+            assert len(site["offers"]) == catalog_size
+            assert (
+                tuple(o["identity"] for o in site["offers"])
+                == (verifier["CURRENT_OFFER_IDENTITIES"][family][:catalog_size])
             )
     offer = records[0]["sites"][4]["offers"][-1]
     if mutation is None:
         assert len(verifier["verify_records"](records, provenance)) == 5
     else:
-        offer[mutation] = {
-            "identity": "0" * 64,
-            "provider": "unknown",
-            "rejection": "",
-        }[mutation]
+        if mutation == "duplicate":
+            records[0]["sites"][4]["offers"].append(offer.copy())
+        else:
+            offer[mutation] = {
+                "identity": "0" * 64,
+                "provider": "unknown",
+                "rejection": "",
+            }[mutation]
         with pytest.raises(AssertionError):
             verifier["verify_records"](records, provenance)
 
