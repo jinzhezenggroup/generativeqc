@@ -4,11 +4,13 @@
 #include <cuda_runtime.h>
 #include <cusolverDn.h>
 
+#include <array>
 #include <limits>
 #include <optional>
 
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
+#include "tensor/cuda_vector_contraction.hpp"
 
 namespace generativeqc::scf {
 
@@ -57,6 +59,20 @@ struct CudaDensityFittingJkPlan {
   std::size_t row_tile{};
   cudaStream_t stream{};
   cublasHandle_t blas{};
+  // Canonical Coulomb contractions borrow this plan's exclusive
+  // immutable handle/stream. Bindings are destroyed before either resource.
+  std::unique_ptr<tensor::CudaVectorContraction> charge_contraction, coulomb_contraction;
+  // Streamed metric views have at most two physical extents (full/tail),
+  // independent of the number of panels. No plans are created during replay.
+  std::array<std::unique_ptr<tensor::CudaVectorContraction>, 2> metric_charge, metric_potential;
+  std::unique_ptr<tensor::CudaVectorContraction> metric_project, metric_rotate;
+  std::size_t coulomb_binding_host_bytes() const noexcept {
+    std::size_t count = bool(charge_contraction) + bool(coulomb_contraction) +
+                        bool(metric_project) + bool(metric_rotate);
+    for (std::size_t i = 0; i != metric_charge.size(); ++i)
+      count += bool(metric_charge[i]) + bool(metric_potential[i]);
+    return count * sizeof(tensor::CudaVectorContraction);
+  }
   cusolverDnHandle_t solver{};
   cusolverDnParams_t solver_parameters{};
   double* three_center{};
