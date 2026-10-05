@@ -103,9 +103,9 @@ int main() {
 
 def test_gemm_competes_for_the_same_science_without_admitting_mixed_rounding() -> None:
     request, candidates, _, _ = density_portfolio(16, "qualification-source")
-    assert len(candidates) == 5
+    assert len(candidates) == 6
     assert dict(request.semantics)["reduction"] == "sum-nu"
-    generated, library = candidates[1], candidates[-1]
+    generated, library, indexed = candidates[1], candidates[4], candidates[5]
     assert generated.request is library.request is request
     assert generated.execution is not None and library.execution is not None
     assert generated.execution.precision == library.execution.precision
@@ -115,3 +115,10 @@ def test_gemm_competes_for_the_same_science_without_admitting_mixed_rounding() -
     assert library.execution.cache_bytes > 0
     assert candidates[2].execution is not None
     assert candidates[2].execution.precision != library.execution.precision
+    assert indexed.request is request and indexed.execution is not None
+    assert indexed.execution.precision == library.execution.precision
+    assert (
+        indexed.execution.topology.materialization
+        == "one-density-factor-per-nonempty-map"
+    )
+    assert indexed.identity != library.identity

@@ -11,7 +11,33 @@ The shared compiler boundary has three separate identities:
 - **Execution binding identity** includes the complete request, target/toolkit
   facts, compilation identity, provider versions, algorithm, layouts, fusion,
   precision, resources, and admitted fallbacks. Changing those execution facts
-  invalidates reuse without changing the original scientific equation.
+invalidates reuse without changing the original scientific equation.
+
+COSX value assembly requests `AO * D`, `seed + AO^T * potential` and the
+point-batched `weight[p] * ESP[p] * projected[p]` through
+`dft.cosx_contraction`. The update includes an explicit donated seed in the
+canonical graph. Six fixed full/tail sites bind once in the shared
+`PreparedContractionSites` owner. Projection, accumulation and weighted ESP have independent
+candidate diagnostics and work counters, while sharing one provider context on
+the existing grid stream. Execution performs no search or descriptor allocation.
+The owner admits strict FP64, audits outputs before downstream consumers, and
+rejects capture until physical replay accounting is available.
+
+`CudaCosxStagingDiagnostic` reports the resolved descriptors, all candidates and
+their rejections, actual device/architecture/runtime/provider versions, per-site
+calls and scalar summands, scaled elements and split publication passes,
+160 KiB host binding reservation, preparation time,
+provider version and retained device growth. Optional library execution needs
+one additional 96 MiB device allowance for the whole owner. An insufficient
+budget or unavailable provider keeps generated execution. Test-only qualification
+can enable the three operations separately; production has no promoted library
+profile. Weighted ESP retains one fused generated kernel, including the incumbent
+increasing-column FMA chain and zero-on-invalid publication with a sticky error.
+The library candidate performs a batched contraction and one in-place combined
+weight/finite publication pass, without a separate numeric buffer. The canonical
+request binds the existing two-node TensorIR region and all three external inputs.
+Derivative projections and composed endpoint
+qualification remain separate consumers under #1884.
 
 `common.lowering_provider.LoweringRequest` carries one bounded set of admitted
 `LoweringPrecision` variants. These refer directly to

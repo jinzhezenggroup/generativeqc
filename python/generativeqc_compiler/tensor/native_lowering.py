@@ -58,6 +58,7 @@ def emit_contraction_region_portfolio(
         )
     )
     candidates = []
+    batch_scaled = "batch_scale_mode" in dict(request.semantics)
     for precision in request.precisions:
         d = precision.directive
         if (
@@ -86,7 +87,13 @@ def emit_contraction_region_portfolio(
                     d.math_mode,
                     execution=CandidateExecution(
                         precision,
-                        "prepared-affine-region",
+                        (
+                            "batch-scaled-fused"
+                            if batch_scaled and provider.name == "generated.cuda"
+                            else "batch-scaled-contraction-and-publication"
+                            if batch_scaled
+                            else "prepared-affine-region"
+                        ),
                         request.operands,
                         ScheduleTopology(
                             materialization="compiler-owned-liveness",
@@ -223,6 +230,7 @@ def contraction_initializer(
     leading_dimensions: tuple[str, str, str] | None = None,
     beta: str = "0.0",
     accumulation: Node | None = None,
+    batch_scale: Node | None = None,
     fixed_modes: tuple[int, ...] = (),
     operand_order: tuple[int, int] = (0, 1),
 ) -> str:
@@ -241,7 +249,21 @@ def contraction_initializer(
     """
     if node.op != "einsum" or len(node.inputs) != 2:
         raise ValueError("native contraction projection requires binary einsum")
-    if accumulation is None:
+    if accumulation is not None and batch_scale is not None:
+        raise ValueError("native region cannot combine donation and batch weighting")
+    if batch_scale is not None:
+        from .batch_scaled_contraction import batch_scaled_contraction_request
+
+        if fixed_modes or operand_order != (0, 1) or beta != "0.0":
+            raise ValueError(
+                "native batch scale cannot project, reorder or donate operands"
+            )
+        if node not in batch_scale.inputs:
+            raise ValueError(
+                "native batch scale must retain its contraction intermediate"
+            )
+        request = batch_scaled_contraction_request(adapter, batch_scale, backend="cuda")
+    elif accumulation is None:
         request = projected_contraction_request(
             adapter, node, fixed_modes=fixed_modes, operand_order=operand_order
         )
