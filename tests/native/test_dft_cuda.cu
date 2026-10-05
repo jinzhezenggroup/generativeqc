@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -21,9 +22,12 @@
 
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
+extern "C" void xc_potential_qualification_for_test(bool library, bool unavailable);
 
 namespace {
 using namespace generativeqc::dft;
+// Test-owned resource admission, independent of scientific method parameters.
+std::size_t potential_qualification_budget{};
 void require(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -87,6 +91,7 @@ struct Fixture {
       plan =
           std::make_unique<CudaXcPlan>(layout, basis.packed, grid.points(), grid.weights(), arena,
                                        allocation_bytes, stream, CudaMolecularGridView{}, maps);
+      if (potential_qualification_budget) plan->prepare_potential(potential_qualification_budget);
     } catch (...) {
       cleanup();
       throw;
@@ -830,6 +835,7 @@ void matrix_schedule_cases() {
 // clang-format off
 #include "dft_local_ao_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
+#include "dft_potential_lowering_cases.cuh"
 // clang-format on
 }  // namespace
 
@@ -837,6 +843,14 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--potential-benchmark") {
+      potential_lowering_benchmark();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--potential-lowering") {
+      potential_lowering_cases();
+      return 0;
+    }
     ao_discovery_cases();
     if (argc == 2 && std::string(argv[1]) == "--ao-discovery") {
       std::cout << "CUDA XC AO discovery, independent CPU E/V and bounded fallback gates passed\n";

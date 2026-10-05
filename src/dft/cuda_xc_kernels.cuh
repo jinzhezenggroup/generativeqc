@@ -67,7 +67,8 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
              double* coefficients, double* point_totals, double* potential, double* totals,
              int* error, CudaXcDensityPrecision precision, const double* direction,
              double* delta_features, double* total_density, double* total_gradient,
-             const std::vector<std::size_t>& ao_offsets, const std::size_t* ao_ids) {
+             const std::vector<std::size_t>& ao_offsets, const std::size_t* ao_ids,
+             const tensor::PreparedSymmetricProduct* potential_binding) {
   const I matrices = l.spins * l.nao * l.nao;
   if ((total_density == nullptr) != (total_gradient == nullptr))
     throw std::invalid_argument("CUDA XC total-density capture requires rho and gradient together");
@@ -131,7 +132,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     // The first point tile initializes its outputs directly; later tiles accumulate.
     scheduled_potential(stream, ao, coefficients, weights + begin, active, count, l.spins,
                         l.feature_terms, l.work_jets, work, point_totals, potential, totals,
-                        begin != 0 || l.local_ao, error, ids, l.nao);
+                        begin != 0 || l.local_ao, error, ids, l.nao, potential_binding);
     cuda_check(cudaGetLastError());
   }
 }

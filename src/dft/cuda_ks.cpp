@@ -782,6 +782,9 @@ struct CudaKsPlan::Impl : KsStateStorage {
         output.dft_diagnostic.history.capacity() * sizeof(ScfIteration) + sizeof(host_xc_totals) +
         sizeof(host_xc_error) + sizeof(host_spin_counts) + sizeof(host_selected) +
         sizeof(host_all_spins) + sizeof(host_one);
+    if (!host_unfused)
+      resource.retained_host_numeric_bytes =
+          sum(resource.retained_host_numeric_bytes, CudaXcLayout::lowering_host_bytes);
     // Conservatively retain the setup peak in the owner's capacity report.
     // This experiment's fixed host cap does not implement public host-budget
     // admission: the Python resource planner currently rejects WB97M-V.

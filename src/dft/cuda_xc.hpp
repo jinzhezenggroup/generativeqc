@@ -11,12 +11,14 @@
 #include "dft/ao_selection_work.hpp"
 #include "dft/grid.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "tensor/cuda_symmetric_product.hpp"
 
 namespace generativeqc::dft {
 
 /** Exact explicit storage request for ordinary-stream semilocal XC. The
  * method's ResourcePlan supplies one arena of device_bytes; this component
- * does not allocate CUDA memory or introduce another user memory budget.
+ * does not allocate numerical CUDA memory or introduce another user budget.
+ * Optional shared provider ownership has a separate, explicit allowance.
  * Host quadrature is prepared separately and uploaded once. Tiles retain
  * only the AO jets and density-product panels required by the functional. */
 enum class CudaXcAoPrecision : std::uint8_t {
@@ -65,6 +67,9 @@ struct CudaXcLayout {
    * by nao, never by the mean selected column count. */
   bool local_ao{};
   std::size_t ao_map_entries{}, host_ao_map_bytes{};
+  // Prepared contraction metadata is separate from the exact numeric arena.
+  static constexpr std::size_t lowering_host_bytes =
+      tensor::PreparedSymmetricProduct::host_reservation;
 };
 
 /** Layout-owned execution facts consumed by higher-level schedulers. These
@@ -116,6 +121,10 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
 
 struct CudaXcTransfers {
   std::uint64_t setup_h2d_bytes{}, output_d2h_bytes{}, synchronizations{}, evaluations{};
+  /** Semantic symmetric products in physically submitted semilocal bodies.
+   * Counts exclude graph recording and count two products per upper-triangle
+   * element/reduction term, regardless of the selected implementation. */
+  std::uint64_t potential_calls{}, potential_summands{};
 };
 
 /** Borrowed current result on the plan's stream. potential is row-major
@@ -168,6 +177,14 @@ class CudaXcPlan {
 
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
+  /** Setup-only provider preparation within an explicit additional allowance.
+   * Zero retains the generated incumbent. The allowance is not numeric arena
+   * space; an optional provider owns it separately and reports its reservation.
+   * Production currently has no qualified alternative endpoint profile. */
+  void prepare_potential(std::size_t provider_budget = 0);
+  const tensor::SymmetricProductDiagnostic& potential_lowering() const noexcept {
+    return potential_binding_->diagnostic();
+  }
   /** Explicit setup-only policy; no density work or external oracle is used.
    * Returns false without discovery if either numeric budget is insufficient.
    * A successful selection is immutable for the lifetime of this geometry
@@ -220,6 +237,7 @@ class CudaXcPlan {
 
  private:
   void check_device() const;
+  void publish_potential_work();
   void enqueue_impl(const double* density, const double* direction, std::size_t elements,
                     std::uint64_t generation, CudaXcDensityPrecision precision,
                     double* total_density = nullptr, double* total_gradient = nullptr,
@@ -230,6 +248,7 @@ class CudaXcPlan {
                                        const double* vsigma, const double* nonlocal_energy);
   CudaXcLayout layout_;
   CudaXcPointLauncher point_launcher_{};
+  std::unique_ptr<tensor::PreparedSymmetricProduct> potential_binding_;
   CudaXcTransfers transfers_;
   CudaXcAoSelectionWork ao_selection_work_;
   bool evaluation_started_{};
@@ -249,6 +268,9 @@ class CudaXcPlan {
 };
 
 namespace cuda_xc_detail {
+std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
+                                                                    cudaStream_t stream,
+                                                                    std::size_t provider_budget);
 /** Populate one host flag per global AO from all actual jets in a point tile.
  * The caller lends full-capacity panels and owns stream/error lifetimes. */
 void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
@@ -267,7 +289,8 @@ void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cud
              int* error, CudaXcDensityPrecision precision, const double* direction = nullptr,
              double* delta_features = nullptr, double* total_density = nullptr,
              double* total_gradient = nullptr, const std::vector<std::size_t>& ao_offsets = {},
-             const std::size_t* ao_ids = nullptr);
+             const std::size_t* ao_ids = nullptr,
+             const tensor::PreparedSymmetricProduct* potential_binding = nullptr);
 void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* basis, const double* points,
                                 const double* effective_weights, const double* total_gradient,

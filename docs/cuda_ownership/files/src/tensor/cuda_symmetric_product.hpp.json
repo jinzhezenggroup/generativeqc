@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_symmetric_product.hpp",
+  "reason": "Provider-neutral prepared interface for borrowed symmetric-product operands, bounded resources and execution provenance. Captured device bodies leave physical submission accounting to the enclosing replay owner.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
