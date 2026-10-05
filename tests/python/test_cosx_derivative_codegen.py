@@ -176,7 +176,6 @@ def test_generated_header_retires_native_cosx_contraction_formulas(
     for helper in (
         "accumulate_projection",
         "accumulate_esp_derivative",
-        "accumulate_bidirectional",
         "accumulate_point_gradient",
         "accumulate_molecular_ao",
         "molecular_cotangent",
@@ -190,6 +189,11 @@ def test_generated_header_retires_native_cosx_contraction_formulas(
         in generated
     )
     assert "execute_checked<SymmetricStep>" in generated
+
+    assert "cosx_derivative_lowering::apply_bidirectional(" in consumer
+    assert "apply_esp_bidirectional_kernel" not in consumer
+    assert "generated_cosx_derivative::accumulate_bidirectional(" in generated
+    assert "execute_checked_transpose_pair<PairedStep>" in generated
 
     for retired in (
         "value += ao[point * nbf + row] * density[row * nbf + column]",
