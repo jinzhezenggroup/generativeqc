@@ -254,7 +254,7 @@ int main(int argc, char** argv) {
       else
         require(max_error(gpu_molecular, first_molecular) < 2.0e-10,
                 "CUDA COSX molecular derivative changed with tile partition");
-      require(!info.provider_allowance && info.contraction_host_bytes == (128U << 10),
+      require(!info.provider_allowance && info.contraction_host_bytes == (192U << 10),
               "molecular derivative prepared resource mismatch");
       for (std::size_t slot = 0; slot < info.contractions.size(); ++slot) {
         const auto& site = info.contractions[slot];

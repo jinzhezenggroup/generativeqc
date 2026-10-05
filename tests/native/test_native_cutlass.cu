@@ -5,6 +5,13 @@
 using namespace generativeqc::tensor;
 using generativeqc_tensor::cuda_check;
 static std::string_view artifact;
+// Instantiate joint checked execution only to test its host quarantine gate.
+// This helper must never reach a CUDA enqueue in the failure cases below.
+struct QuarantinedPairStep {
+  static constexpr std::string_view update_identity =
+      "0000000000000000000000000000000000000000000000000000000000000000";
+  __device__ static bool update(double, double, double, double, double&, double&) { return false; }
+};
 template <class F>
 void rejects(F call) {
   try {
@@ -340,6 +347,21 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
             failed.optional_resources().cache_bytes != charge)
           throw std::runtime_error("CUTLASS shared loader failure lost quarantine/charge");
         const auto prior_calls = calls, prior_summands = summands;
+        const auto rejects_joint_replay = [&] {
+          try {
+            failed.execute_checked_transpose_pair<QuarantinedPairStep>(
+                0, 1, m, n, batches, stream, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+          } catch (const std::logic_error& failure) {
+            if (std::string_view(failure.what()) ==
+                "native contraction retained module loading requires reconciliation")
+              return;
+            throw;
+          }
+          throw std::runtime_error("quarantined table admitted joint checked execution");
+        };
+        // Quarantine wins over shape, helper and pointer checks, including
+        // after release; joint publication cannot replay an older binding.
+        rejects_joint_replay();
         rejects([&] { add_failed(m + 1); });
         rejects([&] { failed.execute(0, m, n, batches, stream, da, db, dc, error); });
         rejects([&] { failed.visit_aot_provenance([](auto...) {}); });
@@ -349,6 +371,7 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
             failed.optional_resources().host_bytes)
           throw std::runtime_error("CUTLASS shared release cleared quarantine/charge");
         rejects([&] { add_failed(m); });
+        rejects_joint_replay();
         rejects([&] { failed.execute(0, m, n, batches, stream, da, db, dc, error); });
         if (calls != prior_calls || summands != prior_summands)
           throw std::runtime_error("CUTLASS quarantined table replayed semantic work");

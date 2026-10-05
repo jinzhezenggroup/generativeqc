@@ -23,6 +23,10 @@ from generativeqc_compiler.tensor.checked_contraction import (
     checked_contraction_request,
     checked_symmetric_right_request,
 )
+from generativeqc_compiler.tensor.checked_contraction_pair import (
+    CheckedTransposePair,
+    checked_transpose_pair_request,
+)
 from generativeqc_compiler.tensor.contraction_update import contraction_update_request
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import (
@@ -85,8 +89,37 @@ def cosx_symmetric_projection_program(points: int, columns: int) -> Program:
     return Program({"result": einsum("pm,mn->pn", ao, paired, coefficient="1/2")})
 
 
+def cosx_bidirectional_program(points: int, columns: int) -> Program:
+    """Keep both molecular ESP projections without assuming matrix symmetry."""
+    weighted = cosx_esp_program(points, columns)
+    product = next(n for n in weighted.outputs["result"].inputs if n.op == "einsum")
+    matrix, projected = product.inputs
+    opposite = input_tensor("symmetric_projection", projected.spec)
+    return Program({"right": product, "left": einsum("pmn,pm->pn", matrix, opposite)})
+
+
+def cosx_bidirectional_pair(program: Program) -> CheckedTransposePair:
+    """Name the existing scalar program's roles for common structural proof."""
+    return CheckedTransposePair(
+        program.outputs["right"],
+        program.outputs["left"],
+        (
+            "right",
+            "left",
+            "matrix_rc",
+            "matrix_cr",
+            "projected",
+            "symmetric_projection",
+        ),
+        ("right_updated", "left_updated"),
+    )
+
+
 def emit_cosx_derivative_contractions(
-    update: Program, publication: Program, symmetric_update: Program
+    update: Program,
+    publication: Program,
+    symmetric_update: Program,
+    paired_update: Program,
 ) -> str:
     """Prepare derivative sites around the existing checked scalar programs.
 
@@ -167,6 +200,37 @@ inline auto {name}(std::size_t points, std::size_t columns) {{
       {name}_target,{name}_compilation,{descriptor}{scale}}};
 }}
 """)
+    pair_program = cosx_bidirectional_program(3, 2)
+    pair = cosx_bidirectional_pair(pair_program)
+    adapter = TensorLoweringAdapter(pair_program)
+    for role, node, name in (
+        (1, pair.first, "bidirectional_right"),
+        (2, pair.second, "bidirectional_left"),
+    ):
+        request = checked_transpose_pair_request(
+            adapter, pair, paired_update, role=role, backend="cuda"
+        )
+        descriptor = contraction_initializer(
+            adapter,
+            node,
+            lambda index: index.space.name,
+            transpose=("N" if role == 1 else "T", "N"),
+            extents=("points", "columns", "1", "columns"),
+            coefficient="1.0",
+            checked_update=paired_update,
+            checked_pair=pair,
+        )
+        pieces.append(
+            emit_contraction_region_portfolio(
+                request, canonical_hash({"descriptor": descriptor}), name=name
+            )
+        )
+        pieces.append(f"""
+inline auto {name}(std::size_t points, std::size_t columns) {{
+  return tensor::ContractionSite{{{name}_request,{name}_candidates,
+      {name}_target,{name}_compilation,{descriptor}}};
+}}
+""")
     pieces.append(f"""
 template <bool Weighted> struct ScalarStep {{
   static constexpr std::string_view update_identity = "{update.logical_hash}";
@@ -189,14 +253,24 @@ struct SymmetricStep {{
     return generated_cosx_derivative::scale(weight,value,output);
   }}
 }};
-using MolecularPrepared = tensor::PreparedContractionSites<4>;
+struct PairedStep {{
+  static constexpr std::string_view update_identity = "{paired_update.logical_hash}";
+  __device__ static bool update(double matrix_rc, double matrix_cr, double projected,
+                                double symmetric, double& right, double& left) noexcept {{
+    return generated_cosx_derivative::accumulate_bidirectional(
+        matrix_rc,matrix_cr,projected,symmetric,right,left);
+  }}
+}};
+using MolecularPrepared = tensor::PreparedContractionSites<8>;
 using PointPrepared = tensor::PreparedContractionSites<6>;
 inline auto prepare_molecular(std::size_t columns, std::size_t full, std::size_t tail,
                               cudaStream_t stream) {{
   if (!columns || !full || tail > full) throw std::invalid_argument("invalid derivative tile domain");
   return std::make_unique<MolecularPrepared>(std::array{{
       projection(full,columns),projection(tail ? tail : full,columns),
-      symmetric_projection(full,columns),symmetric_projection(tail ? tail : full,columns)}},stream,0);
+      symmetric_projection(full,columns),symmetric_projection(tail ? tail : full,columns),
+      bidirectional_right(full,columns),bidirectional_right(tail ? tail : full,columns),
+      bidirectional_left(full,columns),bidirectional_left(tail ? tail : full,columns)}},stream,0);
 }}
 inline auto prepare_point(std::size_t columns, std::size_t full, std::size_t tail,
                           cudaStream_t stream) {{
@@ -230,6 +304,12 @@ inline void apply_esp(PointPrepared& plan, bool tail, cudaStream_t stream,
                       const double* esp, const double* projected, const double* weights,
                       double* output, int* error) {{
   plan.execute_checked<ScalarStep<true>>(tail ? 5 : 4,stream,esp,projected,output,error,weights);
+}}
+inline void apply_bidirectional(MolecularPrepared& plan, bool tail, cudaStream_t stream,
+                                const double* esp, const double* projected,
+                                const double* symmetric, double* right, double* left, int* error) {{
+  plan.execute_checked_transpose_pair<PairedStep>(
+      tail ? 5 : 4,tail ? 7 : 6,stream,esp,projected,symmetric,right,left,error);
 }}
 }} // namespace generativeqc::dft::cosx_derivative_lowering
 #endif

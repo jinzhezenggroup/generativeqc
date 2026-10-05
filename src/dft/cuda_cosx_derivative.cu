@@ -340,34 +340,6 @@ __global__ void contract_point_derivative_kernel(const double* ao, const double*
   }
 }
 
-__global__ void apply_esp_bidirectional_kernel(const double* esp, const double* projected,
-                                               const double* symmetric_projection,
-                                               std::size_t npoint, std::size_t nbf,
-                                               double* potential, double* left_potential,
-                                               int* error) {
-  const std::size_t total = npoint * nbf;
-  const std::size_t matrix = nbf * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf;
-    const std::size_t row = index % nbf;
-    const double* value = esp + point * matrix;
-    double right = 0.0, left = 0.0;
-    bool valid = true;
-    for (std::size_t column = 0; column < nbf; ++column) {
-      if (!generated_cosx_derivative::accumulate_bidirectional(
-              value[row * nbf + column], value[column * nbf + row], projected[point * nbf + column],
-              symmetric_projection[point * nbf + column], right, left)) {
-        atomicCAS(error, 0, 1);
-        valid = false;
-        break;
-      }
-    }
-    potential[index] = valid ? finite_or_flag(right, error) : 0.0;
-    left_potential[index] = valid ? finite_or_flag(left, error) : 0.0;
-  }
-}
-
 __global__ void contract_molecular_ao_kernel(const double* basis, std::size_t natom,
                                              std::size_t nprimitive, const double* ao,
                                              const double* density, const double* weights,
@@ -585,7 +557,7 @@ CudaCosxMolecularDerivativeDiagnostic cuda_cosx_molecular_derivative_diagnostic(
   result.device_bytes = add(result.grid_device_bytes, result.derivative_device_bytes);
   result.bounded_tiling = true;
   result.atomic_coordinate_reduction = true;
-  result.contraction_host_bytes = tensor::contraction_sites_host_reservation(4);
+  result.contraction_host_bytes = tensor::contraction_sites_host_reservation(8);
   return result;
 }
 
@@ -697,10 +669,9 @@ std::vector<double> cuda_cosx_molecular_energy_derivative(
       cosx_derivative_lowering::project_symmetric(*contractions, count != tile_points, view.stream,
                                                   view.ao, density.get(),
                                                   symmetric_projection.get(), error.get());
-      apply_esp_bidirectional_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          esp.get(), projected.get(), symmetric_projection.get(), count, n, potential.get(),
-          left_potential.get(), error.get());
-      check(cudaGetLastError());
+      cosx_derivative_lowering::apply_bidirectional(
+          *contractions, count != tile_points, view.stream, esp.get(), projected.get(),
+          symmetric_projection.get(), potential.get(), left_potential.get(), error.get());
       contract_molecular_ao_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
           device_basis.basis, device_basis.natom, device_basis.nprimitive, view.ao, density.get(),
           device_weights.get(), owners.get(), potential.get(), left_potential.get(), count, n,

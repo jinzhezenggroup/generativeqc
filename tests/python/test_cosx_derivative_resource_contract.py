@@ -92,7 +92,7 @@ int main() {
   }
   if (report.device_bytes != report.grid_device_bytes + expected) return 2;
   if (report.tile_points != t) return 3;
-  if (report.contraction_host_bytes != (128U << 10) || report.provider_allowance) return 4;
+  if (report.contraction_host_bytes != (192U << 10) || report.provider_allowance) return 4;
 }
 """
     harness = (
