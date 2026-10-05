@@ -92,6 +92,10 @@ discovery to admit the indexed recipe. Dense qualification cannot promote the
 indexed candidate, whose gather costs need separate endpoint evidence. The
 native `--indexed-density-provider` gate covers scalar oracles, changed captured
 inputs, explicit and discovered maps, independent CPU E/V and resource fallback.
+`--indexed-density-benchmark ORIGINAL_INPUT MOVED_INPUT` compares generated and
+indexed execution on complete water-cluster grids. It reports map discovery,
+provider setup, cold/warm XC endpoints and gather/work counts separately; its
+positive diagnostic density and fixed-density scope do not qualify SCF/forces.
 
 Native KS callers can supply `CudaXcPreparationBudget` from their enclosing
 resource plan. Both host and device reservations must be admitted before

@@ -860,6 +860,7 @@ void matrix_schedule_cases() {
 #include "dft_density_provider_cases.cuh"
 #include "dft_density_provider_benchmark.cuh"
 #include "dft_indexed_density_cases.cuh"
+#include "dft_mapped_density_benchmark.cuh"
 // clang-format on
 }  // namespace
 
@@ -867,6 +868,10 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 4 && std::string(argv[1]) == "--indexed-density-benchmark") {
+      mapped_density_benchmark(argv[2], argv[3]);
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--indexed-density-provider") {
       indexed_density_provider_cases();
       return 0;
