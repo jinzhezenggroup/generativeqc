@@ -18,6 +18,7 @@ CLASSIFICATIONS = frozenset(
         "diagnostic-test-only",
         "negative-evidence",
         "needs-qualification",
+        "scientific-choice",
         "guarded-promotion-candidate",
         "already-default",
         "retire",
@@ -30,6 +31,10 @@ AUDITED_PREFIXES = (
     "tensor-schedule:",
     "tensor-execution:",
     "dft-policy:",
+    "public-model:",
+    "initial-guess:",
+    "cc-option:",
+    "response-option:",
 )
 
 
@@ -189,6 +194,79 @@ def _discover_force_active_ao(root: Path) -> dict[str, str]:
     return {"dft-policy:force-active-ao-auto": relative.as_posix()}
 
 
+def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
+    result: dict[str, str] = {}
+
+    calculator_relative = Path("python/generativeqc/calculator.py")
+    calculator = _read(root / calculator_relative)
+    if not re.search(r'density_fitting:\s*str\s*\|\s*bool\s*=\s*"none"', calculator):
+        raise ValueError("public density-fitting default drifted from none")
+    result["public-model:density-fitting"] = calculator_relative.as_posix()
+
+    if not re.search(
+        r"initial_guess:\s*InitialGuessSpec\s*\|\s*None\s*=\s*None", calculator
+    ):
+        raise ValueError("preliminary SCF initial-guess default drifted from disabled")
+    result["initial-guess:preliminary-scf"] = calculator_relative.as_posix()
+
+    progressive_relative = Path("python/generativeqc/progressive.py")
+    progressive = _read(root / progressive_relative)
+    if not re.search(r"def\s+projected_singlepoint\s*\(", progressive):
+        raise ValueError("missing explicit cross-basis projected_singlepoint entry point")
+    result["initial-guess:basis-projection"] = progressive_relative.as_posix()
+
+    fock_relative = Path("src/scf/fock_build.hpp")
+    fock = _read(root / fock_relative)
+    if "SeminumericalCosx" not in fock:
+        raise ValueError("missing audited seminumerical COSX approximation")
+    if not re.search(
+        r"FockApproximation\s+approximation\s*\{\s*FockApproximation::Exact\s*\}",
+        fock,
+    ):
+        raise ValueError("Fock approximation default drifted from Exact")
+    result["public-model:cosx-exchange"] = fock_relative.as_posix()
+    return result
+
+
+def _discover_cc_options(root: Path) -> dict[str, str]:
+    relative = Path("src/cc/solver.hpp")
+    source = _read(root / relative)
+    match = re.search(
+        r"struct\s+SolverOptions\s*\{(?P<body>.*?)\n\};",
+        source,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        raise ValueError("missing audited cc::SolverOptions")
+    body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
+    names = re.findall(r"\bbool\s+([A-Za-z0-9_]+)\s*\{\s*false\s*\}\s*;", body)
+    return {f"cc-option:{name}": relative.as_posix() for name in names}
+
+
+def _discover_response_options(root: Path) -> dict[str, str]:
+    relative = Path("src/hf/rhf_frame_response.hpp")
+    source = _read(root / relative)
+    match = re.search(
+        r"struct\s+RHFFrameResponseOptions\s*\{(?P<body>.*?)\n\};",
+        source,
+        flags=re.DOTALL,
+    )
+    if match is None:
+        raise ValueError("missing audited RHFFrameResponseOptions")
+    body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
+    names = re.findall(r"\bbool\s+([A-Za-z0-9_]+)\s*\{\s*false\s*\}\s*;", body)
+    result = {f"response-option:{name}": relative.as_posix() for name in names}
+
+    if not re.search(r"\bdouble\s+orbital_screening_tolerance\s*\{\s*0\.0\s*\}\s*;", body):
+        raise ValueError("RHF response orbital screening default drifted from zero")
+    result["response-option:orbital_screening_tolerance"] = relative.as_posix()
+
+    if not re.search(r"RHFFrameResponseRecycle\s*\*\s*recycling\s*\{\s*\}\s*;", body):
+        raise ValueError("RHF response recycling default drifted from disabled")
+    result["response-option:recycling"] = relative.as_posix()
+    return result
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -198,6 +276,9 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
         _discover_force_active_ao(root),
+        _discover_explicit_model_and_guess_choices(root),
+        _discover_cc_options(root),
+        _discover_response_options(root),
     ):
         overlap = set(result) & set(discovered)
         if overlap:
