@@ -48,6 +48,7 @@
   "files": [
     "CMakeLists.txt",
     "cmake/GenerativeQCCuda.cmake",
+    "cmake/GenerativeQCCutlass.cmake",
     "cmake/GenerativeQCCudaImplib.cmake",
     "cmake/GenerativeQCGenerated.cmake",
     "cmake/GenerativeQCGeneratedSources.cmake",
