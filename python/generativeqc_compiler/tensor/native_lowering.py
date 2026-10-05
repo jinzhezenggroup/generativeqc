@@ -238,13 +238,16 @@ def contraction_initializer(
     row_axes: tuple[int, int, int] | None = None,
     leading_dimensions: tuple[str, str, str] | None = None,
     beta: str = "0.0",
+    accumulation: Node | None = None,
     fixed_modes: tuple[int, ...] = (),
     operand_order: tuple[int, int] = (0, 1),
 ) -> str:
     """Emit a typed descriptor for an already recognized binary matrix einsum.
 
     Optional row cuts/strides describe unbatched affine views; beta can also
-    update a dense output. Native validation checks the physical recipe against
+    update a dense output. `accumulation` additionally binds the existing SSA
+    einsum-plus-input region and its donated seed, rather than hiding beta in a
+    binary operation identity. Native validation checks the physical recipe against
     the original semantic modes before execution.
 
     Matrix recognition belongs to the existing physical lowerer. The descriptor
@@ -254,9 +257,18 @@ def contraction_initializer(
     """
     if node.op != "einsum" or len(node.inputs) != 2:
         raise ValueError("native contraction projection requires binary einsum")
-    request = projected_contraction_request(
-        adapter, node, fixed_modes=fixed_modes, operand_order=operand_order
-    )
+    if accumulation is None:
+        request = projected_contraction_request(
+            adapter, node, fixed_modes=fixed_modes, operand_order=operand_order
+        )
+    else:
+        from .contraction_update import contraction_update_request
+
+        if fixed_modes or operand_order != (0, 1):
+            raise ValueError("native update cannot project or reorder donated operands")
+        if node not in accumulation.inputs or beta != "1.0":
+            raise ValueError("native update must preserve its unit seed contribution")
+        request = contraction_update_request(adapter, accumulation, backend="cuda")
     precision = request.precisions[0]
     directive = precision.directive
     if (
@@ -284,10 +296,13 @@ def contraction_initializer(
     operands = []
     if (row_axes is None) != (leading_dimensions is None):
         raise ValueError("matrix view cuts and strides must be supplied together")
+    # An update's third read is the donated output itself. Keep its original
+    # three physical matrix views while binding the complete SSA region identity.
+    layouts = (*request.operands[:2], request.operands[-1])
     for i, (value, layout) in enumerate(
         zip(
             (*(node.inputs[i] for i in operand_order), node),
-            request.operands,
+            layouts,
             strict=True,
         )
     ):

@@ -533,5 +533,6 @@ operator image is eligible for recycling after the nuclear derivative gates.
 The private force benchmark retains DIIS at argument 8, CCSD Q batch at 9, orbital
 screening/profile/nuclear controls at 10–12, and the derived-denominator selector
 at 13. Residual interval, DF preconditioning, and repeated recycling append at
-14–16. After an abandoned resource-limited force attempt, incomplete phase work
+14–16, followed by packed DIIS at 17 (off by default). After an abandoned
+resource-limited force attempt, incomplete phase work
 and timing fields are null; complete elapsed endpoint time remains available.

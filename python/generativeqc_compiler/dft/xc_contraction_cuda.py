@@ -14,8 +14,9 @@ from typing import Any
 
 from generativeqc_compiler.integral.cuda import CudaEmitter
 
-from .xc_bilinear import ao_pair_bilinear
+from .xc_bilinear import ao_pair_bilinear, symmetric_density_element
 from .xc_density_lowering import emit_density_binding
+from .xc_density_provider import emit_density_provider
 from .xc_potential_lowering import emit_potential_portfolio
 
 
@@ -190,6 +191,25 @@ def compact_panel_program(family: str) -> tuple:
     if family == "mgga":
         roots.extend(entry(j, j) * x[j] / 2 for j in range(1, 4))
     return graph, tuple(roots)
+
+
+def _emit_density_factor() -> str:
+    """Materialize the shared scalar factor once per physical XC evaluation."""
+    graph, root = symmetric_density_element()
+    emitter = CudaEmitter(graph, {"left": "density[i]", "right": "density[transpose]"})
+    emitter.emit((root,))
+    return (
+        r"""
+__global__ void materialize_density_factor(const double* density, I n, I batches,
+                                          double* output, int* error) {
+  for (I i=I(blockIdx.x)*blockDim.x+threadIdx.x; i<batches*n*n;
+       i+=I(blockDim.x)*gridDim.x) {
+    const I transpose=(i/(n*n)*n+i%n)*n+i/n%n;
+"""
+        + "\n".join(emitter.lines)
+        + f"\n    output[i]=finite({emitter.reference(root)},error,1);\n"
+        + "  }\n}\n"
+    )
 
 
 def _emit_panels() -> str:
@@ -468,10 +488,16 @@ def emit_native_xc_matrix_schedule(
     """Emit compact graph lowering for one explicitly qualified tile candidate."""
     return (
         emit_potential_portfolio(_emit_panels() + _emit_tiled(schedule))
-        + "\nnamespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
+        + '\n#include "tensor/cuda_panel_product.cuh"\n'
+        + "namespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
         + _emit_panels()
         + _emit_tiled(schedule)
+        + _emit_density_factor()
         + "\n} // namespace\n"
-        + emit_density_binding(schedule.tile, density_source + _emit_tiled(schedule))
+        + emit_density_binding(
+            schedule.tile,
+            density_source + _emit_tiled(schedule) + _emit_density_factor(),
+        )
+        + emit_density_provider()
         + "\n} // namespace generativeqc::dft::cuda_xc_detail\n"
     )
