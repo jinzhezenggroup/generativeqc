@@ -78,3 +78,8 @@ resource admission and measure the full physical endpoint before promotion.
 
 References: #1886, #1887, #1890; `test_df_cc_source_program.py` and
 `test_df_source_metric_response.py`; the preceding source-row projection note.
+
+Algorithm provenance is subsequently addressed by the
+[explicit plan-provenance decision](2026-10-05-cutensor-explicit-plan-provenance.md).
+The exploratory timing above used the previous default algorithm selection;
+opaque host/lazy resource qualification remains open.

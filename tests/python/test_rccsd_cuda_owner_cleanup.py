@@ -50,6 +50,7 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
         PREFIX
         + "namespace generativeqc::tensor {\n"
         + provider
+        + "struct PreparedContractions { static constexpr std::size_t storage_bytes(std::size_t n) {return 128*n;} };\n"
         + "}\n"
         + OPEN_CC
         + state
@@ -151,10 +152,11 @@ struct DeviceAllocationError : std::runtime_error { using std::runtime_error::ru
 """
 OPEN_CC = r"""
 namespace generativeqc::cc {
-constexpr std::size_t kDFBlasProviderAllowance=96ULL<<20;
+constexpr std::size_t kContractionProviderAllowance=96ULL<<20;
 namespace generated {
 """
 GENERATED = r"""
+void prepare_iteration_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t&,std::size_t&) {}
 namespace dfcore {
 struct CudaState : generated::CudaState {
   const double *df_virtual_singles{}, *df_virtual_doubles{};
@@ -202,8 +204,8 @@ int main() {
     calls = 0; fail_at = 0;
     int constructor_calls = 0;
     { generativeqc::cc::Owner good(p, options, 0); constructor_calls = calls;
-      saw_matrix = saw_matrix || good.plan.matrix_gemm;
-      if (handles != (good.plan.matrix_gemm ? 1 : 0)) return 10;
+      saw_matrix = saw_matrix || good.plan.matrix_gemm || good.conventional_prepared;
+      if (handles != (good.plan.matrix_gemm || good.conventional_prepared ? 1 : 0)) return 10;
       const auto detached = (good.n1 + good.n2) * sizeof(double);
       if (good.diagnostic.numeric_capacity_bytes < 128 + good.layout.total + detached) {
         std::cerr << "CUDA detached result storage was not reserved\n"; return 8;
@@ -212,10 +214,15 @@ int main() {
       if (good.plan.matrix_gemm) {
         const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
         const auto variants=batch>1 ? 1+(tail>1) : 0;
-        expected_capacity+=generativeqc::cc::kDFBlasProviderAllowance+
+        expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
           generativeqc::cc::generated::dfhoist::contraction_host_bytes(variants);
         if(generativeqc::cc::generated::dfhoist::prepared_batch!=batch ||
            generativeqc::cc::generated::dfhoist::prepared_tail!=tail) return 17;
+      }
+      if (good.conventional_prepared) {
+        expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
+          generativeqc::tensor::PreparedContractions::storage_bytes(
+            generativeqc::cc::generated::iteration_prepared_contractions);
       }
       if(good.diagnostic.numeric_capacity_bytes!=expected_capacity) return 18;
       if (events != (history ? 2 : 0)) return 9;
@@ -234,6 +241,14 @@ int main() {
       calls = 0; fail_at = 0;
       { generativeqc::cc::Owner retry(p, options, 0); }
       if (streams || events || allocations || handles || device != 7) return 5;
+    }
+    if (!naux) {
+      options.max_bytes = 8ULL << 20;
+      { generativeqc::cc::Owner bounded(p, options, 0);
+        if (bounded.conventional_prepared || handles ||
+            bounded.diagnostic.numeric_capacity_bytes > options.max_bytes) return 12;
+      }
+      if (streams || events || allocations || handles || device != 7) return 13;
     }
     options.max_bytes = 1; calls = 0;
     try { generativeqc::cc::Owner over_budget(p, options, 0); return 6; }

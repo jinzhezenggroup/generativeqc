@@ -36,14 +36,12 @@ std::size_t difference(std::size_t total, std::size_t included) {
 }
 }  // namespace
 
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const core::System& system,
-                                  const core::System& auxiliary,
-                                  const generativeqc_method_descriptor& descriptor, bool forces,
-                                  bool with_triples, bool df_auxiliary_reduction,
-                                  bool df_matrix_gemm, bool lambda_matrix_gemm,
-                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
-                                  const hf::RHFFrameResponseOptions& frame_options,
-                                  bool derived_denominators) {
+static DFCCSDTResult run_df_ccsdt_native_attempt(
+    runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
+    const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
+    bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
+    std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -56,9 +54,12 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     if (system.atoms[a].position != auxiliary.atoms[a].position ||
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
-  auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0,
-                                      &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit,
-                                      derived_denominators);
+  const auto recycle_bytes = frame_options.recycling ? frame_options.recycling->storage_bytes() : 0;
+  // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
+  // in every phase, then let the response owner rebind/release it explicitly.
+  auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
+                                      recycle_bytes, &auxiliary, forces, df_matrix_gemm, nullptr,
+                                      ccsd_batch_limit, derived_denominators);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;
@@ -68,7 +69,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   result.solver = state.solved.diagnostic;
   result.method_result = state.result;
   result.correlation = state.diagnostic;
-  result.numeric_capacity_bytes = state.diagnostic.numeric_capacity_bytes;
+  result.numeric_capacity_bytes =
+      difference(state.diagnostic.numeric_capacity_bytes, recycle_bytes);
   const auto budget = state.budget;
   const auto device = execution.device_id();
   auto& p = state.problem;
@@ -124,6 +126,10 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
         std::min(result.correlation.minimum_absolute_denominator,
                  result.triples.minimum_absolute_denominator);
   if (!forces) {
+    result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, recycle_bytes);
+    // The public diagnostic includes the caller-owned reservation restored at
+    // this boundary, just like the complete native endpoint allowance.
+    result.correlation.numeric_capacity_bytes = result.numeric_capacity_bytes;
     result.total_seconds = elapsed(started);
     return result;
   }
@@ -237,6 +243,25 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     throw std::logic_error("DF force physical source traversal was incomplete");
   factors = {};
   result.source_response_seconds = elapsed(phase);
+  phase = Clock::now();
+  if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
+  auto orbital_options = frame_options;
+  hf::RHFFrameDFPreconditionerPreparation preconditioner;
+  if (orbital_options.df_preconditioning) {
+    // Preparation precedes source release so it consumes the very same frame
+    // and factors, without rebuilding either source. Charge all surviving CC
+    // payloads while the generated map, copies and identity snapshot coexist.
+    const auto outer = checked_add(base, capacity({&bar_f, &bar_c, &correlation_gradient}));
+    if (outer < budget) {
+      preconditioner =
+          hf::prepare_rhf_frame_df_preconditioner(system, *state.reference, q, p.df_boo, p.df_bov,
+                                                  p.df_bvv, p.df_source_identity, budget - outer);
+      result.numeric_capacity_bytes = std::max(
+          result.numeric_capacity_bytes, checked_add(outer, preconditioner.numeric_capacity_bytes));
+    } else {
+      preconditioner.reason = "DF preconditioner caller budget";
+    }
+  }
   // The source stream is drained and its sink has died. Release all completed
   // CC/source numeric owners before allocating the exact-reference response.
   state.df_source = {};
@@ -245,15 +270,16 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   state.result = {};
   std::vector<double>().swap(state.eps_o);
   std::vector<double>().swap(state.eps_v);
-  phase = Clock::now();
-  if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
-  auto orbital_options = frame_options;
-  orbital_options.maximum_bytes = budget;
+  result.numeric_capacity_bytes = checked_add(result.numeric_capacity_bytes, recycle_bytes);
+  orbital_options.maximum_bytes = checked_add(budget, recycle_bytes);
   orbital_options.caller_bytes =
       checked_add(posthf::source_capacity(auxiliary),
                   checked_add(capacity({&correlation_gradient}), bytes(coords)));
-  result.orbital =
-      hf::rhf_frame_response_cuda(system, *state.reference, bar_f, bar_c, device, orbital_options);
+  result.orbital = hf::rhf_frame_response_cuda(system, *state.reference, bar_f, bar_c, device,
+                                               orbital_options, std::move(preconditioner.data));
+  result.orbital.preconditioner_setup_seconds += preconditioner.seconds;
+  result.orbital.preconditioner_contraction_terms = preconditioner.contraction_terms;
+  if (!preconditioner.reason.empty()) result.orbital.preconditioner_reason = preconditioner.reason;
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes, result.orbital.numeric_capacity_bytes);
   result.orbital_seconds = elapsed(phase);
@@ -265,6 +291,46 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     if (!std::isfinite(value)) throw std::runtime_error("nonfinite complete DF CCSD(T) force");
   }
   result.method_result.forces = result.forces;
+  result.correlation.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  result.total_seconds = elapsed(started);
+  return result;
+}
+
+DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const core::System& system,
+                                  const core::System& auxiliary,
+                                  const generativeqc_method_descriptor& descriptor, bool forces,
+                                  bool with_triples, bool df_auxiliary_reduction,
+                                  bool df_matrix_gemm, bool lambda_matrix_gemm,
+                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+                                  const hf::RHFFrameResponseOptions& frame_options,
+                                  bool derived_denominators) {
+  const auto started = Clock::now();
+  auto* const recycling = frame_options.recycling;
+  const bool had_retained_cache = recycling && recycling->storage_bytes();
+  const auto attempt = [&] {
+    return run_df_ccsdt_native_attempt(execution, system, auxiliary, descriptor, forces,
+                                       with_triples, df_auxiliary_reduction, df_matrix_gemm,
+                                       lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit,
+                                       frame_options, derived_denominators);
+  };
+  try {
+    return attempt();
+  } catch (const MethodError& error) {
+    if (!had_retained_cache || !recycling->storage_bytes() ||
+        error.status() != GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+      throw;
+  } catch (const std::length_error&) {
+    if (!had_retained_cache || !recycling->storage_bytes()) throw;
+  } catch (const std::bad_alloc&) {
+    if (!had_retained_cache || !recycling->storage_bytes()) throw;
+  }
+  // The failed attempt has unwound every phase owner and drained its streams.
+  // A retained cache can constrain triples/Lambda/source as well as the primal.
+  // Release it before one complete cold retry; other physical/CUDA errors pass
+  // through unchanged, and a second resource failure propagates normally.
+  recycling->clear();
+  auto result = attempt();
+  result.recycling_discarded_primal_attempt = true;
   result.total_seconds = elapsed(started);
   return result;
 }

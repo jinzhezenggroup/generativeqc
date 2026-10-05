@@ -453,7 +453,8 @@
         "cutensorHandleResizePlanCache": 1,
         "cutensorOperationDescriptorGetAttribute": 1,
         "cutensorPlanGetAttribute": 1,
-        "cutensorPlanPreferenceSetAttribute": 2
+        "cutensorPlanPreferenceGetAttribute": 2,
+        "cutensorPlanPreferenceSetAttribute": 3
       }
     },
     "src/tensor/cuda_runtime.cuh": {
