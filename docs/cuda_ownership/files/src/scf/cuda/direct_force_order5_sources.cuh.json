@@ -2,6 +2,6 @@
   "path": "src/scf/cuda/direct_force_order5_sources.cuh",
   "role": "scientific",
   "subsystem": "direct_integrals",
-  "reason": "Order-four s/p/d full-range J/K source dispatch binds compiler-owned external-weight derivative roots to the existing native canonicalization, density weights, primitive traversal and scatter adapter. The native class selection remains scientific composition; this experiment is not an ownership retirement or a performance qualification.",
+  "reason": "Order-five s/p/d (dppp, dpds, ddps) full-range J/K source dispatch binds compiler-owned external-weight derivative roots to the existing native canonicalization, density weights, primitive traversal and scatter adapter. The native class selection remains scientific composition; this experiment is not an ownership retirement or a performance qualification.",
   "regions": []
 }
