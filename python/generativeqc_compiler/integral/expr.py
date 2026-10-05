@@ -1291,7 +1291,7 @@ class Graph:
         """
 
         normalized_roots = tuple(roots)
-        order = tuple(self._topological_order_tuple(normalized_roots))
+        order = self._topological_order_tuple(normalized_roots)
         definition_index = {identifier: index for index, identifier in enumerate(order)}
         use_counts = {identifier: 0 for identifier in order}
         last_uses = dict(definition_index)
@@ -1771,7 +1771,7 @@ class Graph:
     def evaluate(self, expression: Expr, variables: Mapping[str, float]) -> float:
         """Evaluate one root for generator tests and finite-difference oracles."""
 
-        order = self._topological_order_tuple([expression])
+        order = self._topological_order_tuple((expression,))
         if not any(
             self.nodes[identifier].operation == "select_le" for identifier in order
         ):
