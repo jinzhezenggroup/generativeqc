@@ -70,6 +70,13 @@ scaled elements and split publication passes, and reconstructs `summary.json`.
 The integral/materialization counts in that summary are derived from the
 unchanged scientific domain, rather than measured profiler counters.
 
+The harness preserves the requested `tile` and reports the plan's
+`effective_tile = min(points, tile)` for full/tail accounting. The verifier
+validates this metadata and derives it when absent from historical receipts.
+This accounting fix postdates the retained measurements; their samples and
+source/binary attribution are unchanged. Host-only regressions exercise
+oversized tiles, exact division, tails and invalid effective metadata.
+
 All GPU work ran on n1/node1 through finite 20-minute Slurm
 `main/gpu:5090:1` allocations, jobs 6000–6003, preserving assigned visibility.
 Each AO/tile case used a separate GPU allocation; this receipt supports paired

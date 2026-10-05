@@ -179,14 +179,16 @@ void cosx_weighted_endpoint_benchmark(char** args) {
     for (std::size_t route = 0; route < masks.size(); ++route) {
       const auto mask = masks[route];
       const auto& info = plans[route]->diagnostic();
+      const auto effective_tile = info.tile_points;
       require(info.provider_allowance == (mask ? 96ULL << 20 : 0), "wrong provider allowance");
       for (unsigned slot = 0; slot < info.contractions.size(); ++slot) {
         const auto& site = info.contractions[slot];
         const auto operation = slot < 4 ? slot % 2 : 2;
         const bool library = mask & (1U << operation);
         const bool full = slot < 2 || slot == 4;
-        const auto count = full ? points / tile : std::size_t(points % tile != 0);
-        const auto extent = full ? tile : points % tile;
+        const auto count =
+            full ? points / effective_tile : std::size_t(points % effective_tile != 0);
+        const auto extent = full ? effective_tile : points % effective_tile;
         const auto calls = repeats * count;
         require(site.candidate.provider == (library ? "cublas" : "generated.cuda") &&
                     site.calls == calls && site.summands == calls * extent * n * n &&
@@ -198,8 +200,8 @@ void cosx_weighted_endpoint_benchmark(char** args) {
                 << "{\"schema\":\"cosx-weighted-endpoint-v1\",\"atoms\":" << system.atoms.size()
                 << ",\"nao\":" << n << ",\"geometry\":" << geometry << ",\"grid\":[" << radial
                 << ',' << polar << ',' << azimuth << ']' << ",\"points\":" << points
-                << ",\"tile\":" << tile << ",\"mask\":" << mask
-                << ",\"geometry_prepare_s\":" << geometry_seconds
+                << ",\"tile\":" << tile << ",\"effective_tile\":" << info.tile_points
+                << ",\"mask\":" << mask << ",\"geometry_prepare_s\":" << geometry_seconds
                 << ",\"prepare_s\":" << setup[route]
                 << ",\"provider_prepare_s\":" << info.contraction_prepare_seconds
                 << ",\"device_bytes\":" << info.device_bytes

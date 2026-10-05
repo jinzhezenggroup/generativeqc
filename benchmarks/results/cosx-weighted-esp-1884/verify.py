@@ -18,6 +18,17 @@ def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def effective_tile(record: dict) -> int:
+    """Validate plan metadata, deriving it for historical pre-fix receipts."""
+    points, requested = record["points"], record["tile"]
+    assert type(points) is int and points > 0
+    assert type(requested) is int and 0 < requested <= 4096
+    expected = min(points, requested)
+    actual = record.get("effective_tile", expected)
+    assert type(actual) is int and actual == expected
+    return actual
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-summary", action="store_true")
@@ -31,8 +42,9 @@ def main() -> None:
     for record in records:
         assert record["schema"] == "cosx-weighted-endpoint-v1"
         n, points, tile, mask = (record[k] for k in ("nao", "points", "tile", "mask"))
+        plan_tile = effective_tile(record)
         assert (record["atoms"], n) in ((48, 384), (96, 768))
-        assert record["grid"] == [3, 3, 6] and tile in (64, 256)
+        assert record["grid"] == [3, 3, 6]
         assert points == record["atoms"] * math.prod(record["grid"])
         assert mask in MASKS and record["geometry"] in (0, 1)
         key = (n, tuple(record["grid"]), tile, record["geometry"])
@@ -59,9 +71,9 @@ def main() -> None:
         assert len(record["sites"]) == 6
         for slot, site in enumerate(record["sites"]):
             full = slot < 2 or slot == 4
-            count = points // tile if full else int(points % tile != 0)
+            count = points // plan_tile if full else int(points % plan_tile != 0)
             # A missing tail prepares the full descriptor but executes it zero times.
-            extent = tile if full or not points % tile else points % tile
+            extent = plan_tile if full or not points % plan_tile else points % plan_tile
             operation = slot % 2 if slot < 4 else 2
             library = bool(mask & (1 << operation))
             calls = 6 * count
@@ -84,7 +96,10 @@ def main() -> None:
                     else "batch-scaled-fused"
                 )
             offers = site["offers"]
-            assert {offer["provider"] for offer in offers} >= {"generated.cuda", "cublas"}
+            assert {offer["provider"] for offer in offers} >= {
+                "generated.cuda",
+                "cublas",
+            }
             assert offers[site["selected"]]["identity"] == site["candidate"]
             for offer in offers:
                 if offer["provider"] not in ("generated.cuda", "cublas"):
@@ -100,28 +115,59 @@ def main() -> None:
             for mask in MASKS
         }
         for record in group.values():
-            assert record["device_bytes"] - record["provider_allowance"] == baseline["device_bytes"]
+            assert (
+                record["device_bytes"] - record["provider_allowance"]
+                == baseline["device_bytes"]
+            )
             for a, b in zip(record["sites"], baseline["sites"], strict=True):
                 for field in (
-                    "scientific", "semantic", "precision", "calls", "summands",
-                    "scaled_elements", "m", "n", "k",
+                    "scientific",
+                    "semantic",
+                    "precision",
+                    "calls",
+                    "summands",
+                    "scaled_elements",
+                    "m",
+                    "n",
+                    "k",
                 ):
                     assert a[field] == b[field]
-        summary.append({
-            "nao": key[0], "grid": key[1], "tile": key[2], "geometry": key[3],
-            "points": baseline["points"],
-            "warm_median_s_masks_0_4_3_7": [warm[mask] for mask in MASKS],
-            "time_change_percent_masks_0_4_3_7": [100 * (warm[m] / warm[0] - 1) for m in MASKS],
-            "esp_time_change_percent_on_generated_projection_update": 100 * (warm[4] / warm[0] - 1),
-            "esp_time_change_percent_on_library_projection_update": 100 * (warm[7] / warm[3] - 1),
-                "summands_per_operation_per_evaluation": baseline["points"] * key[0] ** 2,
-            "scaled_elements_per_evaluation": baseline["points"] * key[0],
-            "split_esp_publication_passes_per_evaluation": math.ceil(baseline["points"] / key[2]),
-            "esp_symmetric_integrals_per_evaluation": baseline["points"] * key[0] * (key[0] + 1) // 2,
-            "esp_materialized_elements_per_evaluation": baseline["points"] * key[0] ** 2,
-            "max_paired_errors": [max(s["errors"][i] for r in group.values() for s in r["samples"]) for i in range(3)],
-            "max_oracle_errors": [max(r["oracle_errors"][i] for r in group.values()) for i in range(3)],
-        })
+        summary.append(
+            {
+                "nao": key[0],
+                "grid": key[1],
+                "tile": key[2],
+                "geometry": key[3],
+                "points": baseline["points"],
+                "warm_median_s_masks_0_4_3_7": [warm[mask] for mask in MASKS],
+                "time_change_percent_masks_0_4_3_7": [
+                    100 * (warm[m] / warm[0] - 1) for m in MASKS
+                ],
+                "esp_time_change_percent_on_generated_projection_update": 100
+                * (warm[4] / warm[0] - 1),
+                "esp_time_change_percent_on_library_projection_update": 100
+                * (warm[7] / warm[3] - 1),
+                "summands_per_operation_per_evaluation": baseline["points"]
+                * key[0] ** 2,
+                "scaled_elements_per_evaluation": baseline["points"] * key[0],
+                "split_esp_publication_passes_per_evaluation": math.ceil(
+                    baseline["points"] / effective_tile(baseline)
+                ),
+                "esp_symmetric_integrals_per_evaluation": baseline["points"]
+                * key[0]
+                * (key[0] + 1)
+                // 2,
+                "esp_materialized_elements_per_evaluation": baseline["points"]
+                * key[0] ** 2,
+                "max_paired_errors": [
+                    max(s["errors"][i] for r in group.values() for s in r["samples"])
+                    for i in range(3)
+                ],
+                "max_oracle_errors": [
+                    max(r["oracle_errors"][i] for r in group.values()) for i in range(3)
+                ],
+            }
+        )
     assert len(groups) == 8 and len(records) == provenance["records"] == 32
     if args.write_summary:
         # Keep generated summary rows compact; the README supplies the review table.
