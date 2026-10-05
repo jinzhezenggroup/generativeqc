@@ -20,6 +20,9 @@ void potential_lowering_cases() {
         require((diagnostic.candidate.provider == "cublas") == (route == 1),
                 "potential lowering did not select the admitted provider");
         require(diagnostic.host_bytes == 16U << 10, "potential binding host reservation");
+        require(diagnostic.candidate.host_bytes == diagnostic.host_bytes &&
+                    diagnostic.indexed_candidate.host_bytes == diagnostic.host_bytes,
+                "candidate host charge differs from the prepared owner");
         require(diagnostic.provider_allowance == (route == 1 ? 96ULL << 20 : 0),
                 "provider resource charge");
         auto d = density(basis.nao, uks ? 2 : 1);

@@ -66,6 +66,9 @@ class CudaSymmetricProduct final : public PreparedSymmetricProduct {
     (void)contraction_product(contraction_product(columns, reduction), batches);
     const auto start = std::chrono::steady_clock::now();
     auto offers = candidates;
+    // Include shared binding/preparation storage in each executable offer, so
+    // candidate provenance agrees with the enclosing owner's resource charge.
+    for (auto& offer : offers) offer.host_bytes = host_reservation;
     bool qualified = false, available = true;
 #if defined(GENERATIVEQC_TEST_HOOKS)
     qualified = symmetric_product_library_for_test;
