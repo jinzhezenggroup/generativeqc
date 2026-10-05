@@ -216,6 +216,7 @@ def test_density_preparation_requires_physical_support_and_formal_qualification(
     unit.write_text(
         r"""
 #include <cassert>
+#include <memory>
 #include <stdexcept>
 #include <vector>
 #include "dft/xc_capabilities.hpp"
@@ -231,7 +232,7 @@ struct CudaXcDensityBinding {
   bool retained_incumbent{};
 };
 struct Layout {
-  bool local_ao{}, physical_mixed{};
+  bool local_ao{}, physical_mixed{}, response{};
   CudaXcFastPathCapabilities fast_paths{};
   std::size_t nao = 17, npoint = 33, tile_points = 16, spins = 2, work_jets = 4;
 };
@@ -240,7 +241,27 @@ struct Execution { bool mixed_density_contraction{}; };
 Execution cuda_xc_execution_capabilities(const Layout& layout) {
   return {!layout.local_ao && layout.physical_mixed};
 }
+using cudaStreamCaptureStatus = int;
+constexpr int cudaStreamCaptureStatusNone = 0;
+int capture_status{};
+int cudaStreamIsCapturing(int, cudaStreamCaptureStatus* status) {
+  *status = capture_status;
+  return 0;
+}
+void check(int status) { assert(status == 0); }
+namespace tensor {
+struct PreparedPanelProduct {
+  struct Diagnostic { NativeLoweringCandidate candidate; };
+  bool enabled() const { return false; }
+  const Diagnostic& diagnostic() const { return diagnostic_; }
+  Diagnostic diagnostic_{};
+};
+}
 namespace cuda_xc_detail {
+std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(
+    const Layout&, int, std::size_t) {
+  return {};
+}
 template<bool Mixed,bool Tiled>
 void launch_density_product(int,const double*,const double*,I,I,I,I,double*,int*,const std::size_t*,I) {}
 """
@@ -252,11 +273,16 @@ void launch_density_product(int,const double*,const double*,I,I,I,I,double*,int*
 struct CudaXcPlan {
   Layout layout_;
   bool evaluation_started_{};
+  int stream_{};
   std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
+  std::unique_ptr<tensor::PreparedPanelProduct> density_provider_;
+  std::unique_ptr<CudaXcDensityBinding> provider_density_binding_;
   std::vector<CudaXcDensityLauncher> local_density_launchers_;
   std::vector<std::size_t> ao_offsets_{0, 17, 17, 21};
   void check_device() const {}
-  void prepare_density(PrecisionDirective, std::uint64_t expected_replays = 1);
+  void prepare_density(PrecisionDirective, std::uint64_t expected_replays = 1,
+                       std::size_t provider_budget = 0);
+  const tensor::PreparedPanelProduct* density_execution_provider(PrecisionPhase) const;
   const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
 };
 """
@@ -313,6 +339,12 @@ int main() {
       assert(plan.local_density_launchers_ == prior_local);
       assert(plan.density_binding(PrecisionPhase::StrictAudit).precision.arithmetic.is_strict_fp64());
       assert(rejects([&] { plan.density_binding(static_cast<PrecisionPhase>(99)); }));
+      const auto before_capture = plan.admitted_density_;
+      capture_status = 1;
+      assert(rejects([&] { plan.prepare_density(strict, 50); }));
+      capture_status = cudaStreamCaptureStatusNone;
+      for (std::size_t slot = 0; slot != 2; ++slot)
+        assert(plan.admitted_density_[slot].launch == before_capture[slot].launch);
       // No malformed dtype, math mode or qualification can publish a partial table.
       const auto retained = plan.admitted_density_;
       for (auto bad : {PrecisionDirective{PrecisionDtype::Fp32,PrecisionDtype::Fp32,PrecisionDtype::Fp32,"bad"},
