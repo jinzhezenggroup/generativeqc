@@ -49,6 +49,8 @@ def emit_potential_portfolio(source: str) -> str:
             'extern "C" void xc_potential_qualification_for_test(bool library, bool unavailable) {',
             "  generativeqc::tensor::symmetric_product_library_for_test=library;",
             "  generativeqc::tensor::symmetric_product_unavailable_for_test=unavailable;}",
+            'extern "C" void xc_potential_indexed_qualification_for_test(bool library) {',
+            "  generativeqc::tensor::symmetric_product_indexed_library_for_test=library;}",
             "#endif",
             "namespace generativeqc::dft::cuda_xc_detail {",
             portfolio,
@@ -56,7 +58,8 @@ def emit_potential_portfolio(source: str) -> str:
             "    const CudaXcLayout& l, cudaStream_t stream, std::size_t provider_budget) {",
             "  return std::make_unique<tensor::CudaSymmetricProduct>(",
             "      xc_potential_request,xc_potential_candidates,xc_potential_target,xc_potential_compilation,",
-            "      l.nao,tensor::contraction_product(l.work_jets,l.tile_points),l.spins,stream,provider_budget);",
+            "      l.nao,tensor::contraction_product(l.work_jets,l.tile_points),l.spins,stream,provider_budget,",
+            "      l.local_ao,!l.local_ao || l.ao_map_entries!=0);",
             "}",
             "} // namespace generativeqc::dft::cuda_xc_detail",
         )

@@ -145,9 +145,26 @@ def emit_symmetric_product_portfolio(
             ("cublas", "library", "symmetric-cross-rank2k", "runtime-bound-pedantic"),
         )
     )
+    # The same operation over an indexed destination needs compact publication
+    # storage and a scatter. Its materialization cost cannot inherit dense
+    # endpoint qualification, even when the arithmetic provider is identical.
+    library = candidates[1]
+    assert library.execution is not None
+    indexed = replace(
+        library,
+        implementation="indexed-symmetric-cross-rank2k",
+        execution=replace(
+            library.execution,
+            algorithm="indexed-symmetric-cross-rank2k",
+            topology=ScheduleTopology(
+                materialization="caller-owned-panels/compact-output/indexed-scatter",
+                reduction="provider-reproducible",
+            ),
+        ),
+    )
     return native_lowering_portfolio(
         request,
-        candidates,
+        (*candidates, indexed),
         target,
         CompilationIdentity(scientific_identity, source),
         name=name,

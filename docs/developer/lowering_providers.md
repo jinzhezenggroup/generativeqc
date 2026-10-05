@@ -106,7 +106,14 @@ no promoted endpoint profile. A provider budget alone does not promote it.
 time, resource reservation and alternative rejection. Its 16 KiB host binding
 allowance is separate from the unchanged numeric device arena; an optional
 library trial additionally admits the shared 96 MiB provider allowance.
-Indexed/local AO domains retain the generated scatter and finite policy.
+An independently qualified indexed candidate uses the same compact inputs,
+computes one temporary symmetric triangle, then scatters into validated local
+AO destinations. Its additional cache is bounded and charged at the global
+spin-matrix capacity through the shared numeric ledger. Dense qualification
+does not admit indexed scatter; empty domains, insufficient cache/provider
+budget and unavailable providers retain generated execution. Map discovery
+must precede optional preparation. `--indexed-potential` qualifies this path
+against independent scalar/CPU references, capture and resource-failure gates.
 Device bodies can be captured without changing host work counters; physical
 replay publication counts the symmetric products and upper-triangle scalar
 summands. The deterministic point totals retain their original order.

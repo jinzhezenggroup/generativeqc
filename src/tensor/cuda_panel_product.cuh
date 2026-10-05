@@ -104,7 +104,12 @@ class CudaPanelProduct final : public PreparedPanelProduct {
       // host registry metadata cannot be reinterpreted as a smaller GPU budget.
       if (status == cudaErrorMemoryAllocation && !host_oom) {
         (void)cudaGetLastError();
-        context_.reset();
+        // This is a live fallback: failed drain/destruction must propagate.
+        // Preparation remains on the context's device and shares its measurement lock.
+        {
+          std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+          context_.release_locked();
+        }
         offer.rejection = "matrix-panel cache allocation unavailable";
       } else {
         generativeqc_tensor::cuda_check(status);

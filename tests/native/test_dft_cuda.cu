@@ -19,6 +19,7 @@
 #include "generativeqc/generativeqc.hpp"
 #include "molecule/basis.hpp"
 #include "runtime/cuda_resources.cuh"
+#include "runtime/resource_ledger.hpp"
 
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_density_provider_for_test(bool, bool);
@@ -29,6 +30,7 @@ extern "C" void xc_density_materialize_for_test(cudaStream_t, const double*, std
                                                 std::size_t, double*, int*);
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 extern "C" void xc_potential_qualification_for_test(bool library, bool unavailable);
+extern "C" void xc_potential_indexed_qualification_for_test(bool library);
 
 namespace {
 using namespace generativeqc::dft;
@@ -862,6 +864,7 @@ void matrix_schedule_cases() {
 #include "dft_ao_discovery_cases.cuh"
 #include "dft_pbe0_ao_discovery_cases.cuh"
 #include "dft_potential_lowering_cases.cuh"
+#include "dft_indexed_potential_cases.cuh"
 #include "dft_density_provider_cases.cuh"
 #include "dft_density_provider_benchmark.cuh"
 #include "dft_indexed_density_cases.cuh"
@@ -873,6 +876,10 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--indexed-potential") {
+      indexed_potential_cases();
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--potential-benchmark") {
       potential_lowering_benchmark();
       return 0;

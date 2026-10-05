@@ -474,7 +474,7 @@ inline void scheduled_potential(cudaStream_t stream, const double* ao,
   };
   binding->execute(stream,{std::size_t(n),std::size_t(work_jets*count),std::size_t(spins),
       ao,work,potential,error,accumulate,ao_ids!=nullptr || (full_n && full_n!=n),
-      &state,generated,materialize,epilogue});
+      &state,generated,materialize,epilogue,ao_ids,std::size_t(full_n)});
 }
 """
 

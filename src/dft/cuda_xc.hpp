@@ -189,8 +189,10 @@ class CudaXcPlan {
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
   /** Setup-only provider preparation within an explicit additional allowance.
-   * Zero retains the generated incumbent. The allowance is not numeric arena
-   * space; an optional provider owns it separately and reports its reservation.
+   * Zero retains the generated incumbent. The allowance is separate from the
+   * numeric arena and covers opaque provider storage plus any compact-output
+   * cache, reported separately by the binding. Discover maps before preparing
+   * optional resources; a dense preparation does not qualify indexed scatter.
    * Production currently has no qualified alternative endpoint profile. */
   void prepare_potential(std::size_t provider_budget = 0);
   const tensor::SymmetricProductDiagnostic& potential_lowering() const noexcept {
@@ -201,7 +203,11 @@ class CudaXcPlan {
    * Mixed admission requires executable physical-layout support and a Qualified
    * entry in the resolved point-program census; local maps remain strict FP64.
    * A nonzero provider_budget also requires the caller to reserve the separate
-   * PreparedPanelProduct::host_reservation; diagnostics report actual charges. */
+   * PreparedPanelProduct::host_reservation; diagnostics report actual charges.
+   * Before evaluation, generated/disabled bindings may be replaced. With an
+   * enabled provider, another nonzero-budget preparation is rejected before
+   * binding/provider setup; use zero budget to release it transactionally first.
+   * A failed preparation preserves the previous tables and provider. */
   void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
                        std::uint64_t expected_replays = 1, std::size_t provider_budget = 0);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
