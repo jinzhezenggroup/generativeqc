@@ -192,3 +192,114 @@ def test_tensor_schedule_classifications_preserve_existing_decisions() -> None:
         entries["tensor-schedule:layouts"]["classification"]
         == "guarded-promotion-candidate"
     )
+
+
+def test_policy_taxonomy_declares_scientific_choices() -> None:
+    payload = _payload()
+    assert "scientific-choice" in payload["classifications"]
+    candidate = copy.deepcopy(payload)
+    candidate["classifications"].remove("scientific-choice")
+    errors = validate_inventory(candidate, root=ROOT, check_sources=False)
+    assert any("policy taxonomy" in error for error in errors)
+
+
+def test_scientific_model_and_projection_choices_remain_explicit() -> None:
+    entries = {
+        control: entry
+        for entry in _payload()["entries"]
+        for control in entry["controls"]
+    }
+    for control in (
+        "public-model:density-fitting",
+        "public-model:cosx-exchange",
+        "initial-guess:basis-projection",
+    ):
+        assert entries[control]["classification"] == "scientific-choice"
+    assert (
+        entries["initial-guess:preliminary-scf"]["classification"]
+        == "needs-qualification"
+    )
+    assert (
+        entries["cc-option:packed_diis"]["classification"]
+        == "guarded-promotion-candidate"
+    )
+
+
+def test_public_density_fitting_default_is_audited(tmp_path: Path) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "python/generativeqc/calculator.py"
+    changed = source.read_text().replace(
+        'density_fitting: str | bool = "none"',
+        'density_fitting: str | bool = "auto"',
+        1,
+    )
+    source.write_text(changed)
+    errors = validate_inventory(payload, root=tmp_path)
+    assert any("density-fitting default drifted" in error for error in errors)
+
+
+def test_fock_approximation_default_is_audited(tmp_path: Path) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/scf/fock_build.hpp"
+    changed = source.read_text().replace(
+        "FockApproximation approximation{FockApproximation::Exact};",
+        "FockApproximation approximation{FockApproximation::DensityFitted};",
+        1,
+    )
+    source.write_text(changed)
+    errors = validate_inventory(payload, root=tmp_path)
+    assert any("Fock approximation default drifted" in error for error in errors)
+
+
+def test_preliminary_initial_guess_default_is_audited(tmp_path: Path) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "python/generativeqc/calculator.py"
+    changed = source.read_text().replace(
+        "initial_guess: InitialGuessSpec | None = None",
+        "initial_guess: InitialGuessSpec | None = InitialGuessSpec()",
+        1,
+    )
+    source.write_text(changed)
+    errors = validate_inventory(payload, root=tmp_path)
+    assert any("initial-guess default drifted" in error for error in errors)
+
+
+def test_new_cc_default_off_option_must_be_registered(tmp_path: Path) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/cc/solver.hpp"
+    original = source.read_text()
+    changed = original.replace(
+        "struct SolverOptions {",
+        "struct SolverOptions {\n  bool new_default_off_path{false};",
+        1,
+    )
+    assert changed != original
+    source.write_text(changed)
+    errors = validate_inventory(payload, root=tmp_path)
+    assert any(
+        "cc-option:new_default_off_path" in error and "unregistered" in error
+        for error in errors
+    )
+
+
+def test_new_response_default_off_option_must_be_registered(tmp_path: Path) -> None:
+    payload = _payload()
+    _copy_audited_sources(payload, tmp_path)
+    source = tmp_path / "src/hf/rhf_frame_response.hpp"
+    original = source.read_text()
+    changed = original.replace(
+        "struct RHFFrameResponseOptions {",
+        "struct RHFFrameResponseOptions {\n  bool new_default_off_path{false};",
+        1,
+    )
+    assert changed != original
+    source.write_text(changed)
+    errors = validate_inventory(payload, root=tmp_path)
+    assert any(
+        "response-option:new_default_off_path" in error and "unregistered" in error
+        for error in errors
+    )
