@@ -1,0 +1,246 @@
+/** Intrusive actual J/K streaming admissions for complete native SCF attempts.
+ * The input contains only frozen public geometry and basis data.
+ * This probe solves anew; it never substitutes for E/F timing.
+ * Borrowed counters use the production generated/native task-entry hooks.
+ */
+#include <cuda_runtime_api.h>
+
+#include <array>
+#include <algorithm>
+#include <cmath>
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "dft/cuda_ks.hpp"
+#include "dft/density_source.hpp"
+#include "dft/grid.hpp"
+#include "molecule/basis.hpp"
+#include "runtime/resource_cuda.cuh"
+#include "scf/cuda/direct_jk_plan.hpp"
+#include "scf/cuda/direct_bounded_fallback.hpp"
+#include "scf/cuda/direct_constants.hpp"
+#include "scf/cuda_fock_execution.hpp"
+#include "scf/fock_provider.hpp"
+
+namespace {
+void require(bool condition, const std::string& message) {
+  if (!condition) throw std::runtime_error(message);
+}
+void check(cudaError_t status) { require(status == cudaSuccess, cudaGetErrorString(status)); }
+constexpr std::size_t classes = generativeqc::scf::detail::kDirectQuartetShellClassCount;
+using Counts = std::array<unsigned long long, classes>;
+
+void print_counts(const Counts& counts) {
+  std::cout << '[';
+  for (std::size_t index = 0; index < counts.size(); ++index) {
+    if (index) std::cout << ',';
+    std::cout << counts[index];
+  }
+  std::cout << ']';
+}
+
+/** Destroy the plan after this borrower has drained and detached its pointers. */
+struct BorrowedCounters {
+  generativeqc::scf::cuda_execution::GeneratedExchangePlan& owner;
+  unsigned long long* device{};
+  explicit BorrowedCounters(generativeqc::scf::cuda_execution::GeneratedExchangePlan& plan)
+      : owner(plan) {
+    require(!owner.admitted_shell_counts && !owner.shared->admitted_shell_counts,
+            "another observer owns this provider");
+    check(generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&device),
+                                                      2 * classes * sizeof(*device)));
+    owner.shared->admitted_shell_counts = device;
+    owner.admitted_shell_counts = device + classes;
+  }
+  ~BorrowedCounters() {
+    cudaStreamSynchronize(owner.shared->stream);
+    owner.shared->admitted_shell_counts = nullptr;
+    owner.admitted_shell_counts = nullptr;
+    generativeqc::runtime::resource_cuda_free(device);
+  }
+};
+}  // namespace
+
+int main(int argc, char** argv) try {
+  using namespace generativeqc;
+  require(argc == 3 && std::getenv("SLURM_JOB_ID"),
+          "usage inside Slurm: probe ORIGINAL_INPUT MOVED_INPUT");
+  const char* expected = std::getenv("EXPECTED_SOURCE_IDENTITY");
+  require(expected && std::string(generativeqc_get_source_identity()) == expected,
+          "loaded source differs from requested source");
+  std::vector<double> moved_seed;
+  for (unsigned geometry = 0; geometry != 2; ++geometry) {
+    std::ifstream input(argv[geometry + 1]);
+    std::size_t atom_count{}, shell_count{};
+    require(bool(input >> atom_count >> shell_count), "missing geometry/basis header");
+    core::System system;
+    system.basis_representation = GENERATIVEQC_BASIS_SPHERICAL;
+    system.atoms.resize(atom_count);
+    for (auto& atom : system.atoms) {
+      require(bool(input >> atom.atomic_number >> atom.position[0] >> atom.position[1] >>
+                   atom.position[2]),
+              "missing atom");
+      system.electron_count += atom.atomic_number;
+    }
+    system.shells.resize(shell_count);
+    for (auto& shell : system.shells) {
+      std::size_t primitives{};
+      require(bool(input >> shell.atom_index >> shell.angular_momentum >> primitives),
+              "missing shell");
+      shell.primitives.resize(primitives);
+      for (auto& primitive : shell.primitives)
+        require(bool(input >> primitive.exponent >> primitive.coefficient), "missing primitive");
+    }
+    std::string detail;
+    require(molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+            detail);
+    scf::FockBuildSpec spec;
+    spec.derivative_order = 1;
+    spec.exchange.coefficient = -0.125;
+    const auto strategy = scf::resolve_fock_build(spec, scf::FockBackend::Cuda, 1e-12);
+    const scf::PreparedFockPlan provider(system, nullptr, strategy, 0);
+    auto* raw = provider.cuda_direct_source();
+    require(raw && raw->generated_exchange && raw->generated_exchange->shared->value_capability,
+            "probe requires complete generated/native streaming J/K coverage");
+    const auto binding = scf::prepared_cuda_fock_binding(provider);
+    require(bool(binding), "missing resident provider binding");
+    auto& generated = *raw->generated_exchange;
+    BorrowedCounters counters(generated);
+    const dft::AoBasis basis(system);
+    const dft::GridSpec grid_spec{1, 48, 16, 32, 3, 1e-12};
+    const auto grid = dft::MolecularGrid::from_cuda(system, grid_spec, 0, true);
+    scf::ScfOptions options;
+    options.compute_forces = false;
+    options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+    options.energy_tolerance = 1e-12;
+    options.density_tolerance = 1e-10;
+    options.screening_tolerance = 1e-12;
+    options.max_iterations = 100;
+    options.semilocal_exchange_scale = 0.75;
+    options.semilocal_correlation_scale = 1.0;
+    dft::CudaKsPlan plan(provider, basis, grid, options, dft::SemilocalFamily::Pbe, 256);
+    std::cout << std::setprecision(17) << std::unitbuf;
+    std::cout
+        << "{\"kind\":\"identity\",\"source_identity\":" << std::quoted(expected)
+        << ",\"geometry\":" << geometry << ",\"atoms\":" << atom_count << ",\"aos\":" << basis.nao
+        << ",\"job\":" << std::quoted(std::getenv("SLURM_JOB_ID"))
+        << ",\"present_mask\":" << generated.shared->class_mask
+        << ",\"covered_mask\":" << generated.shared->value_class_mask
+        << ",\"observer_device_bytes\":" << 2 * classes * sizeof(unsigned long long)
+        << ",\"unit\":\"admitted streaming shell-task dispatch; not primitive recurrence\"}\n";
+    for (unsigned replay = 0; replay != 1; ++replay) {
+      plan.begin(geometry && replay == 0 ? &moved_seed : nullptr, replay != 0);
+      auto previous = plan.transfers();
+      unsigned iteration = 0;
+      while (plan.active()) {
+        check(cudaMemsetAsync(counters.device, 0, 2 * classes * sizeof(unsigned long long),
+                              binding.stream));
+        plan.enqueue_iteration();
+        plan.finish_iteration();
+        Counts coulomb{}, exchange{};
+        check(cudaMemcpyAsync(coulomb.data(), counters.device, sizeof(coulomb),
+                              cudaMemcpyDeviceToHost, binding.stream));
+        check(cudaMemcpyAsync(exchange.data(), counters.device + classes, sizeof(exchange),
+                              cudaMemcpyDeviceToHost, binding.stream));
+        check(cudaStreamSynchronize(binding.stream));
+        const auto current = plan.transfers();
+        require(current.iterations == previous.iterations + 1 &&
+                    current.iteration_chunks == previous.iteration_chunks + 1,
+                "one observed step must execute one drained physical iteration");
+        const char* build = "strict-full-density";
+        std::cout << "{\"kind\":\"iteration\",\"replay\":" << replay << ",\"geometry\":" << geometry
+                  << ",\"iteration\":" << ++iteration << ",\"build\":" << std::quoted(build)
+                  << ",\"j_admitted\":";
+        print_counts(coulomb);
+        std::cout << ",\"k_admitted\":";
+        print_counts(exchange);
+        std::cout << ",\"failed\":" << (plan.failed() ? "true" : "false") << "}\n";
+        previous = current;
+      }
+      const auto result = plan.result(false);
+      const auto& ao = result.dft_diagnostic.cuda_ao_selection;
+      require(ao.requested && ao.selected && ao.cutoff == 1e-16 && ao.xc_evaluations > 0 &&
+                  ao.point_ao_square_sum < ao.dense_point_ao_square_sum,
+              "composed local-AO work did not execute");
+      std::cout << "{\"kind\":\"result\",\"replay\":" << replay << ",\"geometry\":" << geometry
+                << ",\"converged\":" << (result.converged ? "true" : "false")
+                << ",\"energy\":" << result.energy << ",\"fock_builds\":" << result.fock_builds
+                << ",\"energy_change\":" << result.energy_change
+                << ",\"physical_residual_rms\":" << result.physical_residual_rms
+                << ",\"final_residual_audits\":" << result.precision.final_residual_audits
+                << ",\"ao_point_square_sum\":" << ao.point_ao_square_sum
+                << ",\"ao_dense_point_square_sum\":" << ao.dense_point_ao_square_sum
+                << ",\"xc_evaluations\":" << ao.xc_evaluations << "}\n";
+      require(result.converged && !plan.failed(),
+              "SCF attempt did not converge; no cold retry in work probe");
+      require(result.fock_builds == iteration,
+              "observed build count differs from actual owner count");
+
+      // This is an intrusive replay of the unchanged production full-range
+      // derivative kernel, not a complete endpoint or per-class wall timer.
+      // Populate Cartesian density and bound metadata through the real owner,
+      // then attach the already-supported borrowed shell-admission observer.
+      require(generated.force_capability && generated.bounded_pair_order,
+              "missing bounded force lease");
+      auto final_density=plan.warm_density();
+      check(cudaMemcpyAsync(raw->density,final_density.data(),final_density.size()*sizeof(double),
+                            cudaMemcpyHostToDevice,binding.stream));
+      std::vector<double> production;
+      check(scf::cuda_execution::execute_generated_full_range_energy_derivatives(
+          generated,false,raw->density,nullptr,1.0,-0.25,production));
+      using Entry=scf::cuda_execution::DeviceShellClassProfileEntry;
+      Entry* observer=nullptr;
+      check(runtime::resource_cuda_malloc(reinterpret_cast<void**>(&observer),classes*sizeof(Entry)));
+      struct ReleaseObserver {
+        Entry* pointer; cudaStream_t stream;
+        ~ReleaseObserver(){cudaStreamSynchronize(stream);runtime::resource_cuda_free(pointer);}
+      } release{observer,binding.stream};
+      check(cudaMemsetAsync(observer,0,classes*sizeof(Entry),binding.stream));
+      check(cudaMemsetAsync(generated.force,0,production.size()*sizeof(double),binding.stream));
+      check(cudaMemsetAsync(generated.force_cursor,0,sizeof(unsigned long long),binding.stream));
+      auto& shared=*generated.shared;
+      scf::cuda_execution::launch_bounded_direct_shell_quartet_kernel_scaled(
+          false,scf::cuda_execution::DirectScreeningPurpose::Force,shared.worker_blocks,
+          scf::cuda_execution::kBoundedDirectThreads,0,binding.stream,shared.batch,shared.screening,
+          shared.shell_bounds,generated.shell_pair_density_bounds,generated.bounded_pair_order,
+          generated.shell_pair_block_bounds,generated.system_density_bounds,nullptr,0U,
+          generated.heads,shared.schwarz,generated.direct_spin,shared.active,generated.force,
+          generated.force_cursor,observer,1.0,-0.25,true,generated.bounded_block_domain);
+      check(cudaGetLastError());
+      std::array<Entry,classes> admissions{};
+      std::vector<double> observed(production.size());
+      check(cudaMemcpyAsync(admissions.data(),observer,sizeof(admissions),cudaMemcpyDeviceToHost,binding.stream));
+      check(cudaMemcpyAsync(observed.data(),generated.force,observed.size()*sizeof(double),cudaMemcpyDeviceToHost,binding.stream));
+      check(cudaStreamSynchronize(binding.stream));
+      double max_error=0.0;
+      for(std::size_t i=0;i<observed.size();++i) {
+        const double error=std::abs(production[i]+observed[i]); // force versus energy derivative.
+        require(std::isfinite(error) && error<1e-9,"observer changed derivative result");
+        max_error=std::max(max_error,error);
+      }
+      std::cout << "{\"kind\":\"derivative_admissions\",\"geometry\":" << geometry
+                << ",\"atoms\":" << atom_count << ",\"source_channels\":[\"J\",\"K\"]"
+                << ",\"shared_recurrence\":true,\"observer_device_bytes\":" << sizeof(admissions)
+                << ",\"max_production_replay_error\":" << max_error << ",\"classes\":[";
+      for(std::size_t cls=0;cls<classes;++cls){
+        if(cls)std::cout << ',';
+        const auto& e=admissions[cls];
+        std::cout << "{\"class\":"<<cls<<",\"shell_quartets\":"<<e.shell_quartets
+                  <<",\"tiles\":"<<e.tiles<<",\"ao_quartet_upper_bound\":"<<e.ao_quartets
+                  <<",\"primitive_quartet_upper_bound\":"<<e.primitive_quartets<<'}';
+      }
+      std::cout << "]}\n";
+      if (geometry == 0 && replay == 0) moved_seed = plan.warm_density();
+      plan.set_warm_start_updates(false);
+    }
+  }
+  return 0;
+} catch (const std::exception& error) {
+  std::cerr << error.what() << '\n';
+  return 1;
+}

@@ -18,17 +18,23 @@ namespace generativeqc::molecule {
 class BasisGeometryIdentity {
  public:
   explicit BasisGeometryIdentity(const core::System& system) {
-    std::size_t count = 0;
-    visit(system, [&](std::uint64_t) {
-      if (count == words_.max_size()) throw std::length_error("DF source identity is too large");
-      ++count;
-      return true;
-    });
-    words_.reserve(count);
+    words_.reserve(required_storage_bytes(system) / sizeof(std::uint64_t));
     visit(system, [&](std::uint64_t word) {
       words_.push_back(word);
       return true;
     });
+  }
+
+  /** Exact logical payload query without allocating an identity snapshot. */
+  [[nodiscard]] static std::size_t required_storage_bytes(const core::System& system) {
+    std::size_t count = 0;
+    const auto maximum = std::vector<std::uint64_t>{}.max_size();
+    visit(system, [&](std::uint64_t) {
+      if (count == maximum) throw std::length_error("DF source identity is too large");
+      ++count;
+      return true;
+    });
+    return count * sizeof(std::uint64_t);
   }
 
   [[nodiscard]] bool matches(const core::System& system) const noexcept {

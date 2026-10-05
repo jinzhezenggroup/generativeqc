@@ -162,6 +162,7 @@ def resolve_model_identity(request: ModelResolutionInput) -> typing.Any:
         _method_manifest.METHOD_MP2,
         _method_manifest.METHOD_RCCSD,
         _method_manifest.METHOD_RCCSD_T,
+        _method_manifest.METHOD_DF_RCCSD_T,
     ):
         raise NotImplementedError("accuracy model is unavailable for this method")
     orbital = request.basis_metadata["orbital"]

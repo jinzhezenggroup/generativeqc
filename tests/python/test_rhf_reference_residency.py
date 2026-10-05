@@ -129,10 +129,12 @@ struct Owner {
   ~Owner() { scf::destroy_rhf_cuda_bucket_plan(plan); }
 };
 scf::ScfResult solve(Owner& owner, const core::System& system, const scf::ScfOptions& options,
-                     const std::vector<double>* seed=nullptr) {
+                     bool expected_reuse=false, const std::vector<double>* seed=nullptr) {
   auto rows=scf::run_rhf_cuda_bucket_cached(&owner.plan,{system},options,{seed},0);
   require(rows.size()==1 && rows[0].status==GENERATIVEQC_STATUS_SUCCESS,
           "CUDA reference endpoint failed");
+  require(rows[0].execution_plan_reused==expected_reuse,
+          "CUDA reference execution-plan reuse diagnostic");
   require(rows[0].scf.converged && rows[0].scf.reference, "missing physical reference");
   require(rows[0].scf.reference->numeric_capacity_bytes<=options.reference_memory_budget_bytes,
           "reference exceeded complete budget");
@@ -190,7 +192,7 @@ int main(int argc,char** argv) {
           "reused reference failed an independent physical-state gate");
 
   const auto warm_seed=cold_reuse.reference->density;
-  const auto warm_reuse=solve(reusable,system,qualification,&warm_seed);
+  const auto warm_reuse=solve(reusable,system,qualification,true,&warm_seed);
   compare(warm_reuse,qualification_expected);
   require(warm_reuse.precision.post_scf_fock_builds==0 &&
               warm_reuse.precision.skipped_final_fock_builds==1,
@@ -201,7 +203,7 @@ int main(int argc,char** argv) {
   require(molecule::validate_and_normalize(displaced,detail)==GENERATIVEQC_STATUS_SUCCESS,
           "qualification changed-geometry normalization");
   const auto displaced_expected=scf::run_rhf(displaced,qualification);
-  const auto changed_reuse=solve(reusable,displaced,qualification);
+  const auto changed_reuse=solve(reusable,displaced,qualification,true);
   compare(changed_reuse,displaced_expected);
   require(changed_reuse.precision.post_scf_fock_builds==0 &&
               changed_reuse.precision.skipped_final_fock_builds==1,
@@ -231,6 +233,15 @@ int main(int argc,char** argv) {
     require(resident==7*7*7*7*sizeof(double),"roomy reference did not retain ERIs");
     minimum=result.reference->numeric_capacity_bytes-resident;
     owned=scf::hf_cuda_owned_device_bytes(roomy.plan)-resident;
+  }
+  {
+    Owner retained; options.reference_memory_budget_bytes=512ULL<<20;
+    compare(solve(retained,system,options,false),expected);
+    compare(solve(retained,system,options,true),expected);
+    auto moved=system;moved.atoms[1].position[2]+=0.01;
+    require(molecule::validate_and_normalize(moved,detail)==GENERATIVEQC_STATUS_SUCCESS,
+            "retained changed geometry");
+    compare(solve(retained,moved,options,true),scf::run_rhf(moved,options));
   }
   for (std::size_t budget : {minimum+resident-1, minimum+resident}) {
     Owner boundary;options.reference_memory_budget_bytes=budget;

@@ -19,7 +19,7 @@ void require(bool condition, const char* message) {
  * exact Lambda is S/D in dense coordinates, including off-diagonal pair
  * orbits. No generated derivative or CPU response supplies the expected values.
  */
-void qualify(bool cuda) {
+void qualify(bool cuda, bool derived) {
   constexpr std::size_t o = 2, v = 3, n1 = o * v, n2 = n1 * n1;
   const double occupied[o]{-20.0, -1.0}, virtuals[v]{0.3, 2.0, 17.0};
   Problem p;
@@ -59,6 +59,12 @@ void qualify(bool cuda) {
           source2[k] = 0.001 * (std::min(k, mate) + 1);
           expected2[k] = source2[k] / p.d2[k];
         }
+  if (derived) {
+    std::vector<double> eps(occupied, occupied + o);
+    eps.insert(eps.end(), virtuals, virtuals + v);
+    initialize_canonical_denominators(p, eps, SolverOptions{}, true);
+    require(p.d2.empty(), "Lambda must consume canonical doubles without materialization");
+  }
   SolverResult cc;
   cc.status = SolveStatus::Converged;
   cc.t1.resize(n1);
@@ -103,6 +109,7 @@ void qualify(bool cuda) {
   options.diagonal_preconditioning = false;
   require(lambda_cpu_numeric_capacity(p, cc, options, true) == capacity, "optional capacity");
   check(solve(), false);
+  if (derived) return;  // Supplied-array fallback cases below require explicit mode.
   options.diagonal_preconditioning = true;
   const auto first = p.d1[0];
   // Alter only optional solver denominators: the physical Fock operator and
@@ -119,7 +126,9 @@ void qualify(bool cuda) {
 
 int main(int argc, char** argv) {
   try {
-    qualify(argc == 2 && std::string_view(argv[1]) == "--cuda");
+    const bool cuda = argc == 2 && std::string_view(argv[1]) == "--cuda";
+    qualify(cuda, false);
+    qualify(cuda, true);
     std::cout << "Lambda preconditioner oracle, fallback and budget gates passed\n";
     return 0;
   } catch (const std::exception& error) {
