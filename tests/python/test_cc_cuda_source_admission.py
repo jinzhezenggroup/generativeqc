@@ -11,12 +11,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _run(tmp_path: Path, program: str) -> None:
     compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+    cache = shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler and ccache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source, executable = tmp_path / "probe.cpp", tmp_path / "probe"
     source.write_text(program)
     compiled = subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-O0",
@@ -36,30 +39,6 @@ def _run(tmp_path: Path, program: str) -> None:
         [str(executable)], capture_output=True, text=True, timeout=10, check=False
     )
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def test_cuda_source_checked_phase_admission(tmp_path: Path) -> None:
-    _run(tmp_path, CAPACITY)
-
-
-def test_cuda_reference_finishes_before_optional_source(tmp_path: Path) -> None:
-    text = (ROOT / "src/methods/rccsd_method.cpp").read_text()
-    assert text.index("const auto problem_started =") < text.index(
-        "const auto source_plan = plan_correlated_cuda_source("
-    )
-    retained = text[
-        text.index("std::size_t retained_reference_bytes(") : text.index(
-            "cc::Problem build_problem("
-        )
-    ]
-    start = text.index("RccsdNativeState execute_rccsd_prepared(")
-    body = text[
-        start : text.index('    allocation_stage = "MO provider/problem";', start)
-    ]
-    # Execute the production reference and source-preparation prefix. Correlated
-    # kernels are outside this probe; their existing source-lifetime test remains.
-    body += "return {bool(prepared_exact), source_preparation_peak}; } catch (...) { throw; } }\n"
-    _run(tmp_path, PREFIX + retained + body + MAIN)
 
 
 def test_provider_schedule_checks_attempt_deltas(tmp_path: Path) -> None:
@@ -104,79 +83,86 @@ int main() {
     )
 
 
-CAPACITY = r"""
-#include <limits>
-#include "methods/correlated_cuda_source.hpp"
-int main() {
-  using generativeqc::methods::detail::plan_correlated_cuda_source;
-  for (std::size_t n : {2U,14U,100U,1000U}) {
-    for (std::size_t width : {32U,64U,128U}) {
-      const auto plan=plan_correlated_cuda_source(n,2*n,n,n,3*n,n/2,n/2,
-                                                 width,128*n,4096,8192,1ULL<<50);
-      if (!plan.admitted || plan.device_bytes!=8192 ||
-          plan.peak_bytes!=std::max(plan.one_electron_phase_bytes,plan.direct_phase_bytes)) return 1;
-      const auto exact=plan_correlated_cuda_source(n,2*n,n,n,3*n,n/2,n/2,
-                                                  width,128*n,4096,8192,plan.peak_bytes);
-      const auto short_plan=plan_correlated_cuda_source(n,2*n,n,n,3*n,n/2,n/2,
-                                                       width,128*n,4096,8192,plan.peak_bytes-1);
-      if (!exact.admitted || short_plan.admitted) return 2;
-      const auto larger_reference=plan_correlated_cuda_source(n,2*n,n,n,3*n,n/2,n/2,
-                                                             width,128*n,4196,8192,1ULL<<50);
-      if (larger_reference.peak_bytes!=plan.peak_bytes+100) return 3;
-    }
-  }
-  bool overflow=false, invalid=false;
-  try { (void)plan_correlated_cuda_source(2,2,1,std::numeric_limits<std::size_t>::max(),
-                                         2,1,1,32,0,0,1,1); }
-  catch (const std::overflow_error&) { overflow=true; }
-  try { (void)plan_correlated_cuda_source(2,2,1,2,2,1,1,0,0,0,1,1); }
-  catch (const std::invalid_argument&) { invalid=true; }
-  return !(overflow && invalid);
-}
-"""
+def test_cuda_reference_handoffs_preserve_single_source_owner(tmp_path: Path) -> None:
+    text = (ROOT / "src/methods/rccsd_method.cpp").read_text()
+    start = text.index("RccsdNativeState execute_rccsd_prepared(")
+    body = text[
+        start : text.index('    allocation_stage = "MO provider/problem";', start)
+    ]
+    # Execute the real reference/adapter prefix. Both resident and detached
+    # adapters can populate a source; the consumer must retain just one alias.
+    body += (
+        "return {bool(prepared_exact), source_preparation_peak, "
+        "bool(borrowed_reference_source), borrowed_reference_source.use_count(), "
+        "bool(reference_source.source), correlation_options.max_bytes, "
+        "reference_plan_reused}; } catch (...) { throw; } }\n"
+    )
+    helper = (ROOT / "src/methods/correlated_cuda_reference.hpp").read_text()
+    helper = helper[
+        helper.index("template <class Operation>") : helper.index("/** Method-layer")
+    ]
+    _run(tmp_path, PREFIX + helper + body + MAIN)
+
+
+def test_cuda_reference_resident_interaction_handoff_is_preferred() -> None:
+    entry = (ROOT / "src/scf/cuda_hf_entry.cpp").read_text()
+    direct = (ROOT / "src/scf/cuda/direct_jk_kernels.cu").read_text()
+    rccsd = (ROOT / "src/methods/rccsd_method.cpp").read_text()
+    rccsdt = (ROOT / "src/methods/rccsdt_method.cpp").read_text()
+    assert "exact_reference_source_identity" in entry
+    assert "run_rhf_cuda_cached(&owner.plan" in entry
+    assert "std::exchange(*plan, nullptr)" in entry
+    assert "launch_copy_resident_eri_tile" in entry
+    assert "copy_resident_eri_tile_kernel" in direct
+    assert "plan_correlated_cuda_source" not in rccsd
+    assert rccsd.index("if (state.reference_interaction_source)") < rccsd.index(
+        "else if (prepared_exact)"
+    )
+    assert "state.reference_interaction_source.get()" in rccsdt
+
 
 PREFIX = r"""
 #include <chrono>
 #include <memory>
+#include <stdexcept>
+#include <utility>
 #include <vector>
 #include "hf/reference.hpp"
-#include "methods/correlated_cuda_source.hpp"
 #include "scf/cuda/df_source_domain.hpp"
+#include "scf/rhf_source_handoff.hpp"
 #define GENERATIVEQC_HAS_CUDA 1
-int live=0,native_calls=0,host_calls=0,allocations=0;
-int warm_failure=0;
-bool converged=true,fail_source=false;
-std::size_t given_budget=0;
-namespace generativeqc::molecule {
-std::size_t ao_count(const core::System& s) noexcept { return s.shells.size(); }
-std::size_t cartesian_ao_count(const core::System& s) noexcept { return s.shells.size(); }
+int live=0,source_live=0,plan_live=0,native_calls=0,host_calls=0;
+int source_mode=0,warm_failure=0;
+bool converged=true,expect_source=true;
+namespace generativeqc::integrals {
+struct ElectronInteractionSource {
+  ElectronInteractionSource() { ++source_live; }
+  ~ElectronInteractionSource() { --source_live; }
+  std::shared_ptr<void> owner;
+};
 }
 namespace generativeqc::runtime {
-struct ExecutionContext { bool cuda=true; bool cuda_requested() const {return cuda;}
-                          int device_id() const {return 0;} };
+struct ExecutionContext {
+  bool cuda=true;
+  bool cuda_requested() const { return cuda; }
+  int device_id() const { return 0; }
+};
 }
-namespace generativeqc::cc { struct SolverOptions {std::size_t max_bytes=1<<20;}; }
+namespace generativeqc::cc { struct SolverOptions { std::size_t max_bytes=1024; }; }
 namespace generativeqc::scf {
-namespace cuda_execution { constexpr std::size_t kResidentPsssThreads=128; }
-enum class FockSpin { Restricted }; enum class FockBackend { Cuda };
-// Match the real FockBuildSpec default: value-only consumers must opt out.
-struct FockSpec {unsigned derivative_order=1;};
-FockSpec make_hf_fock_spec(FockSpin) {return {};}
-int resolve_fock_build(FockSpec spec,FockBackend,double) {
-  if (spec.derivative_order) throw std::runtime_error("unadmitted source derivatives");
-  return 0;
+struct ScfOptions { int resolved_fock_build=0; };
+struct CudaRhfBucketPlan {
+  CudaRhfBucketPlan() { ++plan_live; }
+  ~CudaRhfBucketPlan() { --plan_live; }
+};
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexcept {
+  return plan ? 64 : 0;
 }
-struct ScfOptions {int resolved_fock_build=0;};
+void destroy_rhf_cuda_bucket_plan(CudaRhfBucketPlan* plan) noexcept { delete plan; }
 struct PreparedFockPlan {
-  PreparedFockPlan() {++live;}
-  PreparedFockPlan(const core::System&,std::nullptr_t,int,int,std::size_t budget) {
-    if (!native_calls || live) throw std::runtime_error("source preceded native reference");
-    given_budget=budget;
-    if (fail_source) throw std::bad_alloc();
-    ++live; ++allocations;
-  }
-  ~PreparedFockPlan() {--live;}
-  int strategy() const {return 0;}
+  PreparedFockPlan() { ++live; }
+  ~PreparedFockPlan() { --live; }
+  int strategy() const { return 0; }
 };
 struct ScfResult {
   bool converged=false;
@@ -192,60 +178,123 @@ ScfResult run_prepared_fock_strategy(const PreparedFockPlan&,const ScfOptions&,
                                     const std::vector<double>*) {
   ++host_calls; return physical();
 }
-ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int,
-                       const std::vector<double>* seed) {
-  if (live) throw std::runtime_error("prior source survived into native reference");
+ScfResult run_rhf_cuda(
+    const core::System&,const ScfOptions&,int,const std::vector<double>* seed,
+    std::shared_ptr<const integrals::ElectronInteractionSource>* source=nullptr,
+    CudaRhfSourceHandoff* handoff=nullptr) {
+  if (live || source_live) throw std::logic_error("prior source survived into native reference");
+  if (bool(source)!=expect_source || bool(handoff)!=expect_source)
+    throw std::logic_error("wrong conventional/DF source dispatch");
   ++native_calls;
+  if (source) source->reset();
+  if (handoff) *handoff={};
+  if (converged && source_mode==1 && source) {
+    *source=std::make_shared<integrals::ElectronInteractionSource>();
+    // Exercise an adapter that reports the same source in both output slots.
+    if (handoff) handoff->source=*source;
+  } else if (converged && source_mode==2 && handoff) {
+    handoff->source=std::make_shared<integrals::ElectronInteractionSource>();
+    handoff->retained_numeric_bytes=32;
+    handoff->numeric_peak_bytes=256;
+  } else if (source_mode==3 && handoff) {
+    handoff->required_peak_bytes=2048;
+    handoff->resource_fallback=true;
+  }
   if (seed && warm_failure==1) throw std::runtime_error("injected warm reference failure");
   if (seed && warm_failure==2) return {};
   return physical();
 }
+ScfResult run_rhf_cuda_cached(
+    CudaRhfBucketPlan** plan,const core::System& system,const ScfOptions& options,int device,
+    const std::vector<double>* seed,bool* reused,
+    std::shared_ptr<const integrals::ElectronInteractionSource>* source=nullptr,
+    CudaRhfSourceHandoff* handoff=nullptr) {
+  const bool had_plan=*plan!=nullptr;
+  if (!*plan) *plan=new CudaRhfBucketPlan;
+  if (reused) *reused=had_plan;
+  auto result=run_rhf_cuda(system,options,device,seed,source,handoff);
+  if (result.converged && source && *source) {
+    auto resident=std::make_shared<integrals::ElectronInteractionSource>();
+    resident->owner=std::shared_ptr<CudaRhfBucketPlan>(std::exchange(*plan,nullptr));
+    *source=std::move(resident);
+    if (handoff) handoff->source=*source;
+  }
+  return result;
+}
 ScfResult run_rhf(const core::System&,const ScfOptions&,const std::vector<double>*) {
   ++host_calls; return physical();
 }
-std::size_t cuda_direct_jk_device_bytes(std::size_t,std::size_t,std::size_t,
-                                      std::size_t,std::size_t,unsigned) {return 8192;}
 }
 namespace generativeqc::methods::detail {
-struct MethodError : std::runtime_error {MethodError(int,const char* s):std::runtime_error(s){}};
-struct RccsdNativeState {bool prepared; std::size_t peak;};
+struct MethodError : std::runtime_error { MethodError(int,const char* s):std::runtime_error(s){} };
+struct RccsdNativeState {
+  bool prepared; std::size_t peak; bool borrowed; long owners; bool handoff_alias;
+  std::size_t budget; bool reused;
+};
 """
 
 MAIN = r"""
 }
 int main() {
   using namespace generativeqc;
-  core::System system; system.atoms.resize(1); system.shells.resize(2);
-  for (auto& shell : system.shells) shell.primitives.resize(1);
+  core::System system,auxiliary;
   runtime::ExecutionContext execution; scf::ScfOptions reference; cc::SolverOptions solver;
   std::unique_ptr<scf::PreparedFockPlan> cache;
   const std::vector<double> seed(4,0.5);
-  for (int mode=0;mode<7;++mode) {
-    cache=std::make_unique<scf::PreparedFockPlan>();
-    native_calls=host_calls=allocations=0; given_budget=0;
-    converged=mode!=2; fail_source=mode==3; solver.max_bytes=mode==1 ? 1 : 1<<20;
-    warm_failure=mode>=5 ? mode-4 : 0;
-    bool fallback=false;
-    try {
-      auto result=methods::detail::execute_rccsd_prepared(
-          execution,system,reference,solver,0,cache.get(),mode>=5 ? &seed : nullptr,
-          &fallback,&cache);
-      if (mode==2 || native_calls!=(mode>=5 ? 2 : 1) || host_calls) return 1;
-      if (result.prepared!=(mode==0 || mode>=4)) return 2;
-      if ((mode==0 || mode>=3) && given_budget!=8192) return 3;
-      if (mode==1 && allocations) return 4;
-      if (fallback!=(mode>=5)) return 8;
-    } catch (const methods::detail::MethodError&) {
-      if (mode!=2 || allocations || cache) return 5;
+  for (bool cached : {false,true}) {
+    for (int mode=0;mode<4;++mode) {
+      for (int failure=0;failure<3;++failure) {
+        source_mode=mode; warm_failure=failure; expect_source=true; converged=true;
+        cache=std::make_unique<scf::PreparedFockPlan>();
+        auto* plan=cached ? new scf::CudaRhfBucketPlan : nullptr;
+        native_calls=host_calls=0;
+        bool fallback=false;
+        const auto result=methods::detail::execute_rccsd_prepared(
+            execution,system,reference,solver,0,cache.get(),failure ? &seed : nullptr,
+            &fallback,&cache,nullptr,false,nullptr,cached ? &plan : nullptr);
+        const bool supplied=mode==1 || mode==2;
+        if (result.prepared || result.borrowed!=supplied || cache || live || source_live) return 1;
+        if (result.owners!=(supplied ? 1 : 0) || result.handoff_alias) return 2;
+        if (result.peak!=(mode==2 ? 256u : 0u)) return 3;
+        if (native_calls!=(failure ? 2 : 1) || host_calls || fallback!=bool(failure)) return 4;
+        if (bool(plan)!=(cached && mode!=1)) return 5;
+        if (result.budget!=(cached && mode!=1 ? 960u : 1024u) || result.reused!=cached) return 6;
+        scf::destroy_rhf_cuda_bucket_plan(plan);
+        if (plan_live) return 7;
+      }
     }
-    cache.reset();
-    if (live) return 6;
   }
-  execution.cuda=false; converged=true; fail_source=false;
-  cache=std::make_unique<scf::PreparedFockPlan>(); native_calls=host_calls=0;
+  // A failed physical reference cannot publish or retain a scientific source.
+  for (bool cached : {false,true}) {
+    auto* plan=cached ? new scf::CudaRhfBucketPlan : nullptr;
+    converged=false; native_calls=host_calls=0; warm_failure=0;
+    try {
+      (void)methods::detail::execute_rccsd_prepared(
+          execution,system,reference,solver,0,nullptr,nullptr,nullptr,&cache,
+          nullptr,false,nullptr,cached ? &plan : nullptr);
+      return 8;
+    } catch (const methods::detail::MethodError&) {}
+    if (native_calls!=1 || host_calls || source_live) return 9;
+    scf::destroy_rhf_cuda_bucket_plan(plan);
+  }
+  // DF references do not request an exact ERI source from either adapter.
+  converged=true; expect_source=false; source_mode=2;
+  for (bool cached : {false,true}) {
+    auto* plan=cached ? new scf::CudaRhfBucketPlan : nullptr;
+    native_calls=host_calls=0;
+    const auto result=methods::detail::execute_rccsd_prepared(
+        execution,system,reference,solver,0,nullptr,nullptr,nullptr,&cache,
+        &auxiliary,false,nullptr,cached ? &plan : nullptr);
+    if (result.borrowed || result.peak || result.prepared || native_calls!=1 || host_calls) return 10;
+    scf::destroy_rhf_cuda_bucket_plan(plan);
+  }
+  // CPU preparation remains cached and never enters the CUDA adapters.
+  execution.cuda=false; cache=std::make_unique<scf::PreparedFockPlan>();
+  native_calls=host_calls=0;
   auto* original=cache.get();
-  auto result=methods::detail::execute_rccsd_prepared(
+  const auto result=methods::detail::execute_rccsd_prepared(
       execution,system,reference,solver,0,cache.get(),nullptr,nullptr,&cache);
-  if (!result.prepared || cache.get()!=original || native_calls || host_calls!=1) return 7;
+  if (!result.prepared || cache.get()!=original || native_calls || host_calls!=1 ||
+      result.borrowed || result.peak || plan_live || source_live) return 11;
 }
 """

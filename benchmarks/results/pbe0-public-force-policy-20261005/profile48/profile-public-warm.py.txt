@@ -1,0 +1,38 @@
+"""Capture one public warm E/F call; never use these timings as clean endpoints."""
+import json
+import runpy
+from pathlib import Path
+from unittest.mock import patch
+
+import cupy as cp
+from generativeqc.batch import PreparedBatch
+
+original = PreparedBatch.execute
+calls = 0
+captured = 0
+
+
+def observed(self, *args, **kwargs):
+    """The first execute is cold; the second is the first unchanged warm replay."""
+    global calls, captured
+    calls += 1
+    if calls != 2:
+        return original(self, *args, **kwargs)
+    cp.cuda.Stream.null.synchronize()
+    cp.cuda.profiler.start()
+    cp.cuda.nvtx.RangePush('public.warm.energy_force')
+    try:
+        result = original(self, *args, **kwargs)
+        captured += 1
+        return result
+    finally:
+        cp.cuda.Stream.null.synchronize()
+        cp.cuda.nvtx.RangePop()
+        cp.cuda.profiler.stop()
+
+
+with patch.object(PreparedBatch, 'execute', observed):
+    runpy.run_path(str(Path(__file__).with_name('public-default-endpoint.py')), run_name='__main__')
+if calls != 12 or captured != 1:
+    raise RuntimeError(f'Unexpected capture inventory: {calls=}, {captured=}')
+print(json.dumps({'scope':'intrusive-first-original-warm-energy-plus-force', 'public_calls':calls, 'captured_calls':captured, 'clean_endpoint_timing':False}))

@@ -150,10 +150,10 @@ GENERATIVEQC_GRID_HD PointPair point_pair(double difference, size_t a, size_t b,
   }
   return result;
 }
-template <bool RetainedLogs, class Log>
+template <bool RetainedLogs, class Logs, class Products, class Bars, class Zeros, class Log>
 GENERATIVEQC_GRID_HD inline double pair_adjoint(const PointPair& state, size_t a, size_t b,
-                                                const double* logs, const double* products,
-                                                const double* bar_product, const size_t* zeros,
+                                                Logs logs, Products products,
+                                                Bars bar_product, Zeros zeros,
                                                 double maximum, Log logarithm) {
   // Saturated branches have exactly zero pullback. Skip before exponentiation
   // to avoid inf*0. One exact zero leaves the other factors; two kill the JVP.
@@ -174,16 +174,16 @@ GENERATIVEQC_GRID_HD inline double pair_adjoint(const PointPair& state, size_t a
   return bar_mu;
 }
 
-GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, const double* logs,
-                                                          const size_t* zeros) {
+template <class Logs, class Zeros>
+GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, Logs logs, Zeros zeros) {
   double maximum = -std::numeric_limits<double>::infinity();
   for (size_t a = 0; a < na; ++a)
     if (!zeros[a]) maximum = std::max(maximum, logs[a]);
   return maximum;
 }
-template <class Ratio>
+template <class Logs, class Products, class Bars, class Zeros, class Ratio>
 GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, double seed,
-    const double* logs, double* products, double* bar_product, const size_t* zeros,
+    Logs logs, Products products, Bars bar_product, Zeros zeros,
     double maximum, Ratio ratio) {
   double total = 0;
   for (size_t a = 0; a < na; ++a) {

@@ -277,11 +277,13 @@ void range_source(double* force,const double* density,double ck,bool accumulate=
 template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... args) {
   ++full_calls;
   const auto values=std::make_tuple(args...);
+  if(std::get<18>(values)!=37) throw std::runtime_error("full range lost borrowed domain");
   full_sources(std::get<14>(values),std::get<12>(values),std::get<16>(values),std::get<17>(values));
 }
 template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
   ++range_calls;
   const auto values=std::make_tuple(args...);
+  if(std::get<19>(values)!=37) throw std::runtime_error("LR lost borrowed domain");
   range_source(std::get<14>(values),std::get<12>(values),std::get<18>(values));
 }
 template<class... Args> int launch_bounded_shell_angular_energy_derivative(Args&&... args) {
@@ -293,6 +295,7 @@ template<class... Args> int launch_bounded_shell_angular_energy_derivative(Args&
   if(std::get<17>(values)!=(range==DirectCoulombRange::Full ? 0.0 : 0.3) ||
      (range==DirectCoulombRange::Long && std::get<18>(values)!=0.0))
     throw std::runtime_error("wrong angular radial/source arguments");
+  if(std::get<20>(values)!=37) throw std::runtime_error("angular route lost borrowed domain");
   if(range==DirectCoulombRange::Full) ++full_calls; else ++range_calls;
   // Model the real launcher's returned-error seam and partial device work:
   // thirteen owning-stream cursor resets, each followed by a launch check.
@@ -358,6 +361,7 @@ int main(int argc,char** argv) {
       std::isfinite(direct_force_density_coefficient_scaled<true>(
           2,0,0,spin_density,1,1,0,0,0.0,1.0)))) return 9;
   GeneratedExchangePlan plan{&shared,true,angular_schedule,&pair,&bound,force,&cursor,&head};
+  plan.bounded_block_domain=37;
   std::vector<double> output{99.0};
   const auto result_matches = [&]() {
     if(output.size()!=3*source_count) return false;

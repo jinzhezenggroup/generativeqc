@@ -84,12 +84,14 @@ using cudaStream_t = void*;
 using cudaEvent_t = void*;
 constexpr int cudaStreamNonBlocking = 1, cudaMemcpyHostToDevice = 1, cudaMemcpyDeviceToDevice = 2;
 int calls = 0, fail_at = 0, streams = 0, events = 0, allocations = 0, handles = 0, device = 7;
+int provider_alloc_failures = 0, arena_alloc_failures = 0;
 int step() { return ++calls == fail_at ? 999 : 0; }
 using cublasHandle_t = void*;
 constexpr int cudaErrorMemoryAllocation=2, CUBLAS_STATUS_ALLOC_FAILED=3;
 constexpr int CUBLAS_POINTER_MODE_HOST=0, CUBLAS_PEDANTIC_MATH=0, CUBLAS_OP_N=0, CUBLAS_OP_T=1;
 int cublasCreate(cublasHandle_t* p) {
   if (const int error=step()) return error;
+  if (provider_alloc_failures) { --provider_alloc_failures; return CUBLAS_STATUS_ALLOC_FAILED; }
   *p=new int(1); ++handles; return 0;
 }
 int cublasDestroy(cublasHandle_t p) { delete static_cast<int*>(p); --handles; return 0; }
@@ -122,6 +124,7 @@ int cudaEventCreate(cudaEvent_t* p) {
 int cudaEventDestroy(cudaEvent_t p) { delete static_cast<int*>(p); --events; return 0; }
 int cudaMalloc(void** p, std::size_t bytes) {
   if (const int error = step()) return error;
+  if (arena_alloc_failures) { --arena_alloc_failures; return cudaErrorMemoryAllocation; }
   *p = new unsigned char[bytes]; ++allocations; return 0;
 }
 int cudaMemcpyAsync(void* d, const void* s, std::size_t n, int, cudaStream_t) {
@@ -170,8 +173,12 @@ namespace dfhoist {
 struct CudaState : dfcore::CudaState {
   double *prepare_arena{}, *auxiliary_arena{};
 };
-constexpr std::size_t contraction_host_bytes = 1024;
-void prepare_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t&,std::size_t&) {}
+constexpr std::size_t contraction_host_bytes(std::size_t variants) { return 1024+variants*512; }
+std::size_t prepared_batch=0,prepared_tail=0;
+void prepare_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t batch,
+                          std::size_t tail,std::size_t&,std::size_t&) {
+  prepared_batch=batch; prepared_tail=tail;
+}
 }
 }
 std::size_t problem_host_bytes(const Problem&) { return 128; }
@@ -186,7 +193,7 @@ int main() {
   // Compile the production owner once, then exercise disabled, one-slot and
   // ordinary DIIS. Event creation participates in the same failure sequence.
   bool saw_matrix=false;
-  for (const unsigned naux : {0U, 2U}) {
+  for (const unsigned naux : {0U, 2U, 5U, 10U, 15U, 16U}) {
   p.naux = naux; p.df_bov.assign(naux, 0.1); p.df_bvv.assign(naux, 0.1);
   for (const unsigned history : {0U, 1U, 6U}) {
     generativeqc::cc::SolverOptions options;
@@ -200,6 +207,16 @@ int main() {
       if (good.diagnostic.numeric_capacity_bytes < 128 + good.layout.total + detached) {
         std::cerr << "CUDA detached result storage was not reserved\n"; return 8;
       }
+      auto expected_capacity = 128 + good.layout.total + detached;
+      if (good.plan.matrix_gemm) {
+        const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
+        const auto variants=batch>1 ? 1+(tail>1) : 0;
+        expected_capacity+=generativeqc::cc::kDFBlasProviderAllowance+
+          generativeqc::cc::generated::dfhoist::contraction_host_bytes(variants);
+        if(generativeqc::cc::generated::dfhoist::prepared_batch!=batch ||
+           generativeqc::cc::generated::dfhoist::prepared_tail!=tail) return 17;
+      }
+      if(good.diagnostic.numeric_capacity_bytes!=expected_capacity) return 18;
       if (events != (history ? 2 : 0)) return 9;
     }
     if (streams || events || allocations || handles || device != 7 || constructor_calls < 18) return 1;
@@ -226,5 +243,25 @@ int main() {
   }
   }
   if (!saw_matrix) return 11;
+  p.naux=2; p.df_bov.assign(2,0.1); p.df_bvv.assign(2,0.1);
+  // Allocation rejection exercises the actual production retry chain: a Q
+  // tile may lose its arena while the admitted matrix provider stays usable.
+  for (int failures : {0, 1, 2}) {
+    calls = fail_at = 0;
+    arena_alloc_failures = failures;
+    generativeqc::cc::SolverOptions options;
+    { generativeqc::cc::Owner retry(p, options, 0);
+      if (retry.plan.matrix_gemm != (failures < 2)) return 12;
+      if (retry.plan.auxiliary_batch_size != (failures == 0 ? 2U : 1U)) return 13;
+    }
+    if (streams || events || allocations || handles || device != 7) return 14;
+  }
+  calls = fail_at = 0;
+  provider_alloc_failures = 1;
+  { generativeqc::cc::SolverOptions options;
+    generativeqc::cc::Owner retry(p, options, 0);
+    if (retry.plan.matrix_gemm || retry.plan.auxiliary_batch_size != 1) return 15;
+  }
+  if (streams || events || allocations || handles || device != 7) return 16;
 }
 """

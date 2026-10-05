@@ -661,8 +661,6 @@ struct CudaKsPlan::Impl : KsStateStorage {
         (options.precision_mode && *options.precision_mode != GENERATIVEQC_PRECISION_FP64 &&
          *options.precision_mode != GENERATIVEQC_PRECISION_AUTO))
       throw std::invalid_argument("CUDA KS received an unsupported execution policy");
-    precision_schedule = resolve_cuda_ks_precision_schedule(
-        options.precision_mode, functional, fitted_coulomb, nonlocal_correlation != nullptr);
     if (nonlocal_correlation) {
       if (!is_semilocal_family(functional, SemilocalFamily::Pbe) &&
           !is_semilocal_family(functional, SemilocalFamily::Wb97mv))
@@ -723,19 +721,27 @@ struct CudaKsPlan::Impl : KsStateStorage {
     xc_layout = cuda_xc_layout(basis, grid, functional, spins == 2, tile, CudaXcAoPrecision::Fp64,
                                options.semilocal_exchange_scale,
                                options.semilocal_correlation_scale, borrow_resident_grid);
+    precision_schedule =
+        resolve_cuda_ks_precision_schedule(options.precision_mode, xc_layout.fast_paths,
+                                           fitted_coulomb, nonlocal_correlation != nullptr);
     const bool host_unfused =
         options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::HostUnfused;
-    // Explicit qualification-only switch; the ordinary SCF default is dense.
+    // Automatic local-AO requests use the XC owner's execution capability.
+    // Keep 0 as a debugging opt-out and 1 as a fail-closed explicit request.
+    // Capability describes legal execution, not endpoint profitability.
     // Fixed geometry maps belong to this owner, so a coordinate/grid rebuild
     // necessarily reruns discovery rather than reusing a pointer-based mask.
     const char* ao_selection = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
-    const bool select_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
-    if (ao_selection && !select_ao && std::strcmp(ao_selection, "0") != 0)
+    const bool disable_ao = ao_selection && std::strcmp(ao_selection, "0") == 0;
+    const bool request_ao = ao_selection && std::strcmp(ao_selection, "1") == 0;
+    if (ao_selection && !disable_ao && !request_ao)
       throw std::invalid_argument("GENERATIVEQC_CUDA_KS_ACTIVE_AO accepts only 0 or 1");
-    if (select_ao &&
-        (host_unfused || !cuda_xc_execution_capabilities(xc_layout).local_ao_selection))
+    const bool capable_local_ao =
+        !host_unfused && cuda_xc_execution_capabilities(xc_layout).local_ao_selection;
+    if (request_ao && !capable_local_ao)
       throw std::invalid_argument(
-          "experimental local SCF AO maps require a device-fused physical FP64 XC layout");
+          "local SCF AO maps require a device-fused physical FP64 XC layout");
+    const bool select_ao = !disable_ao && capable_local_ao;
     constexpr std::size_t ao_map_host_budget = 64U << 20;
     CudaXcAoSelectionResources ao_selection_bound;
     if (select_ao) ao_selection_bound = cuda_xc_ao_selection_resources(xc_layout);
@@ -845,6 +851,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
             throw std::logic_error("admitted native SCF AO selection failed its resource check");
           xc_layout = xc->layout();
         }
+        const auto admitted_precision = resolve_cuda_ks_iteration_precision(
+            precision_schedule, false,
+            cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+        xc->prepare_density(*admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
+                            options.max_iterations);
         prepared_ao_work = xc->ao_selection_work();
         prepared_ao_work.requested = select_ao;
         if (!admit_ao) {
@@ -929,7 +940,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     output.dft_diagnostic.occupations = occupations;
     output.dft_diagnostic.grid_points = xc_layout.npoint;
     output.dft_diagnostic.tile_points = xc_layout.tile_points;
-    output.dft_diagnostic.ao_order = is_semilocal_family(functional, SemilocalFamily::Lda) ? 0 : 1;
+    output.dft_diagnostic.ao_order = xc_layout.jets == 1 ? 0 : 1;
     // Scientific domain identity follows the functional, including B3LYP v2.
     output.dft_diagnostic.scf_domain_version =
         generated::split_hybrid_registered(functional)
@@ -1051,8 +1062,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   runtime::SolverRegionCudaBinding solver_region_binding() const {
-    const bool replay_functional = is_semilocal_family(functional, SemilocalFamily::Lda) ||
-                                   is_semilocal_family(functional, SemilocalFamily::Pbe);
+    const bool replay_point_program =
+        cuda_xc_capability_qualified(xc_layout.fast_paths.graph_replay);
     // CUDA-Graph replay remains limited to the semilocal body qualified by
     // #1437. Global-hybrid chunks may use the shared bounded SolverRegion
     // without capturing the exact-exchange provider.
@@ -1060,7 +1071,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !has_exchange && !has_range_correction && !nonlocal_correlation && !fitted_coulomb &&
         !precision_schedule.any_lower_precision() && options.semilocal_exchange_scale == 1.0 &&
         options.semilocal_correlation_scale == 1.0;
-    const bool replay = configured_replay_enabled() && replay_semilocal_only && replay_functional &&
+    const bool replay = configured_replay_enabled() && replay_semilocal_only &&
+                        replay_point_program &&
                         n <= static_cast<std::size_t>(scf::cuda_execution::kSmallEigensolverLimit);
     auto graph = device_chunk_binding();
     graph.qualification += warm_updates ? ":warm-updates" : ":frozen-warm";
@@ -1318,11 +1330,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
   }
 
   CudaXcView stage_xc(std::uint64_t next_generation,
-                      CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64) {
+                      generativeqc::runtime::PrecisionPhase phase =
+                          generativeqc::runtime::PrecisionPhase::StrictAudit) {
     if (options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused) {
       if (!xc) throw std::logic_error("device-fused XC owner is unavailable");
       if (!device_nonlocal) {
-        xc->enqueue(density, elements, next_generation, precision);
+        xc->enqueue(density, elements, next_generation, phase);
         return xc->view(next_generation);
       }
       xc->enqueue_density_features(density, elements, next_generation, nonlocal_raw_density,
@@ -1434,8 +1447,11 @@ struct CudaKsPlan::Impl : KsStateStorage {
           cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
       pending_mixed_coulomb =
           iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ);
+      const auto density_phase = strict_refinement
+                                     ? generativeqc::runtime::PrecisionPhase::StrictAudit
+                                     : generativeqc::runtime::PrecisionPhase::Admitted;
       pending_mixed_density =
-          iteration_precision.uses_lower_precision(cuda_ks_precision_region::kDensityContraction);
+          xc && !xc->density_binding(density_phase).precision.arithmetic.is_strict_fp64();
       // Provider selection stays inside the prepared Fock facade. For a fitted
       // hybrid, the first cold/warm-seed build has no trusted canonical factor
       // and stays dense. After a successful proposal becomes the current density,
@@ -1495,9 +1511,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
               detail);
       mixed_precision_executed =
           mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
-      const auto potential = stage_xc(
-          ++generation, pending_mixed_density ? CudaXcDensityPrecision::Fp32ComputeFp64Accumulate
-                                              : CudaXcDensityPrecision::Fp64);
+      const auto potential = stage_xc(++generation, density_phase);
       pending_generations[0] = generation;
       ++movement.submitted_iterations;
       pending_iterations = 1;
@@ -2300,7 +2314,7 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
       CudaXcView view;
       profile.milliseconds[3] = timed([&] {
         view = impl_->xc->enqueue_replay_body(impl_->density, impl_->elements,
-                                              CudaXcDensityPrecision::Fp64);
+                                              generativeqc::runtime::PrecisionPhase::StrictAudit);
       });
       read_error(view.error, "fixed-density XC");
       profile.present_mask |= (1U << 3);
