@@ -42,6 +42,8 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     )
     assert "runtime-heavy)" in section
     assert "dist_mode=loadfile" in section
+    assert "rebalance_paths=(" in section
+    assert "rebalance_lookup" in section
     assert "name: python (${{ matrix.shard }})" in section
     assert "coverage-report-python-${{ matrix.shard }}" in section
     assert "benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}" in section
@@ -88,6 +90,14 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
         "test_one_electron_cpu_codegen.py",
         "test_cc_solver.py",
         "test_cc_lambda_solver.py",
+        "test_df_cc_native_solver.py",
+        "test_df_lambda_matrix.py",
+        "test_df_lambda_reduction.py",
+        "test_xc_retirement.py",
+        "test_stationary_cooperative_kernel_host.py",
+        "test_hessian_reference.py",
+        "test_hessian_hvp.py",
+        "test_ecp_halogen_dft.py",
     ):
         assert path_name in section
 

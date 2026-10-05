@@ -15,7 +15,7 @@ from _cc_owner_test_support import compile_owner
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 
-from tools.generate_df_ccsd_hoisted import packed_programs
+from tools.generate_df_ccsd_hoisted import batched_auxiliary_program, packed_programs
 from tools.generate_df_lambda import matrix_programs
 from tools.generate_rccsd_native import (
     _dim,
@@ -36,7 +36,11 @@ def test_native_projection_validates_every_cc_recipe(tmp_path: Path) -> None:
     if compiler is None:
         pytest.skip("host C++ compiler unavailable")
     requests = []
-    for program in (*packed_programs().values(), *matrix_programs().values()):
+    for program in (
+        *packed_programs().values(),
+        batched_auxiliary_program(),
+        *matrix_programs().values(),
+    ):
         adapter = TensorLoweringAdapter(program)
         for node in program.live_nodes:
             matrix = _packed_matrix_gemm(node)

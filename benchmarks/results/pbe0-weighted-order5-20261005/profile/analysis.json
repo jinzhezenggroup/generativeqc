@@ -1,0 +1,33 @@
+{
+  "scope": "intrusive captured first original-geometry warm complete E+F call",
+  "clean_endpoint_timing": false,
+  "job": 5917,
+  "source_head": "8f90f0ac33ee6bd8a755fb85d71291e1f66c5884",
+  "source_identity": "e9d3f9226346d0ee60e93a6c93be88629af7c45bb28a49635649b276b6cfcab6",
+  "nvtx_complete_call_seconds": 26.188054089,
+  "sum_device_kernel_seconds": 23.409498963,
+  "kernel_groups_seconds": {
+    "two_electron_force": 6.552471546,
+    "AO_geometry_force": 2.667037467,
+    "Becke": 4.036175772,
+    "AO_jets": 1.117686432,
+    "one_electron_force": 1.078898273,
+    "XC_kernels": 1.9370304039999997,
+    "matrix_products": 0.790116593,
+    "KS_other": 0.4822607990000001,
+    "J_K_values": 4.427064144,
+    "other": 0.32075753300000015
+  },
+  "group_caveat": "Name-based sum of device kernel durations, not mutually exclusive complete endpoint wall components. Force kernel includes all dispatched classes; no angular share is inferred.",
+  "J_K_serial_streaming_regions": {
+    "first_region_seconds": 2.408809545,
+    "second_region_seconds": 1.974829598,
+    "classes": 20,
+    "interpretation": "First J then K per src/scf/cuda/direct_jk.cpp and direct_coulomb.cpp; events alone do not retain kernel input coefficients."
+  },
+  "raw_report": {
+    "local_path": "/data/jzzeng/qc-1895-order5-weighted-forces-20261005/.artifacts/profile-5917/warm96.nsys-rep",
+    "sha256": "6deb9324e02d29f9deaf76281cf9d2077afb15912b521bdaf20079734d73f9d2",
+    "bytes": 11120652
+  }
+}

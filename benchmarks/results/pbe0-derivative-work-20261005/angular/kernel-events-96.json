@@ -1,0 +1,67 @@
+[
+  {
+    "start_ns": 301166925,
+    "end_ns": 585686539,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)0, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 585695723,
+    "end_ns": 1095607379,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)1, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 1095616147,
+    "end_ns": 1992816283,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)2, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 1992824667,
+    "end_ns": 2819494232,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)3, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 2819520216,
+    "end_ns": 7005837947,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)4, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 7005860635,
+    "end_ns": 10490057343,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)5, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 10490086975,
+    "end_ns": 12470575829,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)6, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 12470614677,
+    "end_ns": 14131475012,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)7, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 14131514819,
+    "end_ns": 14679699210,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)8, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 14679730569,
+    "end_ns": 14728122364,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)9, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 14728143675,
+    "end_ns": 14776969546,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)10, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 14776984138,
+    "end_ns": 14823935240,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)11, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  },
+  {
+    "start_ns": 14823950567,
+    "end_ns": 14871329665,
+    "name": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)12, (int)4>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)"
+  }
+]
