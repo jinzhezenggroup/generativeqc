@@ -191,10 +191,9 @@
     "src/scf/cuda/df_coulomb.cpp": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "reason": "Streamed raw/metric Coulomb panels still submit vendor vectors directly. Resident dense and packed contractions consume canonical prepared TensorIR bindings.",
       "references": {
-        "cublasDgemmStridedBatched": 2,
-        "cublasDgemv": 6
+        "cublasDgemv": 4
       }
     },
     "src/scf/cuda/df_eigensystem.cpp": {
@@ -480,6 +479,18 @@
         "cublasSetWorkspace": 1,
         "cublasSgemm": 1,
         "cublasSgemmStridedBatched": 1
+      }
+    },
+    "src/tensor/cuda_vector_contraction.cpp": {
+      "classification": "provider",
+      "contract": "src/tensor/native_contraction.hpp",
+      "reason": "Shared prepared vector-result TensorIR contraction binding owns candidate selection, version queries and GEMV/strided-GEMM submission through an exclusively borrowed handle.",
+      "references": {
+        "cublasDgemmStridedBatched": 1,
+        "cublasDgemv": 1,
+        "cublasGetPointerMode": 1,
+        "cublasGetStream": 1,
+        "cublasGetVersion": 1
       }
     },
     "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu": {
