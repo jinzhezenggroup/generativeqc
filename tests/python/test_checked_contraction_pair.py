@@ -84,6 +84,13 @@ def test_pair_rejects_scalar_role_swaps_and_partial_science() -> None:
     partial = TensorLoweringAdapter(Program({"right": pair.first}))
     with pytest.raises(ValueError, match="complete two-output"):
         checked_transpose_pair_request(partial, pair, update, role=1, backend="cuda")
+    alias_output = TensorLoweringAdapter(
+        Program({"right": pair.first, "left": pair.second, "extra": pair.first})
+    )
+    with pytest.raises(ValueError, match="complete two-output"):
+        checked_transpose_pair_request(
+            alias_output, pair, update, role=1, backend="cuda"
+        )
     changed = einsum("pmn,pn->pm", *pair.first.inputs, coefficient=2)
     changed_pair = replace(pair, first=changed)
     changed_adapter = TensorLoweringAdapter(

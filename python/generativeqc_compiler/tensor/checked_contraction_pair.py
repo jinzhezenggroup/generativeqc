@@ -51,7 +51,11 @@ def checked_transpose_pair_request(
     expose a successful output after the other update fails.
     """
     first, second = pair.first, pair.second
-    if role not in (1, 2) or set(adapter.program.outputs.values()) != {first, second}:
+    if (
+        role not in (1, 2)
+        or len(adapter.program.outputs) != 2
+        or set(adapter.program.outputs.values()) != {first, second}
+    ):
         raise ValueError("checked pair requires its complete two-output region")
     for node in (first, second):
         if (

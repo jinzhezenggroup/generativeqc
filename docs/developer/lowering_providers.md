@@ -59,8 +59,8 @@ checked contract, including when test qualification is requested.
 
 Molecular derivative ordinary/symmetric and paired ESP projections use eight
 full/tail sites with a 192 KiB host reservation; explicit-point derivative
-assembly uses six with 160 KiB. Neither
-reserves a library device allowance or adds numeric buffers. The compiler
+assembly uses six with 160 KiB. Neither reserves a library device allowance
+or adds numeric buffers. The compiler
 traverses the three borrowed leading jet-axis slices without packing. Optional
 derivative diagnostics publish the prepared identities and actual work only
 after the complete response succeeds. Symmetric projection requests the original

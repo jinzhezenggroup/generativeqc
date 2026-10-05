@@ -888,8 +888,8 @@ class PreparedContractions {
     *summands_ += work;
   }
 
-  /** Execute a compiler-proven forward/transpose pair atomically with respect
-   * to checked publication. All binding, pointer and counter checks occur
+  /** Execute a compiler-proven forward/transpose pair with joint checked
+   * publication. All binding, pointer and counter checks occur
    * before enqueue; failure never falls back to separate partial contractions. */
   template <class Step>
   void execute_checked_transpose_pair(std::size_t first_slot, std::size_t second_slot,
