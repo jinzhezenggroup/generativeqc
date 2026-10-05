@@ -18,10 +18,13 @@ from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from tools.generate_df_ccsd_hoisted import batched_auxiliary_program, packed_programs
 from tools.generate_df_lambda import matrix_programs
 from tools.generate_rccsd_native import (
+    REPRESENTATIVE,
     _dim,
     _fraction,
     _packed_batched_matrix_gemm,
     _packed_matrix_gemm,
+    _prepare_production,
+    iteration_program,
 )
 
 
@@ -36,7 +39,9 @@ def test_native_projection_validates_every_cc_recipe(tmp_path: Path) -> None:
     if compiler is None:
         pytest.skip("host C++ compiler unavailable")
     requests = []
+    conventional = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
     for program in (
+        conventional,
         *packed_programs().values(),
         batched_auxiliary_program(),
         *matrix_programs().values(),

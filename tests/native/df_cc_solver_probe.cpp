@@ -80,7 +80,11 @@ int main() {
               << ' ' << d.df_gemm_calls << ' ' << d.df_gemm_summands << ' ' << d.df_packing_bytes
               << ' ' << d.df_provider_capacity_bytes << ' ' << d.df_auxiliary_batch_size << ' '
               << d.df_auxiliary_tiles << ' ' << d.df_accumulation_bytes << ' '
-              << d.denominator_identity << ' ' << d.derived_d2_iteration_evaluations << '\n';
+              << d.denominator_identity << ' ' << d.derived_d2_iteration_evaluations << ' '
+              << d.conventional_prepared_contractions << ' ' << d.conventional_contraction_calls
+              << ' ' << d.conventional_contraction_summands << ' '
+              << d.conventional_provider_capacity_bytes << ' ' << d.conventional_binding_host_bytes
+              << '\n';
     for (double x : result.t1) std::cout << x << ' ';
     for (double x : result.t2) std::cout << x << ' ';
     std::cout << '\n' << result.reason << '\n';

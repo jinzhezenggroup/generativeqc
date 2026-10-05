@@ -795,7 +795,10 @@ def _cpu_function(
             lines += _cpu_node(
                 node, number, names, storage=f"slot{arena_plan.node_slots[number]}"
             )
-    outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
+    outputs = {
+        key: names[typing.cast("typing.Any", value)._emit_index]
+        for key, value in program.outputs.items()
+    }
     if output_fields is not None:
         returned = [outputs[key] for key in output_fields]
     elif output_type == "IterationOutputs":
@@ -933,6 +936,16 @@ def _independent_cpu(
 
 def cpu_header() -> str:
     iteration = _prepare_production(iteration_program(*REPRESENTATIVE), "cpu")
+    iteration_cuda = _prepare_production(iteration_program(*REPRESENTATIVE), "cuda")
+    iteration_bindings = [
+        recipe
+        for node in iteration_cuda.live_nodes
+        if (recipe := (_packed_matrix_gemm(node) or _packed_batched_matrix_gemm(node)))
+        is not None
+    ]
+    iteration_dimensions = sorted(
+        {dimension for recipe in iteration_bindings for dimension in recipe[2:]}
+    )
     expanded = build_ccsd_program(*REPRESENTATIVE, form="expanded", diagnostics=False)
     replay = _prepare_production(expanded, "cpu", preserve_reduction_order=True)
     replay_fast = _reassociated_independent(expanded, "cpu")
@@ -1088,6 +1101,16 @@ def cpu_header() -> str:
             *[f"  const double* {name}{{}};" for name in TRIPLES_RESPONSE_INPUTS],
             "};",
             f'inline constexpr const char* iteration_equation_hash="{iteration.provenance["physical_equation"]}";',
+            f"inline constexpr std::size_t iteration_prepared_contractions={len(iteration_bindings)};",
+            (
+                "inline bool iteration_prepared_dimensions_fit(std::size_t o,std::size_t v){"
+                "[[maybe_unused]] const auto n=checked_add(o,v);try{return "
+                "iteration_prepared_contractions!=0 && "
+                + " && ".join(
+                    f"{dimension}<=2147483647ULL" for dimension in iteration_dimensions
+                )
+                + ";}catch(const std::length_error&){return false;}}"
+            ),
             f'inline constexpr const char* iteration_program_hash="{iteration.logical_hash}";',
             f'inline constexpr const char* replay_equation_hash="{replay.logical_hash}";',
             f'inline constexpr const char* lambda_rhs_program_hash="{lambda_rhs.logical_hash}";',
@@ -1623,21 +1646,31 @@ def _cuda_program(
     reset_error: bool = True,
     prepared_contractions: str | None = None,
     matrix_gemm: str | None = None,
+    kernel_prefix: str | None = None,
+    emit_kernels: bool = True,
 ) -> str:
     names = _prepare_program(program)
     arena_plan = _arena_plan(program)
     input_overrides = {} if input_overrides is None else dict(input_overrides)
     kernels = []
+    kernel_name = prefix if kernel_prefix is None else kernel_prefix
     for number, node in enumerate(_execution_nodes(program)):
-        if node.op != "input" and not (
-            (
-                (prepared_contractions or matrix_gemm)
-                and _packed_matrix_gemm(node) is not None
+        if (
+            emit_kernels
+            and node.op != "input"
+            and not (
+                (
+                    (prepared_contractions or matrix_gemm)
+                    and _packed_matrix_gemm(node) is not None
+                )
+                or (
+                    prepared_contractions
+                    and _packed_batched_matrix_gemm(node) is not None
+                )
             )
-            or (prepared_contractions and _packed_batched_matrix_gemm(node) is not None)
         ):
             kernels.append(
-                _cuda_kernel(node, number, prefix, names, batch_dim=batch_dim)
+                _cuda_kernel(node, number, kernel_name, names, batch_dim=batch_dim)
             )
     uses_complete_orbital = any(
         _dim(index) == "n"
@@ -1747,7 +1780,7 @@ def _cuda_program(
             ]
         )
         lines += [
-            f"  {prefix}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
+            f"  {kernel_name}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
         ]
     if prepared_contractions:
         # Build descriptors once per owner and batch/tail shape, never in run().
@@ -1763,7 +1796,10 @@ def _cuda_program(
         ]
         lines = declarations + lines
     lines.append("  generativeqc_tensor::cuda_check(cudaGetLastError());")
-    outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
+    outputs = {
+        key: names[typing.cast("typing.Any", value)._emit_index]
+        for key, value in program.outputs.items()
+    }
     if output_fields is not None:
         returned = [outputs[key] for key in output_fields]
     elif output_type == "DeviceIterationOutputs":
@@ -1934,6 +1970,17 @@ def cuda_source() -> str:
             '#include "generated_rccsd_cpu.hpp"',
             "namespace generativeqc::cc::generated {",
             _cuda_program(iteration, "iteration", "DeviceIterationOutputs"),
+            # Reuse the original scalar kernels for non-contraction nodes;
+            # only the traversal and immutable typed bindings differ.
+            _cuda_program(
+                iteration,
+                "iteration_prepared",
+                "DeviceIterationOutputs",
+                arena_field="iteration_arena",
+                prepared_contractions="(*s.conventional_contractions)",
+                kernel_prefix="iteration",
+                emit_kernels=False,
+            ),
             _independent_cuda(replay, replay_fast, "replay", "DeviceReplayOutputs"),
             _cuda_program(
                 lambda_rhs,
@@ -2007,6 +2054,8 @@ def cuda_source() -> str:
                 input_overrides={name: f"s.{name}" for name in orbital_jvp_input_names},
             ),
             "DeviceIterationOutputs run_iteration_cuda(CudaState& state){return run_iteration(state);}",
+            "DeviceIterationOutputs run_iteration_prepared_cuda(CudaState& state){return run_iteration_prepared(state);}",
+            "void prepare_iteration_contractions(CudaState& state,tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){bind_iteration_prepared(state,context,1,calls,summands);}",
             "DeviceReplayOutputs run_replay_cuda(CudaState& state){return run_replay(state);}",
             "DeviceLambdaOutputs run_lambda_rhs_cuda(CudaState& state){return run_lambda_rhs(state);}",
             "DeviceLambdaOutputs run_lambda_transpose_cuda(CudaState& state){return run_lambda_transpose(state);}",
