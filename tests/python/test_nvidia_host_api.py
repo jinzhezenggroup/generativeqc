@@ -1,5 +1,6 @@
 """Compile the provider-free wheel ABI without relying on installed cuBLAS."""
 
+import re
 import shutil
 import subprocess
 import typing
@@ -8,6 +9,31 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _implib_symbols(variable: str) -> set[str]:
+    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
+    try:
+        block = cmake.split(f"set({variable}", 1)[1].split(")", 1)[0]
+    except IndexError as exc:
+        raise AssertionError(f"missing {variable} in CUDA implib manifest") from exc
+    return set(block.split())
+
+
+def test_cudart_implib_covers_direct_host_source_calls() -> None:
+    """Fail fast when production host code adds an unlisted CUDA runtime call."""
+    symbols = _implib_symbols("GENERATIVEQC_CUDART_SYMBOLS")
+    # CUDA headers expose this source-level spelling while the ELF import is versioned.
+    object_symbol = {"cudaGetDeviceProperties": "cudaGetDeviceProperties_v2"}
+    missing: dict[str, list[str]] = {}
+    for source in sorted((ROOT / "src").rglob("*.cpp")):
+        if "xtb" in source.relative_to(ROOT / "src").parts:
+            continue
+        calls = set(re.findall(r"\\b(cuda[A-Z][A-Za-z0-9_]*)\\s*\\(", source.read_text()))
+        absent = sorted({object_symbol.get(call, call) for call in calls} - symbols)
+        if absent:
+            missing[source.relative_to(ROOT).as_posix()] = absent
+    assert not missing, f"CUDA wheel implib is missing host runtime symbols: {missing}"
 
 
 def test_cudart_implib_covers_grid_stream_flags() -> None:
