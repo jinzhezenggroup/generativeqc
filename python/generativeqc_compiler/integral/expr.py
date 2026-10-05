@@ -373,6 +373,9 @@ class Graph:
         self._constants: dict[Coefficient, Expr] = {}
         self._variables: dict[str, Expr] = {}
         self._value_numbers = ValueNumberTable[Node]()
+        # Nodes are immutable and this graph only appends new nodes, so the
+        # reachability/order for an existing ordered root tuple never changes.
+        self._topological_orders: dict[tuple[int, ...], tuple[int, ...]] = {}
 
     def _intern(self, node: Node) -> Expr:
         charge_symbolic_intern()
@@ -877,7 +880,7 @@ class Graph:
             source.identifier: target for source, target in replacements.items()
         }
         rebuilt: dict[int, Expr] = {}
-        for identifier in self.topological_order(roots):
+        for identifier in self._topological_order_tuple(roots):
             if identifier in substitutions:
                 rebuilt[identifier] = substitutions[identifier]
                 continue
@@ -1239,8 +1242,22 @@ class Graph:
 
         return visit(expression.identifier)
 
-    def topological_order(self, roots: Sequence[Expr]) -> list[int]:
-        """Return each reachable node once with dependencies first."""
+    def _topological_order_tuple(self, roots: Sequence[Expr]) -> tuple[int, ...]:
+        """Return a cached immutable dependency-first order for ordered roots.
+
+        Graph nodes are immutable and node identifiers are append-only. Once an
+        ordered root tuple exists, later interning cannot change any edge in its
+        reachable subgraph, so its topological order remains valid for the
+        lifetime of the graph.
+        """
+
+        normalized_roots = tuple(roots)
+        for root in normalized_roots:
+            self._require_graph(root)
+        identifiers = tuple(root.identifier for root in normalized_roots)
+        cached = self._topological_orders.get(identifiers)
+        if cached is not None:
+            return cached
 
         visited: set[int] = set()
         order: list[int] = []
@@ -1253,10 +1270,16 @@ class Graph:
                 visit(argument)
             order.append(identifier)
 
-        for root in roots:
-            self._require_graph(root)
-            visit(root.identifier)
-        return order
+        for identifier in identifiers:
+            visit(identifier)
+        result = tuple(order)
+        self._topological_orders[identifiers] = result
+        return result
+
+    def topological_order(self, roots: Sequence[Expr]) -> list[int]:
+        """Return each reachable node once with dependencies first."""
+
+        return list(self._topological_order_tuple(roots))
 
     def analyze_ssa(self, roots: Sequence[Expr]) -> SsaAnalysis:
         """Return use counts, last uses, and peak materialized live values.
@@ -1268,7 +1291,7 @@ class Graph:
         """
 
         normalized_roots = tuple(roots)
-        order = tuple(self.topological_order(normalized_roots))
+        order = tuple(self._topological_order_tuple(normalized_roots))
         definition_index = {identifier: index for index, identifier in enumerate(order)}
         use_counts = {identifier: 0 for identifier in order}
         last_uses = dict(definition_index)
@@ -1308,7 +1331,10 @@ class Graph:
             live_values += live_deltas[event]
             peak_live_values = max(peak_live_values, live_values)
 
-        counts = self.operation_counts(normalized_roots)
+        counts: dict[str, int] = {}
+        for identifier in order:
+            operation = self.nodes[identifier].operation
+            counts[operation] = counts.get(operation, 0) + 1
         operation_counts = tuple(sorted(counts.items()))
         arithmetic_operation_count = sum(
             self._node_arithmetic_operation_count(self.nodes[identifier])
@@ -1355,7 +1381,7 @@ class Graph:
             # A direct multiply consumed only by one add can be contracted
             # without recomputation. Select at most one multiply per binary add
             # so the lowering remains an ordinary three-operand FMA.
-            for identifier in self.topological_order(normalized_roots):
+            for identifier in self._topological_order_tuple(normalized_roots):
                 node = self.nodes[identifier]
                 if node.operation != "add":
                     continue
@@ -1453,7 +1479,7 @@ class Graph:
 
         baseline_emission_order = tuple(
             identifier
-            for identifier in self.topological_order(normalized_roots)
+            for identifier in self._topological_order_tuple(normalized_roots)
             if identifier in materialized
         )
         emission_order = baseline_emission_order
@@ -1561,7 +1587,7 @@ class Graph:
             return tuple(sorted(counts.items()))
 
         counts: Counter[str] = Counter()
-        for identifier in self.topological_order(roots):
+        for identifier in self._topological_order_tuple(roots):
             if identifier in materialized:
                 counts.update(dict(expression_counts(identifier, True)))
         for root in roots:
@@ -1579,7 +1605,7 @@ class Graph:
         if fusion != AlgebraFusion.FMA:
             return ()
         operations = []
-        for identifier in self.topological_order(roots):
+        for identifier in self._topological_order_tuple(roots):
             node = self.nodes[identifier]
             if node.operation != "add":
                 continue
@@ -1745,7 +1771,7 @@ class Graph:
     def evaluate(self, expression: Expr, variables: Mapping[str, float]) -> float:
         """Evaluate one root for generator tests and finite-difference oracles."""
 
-        order = self.topological_order([expression])
+        order = self._topological_order_tuple([expression])
         if not any(
             self.nodes[identifier].operation == "select_le" for identifier in order
         ):
@@ -1815,7 +1841,7 @@ class Graph:
 
     def operation_counts(self, roots: Sequence[Expr]) -> dict[str, int]:
         counts: dict[str, int] = {}
-        for identifier in self.topological_order(roots):
+        for identifier in self._topological_order_tuple(roots):
             operation = self.nodes[identifier].operation
             counts[operation] = counts.get(operation, 0) + 1
         return counts
