@@ -419,6 +419,30 @@
         "cutensorGetVersion": 1
       }
     },
+    "src/tensor/cuda_cublaslt.cuh": {
+      "classification": "provider",
+      "contract": "src/tensor/native_cublaslt.hpp",
+      "reason": "Shared cuBLASLt prepared-contraction provider owns vendor submission, admission, provenance and lifetime; scientific consumers use canonical lowering bindings.",
+      "references": {
+        "cublasLtCreate": 1,
+        "cublasLtDestroy": 1,
+        "cublasLtGetVersion": 1,
+        "cublasLtHeuristicsCacheGetCapacity": 1,
+        "cublasLtMatmul": 1,
+        "cublasLtMatmulAlgoCheck": 1,
+        "cublasLtMatmulAlgoConfigGetAttribute": 1,
+        "cublasLtMatmulAlgoGetHeuristic": 1,
+        "cublasLtMatmulDescCreate": 1,
+        "cublasLtMatmulDescDestroy": 1,
+        "cublasLtMatmulDescSetAttribute": 3,
+        "cublasLtMatmulPreferenceCreate": 1,
+        "cublasLtMatmulPreferenceDestroy": 1,
+        "cublasLtMatmulPreferenceSetAttribute": 2,
+        "cublasLtMatrixLayoutCreate": 1,
+        "cublasLtMatrixLayoutDestroy": 1,
+        "cublasLtMatrixLayoutSetAttribute": 3
+      }
+    },
     "src/tensor/cuda_cutensor.cuh": {
       "classification": "provider",
       "contract": "src/tensor/native_contraction.hpp",
