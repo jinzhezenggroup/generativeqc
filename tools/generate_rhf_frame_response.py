@@ -21,6 +21,7 @@ from tools.generate_rccsd_native import (
     REPRESENTATIVE,
     _cpu_function,
     _cuda_program,
+    _packed_batched_matrix_gemm,
     _packed_matrix_gemm,
     _required_function,
 )
@@ -45,6 +46,16 @@ def inputs(program: Program) -> tuple[str, ...]:
 
 def output_type(name: str) -> str:
     return "".join(part.title() for part in name.split("_")) + "Outputs"
+
+
+def prepared_recipes(program: Program) -> list[tuple[str, ...]]:
+    """Use the same direct-view recognition as the canonical native emitter."""
+    return [
+        recipe
+        for node in program.live_nodes
+        if (recipe := (_packed_matrix_gemm(node) or _packed_batched_matrix_gemm(node)))
+        is not None
+    ]
 
 
 def cpu_header() -> str:
@@ -115,28 +126,48 @@ def cpu_header() -> str:
 
 
 def cuda_header() -> str:
-    """The owner binds a stream and optional audited row-major BLAS callback.
+    """Borrow prepared semantic tables, with the original scalar arena fallback.
 
-    A missing callback selects the original scalar schedule with exactly the
-    same arena. A callback must check every GEMM result for nonfinite values
-    using the owner's sticky error flag before that storage can be reused.
+    The provider owns every submission and sticky finite-result audit. Five
+    stage tables are prepared once and outlive the generated traversal. Null
+    bindings also select the independent scalar final-residual audit.
     """
+    recipes = {name: prepared_recipes(program) for name, program in programs().items()}
+    dimensions = sorted(
+        {
+            dimension
+            for stage in recipes.values()
+            for recipe in stage
+            for dimension in recipe[2:]
+        }
+    )
     return "\n".join(
         [
             "// Generated RHF frame device interface; do not edit.",
             "#pragma once",
-            "#include <functional>",
             "#include <cuda_runtime.h>",
+            '#include "tensor/cuda_contraction.cuh"',
             '#include "generated_rhf_frame_response_cpu.hpp"',
             "namespace generativeqc::scf::generated::rhf_frame {",
+            f"inline constexpr std::size_t prepared_stages={len(STAGES)};",
+            "inline std::size_t prepared_host_bytes(){return "
+            + "+".join(
+                f"tensor::PreparedContractions::storage_bytes({len(stage)})"
+                for stage in recipes.values()
+            )
+            + ";}",
+            "inline bool prepared_dimensions_fit(std::size_t o,std::size_t v){try{const auto n=checked_add(o,v); return "
+            + " && ".join(f"{d}<=2147483647ULL" for d in dimensions)
+            + ";}catch(const std::length_error&){return false;}}",
             "struct CudaState : Inputs {",
             "  std::size_t o{},v{};",
             "  double* response_arena{};",
             "  int* error{};",
             "  cudaStream_t stream{};",
-            "  // Row-major GEMM, beta=0. Must audit each result on this stream.",
-            "  std::function<void(char,char,std::size_t,std::size_t,std::size_t,double,const double*,const double*,double*)> gemm;",
+            "  // Borrowed contiguous stage tables; nullptr retains scalar execution.",
+            "  tensor::PreparedContractions* contractions{};",
             "};",
+            "void prepare_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t& calls,std::size_t& summands);",
             *(
                 f"{output_type(name)} run_{name}_cuda(CudaState& state);"
                 for name in STAGES
@@ -154,8 +185,8 @@ def cuda_source() -> str:
         '#include "tensor/cuda_runtime.cuh"',
         "namespace generativeqc::scf::generated::rhf_frame {",
     ]
-    for name, p in programs().items():
-        for suffix, gemm in (("scalar", None), ("blas", "s.gemm")):
+    for stage, (name, p) in enumerate(programs().items()):
+        for suffix, prepared in (("scalar", False), ("prepared", True)):
             lines.append(
                 _cuda_program(
                     p,
@@ -163,14 +194,23 @@ def cuda_source() -> str:
                     output_type(name),
                     input_overrides={key: "s." + key for key in inputs(p)},
                     output_fields=tuple(p.outputs),
-                    matrix_gemm=gemm,
+                    prepared_contractions=f"s.contractions[{stage}]"
+                    if prepared
+                    else None,
+                    kernel_prefix=name + "_scalar",
+                    emit_kernels=not prepared,
                     reset_error=False,
                 )
             )
         lines.append(
             f"{output_type(name)} run_{name}_cuda(CudaState& s) {{ "
-            f"return s.gemm ? run_{name}_blas(s) : run_{name}_scalar(s); }}"
+            f"return s.contractions ? run_{name}_prepared(s) : run_{name}_scalar(s); }}"
         )
+    lines += [
+        "void prepare_contractions(CudaState& s,tensor::CudaContractionContext& context,std::size_t& calls,std::size_t& summands){",
+        *(f"bind_{name}_prepared(s,context,1,calls,summands);" for name in STAGES),
+        "}",
+    ]
     return "\n".join([*lines, "}", ""])
 
 

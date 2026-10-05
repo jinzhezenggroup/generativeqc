@@ -71,13 +71,17 @@ def programs() -> dict[str, Program]:
 
 def cpu_header() -> str:
     """Runtime-shape core actions; outputs borrow the supplied arena."""
-    from tools.generate_rccsd_native import canonical_denominators_cpp
+    from tools.generate_rccsd_native import (
+        canonical_denominators_cpp,
+        restricted_pairs_cpp,
+    )
 
     lines = [
         "// Generated retained DF RCCSD equations; do not edit.",
         "#pragma once",
         '#include "generated_df_ccsd_cpu.hpp"',
         canonical_denominators_cpp(),
+        restricted_pairs_cpp(),
         "namespace generativeqc::cc::generated::dfcore {",
         "using df::checked_add; using df::checked_mul; using df::checked_product;",
         "struct Inputs {",

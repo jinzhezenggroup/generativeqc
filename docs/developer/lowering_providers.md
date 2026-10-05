@@ -223,10 +223,28 @@ FP32 and FP64 storage/compute/accumulation;
 DF-CC and Lambda still request FP64. It does not yet execute the general
 `LoweringBinding` portfolio or perform joint native precision/provider selection.
 Mixed compute/accumulation, casts and refinement require a complete additional
-candidate; the current adapter rejects them. The RHF frame-response callback,
-conventional RCCSD migration from #1868, DFT, triples precision, other provider
+candidate; the current adapter rejects them. DFT, triples precision, other provider
 families and complete endpoint qualification remain in
 #1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
+
+Conventional RCCSD iteration also emits typed prepared contractions for directly
+representable unbatched and leading-batch layouts. Non-contraction nodes reuse
+the existing generated kernels and arena plan. The native owner prepares the
+table once and charges its descriptor storage plus shared provider reservation.
+Insufficient dimensions/resources retain the original scalar traversal. There
+is no conventional provider-selection option or CC-local vendor callback;
+execution diagnostics report preparation, work counts and resource capacity.
+The separately expanded independent replay remains the final numerical gate.
+
+Physical RHF frame response prepares five stage tables through the same typed
+boundary. The method options specify the complete resource budget, without a
+matrix implementation selector. Admission charges all five descriptor tables
+and one shared provider reservation; insufficient resources or unavailable
+optional provider storage retain the original scalar CUDA traversal. The final
+orbital residual always uses that independent scalar traversal, even when the
+solve used prepared contractions. Exact unscreened J/K, sticky intermediate
+finite checks and the independent molecular derivative gates remain required.
+Diagnostics retain prepared execution calls, semantic summands and binding bytes.
 
 The same native descriptor also supports `validate_affine()` independently of
 the optional matrix recipe. `affine_contraction_initializer` emits original

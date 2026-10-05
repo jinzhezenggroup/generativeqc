@@ -12,7 +12,10 @@ from _cc_owner_test_support import compile_owner
 from generativeqc_compiler.common.array_graph import evaluate_array_graph
 from generativeqc_compiler.dft.xc_bilinear import density_summand
 from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
-from generativeqc_compiler.dft.xc_density_lowering import emit_density_binding
+from generativeqc_compiler.dft.xc_density_lowering import (
+    density_portfolio,
+    emit_density_binding,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -96,3 +99,19 @@ int main() {
     compile_owner(compiler, tmp_path, [unit], binary)
     result = subprocess.run([str(binary)], check=False, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_gemm_competes_for_the_same_science_without_admitting_mixed_rounding() -> None:
+    request, candidates, _, _ = density_portfolio(16, "qualification-source")
+    assert len(candidates) == 5
+    assert dict(request.semantics)["reduction"] == "sum-nu"
+    generated, library = candidates[1], candidates[-1]
+    assert generated.request is library.request is request
+    assert generated.execution is not None and library.execution is not None
+    assert generated.execution.precision == library.execution.precision
+    assert generated.execution.topology.reduction == "increasing-nu"
+    assert library.execution.topology.reduction == "provider-reproducible"
+    assert library.execution.precision.directive.compute_dtype == "float64"
+    assert library.execution.cache_bytes > 0
+    assert candidates[2].execution is not None
+    assert candidates[2].execution.precision != library.execution.precision

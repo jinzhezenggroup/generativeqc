@@ -37,6 +37,7 @@ struct MethodError : std::runtime_error {
 };
 int calls = 0, live = 0, drains = 0, clears = 0, late_calls = 0, failure = 0;
 const char* phase = "triples";
+bool expected_packed = false;
 struct ResourceOwner {
   ResourceOwner() { ++live; }
   ~ResourceOwner() {
@@ -97,7 +98,8 @@ struct DFCCSDTResult {
 RccsdNativeState run_rccsd_native_state(runtime::ExecutionContext&, const core::System&,
                                         const generativeqc_method_descriptor& d, void*, void*,
                                         void*, std::size_t reserve, const core::System*, bool, bool,
-                                        void*, std::size_t, bool) {
+                                        void*, std::size_t, bool, bool packed_diis) {
+  assert(packed_diis == expected_packed);
   ++calls;
   RccsdNativeState s;
   s.resource = std::make_unique<ResourceOwner>();
@@ -143,8 +145,10 @@ int main() {
   current_cache = &cache;
   auto call = [&] {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
-                               true, 8, 8, opts, true);
+                               true, 8, 8, opts, true, expected_packed);
   };
+  for (bool selected_packed : {false, true}) {
+  expected_packed = selected_packed;
   auto reset = [&] {
     assert(live == 0);
     calls = drains = clears = late_calls = 0;
@@ -219,6 +223,7 @@ int main() {
     republished_failure = true;
   }
   assert(republished_failure && calls == 2 && drains == 2 && clears == 1 && cache.retained == 10);
+  }
   puts(
       "PASS: three late phases retry once after drain+clear; physical errors propagate; repeated "
       "resource failure stops; cold failure stays single; early primal refusal stays bounded; "

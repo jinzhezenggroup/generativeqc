@@ -33,13 +33,16 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
     for (std::size_t i = 0; i < matrices.size(); ++i)
       matrices[i]->assign(inputs[i], inputs[i] + (i == 5 ? n : n * n));
     hf::RHFFrameResponseOptions options;
-    options.matrix_blas = blas;
     options.orbital_screening_tolerance = screening;
     options.profile_jk = true;
     options.bilinear_derivative = nuclear_schedule == 1;
     options.symmetric_polarization = nuclear_schedule == 2;
     options.relax_orbitals = relax;
     options.maximum_bytes = budget;
+    // This probe's scalar ablation uses a real resource constraint. The public
+    // method has no provider selector. Small fixtures fit below the shared
+    // 96 MiB provider allowance; never enlarge the caller's requested budget.
+    if (!blas) options.maximum_bytes = std::min<std::size_t>(budget, (96ULL << 20) - 1);
     options.gmres.max_iterations = max_iterations;
     // Account for the test's borrowed inputs/destinations as well as the native
     // reference copies; the auxiliary metadata belongs only to this probe.
@@ -81,7 +84,10 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
                               result.jk_quartet_visits,
                               result.jk_eri_evaluations,
                               result.exact_refinements,
-                              result.screened_jk_actions};
+                              result.screened_jk_actions,
+                              result.prepared_contractions,
+                              result.contraction_binding_bytes,
+                              result.prepared_contraction_summands};
     std::copy(std::begin(stats), std::end(stats), counts);
     diagnostics[0] = result.orbital_residual;
     diagnostics[1] = result.maximum_stationarity;

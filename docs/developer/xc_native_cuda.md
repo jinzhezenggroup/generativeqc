@@ -71,6 +71,27 @@ precision. The filtered schedule preserves region names, surviving arithmetic
 directives and qualification metadata. Strict refinement restores every region
 to FP64; the requested schedule remains reusable for subsequent iterations.
 
+The density portfolio also contains a strict-FP64 materialized matrix-panel
+candidate. It emits `0.5*D + 0.5*D.T` from the shared scalar graph once per
+physical evaluation, then reuses that factor across all point/jet panels.
+The shared tensor provider owns GEMM, finite publication and resource lifetime.
+Qualification requires a separate 96 MiB provider allowance, exact spin-matrix
+cache bytes, and 16 KiB host reservation. A budget alone does not select it;
+generated execution remains the production incumbent. Mixed arithmetic, local
+maps and signed response retain their existing bindings. The explicit native
+`--density-provider` and `--density-provider-benchmark` commands exercise the
+candidate and its complete fixed-density XC endpoints.
+
+Native KS callers can supply `CudaXcPreparationBudget` from their enclosing
+resource plan. Both host and device reservations must be admitted before
+optional density preparation. KS reports the exact explicit cache under XC
+device storage, the library allowance under provider storage, and binding
+metadata under retained host storage. The matrix cache also participates in
+the shared numeric allocation ledger, including budget failure and teardown.
+Ordinary public callers retain zero optional reservations. Native
+`generativeqc_ks_cuda_tests --density-provider` exercises complete PBE0 cold,
+warm and changed-geometry solves with independent CPU energy/density gates.
+
 AO precision does not change the FP64 point algebra. The selected consumer calls
 the same canonical point implementation with constant functional/consumer facts,
 so CUDA compilation can remove unrelated algebra before register allocation.
