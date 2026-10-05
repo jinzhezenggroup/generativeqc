@@ -1,0 +1,77 @@
+{
+  "source_commit": "90effafa52b73d683600535169fe77ab617a6428",
+  "source_sha256": {
+    "tests/native/cosx_endpoint_benchmark.cuh": "5c6c9dcf714f0b2915e7e6f7cac4dc03e9efaa4d8ee7e592f23c7b1ec03eec7c",
+    "tests/native/test_cosx_cuda.cu": "85d6429605ab4a5bce5381d54dbb3127a47a95656a2f0514f21acdd7efd41d1c",
+    "src/dft/cuda_cosx.cu": "f2add0df7037828ad15711ea4849a5c6c7e087d2267fdca375d394b49ee649c1",
+    "src/tensor/cuda_contraction_sites.cuh": "d0df392159511a41ab321d9e53e4d436f5f7ee4ab0b9f10fa713ca10c75a5c09",
+    "src/tensor/cuda_contraction.cuh": "b1b1f037591ca2e3ce7143e239c864966e53e5dcae4c9ac629b8fe33b098129a",
+    "python/generativeqc_compiler/dft/cosx_contraction.py": "5522f9acf5d3588e9238319f7c4411a7e00b4df14243a3e701296a4f5e8e0fd6"
+  },
+  "source_manifest_sha256": "2e7f4236c84ca2157492955d472c453498a93535c38cc3852cc9aa9e6313265b",
+  "binary_sha256": "1e6c5ab9d9c746841cf09395a1b01596820cddf03e8e6a84d59bc0b17000975d",
+  "inputs": {
+    "source_commit": "b080c9bdcbf81aa952dee811bfd2dbb5a4162981",
+    "sha256": {
+      "input-48-0.txt.gz": "a74716f367006fefcc4929fd806bfa10a4835cedeab253a91d0220e9509a8717",
+      "input-48-1.txt.gz": "2def7c76714be074a4e24e224e311c1d3fa82bdd8bfec10d39bedea0cf3a3eed",
+      "input-96-0.txt.gz": "7e2b6a55bf0a6a569e0b950aeb29087f0c5bfa50a41da5d6f5b6492171083c32",
+      "input-96-1.txt.gz": "d6575f0e3d6605eb07147b75e3b37516132656b2ac9fad732af426d9dd676b75"
+    }
+  },
+  "data_sha256": {
+    "endpoints.json.gz": "47f9eb39bbc0cfa94fc6b1249fc49a37f2277a633dc0e74af60bf0f169d4ff49"
+  },
+  "target": "n1/node1 NVIDIA GeForce RTX 5090 sm_120",
+  "toolkit": "CUDA 12.9.86",
+  "runtime_version": 12090,
+  "provider_version": 120901,
+  "records": 32,
+  "compiler_commands": [
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/tests/native/test_cosx_cuda.cu.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/tests/native/test_cosx_cuda.cu.o.d -x cu -c /data/jzzeng/qc-dft-cosx-crossover-1884/tests/native/test_cosx_cuda.cu -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/tests/native/test_cosx_cuda.cu.o",
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx.cu.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx.cu.o.d -x cu -c /data/jzzeng/qc-dft-cosx-crossover-1884/src/dft/cuda_cosx.cu -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx.cu.o"
+  ],
+  "jobs": [
+    {
+      "atoms": 48,
+      "tile": 64,
+      "slurm": "JobId=5981 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-05T16:19:58 EligibleTime=2026-10-05T16:19:58 AccrueTime=Unknown StartTime=2026-10-05T16:19:58 EndTime=2026-10-05T16:34:58 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T16:19:58 Scheduler=Main Partition=main AllocNode:Sid=localhost:3795409 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=1",
+      "raw_jsonl_sha256": "7a4356cd577424f87dc1b7265f95f1c2cabcb9a72f420e7c67de04c89f760dd6",
+      "source_check_sha256": "1a8a61f909010de74b64e86c870a57ccf6194c6d99eebec906778fa1e4157c3d"
+    },
+    {
+      "atoms": 48,
+      "tile": 256,
+      "slurm": "JobId=5980 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:15:00 TimeMin=N/A SubmitTime=2026-10-05T16:17:13 EligibleTime=2026-10-05T16:17:13 AccrueTime=Unknown StartTime=2026-10-05T16:17:13 EndTime=2026-10-05T16:32:13 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T16:17:13 Scheduler=Main Partition=main AllocNode:Sid=localhost:3773110 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=1",
+      "raw_jsonl_sha256": "8b287d27f1c898d6fd87e442ce2ca1ddbd54031961083d7f75dfcbbe8e107961",
+      "source_check_sha256": "1a8a61f909010de74b64e86c870a57ccf6194c6d99eebec906778fa1e4157c3d"
+    },
+    {
+      "atoms": 96,
+      "tile": 64,
+      "slurm": "JobId=5983 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-05T16:19:58 EligibleTime=2026-10-05T16:19:58 AccrueTime=Unknown StartTime=2026-10-05T16:19:58 EndTime=2026-10-05T16:39:58 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T16:19:58 Scheduler=Main Partition=main AllocNode:Sid=localhost:3795411 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=3",
+      "raw_jsonl_sha256": "86b49c8ff0cf5c4d6917e2b5b359321f194ef3801e110f5d65f297f14b925d68",
+      "source_check_sha256": "1a8a61f909010de74b64e86c870a57ccf6194c6d99eebec906778fa1e4157c3d"
+    },
+    {
+      "atoms": 96,
+      "tile": 256,
+      "slurm": "JobId=5982 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-05T16:19:58 EligibleTime=2026-10-05T16:19:58 AccrueTime=Unknown StartTime=2026-10-05T16:19:58 EndTime=2026-10-05T16:39:58 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T16:19:58 Scheduler=Main Partition=main AllocNode:Sid=localhost:3795410 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=2",
+      "raw_jsonl_sha256": "da4ec8ea98163c947bad74f9fb6acce597d9896af118b859e23aa08cf055b1f3",
+      "source_check_sha256": "1a8a61f909010de74b64e86c870a57ccf6194c6d99eebec906778fa1e4157c3d"
+    }
+  ],
+  "independent_oracle": "CPU COSX on three spread-out points at each actual AO dimension and geometry; full/tail tile=2",
+  "prior_qualification": {
+    "pr": 1966,
+    "source_commit": "8a3885351fa6e3e08caa437b15b0c1f46b7bd030",
+    "binary_sha256": "c918122176e7fcb9ab9887b86fd7a208f73be3c08aa7471d087815cd238f6466",
+    "full_regression": "pass",
+    "memcheck_errors": 0,
+    "initcheck_errors": 0
+  }
+}
