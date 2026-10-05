@@ -1,0 +1,90 @@
+"""Intrusive component replay on fresh, source-matched converged PBE0 states.
+
+This deliberately has no clean E/F timing claim. It preserves the complete
+endpoint protocol as an identity receipt, but executes energy-only solves and
+five diagnostic event-timed J/K/XC replays per accepted geometry.
+"""
+import argparse
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import statistics
+import subprocess
+
+import numpy as np
+from generativeqc import Calculator, GridSpec, KsOptions
+from generativeqc._ks_snapshot import NativeKsSnapshot
+from benchmarks.compare_gpu4pyscf_batch import load_comparison_basis, native_build_metadata
+from benchmarks.ks_preliminary_density import read_ao_work
+from benchmarks.readme_hf_scaling import scaling_cases
+from benchmarks.readme_omol25 import protocol
+from benchmarks.readme_pbe0 import PBE0
+from benchmarks.readme_pbe0_integrated import POLICIES, qualification_policy
+
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--atoms',type=int,choices=(48,96),required=True)
+parser.add_argument('--reference',type=Path,required=True)
+parser.add_argument('--output',type=Path,required=True)
+args=parser.parse_args()
+if not os.environ.get('SLURM_JOB_ID'):
+ raise RuntimeError('finite Slurm GPU allocation required')
+reference=json.loads(args.reference.read_text())
+if reference['status'] != 'measured':
+ raise RuntimeError('independent reference incomplete')
+basis_path=Path('benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json')
+basis,_=load_comparison_basis(basis_path,scaling_cases()[f'water-{args.atoms}'],role='orbital',compute_forces=True)
+grid=GridSpec(radial_points=48,angular_polar=16,angular_azimuth=32)
+identity=protocol(args.atoms,basis,grid,5,benchmark=PBE0)
+if identity != reference['protocol']:
+ raise RuntimeError('scientific identity differs')
+record={'status':'running','measurement_boundary':'intrusive-fixed-density-component-replay',
+ 'clean_endpoint':False,'scientific_protocol':identity,'records':[],
+ 'source_head':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
+ 'reference_sha256':hashlib.sha256(args.reference.read_bytes()).hexdigest(),
+ 'script_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+ 'scheduler':{'job':os.environ['SLURM_JOB_ID'],'visibility':os.environ['CUDA_VISIBLE_DEVICES']}}
+def save():
+ args.output.write_text(json.dumps(record,indent=2,allow_nan=False)+'\n')
+owner=None
+try:
+ with qualification_policy(POLICIES['local-indexed-phased'],scf_active_ao=True):
+  calc=Calculator(method=PBE0.native_method,basis=basis,device='cuda',basis_representation='spherical',
+   ks_options=KsOptions(grid=grid),energy_tolerance=1e-12,density_tolerance=1e-10,
+   screening_tolerance=1e-12,max_iterations=100)
+  record['native_build']=native_build_metadata(calc);save()
+  geometries=identity['geometries_bohr']
+  owner=calc.prepare_batch([geometries[0]],warm_start=True)
+  for geometry in range(2):
+   record['stage']=f'geometry-{geometry}/solve';save()
+   coords=None if geometry==0 else [np.asarray([xyz for _,xyz in geometries[1]])]
+   result=owner.execute(coords,strict=False,properties=('energy',)).items[0]
+   if result.status != 0 or not result.converged or not math.isfinite(result.energy):
+    raise RuntimeError(f'failed SCF {result.status_message}')
+   errors=[abs(result.energy-row['energy']) for row in reference['records'] if row['geometry']==geometry]
+   if not errors or max(errors)>identity['energy_gate']:
+    raise RuntimeError(f'independent energy gate failed {errors}')
+   work=read_ao_work(owner)
+   if not work['selected'] or work['point_ao_square_sum']>=work['dense_point_ao_square_sum']:
+    raise RuntimeError('local SCF AO path did not execute')
+   row={'geometry':geometry,'energy':result.energy,'iterations':result.iterations,
+    'fock_builds':result.fock_builds,'max_reference_energy_error':max(errors),'scf_ao_work':work,'samples_seconds':[]}
+   record['records'].append(row);save()
+   snapshot=NativeKsSnapshot(owner,0)
+   try:
+    for repeat in range(5):
+     record['stage']=f'geometry-{geometry}/profile-{repeat}';save()
+     sample=snapshot.cuda_fixed_density_profile()
+     if sample is None or any(sample[k] is None or sample[k]<=0 for k in ('scf_fock_j','scf_full_range_k','semilocal_ao_grid_xc')):
+      raise RuntimeError('component profile missing')
+     row['samples_seconds'].append(dict(sample));save()
+   finally:
+    snapshot.close()
+   row['median_seconds']={k:None if row['samples_seconds'][0][k] is None else statistics.median(sample[k] for sample in row['samples_seconds']) for k in row['samples_seconds'][0]}
+   save()
+ record['status']='measured';record['stage']='complete';save()
+except BaseException as error:
+ record['status']='failed';record['error']=f'{type(error).__name__}: {error}';save();raise
+finally:
+ if owner is not None: owner.close()

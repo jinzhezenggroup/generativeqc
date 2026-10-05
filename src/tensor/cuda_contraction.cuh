@@ -385,6 +385,8 @@ class PreparedContractions {
    * before publishing the variant; rejection releases all provisional plans and
    * leaves executable variants unchanged. Context-retained module charges survive
    * rejection and release, and must remain in the enclosing owner's budget.
+   * A hard retaining-load failure quarantines this table, including its older
+   * variants. Neither release nor a fresh plan can readmit an unknown overrun.
    * The caller owns fallback selection and budgets
    * reservation.total_bytes(number_of_optional_plans) in addition to the table.
    * A mixed table must supply ceilings valid for every selected provider.
@@ -394,6 +396,7 @@ class PreparedContractions {
            CudaContractionContext& context, std::size_t& calls, std::size_t& summands,
            std::vector<ContractionAlgorithm> algorithms = {},
            ContractionProviderReservation reservation = {}, std::string_view artifact = {}) {
+    require_safe_retained_cache();
     if (variants_.size() == 2) throw std::length_error("native contraction batch variant bound");
     if (!context.prepared()) throw std::logic_error("native contraction provider is not prepared");
     if (algorithms.empty()) algorithms.assign(requests.size(), ContractionAlgorithm::PedanticBlas);
@@ -515,9 +518,15 @@ class PreparedContractions {
           auto& plan = variant.cutlass[i];
           plan = std::make_unique<CudaCutlassContraction>();
           const auto remember_modules = [&] {
-            retained_cache_bytes_ = ContractionProviderReservation::checked_add(
-                retained_cache_bytes_, plan->module_bytes());
-            if (plan->module_bytes()) retained_cache_device_ = device;
+            const auto charge = plan->module_bytes();
+            if (!charge) return;
+            retained_cache_device_ = device;
+            if (charge > std::numeric_limits<std::size_t>::max() - retained_cache_bytes_) {
+              retained_cache_bytes_ = std::numeric_limits<std::size_t>::max();
+              retained_cache_quarantined_ = true;
+              throw std::length_error("native contraction retained module accounting overflow");
+            }
+            retained_cache_bytes_ += charge;
           };
           bool ready{};
           try {
@@ -525,7 +534,10 @@ class PreparedContractions {
                                   reservation.host_bytes, reservation.cache_bytes);
           } catch (...) {
             // No fallback may assume that a failed loader returned its modules
-            // to CUDA. Transfer the charge before provisional plans disappear.
+            // to CUDA or stayed inside its reservation. A fresh plan publishes
+            // module_bytes only once loading begins. Preserve the failure and
+            // known charge floor before this provisional owner disappears.
+            if (plan->module_bytes()) retained_cache_quarantined_ = true;
             remember_modules();
             throw;
           }
@@ -554,10 +566,17 @@ class PreparedContractions {
 
   explicit operator bool() const noexcept { return !variants_.empty(); }
 
+  /** Unsafe retained loading requires enclosing CUDA-context reconciliation.
+   * The owner must carry both this state and the charge across table destruction;
+   * release() does not clear it. There is no local reset/requalification API. */
+  bool retained_cache_quarantined() const noexcept { return retained_cache_quarantined_; }
+
   /** Exact prepared workspace and observed provider device growth. Opaque
    * library host storage keeps its reservation; CUTLASS reports its exact native
    * plan size. Both exclude storage_bytes(). Cache charges include prior failed
-   * preparations and released plans, not only the executable variants. */
+   * preparations and released plans, not only the executable variants. Under
+   * quarantine cache_bytes is only the known charge floor, not a measured bound
+   * on all retained memory; SIZE_MAX also represents an unrepresentable sum. */
   ContractionProviderReservation optional_resources() const {
     ContractionProviderReservation result;
     result.cache_bytes = retained_cache_bytes_;
@@ -599,6 +618,7 @@ class PreparedContractions {
    * No plan pointer or borrowed tensor address is exposed as an identity. */
   template <class F>
   void visit_optional_provenance(F&& consume) const {
+    require_safe_retained_cache();
     if (!variants_.empty() &&
         (!context_ || !context_->prepared() || generation_ != context_->generation()))
       throw std::logic_error("stale native contraction context; prepare again");
@@ -614,6 +634,7 @@ class PreparedContractions {
    * forcing existing cuTENSOR visitors to understand a different record type. */
   template <class F>
   void visit_matmul_provenance(F&& consume) const {
+    require_safe_retained_cache();
     if (!variants_.empty() &&
         (!context_ || !context_->prepared() || generation_ != context_->generation()))
       throw std::logic_error("stale native contraction context; prepare again");
@@ -627,6 +648,7 @@ class PreparedContractions {
   /** Inspect resolved AOT provenance without retaining execution addresses. */
   template <class F>
   void visit_aot_provenance(F&& consume) const {
+    require_safe_retained_cache();
     if (!variants_.empty() &&
         (!context_ || !context_->prepared() || generation_ != context_->generation()))
       throw std::logic_error("stale native contraction context; prepare again");
@@ -638,7 +660,8 @@ class PreparedContractions {
 #endif
   /** Drain executable plans before fallback. optional_resources().cache_bytes
    * remains charged; the enclosing owner must carry it across table destruction
-   * too if that owner continues using the same CUDA context. */
+   * too if that owner continues using the same CUDA context. Quarantine also
+   * survives release, so unsafe retaining failures cannot use this fallback. */
   void release() {
     for (auto& variant : variants_) release_variant(variant);
     variants_.clear();
@@ -650,6 +673,7 @@ class PreparedContractions {
   void execute(std::size_t slot, std::size_t o, std::size_t v, std::size_t q, cudaStream_t stream,
                const T* a, const T* b, T* output, int* error) const {
     static_assert(std::is_same_v<T, double> || std::is_same_v<T, float>);
+    require_safe_retained_cache();
     if (!context_ || !context_->prepared() || generation_ != context_->generation() ||
         stream != context_->stream())
       throw std::logic_error("stale native contraction context; prepare again");
@@ -702,6 +726,10 @@ class PreparedContractions {
   }
 
  private:
+  void require_safe_retained_cache() const {
+    if (retained_cache_quarantined_)
+      throw std::logic_error("native contraction retained module loading requires reconciliation");
+  }
   struct Variant {
     std::size_t o, v, q;
     std::vector<ContractionRequest> requests;
@@ -736,6 +764,7 @@ class PreparedContractions {
   std::size_t generation_{};
   std::size_t retained_cache_bytes_{};
   int retained_cache_device_{};
+  bool retained_cache_quarantined_{};
   std::size_t *calls_{}, *summands_{};
 };
 
