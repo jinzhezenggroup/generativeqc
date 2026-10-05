@@ -13,6 +13,8 @@ from .paths import PACKAGE
 # is shared across method stacks but only depends on common services. XC reuses
 # scalar algebra and DFT ingredients. Method composition sits above XC/TensorIR;
 # custom derivative rules emit tensor graphs and may compose geometry lowerings.
+# DFT panel contractions lower through TensorIR; the tensor owner still depends
+# only on common services and never imports DFT policy.
 ALLOWED = {
     "common": {"common"},
     "integral": {"integral", "common"},
@@ -22,7 +24,7 @@ ALLOWED = {
     "array_api": {"array_api", "tensor"},
     "geometry": {"geometry", "tensor", "common"},
     "periodic": {"periodic", "common"},
-    "dft": {"dft", "common"},
+    "dft": {"dft", "tensor", "common"},
     "xc": {"xc", "integral", "dft", "common"},
     "method": {"method", "geometry", "xc", "tensor", "common"},
 }

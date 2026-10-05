@@ -341,6 +341,8 @@ macro(generativeqc_add_native_tests)
       tests/native/test_cosx_cuda.cu
       src/dft/cuda_cosx.cu
       src/dft/cuda_cosx_derivative.cu
+      "${GENERATIVEQC_COSX_CONTRACTION_HEADER}"
+      "${GENERATIVEQC_ERI_CPU_HEADER}"
       "${GENERATIVEQC_ONE_ELECTRON_HEADER}"
       "${GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER}"
       "${GENERATIVEQC_COSX_DERIVATIVE_CONTRACTION_HEADER}"
@@ -358,6 +360,7 @@ macro(generativeqc_add_native_tests)
       "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_SOURCE_DIR}/src"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/dft" "${CMAKE_CURRENT_BINARY_DIR}/generated")
     target_link_libraries(generativeqc_cosx_cuda_tests PRIVATE CUDA::cudart CUDA::cublas)
+    target_compile_definitions(generativeqc_cosx_cuda_tests PRIVATE GENERATIVEQC_TEST_HOOKS=1)
     set_target_properties(generativeqc_cosx_cuda_tests PROPERTIES CUDA_STANDARD 20)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       target_compile_definitions(generativeqc_cosx_cuda_tests PRIVATE GENERATIVEQC_COSX_TEST_INTERPOSE=1)
@@ -370,6 +373,16 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_cosx_fock_provider_tests
                        tests/native/test_cosx_fock_provider.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    # Exercise qualification through the real enclosing Fock consumer without
+    # enabling provider qualification hooks in the production shared library.
+    target_sources(generativeqc_cosx_fock_provider_tests PRIVATE
+      src/dft/cosx_fock_provider.cpp src/dft/cuda_cosx.cu
+      "${GENERATIVEQC_COSX_CONTRACTION_HEADER}")
+    target_include_directories(generativeqc_cosx_fock_provider_tests PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    target_compile_definitions(generativeqc_cosx_fock_provider_tests PRIVATE GENERATIVEQC_TEST_HOOKS=1)
+    target_link_libraries(generativeqc_cosx_fock_provider_tests PRIVATE CUDA::cublas)
+    set_target_properties(generativeqc_cosx_fock_provider_tests PROPERTIES CUDA_STANDARD 20)
     generativeqc_native_test(generativeqc_cosx_scf_tests
                        tests/native/test_cosx_scf.cpp
                        LIBRARIES CUDA::cudart SKIP_77)

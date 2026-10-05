@@ -17,6 +17,9 @@ struct CosxFockPreparationDiagnostic {
   CudaCosxStagingDiagnostic exchange{};
   CudaCosxMolecularDerivativeDiagnostic derivative{};
   std::size_t device_bytes{}, derivative_peak_device_bytes{}, device_budget_bytes{}, tile_points{};
+  /** Additional capacity passed to the shared exchange owner, not a provider
+   * choice. Preparation may retain less and keep the generated recipe. */
+  std::size_t exchange_budget_bytes{}, contraction_peak_host_bytes{};
 };
 
 /** DFT-owned prepared composition of an existing J provider and CUDA COSX K.
