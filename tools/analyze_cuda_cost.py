@@ -233,6 +233,31 @@ def _report(args: argparse.Namespace) -> dict[str, object]:
     if ncu_evidence is not None and ncu_assessment is not None:
         payload["ncu_execution_evidence"] = ncu_evidence.to_payload()
         payload["ncu_execution_assessment"] = ncu_assessment.to_payload()
+        ncu_theoretical = ncu_evidence.theoretical_occupancy_fraction
+        occupancy_error = (
+            None
+            if ncu_theoretical is None
+            else report.occupancy_upper_bound - ncu_theoretical
+        )
+        payload["ncu_static_calibration"] = {
+            "schema": "generativeqc.compiler.ncu-static-calibration.v1",
+            "scope": (
+                "compare the static/PTXAS per-SM occupancy upper bound with the "
+                "source-matched NCU theoretical occupancy; diagnostic only"
+            ),
+            "static_occupancy_upper_bound": report.occupancy_upper_bound,
+            "ncu_theoretical_occupancy_fraction": ncu_theoretical,
+            "ncu_achieved_occupancy_fraction": (
+                ncu_evidence.achieved_occupancy_fraction
+            ),
+            "static_minus_ncu_theoretical": occupancy_error,
+            "absolute_error": (
+                None if occupancy_error is None else abs(occupancy_error)
+            ),
+            "within_two_percentage_points": (
+                None if occupancy_error is None else abs(occupancy_error) <= 0.02
+            ),
+        }
     return payload
 
 
