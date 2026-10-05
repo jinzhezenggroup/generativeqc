@@ -421,8 +421,8 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     }
   }
 #endif
-  if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !cuda_pbe0 && !cuda_b3lyp &&
-      !cuda_split_hybrid && !cuda_wb97mv)
+  if (scaled_or_hybrid && backend == GENERATIVEQC_BACKEND_CUDA && !execution_plan.range_exchange &&
+      !cuda_pbe0 && !cuda_b3lyp && !cuda_split_hybrid && !cuda_wb97mv)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA scaled/global-hybrid KS composition is not qualified");
   if (execution_plan.nonlocal_correlation &&
@@ -435,13 +435,6 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       !cuda_wb97mv)
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "CUDA self-consistent nonlocal correlation is qualified only for WB97M-V");
-  if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO && execution_plan.nonlocal_correlation)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "self-consistent nonlocal correlation currently requires strict FP64");
-  if (execution_plan.range_exchange && backend != GENERATIVEQC_BACKEND_CPU_REFERENCE &&
-      !cuda_wb97mv)
-    throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "CUDA range-separated KS is qualified only for complete WB97M-V");
   if (execution_plan.range_exchange &&
       execution_plan.semilocal_family != dft::SemilocalFamily::Pbe &&
       execution_plan.semilocal_family != dft::SemilocalFamily::Wb97mv)
@@ -702,6 +695,35 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   return {alpha};
 }
 
+#if GENERATIVEQC_HAS_CUDA
+bool cuda_rsh_provider_compatible(const scf::PreparedFockPlan& provider,
+                                  const scf::ResolvedFockBuild& correction) noexcept {
+  const auto& primary = provider.strategy();
+  const auto& primary_spec = primary.spec;
+  const auto& correction_spec = correction.spec;
+  const auto direct_binding = scf::prepared_cuda_fock_binding(provider);
+  const bool primary_exchange_compatible =
+      !primary_spec.exchange.present ||
+      (primary_spec.exchange.approximation == scf::FockApproximation::Exact &&
+       primary_spec.exchange.op == scf::FockOperator::FullRange &&
+       primary_spec.exchange.omega == 0.0);
+  return direct_binding && primary.backend == scf::FockBackend::Cuda &&
+         primary_spec.derivative_order == 0 && primary_spec.coulomb.present &&
+         primary_spec.coulomb.coefficient == 1.0 &&
+         primary_spec.coulomb.approximation == scf::FockApproximation::Exact &&
+         primary_spec.coulomb.op == scf::FockOperator::FullRange &&
+         primary_spec.coulomb.omega == 0.0 && primary_exchange_compatible &&
+         correction.backend == scf::FockBackend::Cuda &&
+         correction_spec.spin == primary_spec.spin && correction_spec.derivative_order == 0 &&
+         !correction_spec.coulomb.present && correction_spec.exchange.present &&
+         correction_spec.exchange.approximation == scf::FockApproximation::Exact &&
+         correction_spec.exchange.op == scf::FockOperator::LongRange &&
+         std::isfinite(correction_spec.exchange.omega) && correction_spec.exchange.omega > 0.0 &&
+         std::isfinite(correction_spec.exchange.coefficient) &&
+         correction.screening_tolerance == primary.screening_tolerance;
+}
+#endif
+
 class KsPreparedCalculation final : public PreparedCalculation {
  public:
   KsPreparedCalculation(Capabilities capabilities, core::System system,
@@ -731,6 +753,13 @@ class KsPreparedCalculation final : public PreparedCalculation {
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
     if (execution_plan_.range_exchange) prepare_range_exchange(device);
+#if GENERATIVEQC_HAS_CUDA
+    if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
+        (!range_strategy_ || !cuda_rsh_provider_compatible(fock_, *range_strategy_)))
+      throw MethodError(
+          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+          "CUDA range-separated KS requires a compatible prepared Direct SR/LR exchange provider");
+#endif
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA) {

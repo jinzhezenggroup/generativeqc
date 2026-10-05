@@ -1,8 +1,10 @@
 #include <cuda_runtime_api.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -484,6 +486,33 @@ void run_range_exchange_case(bool restricted) {
               snapshot.identity.determinant.model == gpu_strategy.primary &&
               std::abs(snapshot.components.total() - result.energy) < 1e-10,
           "CUDA range-separated final state lost correction identity or energy");
+
+  const auto warm = plan.run();
+  require(warm.converged && warm.initial_density_used && warm.iterations <= result.iterations &&
+              std::abs(warm.energy - result.energy) < 1e-11,
+          "CUDA range-separated warm replay changed the endpoint");
+
+  const auto moved_system = hydrogens(restricted ? 2U : 3U, restricted, 0.05);
+  const dft::AoBasis moved_basis(moved_system);
+  const dft::MolecularGrid moved_grid(moved_system, grid_spec);
+  const scf::PreparedFockPlan moved_cpu_primary(moved_system, nullptr, cpu_strategy.primary);
+  const scf::PreparedFockPlan moved_cpu_correction(moved_system, nullptr, cpu_strategy.correction);
+  const scf::PreparedFockPlan moved_gpu_primary(moved_system, nullptr, gpu_strategy.primary, 0);
+  dft::CudaKsPlan moved_plan(moved_gpu_primary, moved_basis, moved_grid, options,
+                             dft::SemilocalFamily::Pbe, 257, &gpu_strategy.correction);
+  auto moved_seed = plan.warm_density();
+  const auto moved_warm = moved_plan.run(&moved_seed);
+  const auto moved_cold = moved_plan.run(nullptr, false);
+  const auto moved_reference = restricted
+                                   ? scf::run_pbe_rsh_rks(moved_cpu_primary, moved_cpu_correction,
+                                                          moved_basis, moved_grid, options)
+                                   : scf::run_pbe_rsh_uks(moved_cpu_primary, moved_cpu_correction,
+                                                          moved_basis, moved_grid, options);
+  require(moved_warm.converged && moved_warm.initial_density_used && moved_cold.converged &&
+              moved_reference.converged &&
+              std::abs(moved_warm.energy - moved_cold.energy) < 1e-10 &&
+              std::abs(moved_cold.energy - moved_reference.energy) < 1e-10,
+          "changed-geometry CUDA range-separated warm seed changed the physical endpoint");
 }
 
 RshStrategies wb97mv_rsh_strategies(bool restricted, scf::FockBackend backend) {
@@ -1309,7 +1338,96 @@ void run_case(unsigned atoms, bool restricted, std::uint32_t functional) {
             << " residual=" << result.dft_diagnostic.physical_residual << '\n';
 }
 
-void precision_work_census_case(bool restricted, int precision_mode) {
+void pbe0_auto_local_ao_composition_case() {
+  const char* previous = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
+  const std::string saved = previous ? previous : "";
+  const bool had_previous = previous != nullptr;
+
+  scf::ScfOptions options;
+  options.compute_forces = false;
+  options.energy_tolerance = 1e-10;
+  options.density_tolerance = 1e-8;
+  options.max_iterations = 180;
+  options.semilocal_exchange_scale = 0.75;
+  options.semilocal_correlation_scale = 1.0;
+
+  for (bool restricted : {true, false}) {
+    const auto solve = [&](const core::System& system, int precision_mode, bool local,
+                           const std::vector<double>* seed = nullptr) {
+      require(::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", local ? "1" : "0", 1) == 0,
+              "could not select CUDA PBE0 local-AO qualification route");
+      const dft::AoBasis basis(system);
+      const dft::MolecularGrid grid(system, {1, 24, 12, 24, 3, 1e-12});
+      const scf::PreparedFockPlan gpu(
+          system, nullptr, exact_exchange_strategy(restricted, scf::FockBackend::Cuda), 0);
+      auto run_options = options;
+      run_options.precision_mode = precision_mode;
+      dft::CudaKsPlan plan(gpu, basis, grid, run_options, dft::SemilocalFamily::Pbe, 257);
+      return plan.run(seed, false, true);
+    };
+
+    const auto system = hydrogens(restricted ? 2U : 3U, restricted);
+    const auto strict = solve(system, GENERATIVEQC_PRECISION_FP64, false);
+    const auto automatic = solve(system, GENERATIVEQC_PRECISION_AUTO, true);
+    require(strict.converged && automatic.converged &&
+                std::abs(strict.energy - automatic.energy) < 1e-8 &&
+                automatic.dft_diagnostic.cuda_ao_selection.selected &&
+                automatic.dft_diagnostic.cuda_ao_selection.discovery_ao_jet_values > 0,
+            "PBE0 AUTO local-AO composition changed the endpoint or skipped discovery");
+    require(automatic.precision.mixed_stage_fock_builds > 0 &&
+                automatic.precision.strict_refinement_applied &&
+                automatic.precision.refinement_iterations > 0 &&
+                automatic.precision.final_residual_audits == 1,
+            "PBE0 AUTO local-AO composition lost mixed J or strict refinement");
+
+    const auto operator_count = [&](scf::PrecisionOperatorKind kind,
+                                    scf::PrecisionArithmeticMode mode) {
+      std::uint64_t count = 0;
+      for (const auto& item : automatic.precision_work.operators)
+        if (item.kind == kind && item.arithmetic_mode == mode) count += item.count;
+      return count;
+    };
+    const auto strict_mode = scf::PrecisionArithmeticMode::Strict;
+    const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
+    require(
+        operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) > 0 &&
+            operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) == 0 &&
+            operator_count(scf::PrecisionOperatorKind::ExchangeK, mixed_mode) == 0 &&
+            operator_count(scf::PrecisionOperatorKind::ExchangeK, strict_mode) > 0,
+        "PBE0 AUTO local-AO precision provenance does not match executed J/density/K arithmetic");
+
+    auto moved = system;
+    moved.atoms[1].position[2] += 0.07;
+    std::string detail;
+    require(molecule::validate_and_normalize(moved, detail) == GENERATIVEQC_STATUS_SUCCESS, detail);
+    const auto moved_strict = solve(moved, GENERATIVEQC_PRECISION_FP64, false, &strict.density);
+    const auto moved_automatic =
+        solve(moved, GENERATIVEQC_PRECISION_AUTO, true, &automatic.density);
+    require(moved_strict.converged && moved_automatic.converged &&
+                std::abs(moved_strict.energy - moved_automatic.energy) < 1e-8 &&
+                moved_automatic.dft_diagnostic.cuda_ao_selection.selected &&
+                moved_automatic.dft_diagnostic.cuda_ao_selection.discovery_ao_jet_values > 0,
+            "changed-geometry PBE0 AUTO owner reused or lost its local-AO discovery");
+  }
+
+  if (had_previous)
+    require(::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", saved.c_str(), 1) == 0,
+            "could not restore CUDA local-AO selection");
+  else
+    require(::unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO") == 0,
+            "could not restore CUDA local-AO selection");
+}
+
+void precision_work_census_case(bool restricted, int precision_mode, const char* ao_selection) {
+  // Exercise default, explicit local and dense schedules separately. Local AO
+  // contraction deliberately remains FP64 even when AUTO lowers Coulomb J.
+  const char* previous = std::getenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO");
+  const std::string saved = previous ? previous : "";
+  const bool had_previous = previous != nullptr;
+  require((ao_selection ? ::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", ao_selection, 1)
+                        : ::unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO")) == 0,
+          "could not select precision-census AO policy");
+  const bool expect_local = !ao_selection || std::strcmp(ao_selection, "0") != 0;
   const auto system = hydrogens(2, restricted);
   const dft::AoBasis basis(system);
   const dft::GridSpec grid_spec{1, 24, 12, 24, 3, 1e-12};
@@ -1392,6 +1510,9 @@ void precision_work_census_case(bool restricted, int precision_mode) {
   };
   const auto strict = scf::PrecisionArithmeticMode::Strict;
   const auto mixed_mode = scf::PrecisionArithmeticMode::Mixed;
+  require(result.dft_diagnostic.cuda_ao_selection.selected == expect_local,
+          "precision-census solve did not execute the requested AO layout");
+  const auto expected_mixed_density = expect_local ? 0U : result.precision.mixed_stage_fock_builds;
   require(operator_count(scf::PrecisionOperatorKind::CoulombJ, mixed_mode) ==
                   result.precision.mixed_stage_fock_builds &&
               operator_count(scf::PrecisionOperatorKind::CoulombJ, strict) ==
@@ -1399,7 +1520,7 @@ void precision_work_census_case(bool restricted, int precision_mode) {
               operator_count(scf::PrecisionOperatorKind::Xc, mixed_mode) == 0 &&
               operator_count(scf::PrecisionOperatorKind::Xc, strict) == result.fock_builds &&
               operator_count(scf::PrecisionOperatorKind::MatrixProduct, mixed_mode) ==
-                  result.precision.mixed_stage_fock_builds,
+                  expected_mixed_density,
           "CUDA-KS J/XC operator census disagrees with executed arithmetic");
   for (const auto kind :
        {scf::PrecisionOperatorKind::FockAssembly, scf::PrecisionOperatorKind::PhysicalResidual,
@@ -1482,6 +1603,9 @@ void precision_work_census_case(bool restricted, int precision_mode) {
                 recovered.precision_work.returned_solve_epoch != previous_epoch,
             "CUDA-KS recovery did not publish fresh complete precision evidence");
   }
+  require((had_previous ? ::setenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO", saved.c_str(), 1)
+                        : ::unsetenv("GENERATIVEQC_CUDA_KS_ACTIVE_AO")) == 0,
+          "could not restore precision-census AO policy");
 }
 
 /** Exercise the C validation layer, which can reject a request before the
@@ -1698,6 +1822,17 @@ generativeqc_precision_work_detail query_public_precision_work(const generativeq
               !events.empty() && events.back().kind == GENERATIVEQC_PRECISION_EVENT_FINAL_AUDIT &&
               !operators.empty(),
           "public batch precision-work query lost complete execution evidence");
+  // Count actual Fock-assembly operators. Final-audit events and SCF iteration
+  // metadata cannot substitute for the execution owner's work census.
+  std::uint64_t observed_builds = 0;
+  for (const auto& operation : operators)
+    if (operation.kind == GENERATIVEQC_PRECISION_OPERATOR_FOCK_ASSEMBLY)
+      observed_builds += operation.count;
+  std::uint64_t published_builds = 0;
+  require(generativeqc_batch_get_last_fock_builds(batch, index, &published_builds) ==
+                  GENERATIVEQC_STATUS_SUCCESS &&
+              observed_builds > 0 && published_builds == observed_builds,
+          "public CUDA KS Fock count differs from executed Fock assemblies");
   return summary;
 }
 
@@ -1833,11 +1968,13 @@ int main() {
   try {
     prepared_cuda_fock_seam();
     registered_functional_code_seam();
-    precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO);
-    precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO);
-    // UKS avoids the optional strict-RKS device-chunk route even if the test
-    // environment preselects it, so this also qualifies a complete FP64 census.
-    precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64);
+    for (const auto* ao_selection : std::array<const char*, 3>{nullptr, "0", "1"}) {
+      precision_work_census_case(true, GENERATIVEQC_PRECISION_AUTO, ao_selection);
+      precision_work_census_case(false, GENERATIVEQC_PRECISION_AUTO, ao_selection);
+      // UKS avoids optional strict-RKS chunks, retaining a complete FP64 census.
+      precision_work_census_case(false, GENERATIVEQC_PRECISION_FP64, ao_selection);
+    }
+    pbe0_auto_local_ao_composition_case();
     if (std::getenv("GENERATIVEQC_CUDA_KS_CHUNK") == nullptr) {
       require(::setenv("GENERATIVEQC_CUDA_KS_CHUNK", "2", 1) == 0,
               "could not enable CUDA RKS chunk qualification");

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: "${SLURM_JOB_ID:?finite Slurm allocation required}"
+: "${CUDA_VISIBLE_DEVICES:?preserve scheduler visibility}"
+candidate=/data/jzzeng/qc-1892-composed-shared-density-20261005
+control=/data/jzzeng/qc-1892-composed-work-census-20261005
+output="$candidate/.artifacts/endpoint-${SLURM_JOB_ID}"
+mkdir -p "$output"
+trap 'printf "%s\n" "$?" > "$output/job.exit"' EXIT
+scontrol show job "$SLURM_JOB_ID" -o > "$output/job.txt"
+sha256sum "$candidate/.artifacts/paired-endpoint-n1.sh" "$candidate/.artifacts/verify-endpoint.py" > "$output/driver.sha256"
+for checkout in "$control" "$candidate"; do
+  (
+    cd "$checkout"
+    source .artifacts/gpu-env-n1.sh
+    sha256sum -c .artifacts/build/binaries.sha256
+    "$python" .artifacts/check-source.py
+    sha256sum .artifacts/build/source-head.txt .artifacts/build/source-identity.txt .artifacts/gpu-env-n1.sh
+  ) >> "$output/source-binary-check.txt"
+done
+for atoms in 48 96; do
+  (
+    cd "$control"
+    source .artifacts/gpu-env-n1.sh
+    "$python" -m benchmarks.readme_pbe0_integrated --policy default reference --atoms "$atoms" --basis-file benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json --repeats 5 --output "$output/reference-$atoms.json"
+  ) > "$output/reference-$atoms.log" 2>&1
+  # Reverse arm order for the second size. Every arm gets a fresh compiler
+  # artifact directory; neither arm inherits the other's first-use preparation.
+  arms=(control candidate)
+  if [[ "$atoms" == 96 ]]; then arms=(candidate control); fi
+  for arm in "${arms[@]}"; do
+    checkout="$control"
+    if [[ "$arm" == candidate ]]; then checkout="$candidate"; fi
+    (
+      cd "$checkout"
+      source .artifacts/gpu-env-n1.sh
+      export GENERATIVEQC_STATIONARY_CACHE="$output/cache-$arm-$atoms"
+      mkdir -p "$GENERATIVEQC_STATIONARY_CACHE"
+      ccache --show-stats > "$output/ccache-before-$arm-$atoms.txt"
+      "$python" -m benchmarks.readme_pbe0_integrated --policy local-indexed-phased --scf-active-ao native --atoms "$atoms" --basis-file benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json --repeats 5 --reference "$output/reference-$atoms.json" --output "$output/$arm-$atoms.json"
+      "$python" "$candidate/.artifacts/verify-endpoint.py" "$output/$arm-$atoms.json" "$output/reference-$atoms.json" > "$output/verified-$arm-$atoms.json"
+      ccache --show-stats > "$output/ccache-after-$arm-$atoms.txt"
+    ) > "$output/$arm-$atoms.log" 2>&1
+  done
+done

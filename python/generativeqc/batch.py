@@ -583,6 +583,12 @@ class PreparedBatch:
         from generativeqc_compiler.dft import NativeAO
 
         from ._dft_gradient import StationaryKsState
+        from ._force_active_ao import (
+            QUALIFIED_FORCE_ACTIVE_AO_PROFILES,
+            ForceActiveAoWorkload,
+            force_active_ao_policy_record,
+            resolve_force_active_ao_policy,
+        )
         from ._snapshot_grid_cache import SnapshotGridCache
         from ._stationary_composite_cuda import (
             PreparedCompositeStationaryCudaGradient,
@@ -612,7 +618,54 @@ class PreparedBatch:
                     raise NotImplementedError(
                         "public CUDA DFT forces require a qualified CUDA owner"
                     )
-                if requires_composite_stationary_cuda(state):
+                source = state._source
+                composite_force = requires_composite_stationary_cuda(state)
+                target = self._stationary_cuda_target()
+                if composite_force:
+                    max_device_bytes, max_host_bytes = 1 << 30, 2 << 30
+                    tile_policy, policy_tile_points = "budget-auto", None
+                else:
+                    max_device_bytes, max_host_bytes = 512 << 20, 256 << 20
+                    tile_policy, policy_tile_points = "fixed", 256
+
+                profiles_present = bool(QUALIFIED_FORCE_ACTIVE_AO_PROFILES)
+                resident_provider = getattr(source, "cuda_resident_grid", None)
+                resident_grid_available = callable(resident_provider)
+                if (
+                    profiles_present
+                    and source.hamiltonian == "all-electron"
+                    and resident_grid_available
+                ):
+                    resident_grid_available = resident_provider() is not None
+                density_fitted = (
+                    bool(getattr(source, "density_fitted", False))
+                    if profiles_present
+                    else calculator._density_fitting_mode
+                    != _native.DENSITY_FITTING_NONE
+                )
+                workload = ForceActiveAoWorkload(
+                    architecture=target.architecture,
+                    derivative_order=(
+                        2
+                        if composite_force or "sigma" in state.identity.ingredients
+                        else 1
+                    ),
+                    spin_blocks=1 if state.identity.spin == "unpolarized" else 2,
+                    composition="composite" if composite_force else "ordinary",
+                    hamiltonian=source.hamiltonian,
+                    density_fitted=density_fitted,
+                    atoms=basis.natom,
+                    aos=basis.nao,
+                    grid_points=len(state.grid.points),
+                    tile_policy=tile_policy,
+                    tile_points=policy_tile_points,
+                    max_device_bytes=max_device_bytes,
+                    max_host_bytes=max_host_bytes,
+                    resident_grid=resident_grid_available,
+                )
+                decision = resolve_force_active_ao_policy(workload)
+
+                if composite_force:
                     prepared = self._stationary_cuda_execution
                     if not isinstance(
                         prepared, PreparedCompositeStationaryCudaGradient
@@ -621,7 +674,7 @@ class PreparedBatch:
                             prepared.close()
                         prepared = PreparedCompositeStationaryCudaGradient()
                         self._stationary_cuda_execution = prepared
-                    return prepared.execute(
+                    forces, work = prepared.execute(
                         state,
                         basis,
                         compiler=self._stationary_cuda_compiler(),
@@ -632,7 +685,16 @@ class PreparedBatch:
                             )
                         ),
                         library=Path(str(self._library._name)).resolve(),
+                        max_device_bytes=max_device_bytes,
+                        max_host_bytes=max_host_bytes,
+                        active_ao_cutoff=decision.cutoff,
+                        active_ao_cache_bytes=decision.cache_bytes,
                     )
+                    work = dict(work)
+                    work["force_active_ao_policy"] = force_active_ao_policy_record(
+                        decision, work.get("active_ao_maps")
+                    )
+                    return forces, work
 
                 prepared = self._stationary_cuda_execution
                 if not isinstance(prepared, PreparedStationaryCudaExecution):
@@ -641,16 +703,15 @@ class PreparedBatch:
                     prepared = PreparedStationaryCudaExecution()
                     self._stationary_cuda_execution = prepared
                 native_library = Path(str(self._library._name)).resolve()
-                all_electron = state._source.hamiltonian == "all-electron"
+                all_electron = source.hamiltonian == "all-electron"
                 packaged = (
-                    all_electron
-                    and not state._source.method_ir.full_range_exact_exchange
+                    all_electron and not source.method_ir.full_range_exact_exchange
                 )
                 kwargs = {
                     "compiler": (
                         None if packaged else self._stationary_cuda_compiler()
                     ),
-                    "target": self._stationary_cuda_target(),
+                    "target": target,
                     "cache": Path(
                         os.environ.get(
                             "GENERATIVEQC_STATIONARY_CACHE", ".cache/stationary-cuda"
@@ -658,10 +719,10 @@ class PreparedBatch:
                     ),
                     "aot_directory": native_library.parent if packaged else None,
                     "native_grid_library": native_library,
-                    # Public complete forces plan the actual finite grid. The
-                    # private diagnostic's whole-grid work guards are not
-                    # capacity limits: bounded submission windows and all
-                    # host/device byte admission remain mandatory.
+                    "max_device_bytes": max_device_bytes,
+                    "max_host_bytes": max_host_bytes,
+                    "resident_ao_cutoff": decision.cutoff,
+                    "resident_ao_cache_bytes": decision.cache_bytes,
                     "max_grid_points": None,
                     "max_grid_pair_visits": None,
                 }
@@ -676,7 +737,15 @@ class PreparedBatch:
                     result = complete_rks_cuda_gradient_diagnostic(
                         state, basis, prepared=prepared, **kwargs
                     )
-                return -np.asarray(result.gradient).copy(), dict(result.work)
+                work = dict(result.work)
+                selection = work.get("resident_ao_selection")
+                map_work = (
+                    selection.get("work") if isinstance(selection, dict) else None
+                )
+                work["force_active_ao_policy"] = force_active_ao_policy_record(
+                    decision, map_work
+                )
+                return -np.asarray(result.gradient).copy(), work
             finally:
                 state._source.close()
 

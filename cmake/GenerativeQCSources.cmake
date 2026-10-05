@@ -91,6 +91,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/methods/mp2_method.cpp
     src/methods/rccsd_method.cpp
     src/methods/rccsdt_method.cpp
+    src/methods/df_rccsdt_method.cpp
     src/posthf/bridge.cpp
     src/posthf/cuda_derivative.cpp
     src/posthf/mp2_derivative_common.cpp
@@ -154,6 +155,7 @@ function(generativeqc_add_integrals_scf_sources target)
     src/scf/initial_guess/density.cpp
     src/scf/preliminary_guess.cpp
     src/tensor/symmetric_matrix_function.cpp
+    src/scf/cuda/df_source_domain.cpp
     src/scf/cuda/rhf_policy.cpp)
 
   if(GENERATIVEQC_ENABLE_CUDA)

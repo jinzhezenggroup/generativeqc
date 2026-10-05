@@ -11,7 +11,7 @@ import argparse
 import sys
 import typing
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +48,8 @@ from generativeqc_compiler.tensor.ir import (
     divide,
     input_tensor,
 )
+from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.optimize import prepare_for_backend
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.scaled_arithmetic import emit_scaled_bilinear
@@ -198,6 +200,65 @@ def _device_size(spec: TensorSpec) -> str:
     if not spec.indices:
         return "1"
     return "*".join(_dim(i) for i in spec.indices)
+
+
+def ordered_batch_accumulation(
+    program: Program,
+    name: str,
+    state_type: str,
+    output_type: str,
+    batch_expression: str,
+    fields: dict[str, str] | None = None,
+) -> tuple[str, str]:
+    """Emit one fused consumer of typed Q-major outputs in their original order.
+
+    This shared primal/adjoint lowering never builds a Q subtotal: every output
+    lane starts from its retained accumulator, checks each individual addition,
+    and visits Q in increasing order. Thus tile boundaries cannot regroup the
+    reduction or hide overflow before a later cancelling contribution. Output
+    extents and optional Q strides come solely from the supplied TensorIR.
+    """
+    fields = fields or {key: key for key in program.outputs}
+    sizes, device_sizes, strides = {}, {}, {}
+    for key, field in fields.items():
+        spec = program.outputs[key].spec
+        batched = bool(spec.indices and spec.indices[0].space.kind == "batch")
+        if batched:
+            spec = replace(spec, indices=spec.indices[1:], symmetries=())
+        sizes[field], device_sizes[field] = _size(spec), _device_size(spec)
+        strides[field] = device_sizes[field] if batched else "0"
+    targets = ", ".join("double* target_" + field for field in fields.values())
+    declaration = (
+        f"void accumulate_{name}_cuda({state_type}& s, {output_type} values, {targets})"
+    )
+    lines = [
+        f"__global__ void accumulate_{name}_kernel({output_type} values,{targets},std::size_t o,std::size_t v,std::size_t q,int* error) {{",
+        "  std::size_t limit=0;",
+        *(f"  if ({size}>limit) limit={size};" for size in device_sizes.values()),
+        "  for(std::size_t x=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;x<limit;x+=std::size_t(blockDim.x)*gridDim.x){",
+    ]
+    for field in fields.values():
+        lines += [
+            f"    if(x<{device_sizes[field]}){{",
+            f"      double value=target_{field}[x];",
+            f"      for(std::size_t Q=0;Q<q;++Q) value=generativeqc_tensor::finite(value+values.{field}[Q*({strides[field]})+x],error,1);",
+            f"      target_{field}[x]=value; }}",
+        ]
+    lines += [
+        "  }",
+        "}",
+        declaration + " {",
+        "  const auto o=s.o,v=s.v;",
+        "  const auto count=std::max({" + ",".join(sizes.values()) + "});",
+        f"  accumulate_{name}_kernel<<<generativeqc_tensor::blocks(count,256),256,0,s.stream>>>(values,"
+        + ",".join("target_" + field for field in fields.values())
+        + ",o,v,"
+        + batch_expression
+        + ",s.error);",
+        "  generativeqc_tensor::cuda_check(cudaGetLastError());",
+        "}",
+    ]
+    return declaration, "\n".join(lines)
 
 
 def _fraction(value: tuple[int, int]) -> str:
@@ -1484,8 +1545,8 @@ def _cuda_program(
     batch_dim: bool = False,
     output_fields: tuple[str, ...] | None = None,
     reset_error: bool = True,
+    prepared_contractions: str | None = None,
     matrix_gemm: str | None = None,
-    batched_matrix_gemm: str | None = None,
 ) -> str:
     names = _prepare_program(program)
     arena_plan = _arena_plan(program)
@@ -1493,8 +1554,11 @@ def _cuda_program(
     kernels = []
     for number, node in enumerate(_execution_nodes(program)):
         if node.op != "input" and not (
-            (matrix_gemm and _packed_matrix_gemm(node) is not None)
-            or (batched_matrix_gemm and _packed_batched_matrix_gemm(node) is not None)
+            (
+                (prepared_contractions or matrix_gemm)
+                and _packed_matrix_gemm(node) is not None
+            )
+            or (prepared_contractions and _packed_batched_matrix_gemm(node) is not None)
         ):
             kernels.append(
                 _cuda_kernel(node, number, prefix, names, batch_dim=batch_dim)
@@ -1536,6 +1600,8 @@ def _cuda_program(
             else []
         ),
     ]
+    bindings = []
+    adapter = TensorLoweringAdapter(program) if prepared_contractions else None
     for number, node in enumerate(_execution_nodes(program)):
         if node.op == "input":
             input_name = node.attrs["name"]
@@ -1549,22 +1615,43 @@ def _cuda_program(
             continue
         lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         sources = [names[x._emit_index] for x in node.inputs]
-        gemm = _packed_matrix_gemm(node) if matrix_gemm else None
-        batch_gemm = _packed_batched_matrix_gemm(node) if batched_matrix_gemm else None
-        if batch_gemm is not None:
-            ta, tb, batch, m, columns, k = batch_gemm
-            coefficient = _fraction(node.attrs["coefficient"])
-            lines.append(
-                f"  {batched_matrix_gemm}('{ta}','{tb}',{batch},{m},{columns},{k},{coefficient},"
-                f"{sources[0]},{sources[1]},{names[number]});"
-            )
-            continue
-        if gemm is not None:
-            ta, tb, m, columns, k = gemm
+        if matrix_gemm and (legacy_gemm := _packed_matrix_gemm(node)) is not None:
+            # The RHF frame-response owner still uses the legacy callback until
+            # its resource/response migration under #1890 is qualified.
+            ta, tb, m, columns, k = legacy_gemm
             coefficient = _fraction(node.attrs["coefficient"])
             lines.append(
                 f"  {matrix_gemm}('{ta}','{tb}',{m},{columns},{k},{coefficient},"
                 f"{sources[0]},{sources[1]},{names[number]});"
+            )
+            continue
+        gemm = _packed_matrix_gemm(node) if prepared_contractions else None
+        batch_gemm = (
+            _packed_batched_matrix_gemm(node) if prepared_contractions else None
+        )
+        if gemm is not None or batch_gemm is not None:
+            assert adapter is not None
+            if batch_gemm is not None:
+                ta, tb, batch, m, columns, k = batch_gemm
+            else:
+                assert gemm is not None
+                ta, tb, m, columns, k = gemm
+                batch = "1"
+            slot = len(bindings)
+            bindings.append(
+                contraction_initializer(
+                    adapter,
+                    node,
+                    _dim,
+                    transpose=(ta, tb),
+                    extents=(batch, m, columns, k),
+                    coefficient=_fraction(node.attrs["coefficient"]),
+                )
+            )
+            shape_q = "q" if batch_dim else "1"
+            lines.append(
+                f"  {prepared_contractions}.execute({slot},o,v,{shape_q},s.stream,"
+                f"{sources[0]},{sources[1]},{names[number]},s.error);"
             )
             continue
         count = _size(node.spec)
@@ -1581,6 +1668,19 @@ def _cuda_program(
         lines += [
             f"  {prefix}_node_{number}<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>({count}),256),256,0,s.stream>>>({launch_args});",
         ]
+    if prepared_contractions:
+        # Build descriptors once per owner and batch/tail shape, never in run().
+        declarations = [
+            f"static void bind_{prefix}({state_type}& s,generativeqc::tensor::CudaContractionContext& context,",
+            "    std::size_t q,std::size_t& calls,std::size_t& summands){",
+            "  const auto o=s.o,v=s.v;",
+            *(["  const auto n=checked_add(o,v);"] if uses_complete_orbital else []),
+            f"  {prepared_contractions}.add(o,v,q,{{",
+            ",\n".join(bindings),
+            "  },context,calls,summands);",
+            "}",
+        ]
+        lines = declarations + lines
     lines.append("  generativeqc_tensor::cuda_check(cudaGetLastError());")
     outputs = {key: names[value._emit_index] for key, value in program.outputs.items()}
     if output_fields is not None:

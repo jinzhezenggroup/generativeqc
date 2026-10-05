@@ -62,7 +62,7 @@ using Dtype = scf::PrecisionDtype;
 struct Owner {
   bool pending_mixed_coulomb{}, pending_mixed_density{}, mixed_precision_executed{};
   bool device_chunk_mode{}, has_exchange{true}, has_range_correction{true};
-  bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{};
+  bool stabilize_occupations{}, final_closure{}, is_active{}, is_failed{}, device_nonlocal{};
   bool final_state_ready{true}, occupied_fitted_factor_ready{};
   void* nonlocal_correlation{};
   unsigned refinement_iterations{};
@@ -96,19 +96,22 @@ std::uint64_t count(const Owner& p, Kind kind, Mode mode = Mode::Strict) {
   }
   return total;
 }
-void check_inventory(const Owner& p, bool coulomb, bool density, bool stabilized, bool closure) {
+void check_inventory(const Owner& p, bool coulomb, bool density, bool stabilized, bool closure,
+                     bool has_nonlocal = false) {
   assert(count(p, Kind::CoulombJ) == !coulomb);
   assert(count(p, Kind::CoulombJ, Mode::Mixed) == coulomb);
   assert(count(p, Kind::MatrixProduct) == (stabilized ? 9U : 7U));
   assert(count(p, Kind::MatrixProduct, Mode::Mixed) == density);
   assert(count(p, Kind::CoulombRecurrence, Mode::Mixed) == (coulomb ? 11U : 0U));
   assert(count(p, Kind::ExchangeK) == 2 && count(p, Kind::ExchangeK, Mode::Mixed) == 0);
+  assert(count(p, Kind::NonlocalCorrelation) == has_nonlocal);
+  assert(count(p, Kind::NonlocalCorrelation, Mode::Mixed) == 0);
   for (const auto kind : {Kind::Xc, Kind::FockAssembly, Kind::PhysicalResidual,
                           Kind::Eigensolver, Kind::DensityBuild, Kind::Diagnostics})
     assert(count(p, kind) == 1 && count(p, kind, Mode::Mixed) == 0);
   assert(count(p, Kind::Diis) == !closure);
   assert(count(p, Kind::OccupationStabilization) == stabilized);
-  const auto expected_rows = 9U + !closure + stabilized + density + coulomb;
+  const auto expected_rows = 9U + !closure + stabilized + density + coulomb + has_nonlocal;
   assert(p.output.precision_work.operators.size() == expected_rows);
 }
 int main() {
@@ -169,10 +172,23 @@ int main() {
   screened.complete(true, false, 0);
   assert(count(screened, Kind::CoulombJ, Mode::Mixed) == 1);
   assert(count(screened, Kind::CoulombRecurrence, Mode::Mixed) == 0);
+  Owner nlc;
+  nlc.nonlocal_correlation = &nlc;
+  nlc.device_nonlocal = true;
+  nlc.complete(true, false, 11);
+  check_inventory(nlc, true, false, false, false, true);
+  assert(count(nlc, Kind::NonlocalCorrelation) == 1);
+  nlc.output.converged = true;
+  nlc.publish();
+  assert(nlc.output.precision_work.complete &&
+         nlc.output.precision_work.operator_inventory_complete);
+  assert(nlc.output.precision_work.events.back().kind ==
+         scf::PrecisionWorkEventKind::FinalAudit);
   for (int excluded = 0; excluded < 3; ++excluded) {
     Owner partial;
     partial.device_chunk_mode = excluded == 0;
     partial.nonlocal_correlation = excluded == 1 ? &partial : nullptr;
+    partial.device_nonlocal = false;
     if (excluded == 2)
       partial.options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::HostUnfused;
     partial.complete(true, false, 7);
@@ -220,6 +236,14 @@ int main() {
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
+def test_method_controller_defers_nonlocal_auto_to_component_schedule() -> None:
+    source = (ROOT / "src/methods/dft_method.cpp").read_text(encoding="utf-8")
+    assert (
+        "self-consistent nonlocal correlation currently requires strict FP64"
+        not in source
+    )
+
+
 def test_component_schedule_limits_lowering_to_qualified_density_families(
     tmp_path: Path,
 ) -> None:
@@ -231,6 +255,7 @@ def test_component_schedule_limits_lowering_to_qualified_density_families(
 #include <optional>
 #include <stdexcept>
 #include "dft/cuda_ks_precision.hpp"
+#include "dft/semilocal_family.hpp"
 using namespace generativeqc;
 using namespace generativeqc::dft;
 
@@ -239,24 +264,54 @@ int main() {
   assert(runtime::kExecutionPrecisionSchema == "generativeqc.compiler.execution-precision.v1");
   assert(runtime::kStrictPrecisionMathMode == "ieee-rn-no-tf32");
   for (const auto family : {SemilocalFamily::Lda, SemilocalFamily::Pbe,
-                            SemilocalFamily::R2scan, SemilocalFamily::B3lyp}) {
-    const auto code = semilocal_family_code(family);
-    const auto strict =
-        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_FP64, code, false, false);
+                            SemilocalFamily::R2scan, SemilocalFamily::B3lyp,
+                            SemilocalFamily::Wb97mv}) {
+    const auto capabilities = semilocal_family_metadata(family).cuda_fast_paths;
+    const auto strict = resolve_cuda_ks_precision_schedule(
+        GENERATIVEQC_PRECISION_FP64, capabilities, false, false);
     assert(strict.size() == 6 && strict.is_strict_fp64() && !strict.any_lower_precision());
     assert(strict.strict_audit_dtype() == PrecisionDtype::Fp64);
     assert(strict.audit_owner() == "method-controller");
     assert(strict.math_mode() == runtime::kStrictPrecisionMathMode);
-    assert(!resolve_cuda_ks_precision_schedule(std::nullopt, code, false, false)
+    assert(!resolve_cuda_ks_precision_schedule(std::nullopt, capabilities, false, false)
                 .any_lower_precision());
 
-    const auto automatic =
-        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, false, false);
-    assert(automatic.any_lower_precision());
+    const auto automatic = resolve_cuda_ks_precision_schedule(
+        GENERATIVEQC_PRECISION_AUTO, capabilities, false, false);
+    assert(automatic.size() == 6 && automatic.any_lower_precision());
     assert(automatic.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
-    const bool density_mixed = family != SemilocalFamily::B3lyp;
+    const bool density_mixed =
+        cuda_xc_capability_qualified(capabilities.mixed_density_precision);
     assert(automatic.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
            density_mixed);
+    const auto dense_execution =
+        resolve_cuda_ks_iteration_precision(automatic, false, true);
+    assert(dense_execution.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    assert(dense_execution.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
+           density_mixed);
+    const auto local_execution =
+        resolve_cuda_ks_iteration_precision(automatic, false, false);
+    assert(local_execution.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    assert(!local_execution.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
+    // Layout fallback cannot erase a qualified J directive or mutate the input.
+    const auto* executed_j = local_execution.find(cuda_ks_precision_region::kCoulombJ);
+    const auto* requested_j = automatic.find(cuda_ks_precision_region::kCoulombJ);
+    assert(executed_j && requested_j);
+    assert(executed_j->storage_dtype == requested_j->storage_dtype);
+    assert(executed_j->compute_dtype == requested_j->compute_dtype);
+    assert(executed_j->accumulation_dtype == requested_j->accumulation_dtype);
+    assert(executed_j->qualification == requested_j->qualification);
+    assert(executed_j->math_mode == requested_j->math_mode);
+    assert(local_execution.size() == automatic.size());
+    assert(local_execution.audit_owner() == automatic.audit_owner());
+    assert(local_execution.strict_audit_dtype() == automatic.strict_audit_dtype());
+    assert(automatic.uses_lower_precision(cuda_ks_precision_region::kDensityContraction) ==
+           density_mixed);
+    const auto refinement =
+        resolve_cuda_ks_iteration_precision(automatic, true, true);
+    assert(refinement.is_strict_fp64() && refinement.size() == automatic.size());
+    assert(refinement.find(cuda_ks_precision_region::kCoulombJ)->qualification.empty());
+    assert(resolve_cuda_ks_iteration_precision(strict, false, true).is_strict_fp64());
     for (const auto region : {cuda_ks_precision_region::kExactExchange,
                               cuda_ks_precision_region::kTau,
                               cuda_ks_precision_region::kXcPointAlgebra,
@@ -274,20 +329,64 @@ int main() {
            (density_mixed ? PrecisionDtype::Fp32 : PrecisionDtype::Fp64));
     assert(density->accumulation_dtype == PrecisionDtype::Fp64);
 
-    for (const bool fitted : {false, true}) {
+    const auto nonlocal =
+        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, capabilities, false, true);
+    assert(nonlocal.size() == 7 && nonlocal.any_lower_precision());
+    assert(nonlocal.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    assert(!nonlocal.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
+    for (const auto region : {cuda_ks_precision_region::kExactExchange,
+                              cuda_ks_precision_region::kTau,
+                              cuda_ks_precision_region::kXcPointAlgebra,
+                              cuda_ks_precision_region::kNonlocalCorrelation,
+                              cuda_ks_precision_region::kFinalAudit})
+      assert(!nonlocal.uses_lower_precision(region));
+    const auto* nonlocal_region = nonlocal.find(cuda_ks_precision_region::kNonlocalCorrelation);
+    assert(nonlocal_region != nullptr &&
+           nonlocal_region->compute_dtype == PrecisionDtype::Fp64 &&
+           nonlocal_region->accumulation_dtype == PrecisionDtype::Fp64);
+
+    // Nonlocal composition retains strict density even when the layout supports
+    // it; strict refinement also restores the independently admitted J region.
+    const auto nonlocal_execution =
+        resolve_cuda_ks_iteration_precision(nonlocal, false, true);
+    assert(nonlocal_execution.uses_lower_precision(cuda_ks_precision_region::kCoulombJ));
+    assert(!nonlocal_execution.uses_lower_precision(cuda_ks_precision_region::kDensityContraction));
+    const auto nonlocal_refinement =
+        resolve_cuda_ks_iteration_precision(nonlocal, true, true);
+    assert(nonlocal_refinement.size() == 7 && nonlocal_refinement.is_strict_fp64());
+
+    for (const bool nonlocal_graph : {false, true}) {
       bool rejected = false;
       try {
-        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, code, fitted, !fitted);
+        resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO, capabilities, true,
+                                           nonlocal_graph);
       } catch (const std::invalid_argument&) {
         rejected = true;
       }
       assert(rejected);
     }
   }
+  // Refinement must include future regions, not just today's J/density pair.
+  auto extended = resolve_cuda_ks_precision_schedule(GENERATIVEQC_PRECISION_AUTO,
+      semilocal_family_metadata(SemilocalFamily::Pbe).cuda_fast_paths, false, false);
+  extended.add_region("extra.component", runtime::fp32_compute_fp64_accumulation("extra-gate"));
+  const auto local = resolve_cuda_ks_iteration_precision(extended, false, false);
+  assert(local.uses_lower_precision("extra.component"));
+  assert(local.find("extra.component")->qualification == "extra-gate");
+  const auto refinement = resolve_cuda_ks_iteration_precision(extended, true, false);
+  assert(refinement.size() == 7 && refinement.is_strict_fp64());
+  assert(extended.uses_lower_precision("extra.component"));
+  // Strict regions never invoke the predicate or become candidates for lowering.
+  unsigned visits = 0;
+  const auto unchanged = refinement.filter_lower_precision([&](const runtime::PrecisionRegion&) {
+    ++visits;
+    return true;
+  });
+  assert(visits == 0 && unchanged.is_strict_fp64());
   bool rejected = false;
   try {
-    resolve_cuda_ks_precision_schedule(static_cast<generativeqc_precision_mode>(999), 0, false,
-                                       false);
+    resolve_cuda_ks_precision_schedule(static_cast<generativeqc_precision_mode>(999),
+                                       CudaXcFastPathCapabilities{}, false, false);
   } catch (const std::invalid_argument&) {
     rejected = true;
   }

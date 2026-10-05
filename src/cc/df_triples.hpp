@@ -1,7 +1,12 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
+#include <string_view>
 #include <vector>
+
+#include "runtime/execution_precision.hpp"
 
 namespace generativeqc::cc::triples {
 
@@ -10,9 +15,18 @@ struct DFCudaResult {
   double energy{};
   double minimum_absolute_denominator{};
   double seconds{};
+  generativeqc::runtime::PrecisionDirective precision;
+  std::string_view w_scientific_identity, w_semantic_identity, w_candidate_identity, w_provider,
+      w_algorithm;
+  int w_provider_version{}, cuda_runtime_version{};
+  bool retained_incumbent{}, resource_fallback{};
+  std::uint32_t w_contraction_storage_bits{64}, w_contraction_compute_bits{64};
+  std::uint32_t w_contraction_accumulation_bits{64};
+  std::string_view w_precision_identity, w_codegen_precision_schedule_identity;
   std::size_t virtual_triples{}, occupied_tiles{};
-  std::size_t workspace_bytes{}, arena_bytes{}, provider_retained_bytes{};
+  std::size_t workspace_bytes{}, arena_bytes{}, provider_retained_bytes{}, host_binding_bytes{};
   std::size_t panel_capacity{}, panel_gemms{}, moment_gemms{};
+  std::size_t fp64_gemms{}, fp32_gemms{}, precision_cast_elements{};
   std::size_t epilogue_kernels{}, reduction_kernels{}, epilogue_points{};
   std::size_t contraction_summands{}, h2d_bytes{}, d2h_bytes{};
 };
@@ -47,9 +61,15 @@ struct DFCudaFockResult {
  * Q-major B_ov/B_vv replace resident ovvv. Other inputs retain the canonical
  * spatial-MO layout. The owner uploads each input once, builds at most three
  * occupied integral panels and six virtual W cubes, and drains before result
- * publication. Tight budgets fall back to one panel without changing equations.
- * max_bytes covers this owner's numeric storage plus the bounded BLAS allowance;
+ * publication. Tight budgets try one panel, then generated execution at the
+ * admitted precision, then strict generated execution without changing equations.
+ * max_bytes covers numeric storage, host bindings and the selected provider allowance;
  * callers composing endpoints separately charge their retained host/CC state.
+ * Scientifically admitted W directives are bound by the compiler/provider layer.
+ * The optional qualified variant lowers only the W reductions to FP32. W assembly,
+ * V, denominators, energy epilogue and final reductions remain FP64, and the
+ * result records the actual contraction precision plus the generated code's
+ * compiler precision-schedule identity.
  */
 #if GENERATIVEQC_HAS_CUDA
 DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const double* bov,
@@ -57,7 +77,8 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
                               const double* fov, const double* t1, const double* t2,
                               const double* eps_o, const double* eps_v,
                               double denominator_threshold, std::size_t max_bytes, int device,
-                              std::size_t max_panel_buffers = 3);
+                              std::size_t max_panel_buffers = 3,
+                              generativeqc::runtime::PrecisionDirective admitted_w = {});
 /** Differentiate the complete occupied-tile energy on CUDA.
  * Includes both the original energy and all nine input cotangents, staged once.
  * Complete admission charges borrowed host input values, detached outputs,

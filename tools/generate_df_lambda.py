@@ -26,11 +26,11 @@ from tools.generate_df_ccsd_native import programs as virtual_programs
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
     _cuda_program,
-    _device_size,
     _packed_batched_matrix_gemm,
     _packed_matrix_gemm,
     _required_function,
     _size,
+    ordered_batch_accumulation,
 )
 
 if typing.TYPE_CHECKING:
@@ -72,71 +72,22 @@ def matrix_programs() -> dict[str, Program]:
 
 
 def accumulation_declaration(name: str) -> str:
-    targets = ", ".join(
-        "double* target_" + field for field in staged_programs()[name].outputs
-    )
-    return f"void accumulate_{name}_cuda(StagedCudaState& s, {staged_type(name)} values, {targets})"
+    return _accumulation(name)[0]
 
 
 def accumulation_source(name: str) -> str:
-    """Fuse ordered Q reduction and all output accumulations in one kernel.
+    return _accumulation(name)[1]
 
-    Addresses and extents come from typed output IR. Each thread owns one
-    element in each compatible output; no atomics or implicit orbital symmetry
-    are introduced. Check every addition so later cancellation cannot hide an
-    earlier overflow. Scalar execution uses exactly one Q row.
-    """
-    program = matrix_programs()[name]
-    fields = tuple(program.outputs)
-    sizes = {}
-    device_sizes = {}
-    strides = {}
-    for field, node in program.outputs.items():
-        indices = node.spec.indices
-        batched = bool(indices and indices[0].space.kind == "batch")
-        from dataclasses import replace
 
-        sizes[field] = (
-            _size(replace(node.spec, indices=indices[1:], symmetries=()))
-            if batched
-            else _size(node.spec)
-        )
-        device_sizes[field] = (
-            _device_size(replace(node.spec, indices=indices[1:], symmetries=()))
-            if batched
-            else _device_size(node.spec)
-        )
-        strides[field] = sizes[field] if batched else "0"
-    targets = ", ".join("double* target_" + field for field in fields)
-    lines = [
-        f"__global__ void accumulate_{name}_kernel({staged_type(name)} values,{targets},std::size_t o,std::size_t v,std::size_t q,int* error) {{",
-        "  std::size_t limit=0;",
-        *(f"  if ({size}>limit) limit={size};" for size in device_sizes.values()),
-        "  for(std::size_t x=std::size_t(blockIdx.x)*blockDim.x+threadIdx.x;x<limit;x+=std::size_t(blockDim.x)*gridDim.x){",
-    ]
-    for field in fields:
-        stride = device_sizes[field] if strides[field] != "0" else "0"
-        lines += [
-            f"    if(x<{device_sizes[field]}){{",
-            f"      double value=target_{field}[x];",
-            f"      for(std::size_t Q=0;Q<q;++Q) value=generativeqc_tensor::finite(value+values.{field}[Q*({stride})+x],error,1);",
-            f"      target_{field}[x]=value; }}",
-        ]
-    lines += [
-        "  }",
-        "}",
-        accumulation_declaration(name) + " {",
-        "  const auto o=s.o,v=s.v;",
-        "  const auto count=std::max({" + ",".join(sizes.values()) + "});",
-        f"  accumulate_{name}_kernel<<<generativeqc_tensor::blocks(count,256),256,0,s.stream>>>(values,"
-        + ",".join("target_" + field for field in fields)
-        + ",o,v,"
-        + ("s.gemm?s.q:1" if name in BATCHED_STAGES else "1")
-        + ",s.error);",
-        "  generativeqc_tensor::cuda_check(cudaGetLastError());",
-        "}",
-    ]
-    return "\n".join(lines)
+def _accumulation(name: str) -> tuple[str, str]:
+    """Primal and adjoint consumers use the same strict-order batch lowering."""
+    return ordered_batch_accumulation(
+        matrix_programs()[name],
+        name,
+        "StagedCudaState",
+        staged_type(name),
+        f"s.{name}_contractions?s.q:1" if name in BATCHED_STAGES else "1",
+    )
 
 
 def output_type(name: str) -> str:
@@ -251,11 +202,28 @@ def cuda_header() -> str:
             "namespace generativeqc::cc::generated::dflambda {",
             "using CudaState = dfcore::CudaState;",
             "struct StagedCudaState : dfhoist::CudaState {",
-            "  std::size_t q{1};",
-            "  std::function<void(char,char,std::size_t,std::size_t,std::size_t,std::size_t,double,const double*,const double*,double*)> batched_gemm;",
+            *(
+                f"  generativeqc::tensor::PreparedContractions {name}_contractions;"
+                for name in staged_programs()
+            ),
             "  const double *bar_df_tau{}, *bar_df_Lvv{}, *bar_df_Wvoov{},",
             "      *bar_df_Wvovo{}, *bar_df_Xv{}, *bar_df_D05_vv_ladder{}, *bar_df_singles_residual{};",
             "};",
+            "inline std::size_t contraction_host_bytes(std::size_t variants,bool parameters){",
+            "  std::size_t bytes=0;",
+            *(
+                (
+                    "  if(parameters) "
+                    if name == "staged_factors" or "parameter_" in name
+                    else "  "
+                )
+                + f"bytes+=generativeqc::tensor::PreparedContractions::storage_bytes({sum(_packed_matrix_gemm(n) is not None or _packed_batched_matrix_gemm(n) is not None for n in p.live_nodes)},"
+                + ("variants" if name in BATCHED_STAGES else "1")
+                + ");"
+                for name, p in matrix_programs().items()
+            ),
+            "  return bytes; }",
+            "void prepare_contractions(StagedCudaState&,generativeqc::tensor::CudaContractionContext&,std::size_t batch,std::size_t tail,bool parameters,std::size_t& calls,std::size_t& summands);",
             "// Caller clears the sticky flag at each complete core-plus-Q action boundary.",
             *(
                 f"{output_type(name)} run_{name}_cuda(CudaState& state);"
@@ -319,12 +287,27 @@ def cuda_source() -> str:
                 state_type="StagedCudaState",
                 output_fields=tuple(program.outputs),
                 reset_error=False,
-                matrix_gemm="s.gemm",
-                batched_matrix_gemm="s.batched_gemm",
+                prepared_contractions=f"s.{name}_contractions",
                 batch_dim=True,
             ),
-            f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return state.gemm ? run_{name}_matrix(state) : run_{name}_scalar(state); }}",
+            f"{kind} run_{name}_cuda(StagedCudaState& state) {{ return state.{name}_contractions ? run_{name}_matrix(state) : run_{name}_scalar(state); }}",
         ]
+    lines.append(
+        "void prepare_contractions(StagedCudaState& s,generativeqc::tensor::CudaContractionContext& context,std::size_t batch,std::size_t tail,bool parameters,std::size_t& calls,std::size_t& summands){"
+    )
+    for name in staged_programs():
+        optional = name == "staged_factors" or "parameter_" in name
+        if optional:
+            lines.append("  if(parameters){")
+        extent = "batch" if name in BATCHED_STAGES else "1"
+        lines.append(f"  bind_{name}_matrix(s,context,{extent},calls,summands);")
+        if name in BATCHED_STAGES:
+            lines.append(
+                f"  if(tail && tail != batch) bind_{name}_matrix(s,context,tail,calls,summands);"
+            )
+        if optional:
+            lines.append("  }")
+    lines.append("}")
     lines.extend(accumulation_source(name) for name in ACCUMULATED_STAGES)
     return "\n".join([*lines, "}", ""])
 

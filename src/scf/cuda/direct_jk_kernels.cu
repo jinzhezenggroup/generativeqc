@@ -122,17 +122,45 @@ __device__ Scalar canonical_quartet(DeviceBatch batch, std::int32_t system, std:
   }
 }
 
+/** Keep low-order value specializations while sharing high-order preparation.
+ * Only Cartesian strict-FP64 consumers enter this path. Separate radial moments
+ * remain compiler-owned; no full-minus-long integral subtraction is introduced.
+ */
+template <unsigned AngularOrder>
+__device__ CartesianRangePair<double> canonical_range_quartet(
+    DeviceBatch batch, std::int32_t system, std::int32_t first, std::int32_t second,
+    std::int32_t third, std::int32_t fourth, generativeqc::integrals::CoulombRange range,
+    double omega) {
+  if constexpr (AngularOrder < 5U) {
+    return {canonical_quartet<AngularOrder, true, double>(
+                batch, system, first, second, third, fourth, -1,
+                generativeqc::integrals::CoulombRange::Full, 0.0),
+            canonical_quartet<AngularOrder, true, double>(batch, system, first, second, third,
+                                                          fourth, -1, range, omega)};
+  } else {
+    const auto base = static_cast<std::size_t>(system) * batch.direct_nbf;
+    const auto shell_class = direct_quartet_shell_class_device(
+        batch.shell_angular[batch.direct_ao_shells[base + first]],
+        batch.shell_angular[batch.direct_ao_shells[base + second]],
+        batch.shell_angular[batch.direct_ao_shells[base + third]],
+        batch.shell_angular[batch.direct_ao_shells[base + fourth]]);
+    return dispatch_contracted_eri_cartesian_source_shell_class<AngularOrder, double, true>(
+        shell_class, batch, system, first, second, third, fourth, -1, range, omega);
+  }
+}
+
 /** Reuse the scientific compiler's exact contraction and permutation scatter.
  * Bucket homogeneity removes the runtime 0..12 recurrence dispatch from the
  * inner ERI loop. Triangular work enumerates each physical ERI only once. */
-template <unsigned AngularOrder, bool Unrestricted, bool Cartesian>
+template <unsigned AngularOrder, bool Unrestricted, bool Cartesian, bool PairedRanges = false>
 __global__ void canonical_jk_kernel(
     DeviceBatch batch, std::int32_t system, const std::int32_t* pairs, CanonicalPairRows rows,
     std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
     std::size_t second_count, bool same_bucket, std::size_t work_count, bool want_j, bool want_k,
     generativeqc::integrals::CoulombRange exchange_range, double exchange_omega, double screening,
     const double* bounds, const double* density, double* coulomb, double* exchange,
-    std::uint64_t* work_census) {
+    std::uint64_t* work_census, double* range_exchange) {
+  static_assert(!PairedRanges || Cartesian);
   const std::size_t dimension = static_cast<std::size_t>(batch.nbf);
   const std::size_t matrix = dimension * dimension;
   const std::size_t physical_offset = static_cast<std::size_t>(system) * matrix;
@@ -159,27 +187,46 @@ __global__ void canonical_jk_kernel(
             bounds[physical_offset + third * dimension + fourth] <
         screening)
       continue;
-    double full_value = 0.0;
-    if (want_j || (want_k && exchange_range == generativeqc::integrals::CoulombRange::Full)) {
-      full_value = canonical_quartet<AngularOrder, Cartesian, double>(
-          batch, system, first, second, third, fourth, -1,
-          generativeqc::integrals::CoulombRange::Full, 0.0);
-      if (work_census) ++evaluated;
-    }
-    if (want_j)
+    if constexpr (PairedRanges) {
+      // The prepared facade admits identical full-range Schwarz predicates.
+      // Visit the canonical source once and publish all three independent
+      // matrices, using the same orbit scatter and spin normalization.
+      const auto values = canonical_range_quartet<AngularOrder>(
+          batch, system, first, second, third, fourth, exchange_range, exchange_omega);
       accumulate_direct_fock_integral<Unrestricted>(dimension, physical_offset, spin_offset,
                                                     density, coulomb, first, second, third, fourth,
-                                                    full_value, true, false);
-    if (want_k) {
-      const double exchange_value = exchange_range == generativeqc::integrals::CoulombRange::Full
-                                        ? full_value
-                                        : canonical_quartet<AngularOrder, Cartesian, double>(
-                                              batch, system, first, second, third, fourth, -1,
-                                              exchange_range, exchange_omega);
-      if (work_census && exchange_range != generativeqc::integrals::CoulombRange::Full) ++evaluated;
+                                                    values.full, true, false);
       accumulate_direct_fock_integral<Unrestricted>(dimension, physical_offset, spin_offset,
                                                     density, exchange, first, second, third, fourth,
-                                                    exchange_value, false, true);
+                                                    values.full, false, true);
+      accumulate_direct_fock_integral<Unrestricted>(dimension, physical_offset, spin_offset,
+                                                    density, range_exchange, first, second, third,
+                                                    fourth, values.selected, false, true);
+      if (work_census) evaluated += 2U;
+    } else {
+      double full_value = 0.0;
+      if (want_j || (want_k && exchange_range == generativeqc::integrals::CoulombRange::Full)) {
+        full_value = canonical_quartet<AngularOrder, Cartesian, double>(
+            batch, system, first, second, third, fourth, -1,
+            generativeqc::integrals::CoulombRange::Full, 0.0);
+        if (work_census) ++evaluated;
+      }
+      if (want_j)
+        accumulate_direct_fock_integral<Unrestricted>(dimension, physical_offset, spin_offset,
+                                                      density, coulomb, first, second, third,
+                                                      fourth, full_value, true, false);
+      if (want_k) {
+        const double exchange_value = exchange_range == generativeqc::integrals::CoulombRange::Full
+                                          ? full_value
+                                          : canonical_quartet<AngularOrder, Cartesian, double>(
+                                                batch, system, first, second, third, fourth, -1,
+                                                exchange_range, exchange_omega);
+        if (work_census && exchange_range != generativeqc::integrals::CoulombRange::Full)
+          ++evaluated;
+        accumulate_direct_fock_integral<Unrestricted>(dimension, physical_offset, spin_offset,
+                                                      density, exchange, first, second, third,
+                                                      fourth, exchange_value, false, true);
+      }
     }
   }
   if (work_census) {
@@ -210,6 +257,25 @@ __global__ void independent_eri_tile_kernel(DeviceBatch batch, std::int32_t syst
     local /= c1;
     const auto i = static_cast<std::int32_t>(b0 + local);
     eri[element] = contracted_eri<double>(batch, system, i, j, k, l, -1);
+  }
+}
+
+__global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_t n, std::size_t b0,
+                                              std::size_t b1, std::size_t b2, std::size_t b3,
+                                              std::size_t c0, std::size_t c1, std::size_t c2,
+                                              std::size_t c3, std::size_t elements, double* eri) {
+  const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
+  for (std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+       element < elements; element += stride) {
+    std::size_t local = element;
+    const std::size_t l = b3 + local % c3;
+    local /= c3;
+    const std::size_t k = b2 + local % c2;
+    local /= c2;
+    const std::size_t j = b1 + local % c1;
+    local /= c1;
+    const std::size_t i = b0 + local;
+    eri[element] = resident[((i * n + j) * n + k) * n + l];
   }
 }
 
@@ -646,6 +712,19 @@ void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::in
       elements, eri);
 }
 
+void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, std::size_t nbf,
+                                   const std::array<std::size_t, 4>& begin,
+                                   const std::array<std::size_t, 4>& count, std::size_t elements,
+                                   double* eri) {
+  if (!elements) return;
+  constexpr unsigned threads = 128;
+  const unsigned blocks =
+      static_cast<unsigned>(std::min<std::size_t>((elements + threads - 1) / threads, 65535));
+  copy_resident_eri_tile_kernel<<<blocks, threads, 0, stream>>>(
+      resident, nbf, begin[0], begin[1], begin[2], begin[3], count[0], count[1], count[2], count[3],
+      elements, eri);
+}
+
 void launch_independent_jk_bounds_kernel(dim3 grid, dim3 block, std::size_t shared_bytes,
                                          cudaStream_t stream, DeviceBatch batch, double* bounds,
                                          int* failure, bool cartesian) {
@@ -675,7 +754,7 @@ void launch_independent_jk_kernel(dim3 grid, dim3 block, std::size_t shared_byte
         exchange_omega, screening, bounds, density, beta, j_out, ka_out, kb_out, nullptr);
 }
 
-template <bool Cartesian>
+template <bool Cartesian, bool PairedRanges = false>
 void launch_canonical_jk_source(cudaStream_t stream, DeviceBatch batch, std::int32_t system,
                                 unsigned angular_order, const std::int32_t* pairs,
                                 CanonicalPairRows rows, std::size_t first_begin,
@@ -684,7 +763,7 @@ void launch_canonical_jk_source(cudaStream_t stream, DeviceBatch batch, std::int
                                 bool want_k, bool unrestricted, DirectCoulombRange exchange_range,
                                 double exchange_omega, double screening, const double* bounds,
                                 const double* density, double* coulomb, double* exchange,
-                                std::uint64_t* work_census) {
+                                std::uint64_t* work_census, double* range_exchange = nullptr) {
   const std::size_t work_count =
       same_bucket ? first_count * (first_count + 1U) / 2U : first_count * second_count;
   if (!work_count) return;
@@ -694,15 +773,15 @@ void launch_canonical_jk_source(cudaStream_t stream, DeviceBatch batch, std::int
 #define GENERATIVEQC_CANONICAL_JK_ORDER(order)                                                     \
   case order:                                                                                      \
     if (unrestricted)                                                                              \
-      canonical_jk_kernel<order, true, Cartesian><<<blocks, threads, 0, stream>>>(                 \
+      canonical_jk_kernel<order, true, Cartesian, PairedRanges><<<blocks, threads, 0, stream>>>(   \
           batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,        \
           same_bucket, work_count, want_j, want_k, integral_range(exchange_range), exchange_omega, \
-          screening, bounds, density, coulomb, exchange, work_census);                             \
+          screening, bounds, density, coulomb, exchange, work_census, range_exchange);             \
     else                                                                                           \
-      canonical_jk_kernel<order, false, Cartesian><<<blocks, threads, 0, stream>>>(                \
+      canonical_jk_kernel<order, false, Cartesian, PairedRanges><<<blocks, threads, 0, stream>>>(  \
           batch, system, pairs, rows, first_begin, first_count, second_begin, second_count,        \
           same_bucket, work_count, want_j, want_k, integral_range(exchange_range), exchange_omega, \
-          screening, bounds, density, coulomb, exchange, work_census);                             \
+          screening, bounds, density, coulomb, exchange, work_census, range_exchange);             \
     break
   switch (angular_order) {
     GENERATIVEQC_CANONICAL_JK_ORDER(0);
@@ -720,6 +799,19 @@ void launch_canonical_jk_source(cudaStream_t stream, DeviceBatch batch, std::int
     GENERATIVEQC_CANONICAL_JK_ORDER(12);
   }
 #undef GENERATIVEQC_CANONICAL_JK_ORDER
+}
+
+void launch_canonical_rsh_values_kernel(
+    cudaStream_t stream, DeviceBatch batch, std::int32_t system, unsigned angular_order,
+    const std::int32_t* pairs, CanonicalPairRows rows, std::size_t first_begin,
+    std::size_t first_count, std::size_t second_begin, std::size_t second_count, bool same_bucket,
+    bool unrestricted, DirectCoulombRange range, double omega, double screening,
+    const double* bounds, const double* density, double* coulomb, double* full_exchange,
+    double* range_exchange, std::uint64_t* work_census) {
+  launch_canonical_jk_source<true, true>(
+      stream, batch, system, angular_order, pairs, rows, first_begin, first_count, second_begin,
+      second_count, same_bucket, true, true, unrestricted, range, omega, screening, bounds, density,
+      coulomb, full_exchange, work_census, range_exchange);
 }
 
 void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,

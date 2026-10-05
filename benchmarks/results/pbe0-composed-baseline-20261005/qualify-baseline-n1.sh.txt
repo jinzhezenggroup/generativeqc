@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-1895-composed-baseline-20261005
+source .artifacts/gpu-env-n1.sh
+output="$PWD/.artifacts/endpoint-${SLURM_JOB_ID}"
+mkdir -p "$output"
+trap 'printf "%s\n" "$?" > "$output/job.exit"; ccache --show-stats > "$output/ccache-after.txt"' EXIT
+scontrol show job "$SLURM_JOB_ID" -o > "$output/job.txt"
+printf 'job=%s host=%s visibility=%s\n' "$SLURM_JOB_ID" "$(hostname)" "$CUDA_VISIBLE_DEVICES" | tee "$output/scheduler.txt"
+sha256sum -c .artifacts/build/binaries.sha256 > "$output/binary-check.txt"
+"$python" .artifacts/check-source.py | tee "$output/source-check.txt"
+for tool in nvcc ptxas c++; do .artifacts/bin/"$tool" --version > "$output/$tool-version.txt"; done
+ccache --version > "$output/ccache-version.txt"
+ccache --show-stats > "$output/ccache-before.txt"
+sha256sum .artifacts/qualify-baseline-n1.sh .artifacts/gpu-env-n1.sh .artifacts/check-source.py > "$output/inputs.sha256"
+timeout 300 build/cuda-release-sm120/generativeqc_dft_cuda_tests --pbe0-local-ao > "$output/native-pbe0.log" 2>&1
+timeout 300 build/cuda-release-sm120/generativeqc_dft_cuda_tests --ao-discovery > "$output/native-discovery.log" 2>&1
+for atoms in 48 96; do
+ "$python" -m benchmarks.readme_pbe0_integrated --policy default reference --atoms "$atoms" --basis-file benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json --repeats 5 --output "$output/reference-$atoms.json" > "$output/reference-$atoms.log" 2>&1
+ "$python" -m benchmarks.readme_pbe0_integrated --policy local-indexed-phased --scf-active-ao native --atoms "$atoms" --basis-file benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json --repeats 5 --reference "$output/reference-$atoms.json" --output "$output/composed-$atoms.json" > "$output/composed-$atoms.log" 2>&1
+ "$python" .artifacts/verify-endpoint.py "$output/composed-$atoms.json" "$output/reference-$atoms.json" > "$output/verified-$atoms.json"
+ printf 'complete protocol atoms=%s\n' "$atoms"
+done

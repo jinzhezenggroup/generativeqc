@@ -16,7 +16,8 @@
       "python/generativeqc/calculator.py",
       "python/generativeqc/resources_hf.py",
       "python/generativeqc_compiler/tensor/cuda_plan.py",
-      "python/generativeqc_compiler/tensor/cuda_execute.py"
+      "python/generativeqc_compiler/tensor/cuda_execute.py",
+      "python/generativeqc/_force_active_ao.py"
     ],
     "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current promotion classification. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
@@ -186,6 +187,26 @@
       "revisit_condition": "Independent full/LR derivative, sanitizer, complete same-binary cold/warm/displaced and larger-size qualification with observed work must precede promotion.",
       "evidence": [
         "note:.agents/notes/proposed/2026-10-04-reachable-coulomb-states.md"
+      ]
+    },
+    {
+      "id": "hf.direct-hermite-convolution",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION"
+      ],
+      "owner_issues": [
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py"
+      ],
+      "rationale": "Default-off Cartesian pair-axis convolution for generic strict-FP64 orders five and higher. Values and derivatives have separate explicit choices; primitive/AO admission and radial ownership are unchanged. Static contribution counts are not FLOPs or endpoint predictions.",
+      "revisit_condition": "Independent generated value/xyz-jet and full/LR molecular oracles, sanitizer, frozen policy/fallback checks, actual work and same-binary complete cold/warm/displaced/larger endpoint evidence before any promotion.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-hermite-axis-convolution.md"
       ]
     },
     {
@@ -485,6 +506,54 @@
       "evidence": [
         "issue:#507",
         "issue:#1598"
+      ]
+    },
+    {
+      "id": "dft.force-active-ao",
+      "classification": "needs-qualification",
+      "controls": [
+        "dft-policy:force-active-ao-auto"
+      ],
+      "owner_issues": [
+        1853,
+        1598
+      ],
+      "sources": [
+        "python/generativeqc/_force_active_ao.py",
+        "python/generativeqc/batch.py",
+        "python/generativeqc/_stationary_cuda.py",
+        "python/generativeqc/_stationary_composite_cuda.py"
+      ],
+      "rationale": "Public CUDA DFT forces resolve one method-name-free active-AO policy from derivative order, execution composition, spin, provider/resource identity and workload bounds. The production positive-profile registry is intentionally empty because retained complete-force evidence does not cross the shared promotion gate; auto therefore resolves to dense while both ordinary and composite consumers reuse the resident-map owner.",
+      "revisit_condition": "Add a positive profile only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence, independent numerical gates, actual selected/dense AO-work counters and adjacent losing-domain controls under #1598. Matching must remain structural/workload/resource based and dense on every miss.",
+      "evidence": [
+        "issue:#1853",
+        "issue:#1598",
+        "pr:#1833",
+        "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md"
+      ]
+    },
+    {
+      "id": "hf.canonical-shared-rsh-values",
+      "classification": "needs-qualification",
+      "controls": [
+        "hf-runtime:GENERATIVEQC_CANONICAL_RSH_VALUES"
+      ],
+      "owner_issues": [
+        1598,
+        1787
+      ],
+      "sources": [
+        "python/generativeqc/resources_hf.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_source_contraction_cuda.py",
+        "src/scf/cuda/direct_jk.cpp",
+        "src/scf/cuda/direct_jk_kernels.cu"
+      ],
+      "rationale": "Default-off canonical full J/K and range K joint traversal with one density projection and common high-order primitive geometry/Hermite preparation. Separate radial values and independent outputs remain; an optional two-spin Cartesian range matrix is charged after existing owners. No cross-AO cooperative source tile or derivative gain is claimed.",
+      "revisit_condition": "Actual executed candidate/radial counts and independent full/SR/LR matrices, both spins, screened/dense domains, budgets and alias gates; device sanitizers and same-binary complete cold/warm/displaced/larger endpoint evidence.",
+      "evidence": [
+        "note:.agents/notes/proposed/2026-10-04-canonical-shared-rsh-values.md"
       ]
     }
   ]

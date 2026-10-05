@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "tensor/cuda_error.hpp"
@@ -33,6 +34,24 @@ namespace generativeqc::dft {
 namespace {
 using generativeqc::runtime::size_add;
 using generativeqc::runtime::size_mul;
+
+struct CudaXcProgramTraits {
+  bool supported{};
+  bool requires_gradient{};
+  bool requires_tau{};
+  CudaXcFastPathCapabilities fast_paths{};
+};
+
+CudaXcProgramTraits cuda_xc_program_traits(std::uint32_t functional) noexcept {
+  if (const auto* metadata = semilocal_family_metadata_from_code(functional))
+    return {metadata->cuda_ks, metadata->requires_gradient, metadata->requires_tau,
+            metadata->cuda_fast_paths};
+  if (generated::split_hybrid_registered(functional))
+    return {true, true, generated::split_hybrid_is_mgga(functional),
+            generated::split_hybrid_fast_path_capabilities(functional)};
+  return {};
+}
+
 void check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
@@ -46,6 +65,10 @@ void device_pointer(const void* pointer, int device) {
     throw std::invalid_argument("CUDA XC requires a device buffer on the current device");
 }
 }  // namespace
+
+CudaXcFastPathCapabilities cuda_xc_fast_path_capabilities(std::uint32_t functional) noexcept {
+  return cuda_xc_program_traits(functional).fast_paths;
+}
 
 CudaXcLayout cuda_xc_layout(const AoBasis& basis, const MolecularGrid& grid,
                             std::uint32_t functional, bool unrestricted, std::size_t tile_points,
@@ -68,36 +91,35 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
                                   std::size_t tile_points, bool response,
                                   CudaXcAoPrecision ao_precision, double exchange_scale,
                                   double correlation_scale, bool borrow_resident_grid) {
-  const bool generated_split_hybrid = generated::split_hybrid_registered(functional);
-  const bool supported_functional = functional <= 4U || generated_split_hybrid;
+  const auto program = cuda_xc_program_traits(functional);
   if (!atoms || !primitives || !nao || !points || !tile_points || tile_points > INT_MAX ||
-      atoms > INT_MAX || primitives > INT_MAX || nao > INT_MAX || !supported_functional)
+      atoms > INT_MAX || primitives > INT_MAX || nao > INT_MAX || !program.supported)
     throw std::invalid_argument("invalid CUDA XC resource shape");
   if (!std::isfinite(exchange_scale) || !std::isfinite(correlation_scale) || exchange_scale < 0.0 ||
       correlation_scale < 0.0)
     throw std::invalid_argument("invalid CUDA XC component scale");
-  if (functional != 1U && (exchange_scale != 1.0 || correlation_scale != 1.0))
-    throw std::invalid_argument("scaled CUDA XC is currently qualified for PBE only");
-  if (response && (exchange_scale != 1.0 || correlation_scale != 1.0))
-    throw std::invalid_argument("scaled CUDA XC response is not qualified");
-  if (response && functional > 1U)
-    throw std::invalid_argument("CUDA XC response supports LDA/PBE only");
+  const bool scaled = exchange_scale != 1.0 || correlation_scale != 1.0;
+  if (scaled && !cuda_xc_capability_qualified(program.fast_paths.component_scaling))
+    throw std::invalid_argument("scaled CUDA XC point program is not qualified");
+  if (response && scaled) throw std::invalid_argument("scaled CUDA XC response is not qualified");
+  if (response && !cuda_xc_capability_qualified(program.fast_paths.response))
+    throw std::invalid_argument("CUDA XC response is not qualified for this point program");
   if (ao_precision != CudaXcAoPrecision::Fp64 &&
       ao_precision != CudaXcAoPrecision::Fp32ComputeFp64Storage)
     throw std::invalid_argument("unknown CUDA XC AO precision");
-  if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage && functional > 1U)
-    throw std::invalid_argument("non-LDA/PBE CUDA XC currently requires strict FP64 AO evaluation");
+  if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage &&
+      !cuda_xc_capability_qualified(program.fast_paths.mixed_ao_precision))
+    throw std::invalid_argument(
+        "mixed CUDA XC AO precision is not qualified for this point program");
   if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage && response)
     throw std::invalid_argument("CUDA XC response currently requires strict FP64 AO evaluation");
   constexpr auto overflow = "CUDA XC storage overflow";
   const auto packed =
       size_add(size_add(size_mul(3, atoms, overflow), size_mul(2, primitives, overflow), overflow),
                size_mul(16, nao, overflow), overflow);
-  const bool meta_gga = functional == 2U || functional == 4U ||
-                        (generated_split_hybrid && generated::split_hybrid_is_mgga(functional));
-  const auto ao_jets = functional == 0U ? 1U : 4U;
-  const auto work_jets = meta_gga ? 4U : 1U;
-  const auto feature_terms = functional == 0U ? 1U : (meta_gga ? 5U : 4U);
+  const auto ao_jets = program.requires_gradient ? 4U : 1U;
+  const auto work_jets = program.requires_tau ? 4U : 1U;
+  const auto feature_terms = program.requires_gradient ? (program.requires_tau ? 5U : 4U) : 1U;
   CudaXcLayout out{atoms,
                    primitives,
                    nao,
@@ -115,6 +137,7 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
                    response,
                    ao_precision};
   out.borrowed_grid = borrow_resident_grid;
+  out.fast_paths = program.fast_paths;
   std::size_t elements = out.packed_elements;
   if (!out.borrowed_grid)
     elements = size_add(elements, size_mul(4, out.npoint, overflow), overflow);
@@ -135,9 +158,21 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
   return out;
 }
 
+CudaXcExecutionCapabilities cuda_xc_execution_capabilities(const CudaXcLayout& layout) {
+  const auto program =
+      cuda_xc_detail::resolve_point_capabilities(layout.functional, layout.response);
+  const bool physical =
+      !layout.response && layout.nao != 0 && layout.npoint != 0 && layout.tile_points != 0;
+  return {
+      physical && !layout.local_ao && layout.ao_precision == CudaXcAoPrecision::Fp64 &&
+          program.local_ao_selection,
+      physical && !layout.local_ao && program.mixed_density_contraction,
+  };
+}
+
 CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps) {
-  if (dense.local_ao || dense.ao_map_entries || dense.host_ao_map_bytes || dense.response ||
-      dense.ao_precision != CudaXcAoPrecision::Fp64 || !dense.tile_points || !dense.npoint)
+  if (!cuda_xc_execution_capabilities(dense).local_ao_selection || dense.ao_map_entries ||
+      dense.host_ao_map_bytes)
     throw std::invalid_argument("local CUDA XC maps require a dense physical FP64 layout");
   const auto tiles = 1 + (dense.npoint - 1) / dense.tile_points;
   if (maps.offsets.size() != tiles + 1 || maps.offsets.front() != 0 ||
@@ -161,8 +196,7 @@ CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& ma
 }
 
 CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& dense) {
-  if (dense.local_ao || dense.response || dense.ao_precision != CudaXcAoPrecision::Fp64 ||
-      !dense.tile_points || !dense.npoint || !dense.nao)
+  if (!cuda_xc_execution_capabilities(dense).local_ao_selection)
     throw std::invalid_argument("AO discovery requires a dense physical FP64 XC layout");
   constexpr auto overflow = "CUDA XC AO discovery resource overflow";
   CudaXcAoSelectionResources result;
@@ -532,9 +566,13 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     throw std::invalid_argument("unknown CUDA XC density precision");
   if (layout_.local_ao && precision != CudaXcDensityPrecision::Fp64)
     throw std::invalid_argument("local CUDA XC maps require FP64 density contraction");
-  if (precision == CudaXcDensityPrecision::Fp32ComputeFp64Accumulate && layout_.functional > 2U)
+  if (precision == CudaXcDensityPrecision::Fp32ComputeFp64Accumulate &&
+      !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
+    throw std::invalid_argument("mixed CUDA XC density precision is unavailable for this layout");
+  if (precision == CudaXcDensityPrecision::Fp32ComputeFp64Accumulate &&
+      !cuda_xc_capability_qualified(layout_.fast_paths.mixed_density_precision))
     throw std::invalid_argument(
-        "mixed CUDA XC density precision is not qualified for this functional");
+        "mixed CUDA XC density precision is not qualified for this point program");
   if (publish_generation && (!generation || generation <= generations_.submitted()))
     throw std::invalid_argument("CUDA XC density generation is stale");
   device_pointer(density, device_);

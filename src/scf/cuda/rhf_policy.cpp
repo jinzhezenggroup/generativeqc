@@ -445,15 +445,39 @@ bool force_density_product_screening_requested() noexcept {
 }
 
 bool bounded_schwarz_schedule_requested() noexcept {
-  return selected("GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE", "indexed");
+  const char* selection = std::getenv("GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE");
+  if (selection == nullptr) return true;
+  if (std::strcmp(selection, "0") == 0 || std::strcmp(selection, "none") == 0) return false;
+  return std::strcmp(selection, "1") == 0 || std::strcmp(selection, "indexed") == 0 ||
+         std::strcmp(selection, "auto") == 0;
 }
 
 bool bounded_angular_force_requested() noexcept {
   return selected("GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "angular");
 }
 
-bool direct_coulomb_reachable_requested() noexcept {
-  return selected("GENERATIVEQC_DIRECT_COULOMB_REACHABLE", "reachable");
+bool canonical_rsh_values_requested() noexcept {
+  const char* mode = std::getenv("GENERATIVEQC_CANONICAL_RSH_VALUES");
+  return mode && (std::strcmp(mode, "1") == 0 || std::strcmp(mode, "shared") == 0);
+}
+
+unsigned direct_coulomb_reachable_mode() noexcept {
+  const char* mode = std::getenv("GENERATIVEQC_DIRECT_COULOMB_REACHABLE");
+  if (mode == nullptr) return 0;
+  if (std::strcmp(mode, "values") == 0) return 1;
+  if (std::strcmp(mode, "forces") == 0) return 2;
+  return std::strcmp(mode, "1") == 0 || std::strcmp(mode, "all") == 0 ||
+                 std::strcmp(mode, "reachable") == 0
+             ? 3
+             : 0;
+}
+
+unsigned direct_hermite_convolution_mode() noexcept {
+  const char* mode = std::getenv("GENERATIVEQC_DIRECT_HERMITE_CONVOLUTION");
+  if (mode == nullptr) return 0;
+  if (std::strcmp(mode, "values") == 0) return 1;
+  if (std::strcmp(mode, "forces") == 0) return 2;
+  return std::strcmp(mode, "1") == 0 || std::strcmp(mode, "all") == 0 ? 3 : 0;
 }
 
 bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }

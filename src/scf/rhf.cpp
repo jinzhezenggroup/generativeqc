@@ -3293,8 +3293,23 @@ CudaRhfBasisLayoutStats inspect_rhf_cuda_basis_layout(const std::vector<core::Sy
               : 0};
 }
 
-ScfResult run_rhf_cuda(const core::System&, const ScfOptions&, int, const std::vector<double>*) {
+ScfResult run_rhf_cuda(const core::System&, const ScfOptions&, int, const std::vector<double>*,
+                       std::shared_ptr<const integrals::ElectronInteractionSource>*,
+                       CudaRhfSourceHandoff*) {
   throw std::runtime_error("the library was built without CUDA support");
+}
+
+ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan**, const core::System&, const ScfOptions&, int,
+                              const std::vector<double>*, bool* execution_plan_reused,
+                              std::shared_ptr<const integrals::ElectronInteractionSource>*,
+                              CudaRhfSourceHandoff*) {
+  if (execution_plan_reused) *execution_plan_reused = false;
+  throw std::runtime_error("the library was built without CUDA support");
+}
+
+bool reclaim_rhf_cuda_reference_plan(
+    CudaRhfBucketPlan**, std::shared_ptr<const integrals::ElectronInteractionSource>&) noexcept {
+  return false;
 }
 
 struct CudaRhfSourceHandoff;
@@ -3304,6 +3319,8 @@ ScfResult run_rhf_cuda_with_source(const core::System&, const ScfOptions&, int,
 }
 
 std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
+
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) noexcept { return 0; }
 
 ScfResult run_uhf_cuda(const core::System&, const ScfOptions&, int, const std::vector<double>*) {
   throw std::runtime_error("the library was built without CUDA support");

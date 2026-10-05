@@ -23,6 +23,12 @@ endfunction()
 macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
+    if(TARGET generativeqc_cutensor)
+      generativeqc_native_test(generativeqc_native_cutensor_tests
+                         tests/native/test_native_cutensor.cu NO_GENERATIVEQC
+                         LIBRARIES generativeqc_cutensor CUDA::cudart CUDA::cublas)
+      set_tests_properties(generativeqc_native_cutensor_tests PROPERTIES TIMEOUT 120)
+    endif()
     generativeqc_native_test(generativeqc_hf_resource_layout_tests tests/native/test_hf_resource_layout.cpp)
     generativeqc_native_test(generativeqc_incremental_direct_jk_cuda_tests
                        tests/native/test_incremental_direct_jk_cuda.cpp
@@ -296,6 +302,8 @@ macro(generativeqc_add_native_tests)
     add_test(NAME generativeqc_dft_cuda_tests COMMAND generativeqc_dft_cuda_tests)
     add_test(NAME generativeqc_dft_cuda_matrix_tests COMMAND generativeqc_dft_cuda_tests --matrix-schedule)
     add_test(NAME generativeqc_dft_cuda_local_ao_tests COMMAND generativeqc_dft_cuda_tests --local-ao)
+    add_test(NAME generativeqc_dft_cuda_pbe0_local_ao_tests COMMAND generativeqc_dft_cuda_tests --pbe0-local-ao)
+    set_tests_properties(generativeqc_dft_cuda_pbe0_local_ao_tests PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(generativeqc_dft_cuda_local_ao_tests PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(generativeqc_dft_cuda_matrix_tests PROPERTIES SKIP_RETURN_CODE 77)
     set_tests_properties(generativeqc_dft_cuda_tests PROPERTIES SKIP_RETURN_CODE 77)

@@ -112,6 +112,8 @@ class CorrelationResult:
     ccsd_t_virtual_triples: int
     ccsd_t_workspace_bytes: int
     ccsd_t_equation_hash: str
+    reference_execution_plan_reused: bool
+    reference_execution_plan_owned_device_bytes: int
 
 
 @dataclass(frozen=True)

@@ -8,8 +8,7 @@ branches to scientific IR.
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
+from generativeqc_compiler.common.lowering_contract import CandidateExecution
 from generativeqc_compiler.common.lowering_provider import (
     LoweringCandidate,
     LoweringRequest,
@@ -17,12 +16,12 @@ from generativeqc_compiler.common.lowering_provider import (
     collect_lowering_candidates,
     lowering_diagnostics,
 )
-from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.common.specialization import TargetCapabilities
 
 from .cuda_gemm import gemm_contract
 from .cuda_plan import TensorPlan
-from .cuda_reduction import cooperative_reduction_provider, reduction_extent
+from .cuda_reduction import cooperative_reduction_provider
+from .lowering import TensorLoweringAdapter, plan_lowering_request
 
 GENERATED_CUDA_PROVIDER = ProviderDescriptor(
     name="generativeqc.generated_cuda",
@@ -66,17 +65,7 @@ class GeneratedReductionProvider:
     def candidates(
         self, request: LoweringRequest, target: TargetCapabilities
     ) -> tuple[LoweringCandidate, ...]:
-        reason = _cooperative_reduction_rejection(request, target)
-        return (
-            LoweringCandidate(
-                request=request,
-                implementation="tensor-reduce-generated-cooperative",
-                providers=(self.descriptor,),
-                status="unsupported" if reason else "ready",
-                numerical_mode=f"{request.dtype}->{request.accumulation_dtype}",
-                reason=reason,
-            ),
-        )
+        return _reduction_candidates(request, target, self.descriptor)
 
 
 class CubReductionProvider:
@@ -87,58 +76,89 @@ class CubReductionProvider:
     def candidates(
         self, request: LoweringRequest, target: TargetCapabilities
     ) -> tuple[LoweringCandidate, ...]:
+        return _reduction_candidates(request, target, self.descriptor)
+
+
+def _reduction_candidates(
+    request: LoweringRequest, target: TargetCapabilities, descriptor: ProviderDescriptor
+) -> tuple[LoweringCandidate, ...]:
+    """Offer each admitted precision under exactly the same operation identity."""
+    candidates = []
+    for precision in request.precisions or (None,):
         reason = _cooperative_reduction_rejection(request, target)
+        if precision is not None:
+            directive = precision.directive
+            if precision.casts or precision.refinement or precision.audit:
+                reason = "cooperative adapter does not implement standalone cast/refinement/audit obligations"
+            elif any(
+                dtype != directive.compute_dtype for dtype in precision.input_dtypes
+            ):
+                reason = (
+                    "cooperative adapter requires inputs in the requested compute dtype"
+                )
+            numerical_mode = (
+                f"{directive.compute_dtype}->{directive.accumulation_dtype}"
+            )
+            execution = CandidateExecution(
+                precision=precision,
+                algorithm="cub-block-reduce"
+                if descriptor == CUB_REDUCTION_PROVIDER
+                else "generated-cooperative",
+                layouts=request.operands,
+                determinism="reproducible",
+                capture_safe=True,
+            )
+        else:
+            numerical_mode = f"{request.dtype}->{request.accumulation_dtype}"
+            execution = None
+        cub = descriptor == CUB_REDUCTION_PROVIDER
         if (
             reason is None
+            and cub
             and dict(target.features).get("cub-block-reduce-header") is not True
         ):
             reason = "CUB requires explicit cub-block-reduce-header capability"
-        return (
+        candidates.append(
             LoweringCandidate(
                 request=request,
-                implementation="tensor-reduce-cub-block-reduce",
-                providers=(self.descriptor, GENERATED_CUDA_PROVIDER),
+                implementation="tensor-reduce-cub-block-reduce"
+                if cub
+                else "tensor-reduce-generated-cooperative",
+                providers=(descriptor, GENERATED_CUDA_PROVIDER)
+                if cub
+                else (descriptor,),
                 status="unsupported" if reason else "ready",
-                numerical_mode=f"{request.dtype}->{request.accumulation_dtype}",
+                numerical_mode=numerical_mode,
                 reason=reason,
-            ),
+                execution=execution,
+            )
         )
+    return tuple(candidates)
 
 
 def _cooperative_reduction_rejection(
     request: LoweringRequest, target: TargetCapabilities
 ) -> str | None:
-    if request.operation != "reduce" or len(request.shape) != 2:
-        return "provider requires a flattened TensorIR reduction request"
+    semantics = dict(request.semantics)
+    if request.operation not in ("reduce", "einsum"):
+        return "provider requires a TensorIR reduction or streamed einsum request"
+    extent = semantics.get("reduction_extent")
+    if extent is None:
+        if request.operation != "reduce" or len(request.shape) != 2:
+            return "provider requires explicit reduction extent"
+        extent = request.shape[1]  # retained v1 flattened diagnostic request
     if request.dtype not in (
         "float32",
         "float64",
-    ) or request.accumulation_dtype not in (
-        "float32",
-        "float64",
-    ):
+    ) or request.accumulation_dtype not in ("float32", "float64"):
         return "provider supports float32/float64 reduction arithmetic only"
-    subgroup = target.target.subgroup_size
-    if subgroup != 32:
+    if target.target.subgroup_size != 32:
         return "cooperative reduction pilot requires CUDA subgroup size 32"
-    if request.shape[1] < subgroup:
+    if type(extent) is not int or extent < 0:
+        return "reduction extent must be an explicit non-negative integer"
+    if extent < 32:
         return "reduction extent is below the cooperative subgroup threshold"
     return None
-
-
-def _site_hash(plan: TensorPlan, index: int) -> str:
-    step = plan.steps[index]
-    contract = gemm_contract(step.node)
-    payload: dict[str, object] = {
-        "program": plan.program.logical_hash,
-        "step": index,
-        "operation": step.node.op,
-        "dtype": step.node.spec.dtype,
-        "shape": step.node.spec.shape,
-    }
-    if contract is not None:
-        payload["gemm"] = asdict(contract)
-    return canonical_hash(payload)
 
 
 def _numerical_mode(plan: TensorPlan, index: int) -> str:
@@ -161,44 +181,16 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
     if not isinstance(plan, TensorPlan):
         raise TypeError("Tensor CUDA lowering diagnostics require a TensorPlan")
     candidates: list[LoweringCandidate] = []
+    adapter = TensorLoweringAdapter(plan.program)
     for index, step in enumerate(plan.steps):
         node = step.node
         if step.virtual or node.op in ("input", "constant") or not node.spec.size:
             continue
         contract = gemm_contract(node)
         reduction_provider = cooperative_reduction_provider(plan, index)
-        if step.gemm != "none" and contract is not None:
-            is_gemm = True
-            uses_cublas = contract.k > 0
-            operation = "gemm"
-            shape = (contract.batch, contract.m, contract.n, contract.k)
-        elif reduction_provider is not None or node.op == "reduce":
-            is_gemm = False
-            uses_cublas = False
-            operation = "reduce"
-            shape = (node.spec.size, reduction_extent(node))
-        else:
-            is_gemm = False
-            uses_cublas = False
-            operation = node.op
-            shape = tuple(node.spec.shape)
-        value_precision = plan.precision_by_node.get(node)
-        request = LoweringRequest(
-            consumer="tensor.cuda",
-            operation=operation,
-            backend="cuda",
-            dtype=node.spec.dtype,
-            accumulation_dtype=(
-                value_precision.accumulation_dtype
-                if value_precision is not None
-                else node.spec.dtype
-            ),
-            shape=shape,
-            semantics=(
-                ("program_hash", plan.program.logical_hash),
-                ("site_hash", _site_hash(plan, index)),
-            ),
-        )
+        is_gemm = step.gemm != "none" and contract is not None
+        uses_cublas = is_gemm and contract.k > 0
+        request = plan_lowering_request(plan, index, adapter)
         if uses_cublas:
             providers = (CUBLAS_PROVIDER, GENERATED_CUDA_PROVIDER)
             implementation = f"tensor-gemm-{step.gemm}"
@@ -220,6 +212,17 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
                 implementation=implementation,
                 providers=providers,
                 status="ready",
+                execution=(
+                    CandidateExecution(
+                        precision=request.precisions[0],
+                        algorithm=implementation,
+                        layouts=request.operands,
+                        # These are resolved diagnostics, not a new determinism
+                        # or capture qualification for the complete endpoint.
+                    )
+                    if request.precisions
+                    else None
+                ),
                 numerical_mode=_numerical_mode(plan, index),
                 workspace_bytes=plan.library_bytes if uses_cublas else 0,
                 provider_bytes=plan.provider_bytes if uses_cublas else 0,
@@ -249,21 +252,7 @@ def reduction_provider_candidates(
         raise TypeError("reduction provider candidates require a TensorPlan")
     if cooperative_reduction_provider(plan, index) is None:
         raise ValueError("step is not an eligible cooperative reduction")
-    step = plan.steps[index]
-    node = step.node
-    value_precision = plan.precision_by_node[node]
-    request = LoweringRequest(
-        consumer="tensor.cuda",
-        operation="reduce",
-        backend="cuda",
-        dtype=node.spec.dtype,
-        accumulation_dtype=value_precision.accumulation_dtype,
-        shape=(node.spec.size, reduction_extent(node)),
-        semantics=(
-            ("program_hash", plan.program.logical_hash),
-            ("site_hash", _site_hash(plan, index)),
-        ),
-    )
+    request = plan_lowering_request(plan, index, TensorLoweringAdapter(plan.program))
     target = TargetCapabilities(
         plan.target.target_info,
         features=tuple(
