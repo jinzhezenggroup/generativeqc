@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+cd /data/jzzeng/qc-dft-indexed-density-1876
+export PATH=/data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin:$PATH
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+out=$PWD/.artifacts/1876-mapped-crossover
+bin=build/cuda-release-sm120/generativeqc_dft_cuda_tests
+sha256sum -c "$out/source-sha256.txt" > "$out/source-verified.txt"
+scontrol show job "$SLURM_JOB_ID" -o > "$out/job.txt"
+nvidia-smi > "$out/device.txt"
+sha256sum "$bin" > "$out/binary-sha256.txt"
+"$bin" --indexed-density-provider > "$out/indexed-gate.log" 2>&1
+for atoms in 48 96; do
+  for geometry in 0 1; do
+    gzip -dc "benchmarks/results/pbe0-derivative-work-20261005/drivers/input-$atoms-$geometry.txt.gz" > "$out/input-$atoms-$geometry.txt"
+  done
+  /usr/bin/time -v "$bin" --indexed-density-benchmark "$out/input-$atoms-0.txt" "$out/input-$atoms-1.txt" > "$out/endpoint-$atoms.log" 2>&1
+done

@@ -130,10 +130,12 @@ counters are not a complete endpoint traffic ledger.
 
 Response wall times separately report setup, reference audit, weight assembly,
 Z solve, independent residual audit, one-electron and two-electron derivatives.
-Optional `profile_jk` synchronizes each J/K call and records time and canonical
-integral counts. It selects the canonical provider where available, so compare
-matched selectors and hardware. J/K times are subsets of the phase times;
-quartet visits, contracted ERI values and three-axis derivative jets are distinct
+Optional `profile_jk` observes the ordinary value dispatch without selecting a
+different physical execution path. It synchronizes each J/K call and records
+wall/device time and, when all selected channels have canonical census coverage,
+canonical integral counts. Compare matched selectors and hardware. J/K times are
+subsets of the phase times; quartet visits, contracted ERI values and three-axis
+derivative jets are distinct
 work units and are not FLOPs. Census/timing flags and action counts distinguish
 unmeasured fields from measured zeros. Provider-internal transfers remain outside
 the owner-managed traffic counters.

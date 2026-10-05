@@ -97,9 +97,18 @@ struct PreparedCosxFockPlan::Impl {
     const auto j_strategy = coulomb_strategy(strategy);
     coulomb =
         std::make_unique<scf::PreparedFockPlan>(orbital, auxiliary, j_strategy, device, j_budget);
-    exchange =
-        std::make_unique<CudaCosxStagingPlan>(orbital, cosx_grid.points(), cosx_grid.weights(),
-                                              tile_points, device, cosx_resources.device_bytes);
+    // J and K responses execute synchronously in sequence while both value
+    // owners remain resident. Keep the larger transient reservation, including
+    // the J response that has not allocated its buffers yet. Only the remaining
+    // envelope may be used by the shared exchange lowering owner.
+    const auto& j_resources = coulomb->diagnostic();
+    const auto response_peak =
+        std::max(j_resources.response_device_bytes, derivative_resources.device_bytes);
+    const auto non_exchange_peak = add_size(j_resources.device_bytes, response_peak);
+    if (non_exchange_peak >= available) throw std::bad_alloc();
+    const auto exchange_budget = available - non_exchange_peak;
+    exchange = std::make_unique<CudaCosxStagingPlan>(
+        orbital, cosx_grid.points(), cosx_grid.weights(), tile_points, device, exchange_budget);
 
     diagnostic.strategy = strategy;
     diagnostic.coulomb = coulomb->diagnostic();
@@ -107,11 +116,11 @@ struct PreparedCosxFockPlan::Impl {
     diagnostic.derivative = derivative_resources;
     diagnostic.device_bytes =
         add_size(diagnostic.coulomb.device_bytes, diagnostic.exchange.device_bytes);
-    diagnostic.derivative_peak_device_bytes =
-        strategy.spec.derivative_order == 1
-            ? add_size(diagnostic.device_bytes, diagnostic.derivative.device_bytes)
-            : diagnostic.device_bytes;
+    diagnostic.derivative_peak_device_bytes = add_size(diagnostic.device_bytes, response_peak);
     diagnostic.device_budget_bytes = available;
+    diagnostic.exchange_budget_bytes = exchange_budget;
+    diagnostic.contraction_peak_host_bytes = add_size(diagnostic.exchange.contraction_host_bytes,
+                                                      diagnostic.derivative.contraction_host_bytes);
     diagnostic.tile_points = diagnostic.exchange.tile_points;
     if (diagnostic.device_bytes > available || diagnostic.derivative_peak_device_bytes > available)
       throw std::runtime_error(
@@ -145,6 +154,9 @@ struct PreparedCosxFockPlan::Impl {
       result.exchange_alpha = std::move(alpha.exchange);
       result.exchange_beta = std::move(beta_exchange.exchange);
     }
+    // Publish the successful full endpoint's actual site work, including both
+    // UHF spin builds. The preparation snapshot otherwise leaves these zero.
+    diagnostic.exchange = exchange->diagnostic();
     return result;
   }
 

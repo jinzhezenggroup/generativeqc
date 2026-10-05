@@ -11,7 +11,64 @@ The shared compiler boundary has three separate identities:
 - **Execution binding identity** includes the complete request, target/toolkit
   facts, compilation identity, provider versions, algorithm, layouts, fusion,
   precision, resources, and admitted fallbacks. Changing those execution facts
-  invalidates reuse without changing the original scientific equation.
+invalidates reuse without changing the original scientific equation.
+
+COSX value assembly requests `AO * D`, `seed + AO^T * potential` and the
+point-batched `weight[p] * ESP[p] * projected[p]` through
+`dft.cosx_contraction`. The update includes an explicit donated seed in the
+canonical graph. Six fixed full/tail sites bind once in the shared
+`PreparedContractionSites` owner. Projection, accumulation and weighted ESP have independent
+candidate diagnostics and work counters, while sharing one provider context on
+the existing grid stream. Execution performs no search or descriptor allocation.
+The owner admits strict FP64, audits outputs before downstream consumers, and
+rejects capture until physical replay accounting is available.
+
+`CudaCosxStagingDiagnostic` reports the resolved descriptors, all candidates and
+their rejections, actual device/architecture/runtime/provider versions, per-site
+calls and scalar summands, scaled elements and split publication passes,
+160 KiB host binding reservation, preparation time,
+provider version and retained device growth. Optional library execution needs
+one additional 96 MiB device allowance for the whole owner. An insufficient
+budget or unavailable provider keeps generated execution. Test-only qualification
+can enable the three operations separately; production has no promoted library
+profile. Weighted ESP retains one fused generated kernel, including the incumbent
+increasing-column FMA chain and zero-on-invalid publication with a sticky error.
+The library candidate performs a batched contraction and one in-place combined
+weight/finite publication pass, without a separate numeric buffer. The canonical
+request binds the existing two-node TensorIR region and all three external inputs.
+Production SCF/force endpoint qualification remains under #1884.
+
+The enclosing `PreparedCosxFockPlan` passes the remaining admitted device
+envelope to the shared exchange owner after charging Coulomb residency and
+the larger of the sequential J/K response reservations. The Coulomb diagnostic
+reports its additional response capacity and peak even before response buffers
+are allocated. Exchange preparation can therefore use spare capacity without
+overlapping future derivative work; a tight budget retains generated execution.
+The Fock diagnostic includes the value/response host binding peak and refreshes
+exchange site work only after a complete successful build, including both spins.
+
+COSX derivative value projection, three spatial AO-jet projections and weighted
+value ESP also bind shared prepared sites. `tensor.checked_contraction` retains
+the existing scalar update/publication program hashes and declares exact-order
+reduction with finite input/update checks. The common generated executor invokes
+those original helpers at every increasing-column step; invalid intermediate
+work publishes zero and preserves a sticky error before any later cancellation
+or zero weighting. A final-only audit cannot implement this request. Optional
+provider recipes are explicitly rejected until they preserve the complete
+checked contract, including when test qualification is requested.
+
+Molecular derivative ordinary/symmetric projection uses four full/tail sites with a 128 KiB host
+reservation; explicit-point derivative assembly uses six with 160 KiB. Neither
+reserves a library device allowance or adds numeric buffers. The compiler
+traverses the three borrowed leading jet-axis slices without packing. Optional
+derivative diagnostics publish the prepared identities and actual work only
+after the complete response succeeds. Symmetric projection requests the original
+half-scaled `AO * (D + D^T)` graph and invokes the existing scalar helper with
+both readonly views of the same density allocation. The helper retains its
+`(AO * 0.5) * (D + D^T)` rounding and ordered finite checks. Virtual sum/transpose
+intermediates remain unmaterialized; generated execution is the supported recipe.
+Composed ESP response and molecular pullback contractions retain their existing scalar
+helpers and require further shared-region migration.
 
 The DFT grid owner uses this boundary for its density-matrix and orbital-factor
 projections. `dft.grid_contraction` defines the canonical `jpu,uv->jpv` TensorIR

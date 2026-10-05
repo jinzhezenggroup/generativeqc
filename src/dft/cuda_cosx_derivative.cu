@@ -264,78 +264,6 @@ __global__ void esp_value_kernel(const double* basis, std::size_t natom, std::si
   }
 }
 
-__global__ void project_density_kernel(const double* ao, const double* density, std::size_t npoint,
-                                       std::size_t nbf, double* projected, int* error) {
-  const std::size_t total = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf;
-    const std::size_t column = index % nbf;
-    double value = 0.0;
-    for (std::size_t row = 0; row < nbf; ++row) {
-      if (!generated_cosx_derivative::accumulate_projection(ao[point * nbf + row],
-                                                            density[row * nbf + column], value)) {
-        atomicCAS(error, 0, 1);
-        value = 0.0;
-        break;
-      }
-    }
-    projected[index] = finite_or_flag(value, error);
-  }
-}
-
-__global__ void project_density_derivative_kernel(const double* ao, const double* density,
-                                                  std::size_t npoint, std::size_t nbf,
-                                                  double* projected_derivative, int* error) {
-  const std::size_t total = 3 * npoint * nbf;
-  const std::size_t jet_stride = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t axis = index / (npoint * nbf);
-    const std::size_t point = index / nbf % npoint;
-    const std::size_t column = index % nbf;
-    const double* derivative = ao + (axis + 1) * jet_stride + point * nbf;
-    double value = 0.0;
-    for (std::size_t row = 0; row < nbf; ++row) {
-      if (!generated_cosx_derivative::accumulate_projection(derivative[row],
-                                                            density[row * nbf + column], value)) {
-        atomicCAS(error, 0, 1);
-        value = 0.0;
-        break;
-      }
-    }
-    projected_derivative[index] = finite_or_flag(value, error);
-  }
-}
-
-__global__ void apply_esp_kernel(const double* esp, const double* projected, const double* weights,
-                                 std::size_t npoint, std::size_t nbf, double* potential,
-                                 int* error) {
-  const std::size_t total = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf;
-    const std::size_t row = index % nbf;
-    const double* matrix = esp + point * nbf * nbf;
-    double value = 0.0;
-    bool valid = true;
-    for (std::size_t column = 0; column < nbf; ++column) {
-      if (!generated_cosx_derivative::accumulate_projection(
-              matrix[row * nbf + column], projected[point * nbf + column], value)) {
-        atomicCAS(error, 0, 1);
-        valid = false;
-        break;
-      }
-    }
-    double weighted = 0.0;
-    if (valid && !generated_cosx_derivative::scale(weights[point], value, weighted)) {
-      atomicCAS(error, 0, 1);
-      valid = false;
-    }
-    potential[index] = valid ? finite_or_flag(weighted, error) : 0.0;
-  }
-}
-
 __global__ void apply_esp_derivative_kernel(const double* esp, const double* esp_derivative,
                                             const double* projected,
                                             const double* projected_derivative,
@@ -409,28 +337,6 @@ __global__ void contract_point_derivative_kernel(const double* ao, const double*
       valid = false;
     }
     point_gradient[index] = valid ? finite_or_flag(scaled, error) : 0.0;
-  }
-}
-
-__global__ void project_symmetric_density_kernel(const double* ao, const double* density,
-                                                 std::size_t npoint, std::size_t nbf,
-                                                 double* projected, int* error) {
-  const std::size_t total = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf;
-    const std::size_t column = index % nbf;
-    double value = 0.0;
-    for (std::size_t row = 0; row < nbf; ++row) {
-      if (!generated_cosx_derivative::accumulate_symmetric_projection(
-              ao[point * nbf + row], density[row * nbf + column], density[column * nbf + row],
-              value)) {
-        atomicCAS(error, 0, 1);
-        value = 0.0;
-        break;
-      }
-    }
-    projected[index] = finite_or_flag(value, error);
   }
 }
 
@@ -679,13 +585,14 @@ CudaCosxMolecularDerivativeDiagnostic cuda_cosx_molecular_derivative_diagnostic(
   result.device_bytes = add(result.grid_device_bytes, result.derivative_device_bytes);
   result.bounded_tiling = true;
   result.atomic_coordinate_reduction = true;
+  result.contraction_host_bytes = tensor::contraction_sites_host_reservation(4);
   return result;
 }
 
-std::vector<double> cuda_cosx_molecular_energy_derivative(const MolecularGrid& grid,
-                                                          std::span<const double> host_density,
-                                                          CosxDensityConvention convention,
-                                                          std::size_t requested_tile, int device) {
+std::vector<double> cuda_cosx_molecular_energy_derivative(
+    const MolecularGrid& grid, std::span<const double> host_density,
+    CosxDensityConvention convention, std::size_t requested_tile, int device,
+    CudaCosxMolecularDerivativeDiagnostic* execution_diagnostic) {
   if (!requested_tile || device < 0 || grid.point_count() == 0 ||
       grid.points().size() != mul(std::size_t{3}, grid.point_count()) ||
       grid.weights().size() != grid.point_count() || grid.owners().size() != grid.point_count())
@@ -744,6 +651,9 @@ std::vector<double> cuda_cosx_molecular_energy_derivative(const MolecularGrid& g
           "CUDA COSX molecular derivative received an incompatible basis view");
     stream = device_basis.stream;
 
+    auto contractions = cosx_derivative_lowering::prepare_molecular(
+        n, tile_points, grid.point_count() % tile_points, stream);
+
     density.reset(matrix, device);
     esp.reset(mul(tile_points, matrix), device);
     projected.reset(mul(tile_points, n), device);
@@ -782,12 +692,11 @@ std::vector<double> cuda_cosx_molecular_energy_derivative(const MolecularGrid& g
           device_basis.basis, device_basis.natom, device_basis.nprimitive, n, view.points, count,
           esp.get(), error.get());
       check(cudaGetLastError());
-      project_density_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          view.ao, density.get(), count, n, projected.get(), error.get());
-      check(cudaGetLastError());
-      project_symmetric_density_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          view.ao, density.get(), count, n, symmetric_projection.get(), error.get());
-      check(cudaGetLastError());
+      cosx_derivative_lowering::project(*contractions, count != tile_points, view.stream, view.ao,
+                                        density.get(), projected.get(), error.get());
+      cosx_derivative_lowering::project_symmetric(*contractions, count != tile_points, view.stream,
+                                                  view.ao, density.get(),
+                                                  symmetric_projection.get(), error.get());
       apply_esp_bidirectional_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
           esp.get(), projected.get(), symmetric_projection.get(), count, n, potential.get(),
           left_potential.get(), error.get());
@@ -825,6 +734,11 @@ std::vector<double> cuda_cosx_molecular_energy_derivative(const MolecularGrid& g
     if (!std::all_of(result.begin(), result.end(),
                      [](double value) { return std::isfinite(value); }))
       throw std::runtime_error("nonfinite complete CUDA COSX molecular derivative");
+    if (execution_diagnostic) {
+      *execution_diagnostic = diagnostic;
+      execution_diagnostic->contractions = contractions->diagnostics();
+      execution_diagnostic->provider_allowance = contractions->provider_bytes();
+    }
     grid_cuda_destroy_v1(grid_plan);
     return result;
   } catch (...) {
@@ -834,12 +748,11 @@ std::vector<double> cuda_cosx_molecular_energy_derivative(const MolecularGrid& g
   }
 }
 
-std::vector<double> cuda_cosx_point_derivative_reference(const core::System& system,
-                                                         std::span<const double> points_xyz,
-                                                         std::span<const double> weights,
-                                                         std::span<const double> host_density,
-                                                         CosxDensityConvention convention,
-                                                         std::size_t requested_tile, int device) {
+std::vector<double> cuda_cosx_point_derivative_reference(
+    const core::System& system, std::span<const double> points_xyz, std::span<const double> weights,
+    std::span<const double> host_density, CosxDensityConvention convention,
+    std::size_t requested_tile, int device,
+    CudaCosxPointDerivativeDiagnostic* execution_diagnostic) {
   if (points_xyz.empty() || points_xyz.size() % 3 || weights.size() != points_xyz.size() / 3 ||
       !requested_tile || device < 0)
     throw std::invalid_argument("invalid CUDA COSX point-derivative shape");
@@ -893,6 +806,9 @@ std::vector<double> cuda_cosx_point_derivative_reference(const core::System& sys
       throw std::runtime_error("CUDA COSX derivative received an incompatible packed-basis view");
     stream = device_basis.stream;
 
+    auto contractions =
+        cosx_derivative_lowering::prepare_point(n, tile_points, npoint % tile_points, stream);
+
     density.reset(matrix, device);
     esp.reset(mul(tile_points, matrix), device);
     esp_derivative.reset(mul(mul(3, tile_points), matrix), device);
@@ -927,15 +843,15 @@ std::vector<double> cuda_cosx_point_derivative_reference(const core::System& sys
       check(cudaGetLastError());
       check(cudaMemcpyAsync(device_weights.get(), weights.data() + begin, count * sizeof(double),
                             cudaMemcpyHostToDevice, view.stream));
-      project_density_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          view.ao, density.get(), count, n, projected.get(), error.get());
-      check(cudaGetLastError());
-      project_density_derivative_kernel<<<blocks(3 * count * n), 128, 0, view.stream>>>(
-          view.ao, density.get(), count, n, projected_derivative.get(), error.get());
-      check(cudaGetLastError());
-      apply_esp_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          esp.get(), projected.get(), device_weights.get(), count, n, potential.get(), error.get());
-      check(cudaGetLastError());
+      const bool tail = count != tile_points;
+      cosx_derivative_lowering::project(*contractions, tail, view.stream, view.ao, density.get(),
+                                        projected.get(), error.get());
+      cosx_derivative_lowering::project_jets(*contractions, tail, view.stream, view.ao + count * n,
+                                             density.get(), projected_derivative.get(),
+                                             error.get());
+      cosx_derivative_lowering::apply_esp(*contractions, tail, view.stream, esp.get(),
+                                          projected.get(), device_weights.get(), potential.get(),
+                                          error.get());
       apply_esp_derivative_kernel<<<blocks(3 * count * n), 128, 0, view.stream>>>(
           esp.get(), esp_derivative.get(), projected.get(), projected_derivative.get(),
           device_weights.get(), count, n, potential_derivative.get(), error.get());
@@ -954,6 +870,13 @@ std::vector<double> cuda_cosx_point_derivative_reference(const core::System& sys
     check(cudaMemcpyAsync(&failure, error.get(), sizeof(int), cudaMemcpyDeviceToHost, stream));
     check(cudaStreamSynchronize(stream));
     if (failure) throw std::runtime_error("nonfinite CUDA COSX point derivative");
+    if (execution_diagnostic)
+      *execution_diagnostic = {n,
+                               npoint,
+                               tile_points,
+                               cosx_derivative_lowering::PointPrepared::host_reservation,
+                               contractions->provider_bytes(),
+                               contractions->diagnostics()};
     grid_cuda_destroy_v1(grid);
     return result;
   } catch (...) {

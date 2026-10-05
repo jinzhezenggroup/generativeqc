@@ -1,0 +1,112 @@
+{
+  "source_commit": "fc06563ebc00c837bf5fffc9ff280f1b167b5b6b",
+  "source_tree": "2b44f57598a3a581e7c925cd2360d1bfe4b8513f",
+  "source_file_count": 8097,
+  "source_manifest_sha256": "798c83966b3e48c478a3fbb2be156851d64266daba9202623c9e77e3b36cf0f5",
+  "changed_source_sha256": {
+    ".agents/notes/implemented/architecture/2026-10-05-cosx-weighted-esp-provider.md": "37ffc0c9e129805d9830ead94d238cb15075275424f54df23a2e7765aeeb7782",
+    "docs/cuda_ownership/files/src/dft/cuda_cosx.cu.json": "6798007ec99fceeb7af0bf3244e7a26924a79b189216528f8d45977f2e96320f",
+    "docs/cuda_ownership/files/src/tensor/cuda_contraction.cuh.json": "02440349f4bb4f14b92deaed2ee30caef821b52d85580f4e8b452094daecf52d",
+    "docs/developer/lowering_providers.md": "26771b69df5dad6ed193a0726367e9d42606daf5a1422dacb58f09263128a66c",
+    "python/generativeqc_compiler/dft/cosx_contraction.py": "a1c1001bd5b8661906a22e6fe4bcc8d36b0c7966b3a159f752b4ef9be63ccbff",
+    "python/generativeqc_compiler/tensor/batch_scaled_contraction.py": "d9112b85b1dfe7e3a4ca81e0e6e9625d285ea7679b421bc66a729c3050b9168a",
+    "python/generativeqc_compiler/tensor/native_lowering.py": "9fe61d3fc794900534077712e597c2cef857d674024a5dade40ecb1ac1c280ad",
+    "src/dft/cuda_cosx.cu": "57e47e5a0968a39ebc57fca0ccc2ec7812ba12d385ebe780822ff755f4079a9a",
+    "src/dft/cuda_cosx.hpp": "4be7737f938ddb104cd7d19244e046c0228346e6a1d746225a84bc391cf8fad0",
+    "src/tensor/contraction_sites.hpp": "fa93e3036196e977d033414881324f23ffe2edf5a61bdcd2c9fde2e455f7ecab",
+    "src/tensor/cuda_contraction.cuh": "0221b901739d47e25b1ee8897ae6fed913c44c1e38f28e30f773d4f114c52052",
+    "src/tensor/cuda_contraction_sites.cuh": "86b3da3a306e3e8a4244defb17eb3b99af05c208c8ea009f37672039e979ccee",
+    "src/tensor/native_contraction.hpp": "d31a73482442d019f2bdedff2179f682c9f9682c80bf72d388910998799e57c8",
+    "tests/native/cosx_contraction_cases.cuh": "9ce84225663e7fc0a8c0f2223998161f7224acae650814b936d79f8b9e50c4ec",
+    "tests/native/cosx_weighted_endpoint_benchmark.cuh": "9c0658ebcacf6595f2235aa0afbc2faf7e91329705387d117706ef31ff3be6c7",
+    "tests/native/test_cosx_cuda.cu": "b65714a7d16293cd46e7d235d6cb4de27a26830109249eef1e6f2e35d614488c",
+    "tests/python/test_batch_scaled_contraction_lowering.py": "46650460ceb8409b9e53f3d2a7ba7e86f92cd52ec489f08c961dcad6853aa6f7",
+    "tests/python/test_cosx_contraction_lowering.py": "790ae46915739f49cfe65c917abd8f2cd00212e11ab1524ee009c5daba6a31c8"
+  },
+  "binary_sha256": "58f37c72cef61fb11c566c7687a346869697747d318ee039fa8e0ff39e31ede7",
+  "inputs": {
+    "source_commit": "b080c9bdcbf81aa952dee811bfd2dbb5a4162981",
+    "sha256": {
+      "input-48-0.txt.gz": "a74716f367006fefcc4929fd806bfa10a4835cedeab253a91d0220e9509a8717",
+      "input-48-1.txt.gz": "2def7c76714be074a4e24e224e311c1d3fa82bdd8bfec10d39bedea0cf3a3eed",
+      "input-96-0.txt.gz": "7e2b6a55bf0a6a569e0b950aeb29087f0c5bfa50a41da5d6f5b6492171083c32",
+      "input-96-1.txt.gz": "d6575f0e3d6605eb07147b75e3b37516132656b2ac9fad732af426d9dd676b75"
+    }
+  },
+  "records": 32,
+  "data_sha256": {
+    "endpoint-48-64.json.gz": "7d40ee78e83f95351a419dd4afc785cd1bc864aa137ac66d8936c7600c593650",
+    "endpoint-48-256.json.gz": "7bec7fe3fc0f799c0f7904bd065b6a92264bbe66b6c5aec56c440d1362230567",
+    "endpoint-96-64.json.gz": "e5f7ec815e8a9c330bbd38c72fcd6ee518069bed4c87fc24c689191b1517ec65",
+    "endpoint-96-256.json.gz": "903c9043ca6a4e993600ea3a23cbddb620496b9b75374e8ed6454c9b399e0544"
+  },
+  "runtime_version": 12090,
+  "provider_version": 120901,
+  "compiler_commands": [
+    "ccache /usr/bin/c++  -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -O3 -DNDEBUG -std=c++20 -fPIC -MD -MT CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/dft/ao_grid.cpp.o -MF CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/dft/ao_grid.cpp.o.d -o CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/dft/ao_grid.cpp.o -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft/ao_grid.cpp",
+    "ccache /usr/bin/c++  -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -O3 -DNDEBUG -std=c++20 -fPIC -MD -MT CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/dft/grid.cpp.o -MF CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/dft/grid.cpp.o.d -o CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/dft/grid.cpp.o -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft/grid.cpp",
+    "ccache /usr/bin/c++  -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -O3 -DNDEBUG -std=c++20 -fPIC -MD -MT CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/molecule/basis.cpp.o -MF CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/molecule/basis.cpp.o.d -o CMakeFiles/generativeqc_dft_grid_test_objects.dir/src/molecule/basis.cpp.o -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/molecule/basis.cpp",
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/tests/native/test_cosx_cuda.cu.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/tests/native/test_cosx_cuda.cu.o.d -x cu -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/tests/native/test_cosx_cuda.cu -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/tests/native/test_cosx_cuda.cu.o",
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx.cu.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx.cu.o.d -x cu -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft/cuda_cosx.cu -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx.cu.o",
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx_derivative.cu.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx_derivative.cu.o.d -x cu -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft/cuda_cosx_derivative.cu -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cuda_cosx_derivative.cu.o",
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE --fmad=false -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/generated/generated_grid_policy.cu.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/generated/generated_grid_policy.cu.o.d -x cu -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated/generated_grid_policy.cu -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/generated/generated_grid_policy.cu.o",
+    "ccache /usr/bin/c++ -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 -fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cosx_reference.cpp.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cosx_reference.cpp.o.d -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/dft/cosx_reference.cpp.o -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft/cosx_reference.cpp",
+    "ccache /usr/bin/c++ -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 -fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/s_integrals.cpp.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/s_integrals.cpp.o.d -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/s_integrals.cpp.o -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/integrals/s_integrals.cpp",
+    "ccache /usr/bin/c++ -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 -fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/generated_df_cpu.cpp.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/generated_df_cpu.cpp.o.d -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/generated_df_cpu.cpp.o -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/integrals/generated_df_cpu.cpp",
+    "ccache /usr/bin/c++ -DGENERATIVEQC_COSX_TEST_INTERPOSE=1 -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/include -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/dft -I/data/jzzeng/qc-dft-cosx-esp-crossover-1884/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 -fPIE -MD -MT CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/ecp.cpp.o -MF CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/ecp.cpp.o.d -o CMakeFiles/generativeqc_cosx_cuda_tests.dir/src/integrals/ecp.cpp.o -c /data/jzzeng/qc-dft-cosx-esp-crossover-1884/src/integrals/ecp.cpp"
+  ],
+  "ccache_version": "ccache version 4.5.1",
+  "ccache_before": "Summary:\n  Hits:            2627 /  5191 (50.61 %)\n    Direct:        2409 /  5203 (46.30 %)\n    Preprocessed:   218 /  2793 (7.81 %)\n  Misses:          2564\n    Direct:        2794\n    Preprocessed:  2575\n  Uncacheable:     1843\nPrimary storage:\n  Hits:            5789 / 10405 (55.64 %)\n  Misses:          4616\n  Cache size (GB): 1.69 /  5.00 (33.72 %)\n\nUse the -v/--verbose option for more details.",
+  "ccache_after": "Summary:\n  Hits:            2637 /  5202 (50.69 %)\n    Direct:        2418 /  5214 (46.38 %)\n    Preprocessed:   219 /  2795 (7.84 %)\n  Misses:          2565\n    Direct:        2796\n    Preprocessed:  2576\n  Uncacheable:     1843\nPrimary storage:\n  Hits:            5809 / 10427 (55.71 %)\n  Misses:          4618\n  Cache size (GB): 1.69 /  5.00 (33.72 %)\n\nUse the -v/--verbose option for more details.",
+  "runs": [
+    {
+      "atoms": 48,
+      "tile": 64,
+      "srun_exit_code": 0,
+      "completion": "success",
+      "slurm": "JobId=6002 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-05T17:36:09 EligibleTime=2026-10-05T17:36:09 AccrueTime=Unknown StartTime=2026-10-05T17:36:09 EndTime=2026-10-05T17:56:09 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T17:36:09 Scheduler=Main Partition=main AllocNode:Sid=localhost:3891679 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=3",
+      "raw_jsonl_sha256": "3fb2b30133bb54bc734c85672223767a8929a27f8a5f159ec6bcd9c1efbb32a1",
+      "source_check_sha256": "738190052db4e0c6cb664d6cd25dc13fbbf5b88311afdf821d20aea3389cccca"
+    },
+    {
+      "atoms": 48,
+      "tile": 256,
+      "srun_exit_code": 0,
+      "completion": "success",
+      "slurm": "JobId=6001 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-05T17:36:09 EligibleTime=2026-10-05T17:36:09 AccrueTime=Unknown StartTime=2026-10-05T17:36:09 EndTime=2026-10-05T17:56:09 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T17:36:09 Scheduler=Main Partition=main AllocNode:Sid=localhost:3891673 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=2",
+      "raw_jsonl_sha256": "3691343ed0c995f4caa1dea11fbf36af12a3af30f4c56cae503443b1bb361efe",
+      "source_check_sha256": "738190052db4e0c6cb664d6cd25dc13fbbf5b88311afdf821d20aea3389cccca"
+    },
+    {
+      "atoms": 96,
+      "tile": 64,
+      "srun_exit_code": 0,
+      "completion": "success",
+      "slurm": "JobId=6000 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-05T17:36:09 EligibleTime=2026-10-05T17:36:09 AccrueTime=Unknown StartTime=2026-10-05T17:36:09 EndTime=2026-10-05T17:56:09 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T17:36:09 Scheduler=Main Partition=main AllocNode:Sid=localhost:3891660 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=1",
+      "raw_jsonl_sha256": "8772b38a1e7366d2322169ed0e713ed4b5c98aa7cd6db19c9f278fdb991a1bc8",
+      "source_check_sha256": "738190052db4e0c6cb664d6cd25dc13fbbf5b88311afdf821d20aea3389cccca"
+    },
+    {
+      "atoms": 96,
+      "tile": 256,
+      "srun_exit_code": 0,
+      "completion": "success",
+      "slurm": "JobId=6003 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:20:00 TimeMin=N/A SubmitTime=2026-10-05T17:36:09 EligibleTime=2026-10-05T17:36:09 AccrueTime=Unknown StartTime=2026-10-05T17:36:09 EndTime=2026-10-05T17:56:09 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T17:36:09 Scheduler=Main Partition=main AllocNode:Sid=localhost:3891677 ReqNodeList=node1 ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT",
+      "visibility": "visibility=4",
+      "raw_jsonl_sha256": "d5db50d05afeaee7914503d38fac9da24a4199b451d7a36bbe28481db2e3132f",
+      "source_check_sha256": "738190052db4e0c6cb664d6cd25dc13fbbf5b88311afdf821d20aea3389cccca"
+    }
+  ],
+  "independent_oracle": "Discrete CPU COSX on three spread-out points at each actual AO dimension and geometry; tile=2 gives full and tail.",
+  "prior_qualification": {
+    "pr": 1968,
+    "source_commit": "8c53863d0cc8384f54c35e64d15d7da0bfa7463e",
+    "binary_sha256": "6e0ce1ae9f53c7546598e7e981dcd0f8886722db3c7e04fb0e2d07b1db220b08",
+    "full_regression": "pass",
+    "memcheck_errors": 0,
+    "initcheck_errors": 0
+  }
+}

@@ -20,6 +20,7 @@ if typing.TYPE_CHECKING:
 
     from .ir import Node
     from .lowering import TensorLoweringAdapter
+    from .program import Program
     from .types import Index
 
 
@@ -65,6 +66,8 @@ def emit_contraction_region_portfolio(
         )
     )
     candidates = []
+    batch_scaled = "batch_scale_mode" in dict(request.semantics)
+    checked = "scalar_update_hash" in dict(request.semantics)
     for precision in request.precisions:
         d = precision.directive
         if (
@@ -102,13 +105,31 @@ def emit_contraction_region_portfolio(
                     ),
                     execution=CandidateExecution(
                         precision,
-                        "prepared-affine-region",
+                        (
+                            "ordered-checked-scalar"
+                            if checked and provider.name == "generated.cuda"
+                            else "ordered-checked-scalar-unimplemented"
+                            if checked
+                            else "batch-scaled-fused"
+                            if batch_scaled and provider.name == "generated.cuda"
+                            else "batch-scaled-contraction-and-publication"
+                            if batch_scaled
+                            else "prepared-affine-region"
+                        ),
                         request.operands,
                         ScheduleTopology(
                             materialization="compiler-owned-liveness",
-                            reduction="provider-reproducible",
+                            reduction=(
+                                "increasing-logical-index"
+                                if checked and provider.name == "generated.cuda"
+                                else "provider-reproducible"
+                            ),
                         ),
-                        determinism="reproducible",
+                        determinism=(
+                            "exact-order"
+                            if checked and provider.name == "generated.cuda"
+                            else "reproducible"
+                        ),
                         capture_safe=False,
                     ),
                     target=target,
@@ -239,6 +260,10 @@ def contraction_initializer(
     leading_dimensions: tuple[str, str, str] | None = None,
     beta: str = "0.0",
     accumulation: Node | None = None,
+    batch_scale: Node | None = None,
+    checked_update: Program | None = None,
+    checked_publication: Program | None = None,
+    checked_right_symmetrization: tuple[str, str, str] | None = None,
     fixed_modes: tuple[int, ...] = (),
     operand_order: tuple[int, int] = (0, 1),
 ) -> str:
@@ -250,6 +275,10 @@ def contraction_initializer(
     binary operation identity. Native validation checks the physical recipe against
     the original semantic modes before execution.
 
+    A checked symmetric RHS additionally binds the original sum/transpose region
+    and scalar input roles. It borrows one square matrix twice, preserving the
+    original helper's half-factor order instead of materializing a new matrix.
+
     Matrix recognition belongs to the existing physical lowerer. The descriptor
     retains original mode labels and operand shapes, so provider execution can
     validate its matrix recipe against that same semantic request. No provider
@@ -257,7 +286,21 @@ def contraction_initializer(
     """
     if node.op != "einsum" or len(node.inputs) != 2:
         raise ValueError("native contraction projection requires binary einsum")
-    if accumulation is None:
+    if accumulation is not None and batch_scale is not None:
+        raise ValueError("native region cannot combine donation and batch weighting")
+    if batch_scale is not None:
+        from .batch_scaled_contraction import batch_scaled_contraction_request
+
+        if fixed_modes or operand_order != (0, 1) or beta != "0.0":
+            raise ValueError(
+                "native batch scale cannot project, reorder or donate operands"
+            )
+        if node not in batch_scale.inputs:
+            raise ValueError(
+                "native batch scale must retain its contraction intermediate"
+            )
+        request = batch_scaled_contraction_request(adapter, batch_scale, backend="cuda")
+    elif accumulation is None:
         request = projected_contraction_request(
             adapter, node, fixed_modes=fixed_modes, operand_order=operand_order
         )
@@ -269,6 +312,40 @@ def contraction_initializer(
         if node not in accumulation.inputs or beta != "1.0":
             raise ValueError("native update must preserve its unit seed contribution")
         request = contraction_update_request(adapter, accumulation, backend="cuda")
+    if checked_right_symmetrization:
+        from .checked_contraction import checked_symmetric_right_request
+
+        if (
+            checked_update is None
+            or checked_publication is not None
+            or accumulation is not None
+            or batch_scale is not None
+            or fixed_modes
+            or operand_order != (0, 1)
+            or beta != "0.0"
+            or coefficient != "0.5"
+            or transpose != ("N", "N")
+        ):
+            raise ValueError(
+                "checked symmetric RHS requires its complete fresh half-scaled recipe"
+            )
+        request = checked_symmetric_right_request(
+            adapter,
+            node,
+            checked_update,
+            scalar_inputs=checked_right_symmetrization,
+            backend="cuda",
+        )
+    elif checked_update is not None:
+        from .checked_contraction import checked_contraction_request
+
+        if accumulation is not None or beta != "0.0" or coefficient != "1.0":
+            raise ValueError("checked scalar contraction requires a fresh unit result")
+        request = checked_contraction_request(
+            request, checked_update, checked_publication, contraction=node
+        )
+    elif checked_publication is not None:
+        raise ValueError("checked publication requires its scalar update")
     precision = request.precisions[0]
     directive = precision.directive
     if (
@@ -346,8 +423,21 @@ def contraction_initializer(
         + ",".join((*extents, coefficient))
         + (
             ",{" + ",".join(leading_dimensions or ()) + "}," + beta
-            if leading_dimensions is not None or beta != "0.0"
+            if leading_dimensions is not None
+            or beta != "0.0"
+            or checked_update is not None
             else ""
         )
+        + (
+            ","
+            + json.dumps(checked_update.logical_hash)
+            + ","
+            + json.dumps(
+                checked_publication.logical_hash if checked_publication else ""
+            )
+            if checked_update is not None
+            else ""
+        )
+        + (",true" if checked_right_symmetrization else "")
         + "}"
     )

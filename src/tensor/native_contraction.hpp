@@ -113,6 +113,12 @@ struct ContractionRequest {
   // or read as scientific data. beta==0 must not read uninitialized output.
   std::array<std::size_t, 3> leading_dimensions{};
   double beta{};
+  // Hashes of compiler-owned scalar programs used at each ordered reduction
+  // step and optional weight publication. Empty hashes retain ordinary recipes.
+  std::string_view checked_update_identity, checked_publication_identity;
+  // A compiler-recognized virtual symmetric RHS borrows one square matrix and
+  // its transpose. The original scalar helper owns the half-factor rounding.
+  bool checked_right_symmetrization{};
 
   std::size_t leading_dimension(std::size_t operand) const {
     if (leading_dimensions[operand]) return leading_dimensions[operand];
@@ -123,6 +129,22 @@ struct ContractionRequest {
     return contraction_product(batches, contraction_product(m, n));
   }
   std::size_t summands() const { return contraction_product(output_elements(), k); }
+
+  /** Validate a compiler-owned scalar broadcast over the leading batch axis.
+   * A zero-rank view means no epilogue. Weighted regions are fresh outputs;
+   * weighting a donated seed would require a different scientific graph. */
+  void validate_batch_scale(const ContractionOperand& scale) const {
+    if (!checked_update_identity.empty() &&
+        bool(scale.rank) != !checked_publication_identity.empty())
+      throw std::invalid_argument("checked publication differs from its batch-scale view");
+    if (!scale.rank) return;
+    if (scale.rank != 1 || scale.shape[0] != batches || scale.strides[0] != 1 ||
+        scale.dtype != publication_dtype || beta != 0)
+      throw std::invalid_argument("invalid contraction batch-scale view");
+    for (const auto& operand : operands)
+      if (!operand.rank || operand.modes[0] != scale.modes[0] || operand.shape[0] != batches)
+        throw std::invalid_argument("batch scale differs from the shared leading semantic axis");
+  }
 
   /** Logical work counts do not require a matrix factorization or packing.
    * Call validate_affine before using an externally supplied descriptor. */
@@ -155,6 +177,19 @@ struct ContractionRequest {
           "native affine candidate does not implement requested arithmetic");
     if (!std::isfinite(coefficient) || !std::isfinite(beta))
       throw std::invalid_argument("native affine coefficient is not finite");
+    for (const auto identity : {checked_update_identity, checked_publication_identity})
+      if (!identity.empty() &&
+          (identity.size() != 64 ||
+           identity.find_first_not_of("0123456789abcdef") != std::string_view::npos))
+        throw std::invalid_argument("checked contraction requires scalar program identities");
+    if ((!checked_publication_identity.empty() && checked_update_identity.empty()) ||
+        (!checked_update_identity.empty() &&
+         (!precision.is_strict_fp64() || publication_dtype != PrecisionDtype::Fp64 ||
+          coefficient != (checked_right_symmetrization ? 0.5 : 1.0) || beta != 0)) ||
+        (checked_right_symmetrization &&
+         (checked_update_identity.empty() || !checked_publication_identity.empty() ||
+          batches != 1 || k != n || a_trans != 'N' || b_trans != 'N' || operands[1].rank != 2)))
+      throw std::invalid_argument("invalid checked scalar contraction contract");
     for (const auto& view : operands) {
       if (view.rank > ContractionOperand::kMaximumRank || view.dtype != precision.storage_dtype)
         throw std::invalid_argument("native affine operand rank or dtype is invalid");
@@ -307,12 +342,16 @@ struct BoundedContractionDomain {
 
   explicit BoundedContractionDomain(ContractionRequest upper) : maximum(upper) {
     maximum.validate();
+    if (!maximum.checked_update_identity.empty() || !maximum.checked_publication_identity.empty())
+      throw std::invalid_argument("bounded contraction does not implement checked scalar programs");
     if (maximum.batches != 1 || maximum.leading_dimensions != std::array<std::size_t, 3>{})
       throw std::invalid_argument("bounded contraction requires packed unbatched matrices");
   }
 
   void validate(const ContractionRequest& actual) const {
     actual.validate();
+    if (!actual.checked_update_identity.empty() || !actual.checked_publication_identity.empty())
+      throw std::invalid_argument("bounded contraction does not implement checked scalar programs");
     if (actual.scientific_identity != maximum.scientific_identity ||
         actual.semantic_template_identity != maximum.semantic_template_identity ||
         actual.precision_identity != maximum.precision_identity ||

@@ -77,10 +77,25 @@ physical evaluation, then reuses that factor across all point/jet panels.
 The shared tensor provider owns GEMM, finite publication and resource lifetime.
 Qualification requires a separate 96 MiB provider allowance, exact spin-matrix
 cache bytes, and 16 KiB host reservation. A budget alone does not select it;
-generated execution remains the production incumbent. Mixed arithmetic, local
-maps and signed response retain their existing bindings. The explicit native
+generated execution remains the production incumbent. Mixed arithmetic and
+signed response retain their existing bindings. The explicit native
 `--density-provider` and `--density-provider-benchmark` commands exercise the
 candidate and its complete fixed-density XC endpoints.
+
+An independent indexed candidate gathers the same symmetric density graph over
+each nonempty local AO map, then contracts compact `[spin, active, active]`
+factors with the existing mapped point/jet panel. It preserves the local domain
+and reuses one global-capacity cache and handle; it allocates and selects nothing
+per tile. Empty maps retain the generated zero-domain operation. AO discovery
+invalidates an earlier dense provider, so callers must prepare again after
+discovery to admit the indexed recipe. Dense qualification cannot promote the
+indexed candidate, whose gather costs need separate endpoint evidence. The
+native `--indexed-density-provider` gate covers scalar oracles, changed captured
+inputs, explicit and discovered maps, independent CPU E/V and resource fallback.
+`--indexed-density-benchmark ORIGINAL_INPUT MOVED_INPUT` compares generated and
+indexed execution on complete water-cluster grids. It reports map discovery,
+provider setup, cold/warm XC endpoints and gather/work counts separately; its
+positive diagnostic density and fixed-density scope do not qualify SCF/forces.
 
 Native KS callers can supply `CudaXcPreparationBudget` from their enclosing
 resource plan. Both host and device reservations must be admitted before
