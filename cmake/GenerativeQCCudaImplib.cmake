@@ -54,7 +54,7 @@ function(generativeqc_attach_cuda_implib target)
       "${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/implib")
   set(_generativeqc_implib_output
       "${CMAKE_CURRENT_BINARY_DIR}/generated/cuda_implib/${target}")
-  set(_generativeqc_link_launcher
+  string(CONCAT _generativeqc_link_launcher
       "\"${Python3_EXECUTABLE}\" \"${_generativeqc_implib_launcher}\""
       " --cc \"${CMAKE_C_COMPILER}\""
       " --implib-root \"${_generativeqc_implib_root}\""
