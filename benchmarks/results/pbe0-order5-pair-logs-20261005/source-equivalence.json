@@ -1,0 +1,10 @@
+{
+  "python/generativeqc_compiler/method/stationary_becke_phased.py": {
+    "sha256": "99be7406b59f2f63bb4393edc85aaee5bd00fb94e323e9fb2d3de8a521451766",
+    "identical_to_1950": true
+  },
+  "python/generativeqc_compiler/xc/grid_phased.py": {
+    "sha256": "4570486ceadb2a787f8838dd6ea387d8c1664eb9c4479297dd4ae909eca1b795",
+    "identical_to_1950": true
+  }
+}

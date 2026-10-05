@@ -42,13 +42,24 @@ int main() {
     const double value=.125+.003*(i+j+k+l);
     std::set<std::array<size_t,4>> orbit{{i,j,k,l},{j,i,k,l},{i,j,l,k},{j,i,l,k},
                                      {k,l,i,j},{l,k,i,j},{k,l,j,i},{l,k,j,i}};
-    std::vector<double> eri(n*n*n*n), density(100);
+    std::vector<double> eri(n*n*n*n), density(100), seed(100);
     for(auto a:orbit) eri[index(a[0],a[1],a[2],a[3])]=value;
     for(size_t p=0;p<n;++p) for(size_t q=0;q<n;++q) {
       density[off+p+q*n]=((p+q)%3==0 ? 0.0 : .03*(p+2*q+1));
       density[spin+p+q*n]=.04*(p+2*q+1);
       density[spin+m+p+q*n]=-.01*(2*p+q+2);
+      seed[off+p*n+q]=.02*(int(p)-2*int(q)+1);
     }
+    // Dense ordered contraction checks the bilinear coefficient for every
+    // repeated-index orbit, including signed and nonsymmetric operands.
+    double bilinear=0;
+    for(size_t p=0;p<n;++p) for(size_t q=0;q<n;++q)
+    for(size_t r=0;r<n;++r) for(size_t s=0;s<n;++s)
+      bilinear+=seed[off+p*n+q]*density[off+r*n+s]*
+                  (eri[index(p,q,r,s)]-.5*eri[index(p,r,q,s)]);
+    const double coefficient=direct_bilinear_density_coefficient(
+        n,off,density.data(),seed.data(),i,j,k,l);
+    if(std::abs(value*coefficient-bilinear)>2e-13) return 7;
     for(bool unrestricted : {false,true}) for(unsigned mode : {0U,1U,2U}) {
       const bool coulomb_only=mode==1U, exchange_only=mode==2U;
       std::vector<double> actual(100), expected(100);

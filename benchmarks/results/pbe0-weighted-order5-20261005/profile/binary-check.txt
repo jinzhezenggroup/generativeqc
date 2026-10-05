@@ -1,0 +1,4 @@
+build/cuda-release-sm120/libgenerativeqc.so: OK
+build/cuda-release-sm120/generativeqc_dft_cuda_tests: OK
+build/cuda-release-sm120/generativeqc_ks_cuda_tests: OK
+build/cuda-release-sm120/generativeqc_cuda_fock_provider_tests: OK

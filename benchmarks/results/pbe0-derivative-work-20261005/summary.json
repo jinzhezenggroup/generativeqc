@@ -1,0 +1,732 @@
+{
+  "endpoint_qualification": false,
+  "production_time_partition": false,
+  "census": {
+    "48": {
+      "0": {
+        "fock_builds": 23,
+        "physical_residual_rms": 1.2218905214046613e-12,
+        "max_replay_error": 6.856737400084967e-13,
+        "orders": [
+          {
+            "shell_quartets": 3391943,
+            "tiles": 3391943,
+            "ao_quartet_upper_bound": 3391943,
+            "primitive_quartet_upper_bound": 41971883
+          },
+          {
+            "shell_quartets": 6960726,
+            "tiles": 6960726,
+            "ao_quartet_upper_bound": 20882178,
+            "primitive_quartet_upper_bound": 188567274
+          },
+          {
+            "shell_quartets": 6848553,
+            "tiles": 6848553,
+            "ao_quartet_upper_bound": 56784321,
+            "primitive_quartet_upper_bound": 376828293
+          },
+          {
+            "shell_quartets": 4020648,
+            "tiles": 4020648,
+            "ao_quartet_upper_bound": 87704424,
+            "primitive_quartet_upper_bound": 433409364
+          },
+          {
+            "shell_quartets": 1532838,
+            "tiles": 1532838,
+            "ao_quartet_upper_bound": 82725912,
+            "primitive_quartet_upper_bound": 302677968
+          },
+          {
+            "shell_quartets": 391104,
+            "tiles": 391104,
+            "ao_quartet_upper_bound": 48678012,
+            "primitive_quartet_upper_bound": 129503664
+          },
+          {
+            "shell_quartets": 66306,
+            "tiles": 102794,
+            "ao_quartet_upper_bound": 16936992,
+            "primitive_quartet_upper_bound": 33324768
+          },
+          {
+            "shell_quartets": 7368,
+            "tiles": 17496,
+            "ao_quartet_upper_bound": 3530304,
+            "primitive_quartet_upper_bound": 4802112
+          },
+          {
+            "shell_quartets": 520,
+            "tiles": 1408,
+            "ao_quartet_upper_bound": 346920,
+            "primitive_quartet_upper_bound": 346920
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          }
+        ]
+      },
+      "1": {
+        "fock_builds": 12,
+        "physical_residual_rms": 1.3723993953543806e-12,
+        "max_replay_error": 2.398081733190338e-13,
+        "orders": [
+          {
+            "shell_quartets": 3391842,
+            "tiles": 3391842,
+            "ao_quartet_upper_bound": 3391842,
+            "primitive_quartet_upper_bound": 41971100
+          },
+          {
+            "shell_quartets": 6960609,
+            "tiles": 6960609,
+            "ao_quartet_upper_bound": 20881827,
+            "primitive_quartet_upper_bound": 188563275
+          },
+          {
+            "shell_quartets": 6848558,
+            "tiles": 6848558,
+            "ao_quartet_upper_bound": 56784375,
+            "primitive_quartet_upper_bound": 376829025
+          },
+          {
+            "shell_quartets": 4020648,
+            "tiles": 4020648,
+            "ao_quartet_upper_bound": 87704586,
+            "primitive_quartet_upper_bound": 433409868
+          },
+          {
+            "shell_quartets": 1532845,
+            "tiles": 1532845,
+            "ao_quartet_upper_bound": 82726299,
+            "primitive_quartet_upper_bound": 302678643
+          },
+          {
+            "shell_quartets": 391105,
+            "tiles": 391105,
+            "ao_quartet_upper_bound": 48678120,
+            "primitive_quartet_upper_bound": 129503772
+          },
+          {
+            "shell_quartets": 66306,
+            "tiles": 102794,
+            "ao_quartet_upper_bound": 16936992,
+            "primitive_quartet_upper_bound": 33324768
+          },
+          {
+            "shell_quartets": 7368,
+            "tiles": 17496,
+            "ao_quartet_upper_bound": 3530304,
+            "primitive_quartet_upper_bound": 4802112
+          },
+          {
+            "shell_quartets": 520,
+            "tiles": 1408,
+            "ao_quartet_upper_bound": 346920,
+            "primitive_quartet_upper_bound": 346920
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          }
+        ]
+      }
+    },
+    "96": {
+      "0": {
+        "fock_builds": 26,
+        "physical_residual_rms": 9.495748058794027e-14,
+        "max_replay_error": 4.671818487622659e-13,
+        "orders": [
+          {
+            "shell_quartets": 13647876,
+            "tiles": 13647876,
+            "ao_quartet_upper_bound": 13647876,
+            "primitive_quartet_upper_bound": 165634524
+          },
+          {
+            "shell_quartets": 27796096,
+            "tiles": 27796096,
+            "ao_quartet_upper_bound": 83388288,
+            "primitive_quartet_upper_bound": 744081936
+          },
+          {
+            "shell_quartets": 27137980,
+            "tiles": 27137980,
+            "ao_quartet_upper_bound": 224980116,
+            "primitive_quartet_upper_bound": 1483886892
+          },
+          {
+            "shell_quartets": 15823664,
+            "tiles": 15823664,
+            "ao_quartet_upper_bound": 345054564,
+            "primitive_quartet_upper_bound": 1704263436
+          },
+          {
+            "shell_quartets": 5998624,
+            "tiles": 5998624,
+            "ao_quartet_upper_bound": 323428704,
+            "primitive_quartet_upper_bound": 1186689216
+          },
+          {
+            "shell_quartets": 1536020,
+            "tiles": 1536020,
+            "ao_quartet_upper_bound": 190606032,
+            "primitive_quartet_upper_bound": 507813552
+          },
+          {
+            "shell_quartets": 261576,
+            "tiles": 404760,
+            "ao_quartet_upper_bound": 66665952,
+            "primitive_quartet_upper_bound": 131771232
+          },
+          {
+            "shell_quartets": 29328,
+            "tiles": 69552,
+            "ao_quartet_upper_bound": 14027904,
+            "primitive_quartet_upper_bound": 19115136
+          },
+          {
+            "shell_quartets": 2064,
+            "tiles": 5632,
+            "ao_quartet_upper_bound": 1387344,
+            "primitive_quartet_upper_bound": 1387344
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          }
+        ]
+      },
+      "1": {
+        "fock_builds": 17,
+        "physical_residual_rms": 8.450079136656996e-15,
+        "max_replay_error": 4.902744876744691e-13,
+        "orders": [
+          {
+            "shell_quartets": 13647955,
+            "tiles": 13647955,
+            "ao_quartet_upper_bound": 13647955,
+            "primitive_quartet_upper_bound": 165635317
+          },
+          {
+            "shell_quartets": 27796208,
+            "tiles": 27796208,
+            "ao_quartet_upper_bound": 83388624,
+            "primitive_quartet_upper_bound": 744084894
+          },
+          {
+            "shell_quartets": 27138026,
+            "tiles": 27138026,
+            "ao_quartet_upper_bound": 224980554,
+            "primitive_quartet_upper_bound": 1483889406
+          },
+          {
+            "shell_quartets": 15823708,
+            "tiles": 15823708,
+            "ao_quartet_upper_bound": 345055527,
+            "primitive_quartet_upper_bound": 1704268773
+          },
+          {
+            "shell_quartets": 5998637,
+            "tiles": 5998637,
+            "ao_quartet_upper_bound": 323429298,
+            "primitive_quartet_upper_bound": 1186690998
+          },
+          {
+            "shell_quartets": 1536015,
+            "tiles": 1536015,
+            "ao_quartet_upper_bound": 190605654,
+            "primitive_quartet_upper_bound": 507813498
+          },
+          {
+            "shell_quartets": 261576,
+            "tiles": 404760,
+            "ao_quartet_upper_bound": 66665952,
+            "primitive_quartet_upper_bound": 131771232
+          },
+          {
+            "shell_quartets": 29328,
+            "tiles": 69552,
+            "ao_quartet_upper_bound": 14027904,
+            "primitive_quartet_upper_bound": 19115136
+          },
+          {
+            "shell_quartets": 2064,
+            "tiles": 5632,
+            "ao_quartet_upper_bound": 1387344,
+            "primitive_quartet_upper_bound": 1387344
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          },
+          {
+            "shell_quartets": 0,
+            "tiles": 0,
+            "ao_quartet_upper_bound": 0,
+            "primitive_quartet_upper_bound": 0
+          }
+        ]
+      }
+    }
+  },
+  "angular": {
+    "48": {
+      "work": {
+        "0": {
+          "fock_builds": 25,
+          "physical_residual_rms": 1.311403501542346e-13,
+          "max_replay_error": 3.552713678800501e-13,
+          "orders": [
+            {
+              "shell_quartets": 3391943,
+              "tiles": 3391943,
+              "ao_quartet_upper_bound": 3391943,
+              "primitive_quartet_upper_bound": 41971883
+            },
+            {
+              "shell_quartets": 6960726,
+              "tiles": 6960726,
+              "ao_quartet_upper_bound": 20882178,
+              "primitive_quartet_upper_bound": 188567274
+            },
+            {
+              "shell_quartets": 6848553,
+              "tiles": 6848553,
+              "ao_quartet_upper_bound": 56784321,
+              "primitive_quartet_upper_bound": 376828293
+            },
+            {
+              "shell_quartets": 4020648,
+              "tiles": 4020648,
+              "ao_quartet_upper_bound": 87704424,
+              "primitive_quartet_upper_bound": 433409364
+            },
+            {
+              "shell_quartets": 1532838,
+              "tiles": 1532838,
+              "ao_quartet_upper_bound": 82725912,
+              "primitive_quartet_upper_bound": 302677968
+            },
+            {
+              "shell_quartets": 391104,
+              "tiles": 391104,
+              "ao_quartet_upper_bound": 48678012,
+              "primitive_quartet_upper_bound": 129503664
+            },
+            {
+              "shell_quartets": 66306,
+              "tiles": 102794,
+              "ao_quartet_upper_bound": 16936992,
+              "primitive_quartet_upper_bound": 33324768
+            },
+            {
+              "shell_quartets": 7368,
+              "tiles": 17496,
+              "ao_quartet_upper_bound": 3530304,
+              "primitive_quartet_upper_bound": 4802112
+            },
+            {
+              "shell_quartets": 520,
+              "tiles": 1408,
+              "ao_quartet_upper_bound": 346920,
+              "primitive_quartet_upper_bound": 346920
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            }
+          ]
+        },
+        "1": {
+          "fock_builds": 12,
+          "physical_residual_rms": 1.3723502345915908e-12,
+          "max_replay_error": 6.812328479099961e-13,
+          "orders": [
+            {
+              "shell_quartets": 3391842,
+              "tiles": 3391842,
+              "ao_quartet_upper_bound": 3391842,
+              "primitive_quartet_upper_bound": 41971100
+            },
+            {
+              "shell_quartets": 6960609,
+              "tiles": 6960609,
+              "ao_quartet_upper_bound": 20881827,
+              "primitive_quartet_upper_bound": 188563275
+            },
+            {
+              "shell_quartets": 6848558,
+              "tiles": 6848558,
+              "ao_quartet_upper_bound": 56784375,
+              "primitive_quartet_upper_bound": 376829025
+            },
+            {
+              "shell_quartets": 4020648,
+              "tiles": 4020648,
+              "ao_quartet_upper_bound": 87704586,
+              "primitive_quartet_upper_bound": 433409868
+            },
+            {
+              "shell_quartets": 1532845,
+              "tiles": 1532845,
+              "ao_quartet_upper_bound": 82726299,
+              "primitive_quartet_upper_bound": 302678643
+            },
+            {
+              "shell_quartets": 391105,
+              "tiles": 391105,
+              "ao_quartet_upper_bound": 48678120,
+              "primitive_quartet_upper_bound": 129503772
+            },
+            {
+              "shell_quartets": 66306,
+              "tiles": 102794,
+              "ao_quartet_upper_bound": 16936992,
+              "primitive_quartet_upper_bound": 33324768
+            },
+            {
+              "shell_quartets": 7368,
+              "tiles": 17496,
+              "ao_quartet_upper_bound": 3530304,
+              "primitive_quartet_upper_bound": 4802112
+            },
+            {
+              "shell_quartets": 520,
+              "tiles": 1408,
+              "ao_quartet_upper_bound": 346920,
+              "primitive_quartet_upper_bound": 346920
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            }
+          ]
+        },
+        "angular_max_replay_error": 1.7328360968349443e-12
+      },
+      "thirteen_pass_kernel_seconds": [
+        0.111450621,
+        0.196816472,
+        0.361258093,
+        0.34739404,
+        1.119266781,
+        0.920021297,
+        0.599431629,
+        0.686684984,
+        0.257103781,
+        0.010358793,
+        0.010330377,
+        0.01002827,
+        0.010013135
+      ]
+    },
+    "96": {
+      "work": {
+        "0": {
+          "fock_builds": 26,
+          "physical_residual_rms": 9.495951216776141e-14,
+          "max_replay_error": 4.796163466380676e-13,
+          "orders": [
+            {
+              "shell_quartets": 13647876,
+              "tiles": 13647876,
+              "ao_quartet_upper_bound": 13647876,
+              "primitive_quartet_upper_bound": 165634524
+            },
+            {
+              "shell_quartets": 27796096,
+              "tiles": 27796096,
+              "ao_quartet_upper_bound": 83388288,
+              "primitive_quartet_upper_bound": 744081936
+            },
+            {
+              "shell_quartets": 27137980,
+              "tiles": 27137980,
+              "ao_quartet_upper_bound": 224980116,
+              "primitive_quartet_upper_bound": 1483886892
+            },
+            {
+              "shell_quartets": 15823664,
+              "tiles": 15823664,
+              "ao_quartet_upper_bound": 345054564,
+              "primitive_quartet_upper_bound": 1704263436
+            },
+            {
+              "shell_quartets": 5998624,
+              "tiles": 5998624,
+              "ao_quartet_upper_bound": 323428704,
+              "primitive_quartet_upper_bound": 1186689216
+            },
+            {
+              "shell_quartets": 1536020,
+              "tiles": 1536020,
+              "ao_quartet_upper_bound": 190606032,
+              "primitive_quartet_upper_bound": 507813552
+            },
+            {
+              "shell_quartets": 261576,
+              "tiles": 404760,
+              "ao_quartet_upper_bound": 66665952,
+              "primitive_quartet_upper_bound": 131771232
+            },
+            {
+              "shell_quartets": 29328,
+              "tiles": 69552,
+              "ao_quartet_upper_bound": 14027904,
+              "primitive_quartet_upper_bound": 19115136
+            },
+            {
+              "shell_quartets": 2064,
+              "tiles": 5632,
+              "ao_quartet_upper_bound": 1387344,
+              "primitive_quartet_upper_bound": 1387344
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            }
+          ]
+        },
+        "1": {
+          "fock_builds": 15,
+          "physical_residual_rms": 1.1263473586640384e-14,
+          "max_replay_error": 5.169198402654729e-13,
+          "orders": [
+            {
+              "shell_quartets": 13647955,
+              "tiles": 13647955,
+              "ao_quartet_upper_bound": 13647955,
+              "primitive_quartet_upper_bound": 165635317
+            },
+            {
+              "shell_quartets": 27796208,
+              "tiles": 27796208,
+              "ao_quartet_upper_bound": 83388624,
+              "primitive_quartet_upper_bound": 744084894
+            },
+            {
+              "shell_quartets": 27138026,
+              "tiles": 27138026,
+              "ao_quartet_upper_bound": 224980554,
+              "primitive_quartet_upper_bound": 1483889406
+            },
+            {
+              "shell_quartets": 15823708,
+              "tiles": 15823708,
+              "ao_quartet_upper_bound": 345055527,
+              "primitive_quartet_upper_bound": 1704268773
+            },
+            {
+              "shell_quartets": 5998637,
+              "tiles": 5998637,
+              "ao_quartet_upper_bound": 323429298,
+              "primitive_quartet_upper_bound": 1186690998
+            },
+            {
+              "shell_quartets": 1536015,
+              "tiles": 1536015,
+              "ao_quartet_upper_bound": 190605654,
+              "primitive_quartet_upper_bound": 507813498
+            },
+            {
+              "shell_quartets": 261576,
+              "tiles": 404760,
+              "ao_quartet_upper_bound": 66665952,
+              "primitive_quartet_upper_bound": 131771232
+            },
+            {
+              "shell_quartets": 29328,
+              "tiles": 69552,
+              "ao_quartet_upper_bound": 14027904,
+              "primitive_quartet_upper_bound": 19115136
+            },
+            {
+              "shell_quartets": 2064,
+              "tiles": 5632,
+              "ao_quartet_upper_bound": 1387344,
+              "primitive_quartet_upper_bound": 1387344
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            },
+            {
+              "shell_quartets": 0,
+              "tiles": 0,
+              "ao_quartet_upper_bound": 0,
+              "primitive_quartet_upper_bound": 0
+            }
+          ]
+        },
+        "angular_max_replay_error": 2.149391775674303e-12
+      },
+      "thirteen_pass_kernel_seconds": [
+        0.284519614,
+        0.509911656,
+        0.897200136,
+        0.826669565,
+        4.186317731,
+        3.484196708,
+        1.980488854,
+        1.660860335,
+        0.548184391,
+        0.048391795,
+        0.048825871,
+        0.046951102,
+        0.047379098
+      ]
+    }
+  }
+}

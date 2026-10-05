@@ -51,13 +51,14 @@ def test_pbe0_chunks_and_semilocal_replay_exclude_each_auto_component(
     chunk = _span(
         source, "    const bool pure_semilocal_chunk", "    if (device_chunk_mode)"
     )
-    replay = _span(source, "    const bool replay_functional", "    auto graph =")
+    replay = _span(source, "    const bool replay_point_program", "    auto graph =")
     _run(
         tmp_path,
         r"""
 #include <cassert>
 #include <vector>
 #include "dft/semilocal_family.hpp"
+#include "dft/xc_capabilities.hpp"
 #include "scf/types.hpp"
 #include "runtime/execution_precision.hpp"
 using namespace generativeqc;
@@ -84,6 +85,7 @@ runtime::ExecutionPrecisionSchedule test_precision_schedule(bool coulomb, bool d
 struct Owner {
   scf::ScfOptions options;
   runtime::ExecutionPrecisionSchedule precision_schedule;
+  struct { CudaXcFastPathCapabilities fast_paths; } xc_layout;
   bool has_exchange{}, has_range_correction{}, fitted_coulomb{}, device_chunk_mode{};
   bool device_nonlocal{};
   void* nonlocal_correlation{};
@@ -95,7 +97,10 @@ struct Owner {
     struct System { std::vector<int> ecp_terms; } value;
     const System& system() const { return value; }
   } provider;
-  Owner() { options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused; }
+  Owner() {
+    options.xc_execution_schedule = scf::ScfOptions::XcExecutionSchedule::DeviceFused;
+    xc_layout.fast_paths.graph_replay = CudaXcCapability::Qualified;
+  }
   unsigned configured_chunk_width() const { return width; }
   bool configured_replay_enabled() const { return true; }
   bool chunk() {
@@ -119,6 +124,14 @@ int main() {
       p.options.semilocal_exchange_scale = 0.73;
       assert(!p.chunk() && !p.replay());
     }
+  for (auto capability : {CudaXcCapability::Unavailable,
+                          CudaXcCapability::QualificationRequired,
+                          CudaXcCapability::Qualified}) {
+    Owner p;
+    p.xc_layout.fast_paths.graph_replay = capability;
+    assert(p.chunk());
+    assert(p.replay() == (capability == CudaXcCapability::Qualified));
+  }
   for (int excluded = 0; excluded != 7; ++excluded) {
     Owner p;
     if (excluded == 0) p.fitted_coulomb = true;
