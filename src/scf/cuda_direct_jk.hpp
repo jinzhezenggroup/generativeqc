@@ -10,13 +10,15 @@
 namespace generativeqc::scf {
 struct CudaDirectJkPlan;
 
-/** Persistent source/scratch sizes for the generic direct provider. No molecular
- * four-index ERI or derivative tensor is retained. CUDA module/context and
+/** Persistent source/scratch sizes for the direct provider. Ordinary plans do
+ * not retain molecular ERIs; an explicit optional lease may retain canonical
+ * full-range values. No derivative tensor is retained. CUDA module/context and
  * compiler-managed recurrence stack storage are outside these buffer counts.
  */
 struct CudaDirectJkDiagnostic {
   std::size_t batch_size{}, nbf{}, coordinates_per_item{};
   std::size_t device_bytes{}, host_bytes{}, host_preparation_bytes{};
+  std::size_t resident_value_count{}, resident_value_bytes{};
   unsigned derivative_order{};
   double screening_tolerance{};
   const char* schedule{"generic-contracted-eri-public-ao"};

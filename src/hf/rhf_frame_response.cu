@@ -81,7 +81,8 @@ class Owner {
  public:
   Owner(const core::System& system, const PhysicalReference& ref, int device,
         const RHFFrameResponseOptions& options, bool prepare, RHFFrameResponseResult& diagnostic,
-        std::size_t direct_budget, std::size_t arena_elements)
+        std::size_t direct_budget, std::size_t arena_elements, std::size_t resident_budget,
+        bool& resident_values_prepared)
       : n(ref.nbf),
         o(ref.nocc),
         v(n - o),
@@ -104,12 +105,32 @@ class Owner {
                     4 * direct_budget + 4 * posthf::source_capacity(system),
             "RHF exact provider exceeded admitted setup inventory");
     stats.direct_device_bytes = direct_stats.device_bytes;
+    if (resident_budget) {
+      const auto cache_started = Clock::now();
+      const auto cache_status =
+          scf::prepare_cuda_direct_jk_resident_values(direct.get(), resident_budget, detail);
+      stats.resident_jk_setup_seconds = seconds(cache_started);
+      if (cache_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
+          cache_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
+        status(cache_status, detail);
+      const auto cache_info = scf::cuda_direct_jk_plan_diagnostic(direct.get());
+      resident_values_prepared = cache_info.resident_value_bytes != 0;
+      stats.resident_jk_reason = detail;
+      stats.resident_jk_bytes = cache_info.resident_value_bytes;
+      stats.resident_jk_values = cache_info.resident_value_count;
+      stats.direct_device_bytes = cache_info.device_bytes;
+    }
+    stats.numeric_capacity_bytes -= resident_budget - stats.resident_jk_bytes;
     stats.linear_screening_available = scf::cuda_direct_jk_linear_available(direct.get());
     stats.applied_screening =
         stats.linear_screening_available ? options.orbital_screening_tolerance : 0.0;
     stats.requested_screening = options.orbital_screening_tolerance;
     stats.jk_timing_measured = profile;
-    if (profile) census.allocate(device, 2, stream);
+    if (profile) {
+      census.allocate(device, 2, stream);
+      jk_start.create(device);
+      jk_stop.create(device);
+    }
     storage.allocate(device, checked_add(checked_mul(14, nn), checked_add(arena_elements, 1)),
                      stream);
     error.allocate(device, 2, stream);
@@ -217,14 +238,17 @@ class Owner {
     require(finite(result), "nonfinite RHF frame output");
     return result;
   }
-  void potential(const double* d, double* out, double threshold = 0.0) {
+  void potential(const double* d, double* out, double threshold = 0.0, bool uncached = false) {
     // Profiling drains matrix-map work before measuring the integral consumer.
     // It is opt-in; ordinary response retains its asynchronous stream contract.
     if (profile) drain();
     const auto started = Clock::now();
-    const bool linear = stats.linear_screening_available && (profile || threshold > 0);
+    if (profile) jk_start.record(stream);
+    const bool linear = stats.linear_screening_available && (uncached || threshold > 0);
     auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
     spec.derivative_order = 0;
+    const bool census_available =
+        linear || scf::cuda_direct_jk_value_census_available(direct.get(), spec);
     std::string detail;
     if (linear)
       status(scf::enqueue_cuda_direct_jk_linear_device(direct.get(), spec, d, nn, j, k,
@@ -232,18 +256,25 @@ class Owner {
                                                        profile ? census.get() : nullptr, detail),
              detail);
     else
-      status(scf::enqueue_cuda_direct_jk_device(direct.get(), spec, d, nullptr, nn, j, k, nullptr,
-                                                error.get() + 1, detail),
+      status(scf::enqueue_cuda_direct_jk_device(
+                 direct.get(), spec, d, nullptr, nn, j, k, nullptr, error.get() + 1, detail,
+                 profile && census_available ? census.get() : nullptr),
              detail);
     combine_jk<<<blocks(nn), 256, 0, stream>>>(j, k, out, nn);
     audit<<<blocks(nn), 256, 0, stream>>>(out, nn, error.get());
     cuda_resource_check(cudaGetLastError());
+    if (profile) jk_stop.record(stream);
     ++stats.jk_actions;
+    if (stats.resident_jk_bytes && !linear) {
+      ++stats.resident_jk_actions;
+      stats.resident_jk_value_reads =
+          checked_add(stats.resident_jk_value_reads, stats.resident_jk_values);
+    }
     if (threshold > 0) ++stats.screened_jk_actions;
     if (profile) {
       std::array<std::uint64_t, 2> counts{};
       FailureDrain fence{stream};
-      if (linear) {
+      if (census_available) {
         cuda_resource_check(cudaMemcpyAsync(counts.data(), census.get(), sizeof(counts),
                                             cudaMemcpyDeviceToHost, stream));
         stats.d2h_bytes += sizeof(counts);
@@ -251,9 +282,15 @@ class Owner {
       drain();
       fence.stream = nullptr;
       const auto duration = seconds(started);
+      const auto device_duration = 1e-3 * jk_stop.elapsed_since(jk_start);
       stats.jk_seconds += duration;
+      stats.jk_device_seconds += device_duration;
+      if (stats.resident_jk_bytes && !linear) {
+        stats.resident_jk_seconds += duration;
+        stats.resident_jk_device_seconds += device_duration;
+      }
       if (threshold > 0) stats.screened_jk_seconds += duration;
-      if (linear) {
+      if (census_available) {
         ++stats.jk_census_actions;
         stats.jk_quartet_visits = checked_add(stats.jk_quartet_visits, counts[0]);
         stats.jk_eri_evaluations = checked_add(stats.jk_eri_evaluations, counts[1]);
@@ -327,7 +364,7 @@ class Owner {
       begin();
       upload(direction, d_rotation);
       auto dd = maps::run_density_direction_cuda(state);
-      potential(dd.density_direction, df, threshold);
+      potential(dd.density_direction, df, threshold, scalar);
       auto y = download(maps::run_orbital_action_cuda(state).orbital_action, o * v);
       finish();
       std::copy(y.begin(), y.end(), output.begin());
@@ -403,6 +440,7 @@ class Owner {
   runtime::OwnedCudaBuffer<double> storage;
   runtime::OwnedCudaBuffer<int> error;
   runtime::OwnedCudaBuffer<std::uint64_t> census;
+  runtime::OwnedCudaEvent jk_start, jk_stop;
   cudaStream_t stream{};
   maps::CudaState state;
   double *c{}, *h{}, *f{}, *rotation{}, *direction{}, *fseed{}, *cseed{}, *density_seed{}, *df{},
@@ -465,10 +503,11 @@ RHFFrameDFPreconditionerPreparation prepare_rhf_frame_df_preconditioner(
   return result;
 }
 
-RHFFrameResponseResult rhf_frame_response_cuda(
+static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     const core::System& system, const PhysicalReference& ref, std::span<const double> bar_f,
     std::span<const double> bar_c, int device, const RHFFrameResponseOptions& options,
-    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner) {
+    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner, bool& resident_values_prepared,
+    std::size_t& attempted_capacity) {
   const auto started = Clock::now();
   require(std::isfinite(options.orbital_screening_tolerance) &&
               options.orbital_screening_tolerance >= 0,
@@ -612,10 +651,13 @@ RHFFrameResponseResult rhf_frame_response_cuda(
       recycling = nullptr;
     }
   }
-  result.numeric_capacity_bytes = total;
+  const auto resident_budget = options.resident_jk_allowance(n, options.maximum_bytes - total);
+  result.numeric_capacity_bytes = checked_add(total, resident_budget);
+  attempted_capacity = result.numeric_capacity_bytes;
   result.operator_hash = maps::orbital_action_hash;
   runtime::CudaDeviceScope device_scope(device);
-  Owner owner(system, ref, device, options, prepare, result, direct_bound, arena);
+  Owner owner(system, ref, device, options, prepare, result, direct_bound, arena, resident_budget,
+              resident_values_prepared);
   // Cache identity includes the admitted execution policy. Optional provider
   // setup can reject prepared execution after cache admission; do not reuse or
   // publish an image under that now-stale policy. The scalar solve remains valid.
@@ -770,6 +812,46 @@ RHFFrameResponseResult rhf_frame_response_cuda(
   require(finite(result.gradient), "nonfinite RHF electronic gradient");
   if (recycling)
     result.recycle_published = recycling->capture(result.orbital_response.solution, exact_image);
+  return result;
+}
+RHFFrameResponseResult rhf_frame_response_cuda(
+    const core::System& system, const PhysicalReference& ref, std::span<const double> bar_f,
+    std::span<const double> bar_c, int device, const RHFFrameResponseOptions& options,
+    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner) {
+  bool resident_values_prepared = false;
+  std::size_t attempted_capacity = 0;
+  const auto started = Clock::now();
+  try {
+    return rhf_frame_response_cuda_attempt(system, ref, bar_f, bar_c, device, options,
+                                           std::move(preconditioner), resident_values_prepared,
+                                           attempted_capacity);
+  } catch (const std::bad_alloc&) {
+    if (!resident_values_prepared) throw;
+  }
+  // Numeric admission is not a reservation of available device memory. A
+  // successful optional lease can crowd out mandatory owner storage or later
+  // contraction/derivative temporaries. Unwind every owner before one complete
+  // exact retry, rather than moving that allocation failure to a later phase.
+  // Only allocation failure permits retry; unrelated CUDA/numerical faults
+  // propagate, including a pending execution fault behind an allocation OOM.
+  const auto pending = cudaGetLastError();
+  if (pending != cudaErrorMemoryAllocation) cuda_resource_check(pending);
+  auto recompute = options;
+  recompute.resident_jk_maximum_bytes = 0;
+  resident_values_prepared = false;
+  const auto discarded_seconds = seconds(started);
+  const auto discarded_capacity = attempted_capacity;
+  std::string retry_reason =
+      "resident ERI storage retired after allocation failure; exact recomputation";
+  // The transferred optional inverse died with the failed attempt. The exact
+  // retry uses the supported diagonal fallback instead of rebuilding it.
+  auto result =
+      rhf_frame_response_cuda_attempt(system, ref, bar_f, bar_c, device, recompute, nullptr,
+                                      resident_values_prepared, attempted_capacity);
+  result.numeric_capacity_bytes = std::max(result.numeric_capacity_bytes, discarded_capacity);
+  result.resident_jk_discarded_attempt = true;
+  result.resident_jk_retry_seconds = discarded_seconds;
+  result.resident_jk_reason.swap(retry_reason);
   return result;
 }
 }  // namespace generativeqc::hf
