@@ -45,8 +45,10 @@ def test_streamed_dft_cold_warm_and_geometry(
         energy_tolerance=1e-12,
         density_tolerance=1e-10,
     )
-    expected = pyscf_energy(calc, atoms, 1, functional)
-    changed_expected = pyscf_energy(calc, moved, 1, functional)
+    # The 12-atom reference deliberately exports 294,912 grid points. Bound
+    # this independent host oracle explicitly without changing the native grid.
+    expected = pyscf_energy(calc, atoms, 1, functional, max_grid_points=400_000)
+    changed_expected = pyscf_energy(calc, moved, 1, functional, max_grid_points=400_000)
     with calc.prepare_batch([atoms]) as batch:
         for geometry, oracle in (
             (None, expected),

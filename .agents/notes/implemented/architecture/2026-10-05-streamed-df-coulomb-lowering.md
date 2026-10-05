@@ -66,7 +66,27 @@ PySCF energy gate is `1e-8` Hartree with residual `<1e-9`.
 Reproduction scripts, source/binary hashes, verified ccache commands/stats and
 logs are retained under `.artifacts/1890-streamed-coulomb/` in
 `/data/jzzeng/qc-dft-streamed-coulomb-lowering-1890` on the editing host and n1.
-Endpoint timing and oracle results will be appended after qualification.
+The qualified library SHA-256 is
+`27a9e2bfbf0a84c2e8219dfc17672fd221ebb5b41f3928e55898dd0e72020dc7`.
+One binding occupies 1,864 host bytes in this build: full/tail streaming retains
+11,184 bytes (7,456 when no auxiliary tail exists).
+
+Both public streamed PBE/PBE0 tests pass, including cold, warm and changed
+geometry. Separate complete endpoint measurements retain configuration,
+preparation, two warm replays and geometry rebuilds; maximum independent PySCF
+energy error is `2.11e-12` Hartree. Every metric diagnostic remains streamed,
+rank 100, auxiliary width 8. The 294,912-point host oracle explicitly raises
+its export bound to 400,000; its initial default-limit rejection is retained.
+
+| Endpoint | Prepare (s) | Cold (s) | Warm (s) | Geometry (s) | Cold/warm/geometry Fock builds |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| PBE-RKS | 0.5262 | 2.9416 | 0.2950 | 2.9090 | 10 / 1 / 9 |
+| PBE0-RKS | 0.2765 | 4.9353 | 0.5194 | 4.3178 | 11 / 1 / 9 |
+
+Configuration takes 0.0023–0.0027 s. These are current complete energy timings,
+not a before/after performance claim. The physical metric path remains two
+raw source passes and two full-rank metric vector contractions per J build;
+the independent truncated-rank native gate exercises accumulation/padded panels.
 
 ## References and revisit conditions
 
