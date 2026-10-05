@@ -6,20 +6,25 @@
     "diagnostic-test-only",
     "negative-evidence",
     "needs-qualification",
+    "scientific-choice",
     "guarded-promotion-candidate",
     "already-default",
     "retire"
   ],
   "scope": {
     "audited_sources": [
-      "src/scf/types.hpp",
+      "python/generativeqc/_force_active_ao.py",
       "python/generativeqc/calculator.py",
+      "python/generativeqc/progressive.py",
       "python/generativeqc/resources_hf.py",
-      "python/generativeqc_compiler/tensor/cuda_plan.py",
       "python/generativeqc_compiler/tensor/cuda_execute.py",
-      "python/generativeqc/_force_active_ao.py"
+      "python/generativeqc_compiler/tensor/cuda_plan.py",
+      "src/cc/solver.hpp",
+      "src/hf/rhf_frame_response.hpp",
+      "src/scf/fock_build.hpp",
+      "src/scf/types.hpp"
     ],
-    "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current promotion classification. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
+    "contract": "Every control discovered by the checker is registered exactly once with an owner, rationale, revisit condition, and current classification. scientific-choice entries remain explicit because they select a different mathematical approximation or an explicitly declared source/target initialization policy; execution-only choices may be promoted only through evidence-bound guards. Registration is policy bookkeeping only and never constitutes performance or numerical promotion."
   },
   "entries": [
     {
@@ -554,6 +559,221 @@
       "revisit_condition": "Actual executed candidate/radial counts and independent full/SR/LR matrices, both spins, screened/dense domains, budgets and alias gates; device sanitizers and same-binary complete cold/warm/displaced/larger endpoint evidence.",
       "evidence": [
         "note:.agents/notes/proposed/2026-10-04-canonical-shared-rsh-values.md"
+      ]
+    },
+    {
+      "id": "scientific.density-fitting",
+      "classification": "scientific-choice",
+      "controls": [
+        "public-model:density-fitting"
+      ],
+      "owner_issues": [
+        5,
+        1080
+      ],
+      "sources": [
+        "python/generativeqc/calculator.py",
+        "include/generativeqc/generativeqc.h",
+        "docs/user/dft_density_fitting.md"
+      ],
+      "rationale": "Density fitting changes the finite numerical Hamiltonian through an auxiliary basis, Coulomb-metric factorization and threshold. The public default therefore remains direct/exact; selecting auto chooses a backend only after the caller has explicitly selected the density-fitted model.",
+      "revisit_condition": "Do not silently replace an exact/direct request with density fitting. Higher-level workflows may recommend or explicitly select DF only while preserving the auxiliary-basis and metric-threshold model identity.",
+      "evidence": [
+        "issue:#5",
+        "issue:#1080",
+        "docs:docs/user/dft_density_fitting.md"
+      ]
+    },
+    {
+      "id": "scientific.cosx-exchange",
+      "classification": "scientific-choice",
+      "controls": [
+        "public-model:cosx-exchange"
+      ],
+      "owner_issues": [
+        246
+      ],
+      "sources": [
+        "src/scf/fock_build.hpp",
+        "docs/reference/cosx_reference.md"
+      ],
+      "rationale": "Seminumerical COSX changes the exchange approximation and carries an explicit quadrature/model-error identity. It is not an interchangeable execution provider for exact exchange and therefore must not be selected merely from a performance crossover.",
+      "revisit_condition": "Keep COSX explicit in the mathematical Fock request. Automatic provider selection may choose only among implementations of the already selected COSX model, never between exact exchange and COSX.",
+      "evidence": [
+        "issue:#246",
+        "docs:docs/reference/cosx_reference.md"
+      ]
+    },
+    {
+      "id": "initial.preliminary-scf",
+      "classification": "needs-qualification",
+      "controls": [
+        "initial-guess:preliminary-scf"
+      ],
+      "owner_issues": [
+        1702,
+        192
+      ],
+      "sources": [
+        "python/generativeqc/calculator.py",
+        "python/generativeqc/initial_guess.py",
+        ".agents/notes/implemented/performance/2026-10-02-preliminary-scf.md"
+      ],
+      "rationale": "HF/LDA preliminary SCF can reduce target iterations and has profitable measured domains, but it adds a second solve and can change the SCF trajectory/root. Existing evidence is intentionally domain-specific, so normal target execution must not silently insert it.",
+      "revisit_condition": "Promote only through an explicit source/model/workload guard with complete source+target endpoint benefit, unchanged final target-state gates, root/state comparison and deterministic cold fallback. Otherwise retain the explicit initial-guess request.",
+      "evidence": [
+        "pr:#1702",
+        "issue:#192",
+        "note:.agents/notes/implemented/performance/2026-10-02-preliminary-scf.md"
+      ]
+    },
+    {
+      "id": "initial.basis-projection",
+      "classification": "scientific-choice",
+      "controls": [
+        "initial-guess:basis-projection"
+      ],
+      "owner_issues": [
+        189,
+        192
+      ],
+      "sources": [
+        "python/generativeqc/progressive.py",
+        "docs/user/basis_projection.md"
+      ],
+      "rationale": "Cross-basis projection explicitly introduces a source calculation and transports an occupied subspace into the target metric. The target Hamiltonian is rebuilt, but the seed can alter the SCF basin and complete retained evidence does not show a universal workflow speedup.",
+      "revisit_condition": "Do not enable projection implicitly from a target Calculator. A declared progressive workflow may choose it only with an explicit source model, metric/rank validation, target-state verification and cold fallback.",
+      "evidence": [
+        "pr:#229",
+        "issue:#189",
+        "issue:#192",
+        "docs:docs/user/basis_projection.md"
+      ]
+    },
+    {
+      "id": "cc.packed-diis",
+      "classification": "guarded-promotion-candidate",
+      "controls": [
+        "cc-option:packed_diis"
+      ],
+      "owner_issues": [
+        1902
+      ],
+      "sources": [
+        "src/cc/solver.hpp",
+        "docs/developer/rccsd_gpu.md",
+        ".agents/notes/implemented/performance/2026-10-05-rccsd-packed-diis.md"
+      ],
+      "rationale": "Restricted DIIS packing preserves the CC equations and materially lowers history capacity, but changes FP64 projection/summation order and has no demonstrated complete wall-time benefit. Its retained value is capacity admission, not latency.",
+      "revisit_condition": "Normal latency execution should keep full histories. Automatic packing may be promoted only as an identity-checked resource-budget fallback that proves the full-history route would exceed the admitted budget and preserves the existing symmetry, replay and numerical gates.",
+      "evidence": [
+        "issue:#1902",
+        "pr:#1927",
+        "note:.agents/notes/implemented/performance/2026-10-05-rccsd-packed-diis.md"
+      ]
+    },
+    {
+      "id": "response.profiling",
+      "classification": "diagnostic-test-only",
+      "controls": [
+        "response-option:profile_jk"
+      ],
+      "owner_issues": [
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp",
+        "docs/developer/response.md"
+      ],
+      "rationale": "Synchronized J/K timing and canonical-work census intentionally perturb execution for measurement and are observability surfaces, not production algorithm choices.",
+      "revisit_condition": "Retire or narrow the profiling switch when equivalent always-on low-overhead telemetry exists; never promote profiling itself into ordinary execution.",
+      "evidence": [
+        "issue:#1972",
+        "docs:docs/developer/response.md"
+      ]
+    },
+    {
+      "id": "response.orbital-screening",
+      "classification": "negative-evidence",
+      "controls": [
+        "response-option:orbital_screening_tolerance"
+      ],
+      "owner_issues": [
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp",
+        "benchmarks/results/rhf-orbital-response-20261004/README.md"
+      ],
+      "rationale": "Positive provisional orbital-response screening removes little work in the retained large endpoint and shows no meaningful response-time benefit while requiring an unscreened residual/refinement contract. Zero remains the justified default.",
+      "revisit_condition": "Reconsider only with a materially different screening/error model that removes substantial exact J/K work and passes complete force, exact-residual and endpoint gates across a declared workload domain.",
+      "evidence": [
+        "issue:#1972",
+        "benchmarks:benchmarks/results/rhf-orbital-response-20261004/README.md"
+      ]
+    },
+    {
+      "id": "response.canonical-bilinear-derivative",
+      "classification": "negative-evidence",
+      "controls": [
+        "response-option:bilinear_derivative"
+      ],
+      "owner_issues": [
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp",
+        "benchmarks/results/rhf-orbital-response-20261004/README.md"
+      ],
+      "rationale": "The one-pass canonical P:G'(D) experiment is numerically qualified at the retained endpoint but loses shell-level reuse: the measured nuclear two-electron phase regresses from 155.771 s to 258.643 s. The qualified two-pass shell schedule remains the default.",
+      "revisit_condition": "Do not retune or promote the unchanged canonical traversal. Revisit only after a materially different source/work decomposition restores shell/component reuse and demonstrates a complete-endpoint win.",
+      "evidence": [
+        "issue:#1972",
+        "benchmarks:benchmarks/results/rhf-orbital-response-20261004/README.md"
+      ]
+    },
+    {
+      "id": "response.df-preconditioning",
+      "classification": "negative-evidence",
+      "controls": [
+        "response-option:df_preconditioning"
+      ],
+      "owner_issues": [
+        1901,
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp",
+        "benchmarks/results/rhf-response-accelerators-1901/README.md"
+      ],
+      "rationale": "The stronger DF numerical inverse is exact-corrected but did not reduce representative large Z iterations or exact J/K action counts, so its setup/resource cost has no established large complete-endpoint benefit.",
+      "revisit_condition": "Reconsider only with a different preconditioner or workload guard that reproducibly reduces exact physical actions after charging setup, resource ownership and final audits.",
+      "evidence": [
+        "issue:#1901",
+        "issue:#1972",
+        "benchmarks:benchmarks/results/rhf-response-accelerators-1901/README.md"
+      ]
+    },
+    {
+      "id": "response.recycling",
+      "classification": "guarded-promotion-candidate",
+      "controls": [
+        "response-option:recycling"
+      ],
+      "owner_issues": [
+        1901,
+        1972
+      ],
+      "sources": [
+        "src/hf/rhf_frame_response.hpp",
+        "benchmarks/results/rhf-response-accelerators-1901/README.md"
+      ],
+      "rationale": "Strict same-operator recycling can reduce work on an identical retained frame, but representative large cold/warm frames miss the exact identity and show no general endpoint gain. Retained cache capacity is also charged before any possible hit.",
+      "revisit_condition": "Promote only behind exact reference/operator identity, bounded retained-resource admission and repeated complete-endpoint evidence for a real reuse domain; every miss must remain the ordinary exact solve.",
+      "evidence": [
+        "issue:#1901",
+        "issue:#1972",
+        "benchmarks:benchmarks/results/rhf-response-accelerators-1901/README.md"
       ]
     }
   ]
