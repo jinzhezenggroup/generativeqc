@@ -116,9 +116,7 @@ def _dependency_records(
     return records
 
 
-def _validate_dependency_records(
-    records: Any, source_root: Path
-) -> list[Path] | None:
+def _validate_dependency_records(records: Any, source_root: Path) -> list[Path] | None:
     if not isinstance(records, list):
         return None
     resolved: list[Path] = []
