@@ -131,6 +131,46 @@ assert loaded.probe() == 73
     )
 
 
+def test_cmake_launcher_discovers_runtime_import(tmp_path: Path) -> None:
+    _implib_target()
+    cmake = shutil.which("cmake")
+    readelf = shutil.which("readelf")
+    if cmake is None or readelf is None:
+        pytest.skip("CMake and ELF inspector required")
+
+    (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
+    (tmp_path / "cmake").symlink_to(ROOT / "cmake", target_is_directory=True)
+    (tmp_path / "probe.cpp").write_text(
+        'extern "C" int cudaDeviceSynchronize();\n'
+        'extern "C" int probe() { return cudaDeviceSynchronize(); }\n'
+    )
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(AutoImplibProbe LANGUAGES C CXX ASM)\n"
+        f'set(Python3_EXECUTABLE "{sys.executable}")\n'
+        f'include("{ROOT / "cmake/GenerativeQCCudaImplib.cmake"}")\n'
+        "add_library(probe SHARED probe.cpp)\n"
+        "generativeqc_attach_cuda_implib(probe)\n"
+    )
+    build = tmp_path / "build"
+    subprocess.run(
+        [cmake, "-S", str(tmp_path), "-B", str(build)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    subprocess.run(
+        [cmake, "--build", str(build), "-j2"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    dynamic = _run(readelf, "-d", str(build / "libprobe.so")).stdout
+    assert "Shared library: [libcudart" not in dynamic
+
+
 def test_unrelated_undefined_symbol_remains_fatal(tmp_path: Path) -> None:
     target = _implib_target()
     cc, cxx = (shutil.which(name) for name in ("cc", "c++"))
