@@ -85,11 +85,11 @@ class NcuExecutionEvidence:
         if not 8 <= len(revision) <= 40 or any(
             char not in "0123456789abcdef" for char in revision
         ):
-            raise ValueError("source_revision must be an 8-40 digit hexadecimal Git SHA")
+            raise ValueError(
+                "source_revision must be an 8-40 digit hexadecimal Git SHA"
+            )
         digest = self.report_sha256.lower()
-        if len(digest) != 64 or any(
-            char not in "0123456789abcdef" for char in digest
-        ):
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
             raise ValueError("report_sha256 must be a 64 digit hexadecimal digest")
         for name in (
             "theoretical_occupancy_fraction",
