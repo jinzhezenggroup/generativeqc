@@ -3,31 +3,6 @@
 from importlib import import_module
 from typing import TYPE_CHECKING
 
-from .ao import NativeAO, directional_ao_jets, jet_indices
-from .density_source import DensitySource, DensityStamp
-from .features import density_features, orbital_features, spin_densities
-from .grid import (
-    ExplicitGrid,
-    GridPolicy,
-    GridProfile,
-    GridSpec,
-    MolecularGrid,
-    grid_policy_provenance,
-    partition_weights,
-)
-from .nonlocal_integration import (
-    FixedDensityNonlocalCorrelation,
-    NonlocalGeometry,
-    NonlocalIntegral,
-)
-from .nonlocal_reference import (
-    assemble_nonlocal_potential_reference,
-    nonlocal_energy_density_reference,
-    nonlocal_energy_reference,
-    nonlocal_explicit_geometry_derivatives_reference,
-    nonlocal_feature_derivatives_reference,
-    nonlocal_kernel_matrix_reference,
-)
 from .xc_schedule import (
     DEVICE_FUSED,
     HOST_UNFUSED,
@@ -44,25 +19,78 @@ from .xc_schedule import (
 )
 
 if TYPE_CHECKING:
+    from .ao import NativeAO, directional_ao_jets, jet_indices
+    from .density_source import DensitySource, DensityStamp
+    from .features import density_features, orbital_features, spin_densities
+    from .grid import (
+        ExplicitGrid,
+        GridPolicy,
+        GridProfile,
+        GridSpec,
+        MolecularGrid,
+        grid_policy_provenance,
+        partition_weights,
+    )
+    from .nonlocal_integration import (
+        FixedDensityNonlocalCorrelation,
+        NonlocalGeometry,
+        NonlocalIntegral,
+    )
+    from .nonlocal_reference import (
+        assemble_nonlocal_potential_reference,
+        nonlocal_energy_density_reference,
+        nonlocal_energy_reference,
+        nonlocal_explicit_geometry_derivatives_reference,
+        nonlocal_feature_derivatives_reference,
+        nonlocal_kernel_matrix_reference,
+    )
     from .prepared import PreparedGrid, PreparedGridBatch
 
 
-def __getattr__(name: str) -> object:
-    """Activate prepared execution only when that public capability is requested.
+# Numerical/reference APIs keep their canonical owners but load only on demand.
+# Native AOT generators may import DFT graph modules without NumPy or runtime.
+_LAZY_EXPORTS = {
+    "NativeAO": "ao",
+    "directional_ao_jets": "ao",
+    "jet_indices": "ao",
+    "DensitySource": "density_source",
+    "DensityStamp": "density_source",
+    "density_features": "features",
+    "orbital_features": "features",
+    "spin_densities": "features",
+    "ExplicitGrid": "grid",
+    "GridPolicy": "grid",
+    "GridProfile": "grid",
+    "GridSpec": "grid",
+    "MolecularGrid": "grid",
+    "grid_policy_provenance": "grid",
+    "partition_weights": "grid",
+    "FixedDensityNonlocalCorrelation": "nonlocal_integration",
+    "NonlocalGeometry": "nonlocal_integration",
+    "NonlocalIntegral": "nonlocal_integration",
+    "assemble_nonlocal_potential_reference": "nonlocal_reference",
+    "nonlocal_energy_density_reference": "nonlocal_reference",
+    "nonlocal_energy_reference": "nonlocal_reference",
+    "nonlocal_explicit_geometry_derivatives_reference": "nonlocal_reference",
+    "nonlocal_feature_derivatives_reference": "nonlocal_reference",
+    "nonlocal_kernel_matrix_reference": "nonlocal_reference",
+    "PreparedGrid": "prepared",
+    "PreparedGridBatch": "prepared",
+}
 
-    Importing a grid specification executes this package initializer too. Keep
-    that metadata path independent of the prepared grid's CUDA/JIT adapters,
-    while forwarding explicit requests to the canonical class objects.
-    """
-    if name in ("PreparedGrid", "PreparedGridBatch"):
-        value = getattr(import_module(".prepared", __name__), name)
-        globals()[name] = value
-        return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+def __getattr__(name: str) -> object:
+    """Load requested numerical capabilities from their canonical modules."""
+    module = _LAZY_EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    value = getattr(import_module(f".{module}", __name__), name)
+    globals()[name] = value
+    return value
 
 
 def __dir__() -> list[str]:
-    """Preserve discovery of lazily exported prepared-grid classes."""
+    """Preserve discovery of all lazily exported numerical capabilities."""
     return sorted(set(globals()) | set(__all__))
 
 

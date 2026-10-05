@@ -1,0 +1,19 @@
+#!/bin/bash
+set -euo pipefail
+cd /data/jzzeng/qc-dft-indexed-density-1876
+export PATH=/data/jzzeng/qc-provider-1886-tools/cmake/bin:/data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin:/data/jzzeng/qc-provider-1886-tools/bin:/data/jzzeng/qc-provider-1886-tools/venv-rhf/bin:$PATH
+export CCACHE_DIR=/data/jzzeng/ccache CCACHE_BASEDIR=$PWD TMPDIR=/data/jzzeng/qc-provider-1886-tools/tmp
+export PYTHONPATH=python:.:tests/python OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+out=$PWD/.artifacts/1876-mapped-crossover
+ccache --version > "$out/cache-version.txt"
+ccache --show-stats > "$out/cache-before.txt"
+trap 'ccache --show-stats > "$out/cache-after.txt"' EXIT
+cmake --preset cuda-release-sm120 -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache -DGENERATIVEQC_ENABLE_STATIONARY_FORCE_AOT=OFF -DGENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT=OFF
+ninja -C build/cuda-release-sm120 -t commands generativeqc_dft_cuda_tests > "$out/commands.txt"
+python - <<'PY'
+from pathlib import Path
+commands=Path('.artifacts/1876-mapped-crossover/commands.txt').read_text().splitlines()
+compiles=[c for c in commands if ' -c ' in c and ('.cu' in c or '.cpp' in c)]
+assert compiles and all('ccache' in c for c in compiles)
+PY
+ninja -C build/cuda-release-sm120 -j 4 generativeqc_dft_cuda_tests

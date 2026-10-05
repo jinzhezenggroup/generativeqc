@@ -1,0 +1,14 @@
+Summary:
+  Hits:            2607 /  5132 (50.80 %)
+    Direct:        2391 /  5144 (46.48 %)
+    Preprocessed:   216 /  2752 (7.85 %)
+  Misses:          2525
+    Direct:        2753
+    Preprocessed:  2536
+  Uncacheable:     1799
+Primary storage:
+  Hits:            5743 / 10287 (55.83 %)
+  Misses:          4544
+  Cache size (GB): 1.67 /  5.00 (33.34 %)
+
+Use the -v/--verbose option for more details.
