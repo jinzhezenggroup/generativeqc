@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -11,10 +12,8 @@ from pathlib import Path
 
 import pytest
 
-EVIDENCE = (
-    Path(__file__).resolve().parents[2]
-    / "benchmarks/results/pbe0-derivative-work-20261005"
-)
+ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE = ROOT / "benchmarks/results/pbe0-derivative-work-20261005"
 
 
 @pytest.mark.parametrize("optimized", [False, True])
@@ -53,12 +52,19 @@ def test_angular_event_identity_and_duration_binding(
     else:
         pytest.fail("event projection missing from publication")
     manifest_path.write_text(json.dumps(manifest) + "\n")
+    # The copied script starts with tmp_path on sys.path. Bind the repository
+    # helpers explicitly, including when CI has no root entry in PYTHONPATH.
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join(
+        (str(ROOT), environment.get("PYTHONPATH", ""))
+    )
     result = subprocess.run(
         [sys.executable, *(["-O"] if optimized else []), str(tmp_path / "verify.py")],
         capture_output=True,
         text=True,
         check=False,
         timeout=30,
+        env=environment,
     )
     if mutation in ("valid", "reordered"):
         assert result.returncode == 0, result.stderr
