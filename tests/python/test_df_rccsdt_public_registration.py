@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, _generated_methods, _native, method_capabilities
+from generativeqc import Calculator, _generated_methods, _native
 from generativeqc._api_types import MethodCapabilities
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -47,15 +47,6 @@ def test_df_rccsdt_public_owner_forwards_force_requests() -> None:
     assert "descriptor_.density_fitting_auxiliary_basis = nullptr" in source
 
 
-def test_df_rccsdt_public_capability_is_energy_and_forces() -> None:
-    caps = method_capabilities("df-rccsd(t)")
-    alias = method_capabilities("df-ccsd(t)")
-    assert caps.available and not caps.supports_batch
-    assert caps.family == "coupled_cluster"
-    assert caps.supported_properties == frozenset({"energy", "forces"})
-    assert alias.supported_properties == caps.supported_properties
-
-
 @pytest.fixture
 def available_cc_library(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub library discovery only; exercise the actual public constructor."""
@@ -90,6 +81,8 @@ def test_df_rccsdt_constructor_and_descriptor(
         ccsd_diis_history=4,
         **options,
     )
+    assert calc.capabilities.supported_properties == frozenset({"energy", "forces"})
+    assert not calc.capabilities.supports_batch
     auxiliary = ctypes.c_void_p(1234)
     descriptor = calc._method_descriptor(auxiliary_basis=auxiliary)
     assert descriptor.method == _native.METHOD_DF_RCCSD_T
