@@ -1763,6 +1763,53 @@ int main() {
                            "source-backed CUDA RHF RI-J differs from oracle");
       require_matrix_close(source_k, rhf_jk.exchange, 3.0e-11,
                            "source-backed CUDA RHF RI-K differs from oracle");
+      // Full rank uses the eigenbasis projection/rotation bindings; a truncated
+      // metric uses donated charge accumulation and padded inverse-root views.
+      // Three auxiliaries force a tail, and changed nonsymmetric densities must
+      // overwrite all per-execution state in both prepared paths.
+      for (double cutoff : {1e-12, 0.1}) {
+        const auto reference_factor = generativeqc::scf::factor_density_fitting_metric(
+            integrals.metric, integrals.naux, cutoff);
+        const auto reference_tensor =
+            generativeqc::scf::orthonormalize_density_fitting_three_center(
+                integrals.three_center, integrals.nbf, reference_factor);
+        require(cutoff < 0.01 ? reference_factor.effective_rank == integrals.naux
+                              : reference_factor.effective_rank < integrals.naux,
+                "streamed Coulomb fixture must exercise both metric rank paths");
+        for (std::size_t pair_tile : {3U, 17U}) {
+          generativeqc::scf::CudaDensityFittingIntegralSource* replay_source = nullptr;
+          require(generativeqc::scf::create_cuda_density_fitting_integral_source(
+                      0, {orbital}, {auxiliary}, &replay_source, source_metrics, source_nbf,
+                      source_naux, source_detail) == GENERATIVEQC_STATUS_SUCCESS,
+                  source_detail.c_str());
+          generativeqc::scf::CudaDensityFittingJkPlan* replay_raw = nullptr;
+          require(generativeqc::scf::create_cuda_density_fitting_jk_plan_from_source(
+                      0, &replay_source, 1, source_nbf, source_naux, source_metrics, cutoff, 3,
+                      pair_tile, &replay_raw, source_diagnostics,
+                      source_detail) == GENERATIVEQC_STATUS_SUCCESS,
+                  source_detail.c_str());
+          CudaPlan replay_plan(replay_raw,
+                               &generativeqc::scf::destroy_cuda_density_fitting_jk_plan);
+          require(!replay_source && source_diagnostics[0].streamed &&
+                      source_diagnostics[0].effective_rank == reference_factor.effective_rank,
+                  "streamed Coulomb plan changed metric rank or source ownership");
+          for (unsigned replay = 0; replay < 2; ++replay) {
+            auto changed_density = rhf_density;
+            if (replay) {
+              for (std::size_t i = 0; i < changed_density.size(); ++i)
+                changed_density[i] = 0.7 * changed_density[i] + 0.002 * (i % 5);
+            }
+            const auto expected = reference_jk(reference_tensor, changed_density).first;
+            require(generativeqc::scf::execute_cuda_density_fitting_rhf_jk(
+                        replay_plan.get(), changed_density, source_j, source_k, source_detail,
+                        {true, false}) == GENERATIVEQC_STATUS_SUCCESS,
+                    source_detail.c_str());
+            require(source_k.empty(), "J-only replay must not materialize exchange");
+            require_matrix_close(source_j, expected, 3e-11,
+                                 "streamed metric binding differs from four-center RI oracle");
+          }
+        }
+      }
       // A full-tile generated plan retains its own device tensor while the
       // independent host-tensor plan and constrained source remain references.
       generativeqc::scf::CudaDensityFittingIntegralSource* resident_source = nullptr;

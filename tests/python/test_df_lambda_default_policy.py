@@ -32,7 +32,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     definition += (
         " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
-        "ccsd_batch_limit,derived_denominators}; }\n"
+        "ccsd_batch_limit,derived_denominators,packed_diis}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -70,7 +70,7 @@ struct DFCCSDTResult {
   unsigned diis_history;
   bool reduction;
   std::size_t batch_limit, ccsd_batch_limit;
-  bool derived_denominators;
+  bool derived_denominators, packed_diis;
 };
 """
         + declaration
@@ -106,7 +106,8 @@ int main() {
   auto explicit_matrix=run_df_ccsdt_native(context,system,system,descriptor,
                                          true,true,true,true,true,8);
   if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda ||
-     !ordinary.derived_denominators || !explicit_matrix.derived_denominators) return 3;
+     !ordinary.derived_denominators || !explicit_matrix.derived_denominators ||
+     ordinary.packed_diis || explicit_matrix.packed_diis) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame)) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
@@ -229,7 +230,7 @@ int main() {
        result.frame.df_preconditioning!=(inverse[0]=='1') ||
        bool(result.frame.recycling)!=(repeat[0]=='1') ||
        result.frame.orbital_screening_tolerance!=1e-7 || !result.frame.profile_jk ||
-       !result.frame.symmetric_polarization) return 24;
+       !result.frame.symmetric_polarization || result.packed_diis) return 24;
   }
   for(int index : {14,15,16}) for(const char* token : {"", "-1", "1junk", "1.0"}) {
     const char* bad[]{"endpoint","input","output","1","1","1","1","8",
@@ -237,7 +238,25 @@ int main() {
     bad[index]=token;
     try { (void)select(17,bad);return 25; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,18}) {
+  for(bool packed : {false,true})
+  for(const char* inverse : {"0","1"}) for(const char* repeat : {"0","1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","5",
+                          "4","3","1e-7","1","2","0","7",inverse,repeat,packed?"1":"0"};
+    const auto result=select(18,selected);
+    if(result.derived_denominators || result.packed_diis!=packed || result.diis_history!=4 ||
+       result.ccsd_batch_limit!=3 || result.frame.gmres.true_residual_every!=7 ||
+       result.frame.df_preconditioning!=(inverse[0]=='1') ||
+       bool(result.frame.recycling)!=(repeat[0]=='1') ||
+       result.frame.orbital_screening_tolerance!=1e-7 || !result.frame.profile_jk ||
+       !result.frame.symmetric_polarization) return 26;
+    if(select(17,selected).packed_diis) return 27;
+  }
+  for(const char* token : {"", "-1", "2", "1junk", "1.0"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0",token};
+    try { (void)select(18,bad);return 28; } catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,19}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }
@@ -290,7 +309,7 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     definition = re.sub(r"\s*=\s*[^,)]+", "", declaration).strip().removesuffix(";")
     definition += (
         " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
-        "retain_df_response,df_matrix_gemm,correlation_auxiliary}; }\n"
+        "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis}; }\n"
     )
     owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     call = "auto state =" + owner.split("auto state =", 1)[1].split(";", 1)[0] + ";\n"
@@ -311,6 +330,7 @@ struct RccsdNativeState {
   std::size_t batch;
   bool derived, retained, matrix;
   const core::System* auxiliary;
+  bool packed;
 };
 """
         + declaration
@@ -321,6 +341,7 @@ int probe() {
   core::System system, auxiliary;
   generativeqc_method_descriptor descriptor;
   const std::size_t recycle_bytes=123;
+  for(bool packed_diis : {false,true})
   for(bool derived_denominators : {false,true})
   for(bool forces : {false,true})
   for(bool df_matrix_gemm : {false,true})
@@ -330,11 +351,11 @@ int probe() {
         + r"""
     if(state.reference_plan || state.batch!=ccsd_batch_limit ||
        state.derived!=derived_denominators || state.retained!=forces ||
-       state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary) return 1;
+       state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary || state.packed!=packed_diis) return 1;
   }
   const auto ordinary=run_rccsd_native_state(execution,system,descriptor);
   if(ordinary.reference_plan || ordinary.batch!=8 || !ordinary.derived ||
-     ordinary.retained || !ordinary.matrix || ordinary.auxiliary) return 2;
+     ordinary.retained || !ordinary.matrix || ordinary.auxiliary || ordinary.packed) return 2;
   scf::CudaRhfBucketPlan resident;
   auto* reference=&resident;
   const auto explicit_state=run_rccsd_native_state(execution,system,descriptor,

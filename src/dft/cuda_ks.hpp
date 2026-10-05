@@ -17,7 +17,20 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/types.hpp"
 
+namespace generativeqc::tensor {
+struct PanelProductDiagnostic;
+}
+
 namespace generativeqc::dft {
+
+/** Optional lowering resources already reserved by the enclosing resource
+ * plan, in addition to the ordinary XC arena. Provider-internal device bytes
+ * are withheld from the numeric allocation ledger; explicit cache allocations
+ * remain charged to it. Zero budgets retain the ordinary generated binding.
+ * This declaration stays usable without CUDA headers for host inventory. */
+struct CudaXcPreparationBudget {
+  std::size_t device_bytes{}, host_bytes{};
+};
 
 /** Explicit component ownership for composition into #203. Provider/context
  * overhead and host quadrature preparation remain distinct from the native
@@ -181,13 +194,15 @@ class CudaKsPlan {
              std::size_t tile_points = 256,
              const scf::ResolvedFockBuild* range_correction = nullptr,
              nlc::Vv10Plan* nonlocal_correlation = nullptr,
-             nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive);
+             nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive,
+             CudaXcPreparationBudget xc_budget = {});
   CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis, const MolecularGrid& grid,
              const scf::ScfOptions& options, SemilocalFamily functional,
              std::size_t tile_points = 256,
              const scf::ResolvedFockBuild* range_correction = nullptr,
              nlc::Vv10Plan* nonlocal_correlation = nullptr,
-             nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive);
+             nlc::Vv10DensityDomain nonlocal_domain = nlc::Vv10DensityDomain::StrictPositive,
+             CudaXcPreparationBudget xc_budget = {});
   ~CudaKsPlan();
   CudaKsPlan(const CudaKsPlan&) = delete;
   CudaKsPlan& operator=(const CudaKsPlan&) = delete;
@@ -261,6 +276,9 @@ class CudaKsPlan {
                                        bool compute_weighted_density, VerifiedKsFinalState& state,
                                        std::string& detail);
   const CudaKsResources& resources() const noexcept;
+  /** Optional prepared-operation provenance; null means that the owner did
+   * not admit a separate preparation budget. No selection happens here. */
+  const tensor::PanelProductDiagnostic* density_provider_diagnostic() const noexcept;
   CudaKsTransfers transfers() const noexcept;
 
  private:

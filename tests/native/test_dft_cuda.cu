@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
@@ -20,6 +21,9 @@
 #include "runtime/cuda_resources.cuh"
 
 extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
+extern "C" void xc_density_provider_for_test(bool, bool);
+extern "C" void xc_density_materialize_for_test(cudaStream_t, const double*, std::size_t,
+                                                std::size_t, double*, int*);
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 
 namespace {
@@ -58,6 +62,7 @@ generativeqc::core::System system(unsigned l = 0, bool spherical = false) {
 
 /** Test owner deliberately allocates exactly the component request plus a
  * canary. Production ResourcePlan will own this arena together with J/SCF. */
+std::size_t density_provider_qualification_budget{};
 struct Fixture {
   cudaStream_t stream{};
   void* arena{};
@@ -87,6 +92,9 @@ struct Fixture {
       plan =
           std::make_unique<CudaXcPlan>(layout, basis.packed, grid.points(), grid.weights(), arena,
                                        allocation_bytes, stream, CudaMolecularGridView{}, maps);
+      if (density_provider_qualification_budget)
+        plan->prepare_density(generativeqc::runtime::strict_fp64_precision(), 10,
+                              density_provider_qualification_budget);
     } catch (...) {
       cleanup();
       throw;
@@ -846,6 +854,8 @@ void matrix_schedule_cases() {
 #include "dft_local_ao_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
 #include "dft_pbe0_ao_discovery_cases.cuh"
+#include "dft_density_provider_cases.cuh"
+#include "dft_density_provider_benchmark.cuh"
 // clang-format on
 }  // namespace
 
@@ -853,6 +863,14 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--density-provider") {
+      density_provider_cases();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--density-provider-benchmark") {
+      density_provider_benchmark();
+      return 0;
+    }
     pbe0_ao_discovery_cases();
     if (argc == 2 && std::string(argv[1]) == "--pbe0-local-ao") {
       std::cout << "CUDA scaled-PBE local-AO independent CPU E/V and budget gates passed\n";
