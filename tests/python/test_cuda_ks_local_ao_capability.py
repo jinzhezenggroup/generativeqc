@@ -110,7 +110,13 @@ int main(int argc, char** argv) {
 def test_prepared_density_preserves_local_ao_component_precision(
     tmp_path: Path,
 ) -> None:
+    """Run the real KS admission/accounting block with bounded provider facts."""
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    panel_header = (ROOT / "src/tensor/cuda_panel_product.hpp").read_text()
+    reservation_start = panel_header.index(
+        "  static constexpr std::size_t host_reservation"
+    )
+    reservation_end = panel_header.index(";", reservation_start) + 1
     prepare_start = source.index(
         "        const auto admitted_precision = resolve_cuda_ks_iteration_precision("
     )
@@ -134,20 +140,46 @@ def test_prepared_density_preserves_local_ao_component_precision(
     unit.write_text(
         r"""
 #include <cassert>
+#include "dft/cuda_ks.hpp"
 #include "dft/cuda_ks_precision.hpp"
+#include "runtime/bounded_workspace.hpp"
 using namespace generativeqc;
 using namespace generativeqc::dft;
+namespace generativeqc::tensor {
+struct PreparedPanelProduct {
+"""
+        + panel_header[reservation_start:reservation_end]
+        + r"""
+};
+struct PanelProductDiagnostic {
+  std::size_t matrix_bytes{}, provider_allowance{}, host_bytes{};
+};
+}
+std::size_t sum(std::size_t left, std::size_t right) {
+  return runtime::size_add(left, right, "test resource overflow");
+}
 struct Layout { bool mixed_density_contraction; };
 Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
 struct Xc {
   struct Binding { struct Precision { runtime::PrecisionDirective arithmetic; } precision; };
   Binding admitted{}, strict{{runtime::strict_fp64_precision()}};
   bool capable;
-  void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays) {
+  bool qualified{};
+  std::size_t reserved{};
+  tensor::PanelProductDiagnostic diagnostic{};
+  void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays,
+                       std::size_t budget) {
     assert(replays == 50);
     // A mapped layout must receive the narrowed strict directive at setup.
     assert(capable || directive.is_strict_fp64());
     admitted.precision.arithmetic = directive;
+    reserved = budget;
+    const bool selected = qualified && budget >= 160;
+    diagnostic = {selected ? 64U : 0U, selected ? 96U : 0U,
+                  tensor::PreparedPanelProduct::host_reservation};
+  }
+  const tensor::PanelProductDiagnostic* density_provider_diagnostic() const {
+    return reserved ? &diagnostic : nullptr;
   }
   const Binding& density_binding(runtime::PrecisionPhase phase) const {
     return phase == runtime::PrecisionPhase::Admitted ? admitted : strict;
@@ -158,7 +190,13 @@ int main() {
     for (bool nonlocal : {false, true})
       for (auto qualification : {CudaXcCapability::Unavailable,
                                  CudaXcCapability::QualificationRequired,
-                                 CudaXcCapability::Qualified}) {
+                                 CudaXcCapability::Qualified})
+      for (std::size_t host : {std::size_t{0},
+                               tensor::PreparedPanelProduct::host_reservation - 1,
+                               tensor::PreparedPanelProduct::host_reservation,
+                               tensor::PreparedPanelProduct::host_reservation + 1})
+      for (std::size_t device : {std::size_t{0}, std::size_t{1}, std::size_t{160}})
+      for (bool qualified : {false, true}) {
     CudaXcFastPathCapabilities formal;
     formal.mixed_density_precision = qualification;
     const auto precision_schedule = resolve_cuda_ks_precision_schedule(
@@ -168,12 +206,25 @@ int main() {
                                qualification == CudaXcCapability::Qualified;
     Layout xc_layout{capable};
     Xc owner{{}, {{runtime::strict_fp64_precision()}}, capable};
+    owner.qualified = qualified;
     auto* xc = &owner;
     struct { std::uint64_t max_iterations = 50; } options;
+    const CudaXcPreparationBudget xc_budget{device, host};
+    CudaKsResources resource;
+    resource.xc_device_bytes = 1000;
+    resource.provider_device_bytes = 2000;
+    resource.retained_host_numeric_bytes = 3000;
 """
         + source[prepare_start:prepare_end]
         + r"""
     assert(owner.admitted.precision.arithmetic.is_strict_fp64() == !mixed_density);
+    const bool admitted = host >= tensor::PreparedPanelProduct::host_reservation;
+    assert(owner.reserved == (admitted ? device : 0));
+    const bool selected = admitted && device >= 160 && qualified;
+    assert(resource.xc_device_bytes == 1000 + (selected ? 64 : 0));
+    assert(resource.provider_device_bytes == 2000 + (selected ? 96 : 0));
+    assert(resource.retained_host_numeric_bytes ==
+           3000 + (admitted && device ? tensor::PreparedPanelProduct::host_reservation : 0));
     for (bool strict_refinement : {false, true}) {
       bool pending_mixed_coulomb{}, pending_mixed_density{};
 """
