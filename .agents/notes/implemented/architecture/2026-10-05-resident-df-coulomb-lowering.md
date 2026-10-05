@@ -120,3 +120,7 @@ panel/beta-update contracts migrate through the same shared boundary.
 - `tests/python/test_df_coulomb_lowering.py`
 - `tests/native/test_cuda_vector_contraction.cpp`
 - `tests/python/test_dft_df_public.py`
+
+The subsequent [streamed metric migration](2026-10-05-streamed-df-coulomb-lowering.md)
+resolves the streamed GEMV debt above with explicit SSA seed donation and padded
+physical views; the resident decision and incumbent recipes remain unchanged.

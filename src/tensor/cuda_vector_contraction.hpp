@@ -43,8 +43,9 @@ class CudaVectorContraction {
   CudaVectorContraction(const CudaVectorContraction&) = delete;
   CudaVectorContraction& operator=(const CudaVectorContraction&) = delete;
 
-  /** Borrow disjoint contiguous FP64 tensors until stream completion. Capture
-   * records device work only; its enclosing owner accounts physical replays. */
+  /** Borrow validated FP64 views until stream completion. The output is
+   * disjoint from the product inputs; beta==1 explicitly reads its donated seed.
+   * Capture records device work only; the enclosing owner accounts replays. */
   generativeqc_status launch(const double* matrix, const double* vector, double* output) const;
   const Diagnostic& diagnostic() const noexcept { return diagnostic_; }
   const ContractionRequest& resolved() const noexcept { return resolved_; }

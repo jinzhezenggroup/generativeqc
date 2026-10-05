@@ -21,6 +21,7 @@ def _definition(source: str, marker: str) -> str:
 
 
 STUBS = r"""
+#include <array>
 #include <cassert>
 #include <cstddef>
 #include <cstdlib>
@@ -35,7 +36,7 @@ using cudaStream_t = void*;
 enum cudaError_t { cudaSuccess, cudaErrorMemoryAllocation, cudaErrorUnknown };
 int current_device = 1, owner_device = 0, allocations = 0, queries = 0, selections = 0;
 int synchronizations = 0, source_destroys = 0, stream_destroys = 0;
-int binding_destroys = 0;
+int binding_destroys = 0, expected_binding_destroys = 0, binding_layout = 0;
 bool stream_alive = false, blas_alive = false, query_fails = false;
 struct PreparedBinding {
   ~PreparedBinding() {
@@ -63,7 +64,7 @@ cudaError_t cudaStreamSynchronize(cudaStream_t stream) {
 cudaError_t cudaStreamDestroy(cudaStream_t stream) {
   assert(stream && stream_alive && current_device == owner_device && !allocations);
   assert(source_destroys == 1);
-  assert(binding_destroys == 2 && !blas_alive);
+  assert(binding_destroys == expected_binding_destroys && !blas_alive);
   stream_alive = false;
   ++stream_destroys;
   return cudaSuccess;
@@ -72,7 +73,7 @@ void cusolverDnDestroyParams(void*) {}
 void cusolverDnDestroy(void*) {}
 void cublasDestroy(void*) {
   assert(current_device == owner_device && stream_alive && blas_alive);
-  assert(binding_destroys == 2);
+  assert(binding_destroys == expected_binding_destroys);
   blas_alive = false;
 }
 namespace generativeqc::runtime {
@@ -118,8 +119,24 @@ std::shared_ptr<cc::DFSourceState> create_state(bool coefficients = true) {
   state->plan->integral_source = reinterpret_cast<void*>(2);
   state->plan->blas = reinterpret_cast<void*>(3);
   stream_alive = blas_alive = true;
-  state->plan->charge_contraction = std::make_unique<PreparedBinding>();
-  state->plan->coulomb_contraction = std::make_unique<PreparedBinding>();
+  if (binding_layout == 0) {
+    state->plan->charge_contraction = std::make_unique<PreparedBinding>();
+    state->plan->coulomb_contraction = std::make_unique<PreparedBinding>();
+    expected_binding_destroys = 2;
+  } else {
+    state->plan->metric_project = std::make_unique<PreparedBinding>();
+    expected_binding_destroys = 1;
+    // Partial preparation must safely destroy the first binding after failure.
+    if (binding_layout != 3) {
+      state->plan->metric_rotate = std::make_unique<PreparedBinding>();
+      const std::size_t panels = binding_layout == 1 ? 1 : 2;
+      for (std::size_t i = 0; i != panels; ++i) {
+        state->plan->metric_charge[i] = std::make_unique<PreparedBinding>();
+        state->plan->metric_potential[i] = std::make_unique<PreparedBinding>();
+      }
+      expected_binding_destroys = 2 + 2 * panels;
+    }
+  }
   if (coefficients) state->coefficients.allocate(owner_device, 4, state->plan->stream);
   return state;
 }
@@ -132,15 +149,17 @@ void consume_last(std::shared_ptr<cc::DFSourceState> source, int failure) {
   if (failure == 1) throw std::runtime_error("callback after device scope");
 }
 int main(int argc, char** argv) {
-  assert(argc == 2);
+  assert(argc == 3);
   const int mode = std::atoi(argv[1]);
+  binding_layout = std::atoi(argv[2]);
+  assert(binding_layout >= 0 && binding_layout <= 3);
   static_assert(noexcept(cc::PlanDelete{}(nullptr)));
   static_assert(std::is_nothrow_destructible_v<cc::DFSourceState>);
   for (int caller_device : {0, 1}) {
     owner_device = 1 - caller_device;
     current_device = caller_device;
     allocations = queries = selections = synchronizations = source_destroys = stream_destroys = 0;
-    binding_destroys = 0;
+    binding_destroys = expected_binding_destroys = 0;
     stream_alive = blas_alive = query_fails = false;
     if (mode == 6) {
       cc::PlanDelete{}(nullptr);
@@ -179,7 +198,7 @@ int main(int argc, char** argv) {
       }
     }
     assert(!allocations && !stream_alive && source_destroys == 1 && stream_destroys == 1);
-    assert(binding_destroys == 2 && !blas_alive);
+    assert(binding_destroys == expected_binding_destroys && !blas_alive);
     assert(synchronizations == (mode == 7 || mode == 8 ? 0 : 1));
     if (mode != 8 && current_device != caller_device) {
       std::cerr << "retained DF source teardown changed caller device " << caller_device
@@ -206,8 +225,14 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     # Keep the actual release body as well as the CC owner/deleter. Only unused
     # plan data and CUDA APIs are mocked; do not model their device transitions.
     fields = sorted(set(re.findall(r"plan\.(\w+)", release)) - {"device_id"})
-    owned_fields = {"charge_contraction", "coulomb_contraction"}
-    assert owned_fields.issubset(fields)
+    owned_fields = {
+        "charge_contraction",
+        "coulomb_contraction",
+        "metric_project",
+        "metric_rotate",
+    }
+    array_fields = {"metric_charge", "metric_potential"}
+    assert (owned_fields | array_fields).issubset(fields)
     unit = STUBS + _definition(resources, "inline void cuda_resource_check(")
     for marker in (
         "class CudaDeviceScope",
@@ -219,6 +244,8 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     unit += "int device_id{-1};\n" + "".join(
         f"std::unique_ptr<PreparedBinding> {field};\n"
         if field in owned_fields
+        else f"std::array<std::unique_ptr<PreparedBinding>, 2> {field};\n"
+        if field in array_fields
         else f"void* {field}{{}};\n"
         for field in fields
     )
@@ -277,9 +304,14 @@ def state_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "failed-device-query",
     ),
 )
-def test_retained_source_restores_caller_device(state_probe: Path, mode: int) -> None:
+@pytest.mark.parametrize(
+    "bindings", range(4), ids=("resident", "streamed-full", "streamed-tail", "partial")
+)
+def test_retained_source_restores_caller_device(
+    state_probe: Path, mode: int, bindings: int
+) -> None:
     result = subprocess.run(
-        [str(state_probe), str(mode)],
+        [str(state_probe), str(mode), str(bindings)],
         check=False,
         capture_output=True,
         text=True,
