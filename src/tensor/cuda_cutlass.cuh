@@ -15,6 +15,11 @@
 
 namespace generativeqc::tensor {
 
+#if defined(GENERATIVEQC_TEST_HOOKS)
+// Exercise cleanup after CUDA has had an opportunity to retain module storage.
+inline thread_local bool cutlass_fail_after_module_load_for_test = false;
+#endif
+
 /** Optional AOT SIMT contraction owner. The canonical request defines science;
  * a fixed scalar-aligned kernel family implements its proven matrix views.
  * No tensor-core mode, split-K, packing, heuristic or JIT is introduced.
@@ -168,6 +173,10 @@ class CudaCutlassContraction {
     std::copy(artifact.begin(), artifact.end(), provenance_.artifact_identity.begin());
     module_failed_ = true;
     prepared->load();
+#if defined(GENERATIVEQC_TEST_HOOKS)
+    if (cutlass_fail_after_module_load_for_test)
+      throw std::runtime_error("injected failure after CUTLASS module loading");
+#endif
     generativeqc_tensor::cuda_check(cudaMemGetInfo(&after, &total));
     const auto growth = before > after ? before - after : 0;
     if (growth > std::numeric_limits<std::size_t>::max() - observed_module_bytes_) {
