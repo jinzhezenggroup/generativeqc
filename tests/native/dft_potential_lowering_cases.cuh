@@ -97,7 +97,7 @@ void potential_lowering_cases() {
 /** Complete native fixed-density E/Vxc endpoints. These synthetic basis/grid
  * domains expose the actual AO/density/point/potential cost composition, but
  * do not by themselves establish a production molecule/SCF promotion profile.
- * Every warm sample includes changed-input H2D and explicit E/Vxc exports.
+ * Every warm sample includes density H2D and explicit E/Vxc exports.
  */
 void potential_lowering_benchmark() {
   for (unsigned shells : {8U, 18U}) {

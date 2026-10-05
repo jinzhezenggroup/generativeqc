@@ -61,6 +61,28 @@ energy directional derivatives, spin/functional/tail domains, resource fallback,
 changed-input graph replay, local maps, response and exact arena canaries.
 Detailed measured outputs are retained under ignored `.artifacts/1890-vxc/`.
 
+The initial native PBE endpoint comparison on Slurm node1 / RTX 5090 used two
+synthetic Cartesian bases, 2304 points, 128-point tiles, and five warm samples
+after one cold call. Timing includes AO, density, point XC, packing, Vxc,
+explicit density H2D, and E/Vxc exports. These are fixed-density XC endpoints,
+not complete SCF or forces.
+
+| AO | Generated warm median | Rank-2k warm median | Six-call summands |
+|---:|---:|---:|---:|
+| 82 | 0.003152967 s | 0.003813108 s | 94,086,144 |
+| 182 | 0.003617064 s | 0.004280671 s | 460,422,144 |
+
+Each route submitted 108 spin/tile products over all six evaluations. Maximum
+Vxc error against the independent CPU integrator was below 1.6e-14. Rank-2k was
+18–21% slower on these endpoints, in addition to provider preparation (12.3 ms
+for the first library context and 0.168 ms for the later one). This is retained
+negative evidence: keep generated execution as the production incumbent.
+
+The complete legacy native suite also exposed a stale test-message check:
+precision rejection now says "layout", while the old test required "functional".
+The test now checks the stable precision-rejection prefix; admission and the
+last-good-result assertions remain unchanged.
+
 ## Revisit when
 
 A representative complete XC/KS endpoint profile demonstrates a benefit and
