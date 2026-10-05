@@ -74,6 +74,9 @@ int cudaStreamSynchronize(cudaStream_t s) {
 }
 void cuda_check(int error) { if(error)throw std::runtime_error("injected CUDA failure"); }
 namespace generativeqc_tensor { struct DeviceAllocationError : std::bad_alloc {}; }
+// The live CudaState borrows this table; Lambda never dereferences it here.
+namespace generativeqc::tensor { class PreparedContractions; }
+namespace tensor = generativeqc::tensor;
 struct TrackingVector : std::vector<double> {
   using std::vector<double>::vector;
   TrackingVector()=default;
