@@ -336,6 +336,46 @@ static __global__ void publish_batch_scaled_contraction(T* output, const T* scal
   }
 }
 
+/** Execute the compiler's existing scalar helper at every increasing-k step.
+ * The helper owns rounding and input/update checks. Invalid intermediate work
+ * cannot be hidden by later cancellation or a zero publication weight. */
+template <class Step>
+static __global__ void generated_checked_contraction(
+    const double* left, const double* right, const double* scale, double* output, std::size_t count,
+    std::size_t rows, std::size_t columns, std::size_t reduction_extent, std::size_t left_stride,
+    std::size_t right_stride, std::size_t output_stride, bool transpose_left, bool transpose_right,
+    int* error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto batch = index / (rows * columns), row = index / columns % rows,
+               column = index % columns;
+    double value = 0;
+    bool valid = true;
+    for (std::size_t reduction = 0; reduction < reduction_extent; ++reduction) {
+      const auto ai =
+          batch * rows * reduction_extent +
+          (transpose_left ? reduction * left_stride + row : row * left_stride + reduction);
+      const auto bi =
+          batch * reduction_extent * columns +
+          (transpose_right ? column * right_stride + reduction : reduction * right_stride + column);
+      if (!Step::update(left[ai], right[bi], value)) {
+        valid = false;
+        break;
+      }
+    }
+    if (valid && scale) {
+      double published = 0;
+      valid = Step::publish(scale[batch], value, published);
+      value = published;
+    }
+    if (!valid) {
+      atomicCAS(error, 0, 1);
+      value = 0;
+    }
+    output[batch * rows * columns + row * output_stride + column] = value;
+  }
+}
+
 /** Prepared projection of the canonical compiler requests for one AOT stage.
  * Each stage has at most a full batch and a tail batch. All descriptor storage,
  * validation and provider setup occur before execution; replay only selects an
@@ -384,6 +424,10 @@ class PreparedContractions {
       throw std::invalid_argument("native contraction batch-scale table bound");
     for (std::size_t slot = 0; slot < requests.size(); ++slot) {
       requests[slot].validate_batch_scale(batch_scales[slot]);
+      if (!requests[slot].checked_update_identity.empty() &&
+          algorithms[slot] != ContractionAlgorithm::GeneratedOrdered)
+        throw ContractionPreparationUnavailable(
+            "provider does not implement ordered scalar checks");
       if (batch_scales[slot].rank && algorithms[slot] != ContractionAlgorithm::GeneratedOrdered &&
           algorithms[slot] != ContractionAlgorithm::PedanticBlas)
         throw ContractionPreparationUnavailable("provider does not implement weighted publication");
@@ -557,7 +601,7 @@ class PreparedContractions {
     calls_ = summands_ = nullptr;
   }
 
-  template <class T>
+  template <class T, class CheckedStep = void>
   void execute(std::size_t slot, std::size_t o, std::size_t v, std::size_t q, cudaStream_t stream,
                const T* a, const T* b, T* output, int* error,
                const T* batch_scale = nullptr) const {
@@ -578,6 +622,16 @@ class PreparedContractions {
     if (!selected || slot >= selected->requests.size())
       throw std::logic_error("native contraction shape changed; prepare again");
     const auto& r = selected->requests[slot];
+    if constexpr (std::is_void_v<CheckedStep>) {
+      if (!r.checked_update_identity.empty())
+        throw std::invalid_argument("checked contraction requires its compiler scalar helper");
+    } else {
+      static_assert(std::is_same_v<T, double>);
+      if (r.checked_update_identity.empty() ||
+          r.checked_update_identity != CheckedStep::update_identity ||
+          r.checked_publication_identity != CheckedStep::publication_identity)
+        throw std::invalid_argument("scalar helper differs from the prepared contraction");
+    }
     if (bool(selected->batch_scales[slot].rank) != bool(batch_scale))
       throw std::invalid_argument("contraction batch-scale input differs from prepared region");
     // Semantic work remains valid for both matrix and general affine layouts.
@@ -628,7 +682,12 @@ class PreparedContractions {
     // The matrix layout implements the original einsum: C^T = op(B)^T op(A)^T.
     // Batches are explicitly materialized by TensorIR, including broadcasts.
     if (selected->algorithms[slot] == ContractionAlgorithm::GeneratedOrdered) {
-      if (batch_scale) {
+      if constexpr (!std::is_void_v<CheckedStep>) {
+        generated_checked_contraction<CheckedStep>
+            <<<generativeqc_tensor::blocks(r.output_elements(), 128), 128, 0, stream>>>(
+                a, b, batch_scale, output, r.output_elements(), r.m, r.n, r.k, lda, ldb, ldc,
+                r.a_trans == 'T', r.b_trans == 'T', error);
+      } else if (batch_scale) {
         generated_batch_scaled_contraction<<<generativeqc_tensor::blocks(r.output_elements(), 128),
                                              128, 0, stream>>>(
             a, b, batch_scale, output, r.output_elements(), r.m, r.n, r.k, lda, ldb, ldc,

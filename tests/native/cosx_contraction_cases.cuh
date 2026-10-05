@@ -1,3 +1,5 @@
+#pragma once
+
 namespace cosx_contraction_test {
 void check(cudaError_t status) {
   if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));

@@ -22,7 +22,7 @@ template <std::size_t Sites>
 class PreparedContractionSites {
  public:
   static_assert(Sites > 0 && Sites <= 8);
-  static constexpr std::size_t host_reservation = (64U + 16U * Sites) << 10;
+  static constexpr std::size_t host_reservation = contraction_sites_host_reservation(Sites);
 
   template <std::size_t Offers>
   PreparedContractionSites(const std::array<ContractionSite<Offers>, Sites>& sites,
@@ -73,6 +73,9 @@ class PreparedContractionSites {
           offer.host_bytes = host_reservation;
           if (offer.provider == "generated.cuda") {
             incumbent = i;
+          } else if (!site.resolved.checked_update_identity.empty()) {
+            offer.rejection = "provider lacks the ordered scalar check recipe";
+            rejection = offer.rejection;
           } else if (offer.provider == "cublas") {
             offer.provider_bytes = CudaContractionContext::kProviderAllowance;
             if (!qualified)
@@ -136,6 +139,27 @@ class PreparedContractionSites {
 
   void execute(std::size_t slot, cudaStream_t stream, const double* a, const double* b,
                double* output, int* error, const double* batch_scale = nullptr) {
+    execute_bound<void>(slot, stream, a, b, output, error, batch_scale);
+  }
+
+  /** The compiler binds the scalar program hashes during preparation. Replay
+   * supplies that same generated helper; ordinary execution cannot bypass it. */
+  template <class Step>
+  void execute_checked(std::size_t slot, cudaStream_t stream, const double* a, const double* b,
+                       double* output, int* error, const double* batch_scale = nullptr) {
+    execute_bound<Step>(slot, stream, a, b, output, error, batch_scale);
+  }
+  const auto& diagnostics() const noexcept { return diagnostics_; }
+  std::size_t provider_bytes() const noexcept { return provider_bytes_; }
+  std::size_t retained_provider_bytes() const noexcept { return context_.retained_bytes(); }
+  int provider_version() const noexcept { return context_.provider_version(); }
+  int runtime_version() const noexcept { return context_.runtime_version(); }
+  double prepare_seconds() const noexcept { return prepare_seconds_; }
+
+ private:
+  template <class Step>
+  void execute_bound(std::size_t slot, cudaStream_t stream, const double* a, const double* b,
+                     double* output, int* error, const double* batch_scale) {
     if (slot >= Sites) throw std::out_of_range("unknown prepared contraction site");
     auto& diagnostic = diagnostics_[slot];
     const auto next_calls = runtime::lowering_add(diagnostic.calls, 1);
@@ -147,20 +171,12 @@ class PreparedContractionSites {
     const auto next_publications = runtime::lowering_add(
         diagnostic.publication_passes,
         diagnostic.batch_scale.rank && diagnostic.candidate.provider == "cublas" ? 1 : 0);
-    table_.execute(slot, 1, 1, 1, stream, a, b, output, error, batch_scale);
+    table_.template execute<double, Step>(slot, 1, 1, 1, stream, a, b, output, error, batch_scale);
     diagnostic.calls = next_calls;
     diagnostic.summands = next_work;
     diagnostic.scaled_elements = next_scaled;
     diagnostic.publication_passes = next_publications;
   }
-  const auto& diagnostics() const noexcept { return diagnostics_; }
-  std::size_t provider_bytes() const noexcept { return provider_bytes_; }
-  std::size_t retained_provider_bytes() const noexcept { return context_.retained_bytes(); }
-  int provider_version() const noexcept { return context_.provider_version(); }
-  int runtime_version() const noexcept { return context_.runtime_version(); }
-  double prepare_seconds() const noexcept { return prepare_seconds_; }
-
- private:
   CudaContractionContext context_;
   PreparedContractions table_;
   std::array<ContractionSiteDiagnostic, Sites> diagnostics_;
