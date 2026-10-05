@@ -36,6 +36,7 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "void CudaXcPlan::publish_potential_work(",
             "void CudaXcPlan::enqueue_impl(",
             "const CudaXcDensityBinding& CudaXcPlan::density_binding(",
+            "const tensor::PreparedPanelProduct* CudaXcPlan::density_execution_provider(",
         )
     )
     source = r"""
@@ -46,6 +47,7 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <cstdlib>
 #include <limits>
 #include <memory>
+#include <tuple>
 #include <stdexcept>
 #include <vector>
 #include "generativeqc/generativeqc.hpp"
@@ -67,7 +69,11 @@ struct DeviceAllocationError : std::bad_alloc {};
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 }
 using runtime::PrecisionPhase;
-struct CudaXcDensityBinding {};
+struct CudaXcDensityBinding { runtime::NativeLoweringPrecision precision; };
+namespace tensor {
+struct PreparedPanelProduct { bool enabled() const { return true; } };
+}
+const void *expected_density_provider{}, *expected_potential_binding{};
 struct Layout {
   std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2};
   bool local_ao{}, response{};
@@ -76,7 +82,12 @@ struct Layout {
 struct Capabilities { bool mixed_density_contraction{true}; };
 Capabilities cuda_xc_execution_capabilities(const Layout&) { return {}; }
 namespace cuda_xc_detail {
-template <class... T> void enqueue(T...) { ++bodies; }
+template <class... T> void enqueue(T... args) {
+  auto values = std::tie(args...);
+  assert(std::get<sizeof...(T)-2>(values) == expected_density_provider);
+  assert(std::get<sizeof...(T)-1>(values) == expected_potential_binding);
+  ++bodies;
+}
 }
 struct CudaXcPlan {
   Layout layout_;
@@ -92,9 +103,12 @@ struct CudaXcPlan {
   std::vector<std::size_t> ao_offsets_{0, 2, 2, 3};
   const std::size_t* ao_ids_{};
   std::unique_ptr<int> potential_binding_;
+  std::unique_ptr<tensor::PreparedPanelProduct> density_provider_;
+  std::unique_ptr<CudaXcDensityBinding> provider_density_binding_;
   std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
   std::vector<int> local_density_launchers_;
   const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
+  const tensor::PreparedPanelProduct* density_execution_provider(PrecisionPhase) const;
   void check_device() const {}
   void publish_submitted_generation(std::uint64_t);
   void publish_potential_work();
@@ -104,12 +118,21 @@ struct CudaXcPlan {
 """
     driver = r"""
 int main(int argc, char** argv) {
-  assert(argc == 5);
+  assert(argc == 6);
   const bool replay = std::atoi(argv[1]), local = std::atoi(argv[2]);
   const int mode = std::atoi(argv[3]);
   CudaXcPlan plan;
   plan.layout_.spins = std::atoi(argv[4]);
   plan.layout_.local_ao = local;
+  for (auto* table : {&plan.strict_density_, &plan.admitted_density_})
+    for (auto& binding : *table) binding.precision.arithmetic = runtime::strict_fp64_precision();
+  plan.potential_binding_ = std::make_unique<int>(17);
+  expected_potential_binding = plan.potential_binding_.get();
+  if (std::atoi(argv[5])) {
+    plan.density_provider_ = std::make_unique<tensor::PreparedPanelProduct>();
+    plan.provider_density_binding_ = std::make_unique<CudaXcDensityBinding>();
+  }
+  expected_density_provider = local ? nullptr : plan.density_provider_.get();
   const auto initial = mode == 2 ? std::numeric_limits<std::uint64_t>::max() : 0;
   plan.transfers_.potential_calls = initial;
   failure = mode == 1;
@@ -150,6 +173,7 @@ int main(int argc, char** argv) {
     return binary
 
 
+@pytest.mark.parametrize("density_provider", (False, True))
 @pytest.mark.parametrize("spins", (1, 2))
 @pytest.mark.parametrize(
     "mode", range(4), ids=("success", "query-failure", "overflow", "capture")
@@ -157,7 +181,12 @@ int main(int argc, char** argv) {
 @pytest.mark.parametrize("local", (False, True))
 @pytest.mark.parametrize("replay", (False, True))
 def test_publication_is_atomic_and_counts_only_submitted_products(
-    publication_probe: Path, replay: bool, local: bool, mode: int, spins: int
+    publication_probe: Path,
+    replay: bool,
+    local: bool,
+    mode: int,
+    spins: int,
+    density_provider: bool,
 ) -> None:
     result = subprocess.run(
         [
@@ -166,6 +195,7 @@ def test_publication_is_atomic_and_counts_only_submitted_products(
             str(int(local)),
             str(mode),
             str(spins),
+            str(int(density_provider)),
         ],
         capture_output=True,
         text=True,

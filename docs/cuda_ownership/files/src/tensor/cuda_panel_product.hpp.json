@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_panel_product.hpp",
+  "reason": "Shared prepared panel product interface with exact optional host, matrix-cache and provider reservations; compiler adapters own scientific materialization.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

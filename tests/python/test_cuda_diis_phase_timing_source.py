@@ -7,7 +7,7 @@ SOURCE = (ROOT / "src/cc/cuda_solver.cu").read_text()
 
 
 def test_trial_events_are_resolved_after_the_existing_diis_drain() -> None:
-    block = SOURCE.split("if (options.diis_size) {")[-1]
+    block = SOURCE.split("if (owner.history.capacity()) {", 1)[1]
     operations = (
         "cudaEventRecord(owner.trial_begin, owner.stream)",
         "owner.iteration()",
