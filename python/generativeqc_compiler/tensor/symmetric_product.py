@@ -113,6 +113,9 @@ def emit_symmetric_product_portfolio(
     Native qualification can exercise it without changing scientific APIs.
     """
     request = symmetric_product_request(program, output)
+    scientific_identity = request.scientific_identity
+    if scientific_identity is None:
+        raise ValueError("symmetric product requires a scientific identity")
     target = TargetCapabilities(
         TargetInfo("cuda", "current-aot-module", 32, 1024, None)
     )
@@ -146,6 +149,6 @@ def emit_symmetric_product_portfolio(
         request,
         candidates,
         target,
-        CompilationIdentity(request.scientific_identity, source),
+        CompilationIdentity(scientific_identity, source),
         name=name,
     )

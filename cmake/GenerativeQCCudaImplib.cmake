@@ -105,6 +105,7 @@ function(generativeqc_attach_cuda_implib target)
     cublasDgemmStridedBatched
     cublasDgemm_v2
     cublasDgemv_v2
+    cublasDsyr2k_v2
     cublasDsyrk_v2
     cublasGetProperty
     cublasGetVersion_v2

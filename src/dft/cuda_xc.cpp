@@ -469,9 +469,9 @@ CudaXcView CudaXcPlan::enqueue_replay_body(const double* density, std::size_t el
 
 void CudaXcPlan::publish_submitted_generation(std::uint64_t generation) {
   generations_.begin(generation);
+  publish_potential_work();
   generations_.commit(generation);
   ++transfers_.evaluations;
-  publish_potential_work();
 }
 
 void CudaXcPlan::publish_potential_work() {
@@ -646,9 +646,11 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
   }
   if (publish_generation) {
+    // Accounting may fail on a CUDA capture query or checked work overflow.
+    // Finish it before making this submission's output generation observable.
+    publish_potential_work();
     generations_.commit(generation);
     ++transfers_.evaluations;
-    publish_potential_work();
   }
 }
 
