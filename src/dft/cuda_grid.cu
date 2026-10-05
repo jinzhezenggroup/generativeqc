@@ -246,6 +246,9 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
     const size_t workspace = add(error_offset, 256), bytes = add(workspace, 4U << 20);
     if (expected_bytes && bytes != expected_bytes)
       throw std::invalid_argument("native/Python grid plan mismatch");
+    // Arena preparation restores its caller's device. Keep the complete owner
+    // transaction on the requested device, including the separate projection.
+    generativeqc::runtime::CudaDeviceScope device_scope(device, cuda_check);
     p->context.prepare(device, major, minor, bytes, error_offset, workspace, 4U << 20, 96U << 20,
                        false);
     const auto started = std::chrono::steady_clock::now();
