@@ -67,7 +67,7 @@ def source_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return exe
 
 
-@pytest.mark.parametrize("mode", range(21))
+@pytest.mark.parametrize("mode", list(range(21)) + list(range(22, 30)))
 def test_reference_source_exception_lifetime(source_probe: Path, mode: int) -> None:
     result = subprocess.run(
         [str(source_probe), str(mode)],
@@ -171,7 +171,7 @@ class ElectronInteractionSource {
  virtual void read_device(Operator,const std::array<std::size_t,4>&,const std::array<std::size_t,4>&,DeviceInteractionTarget,std::size_t) const=0;
 };
 }
-struct ScfOptions { bool hooks=false,strict_initial_density=false; };
+struct ScfOptions { bool hooks=false,strict_initial_density=false; std::size_t reference_memory_budget_bytes=2000; };
 struct CudaRhfBucketPlan {
  struct Resources { int device_id_=0; double* reference_eri_=reinterpret_cast<double*>(4); } resources;
  CudaRhfBucketPlan(){ ++live; }
@@ -193,7 +193,8 @@ constexpr int GENERATIVEQC_STATUS_SUCCESS=0,GENeric=1,
  GENERATIVEQC_STATUS_NOT_IMPLEMENTED=6,GENeric4=7,
  GENERATIVEQC_STATUS_SCF_NOT_CONVERGED=8;
 struct Error:std::runtime_error { Error(int,const char* s):std::runtime_error(s){} };
-struct ScfResult { bool converged=true; std::shared_ptr<int> reference=std::make_shared<int>(1); };
+struct PhysicalReference { std::size_t numeric_capacity_bytes=1500; };
+struct ScfResult { bool converged=true; std::shared_ptr<PhysicalReference> reference=std::make_shared<PhysicalReference>(); };
 struct RhfBucketItem { generativeqc_status status=0; ScfResult scf; bool execution_plan_reused=false; };
 std::vector<RhfBucketItem> run_rhf_cuda_bucket_cached(CudaRhfBucketPlan** p,const std::vector<core::System>&,const ScfOptions&,const std::vector<const std::vector<double>*>&,int){
  const bool reused=*p!=nullptr;
@@ -201,17 +202,47 @@ std::vector<RhfBucketItem> run_rhf_cuda_bucket_cached(CudaRhfBucketPlan** p,cons
  if(mode==5) throw std::length_error("driver capacity failure after allocation");
  if(mode==6) throw std::bad_alloc();
  RhfBucketItem item; item.execution_plan_reused=reused;
- if(mode==15) {item.scf.converged=false;item.status=GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;}
+ if(mode==15 || mode==29) {item.scf.converged=false;item.status=GENERATIVEQC_STATUS_SCF_NOT_CONVERGED;}
  return {item};
 }
 std::vector<RhfBucketItem> run_rhf_cuda_bucket(const std::vector<core::System>&,const ScfOptions&,const std::vector<const std::vector<double>*>&,int){ return {RhfBucketItem{}}; }
-bool exact_reference_source_identity(const CudaRhfBucketPlan*,const core::System&,const ScfOptions&,int){ return true; }
+bool exact_reference_source_identity(const CudaRhfBucketPlan*,const core::System&,const ScfOptions&,int){ return mode<22; }
 std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan*) {
  if(mode==11) fail_allocation=true;
  return mode==14?std::numeric_limits<std::size_t>::max():1000;
 }
+struct CudaRhfSourceHandoff {
+ std::shared_ptr<const integrals::ElectronInteractionSource> source;
+ std::size_t retained_numeric_bytes{},required_peak_bytes{},numeric_peak_bytes{},device_copy_bytes{};
+ double seconds{}; bool resource_fallback{};
+};
+class CompactSource:public integrals::ElectronInteractionSource {
+ core::System system;
+ public:
+ explicit CompactSource(core::System&& value):system(std::move(value)){}
+ const core::System& orbital() const override {return system;}
+ std::size_t nbf() const override {return 2;}
+ std::size_t naux() const override {return 0;}
+ std::size_t retained_numeric_bytes() const override {return 300;}
+ bool supports(Operator) const noexcept override {return true;}
+ bool supports_host_read(Operator) const noexcept override {return false;}
+ bool supports_device_read(Operator,int) const noexcept override {return true;}
+ void read(Operator,const std::array<std::size_t,4>&,const std::array<std::size_t,4>&,double*,std::size_t) const override {}
+ void read_device(Operator,const std::array<std::size_t,4>&,const std::array<std::size_t,4>&,integrals::DeviceInteractionTarget,std::size_t) const override {}
+};
+int compactions=0;
+CudaRhfSourceHandoff detach_rhf_cuda_source(const CudaRhfBucketPlan&,core::System&& system,std::size_t peak,std::size_t budget){
+ ++compactions;
+ if(mode==27) throw std::runtime_error("compaction transport failure");
+ CudaRhfSourceHandoff result; result.numeric_peak_bytes=peak; result.required_peak_bytes=peak+300;
+ if(result.required_peak_bytes>budget || mode==28) {result.resource_fallback=true;return result;}
+ result.source=std::make_shared<CompactSource>(std::move(system)); result.retained_numeric_bytes=300;
+ result.numeric_peak_bytes=result.required_peak_bytes;result.device_copy_bytes=32;return result;
+}
 ScfResult run_rhf_cuda_cached(CudaRhfBucketPlan**,const core::System&,const ScfOptions&,int,
- const std::vector<double>*,bool*,std::shared_ptr<const integrals::ElectronInteractionSource>*);
+ const std::vector<double>*,bool*,std::shared_ptr<const integrals::ElectronInteractionSource>*,CudaRhfSourceHandoff* = nullptr);
+ScfResult run_rhf_cuda(const core::System&,const ScfOptions&,int,const std::vector<double>*,
+ std::shared_ptr<const integrals::ElectronInteractionSource>*,CudaRhfSourceHandoff* = nullptr);
 """
 
 MAIN = r"""
@@ -224,7 +255,41 @@ int main(int argc,char** argv) {
  try {
   require(argc==2,"mode"); mode=std::atoi(argv[1]);
   core::System system;
-  if(mode==21) {
+  if(mode>=22) {
+   CudaRhfBucketPlan* plan=nullptr;
+   std::shared_ptr<const integrals::ElectronInteractionSource> source;
+   CudaRhfSourceHandoff handoff; ScfOptions options; bool reused=true;
+   if(mode==26) options.reference_memory_budget_bytes=1799;
+   if(mode==22) options.reference_memory_budget_bytes=1800;
+   if(mode==23) {
+    auto scf=run_rhf_cuda_with_source(system,options,0,nullptr,handoff);
+    require(scf.converged && handoff.source && live==0 && destroyed==1,"uncached compact owner retained arena");
+    handoff.source.reset();
+   } else if(mode==25) {
+    (void)run_rhf_cuda(system,options,0,nullptr,&source);
+    require(source && live==0 && destroyed==1,"source-only compact adapter lost source or arena");
+    source.reset();
+   } else {
+    bool caught=false;
+    try {(void)run_rhf_cuda_cached(&plan,system,options,0,nullptr,&reused,&source,&handoff);}
+    catch(const std::runtime_error&) {caught=true;}
+    require(caught==(mode==27),"compaction transport failure was hidden");
+    if(mode==29) require(!plan && !source && compactions==0,"nonconverged export");
+    else if(mode==26 || mode==28) require(plan && !source && handoff.resource_fallback && handoff.numeric_peak_bytes==1500,"resource rejection lost reference/cache");
+    else if(mode!=27) {
+     require(plan && source && handoff.source==source && !reused && live==1,"compact source consumed cached plan");
+     require(handoff.numeric_peak_bytes==1800 && handoff.retained_numeric_bytes==300,"simultaneous compaction budget");
+     handoff.source.reset();
+     require(!reclaim_rhf_cuda_reference_plan(&plan,source),"compact source reclaimed executable");
+     if(mode==24) {
+      auto old=source;
+      (void)run_rhf_cuda_cached(&plan,system,options,0,nullptr,&reused,&source,&handoff);
+      require(reused && source && old && source!=old && live==1,"compact replay lost cache/old snapshot");
+     }
+    }
+    source.reset();handoff.source.reset();destroy_rhf_cuda_bucket_plan(plan);
+   }
+  } else if(mode==21) {
    CudaRhfBucketPlan* plan=nullptr;
    std::shared_ptr<const integrals::ElectronInteractionSource> source;
    (void)run_rhf_cuda_cached(&plan,system,ScfOptions{},0,nullptr,nullptr,&source);
@@ -325,6 +390,7 @@ int main(int argc,char** argv) {
    source.reset();
    require(!plan && live==0 && destroyed==1 && unsafe==0 && pending()==0 && events==0,"unsafe source teardown");
   }
+  if(mode<22) require(compactions==0,"resident dispatch unnecessarily compacted metadata");
   require(live==0 && unsafe==0 && pending()==0 && events==0,"final ownership invariant");
  } catch(const std::exception& e) { std::cerr<<e.what()<<'\n';return 1; }
 }

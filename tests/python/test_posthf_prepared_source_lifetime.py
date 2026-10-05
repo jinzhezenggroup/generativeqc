@@ -22,6 +22,7 @@ PREFIX = r"""
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 int plan_live=0, view_live=0, raw_live=0;
 int source_failure=0;
@@ -67,20 +68,29 @@ struct Problem { std::size_t reference_retained_bytes=100, provider_peak_bytes{}
 struct State {
   Problem problem;
   int df_source{};
-  std::unique_ptr<integrals::ElectronInteractionSource> reference_interaction_source;
+  std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source;
 };
 struct ResidentSource : integrals::ElectronInteractionSource {
   explicit ResidentSource(std::unique_ptr<scf::PreparedFockPlan> owner) : plan(std::move(owner)) {}
   std::size_t retained_numeric_bytes() const override { return plan_bytes; }
   std::unique_ptr<scf::PreparedFockPlan> plan;
 };
+struct DetachedSource : integrals::ElectronInteractionSource {
+  DetachedSource() { ++plan_live; }
+  ~DetachedSource() { --plan_live; }
+  std::size_t retained_numeric_bytes() const override { return plan_bytes; }
+};
 struct Execution { int device_id() const { return 0; } };
-Problem build_problem(const integrals::ElectronInteractionSource& source,
+Problem build_problem(int system, const integrals::ElectronInteractionSource* source,
                       int,SolverOptions,bool,int,int& work,int& metrics,const int* correlation_auxiliary,
                       int* retained_df_response,
                       const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy) {
-  if (correlation_policy) throw std::logic_error("conventional lifetime fixture requires no policy");
-  if (correlation_auxiliary) throw std::logic_error("conventional lifetime fixture requires no auxiliary");
+  if (correlation_auxiliary) {
+    if (system!=43 || source || plan_live || view_live || raw_live || !correlation_policy)
+      throw std::logic_error("DF must build directly from System without an exact source");
+  } else if (correlation_policy) {
+    throw std::logic_error("conventional lifetime fixture requires no policy");
+  }
   if (retained_df_response) throw std::logic_error("conventional lifetime fixture must not retain DF response");
   // Real providers increment work before a source read may fail. Validate only
   // this attempt's delta while retaining both attempts in endpoint diagnostics.
@@ -89,12 +99,13 @@ Problem build_problem(const integrals::ElectronInteractionSource& source,
   if (plan_live && source_failure) {
     const int failure=source_failure; source_failure=0;
     if (failure==1) throw std::length_error("optional provider admission");
+    if (failure==3) throw std::runtime_error("provider numerical failure");
     throw std::bad_alloc();
   }
   if (work-initial_work!=1 || metrics-initial_metrics!=1)
     throw std::logic_error("invalid provider attempt counters");
   // The provider already charges the source exactly once during its own phase.
-  return {100, source.retained_numeric_bytes()+110};
+  return {100, (source ? source->retained_numeric_bytes() : 0)+110};
 }
 """
 
@@ -146,24 +157,28 @@ int mp2_case(bool prepared,bool compute_forces) {
   } else if (prepared && (!plan_live || raw_live)) return 4;
   return 0;
 }
-int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=false) {
+int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=false,bool df=false) {
   std::unique_ptr<scf::PreparedFockPlan> owner;
-  if (prepared) owner=std::make_unique<scf::PreparedFockPlan>();
+  if (prepared && !optional_cuda) owner=std::make_unique<scf::PreparedFockPlan>();
   auto* prepared_exact=owner.get();
-  auto* cuda_source_cache=&owner;
   State state;
-  if (borrowed) {
-    state.reference_interaction_source=std::make_unique<ResidentSource>(std::move(owner));
-    prepared_exact=nullptr;
+  if (prepared && optional_cuda) {
+    if (borrowed) {
+      state.reference_interaction_source=std::make_shared<ResidentSource>(
+          std::make_unique<scf::PreparedFockPlan>());
+    } else {
+      state.reference_interaction_source=std::make_shared<DetachedSource>();
+    }
   }
-  int system=0, reference_value=0, provider_work=0, provider_metrics=0;
+  int system=43, reference_value=0, provider_work=0, provider_metrics=0;
   SolverOptions solver_options, correlation_options;
   scf::CudaRhfBucketPlan** cuda_reference_plan=nullptr;
   const auto retained_plan_bytes=[] { return std::size_t{0}; };
   const auto* reference=&reference_value;
-  const int* correlation_auxiliary=nullptr;
+  const int* correlation_auxiliary=df ? &system : nullptr;
   const bool retain_df_response=false;
-  const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy=nullptr;
+  const scf::cuda_execution::CudaDfSourcePolicy policy;
+  const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy=df ? &policy : nullptr;
   const bool cuda=optional_cuda || !prepared;
   source_failure=failure;
   Execution execution;
@@ -174,7 +189,7 @@ int cc_case(bool prepared,bool optional_cuda=false,int failure=0,bool borrowed=f
         + r"""
   const bool kept=prepared && !failure;
   if (state.problem.reference_retained_bytes != (kept ? 164u : 100u)) return 5;
-  if (state.problem.provider_peak_bytes != (kept ? 174u : 126u)) return 6;
+  if (state.problem.provider_peak_bytes != (kept ? 174u : df ? 110u : 126u)) return 6;
   if (raw_live || view_live || plan_live != int(kept)) return 7;
   if (provider_work != (failure ? 2 : 1) || provider_metrics != provider_work) return 11;
   return 0;
@@ -191,7 +206,15 @@ int main(int argc,char** argv) {
     catch (const std::overflow_error&) {}
   }
   else if(mode<10) result=cc_case(true,true,mode-7);
-  else result=cc_case(true,true,mode-10,true);
+  else if(mode<13) result=cc_case(true,true,mode-10,true);
+  else if(mode==13) result=cc_case(false,true,0,false,true);
+  else {
+    // Only memory errors may release optional storage and retry.
+    try { (void)cc_case(true,true,3,mode==15); return 12; }
+    catch (const std::runtime_error& error) {
+      if (std::string(error.what())!="provider numerical failure") return 13;
+    }
+  }
   if (plan_live || view_live || raw_live) return 10;
   return result;
 }
@@ -220,7 +243,7 @@ int main(int argc,char** argv) {
 
 
 def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> None:
-    for mode in range(13):
+    for mode in range(16):
         process = subprocess.run(
             [str(source_probe), str(mode)],
             capture_output=True,
@@ -232,9 +255,10 @@ def test_posthf_source_lifetime_matches_retained_budget(source_probe: Path) -> N
 
 
 def test_device_interaction_source_defaults_fail_closed(tmp_path: Path) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler and ccache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = tmp_path / "device_source_contract.cpp"
     executable = tmp_path / "device_source_contract"
     source.write_text(
@@ -242,6 +266,7 @@ def test_device_interaction_source_defaults_fail_closed(tmp_path: Path) -> None:
 #include <array>
 #include <cstddef>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include "integrals/electron_interaction_source.hpp"
 
@@ -281,6 +306,7 @@ int main() {
     )
     compiled = subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-O0",
@@ -339,4 +365,6 @@ def test_cc_force_hamiltonian_uses_prepared_cuda_source() -> None:
     assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsd
     assert "if (!execution_.cuda_requested() && cpu_exact_plan_)" not in rccsdt
     assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsd
+    assert "force_source = state.reference_interaction_source.get();" in rccsd
     assert "force_prepared_source.emplace(*cpu_exact_plan_)" in rccsdt
+    assert "force_source = state.reference_interaction_source.get();" in rccsdt
