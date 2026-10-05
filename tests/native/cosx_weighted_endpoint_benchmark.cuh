@@ -4,9 +4,9 @@
  * Timed build includes AO/ESP generation, H2D, contractions, D2H and host energy.
  */
 namespace cosx_weighted_endpoint_test {
-// Scalar template bounds avoid CUDA front-end emission of local container
-// member calls in nested std::array arguments. The benchmark still has four
-// independent routes and six replays per geometry.
+// CUDA 12.9 can emit an invalid unsigned long(...) cast for replay bounds in
+// std::array template arguments in this translation unit. The bounded sample
+// storage below uses ordinary arrays with the same scalar work constants.
 constexpr std::size_t kRoutes = 4, kReplays = 6;
 using namespace generativeqc;
 using Clock = std::chrono::steady_clock;
@@ -163,8 +163,8 @@ void cosx_weighted_endpoint_benchmark(char** args) {
       plans[route] = prepare(system, grid.points(), grid.weights(), tile, masks[route]);
       setup[route] = elapsed(begin);
     }
-    std::array<std::array<double, kReplays>, kRoutes> samples{}, energies{};
-    std::array<std::array<std::array<double, 3>, kReplays>, kRoutes> paired_errors{};
+    double samples[kRoutes][kReplays]{}, energies[kRoutes][kReplays]{};
+    double paired_errors[kRoutes][kReplays][3]{};
     for (std::size_t sample = 0; sample < kReplays; ++sample) {
       std::array<dft::CosxReferenceResult, kRoutes> result;
       // Rotate first-replay and warm routes, including after geometry change.
@@ -176,8 +176,10 @@ void cosx_weighted_endpoint_benchmark(char** args) {
         samples[route][sample] = elapsed(begin);
         energies[route][sample] = result[route].exchange_energy;
       }
-      for (std::size_t route = 0; route < masks.size(); ++route)
-        paired_errors[route][sample] = errors(result[route], result[0]);
+      for (std::size_t route = 0; route < masks.size(); ++route) {
+        const auto error = errors(result[route], result[0]);
+        std::copy(error.begin(), error.end(), paired_errors[route][sample]);
+      }
     }
     for (std::size_t route = 0; route < masks.size(); ++route) {
       const auto mask = masks[route];
