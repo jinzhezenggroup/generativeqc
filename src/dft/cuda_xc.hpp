@@ -18,8 +18,8 @@
 namespace generativeqc::dft {
 
 /** Exact explicit storage request for ordinary-stream semilocal XC. The
- * method's ResourcePlan supplies one arena of device_bytes; this component
- * does not allocate CUDA memory or introduce another user memory budget.
+ * method's ResourcePlan supplies one arena of device_bytes. Optional lowering
+ * resources have a separate reservation within that same resource plan.
  * Host quadrature is prepared separately and uploaded once. Tiles retain
  * only the AO jets and density-product panels required by the functional. */
 enum class CudaXcAoPrecision : std::uint8_t {

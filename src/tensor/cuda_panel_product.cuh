@@ -4,6 +4,7 @@
 #include <climits>
 #include <cstdio>
 
+#include "runtime/resource_cuda.cuh"
 #include "tensor/cuda_contraction.cuh"
 #include "tensor/cuda_panel_product.hpp"
 
@@ -89,8 +90,12 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     if (offer.rejection.empty() && !context_.prepare(stream))
       offer.rejection = "matrix-panel provider allocation unavailable";
     if (offer.rejection.empty()) {
-      const auto status = cudaMalloc(reinterpret_cast<void**>(&matrix_), matrix_bytes);
-      if (status == cudaErrorMemoryAllocation) {
+      bool host_oom = false;
+      const auto status = runtime::resource_cuda_malloc(reinterpret_cast<void**>(&matrix_),
+                                                        matrix_bytes, &host_oom);
+      // Only device exhaustion admits the generated retry. Failure to retain
+      // host registry metadata cannot be reinterpreted as a smaller GPU budget.
+      if (status == cudaErrorMemoryAllocation && !host_oom) {
         (void)cudaGetLastError();
         context_.reset();
         offer.rejection = "matrix-panel cache allocation unavailable";
@@ -161,7 +166,7 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     (void)cudaGetDevice(&previous);
     (void)cudaSetDevice(context_.device());
     (void)cudaStreamSynchronize(context_.stream());
-    (void)cudaFree(matrix_);
+    (void)runtime::resource_cuda_free(matrix_);
     matrix_ = nullptr;
     (void)cudaSetDevice(previous);
   }
