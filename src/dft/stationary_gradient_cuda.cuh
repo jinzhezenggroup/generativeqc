@@ -182,7 +182,9 @@ __global__ void geometry_cooperative_kernel(
     size_t na, const double* weights, const double* raw, const double* external,
     size_t external_stride, size_t external_offset, size_t geometry_lanes, double* partial,
     double* scratch, const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-    double* phase_seeds);
+    double* phase_seeds, const size_t* ao_incidence);
+__global__ void geometry_ao_incidence(generativeqc::dft::GridTaskView view, const int64_t* ao_atoms,
+                                      size_t na, size_t* incidence, int* error);
 __global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
                                 double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
@@ -194,6 +196,7 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                      double* partial, double* scratch,
                      const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
   PhasedBeckeInput phased{};
+  size_t* ao_incidence = nullptr;
   if (owner.phased_storage) {
     if (geometry_lanes != view.npoint || !center_pairs || owner.becke_threads_per_point <= 1)
       throw std::invalid_argument("phased Becke lane/cache contract changed");
@@ -206,14 +209,27 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     phased.center_pairs = center_pairs;
     phased.partial = partial;
     phased.error = error;
+    // The pair panel is dead during AO response. Borrow only proven capacity;
+    // ordinary and constrained owners keep the existing ordered dense scan.
+    const size_t pair_words = 4 * (na * (na - 1) / 2) * owner.points;
+    const size_t point_words = (sizeof(StationaryPointValue) + sizeof(double) - 1) / sizeof(double);
+    const size_t ao_words = point_words + 3 * view.nactive;
+    // Match the cooperative AO panel gate: its serial fallback has no repeated
+    // atom scan to eliminate. Empty selections need no incidence preparation.
+    if (view.nactive && na + view.nactive <= pair_words &&
+        ao_words * sizeof(double) <= owner.becke_shared_bytes - stationary_becke_control_bytes) {
+      ao_incidence = reinterpret_cast<size_t*>(phased.work.pairs);
+      geometry_ao_incidence<<<1, 1, 0, stream>>>(view, ao_atoms, na, ao_incidence, error);
+      ++owner.launches;
+    }
   }
   if (owner.becke_threads_per_point > 1)
     geometry_cooperative_kernel<<<geometry_lanes, owner.becke_threads_per_point,
                                   owner.becke_shared_bytes - stationary_becke_control_bytes,
-                                  stream>>>(view, work, ao_atoms, owners, owner_offset,
-                                            points_per_atom, centers, na, weights, raw, external,
-                                            external_stride, external_offset, geometry_lanes,
-                                            partial, scratch, center_pairs, error, phased.seeds);
+                                  stream>>>(
+        view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,
+        external, external_stride, external_offset, geometry_lanes, partial, scratch, center_pairs,
+        error, phased.seeds, ao_incidence);
   else
     geometry_kernel<<<blocks(geometry_lanes, owner.geometry_threads), owner.geometry_threads, 0,
                       stream>>>(view, work, ao_atoms, owners, owner_offset, points_per_atom,

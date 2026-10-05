@@ -89,6 +89,7 @@ int main() {
     ao_atoms[ao_index]=(ao_index*7)%na;
     active_ids[ao_index]=n-1-ao_index;
   }
+  for(bool indexed:{false,true})
   for(bool cached:{false,true}) for(bool implicit:{false,true}) for(bool external:{false,true})
   for(size_t capacity:{size_t(1),size_t(7)}) for(size_t points:{size_t(0),size_t(1),np}) {
     const size_t lanes=std::min(capacity,points);
@@ -110,12 +111,14 @@ int main() {
     int error=0,producer_error=0;
     generativeqc::dft::GridTaskView view{points,n,n,features.data(),ao.data(),xyz.data(),
                                        implicit?active_ids.data():nullptr,&producer_error};
+    std::vector<size_t> incidence(na+n+2,987654);
     auto invoke=[&](bool cooperative,size_t lane,size_t rank) {
       blockIdx.x=cooperative?lane:lane/32; threadIdx.x=cooperative?rank:lane%32;
       if(cooperative)
         geometry_cooperative_kernel(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
              4,3,centers,na,weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
-             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr);
+             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr,
+             indexed?incidence.data()+1:nullptr);
       else
         geometry_kernel(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),4,3,centers,na,
              weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
@@ -134,6 +137,10 @@ int main() {
     const auto expected=reduce();
     std::fill(partial.begin(),partial.end(),987654);
     auto execute=[&] {
+      if(indexed) {
+        blockIdx.x=threadIdx.x=0;
+        geometry_ao_incidence(view,ao_atoms.data(),na,incidence.data()+1,&error);
+      }
       for(size_t lane=0;lane<lanes;++lane) {
         std::barrier barrier(32);
         std::vector<std::thread> workers;
@@ -152,7 +159,8 @@ int main() {
       if(expected[coordinate]!=actual[coordinate]) return 8;
     for(size_t k=0;k<9*na;++k) if(std::abs(expected[k]-actual[k])>2e-11) return 3;
     if(partial.front()!=987654 || partial.back()!=987654 || scratch.front()!=987654 ||
-       scratch.back()!=987654 || storage.front()!=987654 || storage.back()!=987654) return 4;
+       scratch.back()!=987654 || storage.front()!=987654 || storage.back()!=987654 ||
+       incidence.front()!=987654 || incidence.back()!=987654) return 4;
     if(!points) continue;
     // Invalid input late in a worker never publishes any partial output.
     for(int invalid=0;invalid<6;++invalid) {

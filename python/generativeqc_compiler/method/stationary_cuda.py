@@ -503,6 +503,25 @@ struct GeometryBlockControl {
   int valid;
   int collective_valid;
 };
+// The active map is shared by every point in one tile. A reverse insertion
+// builds increasing-AO incident lists without sorting or changing sum order.
+// The owner lends dead pair-primal storage until the following Becke phase.
+__global__ void geometry_ao_incidence(generativeqc::dft::GridTaskView view,
+    const int64_t* ao_atoms, size_t na, size_t* incidence, int* error) {
+  if (blockIdx.x || threadIdx.x) return;
+  size_t* next = incidence + na;
+  for (size_t atom = 0; atom < na; ++atom) incidence[atom] = view.nactive;
+  for (size_t index = view.nactive; index-- > 0;) {
+    const size_t global = view.ao_ids ? view.ao_ids[index] : index;
+    if (global >= view.nao || ao_atoms[global] < 0 || ao_atoms[global] >= int64_t(na)) {
+      atomicExch(error, 1);
+      return;
+    }
+    const size_t atom = size_t(ao_atoms[global]);
+    next[index] = incidence[atom];
+    incidence[atom] = index;
+  }
+}
 static_assert(sizeof(GeometryBlockControl) == 16);
 struct GeometryBlockTeam {
   int* valid = nullptr;
@@ -525,7 +544,8 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-                                double* phase_seeds = nullptr) {
+                                double* phase_seeds = nullptr,
+                                const size_t* ao_incidence = nullptr) {
   // Lanes remain point workers. A whole block cooperates on one worker's panel.
   const size_t lane = blockIdx.x;
   if (lane >= geometry_lanes) return;
@@ -591,13 +611,21 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       }
       // Each atom has one writer. Both reductions retain the original AO
       // order, including arbitrary active-AO maps and noncontiguous atoms.
-      for (size_t atom = threadIdx.x; atom < na; atom += blockDim.x)
-        for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
-          const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
-          if (ao_atoms[global_ao] == int64_t(atom))
+      for (size_t atom = threadIdx.x; atom < na; atom += blockDim.x) {
+        if (ao_incidence) {
+          for (size_t ao_index = ao_incidence[atom]; ao_index < view.nactive;
+               ao_index = ao_incidence[na + ao_index])
             for (size_t axis = 0; axis < 3; ++axis)
               grad[3 * atom + axis] -= ao_gradient[3 * ao_index + axis];
+        } else {
+          for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
+            const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
+            if (ao_atoms[global_ao] == int64_t(atom))
+              for (size_t axis = 0; axis < 3; ++axis)
+                grad[3 * atom + axis] -= ao_gradient[3 * ao_index + axis];
+          }
         }
+      }
       if (threadIdx.x == 0)
         for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index)
           for (size_t axis = 0; axis < 3; ++axis)

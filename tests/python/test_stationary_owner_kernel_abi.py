@@ -52,7 +52,7 @@ class StationaryOwnerKernelTests(unittest.TestCase):
                 ]
             )
         self.assertEqual(signatures[0], signatures[1])
-        self.assertEqual(len(signatures[0]), 19)
+        self.assertEqual(len(signatures[0]), 20)
 
     def test_emitted_explicit_and_implicit_owner_expression(self) -> None:
         compiler = shutil.which("c++")
