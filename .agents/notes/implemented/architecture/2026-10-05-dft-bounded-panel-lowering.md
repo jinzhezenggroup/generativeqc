@@ -73,6 +73,9 @@ passed four tau-only density/orbital/provider cases with zero errors.
 The CMake-generated native grid translation unit also compiles with the
 explicit CXX/CUDA ccache launchers; command and cumulative cache statistics
 are retained in `.artifacts/1890-grid/`.
+Installed-wheel payloads include the shared descriptor/selection headers and
+their transitive native dependencies; all 13 packaging checks pass, including
+JIT source preparation using only the declared wheel payload.
 
 Complete fixed-density PBE energy/Vxc endpoints include the GPU grid and the
 existing native CPU XC consumer. Five warm samples follow the first call;
