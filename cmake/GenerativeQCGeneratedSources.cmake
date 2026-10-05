@@ -121,6 +121,24 @@ macro(generativeqc_register_host_generated_sources target)
     ARGS --output "${GENERATIVEQC_DF_EXCHANGE_SCHEDULE_HEADER}"
     COMMENT "Generating compiler-owned DF source-reuse schedule")
 
+  generativeqc_register_generated_sources(
+    NAME generativeqc_df_coulomb_lowering_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_df_coulomb_lowering.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_coulomb_lowering.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_vector_contraction.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/cuda_vector_contraction.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/native_contraction.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/lowering_binding.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/df_coulomb.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/df_coulomb_metric.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/metric_lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/contraction_update.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/vector_lowering.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_coulomb_lowering.hpp"
+    COMMENT "Generating resident Coulomb canonical contraction bindings")
+
   # The native host policy is built even when CUDA execution is disabled.
   # Generate its CUDA-independent constants once for both build variants.
   set(GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_POLICY_HEADER

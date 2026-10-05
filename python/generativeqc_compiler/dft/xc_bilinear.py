@@ -31,12 +31,18 @@ def ao_pair_bilinear(family: str) -> tuple[Any, ...]:
     return graph, x, y, c, bilinear
 
 
+def symmetric_density_element() -> tuple[Any, Any]:
+    """Materializable density factor, shared by fused and packed schedules."""
+    graph = Graph()
+    left, right = (graph.variable(name) for name in ("left", "right"))
+    return graph, 0.5 * left + 0.5 * right
+
+
 def density_summand() -> tuple[Any, Any]:
     """One symmetric density/AO summand in the existing scalar DAG.
 
     Both triangles are explicit even for nearly symmetric density matrices.
     Lowerers own reduction order and arithmetic precision, not this algebra.
     """
-    graph = Graph()
-    left, right, orbital = (graph.variable(name) for name in ("left", "right", "ao"))
-    return graph, (0.5 * left + 0.5 * right) * orbital
+    graph, matrix = symmetric_density_element()
+    return graph, matrix * graph.variable("ao")
