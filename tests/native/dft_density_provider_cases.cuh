@@ -15,26 +15,34 @@ struct Buffer {
 };
 }  // namespace density_provider_test
 
-void density_provider_scalar_cases() {
+void density_provider_scalar_cases(bool indexed = false) {
   using namespace density_provider_test;
   for (std::size_t n : {1U, 17U})
     for (bool uks : {false, true}) {
       Stream stream;
-      const auto layout = cuda_xc_layout_shape(1, 1, n, 17, 2, uks, 7);
+      const auto global_n = indexed ? 2 * n + 3 : n;
+      auto layout = cuda_xc_layout_shape(1, 1, global_n, 17, 2, uks, 7);
+      layout.local_ao = indexed;
       const auto spins = layout.spins, jets = layout.work_jets;
       xc_density_provider_for_test(true, false);
+      xc_density_indexed_provider_for_test(indexed);
       auto product = cuda_xc_detail::prepare_density_provider(layout, stream.value, 128ULL << 20);
       xc_density_provider_for_test(false, false);
+      xc_density_indexed_provider_for_test(false);
       require(product->enabled(), "scalar gate did not bind GEMM");
       const auto& diagnostic = product->diagnostic();
-      require(diagnostic.matrix_bytes == spins * n * n * sizeof(double) &&
+      require(diagnostic.matrix_bytes == spins * global_n * global_n * sizeof(double) &&
                   diagnostic.provider_allowance == 96ULL << 20 &&
                   diagnostic.host_bytes == 16ULL << 10 && diagnostic.provider_version > 0,
               "density provider resource/provenance mismatch");
-      Buffer d(spins * n * n), a(jets * 7 * n), out(spins * jets * 7 * n), error(1);
+      static_assert(sizeof(std::size_t) <= sizeof(double));
+      Buffer d(spins * global_n * global_n), a(jets * 7 * n), out(spins * jets * 7 * n), error(1),
+          map(n);
+      auto* device_ids = reinterpret_cast<std::size_t*>(map.value);
       bool alias_rejected{};
       try {
-        product->execute(stream.value, jets, a.value, a.value, reinterpret_cast<int*>(error.value));
+        product->execute(stream.value, n, jets, a.value, a.value,
+                         reinterpret_cast<int*>(error.value));
       } catch (const std::invalid_argument&) {
         alias_rejected = true;
       }
@@ -44,7 +52,10 @@ void density_provider_scalar_cases() {
         cudaGraph_t graph{};
         cudaGraphExec_t executable{};
         for (unsigned replay = 0; replay < 3; ++replay) {
-          std::vector<double> density_values(spins * n * n), ao(rows * n), actual(spins * rows * n);
+          std::vector<double> density_values(spins * global_n * global_n), ao(rows * n),
+              actual(spins * rows * n);
+          std::vector<std::size_t> ids(n);
+          for (std::size_t i = 0; i != n; ++i) ids[i] = indexed ? 2 * i + replay % 3 : i;
           for (std::size_t i = 0; i != density_values.size(); ++i)
             density_values[i] = std::sin(0.37 * (i + 1) + replay);
           for (std::size_t i = 0; i != ao.size(); ++i) ao[i] = std::cos(0.19 * (i + 1) - replay);
@@ -54,13 +65,20 @@ void density_provider_scalar_cases() {
           check(cudaMemcpyAsync(a.value, ao.data(), ao.size() * sizeof(double),
                                 cudaMemcpyHostToDevice, stream.value));
           check(cudaMemsetAsync(error.value, 0, sizeof(int), stream.value));
+          check(cudaMemcpyAsync(device_ids, ids.data(), n * sizeof(std::size_t),
+                                cudaMemcpyHostToDevice, stream.value));
           check(cudaStreamSynchronize(stream.value));
           if (!replay) {
             check(cudaStreamBeginCapture(stream.value, cudaStreamCaptureModeThreadLocal));
-            xc_density_materialize_for_test(stream.value, d.value, n, spins,
-                                            product->materialized_matrices(),
-                                            reinterpret_cast<int*>(error.value));
-            product->execute(stream.value, rows, a.value, out.value,
+            if (indexed)
+              xc_density_gather_for_test(stream.value, d.value, global_n, n, spins, device_ids,
+                                         product->materialized_matrices(),
+                                         reinterpret_cast<int*>(error.value));
+            else
+              xc_density_materialize_for_test(stream.value, d.value, n, spins,
+                                              product->materialized_matrices(),
+                                              reinterpret_cast<int*>(error.value));
+            product->execute(stream.value, n, rows, a.value, out.value,
                              reinterpret_cast<int*>(error.value));
             check(cudaStreamEndCapture(stream.value, &graph));
             check(cudaGraphInstantiate(&executable, graph, 0));
@@ -78,9 +96,10 @@ void density_provider_scalar_cases() {
               for (std::size_t mu = 0; mu != n; ++mu) {
                 long double expected{};
                 for (std::size_t nu = 0; nu != n; ++nu)
-                  expected += (0.5L * density_values[(spin * n + mu) * n + nu] +
-                               0.5L * density_values[(spin * n + nu) * n + mu]) *
-                              ao[row * n + nu];
+                  expected +=
+                      (0.5L * density_values[(spin * global_n + ids[mu]) * global_n + ids[nu]] +
+                       0.5L * density_values[(spin * global_n + ids[nu]) * global_n + ids[mu]]) *
+                      ao[row * n + nu];
                 close(actual[(spin * rows + row) * n + mu], static_cast<double>(expected),
                       "nonsymmetric density scalar oracle", 2e-12);
               }
@@ -90,16 +109,23 @@ void density_provider_scalar_cases() {
       }
       // Publication replaces nonfinite values and preserves an earlier sticky
       // error. Neither a successful GEMM nor a later finite audit may clear it.
-      std::vector<double> bad(spins * n * n, std::numeric_limits<double>::quiet_NaN());
+      std::vector<double> bad(spins * global_n * global_n,
+                              std::numeric_limits<double>::quiet_NaN());
       check(cudaMemcpyAsync(d.value, bad.data(), bad.size() * sizeof(double),
                             cudaMemcpyHostToDevice, stream.value));
       int sticky = 7;
       check(
           cudaMemcpyAsync(error.value, &sticky, sizeof(int), cudaMemcpyHostToDevice, stream.value));
-      xc_density_materialize_for_test(stream.value, d.value, n, spins,
-                                      product->materialized_matrices(),
-                                      reinterpret_cast<int*>(error.value));
-      product->execute(stream.value, jets, a.value, out.value, reinterpret_cast<int*>(error.value));
+      if (indexed)
+        xc_density_gather_for_test(stream.value, d.value, global_n, n, spins, device_ids,
+                                   product->materialized_matrices(),
+                                   reinterpret_cast<int*>(error.value));
+      else
+        xc_density_materialize_for_test(stream.value, d.value, n, spins,
+                                        product->materialized_matrices(),
+                                        reinterpret_cast<int*>(error.value));
+      product->execute(stream.value, n, jets, a.value, out.value,
+                       reinterpret_cast<int*>(error.value));
       check(
           cudaMemcpyAsync(&sticky, error.value, sizeof(int), cudaMemcpyDeviceToHost, stream.value));
       check(cudaStreamSynchronize(stream.value));

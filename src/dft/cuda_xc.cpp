@@ -390,8 +390,10 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   if (layout_.local_ao && local_density_launchers_.empty())
     local_density_launchers_ = local_density_launchers(layout_, ao_offsets_);
   // Optional resources are prepared transactionally. The generated tables
-  // remain available for mixed arithmetic, signed response and local maps.
-  auto provider = provider_budget
+  // remain available for mixed arithmetic, signed response and empty maps.
+  // An empty indexed domain needs no materialized matrix or provider handle.
+  const bool nonempty = !layout_.local_ao || ao_offsets_.back() != 0;
+  auto provider = provider_budget && nonempty
                       ? cuda_xc_detail::prepare_density_provider(layout_, stream_, provider_budget)
                       : nullptr;
   std::unique_ptr<CudaXcDensityBinding> provider_binding;
@@ -411,8 +413,8 @@ const tensor::PreparedPanelProduct* CudaXcPlan::density_execution_provider(
     throw std::invalid_argument("unknown execution precision phase");
   const auto& binding =
       phase == PrecisionPhase::Admitted ? admitted_density_[0] : strict_density_[0];
-  return density_provider_ && density_provider_->enabled() && !layout_.local_ao &&
-                 !layout_.response && binding.precision.arithmetic.is_strict_fp64()
+  return density_provider_ && density_provider_->enabled() && !layout_.response &&
+                 binding.precision.arithmetic.is_strict_fp64()
              ? density_provider_.get()
              : nullptr;
 }
@@ -492,6 +494,11 @@ bool CudaXcPlan::select_local_ao(double cutoff, std::size_t max_host_bytes) {
   local_density_launchers_ = std::move(launchers);
   ao_offsets_ = std::move(maps.offsets);
   ao_ids_ = indices;
+  // Discovery changes the materialization domain. A previously prepared dense
+  // factor cannot serve compact maps; retain generated execution until the
+  // owner explicitly prepares against the published indexed layout.
+  provider_density_binding_.reset();
+  density_provider_.reset();
   layout_ = selected;
   transfers_.setup_h2d_bytes += maps.indices.size() * sizeof(std::size_t);
   transfers_.synchronizations += bound.tiles + 1;

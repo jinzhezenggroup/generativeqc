@@ -89,7 +89,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     cuda_check(cudaMemsetAsync(potential, 0, matrices * sizeof(double), stream));
     cuda_check(cudaMemsetAsync(totals, 0, 3 * sizeof(double), stream));
   }
-  if (density_provider) {
+  if (density_provider && !l.local_ao) {
     // The compiler-owned symmetric factor is invariant across point tiles.
     // Rebuild it on every physical/captured body, never by density pointer identity.
     materialize_density_factor<<<blocks(matrices, 128), 128, 0, stream>>>(
@@ -110,9 +110,16 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     const auto density_launcher = l.local_ao
                                       ? local_density_launchers[tile]
                                       : density_bindings[count == l.tile_points ? 0 : 1].launch;
-    if (density_provider)
-      density_provider->execute(stream, count * l.work_jets, ao, work, error);
-    else
+    if (density_provider && active) {
+      if (l.local_ao) {
+        // Preserve the mapped scientific domain. Only its compact symmetric
+        // factor is packed; all tiles reuse the same bounded provider cache.
+        gather_density_factor<<<blocks(l.spins * active * active, 128), 128, 0, stream>>>(
+            density, l.nao, active, l.spins, ids, density_provider->materialized_matrices(), error);
+        cuda_check(cudaGetLastError());
+      }
+      density_provider->execute(stream, active, count * l.work_jets, ao, work, error);
+    } else
       density_launcher(stream, density, ao, active, count, l.spins, l.work_jets, work, error, ids,
                        l.nao);
     cuda_check(cudaGetLastError());
