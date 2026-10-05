@@ -35,6 +35,12 @@ void release(CudaDensityFittingJkPlan& plan) noexcept {
   destroy_final_validation(plan.final_validation);
   plan.charge_contraction.reset();
   plan.coulomb_contraction.reset();
+  plan.metric_project.reset();
+  plan.metric_rotate.reset();
+  for (std::size_t i = 0; i != plan.metric_charge.size(); ++i) {
+    plan.metric_charge[i].reset();
+    plan.metric_potential[i].reset();
+  }
   destroy_cuda_density_fitting_integral_source(plan.integral_source);
   (void)runtime::resource_cuda_free(plan.inverse_square_roots);
   (void)runtime::resource_cuda_free(plan.metric_eigenvectors);

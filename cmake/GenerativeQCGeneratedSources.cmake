@@ -132,6 +132,9 @@ macro(generativeqc_register_host_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/src/tensor/native_contraction.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/lowering_binding.hpp"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/df_coulomb.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/df_coulomb_metric.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/metric_lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/contraction_update.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/vector_lowering.py"
     ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_df_coulomb_lowering.hpp"
     COMMENT "Generating resident Coulomb canonical contraction bindings")
