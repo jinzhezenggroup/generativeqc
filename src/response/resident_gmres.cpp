@@ -252,8 +252,10 @@ ResidentGmresResult solve_gmres_resident(const GmresPlan& plan, ResidentKrylovBa
       transformed[column + 1] = -sine[column] * transformed_upper;
       ++iterations;
 
-      const bool checkpoint = broke_down || column + 1 == restart ||
-                              iterations == plan.options.max_iterations ||
+      // Match host GMRES: predicted convergence triggers a fresh true residual,
+      // and never substitutes for that acceptance gate.
+      const bool checkpoint = std::abs(transformed[column + 1]) <= target || broke_down ||
+                              column + 1 == restart || iterations == plan.options.max_iterations ||
                               iterations % plan.options.true_residual_every == 0;
       if (!checkpoint) continue;
       const std::size_t columns = column + 1;

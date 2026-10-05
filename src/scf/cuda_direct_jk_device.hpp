@@ -55,6 +55,40 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
                                                   double* alpha_exchange, double* beta_exchange,
                                                   int* numerical_error, std::string& detail);
 
+/** Whether the immutable canonical quartet source can supply a density-independent
+ * linear action. This optional schedule retains no four-index integral tensor. */
+bool cuda_direct_jk_linear_available(const CudaDirectJkPlan* plan) noexcept;
+
+/** Fixed geometry-only Schwarz mask for response, including signed densities.
+ * Uses the canonical quartet's complete permutation orbit for both J and K;
+ * never enters density-dependent shell screening. threshold must be finite,
+ * nonnegative and at least the plan's preparation threshold. An unscreened
+ * plan therefore supports both approximate actions and exact residual audits
+ * without changing metadata, row storage or stream ownership.
+ * Optional device census[2] counts visited canonical quartets and evaluated
+ * ERI values, not FLOPs. It is reset per call and must not alias any buffer.
+ * NOT_IMPLEMENTED means the optional canonical storage was not admitted. */
+generativeqc_status enqueue_cuda_direct_jk_linear_device(
+    CudaDirectJkPlan* plan, FockBuildSpec spec, const double* density, std::size_t matrix_elements,
+    double* coulomb, double* exchange, int* numerical_error, double threshold,
+    std::uint64_t* census, std::string& detail);
+
+/** Eligibility for the explicitly requested canonical bilinear experiment.
+ * Specialized SPD derivative leases retain the caller's bounded polarization
+ * schedule until a measured crossover is qualified. This is not a default. */
+bool cuda_direct_jk_bilinear_preferred(const CudaDirectJkPlan* plan) noexcept;
+
+/** One unscreened canonical traversal of P:(J'(D)-K'(D)/2).
+ * Restricted, single-system, retained first-derivative plan only. Both input
+ * matrices use the public AO frame and may be signed. The optional device
+ * census[2] records canonical quartet visits and evaluated three-axis center
+ * derivative jets; these counts are not FLOPs. Returns host electronic gradient
+ * coordinates, after finite audit and stream completion. Optional canonical
+ * storage refusal returns NOT_IMPLEMENTED for the caller's bounded fallback. */
+generativeqc_status execute_cuda_direct_bilinear_derivative_device(
+    CudaDirectJkPlan* plan, const double* density, const double* seed, std::size_t matrix_elements,
+    std::vector<double>& gradient, std::uint64_t* census, std::string& detail);
+
 /** Enqueue primary full-range J/K and one exact SR/LR K correction after one
  * Direct shell-density preparation. This seam is available only when the
  * retained bounded shell owner covers the range value request; callers keep

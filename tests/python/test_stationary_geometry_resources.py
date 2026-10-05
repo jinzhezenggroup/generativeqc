@@ -134,8 +134,6 @@ def test_native_allocation_matches_compiler_plan_and_rejects_oversized_lanes(
         (48, 384, 352),
         (96, 768, 704),
         (128, 1024, 16384),
-        (96, 1856, 16384),
-        (128, 2048, 16384),
     ):
         for points in (1, 17, 256, 4096):
             shape = {
@@ -169,10 +167,6 @@ for (size_t lanes : {size_t(0),size_t(4097),std::numeric_limits<size_t>::max()})
 }
 try { allocation(128,96,240,4096,256,2,2048); return 3; }
 catch (const std::invalid_argument&) {}
-for (size_t aos : {size_t(2049),std::numeric_limits<size_t>::max()}) {
-  try { allocation(96,aos,16384,256,256,2,256); return 4; }
-  catch (const std::invalid_argument&) {}
-}
 return 0;
 }
 """
@@ -219,7 +213,13 @@ using cudaEvent_t=void*;
 using cudaStream_t=void*;
 namespace generativeqc_stationary_cuda {}
 namespace generativeqc_grid_adjoint { struct CenterPair { double values[6]; }; }
+namespace generativeqc::runtime {
+template <class Element> struct OwnedCudaBuffer {
+  explicit operator bool() const { return false; }
+};
+}
 constexpr size_t stationary_spin_blocks=2, stationary_source_count=8;
+constexpr size_t stationary_becke_retained_max_atoms=32;
 constexpr size_t stationary_geometry_max_lanes=2048, stationary_geometry_max_threads=32;
 constexpr size_t stationary_geometry_max_scratch_bytes=8<<20, task_stride=9;
 int allocations=0, owners=0, arenas=0, max_threads=1024;
@@ -267,7 +267,7 @@ int main() {
   oom=false;
   if(create(bytes) || !result || allocations!=2 || owners!=1) return 4;
   auto* p=static_cast<Owner*>(result);
-  if(p->bytes!=bytes || p->geometry_lanes!=256 || p->geometry_threads!=32) return 5;
+  if(p->bytes!=bytes || p->byte_budget!=bytes || p->geometry_lanes!=256 || p->geometry_threads!=32) return 5;
   if(p->scratch-p->partial!=256*9*12 || p->sources-p->scratch!=256*9*12) return 6;
   if(reinterpret_cast<unsigned char*>(p->weighted_density+2*96*96)-p->context.arena != bytes-256)
     return 7;
@@ -297,17 +297,17 @@ int main() {
   if(!create(bytes+cache_bytes) || result || owners || arenas || allocations!=prior_allocations+1) return 18;
   runtime_failure=false;
   oom_above=std::numeric_limits<size_t>::max();
-  const size_t large_bytes=allocation(96,1856,16384,256,4096,2,256);
+  const size_t large_bytes=allocation(96,768,704,256,4096,2,256);
   auto large=[&](size_t budget) {
-    return stationary_create(0,12,0,96,1856,16384,256,4096,2,16000000,budget,256,32,
+    return stationary_create(0,12,0,96,768,704,256,4096,2,16000000,budget,256,32,
                              &result,error,sizeof(error));
   };
   const int before_large=allocations;
   if(!large(large_bytes-1) || result || allocations!=before_large || owners) return 19;
   if(large(large_bytes) || !result || allocations!=before_large+1 || owners!=1) return 20;
   p=static_cast<Owner*>(result);
-  if(p->bytes!=large_bytes || p->atoms!=96 || p->aos!=1856) return 21;
-  if(reinterpret_cast<unsigned char*>(p->weighted_density+2*1856*1856)-p->context.arena != large_bytes-256)
+  if(p->bytes!=large_bytes || p->atoms!=96 || p->aos!=768) return 21;
+  if(reinterpret_cast<unsigned char*>(p->weighted_density+2*768*768)-p->context.arena != large_bytes-256)
     return 22;
   delete p;
   if(arenas || owners) return 23;

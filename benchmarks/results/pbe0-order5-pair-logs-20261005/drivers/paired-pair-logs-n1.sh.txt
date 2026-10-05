@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+candidate=/data/jzzeng/qc-1895-order5-pair-logs-20261005
+control=/data/jzzeng/qc-1895-order5-weighted-forces-20261005
+cd "$candidate"
+source .artifacts/gpu-env-n1.sh
+output="$candidate/.artifacts/endpoint-${SLURM_JOB_ID}"
+mkdir -p "$output"
+trap 'printf "%s\n" "$?" > "$output/job.exit"' EXIT
+scontrol show job "$SLURM_JOB_ID" -o > "$output/job.txt"
+sha256sum .artifacts/paired-pair-logs-n1.sh .artifacts/public-default-endpoint.py .artifacts/verify-public-default.py > "$output/driver.sha256"
+for atoms in 48 96; do
+  "$python" -m benchmarks.readme_pbe0 reference --atoms "$atoms" --basis-file benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json --repeats 5 --output "$output/reference-$atoms.json" > "$output/reference-$atoms.log" 2>&1
+  arms=(control candidate)
+  if [[ "$atoms" == 96 ]]; then arms=(candidate control); fi
+  for arm in "${arms[@]}"; do
+    checkout="$control"
+    if [[ "$arm" == candidate ]]; then checkout="$candidate"; fi
+    (
+      cd "$checkout"
+      source .artifacts/gpu-env-n1.sh
+      sha256sum -c .artifacts/build/binaries.sha256 > "$output/binary-$arm-$atoms.txt"
+      "$python" .artifacts/check-source.py > "$output/source-$arm-$atoms.txt"
+      export GENERATIVEQC_STATIONARY_CACHE="$output/cache-$arm-$atoms"
+      mkdir -p "$GENERATIVEQC_STATIONARY_CACHE"
+      ccache --show-stats > "$output/ccache-before-$arm-$atoms.txt"
+      "$python" "$candidate/.artifacts/public-default-endpoint.py" --force-policy default native --atoms "$atoms" --basis-file benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json --repeats 5 --reference "$output/reference-$atoms.json" --output "$output/$arm-$atoms.json" > "$output/$arm-$atoms.log" 2>&1
+      "$python" .artifacts/verify-public-default.py "$output/$arm-$atoms.json" "$output/reference-$atoms.json" > "$output/verified-$arm-$atoms.json"
+      ccache --show-stats > "$output/ccache-after-$arm-$atoms.txt"
+    )
+  done
+done

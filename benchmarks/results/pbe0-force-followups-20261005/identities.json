@@ -1,0 +1,17 @@
+{
+  "base": "9d0f4fc0ddbe9c1dc4539cd4f6ad8a6e019ba990",
+  "control": {
+    "revision": "9ba032c783addfeede96890c894b7cc9447cde95",
+    "source": "1c0b0ea35a9d34f179ab9b48c64685d70e1369a7bfc9455906fc83f8ccb657fc",
+    "library": "429a609e109352a47c01b4e421cbc1c17b4c744d9ea2ffac2f58ebcf785df46a"
+  },
+  "root": {
+    "revision": "255d64b8d28ae5432c7cfa175cbaf75dcd12fc44",
+    "source": "cf5aa4d510bcf4fb01016485336f96dc6048e2197bda6a8fe6ecc67f1bdb6fa9",
+    "library": "ce94806ea40ada0bdd1c8163de985c3d785dafb457b85e4eaabaabbff2fd1a7c"
+  },
+  "patches": {
+    "control-source.patch.gz": "7cb62247e09b275a685361a08e5387f56c77da90bfbf9e1ac9fe7372d96a0d94",
+    "root-reuse.patch.gz": "45d08ead74559d6fef1f3e4d8b0abeb91c96b16c60d6d198f17eaedf542358d1"
+  }
+}
