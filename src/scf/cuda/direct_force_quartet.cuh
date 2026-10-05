@@ -17,6 +17,7 @@
 #include "scf/cuda/direct_gradient_types.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
+#include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/matrix_index.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
@@ -31,7 +32,8 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     const ActiveShellQuartetTile* active_shell_quartet_tiles, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
-    double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane) {
+    double exchange_coefficient, std::size_t active_subtile, unsigned ao_quartet_lane,
+    bool refine_ao_density = true) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
   static_assert(AngularOrder >= 2U, "order-0/1 Direct force uses generated exact shell tasks");
   static_assert(AngularOrder != 3U,
@@ -95,11 +97,13 @@ __device__ __forceinline__ void contract_two_electron_force_quartet_subtile_scal
     std::size_t l = 0;
     decode_shell_ao_pair(batch, first_pair, first_ao_pair, system_ao_begin, i, j);
     decode_shell_ao_pair(batch, second_pair, second_ao_pair, system_ao_begin, k, l);
-    if (schwarz_bounds[physical_offset + matrix_index(i, j, n)] *
-            schwarz_bounds[physical_offset + matrix_index(k, l, n)] <
-        screening_tolerance) {
+    const double quartet_bound = schwarz_bounds[physical_offset + matrix_index(i, j, n)] *
+                                 schwarz_bounds[physical_offset + matrix_index(k, l, n)];
+    if (quartet_bound < screening_tolerance) return;
+    if (refine_ao_density && !direct_ao_force_survives_density_products<Unrestricted>(
+                                 quartet_bound, screening_tolerance, n, physical_offset,
+                                 spin_offset, density, i, j, k, l))
       return;
-    }
 
     // Full-range J/K share one derivative; keep their independently observable
     // components separate instead of repeating the invariant ERI recurrence.

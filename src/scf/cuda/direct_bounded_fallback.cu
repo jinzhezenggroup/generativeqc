@@ -356,7 +356,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                                                                      FixedAngularOrder, true>(
                       batch, &queue_count, queue + slot, screening_tolerance, schwarz_bounds,
                       density, active, output, 0U, coulomb_coefficient, exchange_coefficient,
-                      subtile, lane);
+                      subtile, lane, Purpose == DirectScreeningPurpose::Force);
                 } else if constexpr (FixedAngularOrder >= 4 &&
                                      FixedRadialOperator ==
                                          static_cast<int>(DirectRangeOperator::Long)) {
@@ -370,12 +370,14 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                     contract_bounded_direct_force_subtile_scaled<Unrestricted>(
                         batch, angular_order, &queue_count, queue + slot, screening_tolerance,
                         schwarz_bounds, density, active, output, coulomb_coefficient,
-                        exchange_coefficient, subtile, lane);
+                        exchange_coefficient, subtile, lane,
+                        Purpose == DirectScreeningPurpose::Force);
                   } else if (radial_operator == DirectRangeOperator::FullSources) {
                     contract_bounded_direct_force_subtile_scaled<Unrestricted, true>(
                         batch, angular_order, &queue_count, queue + slot, screening_tolerance,
                         schwarz_bounds, density, active, output, coulomb_coefficient,
-                        exchange_coefficient, subtile, lane);
+                        exchange_coefficient, subtile, lane,
+                        Purpose == DirectScreeningPurpose::Force);
                   } else if (radial_operator == DirectRangeOperator::RshSources) {
                     contract_bounded_direct_rsh_force_subtile<Unrestricted>(
                         batch, angular_order, &queue_count, queue + slot, screening_tolerance,

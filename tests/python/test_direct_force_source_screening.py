@@ -139,3 +139,82 @@ def test_force_screening_honors_requested_sources(tmp_path: Path) -> None:
         [str(probe)], check=True, capture_output=True, text=True, timeout=10
     )
     assert result.stdout.strip() == "42 source-demand comparisons"
+
+
+def test_force_ao_density_refinement_honors_spin_and_orientation(tmp_path: Path) -> None:
+    """Exercise the AO-level second-stage predicate on the maintained header."""
+    header = ROOT / "src/scf/cuda/direct_screening.cuh"
+    text = header.read_text()
+    start = text.index(
+        "template <bool Unrestricted>\n"
+        "__device__ __forceinline__ bool direct_ao_force_survives_density_products"
+    )
+    end = text.index("/** Apply the shell-level Schwarz and density gate", start)
+    function = (
+        text[start:end]
+        .replace("__device__ ", "")
+        .replace("__forceinline__ ", "inline ")
+    )
+    source = (
+        r"""
+    #include <array>
+    #include <cmath>
+    #include <cstddef>
+    #include <cstdio>
+    #include <cstdlib>
+    #include <limits>
+    using std::fabs;
+    using std::fmax;
+    using std::fmin;
+    using std::isfinite;
+    struct ShellPairDensityBounds { double coulomb, exchange_alpha, exchange_beta; };
+    std::size_t matrix_index(std::size_t i, std::size_t j, std::size_t n) { return i*n+j; }
+    """
+        + function
+        + r"""
+    unsigned comparisons=0;
+    void require(bool condition, const char* label) {
+      ++comparisons;
+      if (!condition) { std::fprintf(stderr,"failed AO screen: %s\n",label); std::exit(1); }
+    }
+    template<bool U>
+    bool accepts(const std::array<double,48>& density, double bound=1.0, double tol=1e-12,
+                 unsigned offset=0) {
+      return direct_ao_force_survives_density_products<U>(
+        bound,tol,4,offset,offset,density.data(),0,1,2,3);
+    }
+    int main() {
+      std::array<double,48> d{};
+      require(!accepts<false>(d),"zero RHF rejects");
+      require(!accepts<true>(d),"zero UHF rejects");
+      require(accepts<false>(d,1.0,0.0),"zero threshold admits");
+      require(accepts<false>(d,std::numeric_limits<double>::infinity()),"inf bound admits");
+      d={}; d[4]=d[14]=1.0; require(accepts<false>(d),"RHF Coulomb pair live");
+      d={}; d[2]=d[7]=1.0; require(accepts<false>(d),"RHF exchange orientation one");
+      d={}; d[3]=d[6]=1.0; require(accepts<false>(d),"RHF exchange orientation two");
+      d={}; d[1]=d[11]=1e-8; require(!accepts<false>(d),"tiny products reject");
+      d[1]=d[11]=1e-6; require(accepts<false>(d,1.0,1e-3),"force cap preserves live product");
+      d[1]=std::numeric_limits<double>::quiet_NaN(); require(accepts<false>(d),"NaN admits");
+      d={}; d[2]=1.0; d[16+7]=1.0; require(!accepts<true>(d),"opposite spin cannot form K");
+      d[16+2]=1.0; d[7]=-1.0; require(accepts<true>(d),"same-spin K survives cancellation");
+      d={}; d[16+1]=d[16+11]=1.0; require(accepts<false>(d,1.0,1e-12,16),"RHF offset");
+      d={}; d[32+2]=d[32+7]=1.0; require(accepts<true>(d,1.0,1e-12,16),"UHF offset");
+      std::printf("%u AO density-product comparisons\n",comparisons);
+    }
+    """
+    )
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host screening execution requires c++ and ccache")
+    probe = tmp_path / "ao-density-screening-probe"
+    probe.with_suffix(".cpp").write_text(source)
+    subprocess.run(
+        [cache, compiler, "-std=c++20", "-O2", str(probe.with_suffix(".cpp")), "-o", str(probe)],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "CCACHE_DIR": str(tmp_path / ".ccache")},
+    )
+    completed = subprocess.run([str(probe)], check=True, capture_output=True, text=True, timeout=30)
+    assert "AO density-product comparisons" in completed.stdout

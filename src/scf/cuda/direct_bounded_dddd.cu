@@ -121,7 +121,8 @@ __launch_bounds__(detail::kDirectQuartetThreads) void bounded_direct_dddd_stream
         if constexpr (Force) {
           contract_two_electron_force_quartet_subtile_scaled<Unrestricted, kDdddAngularOrder>(
               batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
-              output, 0U, coulomb_coefficient, exchange_coefficient, subtile, lane);
+              output, 0U, coulomb_coefficient, exchange_coefficient, subtile, lane,
+              Purpose == DirectScreeningPurpose::Force);
         } else {
           contract_fock_direct_quartet_subtile<Unrestricted, kDdddAngularOrder>(
               batch, &queue_count, &task, screening_tolerance, schwarz_bounds, density, active,
