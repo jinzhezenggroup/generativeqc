@@ -29,13 +29,13 @@ function(generativeqc_attach_cuda_implib target)
     message(FATAL_ERROR "A C compiler is required to generate provider-free CUDA wheel imports")
   endif()
 
-  string(TOLOWER "\${CMAKE_SYSTEM_PROCESSOR}" processor)
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" processor)
   if(processor MATCHES "^(x86_64|amd64)$")
     set(implib_target x86_64)
   elseif(processor MATCHES "^(aarch64|arm64)$")
     set(implib_target aarch64)
   else()
-    message(FATAL_ERROR "unsupported CUDA wheel architecture: \${CMAKE_SYSTEM_PROCESSOR}")
+    message(FATAL_ERROR "unsupported CUDA wheel architecture: ${CMAKE_SYSTEM_PROCESSOR}")
   endif()
 
   # Derive imports from the strict final-link diagnostics instead of maintaining
@@ -43,31 +43,31 @@ function(generativeqc_attach_cuda_implib target)
   # object-level names after CUDA header aliases (for example *_v2) and the
   # registration symbols emitted by NVCC. The launcher only synthesizes known
   # provider families; unrelated unresolved symbols remain hard link failures.
-  get_target_property(_generativeqc_existing_link_launcher \${target} RULE_LAUNCH_LINK)
+  get_target_property(_generativeqc_existing_link_launcher ${target} RULE_LAUNCH_LINK)
   if(_generativeqc_existing_link_launcher)
     message(FATAL_ERROR
-      "cannot compose CUDA wheel auto-implib with an existing RULE_LAUNCH_LINK on \${target}")
+      "cannot compose CUDA wheel auto-implib with an existing RULE_LAUNCH_LINK on ${target}")
   endif()
   set(_generativeqc_implib_launcher
-      "\${CMAKE_CURRENT_SOURCE_DIR}/tools/link_cuda_implib.py")
+      "${CMAKE_CURRENT_SOURCE_DIR}/tools/link_cuda_implib.py")
   set(_generativeqc_implib_root
-      "\${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/implib")
+      "${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/implib")
   set(_generativeqc_implib_output
-      "\${CMAKE_CURRENT_BINARY_DIR}/generated/cuda_implib/\${target}")
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/cuda_implib/${target}")
   set(_generativeqc_link_launcher
-      "\"\${Python3_EXECUTABLE}\" \"\${_generativeqc_implib_launcher}\""
-      " --cc \"\${CMAKE_C_COMPILER}\""
-      " --implib-root \"\${_generativeqc_implib_root}\""
-      " --work-dir \"\${_generativeqc_implib_output}\""
-      " --target \"\${implib_target}\" --")
-  set_property(TARGET \${target} PROPERTY RULE_LAUNCH_LINK
-               "\${_generativeqc_link_launcher}")
+      "\"${Python3_EXECUTABLE}\" \"${_generativeqc_implib_launcher}\""
+      " --cc \"${CMAKE_C_COMPILER}\""
+      " --implib-root \"${_generativeqc_implib_root}\""
+      " --work-dir \"${_generativeqc_implib_output}\""
+      " --target \"${implib_target}\" --")
+  set_property(TARGET ${target} PROPERTY RULE_LAUNCH_LINK
+               "${_generativeqc_link_launcher}")
 
-  target_include_directories(\${target} BEFORE PRIVATE
-    "\${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/nvidia_host_api")
-  target_include_directories(\${target} PRIVATE \${GENERATIVEQC_CUDA_TOOLKIT_INCLUDE_DIRS})
-  target_link_libraries(\${target} PRIVATE \${CMAKE_DL_LIBS})
-  target_link_options(\${target} PRIVATE "LINKER:-z,defs")
+  target_include_directories(${target} BEFORE PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/nvidia_host_api")
+  target_include_directories(${target} PRIVATE ${GENERATIVEQC_CUDA_TOOLKIT_INCLUDE_DIRS})
+  target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
+  target_link_options(${target} PRIVATE "LINKER:-z,defs")
 endfunction()
 
 # Native GFN2 needs two driver metadata queries, but loading a CUDA-enabled
