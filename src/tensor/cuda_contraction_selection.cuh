@@ -274,8 +274,9 @@ class PreparedContractionRegion {
  * As with fixed tables, capture needs explicit replay work accounting first. */
 class PreparedBoundedContraction {
  public:
-  // Charge the retained owner plus the simultaneously live replay descriptor.
-  static constexpr std::size_t host_reservation = 16U << 10;
+  // Include the retained owner, descriptor copies and bounded preparation
+  // selection scratch. This portfolio has at most five simultaneous offers.
+  static constexpr std::size_t host_reservation = 32U << 10;
 
   template <std::size_t N>
   PreparedBoundedContraction(const runtime::NativeLoweringRequest& request,
@@ -284,7 +285,9 @@ class PreparedBoundedContraction {
                              ContractionRequest maximum, cudaStream_t stream,
                              std::size_t maximum_bytes)
       : domain_(maximum) {
-    static_assert(sizeof(PreparedBoundedContraction) + sizeof(ContractionRequest) <=
+    static_assert(N <= 5, "bounded-domain portfolio exceeds its charged preparation capacity");
+    static_assert(sizeof(PreparedBoundedContraction) + 3 * sizeof(ContractionRequest) +
+                      3 * sizeof(candidates) + 8192 <=
                   host_reservation);
     if (maximum.scientific_identity != request.scientific_identity ||
         maximum.semantic_template_identity != request.semantic_identity)

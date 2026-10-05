@@ -27,7 +27,7 @@ Exact-shape cuTENSOR, cuBLASLt and CUTLASS plans remain rejected candidates for
 this domain; optional-provider failure admits the same-precision generated
 fallback. `CudaGrid.metrics()["lowering"]` reports provider, candidate, precision
 and semantic identities, preparation time/count, complete binding reservation,
-submitted calls and scalar summands. The grid capacity charges 16 KiB of host
+submitted calls and scalar summands. The grid capacity charges 32 KiB of host
 binding storage in addition to its existing provider allowance. Capture is
 rejected until logical replay work accounting is connected for this owner.
 Native XC density/Vxc fused kernels are a separate migration consumer.

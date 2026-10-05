@@ -32,7 +32,8 @@ not approximated by unbounded plan caching. The old provider allowance remains;
 the new context replaces the old grid BLAS handle, so handles are not duplicated.
 The numeric arena retains its existing 4 MiB reserved workspace for ABI/layout
 compatibility; the new shared provider uses its qualified zero-workspace policy.
-One 16 KiB host reservation covers the binding and simultaneous stack descriptor.
+One 32 KiB host reservation covers the binding, descriptor copies, and bounded
+preparation selection scratch as well as the replay stack descriptor.
 
 ## Invariants
 
@@ -64,9 +65,46 @@ fixture/CPU feature comparisons exercise full/local/empty maps, all feature mask
 spin reuse and density/orbital routes. Additional tests force generated fallback
 and verify exact semantic work counts and a single preparation across tails.
 The shared fixed-table CUDA tests protect the common executor extraction.
-Complete consumer timings and final test results are recorded with the PR;
-this architectural migration does not promote a new optional provider or claim
-a full SCF/force speedup.
+Host/compiler/publication gates: 582 passed, 13 opt-in skips. Slurm suites:
+140 grid/shared-executor tests and 178 density/spatial/fallback tests passed.
+After extending the host reservation to include preparation scratch, the
+focused resource/consumer suite passed 32 tests. Memcheck and initcheck each
+passed four tau-only density/orbital/provider cases with zero errors.
+The CMake-generated native grid translation unit also compiles with the
+explicit CXX/CUDA ccache launchers; command and cumulative cache statistics
+are retained in `.artifacts/1890-grid/`.
+
+Complete fixed-density PBE energy/Vxc endpoints include the GPU grid and the
+existing native CPU XC consumer. Five warm samples follow the first call;
+every sample is checked against the independently generated retained fixtures.
+They are diagnostic endpoint measurements, not isolated GEMM timing:
+
+| AO / points | Route | Baseline warm median (s) | Migrated warm median (s) | Calls / summands per endpoint |
+| --- | --- | --- | --- | --- |
+| 96 / 12288 | density | 0.079394 | 0.078215 | 96 / 226492416 |
+| 96 / 12288 | orbitals | 0.087210 | 0.087616 | 192 / 188743680 |
+| 192 / 24576 | density | 0.246586 | 0.241936 | 192 / 1811939328 |
+| 192 / 24576 | orbitals | 0.279571 | 0.278702 | 576 / 1509949440 |
+
+Work is unchanged; the migrated counters are checked against those equations.
+Maximum energy/matrix errors over all samples are below 2.2e-14 / 3.2e-15.
+First density endpoint calls were 0.177689/0.251849 s baseline and
+0.161311/0.243279 s migrated at 96/192 AO. Migrated binding preparation was
+0.015807/0.001689 s and occurs once, outside repeated endpoint execution.
+These small warm differences do not establish a performance improvement.
+
+Baseline source is `6a0e4eede`; the baseline generated grid binary SHA256 is
+`8a2dfaa032fb14c3fcb9363e1a50a7ef3061d54e25163833a0dca1d6a2456226`.
+The final migrated grid binary is
+`86c0134dba3b3a22b7880ca4a8ecae541e6f3f630f81eeb1345b7e75575e362a`.
+Both runs explicitly compose their generated grid with the same pinned native
+AO-normalization library, revision `9ba032c783addfeede96890c894b7cc9447cde95`,
+SHA256 `429a609e109352a47c01b4e421cbc1c17b4c744d9ea2ffac2f58ebcf785df46a`.
+This is not a current-head full native-library or SCF/force benchmark.
+`endpoint.py`, `endpoint-baseline.json`, `endpoint-final.json`, initial failures,
+all compiler/test logs and earlier resource-reservation measurements remain in
+the ignored artifact directory. No optional provider/default promotion follows
+from this architectural migration.
 
 ## Revisit when
 
