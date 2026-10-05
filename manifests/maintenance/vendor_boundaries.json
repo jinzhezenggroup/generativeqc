@@ -100,16 +100,6 @@
         "cublasGetVersion": 1
       }
     },
-    "src/posthf/df_mo_response.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Post-HF contraction/transform owners still couple equations to direct vendor matrix/vector calls; preserve source residency and numerical gates during migration.",
-      "references": {
-        "cublasDgemm": 1,
-        "cublasGetPointerMode": 1,
-        "cublasGetStream": 1
-      }
-    },
     "src/posthf/ri_mp2_cuda.cu": {
       "classification": "migration",
       "contract": "#1890",

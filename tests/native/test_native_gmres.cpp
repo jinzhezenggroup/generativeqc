@@ -605,6 +605,59 @@ void response_batch_contract() {
           "mutated response batch plan reached its operator");
 }
 
+void amortized_true_residuals() {
+  constexpr std::size_t n = 24;
+  DenseOperator matrix{n, std::vector<double>(n * n)};
+  std::vector<double> rhs(n), diagonal(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    diagonal[i] = matrix.values[i * n + i] = 2.0 + 0.04 * i;
+    rhs[i] = 0.1 + 0.013 * i;
+    if (i) matrix.values[i * n + i - 1] = matrix.values[(i - 1) * n + i] = 0.3;
+  }
+  GmresOptions options;
+  options.relative_tolerance = 0.0;
+  options.absolute_tolerance = 1e-11;
+  options.restart = n;
+  const auto old_plan = generativeqc::response::prepare_gmres(n, options);
+  auto apply = [&](auto x, auto y) { matrix(x, y); };
+  const auto every = generativeqc::response::solve_gmres(old_plan, apply, rhs, {}, diagonal);
+  options.true_residual_every = n;
+  const auto plan = generativeqc::response::prepare_gmres(n, options);
+  const auto sparse = generativeqc::response::solve_gmres(plan, apply, rhs, {}, diagonal);
+  require(every.converged() && sparse.converged(), "deferred residual convergence");
+  require(every.iterations == sparse.iterations && sparse.iterations < n,
+          "predicted convergence did not trigger an early true residual");
+  require(sparse.operator_actions < every.operator_actions &&
+              sparse.operator_actions == sparse.iterations + 1,
+          "deferred checks did not save exact actions");
+  require(explicit_residual(matrix, sparse.solution, rhs) <= options.absolute_tolerance,
+          "deferred checks failed independent residual");
+  require(plan.workspace_bytes == old_plan.workspace_bytes, "checkpoint policy added workspace");
+  const auto workspace = generativeqc::response::resident_gmres_workspace(plan);
+  DenseResidentBackend backend{n, workspace.vector_slots, matrix.values};
+  const auto unpreconditioned = generativeqc::response::solve_gmres(plan, apply, rhs);
+  const auto resident = generativeqc::response::solve_gmres_resident(plan, backend, rhs);
+  require(resident.result.converged() &&
+              resident.result.iterations == unpreconditioned.iterations &&
+              resident.result.operator_actions == unpreconditioned.operator_actions,
+          "resident and host checkpoint policies differ");
+  require(explicit_residual(matrix, resident.result.solution, rhs) <= options.absolute_tolerance,
+          "resident deferred residual gate");
+
+  // An intentionally inconsistent callback predicts exact convergence from
+  // its first Arnoldi image. Its real candidate action must still refuse it.
+  const auto invalid_plan = generativeqc::response::prepare_gmres(2, options);
+  const std::array<double, 2> small_rhs{1.0, 2.0};
+  unsigned actions = 0;
+  auto inconsistent = [&](auto x, auto y) {
+    ++actions;
+    for (std::size_t i = 0; i < x.size(); ++i) y[i] = (actions == 1 ? 1.0 : 2.0) * x[i];
+  };
+  const auto invalid = generativeqc::response::solve_gmres(invalid_plan, inconsistent, small_rhs);
+  require(!invalid.converged() && actions >= 2,
+          "Hessenberg estimate replaced true residual acceptance");
+}
+
 void stable_norm_extremes() {
   const std::array<double, 2> tiny{1e-200, 0.0};
   const std::array<double, 2> large{1e200, 0.0};
@@ -636,6 +689,7 @@ int main() {
     breakdown_and_nonfinite_paths();
     options_and_workspace_boundaries();
     response_batch_contract();
+    amortized_true_residuals();
     stable_norm_extremes();
     measured_workspace_owns_returned_storage();
     std::cout << "Native GMRES contracts passed\n";

@@ -112,7 +112,8 @@ GmresPlan prepare_gmres(std::size_t dimension, const GmresOptions& options) {
 
 GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                         std::span<const double> rhs, std::span<const double> initial_guess,
-                        std::span<const double> diagonal_preconditioner) {
+                        std::span<const double> diagonal_preconditioner,
+                        const LinearOperator& right_preconditioner) {
   // Plans are public value objects. Revalidate derived capacity and controls
   // before trusting admission, allocating output, or invoking a callback.
   const auto expected = prepare_gmres(plan.dimension, plan.options);
@@ -133,6 +134,9 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
     return result_for(plan, std::move(x), GmresStatus::nonfinite_input,
                       std::numeric_limits<double>::infinity(), 0.0, 0, 0, 0, 0);
   if (!apply) throw std::invalid_argument("GMRES operator callback is empty");
+  if (right_preconditioner && !diagonal_preconditioner.empty())
+    throw std::invalid_argument(
+        "GMRES preconditioner callback and diagonal are mutually exclusive");
   for (double value : diagonal_preconditioner)
     if (std::abs(value) <= plan.options.breakdown_tolerance)
       throw std::invalid_argument("GMRES diagonal preconditioner contains a zero entry");
@@ -147,7 +151,11 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
     return finite(output);
   };
   auto precondition = [&](std::span<const double> input, std::span<double> output) {
-    if (diagonal_preconditioner.empty()) {
+    if (right_preconditioner) {
+      ++preconditioner_actions;
+      std::fill(output.begin(), output.end(), 0.0);
+      right_preconditioner(input, output);
+    } else if (diagonal_preconditioner.empty()) {
       std::copy(input.begin(), input.end(), output.begin());
     } else {
       ++preconditioner_actions;
@@ -212,6 +220,9 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
       const auto basis_column = std::span<const double>(basis.data() + column * n, n);
       auto z_column = std::span<double>(preconditioned.data() + column * n, n);
       precondition(basis_column, z_column);
+      if (!finite(z_column))
+        return result_for(plan, std::move(best_x), GmresStatus::nonfinite_preconditioner, best_norm,
+                          rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
       if (!apply_checked(z_column, work))
         return result_for(plan, std::move(best_x), GmresStatus::nonfinite_operator, best_norm,
                           rhs_norm, iterations, restarts, operator_actions, preconditioner_actions);
@@ -260,8 +271,11 @@ GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
       transformed[column + 1] = -sine[column] * transformed_upper;
       ++iterations;
 
-      const bool checkpoint = broke_down || column + 1 == restart ||
-                              iterations == plan.options.max_iterations ||
+      // The small Hessenberg residual can request an exact check; it can never
+      // accept a solution. This lets expensive operators amortize intermediate
+      // checks without waiting until restart after predicted convergence.
+      const bool checkpoint = std::abs(transformed[column + 1]) <= target || broke_down ||
+                              column + 1 == restart || iterations == plan.options.max_iterations ||
                               iterations % plan.options.true_residual_every == 0;
       if (!checkpoint) continue;
       const std::size_t columns = column + 1;

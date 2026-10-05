@@ -99,7 +99,26 @@ projection retains scientific identity, parent semantic identity and operand
 order. Interior-axis slices are rejected. The caller traverses every fixed
 reduction row and accumulates its contribution. The native validator checks all
 eight matrix recipes against their projected axes. The CUDA response consumer
-still uses its original callback interface pending prepared execution migration.
+prepares all eight sites through the shared contraction table and runs its two
+row passes without plan search. Method interfaces accept device inputs and a
+stream; they do not accept a vendor handle or provider selector.
+
+The homogeneous contraction-region portfolio offers strict cuBLAS, generated
+CUDA and optional cuTENSOR execution. Unknown complete costs preserve a legal
+cuBLAS incumbent. A remaining budget that cannot hold the library reservation
+selects generated execution; optional preparation rejection releases provisional
+plans before the same-precision fallback. The region cannot implement casts,
+mixed arithmetic, refinement or precision audits and refuses such obligations.
+
+Source-response admission adds descriptor host storage and every simultaneous
+plan/provider/workspace reservation to its borrowed inputs and scratch. The
+physical source/metric wrapper removes only the exact borrowed overlap. The
+response currently owns a separate context, so cuBLAS adds the shared 96 MiB
+conservative reservation even when the retained physical source owns a handle.
+Diagnostics report binding bytes, selected compiler candidate identity, provider
+version, preparation time, queried optional workspace and observed provider
+device growth. cuTENSOR still has no qualified production resource profile;
+test-only ceilings and costs exercise execution without promoting it.
 
 `src/tensor/cuda_contraction.cuh` owns preparation, provider resources and typed
 execution. Each stage pre-binds its full and tail batch shapes outside iteration;
