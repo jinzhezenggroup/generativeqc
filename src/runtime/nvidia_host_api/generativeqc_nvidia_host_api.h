@@ -50,7 +50,9 @@ cublasStatus_t cublasGetProperty(libraryPropertyType type, int* value);
 cublasStatus_t cublasGetVersion_v2(cublasHandle_t handle, int* version);
 cublasStatus_t cublasSetWorkspace_v2(cublasHandle_t handle, void* workspace,
                                      size_t workspace_size_in_bytes);
+cublasStatus_t cublasGetStream_v2(cublasHandle_t handle, cudaStream_t* stream);
 cublasStatus_t cublasSetStream_v2(cublasHandle_t handle, cudaStream_t stream);
+cublasStatus_t cublasGetPointerMode_v2(cublasHandle_t handle, cublasPointerMode_t* mode);
 cublasStatus_t cublasSetPointerMode_v2(cublasHandle_t handle, cublasPointerMode_t mode);
 cublasStatus_t cublasSetMathMode(cublasHandle_t handle, cublasMath_t mode);
 cublasStatus_t cublasDaxpy_v2(cublasHandle_t handle, int n, const double* alpha, const double* x,
@@ -98,7 +100,9 @@ cublasStatus_t cublasDgeam(cublasHandle_t handle, cublasOperation_t transa,
 #define cublasDestroy cublasDestroy_v2
 #define cublasGetVersion cublasGetVersion_v2
 #define cublasSetWorkspace cublasSetWorkspace_v2
+#define cublasGetStream cublasGetStream_v2
 #define cublasSetStream cublasSetStream_v2
+#define cublasGetPointerMode cublasGetPointerMode_v2
 #define cublasSetPointerMode cublasSetPointerMode_v2
 #define cublasDaxpy cublasDaxpy_v2
 #define cublasDcopy cublasDcopy_v2

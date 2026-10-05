@@ -35,6 +35,8 @@ def probe() -> typing.Any:
         ct.c_bool,
         ct.c_size_t,
         ct.c_size_t,
+        ct.c_double,
+        ct.c_uint,
         ct.POINTER(dp),
         ct.POINTER(ct.c_size_t),
         dp,
@@ -93,6 +95,9 @@ def run(
     relax: bool = True,
     budget: int = 1 << 30,
     iterations: int = 200,
+    screening: float = 0.0,
+    bilinear: bool = True,
+    symmetric: bool = False,
 ) -> tuple:
     n = len(arrays[0])
     o = metadata["records"]["conventional"]["electron_count"] // 2
@@ -104,7 +109,7 @@ def run(
     dp = ct.POINTER(ct.c_double)
     feeds = (dp * 8)(*(a.ctypes.data_as(dp) for a in [*arrays, *sources]))
     destinations = (dp * 6)(*(a.ctypes.data_as(dp) for a in output))
-    counts, values = np.zeros(12, dtype=np.uintp), np.zeros(3)
+    counts, values = np.zeros(17, dtype=np.uintp), np.zeros(5)
     error = ct.create_string_buffer(1024)
     with NativeSource(**source_arguments(metadata)) as source:
         status = probe(
@@ -115,6 +120,8 @@ def run(
             relax,
             budget,
             iterations,
+            screening,
+            2 if symmetric else int(bilinear),
             destinations,
             counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
             values.ctypes.data_as(dp),
@@ -124,10 +131,14 @@ def run(
     return status, error.value.decode(), output, counts, values
 
 
-@pytest.mark.parametrize("name", ["h2", "water", "lih"])
+@pytest.mark.parametrize("name", ["h2", "water", "lih", "h2_f"])
 @pytest.mark.parametrize("blas", [False, True])
 def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
-    metadata, _ = load_fixture(name)
+    metadata, _ = load_fixture("h2" if name == "h2_f" else name)
+    if name == "h2_f":
+        metadata["inputs"]["shells"].append(
+            {"atom_index": 1, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
+        )
     arrays, mf = reference(metadata)
     n, o = len(arrays[0]), mf.mol.nelectron // 2
     sources, _ = seeds(arrays, o, 0.0)
@@ -142,10 +153,25 @@ def test_complete_hf_limit(probe: typing.Any, name: str, blas: bool) -> None:
     np.testing.assert_allclose(output[1], arrays[4], atol=3e-10, rtol=3e-10)
     expected_pulay = -2 * (arrays[0][:, :o] * arrays[5][:o]) @ arrays[0][:, :o].T
     np.testing.assert_allclose(output[2], expected_pulay, atol=3e-9, rtol=3e-10)
-    assert counts[2] == 3 and counts[9] == 0 and counts[11] == 0
+    # Specialized SPD leases are build/admission dependent. Without one, the
+    # same canonical bilinear consumer is valid for these small bases too.
+    assert counts[2] in (1, 3)
+    assert counts[9] == 0 and counts[11] == 0
+    if name == "h2_f":
+        assert counts[2] == 1
+        fallback = run(probe, metadata, arrays, sources, blas=blas, bilinear=False)
+        assert fallback[0] == 0, fallback[1]
+        assert fallback[3][2] == 3
+        np.testing.assert_allclose(output[0], fallback[2][0], atol=3e-10, rtol=3e-10)
     assert bool(counts[4]) == blas
     assert max(values) < 1e-8
     assert n > o
+    symmetric = run(
+        probe, metadata, arrays, sources, blas=blas, bilinear=False, symmetric=True
+    )
+    assert symmetric[0] == 0, symmetric[1]
+    assert symmetric[3][2] == 2
+    np.testing.assert_allclose(symmetric[2][0], output[0], atol=3e-10, rtol=3e-10)
 
 
 @pytest.mark.parametrize("name", ["water", "lih"])
@@ -163,6 +189,12 @@ def test_nonzero_z_response_matches_complete_energy_directions(
     assert status == 0, error
     assert counts[10] > 0 and counts[9] == 0
     assert values[0] < 1e-10 and values[1] < 1e-8
+    symmetric = run(
+        probe, metadata, arrays, sources, blas=blas, bilinear=False, symmetric=True
+    )
+    assert symmetric[0] == 0, symmetric[1]
+    assert symmetric[3][2] == 2
+    np.testing.assert_allclose(symmetric[2][0], output[0], atol=3e-9, rtol=3e-10)
     gradient = output[0] + mf.nuc_grad_method().grad_nuc()
     direction = np.random.default_rng(1765).normal(size=gradient.shape)
     direction /= np.linalg.norm(direction)
@@ -224,3 +256,204 @@ def test_admission_reference_and_stationarity_fail_without_publication(
         )
         assert result[0] != 0
         assert all(np.all(a == 12345.0) for a in result[2])
+
+
+def test_same_operator_subspace_retains_exact_response_gates(
+    probe: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    metadata, _ = load_fixture("water")
+    arrays, mf = reference(metadata)
+    sources, _ = seeds(arrays, mf.mol.nelectron // 2, 0.03)
+    cold = run(probe, metadata, arrays, sources)
+    assert cold[0] == 0, cold[1]
+    monkeypatch.setenv("GENERATIVEQC_TEST_RHF_RECYCLE_REPEAT", "1")
+    warm = run(probe, metadata, arrays, sources)
+    assert warm[0] == 0, warm[1]
+    assert warm[3][1] < cold[3][1]  # actual exact J/K calls, not a FLOP estimate
+    assert warm[3][10] == 0  # the fresh physical residual accepts the projection
+    for actual, expected in zip(warm[2], cold[2], strict=True):
+        np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
+    assert max(warm[4]) < 1e-8
+
+
+@pytest.mark.parametrize("threshold", [1e-12, 1e-4, 0.5])
+def test_fixed_mask_response_is_qualified_against_exact_operator(
+    probe: typing.Any, threshold: float
+) -> None:
+    """Even aggressive provisional masks must retain the original force gate."""
+    metadata, _ = load_fixture("water")
+    arrays, mf = reference(metadata)
+    source, _ = seeds(arrays, mf.mol.nelectron // 2, 0.03)
+    exact = run(probe, metadata, arrays, source)
+    actual = run(probe, metadata, arrays, source, screening=threshold)
+    assert exact[0] == actual[0] == 0, actual[1]
+    assert actual[4][0] < 1e-10
+    assert actual[4][3] == threshold
+    assert actual[3][16] > 0
+    if threshold >= 0.5:
+        assert actual[3][15] > 0  # a failed exact audit requires correction
+    for got, want in zip(actual[2], exact[2], strict=True):
+        np.testing.assert_allclose(got, want, atol=3e-9, rtol=3e-10)
+    assert actual[3][12] == actual[3][1]
+    assert actual[3][14] <= actual[3][13]
+
+
+@pytest.mark.parametrize("threshold", [0.0, 0.03])
+def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
+    """The same symmetric ERI mask must act linearly on arbitrary signed D."""
+    from tools.generate_validation_references import pyscf_molecule
+
+    metadata, _ = load_fixture("water")
+    mol, scale, _ = pyscf_molecule(metadata["inputs"])
+    eri = mol.intor("int2e") * np.einsum("i,j,k,l->ijkl", scale, scale, scale, scale)
+    bounds = np.sqrt(np.maximum(np.einsum("ijij->ij", eri), 0))
+    mask = bounds[:, :, None, None] * bounds[None, None, :, :] >= threshold
+    screened = eri * mask
+    n = len(scale)
+    dp = ct.POINTER(ct.c_double)
+    call = ct.CDLL(
+        str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve())
+    ).rhf_linear_jk_probe
+    call.argtypes = [
+        ct.c_void_p,
+        dp,
+        ct.c_double,
+        dp,
+        ct.POINTER(ct.c_uint64),
+        ct.c_void_p,
+        ct.c_size_t,
+    ]
+    call.restype = ct.c_int
+    rng = np.random.default_rng(1830)
+    a, b = (rng.normal(size=(n, n)) for _ in range(2))
+    a, b = a + a.T, b + b.T
+    potentials = []
+    with NativeSource(**source_arguments(metadata)) as source:
+        for d in (a, b, 2.3 * a - 0.7 * b):
+            output = np.empty((2, n, n))
+            counts = np.zeros(2, dtype=np.uint64)
+            error = ct.create_string_buffer(2048)
+            code = call(
+                source._handle,
+                d.ctypes.data_as(dp),
+                threshold,
+                output.ctypes.data_as(dp),
+                counts.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+                error,
+                len(error),
+            )
+            assert code == 0, error.value.decode()
+            reference = np.stack(
+                [
+                    np.einsum("ijkl,kl->ij", screened, d),
+                    np.einsum("ikjl,kl->ij", screened, d),
+                ]
+            )
+            np.testing.assert_allclose(output, reference, atol=2e-11, rtol=2e-12)
+            assert counts[0] >= counts[1] > 0
+            potentials.append(output[0] - 0.5 * output[1])
+    np.testing.assert_allclose(
+        potentials[2], 2.3 * potentials[0] - 0.7 * potentials[1], atol=2e-11, rtol=2e-12
+    )
+    np.testing.assert_allclose(
+        np.sum(a * potentials[1]), np.sum(b * potentials[0]), atol=2e-11, rtol=2e-12
+    )
+
+
+@pytest.mark.parametrize("through_f", [False, True])
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+@pytest.mark.parametrize("centers", [2, 4])
+def test_bilinear_derivative_signed_density_oracle(
+    through_f: bool, representation: str, centers: int
+) -> None:
+    """Independent libcint nuclear derivatives and FD of signed P:G(D)."""
+    metadata, _ = load_fixture("h2")
+    metadata = copy.deepcopy(metadata)
+    metadata["inputs"]["basis_representation"] = representation
+    if centers == 4:
+        # Nonplanar centers exercise all three explicit center jets and
+        # translation reconstruction of the fourth atom.
+        metadata["inputs"]["atomic_numbers"].extend([1, 1])
+        metadata["inputs"]["coordinates"].extend([[0.7, 1.2, -0.3], [-1.1, 0.4, 0.8]])
+        metadata["inputs"]["shells"].extend(
+            {"atom_index": atom, "angular_momentum": 0, "primitives": [[0.9, 1.0]]}
+            for atom in (2, 3)
+        )
+    if through_f:
+        metadata["inputs"]["shells"].append(
+            {
+                "atom_index": centers - 1,
+                "angular_momentum": 3,
+                "primitives": [[0.8, 1.0]],
+            }
+        )
+    mol, scale, _ = pyscf_molecule(metadata["inputs"])
+    n = len(scale)
+    rng = np.random.default_rng(1831)
+    d, p = (rng.normal(scale=0.04, size=(n, n)) for _ in range(2))
+    d, p = d + d.T, p + p.T
+    weight = np.einsum("ij,kl->ijkl", p, d) - 0.5 * np.einsum("ik,jl->ijkl", p, d)
+    normalization = np.einsum("i,j,k,l->ijkl", scale, scale, scale, scale)
+    ip1 = mol.intor("int2e_ip1")
+    oracle = np.zeros((mol.natm, 3))
+    for permutation in ((0, 1, 2, 3), (1, 0, 2, 3), (2, 3, 0, 1), (3, 2, 0, 1)):
+        tensor = -ip1.transpose((0, *(1 + permutation.index(i) for i in range(4))))
+        for atom, (_, _, begin, end) in enumerate(mol.aoslice_by_atom()):
+            mask = np.zeros(n)
+            mask[begin:end] = 1
+            shape = [1] * 4
+            shape[permutation[0]] = n
+            oracle[atom] += np.einsum(
+                "xijkl,ijkl->x", tensor, weight * normalization * mask.reshape(shape)
+            )
+    dp = ct.POINTER(ct.c_double)
+    call = ct.CDLL(
+        str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve())
+    ).rhf_bilinear_derivative_probe
+    call.argtypes = [
+        ct.c_void_p,
+        dp,
+        dp,
+        dp,
+        ct.POINTER(ct.c_uint64),
+        ct.c_void_p,
+        ct.c_size_t,
+    ]
+    call.restype = ct.c_int
+    with NativeSource(**source_arguments(metadata)) as source:
+        for invalid in (False, True):
+            data = np.full_like(d, 1e308) if invalid else d
+            seed = np.full_like(p, 1e308) if invalid else p
+            output = np.full_like(oracle, 12345.0)
+            counts = np.zeros(2, dtype=np.uint64)
+            error = ct.create_string_buffer(2048)
+            code = call(
+                source._handle,
+                data.ctypes.data_as(dp),
+                seed.ctypes.data_as(dp),
+                output.ctypes.data_as(dp),
+                counts.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+                error,
+                len(error),
+            )
+            if invalid:
+                assert code != 0
+                assert np.all(output == 12345.0)
+                continue
+            assert code == 0, error.value.decode()
+            np.testing.assert_allclose(output, oracle, atol=2e-11, rtol=2e-10)
+            np.testing.assert_allclose(output.sum(axis=0), 0, atol=2e-12)
+            assert 0 < counts[1] <= (centers - 1) * counts[0]
+    for step in (1e-4, 3e-5):
+        energies = []
+        for sign in (-1, 1):
+            displaced = copy.deepcopy(metadata["inputs"])
+            displaced["coordinates"][0][2] += sign * step
+            shifted, norms, _ = pyscf_molecule(displaced)
+            eri = shifted.intor("int2e") * np.einsum(
+                "i,j,k,l->ijkl", norms, norms, norms, norms
+            )
+            energies.append(np.sum(weight * eri))
+        np.testing.assert_allclose(
+            (energies[1] - energies[0]) / (2 * step), oracle[0, 2], atol=3e-9
+        )

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-1895-order5-shipping-20261005
+export PATH=/group/software/cuda-12.9.1/bin:$PATH
+export CCACHE_DIR=/data/jzzeng/ccache CCACHE_BASEDIR="$PWD"
+ccache --version > .artifacts/build/aot-ccache-version.txt
+ccache --show-stats > .artifacts/build/aot-ccache-before.txt
+profiles=(lda_rks lda_uks pbe_rks pbe_uks r2scan_rks r2scan_uks)
+targets=()
+for profile in "${profiles[@]}"; do targets+=("generativeqc_stationary_${profile}_manifest"); done
+ninja -C build/cuda-release-sm120 -t commands "${targets[@]}" > .artifacts/build/aot-commands.txt
+python - <<'PY'
+from pathlib import Path
+commands=[s for s in Path('.artifacts/build/aot-commands.txt').read_text().splitlines() if ' -c ' in s and ('/nvcc ' in s or '/c++ ' in s)]
+assert commands and all('ccache ' in s for s in commands)
+print('Verified AOT ccache commands',len(commands))
+PY
+cmake --build build/cuda-release-sm120 --target "${targets[@]}" --parallel 4
+ccache --show-stats > .artifacts/build/aot-ccache-after.txt
+for profile in "${profiles[@]}"; do sha256sum "build/cuda-release-sm120/libgenerativeqc_stationary_${profile}.so" "build/cuda-release-sm120/generativeqc_stationary_${profile}.json"; done > .artifacts/build/aot-binaries.sha256
