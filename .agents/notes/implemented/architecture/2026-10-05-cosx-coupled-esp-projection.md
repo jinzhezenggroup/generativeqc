@@ -43,6 +43,12 @@ partial-execution rejection, wrong helper, overlapping output and one-sided
 failure gates protect the complete region. A failure in either update must
 zero both outputs while preserving an enclosing sticky error.
 
+The common variant lookup also preserves context-retained module quarantine
+from the optional CUTLASS owner. Both ordinary and joint execution reject a
+quarantined table before shape/helper/pointer checks, including after release.
+The optional native CUTLASS failure regression exercises both joint-entry gates;
+its placeholder scalar helper must never enqueue.
+
 Source/binary manifests, ccache commands/statistics and finite Slurm qualification
 receipts live in ignored `.artifacts/1884-cosx-bidirectional/`. Complete Fock,
 production-default HF/PBE0 SCF and independent molecular derivative regressions
