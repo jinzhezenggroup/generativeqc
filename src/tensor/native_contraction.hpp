@@ -124,6 +124,19 @@ struct ContractionRequest {
   }
   std::size_t summands() const { return contraction_product(output_elements(), k); }
 
+  /** Validate a compiler-owned scalar broadcast over the leading batch axis.
+   * A zero-rank view means no epilogue. Weighted regions are fresh outputs;
+   * weighting a donated seed would require a different scientific graph. */
+  void validate_batch_scale(const ContractionOperand& scale) const {
+    if (!scale.rank) return;
+    if (scale.rank != 1 || scale.shape[0] != batches || scale.strides[0] != 1 ||
+        scale.dtype != publication_dtype || beta != 0)
+      throw std::invalid_argument("invalid contraction batch-scale view");
+    for (const auto& operand : operands)
+      if (!operand.rank || operand.modes[0] != scale.modes[0] || operand.shape[0] != batches)
+        throw std::invalid_argument("batch scale differs from the shared leading semantic axis");
+  }
+
   /** Logical work counts do not require a matrix factorization or packing.
    * Call validate_affine before using an externally supplied descriptor. */
   std::size_t affine_output_elements() const { return operands[2].elements(); }

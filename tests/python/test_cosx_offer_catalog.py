@@ -40,7 +40,7 @@ def generated_catalogs() -> list[list[dict[str, str]]]:
     """Read identities from actual generated declarations, not copied fixtures."""
     source = emit_cosx_contractions()
     result = []
-    for name in ("projection", "accumulation"):
+    for name in ("projection", "accumulation", "esp_application"):
         block = source.split(f"{name}_candidates{{{{", 1)[1].split("\n}};", 1)[0]
         fields = [
             re.findall(r'"([^"]*)"', line)
@@ -54,13 +54,13 @@ def generated_catalogs() -> list[list[dict[str, str]]]:
 def test_pinned_receipt_catalog_matches_actual_generator() -> None:
     verifier = runpy.run_path(str(RECEIPTS / "verify.py"))
     for family, offers in enumerate(generated_catalogs()):
-        assert len(offers) in (3, 4, 5)
+        assert len(offers) in (4, 5)
         assert (
             tuple(o["provider"] for o in offers) == verifier["PROVIDERS"][: len(offers)]
         )
         assert (
             tuple(o["identity"] for o in offers)
-            == verifier["OFFER_IDENTITIES"][family][: len(offers)]
+            == verifier["CURRENT_OFFER_IDENTITIES"][family][: len(offers)]
         )
 
 
@@ -84,7 +84,7 @@ def test_pending_cutlass_identity_uses_canonical_candidate(
     monkeypatch.setattr(native_lowering, "native_lowering_portfolio", capture)
     emit_cosx_contractions()
     verifier = runpy.run_path(str(RECEIPTS / "verify.py"))
-    assert len(captured) == 2
+    assert len(captured) == 3
     for family, template in enumerate(captured):
         candidate = replace(
             template,
@@ -98,7 +98,7 @@ def test_pending_cutlass_identity_uses_canonical_candidate(
                 ),
             ),
         )
-        assert candidate.identity == verifier["OFFER_IDENTITIES"][family][4]
+        assert candidate.identity == verifier["CURRENT_OFFER_IDENTITIES"][family][4]
 
 
 def test_native_gate_accepts_actual_generated_catalog(tmp_path: Path) -> None:
@@ -114,7 +114,7 @@ def test_native_gate_accepts_actual_generated_catalog(tmp_path: Path) -> None:
     (tmp_path / "cosx_descriptors.hpp").write_text(generated)
     native = (ROOT / "tests/native/cosx_contraction_cases.cuh").read_text()
     checks = re.findall(
-        r"(const bool library = route < 4.*?)(?=\s+const auto calls =)",
+        r"(const bool library = route < 8.*?)(?=\s+const auto calls =)",
         native,
         re.DOTALL,
     )
@@ -131,14 +131,14 @@ void require(bool value, const char* message) {
 namespace cosx_lowering = generativeqc::dft::cosx_lowering;
 int main() {
   const struct { int contraction_device=0, compute_major=12, runtime_version=12090; } info;
-  for (unsigned route=0; route<6; ++route) {
-    const unsigned mask=route<4?route:3;
-    for (unsigned slot=0; slot<4; ++slot) {
-      const auto descriptor=slot%2?cosx_lowering::accumulation(3,7):cosx_lowering::projection(3,7);
+  for (unsigned route=0; route<10; ++route) {
+    const unsigned mask=route<8?route:7;
+    for (unsigned slot=0; slot<6; ++slot) {
+      const auto descriptor=slot>=4?cosx_lowering::esp_application(3,7):slot%2?cosx_lowering::accumulation(3,7):cosx_lowering::projection(3,7);
       generativeqc::tensor::ContractionSiteDiagnostic good{descriptor.resolved, {}};
       good.offer_count=descriptor.candidates.size();
       std::copy(descriptor.candidates.begin(),descriptor.candidates.end(),good.offers.begin());
-      good.selected=route<4&&(mask&(1U<<(slot%2)))?0:1;
+      good.selected=route<8&&(mask&(1U<<(slot<4?slot%2:2)))?0:1;
       if(good.selected==1) good.offers[0].rejection="unqualified or unavailable";
       good.candidate=good.offers[good.selected];
       for (std::size_t i=2;i<good.offer_count;++i) good.offers[i].rejection="unqualified optional";

@@ -91,17 +91,23 @@ std::unique_ptr<dft::CudaCosxStagingPlan> prepare(const core::System& system,
   }
 }
 
-void site_json(const tensor::ContractionSiteDiagnostic& site) {
+void site_json(const tensor::ContractionSiteDiagnostic& site, unsigned slot) {
+  constexpr std::array<std::string_view, 6> labels{"projection_full",      "accumulation_full",
+                                                   "projection_tail",      "accumulation_tail",
+                                                   "esp_application_full", "esp_application_tail"};
   const auto& r = site.resolved;
   const auto& c = site.candidate;
-  std::cout << "{\"provider\":" << std::quoted(std::string(c.provider))
+  std::cout << "{\"label\":" << std::quoted(std::string(labels.at(slot)))
+            << ",\"provider\":" << std::quoted(std::string(c.provider))
             << ",\"algorithm\":" << std::quoted(std::string(c.algorithm))
             << ",\"candidate\":" << std::quoted(std::string(c.identity))
             << ",\"scientific\":" << std::quoted(std::string(r.scientific_identity))
             << ",\"semantic\":" << std::quoted(std::string(r.semantic_template_identity))
             << ",\"precision\":" << std::quoted(std::string(r.precision_identity))
-            << ",\"m\":" << r.m << ",\"n\":" << r.n << ",\"k\":" << r.k
-            << ",\"calls\":" << site.calls << ",\"summands\":" << site.summands
+            << ",\"batches\":" << r.batches << ",\"m\":" << r.m << ",\"n\":" << r.n
+            << ",\"k\":" << r.k << ",\"calls\":" << site.calls << ",\"summands\":" << site.summands
+            << ",\"scaled_elements\":" << site.scaled_elements
+            << ",\"publication_passes\":" << site.publication_passes
             << ",\"selected\":" << site.selected << ",\"offers\":[";
   for (std::size_t i = 0; i < site.offer_count; ++i) {
     const auto& offer = site.offers[i];
@@ -125,7 +131,7 @@ void cosx_endpoint_benchmark(char** args) {
   require(radial && radial <= 1000 && polar && polar <= 1000 && azimuth && azimuth <= 1000 &&
               tile && tile <= 4096,
           "invalid COSX benchmark grid/tile");
-  constexpr std::size_t repeats = 6;
+  constexpr std::size_t repeats = 6, routes = 8;
   constexpr auto convention = dft::CosxDensityConvention::rhf_spin_summed;
   for (unsigned geometry = 0; geometry < 2; ++geometry) {
     const auto geometry_begin = Clock::now();
@@ -148,52 +154,62 @@ void cosx_endpoint_benchmark(char** args) {
     }
     const auto oracle =
         dft::build_cosx_reference(system, oracle_xyz, oracle_weights, density, convention);
-    std::array<std::array<double, 3>, 4> oracle_errors{};
-    for (unsigned mask = 0; mask < 4; ++mask) {
+    std::array<std::array<double, 3>, routes> oracle_errors{};
+    for (unsigned mask = 0; mask < routes; ++mask) {
       auto plan = prepare(system, oracle_xyz, oracle_weights, 2, mask);
       oracle_errors[mask] = errors(plan->build(density, convention), oracle);
     }
 
-    std::array<std::unique_ptr<dft::CudaCosxStagingPlan>, 4> plans;
-    std::array<double, 4> setup{};
-    for (unsigned mask = 0; mask < 4; ++mask) {
+    std::array<std::unique_ptr<dft::CudaCosxStagingPlan>, routes> plans;
+    std::array<double, routes> setup{};
+    for (unsigned mask = 0; mask < routes; ++mask) {
       const auto begin = Clock::now();
       plans[mask] = prepare(system, grid.points(), grid.weights(), tile, mask);
       setup[mask] = elapsed(begin);
     }
-    std::array<std::array<double, repeats>, 4> samples{}, energies{};
-    std::array<std::array<std::array<double, 3>, repeats>, 4> paired_errors{};
+    std::array<std::array<double, repeats>, routes> samples{}, energies{};
+    std::array<std::array<std::array<double, 3>, repeats>, routes> paired_errors{};
     for (std::size_t sample = 0; sample < repeats; ++sample) {
-      std::array<dft::CosxReferenceResult, 4> result;
-      // Rotate all four routes, including after geometry change. This reports
+      std::array<dft::CosxReferenceResult, routes> result;
+      // Rotate all eight routes, including after geometry change. This reports
       // first replay, not process-cold CUDA/library initialization.
-      for (unsigned order = 0; order < 4; ++order) {
-        const auto mask = (order + sample + geometry) % 4;
+      for (unsigned order = 0; order < routes; ++order) {
+        const auto mask = (order + sample + geometry) % routes;
         const auto begin = Clock::now();
         result[mask] = plans[mask]->build(density, convention);
         samples[mask][sample] = elapsed(begin);
         energies[mask][sample] = result[mask].exchange_energy;
       }
-      for (unsigned mask = 0; mask < 4; ++mask)
+      for (unsigned mask = 0; mask < routes; ++mask)
         paired_errors[mask][sample] = errors(result[mask], result[0]);
     }
-    for (unsigned mask = 0; mask < 4; ++mask) {
+    for (unsigned mask = 0; mask < routes; ++mask) {
       const auto& info = plans[mask]->diagnostic();
       const auto effective_tile = info.tile_points;
       require(info.provider_allowance == (mask ? 96ULL << 20 : 0), "wrong provider allowance");
-      for (unsigned slot = 0; slot < 4; ++slot) {
+      for (unsigned slot = 0; slot < info.contractions.size(); ++slot) {
         const auto& site = info.contractions[slot];
-        const bool library = mask & (1U << (slot % 2));
+        const bool weighted = slot >= 4;
+        const bool full = slot < 2 || slot == 4;
+        const bool library = mask & (1U << (weighted ? 2 : slot % 2));
         const auto count =
-            slot < 2 ? points / effective_tile : std::size_t(points % effective_tile != 0);
-        const auto extent = slot < 2 ? effective_tile : points % effective_tile;
+            full ? points / effective_tile : std::size_t(points % effective_tile != 0);
+        const auto extent =
+            full || !(points % effective_tile) ? effective_tile : points % effective_tile;
+        const auto& r = site.resolved;
+        require(r.batches == (weighted ? extent : 1) &&
+                    r.m == (weighted || slot % 2 ? n : extent) && r.n == (weighted ? 1 : n) &&
+                    r.k == (weighted || !(slot % 2) ? n : extent),
+                "benchmark contraction shape mismatch");
         require(site.candidate.provider == (library ? "cublas" : "generated.cuda") &&
                     site.calls == repeats * count &&
-                    site.summands == repeats * count * extent * n * n,
+                    site.summands == repeats * count * extent * n * n &&
+                    site.scaled_elements == (weighted ? repeats * count * extent * n : 0) &&
+                    site.publication_passes == (weighted && library ? repeats * count : 0),
                 "benchmark provider or semantic work mismatch");
       }
       std::cout << std::setprecision(17)
-                << "{\"schema\":\"cosx-endpoint-v1\",\"atoms\":" << system.atoms.size()
+                << "{\"schema\":\"cosx-endpoint-v2\",\"atoms\":" << system.atoms.size()
                 << ",\"nao\":" << n << ",\"geometry\":" << geometry << ",\"grid\":[" << radial
                 << ',' << polar << ',' << azimuth << ']' << ",\"points\":" << points
                 << ",\"tile\":" << tile << ",\"effective_tile\":" << effective_tile
@@ -217,9 +233,9 @@ void cosx_endpoint_benchmark(char** args) {
                   << e[1] << ',' << e[2] << "]}";
       }
       std::cout << "],\"sites\":[";
-      for (unsigned slot = 0; slot < 4; ++slot) {
+      for (unsigned slot = 0; slot < info.contractions.size(); ++slot) {
         if (slot) std::cout << ',';
-        site_json(info.contractions[slot]);
+        site_json(info.contractions[slot], slot);
       }
       std::cout << "]}" << std::endl;
     }

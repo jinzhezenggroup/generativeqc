@@ -58,4 +58,6 @@ def test_emission_is_deterministic_and_provider_neutral() -> None:
     assert source == emit_cosx_contractions()
     assert '"cublas"' in source and '"generated.cuda"' in source
     assert "cublasDgemm" not in source and "cublasCreate" not in source
-    assert "PreparedContractionSites<4>" in source
+    assert "PreparedContractionSites<6>" in source
+    assert "batch-scaled-fused" in source
+    assert "batch-scaled-contraction-and-publication" in source

@@ -36,10 +36,11 @@ class PreparedContractionSites {
     // donated output of beta=1 is represented in the canonical SSA request.
     for (const auto& site : sites) {
       site.resolved.validate();
+      site.resolved.validate_batch_scale(site.batch_scale);
       const auto& r = site.request;
       if (site.resolved.scientific_identity != r.scientific_identity ||
           site.resolved.semantic_template_identity != r.semantic_identity ||
-          r.inputs != (site.resolved.beta == 0 ? 2U : 3U) ||
+          r.inputs != (site.resolved.beta == 0 && !site.batch_scale.rank ? 2U : 3U) ||
           (site.resolved.beta != 0 && site.resolved.beta != 1) ||
           !site.resolved.precision.is_strict_fp64() ||
           site.resolved.publication_dtype != PrecisionDtype::Fp64 || r.precisions.size() != 1 ||
@@ -47,6 +48,12 @@ class PreparedContractionSites {
           !r.precisions[0].refinement.empty() || !r.precisions[0].audit.empty() ||
           site.resolved.precision_identity != r.precisions[0].identity)
         throw std::invalid_argument("site differs from its strict canonical contraction");
+      if (r.precisions[0].inputs != r.inputs)
+        throw std::invalid_argument("site precision input count differs from the canonical region");
+      for (std::size_t input = 0; input < r.inputs; ++input)
+        if (r.input_dtypes[input] != PrecisionDtype::Fp64 ||
+            r.precisions[0].input_dtypes[input] != PrecisionDtype::Fp64)
+          throw std::invalid_argument("site does not implement implicit input casts");
     }
     std::vector<ContractionAlgorithm> algorithms(Sites);
     const auto select = [&](bool available) {
@@ -102,6 +109,7 @@ class PreparedContractionSites {
         algorithms[slot] =
             library ? ContractionAlgorithm::PedanticBlas : ContractionAlgorithm::GeneratedOrdered;
         diagnostics_[slot] = {site.resolved, selected, rejection};
+        diagnostics_[slot].batch_scale = site.batch_scale;
         std::copy(offers.begin(), offers.end(), diagnostics_[slot].offers.begin());
         diagnostics_[slot].offer_count = Offers;
         diagnostics_[slot].selected = decision.selected;
@@ -115,22 +123,35 @@ class PreparedContractionSites {
     if (!library) context_.prepare_generated(stream);
     provider_bytes_ = library ? CudaContractionContext::kProviderAllowance : 0;
     std::vector<ContractionRequest> requests(Sites);
-    for (std::size_t i = 0; i < Sites; ++i) requests[i] = sites[i].resolved;
-    table_.add(1, 1, 1, std::move(requests), context_, calls_, summands_, std::move(algorithms));
+    std::vector<ContractionOperand> batch_scales(Sites);
+    for (std::size_t i = 0; i < Sites; ++i) {
+      requests[i] = sites[i].resolved;
+      batch_scales[i] = sites[i].batch_scale;
+    }
+    table_.add(1, 1, 1, std::move(requests), context_, calls_, summands_, std::move(algorithms), {},
+               std::move(batch_scales));
     prepare_seconds_ =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
   }
 
   void execute(std::size_t slot, cudaStream_t stream, const double* a, const double* b,
-               double* output, int* error) {
+               double* output, int* error, const double* batch_scale = nullptr) {
     if (slot >= Sites) throw std::out_of_range("unknown prepared contraction site");
     auto& diagnostic = diagnostics_[slot];
     const auto next_calls = runtime::lowering_add(diagnostic.calls, 1);
     const auto next_work =
         runtime::lowering_add(diagnostic.summands, diagnostic.resolved.summands());
-    table_.execute(slot, 1, 1, 1, stream, a, b, output, error);
+    const auto next_scaled = runtime::lowering_add(
+        diagnostic.scaled_elements,
+        diagnostic.batch_scale.rank ? diagnostic.resolved.output_elements() : 0);
+    const auto next_publications = runtime::lowering_add(
+        diagnostic.publication_passes,
+        diagnostic.batch_scale.rank && diagnostic.candidate.provider == "cublas" ? 1 : 0);
+    table_.execute(slot, 1, 1, 1, stream, a, b, output, error, batch_scale);
     diagnostic.calls = next_calls;
     diagnostic.summands = next_work;
+    diagnostic.scaled_elements = next_scaled;
+    diagnostic.publication_passes = next_publications;
   }
   const auto& diagnostics() const noexcept { return diagnostics_; }
   std::size_t provider_bytes() const noexcept { return provider_bytes_; }

@@ -35,7 +35,7 @@ int grid_cuda_basis_v1(void* pointer, generativeqc::dft::GridBasisView* output, 
 #if defined(GENERATIVEQC_TEST_HOOKS)
 extern "C" void cosx_contraction_qualification_for_test(unsigned mask, bool unavailable) {
   generativeqc::tensor::contraction_sites_qualification_for_test =
-      (mask & 1U ? 5U : 0U) | (mask & 2U ? 10U : 0U);
+      (mask & 1U ? 5U : 0U) | (mask & 2U ? 10U : 0U) | (mask & 4U ? 48U : 0U);
   generativeqc::tensor::contraction_sites_unavailable_for_test = unavailable;
 }
 #endif
@@ -228,21 +228,6 @@ __global__ void esp_integrals_kernel(const double* basis, std::size_t natom, std
   }
 }
 
-__global__ void apply_esp_kernel(const double* esp, const double* projected, const double* weights,
-                                 std::size_t npoint, std::size_t nbf, double* potential,
-                                 int* error) {
-  const std::size_t total = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf, row = index % nbf;
-    const double* matrix = esp + point * nbf * nbf;
-    double value = 0.0;
-    for (std::size_t column = 0; column < nbf; ++column)
-      value += matrix[row * nbf + column] * projected[point * nbf + column];
-    potential[index] = finite_or_flag(weights[point] * value, error);
-  }
-}
-
 __global__ void symmetrize_exchange_kernel(const double* raw, std::size_t nbf, double* output,
                                            int* error) {
   const std::size_t total = nbf * nbf;
@@ -408,9 +393,8 @@ struct CudaCosxStagingPlan::Impl {
       const std::size_t site = count == tile_points ? 0 : 2;
       contractions->execute(site, view.stream, view.ao, density.get(), projected.get(),
                             error.get());
-      apply_esp_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          esp.get(), projected.get(), device_weights.get(), count, n, potential.get(), error.get());
-      check(cudaGetLastError());
+      contractions->execute(count == tile_points ? 4 : 5, view.stream, esp.get(), projected.get(),
+                            potential.get(), error.get(), device_weights.get());
       contractions->execute(site + 1, view.stream, view.ao, potential.get(), raw.get(),
                             error.get());
     }
