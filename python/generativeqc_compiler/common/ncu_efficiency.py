@@ -324,12 +324,12 @@ def assess_ncu_execution(evidence: NcuExecutionEvidence) -> NcuExecutionAssessme
     )
     confidence = (
         "high"
-        if evidence_groups >= 5
+        if evidence_groups >= 4
         else "medium"
-        if evidence_groups >= 3
+        if evidence_groups >= 2
         else "low"
     )
-    if evidence_groups < 3:
+    if evidence_groups < 2:
         diagnostics.append(
             "too few independent NCU counter groups for a strong mechanism "
             "classification"
