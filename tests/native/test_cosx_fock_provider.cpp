@@ -90,10 +90,20 @@ void verify_admission(const generativeqc::dft::CosxFockPreparationDiagnostic& di
   for (std::size_t slot = 0; slot < k.contractions.size(); ++slot) {
     const auto& site = k.contractions[slot];
     const bool tail = slot < 4 ? slot >= 2 : slot == 5;
+    // The existing hook qualifies operations, each covering its full/tail
+    // descriptors: projection bit 0, accumulation bit 1, weighted ESP bit 2.
+    const bool library = (expected_mask & (1U << (slot < 4 ? slot % 2 : 2))) != 0;
+    if (site.calls != spin_builds * (tail ? tail_tiles : full_tiles) ||
+        site.summands != site.calls * site.resolved.summands() ||
+        site.candidate.provider != (library ? "cublas" : "generated.cuda"))
+      std::cerr << "mask=" << expected_mask << " slot=" << slot << " calls=" << site.calls
+                << " full=" << full_tiles << " tail=" << tail_tiles << " spins=" << spin_builds
+                << " work=" << site.summands << " per_call=" << site.resolved.summands()
+                << " provider=" << site.candidate.provider
+                << " reason=" << site.alternative_rejection << '\n';
     require(site.calls == spin_builds * (tail ? tail_tiles : full_tiles) &&
                 site.summands == site.calls * site.resolved.summands() &&
-                site.candidate.provider ==
-                    ((expected_mask & (1U << slot)) ? "cublas" : "generated.cuda"),
+                site.candidate.provider == (library ? "cublas" : "generated.cuda"),
             "enclosing Fock diagnostic lost selected full/tail provider or actual work");
   }
   require((k.provider_allowance != 0) == (expected_mask != 0) &&
@@ -284,15 +294,15 @@ int main() {
     if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
     // Qualification is below the scientific owner. Each route reuses the same
     // independent RI-J/COSX value, energy, spin and molecular-derivative oracles.
-    for (unsigned mask : {0U, 1U, 2U, 3U, 48U, 63U}) {
+    for (unsigned mask : {0U, 1U, 2U, 3U, 4U, 7U}) {
       cosx_contraction_qualification_for_test(mask, false);
       verify_restricted(h2(), 0, mask);
     }
-    for (unsigned mask : {0U, 63U}) {
+    for (unsigned mask : {0U, 7U}) {
       cosx_contraction_qualification_for_test(mask, false);
       verify_unrestricted(h2(), 0, mask);
     }
-    cosx_contraction_qualification_for_test(63U, true);
+    cosx_contraction_qualification_for_test(7U, true);
     verify_restricted(h2(), 0, 0);
     cosx_contraction_qualification_for_test(0, false);
     std::cout << "prepared RI-J/COSX-K fixed-density RHF/UHF provider PASS\n";
