@@ -37,7 +37,10 @@ def test_complete_checked_identity(weighted: bool) -> None:
             if weighted
             else adapter.request(root, backend=backend)
         )
-        request = checked_contraction_request(base, update, scale if weighted else None)
+        product = next(n for n in root.inputs if n.op == "einsum") if weighted else root
+        request = checked_contraction_request(
+            base, update, scale if weighted else None, contraction=product
+        )
         assert request.scientific_identity == base.scientific_identity
         assert dict(request.semantics)["scalar_update_hash"] == update.logical_hash
         assert (
@@ -59,7 +62,7 @@ def test_checked_recognition_rejects_changed_program_or_region() -> None:
         {"updated": add(update.outputs["updated"], update.outputs["updated"])}
     )
     with pytest.raises(ValueError, match="update graph"):
-        checked_contraction_request(base, bad)
+        checked_contraction_request(base, bad, contraction=program.outputs["result"])
     factors = [
         input_tensor(n.attrs["name"], replace(n.spec, dtype="float32"))
         for n in program.outputs["result"].inputs
@@ -69,9 +72,16 @@ def test_checked_recognition_rejects_changed_program_or_region() -> None:
         fp32.outputs["result"], backend="cuda"
     )
     with pytest.raises(ValueError, match="complete FP64"):
-        checked_contraction_request(fp32_request, update)
-    with pytest.raises(ValueError, match="complete FP64"):
-        checked_contraction_request(base, update, build_cosx_scale_program())
+        checked_contraction_request(
+            fp32_request, update, contraction=fp32.outputs["result"]
+        )
+    with pytest.raises(ValueError, match="original node"):
+        checked_contraction_request(
+            base,
+            update,
+            build_cosx_scale_program(),
+            contraction=program.outputs["result"],
+        )
 
 
 def test_asymmetric_jet_projection_against_independent_long_double() -> None:
@@ -102,3 +112,72 @@ def test_derivative_emission_keeps_checked_scalar_owner_and_axis_schedule() -> N
     assert "execute_checked<ScalarStep<false>>" in source
     assert "axis < 3" in source and "jets+axis*stride" in source
     assert "cublasDgemm(" not in source
+
+
+@pytest.mark.parametrize("coefficient", (-1, 2))
+def test_checked_native_binding_rejects_nonunit_original_coefficient(
+    coefficient: int,
+) -> None:
+    from generativeqc_compiler.tensor.native_lowering import contraction_initializer
+
+    original = cosx_matrix_program(5, 3, update=False)
+    product = einsum(
+        "pm,mn->pn", *original.outputs["result"].inputs, coefficient=coefficient
+    )
+    adapter = TensorLoweringAdapter(Program({"result": product}))
+    with pytest.raises(ValueError, match="unit original contraction"):
+        contraction_initializer(
+            adapter,
+            product,
+            lambda index: index.space.name,
+            transpose=("N", "N"),
+            extents=("1", "points", "columns", "columns"),
+            coefficient="1.0",
+            checked_update=build_cosx_projection_update_program(),
+        )
+
+
+@pytest.mark.parametrize("weighted", (False, True))
+def test_checked_request_binds_original_node_proof(weighted: bool) -> None:
+    program = (
+        cosx_esp_program(5, 3) if weighted else cosx_matrix_program(5, 3, update=False)
+    )
+    adapter = TensorLoweringAdapter(program)
+    root = program.outputs["result"]
+    request = (
+        batch_scaled_contraction_request(adapter, root, backend="cuda")
+        if weighted
+        else adapter.request(root, backend="cuda")
+    )
+    unrelated = cosx_matrix_program(7, 3, update=False).outputs["result"]
+    with pytest.raises(ValueError, match="original node"):
+        checked_contraction_request(
+            request,
+            build_cosx_projection_update_program(),
+            build_cosx_scale_program() if weighted else None,
+            contraction=unrelated,
+        )
+
+
+def test_checked_request_rejects_unit_proof_for_scaled_request() -> None:
+    original = cosx_matrix_program(5, 3, update=False).outputs["result"]
+    product = einsum("pm,mn->pn", *original.inputs, coefficient=2)
+    adapter = TensorLoweringAdapter(Program({"result": product}))
+    request = adapter.request(product, backend="cuda")
+    update = build_cosx_projection_update_program()
+    with pytest.raises(ValueError, match="unit original contraction"):
+        checked_contraction_request(request, update, contraction=product)
+    with pytest.raises(ValueError, match="original node"):
+        checked_contraction_request(request, update, contraction=original)
+
+
+@pytest.mark.parametrize("outer", (False, True))
+def test_checked_weighted_region_keeps_inner_and_outer_unit_guards(outer: bool) -> None:
+    original = cosx_esp_program(5, 3).outputs["result"]
+    weight, product = original.inputs
+    if not outer:
+        product = einsum("pmn,pn->pm", *product.inputs, coefficient=2)
+    root = einsum("p,pm->pm", weight, product, coefficient=2 if outer else 1)
+    adapter = TensorLoweringAdapter(Program({"result": root}))
+    with pytest.raises(ValueError, match="cannot reduce, reorder, broadcast or cast"):
+        batch_scaled_contraction_request(adapter, root, backend="cuda")

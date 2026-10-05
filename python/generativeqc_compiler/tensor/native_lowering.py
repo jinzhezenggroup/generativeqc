@@ -297,7 +297,7 @@ def contraction_initializer(
         if accumulation is not None or beta != "0.0" or coefficient != "1.0":
             raise ValueError("checked scalar contraction requires a fresh unit result")
         request = checked_contraction_request(
-            request, checked_update, checked_publication
+            request, checked_update, checked_publication, contraction=node
         )
     elif checked_publication is not None:
         raise ValueError("checked publication requires its scalar update")

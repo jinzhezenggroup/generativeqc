@@ -104,7 +104,7 @@ namespace generativeqc::dft::cosx_derivative_lowering {
             else projected_contraction_request(adapter, product, fixed_modes=fixed)
         )
         request = checked_contraction_request(
-            request, update, publication if weighted else None
+            request, update, publication if weighted else None, contraction=product
         )
         descriptor = contraction_initializer(
             adapter,

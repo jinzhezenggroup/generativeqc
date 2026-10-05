@@ -7,16 +7,20 @@ from typing import TYPE_CHECKING
 
 from generativeqc_compiler.common.lowering_contract import LoweringConstraints
 
+from .program import Program, node_hashes
+
 if TYPE_CHECKING:
     from generativeqc_compiler.common.lowering_provider import LoweringRequest
 
-    from .program import Program
+    from .ir import Node
 
 
 def checked_contraction_request(
     request: LoweringRequest,
     update: Program,
     publication: Program | None = None,
+    *,
+    contraction: Node,
 ) -> LoweringRequest:
     """Retain the compiler's checked scalar arithmetic at every reduction step.
 
@@ -25,6 +29,21 @@ def checked_contraction_request(
     authoritative and their hashes bind the generated execution. A final-output
     audit cannot replace an intermediate update check or change reduction order.
     """
+    if (
+        contraction.op != "einsum"
+        or len(contraction.inputs) != 2
+        or contraction.attrs["coefficient"] != (1, 1)
+    ):
+        raise ValueError(
+            "checked scalar execution requires a unit original contraction"
+        )
+    # The request may describe a leading-axis slice or a weighted region. Bind
+    # the proof to its original product, never an unrelated unit-coefficient node.
+    proof = node_hashes(Program({"result": contraction}).nodes)[contraction]
+    semantics = dict(request.semantics)
+    expected = semantics.get("contraction_node_hash" if publication else "node_hash")
+    if proof != expected:
+        raise ValueError("checked contraction proof differs from its original node")
     inputs = {n.attrs["name"]: n for n in update.live_nodes if n.op == "input"}
     if (
         set(inputs) != {"accumulator", "left", "right"}
