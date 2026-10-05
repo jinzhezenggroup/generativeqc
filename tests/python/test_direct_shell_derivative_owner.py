@@ -375,10 +375,27 @@ def test_channel_dispatch_is_independent(tmp_path: Path) -> None:
     header = _source("src/scf/cuda/direct_jk_plan.hpp")
     start = header.index("struct DirectJkValueDispatch")
     end = header.index("/** Own one exact public-AO provider", start)
+    source = _source("src/scf/cuda/direct_jk.cpp")
+    device_start = source.index("enqueue_cuda_direct_jk_device_impl(")
+    dispatch_start = source.index("const auto dispatch =", device_start)
+    dispatch_end = source.index(";", dispatch_start) + 1
+    device_dispatch = source[dispatch_start:dispatch_end]
     harness = (
         "#include <cassert>\n"
         + header[start:end]
         + r"""
+DirectJkValueDispatch device_dispatch(bool generated_coulomb_available,
+    bool generated_exchange_available, bool want_j, bool want_k, bool mixed_j,
+    bool canonical, bool fixed) {
+  struct Channel { bool present; };
+  struct { Channel coulomb, exchange; } spec{{want_j},{want_k}};
+  struct Plan { const void* canonical_pairs; } storage{canonical ? &spec : nullptr};
+  auto* plan = &storage;
+"""
+        + device_dispatch
+        + r"""
+  return dispatch;
+}
 int main() {
   for (unsigned mask = 0; mask < 64; ++mask) {
     const bool generated_j = mask & 1U, generated_k = mask & 2U;
@@ -398,6 +415,22 @@ int main() {
     assert(int(both.generated_exchange) + int(both.canonical_exchange) +
            int(both.generic_exchange) == int(k));
     if (mixed) assert(!both.generated_coulomb && !both.canonical_coulomb);
+    const auto ordinary = device_dispatch(generated_j, generated_k, j, k, mixed,
+                                           canonical, false);
+    assert(ordinary.generated_coulomb == both.generated_coulomb);
+    assert(ordinary.generated_exchange == both.generated_exchange);
+    assert(ordinary.canonical_coulomb == both.canonical_coulomb);
+    assert(ordinary.canonical_exchange == both.canonical_exchange);
+    assert(ordinary.generic_coulomb == both.generic_coulomb);
+    assert(ordinary.generic_exchange == both.generic_exchange);
+    // Fixed-mask RHF response has canonical pairs and strict J precision.
+    // Its geometry-only screen/census must not be bypassed by shell providers.
+    if (canonical && !mixed) {
+      const auto fixed = device_dispatch(generated_j, generated_k, j, k, false, true, true);
+      assert(fixed.canonical_coulomb == j && fixed.canonical_exchange == k);
+      assert(!fixed.generated_coulomb && !fixed.generated_exchange);
+      assert(!fixed.generic_coulomb && !fixed.generic_exchange);
+    }
   }
 }
 """
