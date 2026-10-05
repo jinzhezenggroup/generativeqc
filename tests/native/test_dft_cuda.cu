@@ -101,14 +101,15 @@ struct Fixture {
   }
   ~Fixture() { cleanup(); }
   void submit(const std::vector<double>& d,
-              CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64) {
+              generativeqc::runtime::PrecisionPhase phase =
+                  generativeqc::runtime::PrecisionPhase::StrictAudit) {
     check(cudaMemcpyAsync(density, d.data(), d.size() * sizeof(double), cudaMemcpyHostToDevice,
                           stream));
     // Reference input transfer is an explicit test stage. Complete it before
     // a temporary host density can die; the measured native enqueue follows.
     check(cudaStreamSynchronize(stream));
     const auto before = plan->transfers();
-    plan->enqueue(density, d.size(), ++generation, precision);
+    plan->enqueue(density, d.size(), ++generation, phase);
     const auto after = plan->transfers();
     require(after.output_d2h_bytes == before.output_d2h_bytes &&
                 after.setup_h2d_bytes == before.setup_h2d_bytes &&
@@ -559,7 +560,9 @@ void mixed_density_contraction(const AoBasis& basis, const MolecularGrid& grid,
             "mixed tiled qualification must admit its target schedule");
   const auto d = density(basis.nao, uks ? 2 : 1);
   strict.submit(d);
-  mixed.submit(d, CudaXcDensityPrecision::Fp32ComputeFp64Accumulate);
+  mixed.plan->prepare_density(generativeqc::runtime::fp32_compute_fp64_accumulation(
+      "dft.cuda.auto/density-contraction-v1"));
+  mixed.submit(d, generativeqc::runtime::PrecisionPhase::Admitted);
   const auto reference = strict.scalars(), candidate = mixed.scalars();
   require(reference.error == 0 && candidate.error == 0, "mixed-density XC rejected finite input");
   const auto tol = [](double x) { return 2e-6 + 2e-6 * std::abs(x); };
@@ -580,6 +583,18 @@ void mixed_density_contraction(const AoBasis& basis, const MolecularGrid& grid,
 void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bool uks,
                              std::uint32_t functional) {
   Fixture test(basis, grid, functional, uks, 13);
+  bool domain_rejected = false;
+  try {
+    test.plan->prepare_density(generativeqc::runtime::fp32_compute_fp64_accumulation(
+        "dft.cuda.auto/density-contraction-v1"));
+  } catch (const std::invalid_argument& error) {
+    // Physical support and formal qualification independently gate preparation.
+    const std::string detail = error.what();
+    domain_rejected =
+        detail == "mixed density contraction is not qualified for this domain" ||
+        detail == "mixed CUDA XC density precision is not qualified for this point program";
+  }
+  require(domain_rejected, "unqualified density binding admitted during preparation");
   const auto d = density(basis.nao, uks ? 2 : 1);
   compare(test, basis, grid, d);
   const auto previous = test.scalars();
@@ -587,14 +602,11 @@ void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bo
   const auto before = test.plan->transfers();
   bool rejected = false;
   try {
-    test.plan->enqueue(test.density, d.size(), test.generation + 1,
-                       CudaXcDensityPrecision::Fp32ComputeFp64Accumulate);
+    test.plan->prepare_density(generativeqc::runtime::fp32_compute_fp64_accumulation(
+        "dft.cuda.auto/density-contraction-v1"));
   } catch (const std::invalid_argument& error) {
-    // Physical execution support and formal qualification are independent
-    // gates. Either may reject this request before any generation is consumed.
-    const std::string detail = error.what();
-    rejected = detail == "mixed CUDA XC density precision is unavailable for this layout" ||
-               detail == "mixed CUDA XC density precision is not qualified for this point program";
+    rejected =
+        std::string(error.what()).find("immutable after first evaluation") != std::string::npos;
   }
   require(rejected, "unqualified functional mixed density was not rejected");
   const auto after = test.plan->transfers();

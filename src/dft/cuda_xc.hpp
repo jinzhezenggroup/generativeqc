@@ -12,6 +12,7 @@
 #include "dft/grid.hpp"
 #include "dft/xc_capabilities.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/lowering_binding.hpp"
 
 namespace generativeqc::dft {
 
@@ -25,14 +26,17 @@ enum class CudaXcAoPrecision : std::uint8_t {
   Fp32ComputeFp64Storage = 1,
 };
 
-/** Density-times-AO arithmetic. Mixed evaluates products in explicit RN FP32
- * while keeping storage, the long reduction, point XC, Vxc and scalar reductions FP64.
- * Admission requires both executable layout support and a Qualified entry in
- * the resolved point-program capability census. Dense LDA/PBE/r2SCAN are qualified;
- * local-AO layouts remain strict FP64 until independently qualified. */
-enum class CudaXcDensityPrecision : std::uint8_t {
-  Fp64 = 0,
-  Fp32ComputeFp64Accumulate = 1,
+/** Prepared density product entry. Shapes and mapped AO lifetimes are owned
+ * by CudaXcPlan; this launcher has no policy, search, allocation or CUDA state. */
+using CudaXcDensityLauncher = void (*)(cudaStream_t, const double*, const double*, std::int64_t,
+                                       std::int64_t, std::int64_t, std::int64_t, double*, int*,
+                                       const std::size_t*, std::int64_t);
+
+struct CudaXcDensityBinding {
+  CudaXcDensityLauncher launch{};
+  generativeqc::runtime::NativeLoweringCandidate candidate;
+  generativeqc::runtime::NativeLoweringPrecision precision;
+  bool retained_incumbent{};
 };
 
 /** Compiler-selected point entry. The immutable functional/response key is
@@ -175,6 +179,14 @@ class CudaXcPlan {
 
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
+  /** Setup-only binding of scientifically admitted arithmetic. Full/tail
+   * entries and strict audit entries are immutable after the first evaluation.
+   * Mixed admission requires executable physical-layout support and a Qualified
+   * entry in the resolved point-program census; local maps remain strict FP64. */
+  void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
+                       std::uint64_t expected_replays = 1);
+  const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
+
   /** Explicit setup-only policy; no density work or external oracle is used.
    * Returns false without discovery if either numeric budget is insufficient.
    * A successful selection is immutable for the lifetime of this geometry
@@ -184,12 +196,14 @@ class CudaXcPlan {
   /** Borrow immutable device quadrature owned by this plan. */
   CudaXcGridView grid_view() const;
   void enqueue(const double* density, std::size_t elements, std::uint64_t generation,
-               CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64);
+               generativeqc::runtime::PrecisionPhase phase =
+                   generativeqc::runtime::PrecisionPhase::StrictAudit);
   /** Enqueue only the stable device body for a shared replay region. The caller
    * must publish exactly one logical generation per physically submitted body
    * after the runtime chooses warmup/capture/replay/fallback. */
   CudaXcView enqueue_replay_body(const double* density, std::size_t elements,
-                                 CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64);
+                                 generativeqc::runtime::PrecisionPhase phase =
+                                     generativeqc::runtime::PrecisionPhase::StrictAudit);
   /** Replay-runtime counterpart that also exports total rho/grad-rho for a
    * resident nonlocal consumer. Logical generation publication remains owned
    * by publish_submitted_generation() after the runtime selects physical work. */
@@ -228,7 +242,7 @@ class CudaXcPlan {
  private:
   void check_device() const;
   void enqueue_impl(const double* density, const double* direction, std::size_t elements,
-                    std::uint64_t generation, CudaXcDensityPrecision precision,
+                    std::uint64_t generation, generativeqc::runtime::PrecisionPhase phase,
                     double* total_density = nullptr, double* total_gradient = nullptr,
                     bool publish_generation = true);
   void enqueue_nonlocal_potential_impl(std::uint64_t generation, bool publish_generation,
@@ -237,6 +251,11 @@ class CudaXcPlan {
                                        const double* vsigma, const double* nonlocal_energy);
   CudaXcLayout layout_;
   CudaXcPointLauncher point_launcher_{};
+  // Fixed full/tail slots avoid storage proportional to dense grid size.
+  std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
+  // Local maps require one immutable launcher per tile, charged with host maps.
+  std::vector<CudaXcDensityLauncher> local_density_launchers_;
+
   CudaXcTransfers transfers_;
   CudaXcAoSelectionWork ao_selection_work_;
   bool evaluation_started_{};
@@ -256,6 +275,12 @@ class CudaXcPlan {
 };
 
 namespace cuda_xc_detail {
+/** Compiler-emitted bounded selection; no CUDA calls and no runtime probing. */
+CudaXcDensityBinding prepare_density_binding(std::int64_t n, std::int64_t count, std::int64_t spins,
+                                             std::int64_t work_jets,
+                                             generativeqc::runtime::PrecisionDirective admitted,
+                                             std::uint64_t expected_replays);
+
 /** Populate one host flag per global AO from all actual jets in a point tile.
  * The caller lends full-capacity panels and owns stream/error lifetimes. */
 void select_ao(const CudaXcLayout& layout, cudaStream_t stream, const double* basis,
@@ -271,10 +296,11 @@ void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cud
              const double* basis, const double* points, const double* weights,
              const double* density, double* ao, double* work, double* features,
              double* coefficients, double* point_totals, double* potential, double* totals,
-             int* error, CudaXcDensityPrecision precision, const double* direction = nullptr,
-             double* delta_features = nullptr, double* total_density = nullptr,
-             double* total_gradient = nullptr, const std::vector<std::size_t>& ao_offsets = {},
-             const std::size_t* ao_ids = nullptr);
+             int* error, const std::array<CudaXcDensityBinding, 2>& density_bindings,
+             const std::vector<CudaXcDensityLauncher>& local_density_launchers,
+             const double* direction = nullptr, double* delta_features = nullptr,
+             double* total_density = nullptr, double* total_gradient = nullptr,
+             const std::vector<std::size_t>& ao_offsets = {}, const std::size_t* ao_ids = nullptr);
 void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* basis, const double* points,
                                 const double* effective_weights, const double* total_gradient,

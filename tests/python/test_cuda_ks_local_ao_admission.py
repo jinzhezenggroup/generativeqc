@@ -56,6 +56,12 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "struct CudaXcAoSelectionResources",
         )
     )
+    # Keep the exact production launcher signature in the host-storage census.
+    # The CUDA stream is opaque here; this probe never calls a launcher.
+    launcher_start = header.index("using CudaXcDensityLauncher =")
+    launcher_end = header.index(";", launcher_start) + 1
+    declarations += "\nstruct CUstream_st; using cudaStream_t = CUstream_st*;\n"
+    declarations += header[launcher_start:launcher_end]
     xc_source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
     declarations += "\n" + _definition(xc_source, "struct CudaXcProgramTraits") + ";"
     definitions = "\n".join(
@@ -148,7 +154,7 @@ int main(int argc, char** argv) {
 }
 """
     )
-    subprocess.run(
+    built = subprocess.run(
         [
             cache,
             compiler,
@@ -167,12 +173,13 @@ int main(int argc, char** argv) {
             "-o",
             str(executable),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=60,
         env={**os.environ, "CCACHE_BASEDIR": str(ROOT)},
     )
+    assert built.returncode == 0, built.stderr
     return executable
 
 

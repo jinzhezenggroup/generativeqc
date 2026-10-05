@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import textwrap
 from pathlib import Path
 
 import pytest
+from _cc_owner_test_support import compile_owner
+from generativeqc_compiler.dft.xc_contraction_cuda import XcMatrixSchedule, _emit_tiled
+from generativeqc_compiler.dft.xc_density_lowering import emit_density_binding
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -105,8 +107,14 @@ int main(int argc, char** argv) {
         assert result.stdout == expected
 
 
-def test_iteration_path_intersects_schedule_with_xc_density_capability() -> None:
+def test_prepared_density_preserves_local_ao_component_precision(
+    tmp_path: Path,
+) -> None:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
+    prepare_start = source.index(
+        "        const auto admitted_precision = resolve_cuda_ks_iteration_precision("
+    )
+    prepare_end = source.index("        prepared_ao_work =", prepare_start)
     start = source.index(
         "      const auto iteration_precision = resolve_cuda_ks_iteration_precision("
     )
@@ -119,86 +127,213 @@ def test_iteration_path_intersects_schedule_with_xc_density_capability() -> None
         "iteration_precision.uses_lower_precision(cuda_ks_precision_region::kCoulombJ)"
         in block
     )
-    assert (
-        "iteration_precision.uses_lower_precision(cuda_ks_precision_region::kDensityContraction)"
-        in block
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("requires a host C++ compiler")
+    unit, executable = tmp_path / "prepared.cpp", tmp_path / "prepared"
+    unit.write_text(
+        r"""
+#include <cassert>
+#include "dft/cuda_ks_precision.hpp"
+using namespace generativeqc;
+using namespace generativeqc::dft;
+struct Layout { bool mixed_density_contraction; };
+Layout cuda_xc_execution_capabilities(const Layout& layout) { return layout; }
+struct Xc {
+  struct Binding { struct Precision { runtime::PrecisionDirective arithmetic; } precision; };
+  Binding admitted{}, strict{{runtime::strict_fp64_precision()}};
+  bool capable;
+  void prepare_density(runtime::PrecisionDirective directive, std::uint64_t replays) {
+    assert(replays == 50);
+    // A mapped layout must receive the narrowed strict directive at setup.
+    assert(capable || directive.is_strict_fp64());
+    admitted.precision.arithmetic = directive;
+  }
+  const Binding& density_binding(runtime::PrecisionPhase phase) const {
+    return phase == runtime::PrecisionPhase::Admitted ? admitted : strict;
+  }
+};
+int main() {
+  for (bool capable : {false, true}) for (bool automatic : {false, true})
+    for (bool nonlocal : {false, true})
+      for (auto qualification : {CudaXcCapability::Unavailable,
+                                 CudaXcCapability::QualificationRequired,
+                                 CudaXcCapability::Qualified}) {
+    CudaXcFastPathCapabilities formal;
+    formal.mixed_density_precision = qualification;
+    const auto precision_schedule = resolve_cuda_ks_precision_schedule(
+        automatic ? GENERATIVEQC_PRECISION_AUTO : GENERATIVEQC_PRECISION_FP64,
+        formal, false, nonlocal);
+    const bool mixed_density = automatic && capable && !nonlocal &&
+                               qualification == CudaXcCapability::Qualified;
+    Layout xc_layout{capable};
+    Xc owner{{}, {{runtime::strict_fp64_precision()}}, capable};
+    auto* xc = &owner;
+    struct { std::uint64_t max_iterations = 50; } options;
+"""
+        + source[prepare_start:prepare_end]
+        + r"""
+    assert(owner.admitted.precision.arithmetic.is_strict_fp64() == !mixed_density);
+    for (bool strict_refinement : {false, true}) {
+      bool pending_mixed_coulomb{}, pending_mixed_density{};
+"""
+        + block
+        + r"""
+      assert(pending_mixed_coulomb == (automatic && !strict_refinement));
+      assert(pending_mixed_density == (mixed_density && !strict_refinement));
+    }
+  }
+}
+"""
     )
+    compile_owner(compiler, tmp_path, [unit], executable)
+    subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_density_enqueue_requires_physical_support_and_formal_qualification(
+def test_density_preparation_requires_physical_support_and_formal_qualification(
     tmp_path: Path,
 ) -> None:
+    """Run real preparation/selection against both directions of gate disagreement."""
     source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
-    start = source.index(
-        "  if (precision != CudaXcDensityPrecision::Fp64",
-        source.index("void CudaXcPlan::enqueue_impl("),
+    start = source.index("void CudaXcPlan::prepare_density(")
+    end = source.index("bool CudaXcPlan::select_local_ao(", start)
+    preparation = source[start:end]
+    local_start = source.index(
+        "std::vector<CudaXcDensityLauncher> local_density_launchers("
     )
-    end = source.index("  if (publish_generation", start)
-    guard = source[start:end]
+    local_end = source.index("}  // namespace", local_start)
     compiler = shutil.which("c++")
     if compiler is None:
         pytest.skip("requires a host C++ compiler")
     unit = tmp_path / "density_guard.cpp"
     executable = tmp_path / "density_guard"
+    emitted = _emit_tiled(XcMatrixSchedule(16))
+    shape_admission = emitted[
+        emitted.index("inline bool tiled_xc_admitted(") : emitted.index(
+            "template <bool Mixed, bool Tiled>"
+        )
+    ]
     unit.write_text(
         r"""
 #include <cassert>
 #include <stdexcept>
+#include <vector>
 #include "dft/xc_capabilities.hpp"
+#include "runtime/lowering_binding.hpp"
 using namespace generativeqc::dft;
-enum class CudaXcDensityPrecision { Fp64, Fp32ComputeFp64Accumulate };
+using namespace generativeqc::runtime;
+using I = std::int64_t;
+using CudaXcDensityLauncher = void (*)(int,const double*,const double*,I,I,I,I,double*,int*,const std::size_t*,I);
+struct CudaXcDensityBinding {
+  CudaXcDensityLauncher launch{};
+  NativeLoweringCandidate candidate;
+  NativeLoweringPrecision precision;
+  bool retained_incumbent{};
+};
 struct Layout {
   bool local_ao{}, physical_mixed{};
   CudaXcFastPathCapabilities fast_paths{};
+  std::size_t nao = 17, npoint = 33, tile_points = 16, spins = 2, work_jets = 4;
 };
+using CudaXcLayout = Layout;
 struct Execution { bool mixed_density_contraction{}; };
 Execution cuda_xc_execution_capabilities(const Layout& layout) {
-  return {layout.physical_mixed};
+  return {!layout.local_ao && layout.physical_mixed};
 }
-bool admitted(Layout layout_, CudaXcDensityPrecision precision) {
-  try {
+namespace cuda_xc_detail {
+template<bool Mixed,bool Tiled>
+void launch_density_product(int,const double*,const double*,I,I,I,I,double*,int*,const std::size_t*,I) {}
 """
-        + textwrap.indent(guard, "  ")
+        + shape_admission
+        + emit_density_binding(16, emitted)
+        + "\n}\n"
+        + source[local_start:local_end]
         + r"""
-    return true;
-  } catch (const std::invalid_argument&) {
-    return false;
-  }
+struct CudaXcPlan {
+  Layout layout_;
+  bool evaluation_started_{};
+  std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
+  std::vector<CudaXcDensityLauncher> local_density_launchers_;
+  std::vector<std::size_t> ao_offsets_{0, 17, 17, 21};
+  void check_device() const {}
+  void prepare_density(PrecisionDirective, std::uint64_t expected_replays = 1);
+  const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
+};
+"""
+        + preparation
+        + r"""
+template<class Action> bool rejects(Action action) {
+  try { action(); } catch (const std::invalid_argument&) { return true; }
+  return false;
 }
 int main() {
+  const auto strict = strict_fp64_precision();
+  const auto mixed = fp32_compute_fp64_accumulation("dft.cuda.auto/density-contraction-v1");
+  unsigned cases = 0;
   for (bool local : {false, true}) for (bool physical : {false, true})
     for (auto qualification : {CudaXcCapability::Unavailable,
                                CudaXcCapability::QualificationRequired,
                                CudaXcCapability::Qualified}) {
-      Layout layout{local, physical};
-      layout.fast_paths.mixed_density_precision = qualification;
-      assert(admitted(layout, CudaXcDensityPrecision::Fp64));
-      assert(admitted(layout, CudaXcDensityPrecision::Fp32ComputeFp64Accumulate) ==
-             (!local && physical && qualification == CudaXcCapability::Qualified));
-      assert(!admitted(layout, static_cast<CudaXcDensityPrecision>(99)));
+      CudaXcPlan plan;
+      plan.layout_.local_ao = local;
+      plan.layout_.physical_mixed = physical;
+      plan.layout_.fast_paths.mixed_density_precision = qualification;
+      plan.prepare_density(strict, 50);
+      const auto prior = plan.admitted_density_;
+      const auto prior_local = plan.local_density_launchers_;
+      if (local) {
+        assert(prior_local.size() == 3);
+        assert((prior_local[0] == &cuda_xc_detail::launch_density_product<false,true>));
+        // The empty middle map and one-point final tile use strict scalar bodies.
+        assert((prior_local[1] == &cuda_xc_detail::launch_density_product<false,false>));
+        assert((prior_local[2] == &cuda_xc_detail::launch_density_product<false,false>));
+      } else {
+        assert(prior_local.empty());
+      }
+      const bool allowed = !local && physical && qualification == CudaXcCapability::Qualified;
+      assert(rejects([&] { plan.prepare_density(mixed, 50); }) == !allowed);
+      for (std::size_t slot = 0; slot != 2; ++slot) {
+        const auto& binding = plan.admitted_density_[slot];
+        assert(binding.precision.arithmetic.is_strict_fp64() == !allowed);
+        assert(binding.retained_incumbent);
+        const auto expected = allowed
+            ? (slot ? &cuda_xc_detail::launch_density_product<true,false>
+                    : &cuda_xc_detail::launch_density_product<true,true>)
+            : (slot ? &cuda_xc_detail::launch_density_product<false,false>
+                    : &cuda_xc_detail::launch_density_product<false,true>);
+        assert(binding.launch == expected);
+        const auto& record = cuda_xc_detail::density_lowering_candidates[(allowed ? 2 : 0) + !slot];
+        assert(binding.candidate.identity == record.identity);
+        assert(binding.candidate.request_identity == record.request_identity);
+        assert(binding.candidate.precision_identity == record.precision_identity);
+        assert(binding.precision.identity == record.precision_identity);
+        assert(plan.strict_density_[slot].precision.arithmetic.is_strict_fp64());
+        if (!allowed) assert(binding.launch == prior[slot].launch);
+      }
+      assert(plan.local_density_launchers_ == prior_local);
+      assert(plan.density_binding(PrecisionPhase::StrictAudit).precision.arithmetic.is_strict_fp64());
+      assert(rejects([&] { plan.density_binding(static_cast<PrecisionPhase>(99)); }));
+      // No malformed dtype, math mode or qualification can publish a partial table.
+      const auto retained = plan.admitted_density_;
+      for (auto bad : {PrecisionDirective{PrecisionDtype::Fp32,PrecisionDtype::Fp32,PrecisionDtype::Fp32,"bad"},
+                       fp32_compute_fp64_accumulation("unqualified"),
+                       PrecisionDirective{PrecisionDtype::Fp64,PrecisionDtype::Fp64,PrecisionDtype::Fp64,"","fast"}}) {
+        assert(rejects([&] { plan.prepare_density(bad, 50); }));
+        for (std::size_t slot = 0; slot != 2; ++slot)
+          assert(plan.admitted_density_[slot].launch == retained[slot].launch);
+      }
+      // Once evaluation starts, neither arithmetic may rebind or allocate maps.
+      plan.evaluation_started_ = true;
+      assert(rejects([&] { plan.prepare_density(strict, 50); }));
+      assert(rejects([&] { plan.prepare_density(mixed, 50); }));
+      assert(plan.local_density_launchers_ == prior_local);
+      ++cases;
     }
+  assert(cases == 12);
 }
 """
     )
-    built = subprocess.run(
-        [
-            compiler,
-            "-std=c++17",
-            "-Wall",
-            "-Wextra",
-            "-Werror",
-            "-I",
-            str(ROOT / "src"),
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
-    )
-    assert built.returncode == 0, built.stderr
+    compile_owner(compiler, tmp_path, [unit], executable)
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
