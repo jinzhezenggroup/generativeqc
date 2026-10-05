@@ -265,14 +265,38 @@ struct Owner {
         cuda_check(cudaEventCreate(&trial_end));
       }
       if (plan.matrix_gemm && !contractions.prepare(stream)) scalar_plan();
-      auto allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+      auto allocate_numeric = [&]() {
+        auto code = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+        if (code) return code;
+        // A later history refusal does not erase this successful allocation's
+        // peak: the earlier, larger base really coexisted with retained state.
+        diagnostic.owned_device_bytes =
+            std::max(diagnostic.owned_device_bytes,
+                     checked_add(layout.total, plan.matrix_gemm ? kDFBlasProviderAllowance : 0));
+        diagnostic.numeric_capacity_bytes =
+            std::max(diagnostic.numeric_capacity_bytes, combined - layout.history_bytes);
+        if (!layout.history_bytes) return code;
+        code = cudaMalloc(reinterpret_cast<void**>(&history_base), layout.history_bytes);
+        if (code == cudaErrorMemoryAllocation) {
+          (void)cudaGetLastError();
+          // The complete numeric pair owns admission. Release the partial
+          // arena before retrying a smaller Q tile or the scalar schedule.
+          std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+          cuda_check(cudaStreamSynchronize(stream));
+          ++diagnostic.synchronizations;
+          cuda_check(cudaFree(base));
+          base = nullptr;
+        }
+        return code;
+      };
+      auto allocation = allocate_numeric();
       if (allocation == cudaErrorMemoryAllocation && plan.auxiliary_batch_size > 1) {
         (void)cudaGetLastError();
         // The same admitted provider can execute one-Q work without the
         // optional batched outputs. Retry before abandoning matrix execution.
         plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, true);
         combined = build_layout();
-        allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+        allocation = allocate_numeric();
       }
       if (allocation == cudaErrorMemoryAllocation && plan.matrix_gemm) {
         // Only optional-resource failure permits retry. Arithmetic and driver
@@ -284,11 +308,9 @@ struct Owner {
           contractions.release_locked();
         }
         scalar_plan();
-        allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+        allocation = allocate_numeric();
       }
       cuda_check(allocation);
-      if (layout.history_bytes)
-        cuda_check(cudaMalloc(reinterpret_cast<void**>(&history_base), layout.history_bytes));
 
       std::array<double**, 15> fields = {&state.foo,  &state.fov,  &state.fvv,          &state.ovov,
                                          &state.ovvo, &state.oovv, &state.ovvv,         &state.ovoo,
@@ -367,9 +389,12 @@ struct Owner {
       diagnostic.df_matrix_gemm = plan.matrix_gemm;
       diagnostic.df_auxiliary_batch_size = plan.auxiliary_batch_size;
       diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kDFBlasProviderAllowance : 0;
-      diagnostic.owned_device_bytes = checked_add(checked_add(layout.total, layout.history_bytes),
-                                                  diagnostic.df_provider_capacity_bytes);
-      diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, combined);
+      diagnostic.owned_device_bytes =
+          std::max(diagnostic.owned_device_bytes,
+                   checked_add(checked_add(layout.total, layout.history_bytes),
+                               diagnostic.df_provider_capacity_bytes));
+      diagnostic.numeric_capacity_bytes =
+          std::max(diagnostic.numeric_capacity_bytes, std::max(p.provider_peak_bytes, combined));
       diagnostic.packed_diis = packed;
       diagnostic.diis_history_capacity_bytes = layout.history_bytes;
       non_history_capacity = combined - layout.history_bytes;
@@ -809,7 +834,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       owner.diagnostic.update_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
       ++owner.diagnostic.update_calls;
-      if (options.diis_size) {
+      if (owner.history.capacity()) {
         const auto trial_diis_started = std::chrono::steady_clock::now();
         cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
         const auto trial = owner.iteration();
