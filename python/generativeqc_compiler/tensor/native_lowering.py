@@ -10,13 +10,175 @@ from __future__ import annotations
 
 import json
 import typing
+from dataclasses import replace
+from math import prod
 
 if typing.TYPE_CHECKING:
     from collections.abc import Callable
 
+    from generativeqc_compiler.common.lowering_provider import LoweringRequest
+
     from .ir import Node
     from .lowering import TensorLoweringAdapter
     from .types import Index
+
+
+def emit_contraction_region_portfolio(
+    request: LoweringRequest, source_identity: str, *, name: str
+) -> str:
+    """Offer homogeneous prepared implementations for one compiler region.
+
+    Native preparation resolves resource/version availability. This factory
+    neither invents precision variants nor implements casts/refinement; regions
+    requiring those obligations need a composite executor such as triples W.
+    """
+    from generativeqc_compiler.common.backend import TargetInfo
+    from generativeqc_compiler.common.lowering_contract import CandidateExecution
+    from generativeqc_compiler.common.lowering_provider import (
+        LoweringCandidate,
+        ProviderDescriptor,
+    )
+    from generativeqc_compiler.common.native_lowering import native_lowering_portfolio
+    from generativeqc_compiler.common.schedule import ScheduleTopology
+    from generativeqc_compiler.common.specialization import (
+        CompilationIdentity,
+        TargetCapabilities,
+    )
+
+    target = TargetCapabilities(
+        TargetInfo("cuda", "current-aot-module", 32, 1024, None)
+    )
+    providers = tuple(
+        ProviderDescriptor(provider, kind, "prepared-affine-region", version=version)
+        for provider, kind, version in (
+            ("cublas", "library", "runtime-bound-pedantic"),
+            ("generated.cuda", "generated", source_identity),
+            ("cutensor", "library", "runtime-bound-qualified-2.x"),
+        )
+    )
+    candidates = []
+    for precision in request.precisions:
+        d = precision.directive
+        if (
+            precision.casts
+            or precision.refinement
+            or precision.audit
+            or len(
+                {
+                    *precision.input_dtypes,
+                    precision.publication_dtype,
+                    d.storage_dtype,
+                    d.compute_dtype,
+                    d.accumulation_dtype,
+                }
+            )
+            != 1
+        ):
+            raise ValueError("contraction region requires homogeneous arithmetic")
+        for provider in providers:
+            candidates.append(
+                LoweringCandidate(
+                    request,
+                    "region-" + provider.name,
+                    (provider,),
+                    "ready",
+                    d.math_mode,
+                    execution=CandidateExecution(
+                        precision,
+                        "prepared-affine-region",
+                        request.operands,
+                        ScheduleTopology(
+                            materialization="compiler-owned-liveness",
+                            reduction="provider-reproducible",
+                        ),
+                        determinism="reproducible",
+                        capture_safe=False,
+                    ),
+                    target=target,
+                )
+            )
+    assert request.scientific_identity is not None
+    return native_lowering_portfolio(
+        request,
+        candidates,
+        target,
+        CompilationIdentity(request.scientific_identity, source_identity),
+        name=name,
+    )
+
+
+def projected_contraction_request(
+    adapter: TensorLoweringAdapter,
+    node: Node,
+    *,
+    fixed_modes: tuple[int, ...] = (),
+    operand_order: tuple[int, int] = (0, 1),
+) -> LoweringRequest:
+    """Project compiler-owned row traversal into the common semantic request.
+
+    Fixing modes describes one slice of the existing einsum, not a new algebra.
+    The enclosing compiler schedule must traverse every fixed reduction mode
+    and accumulate its contributions. Only leading packed axes can be removed;
+    this cannot silently materialize a strided interior slice. All providers
+    consume the same projected request, with the parent operation retained.
+    """
+    request = adapter.request(node, backend="cuda")
+    if (
+        node.op != "einsum"
+        or len(node.inputs) != 2
+        or operand_order not in ((0, 1), (1, 0))
+    ):
+        raise ValueError("native projection requires two ordered einsum operands")
+    if not fixed_modes and operand_order == (0, 1):
+        return request
+    fixed = set(fixed_modes)
+    if len(fixed) != len(fixed_modes) or not fixed <= {
+        mode for operand in request.operands for mode in operand.modes
+    }:
+        raise ValueError("invalid fixed contraction modes")
+    operands = []
+    for index in (*operand_order, 2):
+        operand = request.operands[index]
+        kept = [axis for axis, mode in enumerate(operand.modes) if mode not in fixed]
+        if kept and kept != list(range(kept[0], len(operand.modes))):
+            raise ValueError("native row projection requires leading fixed axes")
+        operands.append(
+            replace(
+                operand,
+                modes=tuple(operand.modes[i] for i in kept),
+                shape=tuple(operand.shape[i] for i in kept),
+                strides=None
+                if operand.strides is None
+                else tuple(operand.strides[i] for i in kept),
+            )
+        )
+    output = operands[-1]
+    semantics = dict(request.semantics)
+    extents = {
+        mode: n for op in operands for mode, n in zip(op.modes, op.shape, strict=True)
+    }
+    semantics.update(
+        {
+            "parent_semantic_identity": request.semantic_identity,
+            "fixed_modes": json.dumps(sorted(fixed)),
+            "operand_order": json.dumps(operand_order),
+            "output_elements": prod(output.shape),
+            "reduction_extent": prod(
+                n for mode, n in extents.items() if mode not in output.modes
+            ),
+        }
+    )
+    return replace(
+        request,
+        operands=tuple(operands),
+        shape=output.shape,
+        input_dtypes=tuple(request.input_dtypes[i] for i in operand_order),
+        precisions=tuple(
+            replace(p, input_dtypes=tuple(p.input_dtypes[i] for i in operand_order))
+            for p in request.precisions
+        ),
+        semantics=tuple(semantics.items()),
+    )
 
 
 def affine_contraction_initializer(
@@ -26,6 +188,8 @@ def affine_contraction_initializer(
     *,
     coefficient: str,
     beta: str = "0.0",
+    fixed_modes: tuple[int, ...] = (),
+    operand_order: tuple[int, int] = (0, 1),
 ) -> str:
     """Project the original binary axes without requiring a GEMM factorization.
 
@@ -41,6 +205,8 @@ def affine_contraction_initializer(
         extents=("1", "0", "0", "0"),
         coefficient=coefficient,
         beta=beta,
+        fixed_modes=fixed_modes,
+        operand_order=operand_order,
     )
 
 
@@ -55,6 +221,8 @@ def contraction_initializer(
     row_axes: tuple[int, int, int] | None = None,
     leading_dimensions: tuple[str, str, str] | None = None,
     beta: str = "0.0",
+    fixed_modes: tuple[int, ...] = (),
+    operand_order: tuple[int, int] = (0, 1),
 ) -> str:
     """Emit a typed descriptor for an already recognized binary matrix einsum.
 
@@ -69,7 +237,9 @@ def contraction_initializer(
     """
     if node.op != "einsum" or len(node.inputs) != 2:
         raise ValueError("native contraction projection requires binary einsum")
-    request = adapter.request(node, backend="cuda")
+    request = projected_contraction_request(
+        adapter, node, fixed_modes=fixed_modes, operand_order=operand_order
+    )
     precision = request.precisions[0]
     directive = precision.directive
     if (
@@ -98,10 +268,21 @@ def contraction_initializer(
     if (row_axes is None) != (leading_dimensions is None):
         raise ValueError("matrix view cuts and strides must be supplied together")
     for i, (value, layout) in enumerate(
-        zip((*node.inputs, node), request.operands, strict=True)
+        zip(
+            (*(node.inputs[i] for i in operand_order), node),
+            request.operands,
+            strict=True,
+        )
     ):
         modes = ",".join(map(str, layout.modes))
-        shape = ",".join(dimension(index) for index in value.spec.indices)
+        original_labels = (
+            node.attrs["labels"][operand_order[i]] if i < 2 else node.attrs["output"]
+        )
+        shape = ",".join(
+            dimension(index)
+            for mode, index in zip(original_labels, value.spec.indices, strict=True)
+            if mode not in fixed_modes
+        )
         view = "matrix_view" if row_axes is not None else "dense"
         extra = ""
         if row_axes is not None:

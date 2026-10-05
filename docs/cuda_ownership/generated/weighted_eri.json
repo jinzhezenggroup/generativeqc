@@ -1,7 +1,9 @@
 {
   "name": "weighted_eri",
   "outputs": [
-    "generated/weighted_eri.cuh"
+    "generated/weighted_eri.cuh",
+    "generated/order4_weighted_eri.cuh",
+    "generated/order5_weighted_eri.cuh"
   ],
   "owner": "python/generativeqc_compiler/integral/weighted_eri_cuda.py"
 }

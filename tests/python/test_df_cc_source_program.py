@@ -284,15 +284,16 @@ def test_staged_source_response_matches_direct_and_directional_difference(
 
 @pytest.mark.parametrize("n,q", [(1, 1), (2, 3), (5, 4), (3, 7)])
 @pytest.mark.parametrize("symmetric", [False, True])
+@pytest.mark.parametrize("prepared", [False, True])
 def test_native_source_reverse_layout_reuse_and_complete_work(
-    native_source_probe: Path, n: int, q: int, symmetric: bool
+    native_source_probe: Path, n: int, q: int, symmetric: bool, prepared: bool
 ) -> None:
     arrays = _response_inputs(n, q, symmetric)
     data = f"{n} {q}\n" + "\n".join(
         " ".join(map(repr, x.ravel().tolist())) for x in arrays
     )
     completed = subprocess.run(
-        [str(native_source_probe), "--response"],
+        [str(native_source_probe), "--response-prepared" if prepared else "--response"],
         input=data,
         text=True,
         check=True,
@@ -319,6 +320,22 @@ def test_native_source_reverse_layout_reuse_and_complete_work(
             atol=3e-11,
             rtol=3e-13,
         )
+
+
+@pytest.mark.parametrize("n", [1, 2, 5, 230])
+@pytest.mark.parametrize("q", [1, 3, 7, 488])
+def test_source_response_descriptors_validate(
+    native_source_probe: Path, n: int, q: int
+) -> None:
+    """Validate the matrix recipe against semantic axes, including unit dimensions."""
+    subprocess.run(
+        [str(native_source_probe), "--response-descriptors"],
+        input=f"{n} {q}\n",
+        text=True,
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
 
 
 @pytest.mark.parametrize("n,q", [(230, 488), (264, 666)])
@@ -374,6 +391,22 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         "-I" + str(cuda_root / "include"),
     ]
     complete_library = os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY")
+    cutensor = os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") == "1"
+    provider_link = []
+    if not complete_library:
+        includes += ["-DGENERATIVEQC_TEST_HOOKS=1", "-DGENERATIVEQC_HAS_CUDA=1"]
+    if cutensor:
+        provider_root = Path(os.environ["GENERATIVEQC_CUTENSOR_ROOT"])
+        includes += [
+            "-DGENERATIVEQC_HAS_CUTENSOR=1",
+            "-I" + str(provider_root / "include"),
+        ]
+        provider_link = [
+            str(provider_root / "lib/libcutensor.so.2"),
+            "-Wl,-rpath," + str(provider_root / "lib"),
+        ]
+    else:
+        includes += ["-DGENERATIVEQC_HAS_CUTENSOR=0"]
     objects = []
     for source, command in (
         (
@@ -389,7 +422,7 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         ),
         (
             ROOT / "tests/native/df_mo_response_probe.cpp",
-            [compiler, "-std=c++20", "-O2", "-fPIC"],
+            [nvcc, "-x", "cu", "-std=c++20", "-O2", "-arch=sm_120", "-Xcompiler=-fPIC"],
         ),
     ):
         if complete_library and source.suffix == ".cu":
@@ -415,6 +448,7 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
             "-L" + str(cuda_root / "lib64"),
             "-lcublas",
             "-lcudart",
+            *provider_link,
             "-Wl,-rpath," + str(cuda_root / "lib64"),
             "-o",
             str(library),
@@ -424,7 +458,7 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         timeout=30,
     )
     dll = ct.CDLL(str(library))
-    call = dll.df_mo_response_probe
+    call = dll.df_mo_response_probe_v2
     dp = ct.POINTER(ct.c_double)
     call.argtypes = [
         ct.c_size_t,
@@ -434,7 +468,9 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         ct.c_size_t,
         ct.c_size_t,
         ct.c_int,
+        ct.c_int,
         ct.POINTER(ct.c_size_t),
+        ct.c_size_t,
         ct.c_void_p,
         ct.c_size_t,
     ]
@@ -449,12 +485,13 @@ def _run_cuda_source(
     budget: int = 1 << 30,
     caller_bytes: int = 0,
     failure: int = 0,
+    provider_test: int = 0,
 ) -> tuple:
     raw, c, root, _ = arrays
     n, _, q = raw.shape
     inputs = [np.ascontiguousarray(value) for value in arrays]
     outputs = [np.full_like(value, np.nan) for value in (raw, c, root)]
-    counts = np.zeros(9, dtype=np.uintp)
+    counts = np.zeros(16, dtype=np.uintp)
     error = ct.create_string_buffer(1024)
     dp = ct.POINTER(ct.c_double)
     status = call(
@@ -465,7 +502,9 @@ def _run_cuda_source(
         budget,
         caller_bytes,
         failure,
+        provider_test,
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        len(counts),
         error,
         len(error),
     )
@@ -499,17 +538,101 @@ def test_cuda_streamed_source_response_matches_independent_complete_expression(
     )
     assert counts[6] == (2 * n * n * q + 2 * n * q + n * n + q * q) * 8 + 4
     assert counts[8] == 4
+    assert counts[9] > 0 and counts[10] > 0 and counts[11] == 8 and counts[12] == 0
+    assert counts[13] > 0
     assert (
         _run_cuda_source(
             cuda_source_response_probe, arrays, budget=int(counts[7]), caller_bytes=1234
         )[0]
         == 0
     )
-    status, failed, _, error = _run_cuda_source(
+    # Removing one byte from the library reservation admits the complete
+    # generated implementation. Its exact minimum still fails closed below it.
+    status, fallback, generated, error = _run_cuda_source(
         cuda_source_response_probe, arrays, budget=int(counts[7]) - 1, caller_bytes=1234
+    )
+    assert status == 0, error
+    assert generated[12] == 1 and generated[10] == 0 and generated[11] == 8
+    for actual, want in zip(fallback, outputs, strict=True):
+        np.testing.assert_allclose(actual, want, atol=3e-11, rtol=3e-13)
+    assert generated[7] < counts[7] and generated[9] < counts[9]
+    status, failed, _, error = _run_cuda_source(
+        cuda_source_response_probe,
+        arrays,
+        budget=int(generated[7]) - 1,
+        caller_bytes=1234,
     )
     assert status != 0 and "budget" in error
     assert all(np.isnan(x).all() for x in failed)
+
+
+@pytest.mark.parametrize("provider_test", [1, 2, 3])
+@pytest.mark.parametrize("n,q", [(1, 1), (2, 3), (5, 4), (3, 7)])
+def test_cuda_source_response_optional_providers(
+    cuda_source_response_probe: typing.Any, provider_test: int, n: int, q: int
+) -> None:
+    if os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY"):
+        pytest.skip("provider controls are qualification-only")
+    if provider_test >= 2 and os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1":
+        pytest.skip("requires optional provider qualification")
+    arrays = _response_inputs(n, q, False)
+    status, outputs, counts, error = _run_cuda_source(
+        cuda_source_response_probe, arrays, budget=8 << 30, provider_test=provider_test
+    )
+    assert status == 0, error
+    assert counts[11] == 8 and counts[12] == (2 if provider_test == 2 else 1)
+    if provider_test == 2:
+        assert counts[10] >= 20800 and counts[10] // 10000 == 2
+    else:
+        assert counts[10] == 0
+    assert counts[4] == 3 * n + 5 and counts[5] == 6 * n**3 * q + 2 * n * n * q * q
+    expected = _direct_source_response(*arrays)
+    for actual, name in zip(
+        outputs,
+        ("bar_raw_three_center", "bar_coefficients", "bar_inverse_root"),
+        strict=True,
+    ):
+        np.testing.assert_allclose(actual, expected[name], atol=3e-11, rtol=3e-13)
+
+
+def test_cuda_source_missing_optional_provider_retains_incumbent(
+    cuda_source_response_probe: typing.Any,
+) -> None:
+    if (
+        os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY")
+        or os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") == "1"
+    ):
+        pytest.skip("requires the standalone provider-absent build")
+    status, _, counts, error = _run_cuda_source(
+        cuda_source_response_probe,
+        _response_inputs(2, 3, False),
+        budget=8 << 30,
+        provider_test=2,
+    )
+    assert status == 0, error
+    assert counts[12] == 0 and counts[11] == 8 and counts[10] > 0
+
+
+@pytest.mark.parametrize("provider_test", [1, 2, 3])
+def test_cuda_source_provider_failure_is_sticky(
+    cuda_source_response_probe: typing.Any, provider_test: int
+) -> None:
+    if os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY"):
+        pytest.skip("provider controls are qualification-only")
+    if provider_test >= 2 and os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1":
+        pytest.skip("requires optional provider qualification")
+    raw, c, root, bar = _response_inputs(2, 3, False)
+    raw[:] = 1e308
+    c[:] = 10
+    bar[:] = 0
+    status, outputs, _, error = _run_cuda_source(
+        cuda_source_response_probe,
+        (raw, c, root, bar),
+        budget=8 << 30,
+        provider_test=provider_test,
+    )
+    assert status != 0 and "nonfinite" in error
+    assert all(np.isnan(x).all() for x in outputs)
 
 
 @pytest.mark.parametrize("failure", [1, 2, 3, 4, 5])

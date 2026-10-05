@@ -17,6 +17,19 @@ int main(int argc, char** argv) {
   if (!(std::cin >> n >> q)) return 1;
   const auto work = posthf::generated::df_mo_source_work(n, q);
   const auto response_work = posthf::generated::df_mo_source_response_work(n, q);
+  if (argc == 2 && std::string_view(argv[1]) == "--response-descriptors") {
+    const auto requests = posthf::generated::df_mo_response_descriptors(n, q);
+    if (requests.size() != 8) return 5;
+    std::size_t summands = 0;
+    for (std::size_t slot = 0; slot < requests.size(); ++slot) {
+      const auto& request = requests[slot];
+      request.validate();
+      if (request.beta != (slot == 6 ? 1.0 : 0.0) || request.coefficient != 1.0) return 6;
+      summands += request.affine_summands() * (slot == 0 || slot >= 6 ? n : 1);
+    }
+    if (summands != response_work.contraction_summands) return 7;
+    return 0;
+  }
   if (argc == 2 && std::string_view(argv[1]) == "--response-work") {
     std::cout << response_work.source_rows << ' ' << response_work.raw_values << ' '
               << response_work.output_rows << ' ' << response_work.output_values << ' '
@@ -34,7 +47,8 @@ int main(int argc, char** argv) {
     for (auto& value : *values)
       if (!(std::cin >> value)) return 2;
   std::vector<double> first(work.raw_values), transformed(work.raw_values);
-  if (argc == 2 && std::string_view(argv[1]) == "--response") {
+  if (argc == 2 && (std::string_view(argv[1]) == "--response" ||
+                    std::string_view(argv[1]) == "--response-prepared")) {
     std::vector<double> bar_b(work.raw_values), bar_a(work.raw_values), bar_c(n * n, -999),
         bar_root(q * q, -777), raw_row(n * q), bar_row(n * q);
     for (auto& value : bar_b)
@@ -56,18 +70,34 @@ int main(int argc, char** argv) {
       summands += m * columns * k;
       tensor::cpu_gemm(tb, ta, columns, m, k, b, a, c, 1.0, accumulate ? 1.0 : 0.0);
     };
-    posthf::generated::pullback_df_mo_source(n, q, coefficients.data(), root.data(), bar_b.data(),
-                                             first.data(), transformed.data(), bar_row.data(),
-                                             bar_c.data(), bar_root.data(), read, consume, gemm);
+    const bool prepared = std::string_view(argv[1]) == "--response-prepared";
+    const auto requests = posthf::generated::df_mo_response_descriptors(n, q);
+    for (const auto& request : requests) request.validate();
+    auto execute = [&](std::size_t slot, const double* a, const double* b, double* c) {
+      const auto& r = requests.at(slot);
+      ++gemms;
+      summands += r.summands();
+      tensor::cpu_gemm(r.a_trans, r.b_trans, r.m, r.n, r.k, a, b, c, r.coefficient, r.beta);
+    };
+    auto response = [&](std::size_t orbitals, std::size_t auxiliaries) {
+      if (prepared)
+        posthf::generated::pullback_df_mo_source_prepared(
+            orbitals, auxiliaries, coefficients.data(), root.data(), bar_b.data(), first.data(),
+            transformed.data(), bar_row.data(), bar_c.data(), bar_root.data(), read, consume,
+            execute);
+      else
+        posthf::generated::pullback_df_mo_source(
+            orbitals, auxiliaries, coefficients.data(), root.data(), bar_b.data(), first.data(),
+            transformed.data(), bar_row.data(), bar_c.data(), bar_root.data(), read, consume, gemm);
+    };
+    response(n, q);
     if (reads != response_work.source_rows || consumed != response_work.output_rows ||
         gemms != response_work.gemms || summands != response_work.contraction_summands)
       throw std::runtime_error("response work model differs from execution");
     // Shape refusal must precede every callback and any pointer use.
     auto reject = [&](std::size_t orbitals, std::size_t auxiliaries) {
       try {
-        posthf::generated::pullback_df_mo_source(orbitals, auxiliaries, nullptr, nullptr, nullptr,
-                                                 nullptr, nullptr, nullptr, nullptr, nullptr, read,
-                                                 consume, gemm);
+        response(orbitals, auxiliaries);
       } catch (const std::invalid_argument&) {
         return;
       } catch (const std::overflow_error&) {

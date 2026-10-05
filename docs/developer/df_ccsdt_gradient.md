@@ -165,7 +165,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
@@ -178,6 +178,11 @@ positions ten through twelve: `ORBITAL_SCHWARZ` defaults to
 zero and requires a complete finite nonnegative number, `PROFILE_JK` to zero and `NUCLEAR` to two (symmetric polarization).
 `NUCLEAR=0` selects the legacy three-pass identity and `NUCLEAR=1` explicitly
 opts into the experimental canonical bilinear derivative.
+`DERIVED_DENOMINATORS` follows all existing controls at argument thirteen and
+defaults to one. Zero retains the explicit CUDA denominator representation.
+It accepts only the complete token `0` or `1`; it does not change the meaning
+of the screening token at argument ten, profiling at eleven, or the nuclear
+response schedule at twelve.
 
 For example, an exact force endpoint with the default six-vector DIIS history
 and explicit symmetric response is:
