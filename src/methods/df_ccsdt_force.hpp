@@ -14,7 +14,7 @@ namespace generativeqc::methods::detail {
  * owner; public force promotion remains separate. */
 struct DFCCSDTResult {
   // If true, total_seconds includes a resource-refused precursor whose work
-  // counters are unavailable; successful-primal counters are not endpoint totals.
+  // counters are unavailable; successful-attempt counters are not endpoint totals.
   bool recycling_discarded_primal_attempt{};
   double energy{}, reference_energy{}, correlation_energy{}, triples_energy{};
   std::vector<double> forces;

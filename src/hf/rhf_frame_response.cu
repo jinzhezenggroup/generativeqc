@@ -506,6 +506,18 @@ RHFFrameResponseResult rhf_frame_response_cuda(
       std::chrono::duration<double>(std::chrono::steady_clock::now() - setup_started).count();
   result.df_preconditioned = inverse.has_value();
   result.preconditioner_fallback = options.df_preconditioning && !inverse;
+  // Fixed-frame requests do not consume or rebind a retained solved direction,
+  // but caller ownership keeps its payload live. Charge it or release it before
+  // allocating the physical owner; an unused cache cannot exceed this budget.
+  if (!options.relax_orbitals && options.recycling) {
+    const auto retained = options.recycling->storage_bytes();
+    if (retained > options.maximum_bytes - total) {
+      options.recycling->clear();
+    } else {
+      result.recycle_capacity_bytes = retained;
+      total = checked_add(total, retained);
+    }
+  }
   auto* recycling = options.relax_orbitals ? options.recycling : nullptr;
   if (recycling) {
     // The extra vector holds the independent scalar audit image until all

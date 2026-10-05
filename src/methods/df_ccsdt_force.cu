@@ -36,14 +36,12 @@ std::size_t difference(std::size_t total, std::size_t included) {
 }
 }  // namespace
 
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const core::System& system,
-                                  const core::System& auxiliary,
-                                  const generativeqc_method_descriptor& descriptor, bool forces,
-                                  bool with_triples, bool df_auxiliary_reduction,
-                                  bool df_matrix_gemm, bool lambda_matrix_gemm,
-                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
-                                  bool derived_denominators,
-                                  const hf::RHFFrameResponseOptions* response_options) {
+static DFCCSDTResult run_df_ccsdt_native_attempt(
+    runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
+    const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
+    bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
+    std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit, bool derived_denominators,
+    const hf::RHFFrameResponseOptions* response_options) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -56,40 +54,16 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     if (system.atoms[a].position != auxiliary.atoms[a].position ||
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
-  auto recycle_bytes = response_options && response_options->recycling
-                           ? response_options->recycling->storage_bytes()
-                           : 0;
+  const auto recycle_bytes = response_options && response_options->recycling
+                                 ? response_options->recycling->storage_bytes()
+                                 : 0;
   // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
   // in every phase, then let the response owner rebind/release it explicitly.
-  auto primal = [&] {
-    return run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
-                                  recycle_bytes, &auxiliary, forces, df_matrix_gemm, nullptr,
-                                  ccsd_batch_limit, derived_denominators);
-  };
-  RccsdNativeState state;
-  bool discarded_attempt = false;
-  try {
-    state = primal();
-  } catch (const MethodError& error) {
-    if (!recycle_bytes || error.status() != GENERATIVEQC_STATUS_OUT_OF_MEMORY) throw;
-    discarded_attempt = true;
-  } catch (const std::length_error&) {
-    if (!recycle_bytes) throw;
-    discarded_attempt = true;
-  } catch (const std::bad_alloc&) {
-    if (!recycle_bytes) throw;
-    discarded_attempt = true;
-  }
-  if (discarded_attempt) {
-    // A retained optional subspace cannot make an otherwise admitted cold
-    // endpoint fail. Retry once after actual release, preserving elapsed time.
-    response_options->recycling->clear();
-    recycle_bytes = 0;
-    state = primal();
-  }
+  auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
+                                      recycle_bytes, &auxiliary, forces, df_matrix_gemm, nullptr,
+                                      ccsd_batch_limit, derived_denominators);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
-  result.recycling_discarded_primal_attempt = discarded_attempt;
   result.reference_energy = state.reference->energy;
   result.correlation_energy = state.solved.correlation_energy;
   result.energy = state.solved.total_energy;
@@ -321,6 +295,45 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   }
   result.method_result.forces = result.forces;
   result.correlation.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  result.total_seconds = elapsed(started);
+  return result;
+}
+
+DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const core::System& system,
+                                  const core::System& auxiliary,
+                                  const generativeqc_method_descriptor& descriptor, bool forces,
+                                  bool with_triples, bool df_auxiliary_reduction,
+                                  bool df_matrix_gemm, bool lambda_matrix_gemm,
+                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+                                  bool derived_denominators,
+                                  const hf::RHFFrameResponseOptions* response_options) {
+  const auto started = Clock::now();
+  auto* const recycling = response_options ? response_options->recycling : nullptr;
+  const bool had_retained_cache = recycling && recycling->storage_bytes();
+  const auto attempt = [&] {
+    return run_df_ccsdt_native_attempt(execution, system, auxiliary, descriptor, forces,
+                                       with_triples, df_auxiliary_reduction, df_matrix_gemm,
+                                       lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit,
+                                       derived_denominators, response_options);
+  };
+  try {
+    return attempt();
+  } catch (const MethodError& error) {
+    if (!had_retained_cache || !recycling->storage_bytes() ||
+        error.status() != GENERATIVEQC_STATUS_OUT_OF_MEMORY)
+      throw;
+  } catch (const std::length_error&) {
+    if (!had_retained_cache || !recycling->storage_bytes()) throw;
+  } catch (const std::bad_alloc&) {
+    if (!had_retained_cache || !recycling->storage_bytes()) throw;
+  }
+  // The failed attempt has unwound every phase owner and drained its streams.
+  // A retained cache can constrain triples/Lambda/source as well as the primal.
+  // Release it before one complete cold retry; other physical/CUDA errors pass
+  // through unchanged, and a second resource failure propagates normally.
+  recycling->clear();
+  auto result = attempt();
+  result.recycling_discarded_primal_attempt = true;
   result.total_seconds = elapsed(started);
   return result;
 }
