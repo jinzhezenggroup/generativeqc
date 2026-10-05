@@ -212,7 +212,9 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
     progressive_relative = Path("python/generativeqc/progressive.py")
     progressive = _read(root / progressive_relative)
     if not re.search(r"def\s+projected_singlepoint\s*\(", progressive):
-        raise ValueError("missing explicit cross-basis projected_singlepoint entry point")
+        raise ValueError(
+            "missing explicit cross-basis projected_singlepoint entry point"
+        )
     result["initial-guess:basis-projection"] = progressive_relative.as_posix()
 
     fock_relative = Path("src/scf/fock_build.hpp")
@@ -316,15 +318,13 @@ def validate_inventory(
     if payload.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
     classifications = payload.get("classifications")
-    if not isinstance(classifications, list) or any(
-        not isinstance(value, str) for value in classifications
-    ):
-        errors.append(
-            "classifications must declare exactly the supported policy taxonomy"
+    if (
+        not isinstance(classifications, list)
+        or any(not isinstance(value, str) for value in classifications)
+        or (
+            len(classifications) != len(set(classifications))
+            or set(classifications) != CLASSIFICATIONS
         )
-    elif (
-        len(classifications) != len(set(classifications))
-        or set(classifications) != CLASSIFICATIONS
     ):
         errors.append(
             "classifications must declare exactly the supported policy taxonomy"
