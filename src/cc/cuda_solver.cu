@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -75,6 +76,7 @@ struct Layout {
   std::size_t iteration{}, replay{}, last_t1{}, last_t2{}, vectors{}, errors{};
   std::size_t gram{}, system{}, coefficients{}, r1_partials{}, r2_partials{}, scalars{};
   std::size_t status{}, generated_error{}, arithmetic{}, total{};
+  std::size_t history_bytes{}, metric_weights{};
   std::size_t df_bov{}, df_bvv{}, df_arena{}, df_sum{}, df_prepare{};
 };
 
@@ -94,6 +96,8 @@ struct Owner {
   tensor::PreparedContractions conventional_contractions;
   bool conventional_prepared{};
   unsigned char* base{};
+  unsigned char* history_base{};
+  unsigned char* metric_weights{};
   Layout layout;
   generated::dfcore::CudaState state;
   generated::df::CudaState df_state;
@@ -105,6 +109,11 @@ struct Owner {
   double *r1_partials{}, *r2_partials{}, *scalars{};
   int *status{}, *arithmetic{};
   std::size_t n1{}, n2{}, elements{}, partial1{}, partial2{};
+  std::size_t history_elements{}, non_history_capacity{};
+  bool packed{};
+  int* packing_refused{};
+  double* pair_asymmetry{};
+  generated::RestrictedPairCoordinates coordinates;
   solver::DiisRing history;
   unsigned restarts{};
   SolverDiagnostic diagnostic;
@@ -115,7 +124,23 @@ struct Owner {
         n1(checked_mul(p.nocc, p.nvir)),
         n2(checked_mul(checked_mul(p.nocc, p.nocc), checked_mul(p.nvir, p.nvir))),
         elements(checked_add(n1, n2)),
+        coordinates{p.nocc, p.nvir},
         history(options.diis_size) {
+    packed = options.packed_diis && options.diis_size;
+    // Supplied amplitudes are a contract, not a projected guess. Require
+    // exact symmetry here; the bounded rounding policy applies only later.
+    if (packed) {
+      for (std::size_t k = 0; k < n2; ++k) {
+        const auto mate = coordinates(k).partner;
+        if (std::bit_cast<std::uint64_t>(p.initial_t2[k]) !=
+            std::bit_cast<std::uint64_t>(p.initial_t2[mate])) {
+          packed = false;
+          diagnostic.packed_diis_refused = true;
+          break;
+        }
+      }
+    }
+    history_elements = packed ? checked_add(n1, checked_add(n2, n1) / 2) : elements;
     naux = p.naux;
     conventional_prepared = !naux && generated::iteration_prepared_dimensions_fit(p.nocc, p.nvir);
     // The compiler derives each flattened dimension from contraction labels;
@@ -155,10 +180,17 @@ struct Owner {
       }
       layout.last_t1 = reserve(layout, cursor, checked_mul(n1, sizeof(double)));
       layout.last_t2 = reserve(layout, cursor, checked_mul(n2, sizeof(double)));
-      layout.vectors = reserve(
-          layout, cursor, checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
-      layout.errors = reserve(
-          layout, cursor, checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
+      // Histories have a separate allocation so refusal can really release
+      // the packed payload before admitting a full-layout replacement.
+      std::size_t history_cursor = 0;
+      layout.vectors =
+          reserve(layout, history_cursor,
+                  checked_mul(checked_mul(options.diis_size, history_elements), sizeof(double)));
+      layout.errors =
+          reserve(layout, history_cursor,
+                  checked_mul(checked_mul(options.diis_size, history_elements), sizeof(double)));
+      layout.history_bytes = align256(history_cursor);
+      layout.metric_weights = reserve(layout, cursor, packed ? history_elements : 0);
       layout.gram =
           reserve(layout, cursor,
                   checked_mul(checked_mul(options.diis_size, options.diis_size), sizeof(double)));
@@ -171,17 +203,19 @@ struct Owner {
       partial2 = std::min<std::size_t>((n2 + 255) / 256, 65535);
       layout.r1_partials = reserve(layout, cursor, checked_mul(partial1, sizeof(double)));
       layout.r2_partials = reserve(layout, cursor, checked_mul(partial2, sizeof(double)));
-      layout.scalars = reserve(layout, cursor, 2 * sizeof(double));
+      layout.scalars = reserve(layout, cursor, 3 * sizeof(double));
       // Pack the generated-tensor error beside DIIS status so separating
       // generated and DIIS arithmetic state does not increase the aligned arena.
-      layout.status = reserve(layout, cursor, 2 * sizeof(int));
+      layout.status = reserve(layout, cursor, 3 * sizeof(int));
       layout.generated_error = checked_add(layout.status, sizeof(int));
       layout.arithmetic = reserve(layout, cursor, sizeof(int));
       layout.total = align256(cursor);
 
       // Final detached host amplitudes coexist with this resident device arena.
       auto total = checked_add(
-          checked_add(p.reference_retained_bytes, checked_add(problem_host_bytes(p), layout.total)),
+          checked_add(
+              p.reference_retained_bytes,
+              checked_add(problem_host_bytes(p), checked_add(layout.total, layout.history_bytes))),
           checked_mul(elements, sizeof(double)));
       if (conventional_prepared)
         return checked_add(checked_add(total, kContractionProviderAllowance),
@@ -242,14 +276,40 @@ struct Owner {
       }
       if ((conventional_prepared || plan.matrix_gemm) && !contractions.prepare(stream))
         scalar_plan();
-      auto allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+      auto allocate_numeric = [&]() {
+        auto code = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+        if (code) return code;
+        // A later history refusal does not erase this successful allocation's
+        // peak: the earlier, larger base really coexisted with retained state.
+        diagnostic.owned_device_bytes =
+            std::max(diagnostic.owned_device_bytes,
+                     checked_add(layout.total, (conventional_prepared || plan.matrix_gemm)
+                                                   ? kContractionProviderAllowance
+                                                   : 0));
+        diagnostic.numeric_capacity_bytes =
+            std::max(diagnostic.numeric_capacity_bytes, combined - layout.history_bytes);
+        if (!layout.history_bytes) return code;
+        code = cudaMalloc(reinterpret_cast<void**>(&history_base), layout.history_bytes);
+        if (code == cudaErrorMemoryAllocation) {
+          (void)cudaGetLastError();
+          // The complete numeric pair owns admission. Release the partial
+          // arena before retrying a smaller Q tile or the scalar schedule.
+          std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+          cuda_check(cudaStreamSynchronize(stream));
+          ++diagnostic.synchronizations;
+          cuda_check(cudaFree(base));
+          base = nullptr;
+        }
+        return code;
+      };
+      auto allocation = allocate_numeric();
       if (allocation == cudaErrorMemoryAllocation && plan.auxiliary_batch_size > 1) {
         (void)cudaGetLastError();
         // The same admitted provider can execute one-Q work without the
         // optional batched outputs. Retry before abandoning matrix execution.
         plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction, true);
         combined = build_layout();
-        allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+        allocation = allocate_numeric();
       }
       if (allocation == cudaErrorMemoryAllocation && (conventional_prepared || plan.matrix_gemm)) {
         // Only optional-resource failure permits retry. Arithmetic and driver
@@ -261,7 +321,7 @@ struct Owner {
           contractions.release_locked();
         }
         scalar_plan();
-        allocation = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
+        allocation = allocate_numeric();
       }
       cuda_check(allocation);
 
@@ -324,8 +384,9 @@ struct Owner {
       }
       last_t1 = reinterpret_cast<double*>(base + layout.last_t1);
       last_t2 = reinterpret_cast<double*>(base + layout.last_t2);
-      vectors = reinterpret_cast<double*>(base + layout.vectors);
-      errors = reinterpret_cast<double*>(base + layout.errors);
+      vectors = history_base ? reinterpret_cast<double*>(history_base + layout.vectors) : nullptr;
+      errors = history_base ? reinterpret_cast<double*>(history_base + layout.errors) : nullptr;
+      metric_weights = packed ? base + layout.metric_weights : nullptr;
       gram = reinterpret_cast<double*>(base + layout.gram);
       system = reinterpret_cast<double*>(base + layout.system);
       coefficients = reinterpret_cast<double*>(base + layout.coefficients);
@@ -333,6 +394,10 @@ struct Owner {
       r2_partials = reinterpret_cast<double*>(base + layout.r2_partials);
       scalars = reinterpret_cast<double*>(base + layout.scalars);
       status = reinterpret_cast<int*>(base + layout.status);
+      packing_refused = status + 2;
+      pair_asymmetry = scalars + 2;
+      cuda_check(cudaMemsetAsync(packing_refused, 0, sizeof(int), stream));
+      cuda_check(cudaMemsetAsync(pair_asymmetry, 0, sizeof(double), stream));
       arithmetic = reinterpret_cast<int*>(base + layout.arithmetic);
       cuda_check(cudaMemcpyAsync(last_t1, state.t1, n1 * sizeof(double), cudaMemcpyDeviceToDevice,
                                  stream));
@@ -351,9 +416,15 @@ struct Owner {
       diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kContractionProviderAllowance : 0;
       diagnostic.df_auxiliary_batch_size = plan.auxiliary_batch_size;
       diagnostic.owned_device_bytes =
-          checked_add(layout.total, checked_add(diagnostic.df_provider_capacity_bytes,
-                                                diagnostic.conventional_provider_capacity_bytes));
-      diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, combined);
+          std::max(diagnostic.owned_device_bytes,
+                   checked_add(checked_add(layout.total, layout.history_bytes),
+                               checked_add(diagnostic.df_provider_capacity_bytes,
+                                           diagnostic.conventional_provider_capacity_bytes)));
+      diagnostic.numeric_capacity_bytes =
+          std::max(diagnostic.numeric_capacity_bytes, std::max(p.provider_peak_bytes, combined));
+      diagnostic.packed_diis = packed;
+      diagnostic.diis_history_capacity_bytes = layout.history_bytes;
+      non_history_capacity = combined - layout.history_bytes;
     } catch (...) {
       cleanup();
       throw;
@@ -361,6 +432,57 @@ struct Owner {
   }
 
   ~Owner() { cleanup(); }
+
+  void refuse_packed_history(const SolverOptions& options) {
+    // Called only after a drained packing audit, before any extrapolation.
+    // Reset histories, retaining the current full physical amplitudes/residual.
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+    cuda_check(cudaFree(history_base));
+    history_base = nullptr;
+    vectors = errors = nullptr;
+    history.clear();
+    packed = false;
+    metric_weights = nullptr;
+    diagnostic.packed_diis = false;
+    diagnostic.packed_diis_refused = true;
+    ++restarts;
+    history_elements = elements;
+    std::size_t cursor = 0;
+    layout.vectors = reserve(layout, cursor,
+                             checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
+    layout.errors = reserve(layout, cursor,
+                            checked_mul(checked_mul(options.diis_size, elements), sizeof(double)));
+    const auto amount = align256(cursor);
+    bool admitted = amount <= options.max_bytes - non_history_capacity;
+    if (admitted) {
+      const auto code = cudaMalloc(reinterpret_cast<void**>(&history_base), amount);
+      if (code == cudaErrorMemoryAllocation) {
+        (void)cudaGetLastError();
+        admitted = false;
+      } else
+        cuda_check(code);
+    }
+    if (!admitted) {
+      // A bounded Jacobi continuation uses no optional history. It must still
+      // converge under the original physical replay gates before publication.
+      history = solver::DiisRing(0);
+      layout.history_bytes = 0;
+      diagnostic.diis_disabled_after_packing_refusal = true;
+      return;
+    }
+    layout.history_bytes = amount;
+    vectors = reinterpret_cast<double*>(history_base + layout.vectors);
+    errors = reinterpret_cast<double*>(history_base + layout.errors);
+    diagnostic.diis_history_capacity_bytes =
+        std::max(diagnostic.diis_history_capacity_bytes, amount);
+    diagnostic.owned_device_bytes =
+        std::max(diagnostic.owned_device_bytes,
+                 checked_add(checked_add(layout.total, amount),
+                             checked_add(diagnostic.df_provider_capacity_bytes,
+                                         diagnostic.conventional_provider_capacity_bytes)));
+    diagnostic.numeric_capacity_bytes =
+        std::max(diagnostic.numeric_capacity_bytes, checked_add(non_history_capacity, amount));
+  }
 
   void virtual_corrections() {
     cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream));
@@ -482,8 +604,10 @@ struct Owner {
     trial_begin = nullptr;
     trial_end = nullptr;
     if (base) cudaFree(base);
+    if (history_base) cudaFree(history_base);
     if (stream) cudaStreamDestroy(stream);
     base = nullptr;
+    history_base = nullptr;
     stream = nullptr;
   }
 
@@ -547,37 +671,66 @@ struct Owner {
 
 bool run_diis(Owner& s, const SolverOptions& options,
               const generated::DeviceIterationOutputs& trial) {
-  if (!options.diis_size) return false;
+  if (!s.history.capacity()) return false;
   // Appending to a full ring overwrites the oldest physical row. The live
   // chronological view advances without copying either complete history.
   const auto slot = s.history.push();
   int count = static_cast<int>(s.history.size());
   const int capacity = static_cast<int>(s.history.capacity());
-  cuda_check(cudaMemcpyAsync(s.vectors + std::size_t(slot) * s.elements, s.state.t1,
-                             s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
-  cuda_check(cudaMemcpyAsync(s.vectors + std::size_t(slot) * s.elements + s.n1, s.state.t2,
-                             s.n2 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
-  cuda_check(cudaMemcpyAsync(s.errors + std::size_t(slot) * s.elements, trial.r1,
-                             s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
-  cuda_check(cudaMemcpyAsync(s.errors + std::size_t(slot) * s.elements + s.n1, trial.r2,
-                             s.n2 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
-  s.diagnostic.diis_history_insert_bytes = checked_add(s.diagnostic.diis_history_insert_bytes,
-                                                       checked_mul(2 * sizeof(double), s.elements));
+  s.diagnostic.diis_history_insert_bytes = checked_add(
+      s.diagnostic.diis_history_insert_bytes, checked_mul(2 * sizeof(double), s.history_elements));
+  if (s.packed) {
+    generativeqc_tensor::history_insert_orbits<<<
+        generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(s.elements), 256), 256, 0,
+        s.stream>>>(
+        s.state.t1, s.state.t2, trial.r1, trial.r2, static_cast<generativeqc_tensor::I>(s.n1),
+        static_cast<generativeqc_tensor::I>(s.n2), s.vectors + slot * s.history_elements,
+        s.errors + slot * s.history_elements, s.metric_weights, s.coordinates,
+        generated::pair_rounding_tolerance, s.packing_refused, s.pair_asymmetry, s.state.error);
+    ++s.diagnostic.diis_pack_calls;
+    s.diagnostic.diis_conversion_bytes = checked_add(
+        s.diagnostic.diis_conversion_bytes,
+        checked_add(checked_mul(2 * sizeof(double), checked_add(s.elements, s.history_elements)),
+                    s.history_elements));
+    int refused = 0;
+    cuda_check(cudaMemcpyAsync(&refused, s.packing_refused, sizeof(int), cudaMemcpyDeviceToHost,
+                               s.stream));
+    cuda_check(cudaMemcpyAsync(&s.diagnostic.diis_maximum_pair_asymmetry, s.pair_asymmetry,
+                               sizeof(double), cudaMemcpyDeviceToHost, s.stream));
+    s.diagnostic.scalar_d2h_bytes += sizeof(int) + sizeof(double);
+    s.check_generated_error();
+    if (refused) {
+      s.refuse_packed_history(options);
+      return run_diis(s, options, trial);
+    }
+  } else {
+    cuda_check(cudaMemcpyAsync(s.vectors + std::size_t(slot) * s.history_elements, s.state.t1,
+                               s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
+    cuda_check(cudaMemcpyAsync(s.vectors + std::size_t(slot) * s.history_elements + s.n1,
+                               s.state.t2, s.n2 * sizeof(double), cudaMemcpyDeviceToDevice,
+                               s.stream));
+    cuda_check(cudaMemcpyAsync(s.errors + std::size_t(slot) * s.history_elements, trial.r1,
+                               s.n1 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
+    cuda_check(cudaMemcpyAsync(s.errors + std::size_t(slot) * s.history_elements + s.n1, trial.r2,
+                               s.n2 * sizeof(double), cudaMemcpyDeviceToDevice, s.stream));
+  }
   // Compute the first self norm too: a subsequent insertion reuses it. Retries
   // below only retire a logical row; no old-old residual dot is recomputed.
   generativeqc_tensor::history_gram_row<<<count, 256, 0, s.stream>>>(
-      s.errors, static_cast<generativeqc_tensor::I>(s.elements), capacity,
-      static_cast<int>(s.history.first()), count, static_cast<int>(slot), s.gram);
+      s.errors, static_cast<generativeqc_tensor::I>(s.history_elements), capacity,
+      static_cast<int>(s.history.first()), count, static_cast<int>(slot), s.gram, s.metric_weights);
   ++s.diagnostic.diis_gram_calls;
   s.diagnostic.diis_residual_dot_terms =
-      checked_add(s.diagnostic.diis_residual_dot_terms, checked_mul(count, s.elements));
+      checked_add(s.diagnostic.diis_residual_dot_terms, checked_mul(count, s.history_elements));
+  if (s.packed) s.diagnostic.diis_metric_weight_terms += checked_mul(count, s.history_elements);
   s.diagnostic.diis_gram_updates = checked_add(s.diagnostic.diis_gram_updates, 2 * count - 1);
   if (count == 1) {
-    s.check_generated_error();
+    if (!s.packed) s.check_generated_error();
+    cuda_check(cudaGetLastError());
     return false;
   }
   bool state_modified = false;
-  bool generated_error_checked = false;
+  bool generated_error_checked = s.packed;
   int generated_error = 0;
   while (count > 1) {
     generativeqc::cc::diis_coefficients<<<1, 1, 0, s.stream>>>(s.gram, count, s.system,
@@ -592,15 +745,25 @@ bool run_diis(Owner& s, const SolverOptions& options,
     generativeqc_tensor::diis_combine_slice<<<generativeqc_tensor::blocks(
                                                   static_cast<generativeqc_tensor::I>(s.n1), 256),
                                               256, 0, s.stream>>>(
-        s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.elements), 0,
+        s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.history_elements), 0,
         static_cast<generativeqc_tensor::I>(s.n1), count, s.status, s.state.t1, s.arithmetic,
         capacity, static_cast<int>(s.history.first()));
-    generativeqc_tensor::diis_combine_slice<<<generativeqc_tensor::blocks(
-                                                  static_cast<generativeqc_tensor::I>(s.n2), 256),
-                                              256, 0, s.stream>>>(
-        s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.elements),
-        static_cast<generativeqc_tensor::I>(s.n1), static_cast<generativeqc_tensor::I>(s.n2), count,
-        s.status, s.state.t2, s.arithmetic, capacity, static_cast<int>(s.history.first()));
+    if (s.packed) {
+      generativeqc_tensor::diis_combine_orbits<<<
+          generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(s.n2), 256), 256, 0,
+          s.stream>>>(s.vectors, s.coefficients,
+                      static_cast<generativeqc_tensor::I>(s.history_elements),
+                      static_cast<generativeqc_tensor::I>(s.n1),
+                      static_cast<generativeqc_tensor::I>(s.n2), count, s.status, s.state.t2,
+                      s.arithmetic, capacity, static_cast<int>(s.history.first()), s.coordinates);
+    } else {
+      generativeqc_tensor::diis_combine_slice<<<generativeqc_tensor::blocks(
+                                                    static_cast<generativeqc_tensor::I>(s.n2), 256),
+                                                256, 0, s.stream>>>(
+          s.vectors, s.coefficients, static_cast<generativeqc_tensor::I>(s.history_elements),
+          static_cast<generativeqc_tensor::I>(s.n1), static_cast<generativeqc_tensor::I>(s.n2),
+          count, s.status, s.state.t2, s.arithmetic, capacity, static_cast<int>(s.history.first()));
+    }
     s.diagnostic.diis_combine_calls += 2;
     int host_status = 1, arithmetic = 0;
     if (!generated_error_checked)
@@ -621,6 +784,7 @@ bool run_diis(Owner& s, const SolverOptions& options,
     }
     if (host_status == 2) break;
     if (host_status == 0) {
+      if (s.packed) s.diagnostic.diis_conversion_bytes += checked_mul(sizeof(double), s.n2);
       if (arithmetic) throw std::runtime_error("nonfinite RCCSD CUDA DIIS extrapolation");
       s.diagnostic.diis_combine_terms =
           checked_add(s.diagnostic.diis_combine_terms, checked_mul(count, s.elements));
@@ -701,7 +865,7 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       owner.diagnostic.update_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - update_started).count();
       ++owner.diagnostic.update_calls;
-      if (options.diis_size) {
+      if (owner.history.capacity()) {
         const auto trial_diis_started = std::chrono::steady_clock::now();
         cuda_check(cudaEventRecord(owner.trial_begin, owner.stream));
         const auto trial = owner.iteration();
