@@ -29,7 +29,7 @@ def test_cudart_implib_covers_direct_host_source_calls() -> None:
     for source in sorted((ROOT / "src").rglob("*.cpp")):
         if "xtb" in source.relative_to(ROOT / "src").parts:
             continue
-        calls = set(re.findall(r"\\b(cuda[A-Z][A-Za-z0-9_]*)\\s*\\(", source.read_text()))
+        calls = set(re.findall(r"\b(cuda[A-Z][A-Za-z0-9_]*)\s*\(", source.read_text()))
         absent = sorted({object_symbol.get(call, call) for call in calls} - symbols)
         if absent:
             missing[source.relative_to(ROOT).as_posix()] = absent
