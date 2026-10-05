@@ -36,7 +36,7 @@ bool phases(generativeqc_grid_phased::Workspace work, const double* points,
           return false;
   for (size_t point = 0; point < work.points; ++point)
     for (size_t atom = 0; atom < work.atoms; ++atom)
-      atom_logs_phase(work, point, atom, counted_log);
+      atom_logs_phase(work, point, atom);
   for (size_t point = 0; point < work.points; ++point)
     if (!point_normalize_phase(work, point, owners[point], seeds[point], local_ratio)) return false;
   for (size_t point = 0; point < work.points; ++point)
