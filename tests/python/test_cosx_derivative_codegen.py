@@ -176,13 +176,20 @@ def test_generated_header_retires_native_cosx_contraction_formulas(
     for helper in (
         "accumulate_projection",
         "accumulate_esp_derivative",
-        "accumulate_symmetric_projection",
         "accumulate_bidirectional",
         "accumulate_point_gradient",
         "accumulate_molecular_ao",
         "molecular_cotangent",
     ):
         assert f"generated_cosx_derivative::{helper}" in consumer
+
+    assert "cosx_derivative_lowering::project_symmetric(" in consumer
+    assert "project_symmetric_density_kernel" not in consumer
+    assert (
+        "generated_cosx_derivative::accumulate_symmetric_projection(a,b,bt,value)"
+        in generated
+    )
+    assert "execute_checked<SymmetricStep>" in generated
 
     for retired in (
         "value += ao[point * nbf + row] * density[row * nbf + column]",
