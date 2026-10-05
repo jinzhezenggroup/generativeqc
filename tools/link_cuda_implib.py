@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Discover provider-free CUDA imports from the real final-link diagnostics.
 
