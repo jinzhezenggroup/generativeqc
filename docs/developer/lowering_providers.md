@@ -169,8 +169,15 @@ unavailable, including after release. `retained_cache_quarantined()` distinguish
 that state; its cache bytes are only the known charge floor, not a measured bound
 on all retained memory. There is no table-local reset. The enclosing owner must
 preserve both charge and quarantine across table destruction while it keeps using
-the CUDA context; replacing the table cannot requalify an unknown overrun. Shared
-region selection does not yet offer CUTLASS, and no production profile is installed.
+the CUDA context; replacing the table cannot requalify an unknown overrun.
+Homogeneous shared regions retain CUTLASS as explicit unavailable evidence.
+Their function-local owner cannot preserve an unsafe module load across failed
+construction and later calls on the same CUDA context. CUTLASS admission is
+therefore closed even with test-only profiles, and forged admitted plans reject
+before loading. Re-enabling it requires explicit context/build-lifetime ownership
+of both retained charges and quarantine; a measured resource profile alone is
+insufficient. Standalone/shared-table CUTLASS retains its existing owner contract.
+No production profile is installed.
 Native CMake builds can enable the optional header dependency with
 `GENERATIVEQC_ENABLE_CUTLASS=ON` and
 `GENERATIVEQC_CUTLASS_ROOT=/path/to/cutlass-3.9.2`. The option defaults to OFF;
@@ -366,13 +373,16 @@ rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
 
 Streamed DF MO source response offers cuBLASLt alongside cuBLAS, cuTENSOR and
-generated execution for the same compiler region. `PreparedContractionRegion`
+generated execution for the same compiler region. CUTLASS remains unavailable
+until the region has a context-lifetime retention owner. `PreparedContractionRegion`
 reserves all eight simultaneous plans before source callbacks and reuses their
 cached algorithms for every row. Reservations are provider-specific; a partial
 optional preparation failure drains provisional plans before selecting the
 same-precision generated fallback. Diagnostics report the actual provider,
 version, preparation time, work and resource counts. No production cuBLASLt
-resource profile is installed, so ordinary selection retains the incumbent.
+resource profile is installed, so ordinary selection retains the incumbent. The
+test adapter's `df_mo_response_probe_v3` ABI still accepts an artifact digest;
+CUTLASS qualification controls cannot bypass the lifetime restriction.
 
 The native cuTENSOR executor fixes the GETT family and kernel rank zero at
 preparation, with JIT, cache and incremental autotuning disabled. Unsupported
