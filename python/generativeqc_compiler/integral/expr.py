@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 Coefficient = Fraction | float
 Scalar = int | float | Fraction
+_TOPOLOGICAL_ORDER_CACHE_LIMIT = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -1273,6 +1274,9 @@ class Graph:
         for identifier in identifiers:
             visit(identifier)
         result = tuple(order)
+        if len(self._topological_orders) >= _TOPOLOGICAL_ORDER_CACHE_LIMIT:
+            oldest = next(iter(self._topological_orders))
+            del self._topological_orders[oldest]
         self._topological_orders[identifiers] = result
         return result
 
