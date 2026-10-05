@@ -92,6 +92,15 @@ recipe. Representative AOT hashes identify templates; they are not hashes of
 resolved runtime shapes. The native validator checks collapsed matrix axes
 against the semantic labels, including batches and transposes.
 
+DF MO source response also emits eight descriptors and a prepared callback
+traversal from its existing TensorIR reverse program. Leading source rows and
+leading reduction rows are explicit projections of the parent request; the
+projection retains scientific identity, parent semantic identity and operand
+order. Interior-axis slices are rejected. The caller traverses every fixed
+reduction row and accumulates its contribution. The native validator checks all
+eight matrix recipes against their projected axes. The CUDA response consumer
+still uses its original callback interface pending prepared execution migration.
+
 `src/tensor/cuda_contraction.cuh` owns preparation, provider resources and typed
 execution. Each stage pre-binds its full and tail batch shapes outside iteration;
 replay checks dtype, shape, device, stream and context generation. The owner
