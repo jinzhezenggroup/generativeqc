@@ -338,11 +338,16 @@ def test_cuda_failed_preparation_retains_ledger_rejection_and_releases_buffers(
     create = calculator._library.generativeqc_resource_ledger_create_v1
     create.argtypes = [ctypes.c_size_t, ctypes.c_int]
     create.restype = ctypes.c_void_p
-    # The second case allows one complete owner before rejecting its neighbor.
-    # Constructor unwinding must release both its state and any partial upload.
-    capacity = (
-        calculator.estimate_resources([H2]).resident_bytes["device"] if partial else 1
-    )
+    capacity = 1
+    if partial:
+        # The capacity estimate includes optional provider allowances and can
+        # exceed two actual owners. Fault the measured single-owner setup peak
+        # instead, allowing one complete owner before rejecting its neighbor.
+        # Constructor unwinding must release retained state and partial uploads.
+        with calculator.prepare_batch([H2]) as probe:
+            observed = probe.resource_diagnostics["preparation"]["device_ledger"]
+            capacity = observed["peak_bytes"]
+            assert 0 < observed["live_bytes"] <= capacity
     # Fault the assigned capacity only, retaining the real native allocator and
     # exception path so this exercises preparation cleanup rather than a mock.
     monkeypatch.setattr(

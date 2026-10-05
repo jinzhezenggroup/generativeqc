@@ -4,6 +4,26 @@ include_guard(GLOBAL)
 # live in GenerativeQCGenerated.cmake; this file owns generator inputs/outputs and the
 # target(s) that consume each generated family.
 macro(generativeqc_register_host_generated_sources target)
+  generativeqc_register_generated_sources(
+    NAME generativeqc_solver_lowering_codegen
+    TARGET ${target}
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_solver_lowering.py"
+    OUTPUTS "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_solver_lowering.hpp"
+    DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver.cpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver_kernels.cu"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver_types.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/eigensolver_kernels.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/cuda/matrix_index.cuh"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/scf/eigensolver_workspace.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/lowering_binding.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/runtime/execution_precision.hpp"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/solver_lowering.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/common/library.py"
+    ARGS --output "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_solver_lowering.hpp"
+    COMMENT "Generating shared symmetric eigensolver lowering portfolio")
+
   if(GENERATIVEQC_ENABLE_STATIONARY_CPU_FORCE_AOT)
     set(GENERATIVEQC_STATIONARY_CPU_AOT_DIRECTORY
         "${CMAKE_CURRENT_BINARY_DIR}/generated/stationary_cpu_derivatives")
