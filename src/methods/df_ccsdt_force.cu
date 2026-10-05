@@ -41,7 +41,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
     bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
     std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
-    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators) {
+    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -59,7 +59,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   // in every phase, then let the response owner rebind/release it explicitly.
   auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
                                       recycle_bytes, &auxiliary, forces, df_matrix_gemm, nullptr,
-                                      ccsd_batch_limit, derived_denominators);
+                                      ccsd_batch_limit, derived_denominators, packed_diis);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;
@@ -303,7 +303,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
                                   bool df_matrix_gemm, bool lambda_matrix_gemm,
                                   std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
                                   const hf::RHFFrameResponseOptions& frame_options,
-                                  bool derived_denominators) {
+                                  bool derived_denominators, bool packed_diis) {
   const auto started = Clock::now();
   auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();
@@ -311,7 +311,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     return run_df_ccsdt_native_attempt(execution, system, auxiliary, descriptor, forces,
                                        with_triples, df_auxiliary_reduction, df_matrix_gemm,
                                        lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit,
-                                       frame_options, derived_denominators);
+                                       frame_options, derived_denominators, packed_diis);
   };
   try {
     return attempt();

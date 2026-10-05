@@ -5,7 +5,7 @@
 #include <cstddef>
 
 #include "cc/solver.hpp"
-#include "tensor/cuda_runtime.cuh"
+#include "tensor/cuda_contraction.cuh"
 
 namespace generativeqc::cc::generated {
 
@@ -18,6 +18,8 @@ struct CudaState {
   double* canonical_eps{};
   double canonical_level_shift{};
   double *iteration_arena{}, *replay_arena{}, *response_arena{};
+  // Borrowed semantic table; the native owner keeps it and its context alive.
+  tensor::PreparedContractions* conventional_contractions{};
   double *bar_correlation_energy{}, *bar_singles_residual{}, *bar_doubles_residual{};
   double *bar_foo{}, *bar_fov{}, *bar_fvv{};
   double *bar_ovov{}, *bar_ovvo{}, *bar_oovv{}, *bar_ovvv{}, *bar_ovoo{}, *bar_oooo{}, *bar_vvvv{};
@@ -68,6 +70,9 @@ struct DeviceOrbitalJvpOutput {
 };
 
 DeviceIterationOutputs run_iteration_cuda(CudaState& state);
+DeviceIterationOutputs run_iteration_prepared_cuda(CudaState& state);
+void prepare_iteration_contractions(CudaState&, tensor::CudaContractionContext&, std::size_t& calls,
+                                    std::size_t& summands);
 DeviceReplayOutputs run_replay_cuda(CudaState& state);
 DeviceLambdaOutputs run_lambda_rhs_cuda(CudaState& state);
 DeviceLambdaOutputs run_lambda_transpose_cuda(CudaState& state);

@@ -80,19 +80,6 @@
         "cublasGetVersion": 1
       }
     },
-    "src/hf/rhf_frame_response.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "HF response equations still submit or emit vendor contractions; retain equations while moving submission to shared bindings.",
-      "references": {
-        "cublasCreate": 1,
-        "cublasDestroy": 1,
-        "cublasDgemm": 1,
-        "cublasSetPointerMode": 1,
-        "cublasSetStream": 1,
-        "cublasSetWorkspace": 1
-      }
-    },
     "src/posthf/cuda_low_rank.cu": {
       "classification": "migration",
       "contract": "#1890",
@@ -186,15 +173,6 @@
         "cusolverDnXsyevjSetSortEig": 1,
         "cusolverDnXsyevjSetTolerance": 1,
         "cusolverGetProperty": 1
-      }
-    },
-    "src/scf/cuda/df_coulomb.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
-      "references": {
-        "cublasDgemmStridedBatched": 2,
-        "cublasDgemv": 6
       }
     },
     "src/scf/cuda/df_eigensystem.cpp": {
@@ -490,6 +468,14 @@
         "cutensorPlanPreferenceSetAttribute": 3
       }
     },
+    "src/tensor/cuda_panel_product.cuh": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/dft/xc_density_lowering.py",
+      "reason": "Shared prepared matrix-panel executor consumes the canonical density portfolio and owns strict GEMM submission, cache lifetime and finite publication.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
     "src/tensor/cuda_runtime.cuh": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",
@@ -505,6 +491,18 @@
         "cublasSetWorkspace": 1,
         "cublasSgemm": 1,
         "cublasSgemmStridedBatched": 1
+      }
+    },
+    "src/tensor/cuda_vector_contraction.cpp": {
+      "classification": "provider",
+      "contract": "src/tensor/native_contraction.hpp",
+      "reason": "Shared prepared vector-result TensorIR contraction binding owns candidate selection, version queries and GEMV/strided-GEMM submission through an exclusively borrowed handle.",
+      "references": {
+        "cublasDgemmStridedBatched": 1,
+        "cublasDgemv": 1,
+        "cublasGetPointerMode": 1,
+        "cublasGetStream": 1,
+        "cublasGetVersion": 1
       }
     },
     "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu": {
