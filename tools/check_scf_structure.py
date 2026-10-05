@@ -153,6 +153,7 @@ CUDA_ALLOWED["cuda_df_runtime"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_df_runtime"]
 ) + (
     "runtime/cuda_component_trace.hpp",
+    "tensor/cuda_vector_contraction.hpp",
     "scf/cuda/df_metric_kernels.",
     "scf/cuda/df_jk_kernels.",
     "scf/cuda/df_packed_values.",

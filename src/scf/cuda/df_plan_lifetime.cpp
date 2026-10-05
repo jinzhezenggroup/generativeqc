@@ -33,6 +33,8 @@ void release(CudaDensityFittingJkPlan& plan) noexcept {
   destroy_persistent_scf_state(plan.persistent_scf_state);
   destroy_ordinary_eigensystem(plan.ordinary_eigensystem);
   destroy_final_validation(plan.final_validation);
+  plan.charge_contraction.reset();
+  plan.coulomb_contraction.reset();
   destroy_cuda_density_fitting_integral_source(plan.integral_source);
   (void)runtime::resource_cuda_free(plan.inverse_square_roots);
   (void)runtime::resource_cuda_free(plan.metric_eigenvectors);
