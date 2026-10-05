@@ -56,6 +56,24 @@ make no speedup claim. Source/binary hashes, ccache commands/statistics, finite
 Slurm qualification scripts, native regression and sanitizer logs are retained
 under `.artifacts/1876-ks-density/`.
 
+Qualification on n1/node1 (finite Slurm `main`, `gpu:5090:1`, CUDA 12.9 / cuBLAS
+120901) passes at source `4c1209729`: all 28 routes / 56 solves, the XC provider
+suite, full native KS regression, and memcheck/initcheck with zero errors.
+Maximum cold energy error against the independent CPU solve is `9.95e-14`
+Hartree. All 109 selected Python tests pass, including the seven GPU resource
+tests enabled explicitly within Slurm; the initial run without that opt-in is
+retained separately. This also resolves the missing-library prerequisite of
+the earlier fixed-density-only build.
+
+Qualified KS test SHA-256:
+`33f0183f6916808b3cb146d93d9f9879a33b4e5643b586733f8d4ace48ea2452`.
+Qualified shared-library SHA-256:
+`49c9c042b2caa878b3caea8fa32b9478e2b349f21e29a5ecb25d6568eb6b9e37`.
+The subsequent change only records this evidence. Full compiler commands prove
+both C++ and CUDA use ccache, and before/after statistics distinguish its hits
+from uncached compilation. Initial pre-final-header/timing runs are retained
+under `initial/` rather than attributed to these final binaries.
+
 ## Revisit when
 
 Compose this reservation with potential-assembly candidates and a single
