@@ -50,6 +50,7 @@ def test_cuda_owner_unwinds_every_setup_failure(tmp_path: Path) -> None:
         PREFIX
         + "namespace generativeqc::tensor {\n"
         + provider
+        + "struct PreparedContractions { static constexpr std::size_t storage_bytes(std::size_t n) {return 128*n;} };\n"
         + "}\n"
         + OPEN_CC
         + state
@@ -175,10 +176,11 @@ struct DeviceAllocationError : std::runtime_error { using std::runtime_error::ru
 """
 OPEN_CC = r"""
 namespace generativeqc::cc {
-constexpr std::size_t kDFBlasProviderAllowance=96ULL<<20;
+constexpr std::size_t kContractionProviderAllowance=96ULL<<20;
 namespace generated {
 """
 GENERATED = r"""
+void prepare_iteration_contractions(CudaState&,tensor::CudaContractionContext&,std::size_t&,std::size_t&) {}
 namespace dfcore {
 struct CudaState : generated::CudaState {
   const double *df_virtual_singles{}, *df_virtual_doubles{};
@@ -228,8 +230,8 @@ int main() {
     calls = 0; fail_at = 0;
     int constructor_calls = 0;
     { generativeqc::cc::Owner good(p, options, 0); constructor_calls = calls;
-      saw_matrix = saw_matrix || good.plan.matrix_gemm;
-      if (handles != (good.plan.matrix_gemm ? 1 : 0)) return 10;
+      saw_matrix = saw_matrix || good.plan.matrix_gemm || good.conventional_prepared;
+      if (handles != (good.plan.matrix_gemm || good.conventional_prepared ? 1 : 0)) return 10;
       const auto detached = (good.n1 + good.n2) * sizeof(double);
       if (good.diagnostic.numeric_capacity_bytes < 128 + good.layout.total + detached) {
         std::cerr << "CUDA detached result storage was not reserved\n"; return 8;
@@ -239,10 +241,15 @@ int main() {
       if (good.plan.matrix_gemm) {
         const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
         const auto variants=batch>1 ? 1+(tail>1) : 0;
-        expected_capacity+=generativeqc::cc::kDFBlasProviderAllowance+
+        expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
           generativeqc::cc::generated::dfhoist::contraction_host_bytes(variants);
         if(generativeqc::cc::generated::dfhoist::prepared_batch!=batch ||
            generativeqc::cc::generated::dfhoist::prepared_tail!=tail) return 17;
+      }
+      if (good.conventional_prepared) {
+        expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
+          generativeqc::tensor::PreparedContractions::storage_bytes(
+            generativeqc::cc::generated::iteration_prepared_contractions);
       }
       if(good.diagnostic.numeric_capacity_bytes!=expected_capacity) return 18;
       if (events != (history ? 2 : 0)) return 9;
@@ -261,6 +268,14 @@ int main() {
       calls = 0; fail_at = 0;
       { generativeqc::cc::Owner retry(p, options, 0); }
       if (streams || events || allocations || handles || device != 7) return 5;
+    }
+    if (!naux) {
+      options.max_bytes = 8ULL << 20;
+      { generativeqc::cc::Owner bounded(p, options, 0);
+        if (bounded.conventional_prepared || handles ||
+            bounded.diagnostic.numeric_capacity_bytes > options.max_bytes) return 12;
+      }
+      if (streams || events || allocations || handles || device != 7) return 13;
     }
     options.max_bytes = 1; calls = 0;
     try { generativeqc::cc::Owner over_budget(p, options, 0); return 6; }
@@ -334,7 +349,7 @@ int main() {
       generativeqc::cc::Owner retry(p,options,0);
       if(!retry.plan.matrix_gemm || retry.plan.auxiliary_batch_size!=1 ||
          live_bytes!=narrow_total || retry.packed!=packed) return 24;
-      if(retry.diagnostic.owned_device_bytes<wide_base+generativeqc::cc::kDFBlasProviderAllowance ||
+      if(retry.diagnostic.owned_device_bytes<wide_base+generativeqc::cc::kContractionProviderAllowance ||
          retry.diagnostic.numeric_capacity_bytes<wide_non_history_capacity ||
          retry.diagnostic.synchronizations<2) return 32;
     } catch(const std::runtime_error& error) {
@@ -367,6 +382,50 @@ int main() {
     }
     history_alloc_error=cudaErrorMemoryAllocation;
   }
+  // Conventional preparation shares the two-allocation history retry. A
+  // refused second allocation must release the provider, retain its prior
+  // peak, and try the complete scalar pair exactly once.
+  p.naux=0;p.df_bov.clear();p.df_bvv.clear();
+  for(const bool packed:{false,true}) {
+    std::size_t prepared_base=0,prepared_non_history=0;
+    for(const int failures:{0,1,2}) {
+      generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=packed;
+      history_alloc_failures=failures;numeric_attempts=history_attempts=0;
+      try {
+        generativeqc::cc::Owner retry(p,options,0);
+        if(failures==2 || retry.conventional_prepared!=(failures==0) ||
+           retry.plan.matrix_gemm || retry.packed!=packed) return 33;
+        if(!failures) {
+          prepared_base=retry.layout.total;
+          prepared_non_history=retry.diagnostic.numeric_capacity_bytes-retry.layout.history_bytes;
+        } else if(retry.diagnostic.owned_device_bytes<prepared_base+generativeqc::cc::kContractionProviderAllowance ||
+                  retry.diagnostic.numeric_capacity_bytes<prepared_non_history ||
+                  retry.diagnostic.conventional_provider_capacity_bytes ||
+                  retry.diagnostic.conventional_binding_host_bytes ||
+                  retry.diagnostic.synchronizations<2) return 34;
+      } catch(const std::runtime_error&) {if(failures!=2) return 35;}
+      if(history_attempts!=std::min(failures+1,2) || numeric_attempts!=2*history_attempts ||
+         history_alloc_failures || live_bytes || streams || events || allocations ||
+         handles || device!=7) return 36;
+    }
+  }
+  // Post-execution packed refusal retains the conventional provider while
+  // replacing histories. Its allowance coexists with the larger full payload.
+  { generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=true;
+    generativeqc::cc::Owner owner(p,options,0);
+    const auto packed_bytes=owner.layout.history_bytes;
+    const auto before=owner.diagnostic.owned_device_bytes;
+    if(!owner.conventional_prepared || !owner.packed || !handles) return 37;
+    owner.refuse_packed_history(options);
+    const auto expected=owner.layout.total+owner.layout.history_bytes+
+        owner.diagnostic.conventional_provider_capacity_bytes;
+    if(owner.packed || !owner.conventional_prepared || !handles ||
+       owner.layout.history_bytes<=packed_bytes || expected<=before ||
+       owner.diagnostic.owned_device_bytes!=expected ||
+       owner.diagnostic.numeric_capacity_bytes!=owner.non_history_capacity+owner.layout.history_bytes)
+      return 38;
+  }
+  if(live_bytes || streams || events || allocations || handles || device!=7) return 39;
   std::cout<<"Full/packed history allocation pairs retain one-Q/scalar retry and error gates\n";
 }
 """

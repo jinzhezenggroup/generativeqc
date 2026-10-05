@@ -90,6 +90,10 @@ struct SolverDiagnostic {
   std::size_t diis_gram_calls{};
   std::size_t diis_coefficient_calls{};
   std::size_t diis_combine_calls{};
+  // Execution diagnostics only; scientific options carry no provider selector.
+  bool conventional_prepared_contractions{};
+  std::size_t conventional_contraction_calls{}, conventional_contraction_summands{};
+  std::size_t conventional_provider_capacity_bytes{}, conventional_binding_host_bytes{};
   // History insertion counts destination bytes; chronological retirement moves
   // no tensor bytes. Dot/combine terms are scalar summands, not hardware FLOPs.
   std::size_t diis_history_insert_bytes{}, diis_history_shift_bytes{};

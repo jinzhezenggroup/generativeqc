@@ -1,4 +1,4 @@
-"""DF solver releases must not hide another owner's measured provider growth.
+"""CC solver releases must not hide another owner's measured provider growth.
 
 Compile the live cleanup and optional-arena fallback with host CUDA doubles.
 This tests resource ordering and fallback selection, not GPU execution.
@@ -53,7 +53,16 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("operation", ["cleanup", "fallback", "history-fallback"])
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "cleanup",
+        "fallback",
+        "history-fallback",
+        "conventional-fallback",
+        "conventional-history-fallback",
+    ],
+)
 def test_provider_release_waits_for_other_owner_measurement(
     provider_lifetime_probe: Path, operation: str
 ) -> None:
@@ -97,7 +106,7 @@ int cudaMalloc(void** pointer,std::size_t) {
 void cuda_check(int code) { if(code) throw std::runtime_error("CUDA failure"); }
 void blas_check(int code) { if(code) throw std::runtime_error("BLAS failure"); }
 namespace generativeqc::cc {
-constexpr std::size_t kDFBlasProviderAllowance=96ULL<<20;
+constexpr std::size_t kContractionProviderAllowance=96ULL<<20;
 std::size_t checked_add(std::size_t a,std::size_t b) { return a+b; }
 struct Contractions {
   void *handle=reinterpret_cast<void*>(2), *stream=reinterpret_cast<void*>(1);
@@ -131,18 +140,27 @@ struct Owner {
   std::size_t naux=1,combined=0;
   Plan df_iteration_plan(std::size_t,std::size_t,std::size_t,bool,bool,bool) { return {}; }
   std::size_t build_layout() { return layout.total; }
+  bool conventional_prepared=false;
   struct { std::size_t total=1024,history_bytes=0; } layout;
   struct { unsigned synchronizations=0; std::size_t owned_device_bytes=0,numeric_capacity_bytes=0; } diagnostic;
   int replans=0;
-  void scalar_plan() { plan.matrix_gemm=false; layout.total=512; ++replans; }
+  void scalar_plan() {
+    conventional_prepared=false; plan.matrix_gemm=false; layout.total=512; ++replans;
+  }
 """
 
 MAIN = r"""
 int main(int argc,char** argv) {
   if(argc!=2) return 99;
-  fail_history=std::string(argv[1])=="history-fallback";
-  const bool fallback=std::string(argv[1])=="fallback" || fail_history;
+  const auto operation=std::string(argv[1]);
+  fail_history=operation=="history-fallback" || operation=="conventional-history-fallback";
+  const bool fallback=operation!="cleanup";
   generativeqc::cc::Owner owner;
+  if (operation=="conventional-fallback" || operation=="conventional-history-fallback") {
+    owner.conventional_prepared=true;
+    owner.plan.matrix_gemm=false;
+    owner.naux=0;
+  }
   if(fail_history) {
     owner.base=owner.history_base=nullptr;owner.layout.history_bytes=256;owner.combined=2048;
   }
@@ -168,7 +186,7 @@ int main(int argc,char** argv) {
   }
   if(destroys!=1 || owner.contractions.handle) return 2;
   if(fallback) {
-    if(owner.plan.matrix_gemm || owner.replans!=1 || allocations!=(fail_history ? 4 : 2) ||
+    if(owner.conventional_prepared || owner.plan.matrix_gemm || owner.replans!=1 || allocations!=(fail_history ? 4 : 2) ||
        cleared!=(fail_history ? 2 : 1) ||
        owner.layout.total!=512 || owner.base!=reinterpret_cast<unsigned char*>(4)) return 3;
     owner.cleanup();

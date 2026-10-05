@@ -33,7 +33,7 @@ namespace {
 
 using generativeqc_tensor::cuda_check;
 // Shared provider storage is charged separately from the compiler's IR arena.
-constexpr auto kDFBlasProviderAllowance = tensor::CudaContractionContext::kProviderAllowance;
+constexpr auto kContractionProviderAllowance = tensor::CudaContractionContext::kProviderAllowance;
 
 std::size_t checked_mul(std::size_t a, std::size_t b) {
   if (a && b > std::numeric_limits<std::size_t>::max() / a)
@@ -93,6 +93,8 @@ struct Owner {
   cudaStream_t stream{};
   cudaEvent_t trial_begin{}, trial_end{};
   tensor::CudaContractionContext contractions;
+  tensor::PreparedContractions conventional_contractions;
+  bool conventional_prepared{};
   unsigned char* base{};
   unsigned char* history_base{};
   unsigned char* metric_weights{};
@@ -140,6 +142,7 @@ struct Owner {
     }
     history_elements = packed ? checked_add(n1, checked_add(n2, n1) / 2) : elements;
     naux = p.naux;
+    conventional_prepared = !naux && generated::iteration_prepared_dimensions_fit(p.nocc, p.nvir);
     // The compiler derives each flattened dimension from contraction labels;
     // neither tensor rank nor o*v alone bounds the provider's signed extents.
     const bool matrix_dimensions_fit =
@@ -214,7 +217,11 @@ struct Owner {
               p.reference_retained_bytes,
               checked_add(problem_host_bytes(p), checked_add(layout.total, layout.history_bytes))),
           checked_mul(elements, sizeof(double)));
-      return plan.matrix_gemm ? checked_add(checked_add(total, kDFBlasProviderAllowance),
+      if (conventional_prepared)
+        return checked_add(checked_add(total, kContractionProviderAllowance),
+                           tensor::PreparedContractions::storage_bytes(
+                               generated::iteration_prepared_contractions));
+      return plan.matrix_gemm ? checked_add(checked_add(total, kContractionProviderAllowance),
                                             generated::dfhoist::contraction_host_bytes(
                                                 plan.auxiliary_batch_size > 1
                                                     ? 1 + (naux % plan.auxiliary_batch_size > 1)
@@ -242,7 +249,10 @@ struct Owner {
       }
     }
     const auto scalar_plan = [&]() {
-      plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
+      if (!naux)
+        conventional_prepared = false;
+      else
+        plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction);
       combined = build_layout();
       if (plan.hoisted && combined > options.max_bytes) {
         plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
@@ -251,7 +261,7 @@ struct Owner {
       if (combined > options.max_bytes)
         throw std::length_error("RCCSD CUDA scalar fallback exceeds correlation memory budget");
     };
-    if (plan.matrix_gemm && combined > options.max_bytes) scalar_plan();
+    if ((conventional_prepared || plan.matrix_gemm) && combined > options.max_bytes) scalar_plan();
     if (plan.hoisted && combined > options.max_bytes) {
       plan = df_iteration_plan(p.nocc, p.nvir, naux, true, false);
       combined = build_layout();
@@ -264,7 +274,8 @@ struct Owner {
         cuda_check(cudaEventCreate(&trial_begin));
         cuda_check(cudaEventCreate(&trial_end));
       }
-      if (plan.matrix_gemm && !contractions.prepare(stream)) scalar_plan();
+      if ((conventional_prepared || plan.matrix_gemm) && !contractions.prepare(stream))
+        scalar_plan();
       auto allocate_numeric = [&]() {
         auto code = cudaMalloc(reinterpret_cast<void**>(&base), layout.total);
         if (code) return code;
@@ -272,7 +283,9 @@ struct Owner {
         // peak: the earlier, larger base really coexisted with retained state.
         diagnostic.owned_device_bytes =
             std::max(diagnostic.owned_device_bytes,
-                     checked_add(layout.total, plan.matrix_gemm ? kDFBlasProviderAllowance : 0));
+                     checked_add(layout.total, (conventional_prepared || plan.matrix_gemm)
+                                                   ? kContractionProviderAllowance
+                                                   : 0));
         diagnostic.numeric_capacity_bytes =
             std::max(diagnostic.numeric_capacity_bytes, combined - layout.history_bytes);
         if (!layout.history_bytes) return code;
@@ -298,7 +311,7 @@ struct Owner {
         combined = build_layout();
         allocation = allocate_numeric();
       }
-      if (allocation == cudaErrorMemoryAllocation && plan.matrix_gemm) {
+      if (allocation == cudaErrorMemoryAllocation && (conventional_prepared || plan.matrix_gemm)) {
         // Only optional-resource failure permits retry. Arithmetic and driver
         // failures are propagated, and a retry never changes the equations.
         (void)cudaGetLastError();
@@ -334,6 +347,12 @@ struct Owner {
       state.iteration_arena = reinterpret_cast<double*>(base + layout.iteration);
       state.replay_arena = reinterpret_cast<double*>(base + layout.replay);
       state.error = reinterpret_cast<int*>(base + layout.generated_error);
+      if (conventional_prepared) {
+        state.conventional_contractions = &conventional_contractions;
+        generated::prepare_iteration_contractions(state, contractions,
+                                                  diagnostic.conventional_contraction_calls,
+                                                  diagnostic.conventional_contraction_summands);
+      }
       if (naux) {
         df_bov = reinterpret_cast<double*>(base + layout.df_bov);
         df_bvv = reinterpret_cast<double*>(base + layout.df_bvv);
@@ -387,12 +406,20 @@ struct Owner {
       cuda_check(cudaStreamSynchronize(stream));
       ++diagnostic.synchronizations;
       diagnostic.df_matrix_gemm = plan.matrix_gemm;
+      diagnostic.conventional_prepared_contractions = conventional_prepared;
+      diagnostic.conventional_provider_capacity_bytes =
+          conventional_prepared ? kContractionProviderAllowance : 0;
+      diagnostic.conventional_binding_host_bytes =
+          conventional_prepared ? tensor::PreparedContractions::storage_bytes(
+                                      generated::iteration_prepared_contractions)
+                                : 0;
+      diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kContractionProviderAllowance : 0;
       diagnostic.df_auxiliary_batch_size = plan.auxiliary_batch_size;
-      diagnostic.df_provider_capacity_bytes = plan.matrix_gemm ? kDFBlasProviderAllowance : 0;
       diagnostic.owned_device_bytes =
           std::max(diagnostic.owned_device_bytes,
                    checked_add(checked_add(layout.total, layout.history_bytes),
-                               diagnostic.df_provider_capacity_bytes));
+                               checked_add(diagnostic.df_provider_capacity_bytes,
+                                           diagnostic.conventional_provider_capacity_bytes)));
       diagnostic.numeric_capacity_bytes =
           std::max(diagnostic.numeric_capacity_bytes, std::max(p.provider_peak_bytes, combined));
       diagnostic.packed_diis = packed;
@@ -448,9 +475,11 @@ struct Owner {
     errors = reinterpret_cast<double*>(history_base + layout.errors);
     diagnostic.diis_history_capacity_bytes =
         std::max(diagnostic.diis_history_capacity_bytes, amount);
-    diagnostic.owned_device_bytes = std::max(
-        diagnostic.owned_device_bytes,
-        checked_add(checked_add(layout.total, amount), diagnostic.df_provider_capacity_bytes));
+    diagnostic.owned_device_bytes =
+        std::max(diagnostic.owned_device_bytes,
+                 checked_add(checked_add(layout.total, amount),
+                             checked_add(diagnostic.df_provider_capacity_bytes,
+                                         diagnostic.conventional_provider_capacity_bytes)));
     diagnostic.numeric_capacity_bytes =
         std::max(diagnostic.numeric_capacity_bytes, checked_add(non_history_capacity, amount));
   }
@@ -482,7 +511,9 @@ struct Owner {
   }
 
   generated::DeviceIterationOutputs iteration() {
-    if (!naux) return generated::run_iteration_cuda(state);
+    if (!naux)
+      return conventional_prepared ? generated::run_iteration_prepared_cuda(state)
+                                   : generated::run_iteration_cuda(state);
     if (plan.hoisted) {
       cuda_check(cudaMemsetAsync(state.error, 0, sizeof(int), stream));
       cuda_check(cudaMemsetAsync(df_sum, 0, plan.accumulation * sizeof(double), stream));

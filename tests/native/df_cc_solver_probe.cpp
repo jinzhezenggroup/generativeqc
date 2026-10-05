@@ -82,7 +82,10 @@ int main() {
               << ' ' << d.df_provider_capacity_bytes << ' ' << d.df_auxiliary_batch_size << ' '
               << d.df_auxiliary_tiles << ' ' << d.df_accumulation_bytes << ' '
               << d.denominator_identity << ' ' << d.derived_d2_iteration_evaluations << ' '
-              << d.packed_diis << ' ' << d.packed_diis_refused << ' '
+              << d.conventional_prepared_contractions << ' ' << d.conventional_contraction_calls
+              << ' ' << d.conventional_contraction_summands << ' '
+              << d.conventional_provider_capacity_bytes << ' ' << d.conventional_binding_host_bytes
+              << ' ' << d.packed_diis << ' ' << d.packed_diis_refused << ' '
               << d.diis_disabled_after_packing_refusal << ' ' << d.diis_history_capacity_bytes
               << ' ' << d.diis_conversion_bytes << ' ' << d.diis_metric_weight_terms << ' '
               << d.diis_pack_calls << ' ' << d.diis_maximum_pair_asymmetry << '\n';
