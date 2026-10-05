@@ -1,8 +1,8 @@
 # DF-CCSD(T) same-Hamiltonian definition and factorized path
 
-Status: issue #157 slices A-B, the first slice-C factorized-(T) endpoint, and
-C2a's explicit energy-only source facade are implemented. Native Calculator
-registration and production performance/memory qualification remain open.
+Status: issue #157 slices A-B, factorized (T), C2a's source facade, and C2b's
+public/native energy-only Calculator registration are implemented. Production
+performance/memory qualification remains open; public DF forces remain #158.
 
 ## First supported method definition
 
@@ -113,9 +113,17 @@ existing native RHF snapshot-export bridge and therefore inherits that bridge's
 native method owner the same correlation-DF Hamiltonian semantics instead of
 merely enabling the existing conventional RCCSD(T) owner.
 
-Remaining Slice-C work is C2b native Calculator energy registration plus C3
-production performance/memory qualification (and later CUDA promotion); DF
-gradients remain #158.
+C2b registers a distinct `df-rccsd(t)` / `df-ccsd(t)` public method. It is
+CUDA/FP64, energy-only, requires an explicit auxiliary basis and keeps the
+reference conventional RHF while passing that auxiliary only to the correlation
+Hamiltonian. The method selector is intrinsically DF: the Python Calculator
+promotes its default fitting mode to CUDA, while an explicitly requested CPU
+fitting mode remains unsupported. The existing `rccsd(t)` method remains
+conventional and unchanged. Prepared batches and force requests remain
+fail-closed.
+
+Remaining Slice-C work is C3 production performance/memory qualification; DF
+force promotion remains #158.
 
 ## Compiler-owned virtual residual and response actions
 
@@ -177,8 +185,25 @@ fallback for qualification. Convergence always uses the original expanded
 virtual actions and `tools/generate_df_ccsd_core.py` replay, independently of the
 primary schedule.
 
+CUDA matrix execution lifts the auxiliary-dependent primal DAG into bounded
+Q tiles using the same compiler transform as staged Lambda. Amplitude-only
+inputs stay shared; explicit transposes/broadcasts and every Q-dependent output
+enter the liveness arena. `SolverOptions::df_auxiliary_batch_limit` caps the
+tile (default eight); admission halves larger candidates until the complete
+owner budget and provider dimension limits fit. A limit of one retains the
+matrix one-Q schedule. Allocation rejection retries one-Q before the existing
+scalar fallback. Independent expanded replay remains one-Q.
+
+One generated kernel accumulates all six primal cuts per tile. For each output
+element it starts from the retained sum and adds each Q contribution in the
+original ascending order, checking every addition. It does not form a tile
+subtotal or use atomic sums. Primal and Lambda consumers share this lowering;
+factor cotangents remain separate Q rows. The existing tensor adapter executes
+ordinary/strided products with the owner's admitted provider handle. It adds no
+method-local provider discovery or new scientific equations.
+
 Complete solver admission includes resident factors, accumulated corrections,
-both core arenas, one-slice scratch, preparation and accumulated intermediates,
+both core arenas, selected Q-tile scratch, preparation and accumulated intermediates,
 DIIS and retained/final host arrays. CUDA
 uploads factors once; borrowed action outputs are consumed on the same stream
 before scratch reuse. A sticky arithmetic flag spans all Q slices and the
@@ -186,6 +211,12 @@ core. Diagnostics report auxiliary slices, virtual operations, accumulation
 calls, prepared/hoisted evaluations and exact scalar contraction summands across
 the entire solve, including convergence replay. Summand counts exclude
 elementwise operations and are not hardware FLOPs or timing predictions.
+CUDA also reports the selected tile size, actual tile count including one-Q
+replay, and accumulation read/write bytes. For a tile with `b` rows and `C`
+retained cut elements, accumulation visits `(b+2)*C*sizeof(double)` logical
+bytes (Q inputs and one accumulator read/write), not measured physical traffic.
+Packing traffic is recorded separately. Queries and counters account for a
+partial final tile without charging unevaluated padded Q rows.
 
 Conventional admission rejects the DF representation unless an owner explicitly
 opts in. Native CUDA Lambda accepts the factorized representation as described
@@ -388,7 +419,7 @@ not register a Calculator method.
 ## Non-goals after slice B
 
 - no production full-`NMO^4` DF integral storage;
-- no native Calculator DF-CCSD(T) method registration in C2a;
+- no prepared-batch DF-CCSD(T) public owner in C2b;
 - no complete DF-CCSD(T) force or gradient claim (tracked by #158; the
   reusable B-to-A/M reverse edge is documented in [df_ccsdt_gradient.md](df_ccsdt_gradient.md));
 - no frozen-core, open-shell, ECP, local, or DLPNO variant.

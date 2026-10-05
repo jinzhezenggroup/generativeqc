@@ -29,6 +29,7 @@ AUDITED_PREFIXES = (
     "hf-runtime:",
     "tensor-schedule:",
     "tensor-execution:",
+    "dft-policy:",
 )
 
 
@@ -179,6 +180,15 @@ def _discover_public_precision(root: Path) -> dict[str, str]:
     return {"public-policy:precision-auto": relative.as_posix()}
 
 
+def _discover_force_active_ao(root: Path) -> dict[str, str]:
+    relative = Path("python/generativeqc/_force_active_ao.py")
+    tree = ast.parse(_read(root / relative), filename=str(relative))
+    default = _assignment_map(tree).get("DEFAULT_FORCE_ACTIVE_AO_POLICY")
+    if not isinstance(default, ast.Constant) or default.value != "auto":
+        raise ValueError("force active-AO policy default drifted from auto")
+    return {"dft-policy:force-active-ao-auto": relative.as_posix()}
+
+
 def discover_controls(root: Path = ROOT) -> dict[str, str]:
     result: dict[str, str] = {}
     for discovered in (
@@ -187,6 +197,7 @@ def discover_controls(root: Path = ROOT) -> dict[str, str]:
         _discover_runtime_controls(root),
         _discover_tensor_schedule(root),
         _discover_tensor_execution(root),
+        _discover_force_active_ao(root),
     ):
         overlap = set(result) & set(discovered)
         if overlap:

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-1895-order4-weighted-forces-20261005
+export PATH=/group/software/cuda-12.9.1/bin:$PATH
+export CUDACXX=/group/software/cuda-12.9.1/bin/nvcc
+export CCACHE_DIR=/data/jzzeng/ccache CCACHE_BASEDIR="$PWD"
+export PYTHONPATH="$PWD/python" PYTHONDONTWRITEBYTECODE=1
+ccache --version > .artifacts/build/ccache-version.txt
+ccache --show-stats > .artifacts/build/ccache-before.txt
+cmake --preset cuda-release-sm120 -DPython3_EXECUTABLE=/home/jzzeng/vibeqc-build-venv/bin/python -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_CUDA_COMPILER_LAUNCHER=ccache -DGENERATIVEQC_CUDA_COMPILE_JOBS=4 -DGENERATIVEQC_AOT_COMPILE_JOBS=4
+ninja -C build/cuda-release-sm120 -t commands generativeqc generativeqc_cuda_fock_provider_tests generativeqc_dft_cuda_tests generativeqc_ks_cuda_tests > .artifacts/build/commands.txt
+python - <<'CHECK'
+from pathlib import Path
+commands=[line for line in Path('.artifacts/build/commands.txt').read_text().splitlines() if ' -c ' in line and ('/nvcc ' in line or '/c++ ' in line)]
+if not commands or any('ccache ' not in line for line in commands):
+ raise RuntimeError('compiler launcher receipt is missing ccache')
+print('Verified ccache launchers:',len(commands))
+CHECK
+cmake --build build/cuda-release-sm120 --target generativeqc generativeqc_cuda_fock_provider_tests generativeqc_dft_cuda_tests generativeqc_ks_cuda_tests --parallel 6
+ccache --show-stats > .artifacts/build/ccache-after.txt
+sha256sum build/cuda-release-sm120/libgenerativeqc.so build/cuda-release-sm120/generativeqc_dft_cuda_tests build/cuda-release-sm120/generativeqc_ks_cuda_tests build/cuda-release-sm120/generativeqc_cuda_fock_provider_tests > .artifacts/build/binaries.sha256
+PYTHONPATH=python /home/jzzeng/vibeqc-build-venv/bin/python - <<'PY' > .artifacts/build/source-identity.txt
+from pathlib import Path
+from generativeqc.autotune import source_identity
+print(source_identity(Path.cwd()))
+PY
