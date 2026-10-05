@@ -59,6 +59,7 @@ def test_native_cutlass_execution(tmp_path: Path) -> None:
     (tmp_path / "CMakeLists.txt").write_text(
         "cmake_minimum_required(VERSION 3.24)\n"
         "project(CutlassQualification LANGUAGES CXX CUDA)\n"
+        "find_package(CUDAToolkit 12.9 REQUIRED)\n"
         "set(CMAKE_CXX_STANDARD 20)\n"
         "set(CMAKE_CUDA_STANDARD 20)\n"
         "set(CMAKE_CUDA_STANDARD_REQUIRED ON)\n"
@@ -70,6 +71,7 @@ def test_native_cutlass_execution(tmp_path: Path) -> None:
         f'target_include_directories(cutlass PRIVATE "{root / "src"}")\n'
         "target_compile_definitions(cutlass PRIVATE GENERATIVEQC_TEST_HOOKS=1)\n"
         "generativeqc_configure_cutlass(cutlass)\n"
+        "target_link_libraries(cutlass PRIVATE CUDA::cublas)\n"
     )
     build = tmp_path / "build"
     executable = build / "cutlass"

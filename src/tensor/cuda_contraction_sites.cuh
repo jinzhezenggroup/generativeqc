@@ -132,7 +132,7 @@ class PreparedContractionSites {
       batch_scales[i] = sites[i].batch_scale;
     }
     table_.add(1, 1, 1, std::move(requests), context_, calls_, summands_, std::move(algorithms), {},
-               std::move(batch_scales));
+               {}, std::move(batch_scales));
     prepare_seconds_ =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
   }
