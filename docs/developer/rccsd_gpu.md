@@ -77,6 +77,30 @@ maxima; trial residual tensors feed GPU DIIS directly and are never staged to
 the host. `src/cc/cuda_state.cuh` supplies the shared Gram solve support plus
 history compaction and slice extrapolation for separately pinned T1/T2 spans.
 
+The production C++ owner in `src/cc/cuda_solver.cu` keeps those amplitude/error
+histories in a physical ring. `solver::DiisRing` maps chronological positions
+to fixed device rows; wrap and dependent-history retirement move no complete
+history tensor. A persistent Gram matrix uses physical row indices. Each
+insertion computes only its dots against the live rows, including its self norm;
+retries reuse all surviving entries. The bounded augmented solve and weighted
+combination still visit rows in chronological order. Exact-zero Gram retains the
+trial and history, while ill-conditioning retires the oldest row as before.
+
+The shared tensor history kernels preserve explicit FP64 products, sums and the
+256-lane reduction tree. At full history `h` and vector length `N`, residual dot
+work is `h*N` summands per insertion instead of `h*(h+1)*N/2`; no history-sized
+conversion or new device scratch is needed. `SolverDiagnostic` exposes insertion
+destination bytes, shift bytes, residual dot summands, Gram scalar writes and
+successful combine summands. These are semantic counts, not hardware FLOPs or
+measured memory-bus traffic. The complete DF-CCSD(T) endpoint probe publishes them
+beside solver/DIIS timing. The older explicitly prepared JIT adapter retains its
+dense history ABI and uses the same shared slice-combination primitive.
+
+Independent ring tests cover one live row, full/wrapped histories, clear/restart,
+singular and exact-zero Grams, poisoned unused rows, and a modified old-old Gram
+sentinel that a full rebuild would overwrite. Run real-device coverage only in
+a finite Slurm allocation with `GENERATIVEQC_CC_DIIS_RING_CUDA_TEST=1`.
+
 The control sequence preserves the CPU solver's semantics:
 
 1. run the exact physical equations at the current amplitudes;
