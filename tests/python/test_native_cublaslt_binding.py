@@ -26,6 +26,8 @@ def test_prepared_cublaslt_execution(tmp_path: Path) -> None:
             "-std=c++20",
             "-O2",
             "-arch=sm_120",
+            "-DGENERATIVEQC_HAS_CUBLASLT=1",
+            "-DGENERATIVEQC_TEST_HOOKS=1",
             "-I" + str(root / "src"),
             "-c",
             str(root / "tests/native/test_native_cublaslt.cu"),
