@@ -9,9 +9,10 @@
 
 namespace generativeqc::tensor {
 
-/** Prepared dense left-matrix times shared panel. The compiler materializes
- * each column-major square matrix once per complete evaluation; all point/jet
- * panels reuse it. No scientific symmetrization or precision policy lives here.
+/** Prepared left-matrix times shared panel. The compiler materializes each
+ * column-major square matrix at the recipe's lifetime boundary: once per
+ * evaluation for a dense domain, or per map for indexed views. No scientific
+ * symmetrization or precision policy lives here.
  * The owner supplies an independent allowance beyond its ordinary numeric arena.
  */
 struct PanelProductDiagnostic {
@@ -30,9 +31,12 @@ class PreparedPanelProduct {
   virtual double* materialized_matrices() const noexcept = 0;
   /** Panels are row-major [rows, columns], shared by batches; outputs are
    * [batch, rows, columns]. All buffers must be disjoint and live on the
-   * prepared stream/device until completion, including captured replay. */
-  virtual void execute(cudaStream_t, std::size_t rows, const double* panel, double* output,
-                       int* error) const = 0;
+   * prepared stream/device until completion, including captured replay.
+   * Bounded-column recipes require freshly materialized compact matrices of
+   * [batch, columns, columns] for each call; no global leading stride is used.
+   * Empty domains stay with the caller's generated zero-domain operation. */
+  virtual void execute(cudaStream_t, std::size_t columns, std::size_t rows, const double* panel,
+                       double* output, int* error) const = 0;
   virtual const PanelProductDiagnostic& diagnostic() const noexcept = 0;
 };
 }  // namespace generativeqc::tensor

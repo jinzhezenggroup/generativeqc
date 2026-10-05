@@ -192,19 +192,33 @@ def compact_panel_program(family: str) -> tuple:
     return graph, tuple(roots)
 
 
-def _emit_density_factor() -> str:
-    """Materialize the shared scalar factor once per physical XC evaluation."""
+def _emit_density_factor(indexed: bool = False) -> str:
+    """Emit the same factor over a dense or validated immutable indexed view."""
     graph, root = symmetric_density_element()
-    emitter = CudaEmitter(graph, {"left": "density[i]", "right": "density[transpose]"})
+    emitter = CudaEmitter(
+        graph, {"left": "density[source]", "right": "density[transpose]"}
+    )
     emitter.emit((root,))
-    return (
-        r"""
+    prologue = r"""
 __global__ void materialize_density_factor(const double* density, I n, I batches,
                                           double* output, int* error) {
   for (I i=I(blockIdx.x)*blockDim.x+threadIdx.x; i<batches*n*n;
        i+=I(blockDim.x)*gridDim.x) {
+    const I source=i;
     const I transpose=(i/(n*n)*n+i%n)*n+i/n%n;
 """
+    if indexed:
+        prologue = r"""
+__global__ void gather_density_factor(const double* density, I global_n, I n, I batches,
+    const std::size_t* ids, double* output, int* error) {
+  for (I i=I(blockIdx.x)*blockDim.x+threadIdx.x; i<batches*n*n;
+       i+=I(blockDim.x)*gridDim.x) {
+    const I spin=i/(n*n), row=ids[i/n%n], col=ids[i%n];
+    const I source=(spin*global_n+row)*global_n+col;
+    const I transpose=(spin*global_n+col)*global_n+row;
+"""
+    return (
+        prologue
         + "\n".join(emitter.lines)
         + f"\n    output[i]=finite({emitter.reference(root)},error,1);\n"
         + "  }\n}\n"
@@ -444,10 +458,14 @@ def emit_native_xc_matrix_schedule(
         + _emit_panels()
         + _emit_tiled(schedule)
         + _emit_density_factor()
+        + _emit_density_factor(indexed=True)
         + "\n} // namespace\n"
         + emit_density_binding(
             schedule.tile,
-            density_source + _emit_tiled(schedule) + _emit_density_factor(),
+            density_source
+            + _emit_tiled(schedule)
+            + _emit_density_factor()
+            + _emit_density_factor(indexed=True),
         )
         + emit_density_provider()
         + "\n} // namespace generativeqc::dft::cuda_xc_detail\n"
