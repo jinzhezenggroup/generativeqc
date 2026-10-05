@@ -35,7 +35,8 @@ CudaVectorContraction::CudaVectorContraction(
   for (std::size_t i = 0; i != operand_bytes_.size(); ++i)
     operand_bytes_[i] = resolved.operands[i].storage_elements() * sizeof(double);
   if (!handle || !stream || resolved.n != 1 || resolved.b_trans != 'N' ||
-      resolved.coefficient != 1.0 || resolved.beta != 0.0 || resolved.leading_dimension(1) != 1 ||
+      resolved.coefficient != 1.0 || (resolved.beta != 0.0 && resolved.beta != 1.0) ||
+      request.inputs != (resolved.beta == 0.0 ? 2U : 3U) || resolved.leading_dimension(1) != 1 ||
       resolved.leading_dimension(2) != 1 || !resolved.precision.is_strict_fp64() ||
       resolved.publication_dtype != PrecisionDtype::Fp64 ||
       resolved.scientific_identity != request.scientific_identity ||
@@ -92,8 +93,9 @@ CudaVectorContraction::CudaVectorContraction(
 generativeqc_status CudaVectorContraction::launch(const double* matrix, const double* vector,
                                                   double* output) const {
   if (!matrix || !vector || !output) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  // The semantic operation publishes fresh storage. Check byte ranges before
-  // any submission, including partial aliasing; inputs may alias one another.
+  // The result is disjoint from the two product inputs. An admitted SSA update
+  // donates its seed/result allocation, which is represented by output itself.
+  // Reject partial aliasing before submission; product inputs may share storage.
   const auto overlaps = [](const void* a, std::size_t na, const void* b, std::size_t nb) {
     const auto x = reinterpret_cast<std::uintptr_t>(a), y = reinterpret_cast<std::uintptr_t>(b);
     return x <= y ? y - x < na : x - y < nb;

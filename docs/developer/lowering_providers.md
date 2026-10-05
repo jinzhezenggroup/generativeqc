@@ -77,6 +77,16 @@ and decisions remain preparation metadata; they do not resolve executable owners
 
 ## Current integration
 
+`tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
+rank-2/3 matrix contractions, using the same canonical planned request as existing
+cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and
+transposed outputs without packing/scatter. The first adapter supports homogeneous
+pedantic FP32/FP64 and rejects unimplemented precision obligations and aliases.
+Provider version and simultaneous workspace/provider/host/cache ceilings must be
+explicit. Ready means preparation eligibility; algorithm selection, exact queried
+workspace, native replay and opaque/lazy allocation qualification remain required.
+No cuBLASLt production executor or measured default promotion is connected yet.
+
 `tensor.lowering.TensorLoweringAdapter` projects existing TensorIR nodes for CPU
 or CUDA consumers. It resolves program-wide precision and node hashes once per
 preparation. Tensor CUDA provider diagnostics and generated/CUB reduction offers
@@ -110,6 +120,12 @@ selects generated execution; optional preparation rejection releases provisional
 plans before the same-precision fallback. The region cannot implement casts,
 mixed arithmetic, refinement or precision audits and refuses such obligations.
 
+`PreparedContractionRegion` in the tensor runtime owns context preparation,
+provider-specific lifecycle and transactional fallback. Method emitters provide
+the semantic portfolio, descriptor factory and resolved shape key. They do not
+emit provider-dependent setup branches. The shared owner checks descriptor count
+and its minimum binding reservation before accepting the prepared region.
+
 Source-response admission adds descriptor host storage and every simultaneous
 plan/provider/workspace reservation to its borrowed inputs and scratch. The
 physical source/metric wrapper removes only the exact borrowed overlap. The
@@ -136,8 +152,7 @@ FP32 and FP64 storage/compute/accumulation;
 DF-CC and Lambda still request FP64. It does not yet execute the general
 `LoweringBinding` portfolio or perform joint native precision/provider selection.
 Mixed compute/accumulation, casts and refinement require a complete additional
-candidate; the current adapter rejects them. The RHF frame-response callback,
-DFT, triples precision, other provider
+candidate; the current adapter rejects them. DFT, triples precision, other provider
 families and complete endpoint qualification remain in
 #1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
 
@@ -149,6 +164,16 @@ Insufficient dimensions/resources retain the original scalar traversal. There
 is no conventional provider-selection option or CC-local vendor callback;
 execution diagnostics report preparation, work counts and resource capacity.
 The separately expanded independent replay remains the final numerical gate.
+
+Physical RHF frame response prepares five stage tables through the same typed
+boundary. The method options specify the complete resource budget, without a
+matrix implementation selector. Admission charges all five descriptor tables
+and one shared provider reservation; insufficient resources or unavailable
+optional provider storage retain the original scalar CUDA traversal. The final
+orbital residual always uses that independent scalar traversal, even when the
+solve used prepared contractions. Exact unscreened J/K, sticky intermediate
+finite checks and the independent molecular derivative gates remain required.
+Diagnostics retain prepared execution calls, semantic summands and binding bytes.
 
 The same native descriptor also supports `validate_affine()` independently of
 the optional matrix recipe. `affine_contraction_initializer` emits original

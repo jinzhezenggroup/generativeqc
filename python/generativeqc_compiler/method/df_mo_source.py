@@ -553,50 +553,20 @@ def _native_response_execution_header(
                 request, identity, name="source_response_lowering"
             ),
             r"""
-class DFMOSourceResponseExecution {
- public:
-  static tensor::ContractionRegionPlan plan(std::size_t available,bool library=true) {
-    return tensor::select_contraction_region(source_response_lowering_request,
-        source_response_lowering_candidates,source_response_lowering_target,
-        source_response_lowering_compilation,8,
-        sizeof(DFMOSourceResponseExecution)+tensor::PreparedContractions::storage_bytes(8),available,library);
-  }
-  DFMOSourceResponseExecution(tensor::ContractionRegionPlan plan,std::size_t n,std::size_t q,
-      cudaStream_t stream,std::size_t& calls,std::size_t& summands):plan_(plan),n_(n),q_(q) {
-    if(plan_.algorithm==tensor::ContractionAlgorithm::PedanticBlas) {
-      if(!context_.prepare(stream)) {
-        context_.prepare_generated(stream);
-        plan_=DFMOSourceResponseExecution::plan(plan_.binding_bytes,false);
-      }
-    } else context_.prepare_generated(stream);
-    const auto bind=[&] {table_.add(n,q,1,df_mo_response_descriptors(n,q),context_,calls,summands,
-        std::vector<tensor::ContractionAlgorithm>(8,plan_.algorithm),plan_.reservation);};
-    try {bind();}
-    catch(const tensor::ContractionPreparationUnavailable&) {
-      table_.release();
-      plan_=DFMOSourceResponseExecution::plan(plan_.binding_bytes,false);
-      bind();
-    }
-  }
-  void execute(std::size_t slot,cudaStream_t stream,const double* a,const double* b,double* c,int* error) {
-    table_.execute(slot,n_,q_,1,stream,a,b,c,error);
-  }
-  tensor::ContractionProviderReservation optional_resources() const {return table_.optional_resources();}
-  std::size_t retained_provider_bytes() const {
-    return tensor::ContractionProviderReservation::checked_add(context_.retained_bytes(),
-        table_.optional_resources().provider_bytes);
-  }
-  const tensor::ContractionRegionPlan& selected() const noexcept {return plan_;}
-  std::size_t provider_version() const noexcept {
-    return plan_.algorithm==tensor::ContractionAlgorithm::CutensorAffine
-        ? tensor::cutensor_provider_version() : std::size_t(context_.provider_version());
-  }
- private:
-  tensor::ContractionRegionPlan plan_;
-  std::size_t n_,q_;
-  tensor::CudaContractionContext context_;
-  tensor::PreparedContractions table_;
-};
+inline tensor::ContractionRegionPlan plan_df_mo_source_response(std::size_t available) {
+  return tensor::select_contraction_region(source_response_lowering_request,
+      source_response_lowering_candidates,source_response_lowering_target,
+      source_response_lowering_compilation,8,
+      tensor::PreparedContractionRegion::storage_bytes(8),available);
+}
+inline tensor::PreparedContractionRegion prepare_df_mo_source_response(
+    tensor::ContractionRegionPlan plan,std::size_t n,std::size_t q,cudaStream_t stream,
+    std::size_t& calls,std::size_t& summands) {
+  return tensor::PreparedContractionRegion(plan,source_response_lowering_request,
+      source_response_lowering_candidates,source_response_lowering_target,
+      source_response_lowering_compilation,8,{n,q,1},stream,calls,summands,
+      [n,q] {return df_mo_response_descriptors(n,q);});
+}
 }  // namespace generativeqc::posthf::generated
 #endif
 """,
