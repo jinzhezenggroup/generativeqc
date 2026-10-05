@@ -396,6 +396,13 @@ def canonical_denominators_cpp() -> str:
     )
 
 
+def restricted_pairs_cpp() -> str:
+    """Shared storage-only permutation/metric contract, separate from CC equations."""
+    from generativeqc_compiler.cc.pair_coordinates import cpp_coordinates
+
+    return cpp_coordinates()
+
+
 def _canonical_d2_consumer(node: typing.Any) -> bool:
     """Only the declared Jacobi d2 input admits the canonical input view."""
     return (
@@ -1065,6 +1072,7 @@ def cpu_header() -> str:
             "#include <limits>",
             "#include <stdexcept>",
             canonical_denominators_cpp(),
+            restricted_pairs_cpp(),
             "namespace generativeqc::cc::generated {",
             _scaled_bilinear_cpp(),
             'inline std::size_t checked_add(std::size_t a,std::size_t b){if(b>std::numeric_limits<std::size_t>::max()-a)throw std::length_error("RCCSD size overflow");return a+b;}',
@@ -1645,7 +1653,6 @@ def _cuda_program(
     output_fields: tuple[str, ...] | None = None,
     reset_error: bool = True,
     prepared_contractions: str | None = None,
-    matrix_gemm: str | None = None,
     kernel_prefix: str | None = None,
     emit_kernels: bool = True,
 ) -> str:
@@ -1659,10 +1666,7 @@ def _cuda_program(
             emit_kernels
             and node.op != "input"
             and not (
-                (
-                    (prepared_contractions or matrix_gemm)
-                    and _packed_matrix_gemm(node) is not None
-                )
+                (prepared_contractions and _packed_matrix_gemm(node) is not None)
                 or (
                     prepared_contractions
                     and _packed_batched_matrix_gemm(node) is not None
@@ -1724,16 +1728,6 @@ def _cuda_program(
             continue
         lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         sources = [names[x._emit_index] for x in node.inputs]
-        if matrix_gemm and (legacy_gemm := _packed_matrix_gemm(node)) is not None:
-            # The RHF frame-response owner still uses the legacy callback until
-            # its resource/response migration under #1890 is qualified.
-            ta, tb, m, columns, k = legacy_gemm
-            coefficient = _fraction(node.attrs["coefficient"])
-            lines.append(
-                f"  {matrix_gemm}('{ta}','{tb}',{m},{columns},{k},{coefficient},"
-                f"{sources[0]},{sources[1]},{names[number]});"
-            )
-            continue
         gemm = _packed_matrix_gemm(node) if prepared_contractions else None
         batch_gemm = (
             _packed_batched_matrix_gemm(node) if prepared_contractions else None

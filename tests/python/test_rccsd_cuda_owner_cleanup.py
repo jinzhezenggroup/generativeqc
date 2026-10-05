@@ -77,15 +77,21 @@ PREFIX = r"""
 #include <functional>
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cstring>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <unordered_map>
 using cudaStream_t = void*;
 using cudaEvent_t = void*;
 constexpr int cudaStreamNonBlocking = 1, cudaMemcpyHostToDevice = 1, cudaMemcpyDeviceToDevice = 2;
 int calls = 0, fail_at = 0, streams = 0, events = 0, allocations = 0, handles = 0, device = 7;
 int provider_alloc_failures = 0, arena_alloc_failures = 0;
+int history_alloc_failures=0,history_alloc_error=2,numeric_attempts=0,history_attempts=0;
+int free_error_once=0,sync_error_once=0;
+std::size_t memory_limit=std::numeric_limits<std::size_t>::max(),live_bytes=0;
+std::unordered_map<void*,std::size_t> allocation_bytes;
 int step() { return ++calls == fail_at ? 999 : 0; }
 using cublasHandle_t = void*;
 constexpr int cudaErrorMemoryAllocation=2, CUBLAS_STATUS_ALLOC_FAILED=3;
@@ -124,19 +130,37 @@ int cudaEventCreate(cudaEvent_t* p) {
 }
 int cudaEventDestroy(cudaEvent_t p) { delete static_cast<int*>(p); --events; return 0; }
 int cudaMalloc(void** p, std::size_t bytes) {
+  ++numeric_attempts;
   if (const int error = step()) return error;
   if (arena_alloc_failures) { --arena_alloc_failures; return cudaErrorMemoryAllocation; }
-  *p = new unsigned char[bytes]; ++allocations; return 0;
+  if(allocations==1) {
+    ++history_attempts;
+    if(history_alloc_failures) { --history_alloc_failures; return history_alloc_error; }
+  }
+  if(bytes>memory_limit-live_bytes) return cudaErrorMemoryAllocation;
+  *p = new unsigned char[bytes]; ++allocations;
+  allocation_bytes[*p]=bytes;live_bytes+=bytes;return 0;
 }
 int cudaMemcpyAsync(void* d, const void* s, std::size_t n, int, cudaStream_t) {
   if (const int error = step()) return error;
   std::memcpy(d, s, n); return 0;
 }
+int cudaMemsetAsync(void* d, int value, std::size_t n, cudaStream_t) {
+  if (const int error=step()) return error;
+  std::memset(d,value,n); return 0;
+}
 """
 
 PREFIX += r"""
-int cudaStreamSynchronize(cudaStream_t) { return step(); }
-int cudaFree(void* p) { delete[] static_cast<unsigned char*>(p); --allocations; return 0; }
+int cudaStreamSynchronize(cudaStream_t) {
+  if(sync_error_once) { const auto result=sync_error_once;sync_error_once=0;return result; }
+  return step();
+}
+int cudaFree(void* p) {
+  if(free_error_once) { const auto result=free_error_once;free_error_once=0;return result; }
+  live_bytes-=allocation_bytes.at(p);allocation_bytes.erase(p);
+  delete[] static_cast<unsigned char*>(p); --allocations; return 0;
+}
 int cudaStreamDestroy(cudaStream_t p) { delete static_cast<int*>(p); --streams; return 0; }
 void cuda_check(int code) { if (code) throw std::runtime_error("injected CUDA failure"); }
 using cudaStreamCaptureStatus = int;
@@ -199,8 +223,10 @@ int main() {
   for (const unsigned naux : {0U, 2U, 5U, 10U, 15U, 16U}) {
   p.naux = naux; p.df_bov.assign(naux, 0.1); p.df_bvv.assign(naux, 0.1);
   for (const unsigned history : {0U, 1U, 6U}) {
+  for (const bool packed : {false, true}) {
     generativeqc::cc::SolverOptions options;
     options.diis_size = history;
+    options.packed_diis = packed;
     calls = 0; fail_at = 0;
     int constructor_calls = 0;
     { generativeqc::cc::Owner good(p, options, 0); constructor_calls = calls;
@@ -210,7 +236,8 @@ int main() {
       if (good.diagnostic.numeric_capacity_bytes < 128 + good.layout.total + detached) {
         std::cerr << "CUDA detached result storage was not reserved\n"; return 8;
       }
-      auto expected_capacity = 128 + good.layout.total + detached;
+      // Both numeric allocations coexist with prepared host descriptors.
+      auto expected_capacity = 128 + good.layout.total + good.layout.history_bytes + detached;
       if (good.plan.matrix_gemm) {
         const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
         const auto variants=batch>1 ? 1+(tail>1) : 0;
@@ -258,6 +285,7 @@ int main() {
               << constructor_calls << '\n';
   }
   }
+  }
   if (!saw_matrix) return 11;
   p.naux=2; p.df_bov.assign(2,0.1); p.df_bvv.assign(2,0.1);
   // Allocation rejection exercises the actual production retry chain: a Q
@@ -279,5 +307,125 @@ int main() {
     if (retry.plan.matrix_gemm || retry.plan.auxiliary_batch_size != 1) return 15;
   }
   if (streams || events || allocations || handles || device != 7) return 16;
+  for (const int refusal : {0,1,2}) {
+    calls=fail_at=0;
+    generativeqc::cc::SolverOptions options;
+    options.packed_diis=true;
+    { generativeqc::cc::Owner owner(p,options,0);
+      if (!owner.packed) return 17;
+      if (refusal==1) options.max_bytes=owner.non_history_capacity;
+      if (refusal==2) arena_alloc_failures=1;
+      owner.refuse_packed_history(options);
+      if (owner.packed || !owner.diagnostic.packed_diis_refused) return 18;
+      if ((owner.history.capacity()==0)!=(refusal!=0)) return 19;
+      if (allocations != (refusal ? 1 : 2)) return 20;
+    }
+    if (streams || events || allocations || handles || device != 7) return 21;
+  }
+  p.nocc=2;p.nvir=6;p.naux=16;
+  p.foo.assign(4,1.);p.fov.assign(12,1.);p.fvv.assign(36,1.);
+  p.ovov.assign(144,1.);p.ovvo.assign(144,1.);p.oovv.assign(144,1.);
+  p.ovvv.assign(432,1.);p.ovoo.assign(48,1.);p.oooo.assign(16,1.);p.vvvv.assign(1296,1.);
+  p.d1.assign(12,-2.);p.d2.assign(144,-4.);p.initial_t1.assign(12,0.);p.initial_t2.assign(144,0.);
+  p.df_bov.assign(192,.1);p.df_bvv.assign(576,.1);
+  for(const bool packed:{false,true}) {
+    generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=packed;
+    std::size_t wide_base=0,history_bytes=0,narrow_total=0,wide_non_history_capacity=0;
+    {generativeqc::cc::Owner wide(p,options,0);
+      wide_base=wide.layout.total;history_bytes=wide.layout.history_bytes;
+      wide_non_history_capacity=wide.diagnostic.numeric_capacity_bytes-history_bytes;
+      if(wide.plan.auxiliary_batch_size!=8) return 22;
+    }
+    options.df_auxiliary_batch_limit=1;
+    {generativeqc::cc::Owner narrow(p,options,0);
+      narrow_total=narrow.layout.total+narrow.layout.history_bytes;
+    }
+    options.df_auxiliary_batch_limit=8;
+    // The optional wide base fits, but its second numeric allocation does not.
+    // The complete one-Q pair must still be retried, including full histories.
+    memory_limit=wide_base+history_bytes-1;
+    if(narrow_total>memory_limit) return 23;
+    try {
+      generativeqc::cc::Owner retry(p,options,0);
+      if(!retry.plan.matrix_gemm || retry.plan.auxiliary_batch_size!=1 ||
+         live_bytes!=narrow_total || retry.packed!=packed) return 24;
+      if(retry.diagnostic.owned_device_bytes<wide_base+generativeqc::cc::kContractionProviderAllowance ||
+         retry.diagnostic.numeric_capacity_bytes<wide_non_history_capacity ||
+         retry.diagnostic.synchronizations<2) return 32;
+    } catch(const std::runtime_error& error) {
+      std::cerr<<"history OOM bypassed fitting one-Q fallback, packed="<<packed
+               <<": "<<error.what()<<'\n';return 25;
+    }
+    memory_limit=std::numeric_limits<std::size_t>::max();
+    if(live_bytes || streams || events || allocations || handles || device!=7) return 26;
+    for(const int failures:{1,2,3}) {
+      history_alloc_failures=failures;numeric_attempts=history_attempts=0;
+      try {
+        generativeqc::cc::Owner retry(p,options,0);
+        if(failures==3 || retry.plan.matrix_gemm!=(failures==1) ||
+           retry.plan.auxiliary_batch_size!=1 || retry.packed!=packed) return 27;
+      } catch(const std::runtime_error&) {if(failures!=3) return 28;}
+      if(history_attempts!=std::min(failures+1,3) || numeric_attempts!=2*history_attempts ||
+         history_alloc_failures || live_bytes || streams || events || allocations ||
+         handles || device!=7) return 29;
+    }
+    // A history driver error, failed drain or failed partial free must propagate,
+    // never turn into an optional-resource retry. Cleanup gets one safe retry.
+    for(const int error:{0,1,2}) {
+      history_alloc_failures=1;numeric_attempts=history_attempts=0;
+      history_alloc_error=error==0 ? 999 : cudaErrorMemoryAllocation;
+      sync_error_once=error==1 ? 999 : 0;free_error_once=error==2 ? 999 : 0;
+      try {generativeqc::cc::Owner broken(p,options,0);return 30;}
+      catch(const std::runtime_error&) {}
+      if(numeric_attempts!=2 || history_attempts!=1 || live_bytes || streams || events ||
+         allocations || handles || device!=7 || sync_error_once || free_error_once) return 31;
+    }
+    history_alloc_error=cudaErrorMemoryAllocation;
+  }
+  // Conventional preparation shares the two-allocation history retry. A
+  // refused second allocation must release the provider, retain its prior
+  // peak, and try the complete scalar pair exactly once.
+  p.naux=0;p.df_bov.clear();p.df_bvv.clear();
+  for(const bool packed:{false,true}) {
+    std::size_t prepared_base=0,prepared_non_history=0;
+    for(const int failures:{0,1,2}) {
+      generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=packed;
+      history_alloc_failures=failures;numeric_attempts=history_attempts=0;
+      try {
+        generativeqc::cc::Owner retry(p,options,0);
+        if(failures==2 || retry.conventional_prepared!=(failures==0) ||
+           retry.plan.matrix_gemm || retry.packed!=packed) return 33;
+        if(!failures) {
+          prepared_base=retry.layout.total;
+          prepared_non_history=retry.diagnostic.numeric_capacity_bytes-retry.layout.history_bytes;
+        } else if(retry.diagnostic.owned_device_bytes<prepared_base+generativeqc::cc::kContractionProviderAllowance ||
+                  retry.diagnostic.numeric_capacity_bytes<prepared_non_history ||
+                  retry.diagnostic.conventional_provider_capacity_bytes ||
+                  retry.diagnostic.conventional_binding_host_bytes ||
+                  retry.diagnostic.synchronizations<2) return 34;
+      } catch(const std::runtime_error&) {if(failures!=2) return 35;}
+      if(history_attempts!=std::min(failures+1,2) || numeric_attempts!=2*history_attempts ||
+         history_alloc_failures || live_bytes || streams || events || allocations ||
+         handles || device!=7) return 36;
+    }
+  }
+  // Post-execution packed refusal retains the conventional provider while
+  // replacing histories. Its allowance coexists with the larger full payload.
+  { generativeqc::cc::SolverOptions options;options.diis_size=8;options.packed_diis=true;
+    generativeqc::cc::Owner owner(p,options,0);
+    const auto packed_bytes=owner.layout.history_bytes;
+    const auto before=owner.diagnostic.owned_device_bytes;
+    if(!owner.conventional_prepared || !owner.packed || !handles) return 37;
+    owner.refuse_packed_history(options);
+    const auto expected=owner.layout.total+owner.layout.history_bytes+
+        owner.diagnostic.conventional_provider_capacity_bytes;
+    if(owner.packed || !owner.conventional_prepared || !handles ||
+       owner.layout.history_bytes<=packed_bytes || expected<=before ||
+       owner.diagnostic.owned_device_bytes!=expected ||
+       owner.diagnostic.numeric_capacity_bytes!=owner.non_history_capacity+owner.layout.history_bytes)
+      return 38;
+  }
+  if(live_bytes || streams || events || allocations || handles || device!=7) return 39;
+  std::cout<<"Full/packed history allocation pairs retain one-Q/scalar retry and error gates\n";
 }
 """

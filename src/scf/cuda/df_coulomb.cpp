@@ -88,7 +88,6 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
       runtime::df_progress::number("executed_ao_pairs", pair_tile);
       runtime::df_progress::number("executed_auxiliary_tile", plan.auxiliary_tile);
       runtime::df_progress::number("raw_tensor_passes", raw_charge_ready ? 1 : 2);
-      const double one = 1.0, zero = 0.0;
       for (std::size_t system = 0; system < plan.batch_size; ++system) {
         const auto* inverse = plan.inverse_square_roots + system * plan.naux * plan.naux;
         auto* charge = plan.auxiliary_density + system * plan.naux;
@@ -121,38 +120,39 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
             }
             if (factor_first) continue;
             const auto status = trace_call("ri_j_metric_gemm", plan.stream, [&] {
-              return cublasDgemv(plan.blas, CUBLAS_OP_N, static_cast<int>(plan.naux),
-                                 static_cast<int>(count), &one, inverse + begin * plan.naux,
-                                 static_cast<int>(plan.naux), panel_vector, 1, &one, charge, 1);
+              return plan.metric_charge[count == plan.auxiliary_tile ? 0 : 1]->launch(
+                  inverse + begin * plan.naux, panel_vector, charge);
             });
-            if (status != CUBLAS_STATUS_SUCCESS)
-              return blas_failure(status, "transform raw DF panel charge", detail);
+            if (status != GENERATIVEQC_STATUS_SUCCESS) {
+              detail = "transform raw DF panel charge failed";
+              return status;
+            }
           }
         }
         if (factor_first) {
           // Keep eigendirections until after division. Only two length-Naux
           // vectors are live, in the charge owner and existing K scratch;
           // source work stays at the same two complete raw-tensor passes.
-          const auto a = static_cast<int>(plan.naux);
           const auto* q = plan.metric_eigenvectors + system * plan.naux * plan.naux;
           auto status = trace_call("ri_j_metric_eigen_projection", plan.stream, [&] {
-            return cublasDgemv(plan.blas, CUBLAS_OP_T, a, a, &one, q, a, charge, 1, &zero,
-                               panel_vector, 1);
+            return plan.metric_project->launch(q, charge, panel_vector);
           });
-          if (status != CUBLAS_STATUS_SUCCESS)
-            return blas_failure(status, "project raw DF charge eigendirections", detail);
+          if (status != GENERATIVEQC_STATUS_SUCCESS) {
+            detail = "project raw DF charge eigendirections failed";
+            return status;
+          }
           launch_scale_metric_projection(plan.stream, plan.naux, 1,
                                          plan.metric_eigenvalues + system * plan.naux, false,
                                          panel_vector);
           cuda_error = cudaPeekAtLastError();
           if (cuda_error != cudaSuccess)
             return cuda_failure(cuda_error, "scale raw DF charge eigendirections", detail);
-          status = trace_call("ri_j_metric_scaled_rotation", plan.stream, [&] {
-            return cublasDgemv(plan.blas, CUBLAS_OP_N, a, a, &one, q, a, panel_vector, 1, &zero,
-                               charge, 1);
-          });
-          if (status != CUBLAS_STATUS_SUCCESS)
-            return blas_failure(status, "rotate inverse-applied raw DF charge", detail);
+          status = trace_call("ri_j_metric_scaled_rotation", plan.stream,
+                              [&] { return plan.metric_rotate->launch(q, panel_vector, charge); });
+          if (status != GENERATIVEQC_STATUS_SUCCESS) {
+            detail = "rotate inverse-applied raw DF charge failed";
+            return status;
+          }
           runtime::cuda_trace::trace_counter("streamed_coulomb_factor_first", 1);
           runtime::cuda_trace::trace_counter("streamed_coulomb_factor_gemvs", 2);
           runtime::cuda_trace::trace_counter("streamed_coulomb_factor_flops",
@@ -162,12 +162,13 @@ generativeqc_status build_coulomb(CudaDensityFittingJkPlan& plan, const double* 
           const auto count = std::min(plan.auxiliary_tile, plan.naux - begin);
           if (!factor_first) {
             const auto status = trace_call("ri_j_metric_gemm", plan.stream, [&] {
-              return cublasDgemv(plan.blas, CUBLAS_OP_N, static_cast<int>(count),
-                                 static_cast<int>(plan.naux), &one, inverse + begin,
-                                 static_cast<int>(plan.naux), charge, 1, &zero, panel_vector, 1);
+              return plan.metric_potential[count == plan.auxiliary_tile ? 0 : 1]->launch(
+                  inverse + begin, charge, panel_vector);
             });
-            if (status != CUBLAS_STATUS_SUCCESS)
-              return blas_failure(status, "form raw DF panel potential", detail);
+            if (status != GENERATIVEQC_STATUS_SUCCESS) {
+              detail = "form raw DF panel potential failed";
+              return status;
+            }
           }
           const auto* potential = factor_first ? charge + begin : panel_vector;
           for (std::size_t pair_begin = 0; pair_begin < plan.matrix_elements;

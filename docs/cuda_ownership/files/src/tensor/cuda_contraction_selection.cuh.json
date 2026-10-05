@@ -1,6 +1,6 @@
 {
   "path": "src/tensor/cuda_contraction_selection.cuh",
-  "reason": "Bounded preparation-time selection of compiler-emitted contraction regions with complete simultaneous binding reservations and generated fallback. No scientific equations or precision policy.",
+  "reason": "Bounded selection and shared lifetime of compiler-emitted contraction regions: context preparation, descriptor admission, simultaneous binding reservations, transactional generated fallback and typed replay. No scientific equations or precision policy.",
   "regions": [],
   "role": "runtime",
   "subsystem": "runtime"

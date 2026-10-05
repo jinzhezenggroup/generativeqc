@@ -15,7 +15,7 @@ std::size_t bytes(std::size_t count) { return checked_mul(count, sizeof(double))
 }  // namespace
 
 std::size_t df_mo_source_response_binding_capacity(std::size_t available) {
-  return generated::DFMOSourceResponseExecution::plan(available).binding_bytes;
+  return generated::plan_df_mo_source_response(available).binding_bytes;
 }
 
 CudaDFMOSourceResponseDiagnostic pullback_df_mo_source_cuda(
@@ -40,10 +40,10 @@ CudaDFMOSourceResponseDiagnostic pullback_df_mo_source_cuda(
     throw std::length_error("DF MO source response exceeds complete numeric budget");
   runtime::CudaDeviceScope scope(device);
   const auto admitted =
-      generated::DFMOSourceResponseExecution::plan(budget - result.numeric_capacity_bytes);
+      generated::plan_df_mo_source_response(budget - result.numeric_capacity_bytes);
   const auto prepare_start = std::chrono::steady_clock::now();
-  generated::DFMOSourceResponseExecution execution(admitted, n, q, stream, result.gemms,
-                                                   result.contraction_summands);
+  auto execution = generated::prepare_df_mo_source_response(admitted, n, q, stream, result.gemms,
+                                                            result.contraction_summands);
   result.preparation_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                               std::chrono::steady_clock::now() - prepare_start)
                               .count();

@@ -52,6 +52,14 @@ def coulomb_portfolio(
         adapter.request(node, backend="cuda"),
         constraints=LoweringConstraints(maximum_candidates=2),
     )
+    candidates, target, compilation = vector_portfolio(request, source_identity)
+    return adapter, node, request, candidates, target, compilation
+
+
+def vector_portfolio(
+    request: LoweringRequest, source_identity: str
+) -> tuple[tuple[LoweringCandidate, ...], TargetCapabilities, CompilationIdentity]:
+    """Register the same executable algorithms for any admitted vector region."""
     target = TargetCapabilities(
         TargetInfo("cuda", "current-native-module", 32, 1024, None)
     )
@@ -77,7 +85,7 @@ def coulomb_portfolio(
         )
         for algorithm in ("gemv", "gemm-strided-batched-vector")
     )
-    return adapter, node, request, candidates, target, compilation
+    return candidates, target, compilation
 
 
 def coulomb_header(source_identity: str) -> str:
