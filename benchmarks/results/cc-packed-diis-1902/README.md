@@ -3,7 +3,7 @@
 These frozen observations use production source `3c28ca85c` and one binary,
 with full versus packed histories selected explicitly. They predate the
 parent's prepared-contraction integration; they are not timings of that later
-tree. Current integration qualification is retained separately when complete.
+tree. Separate integration qualifications are retained below.
 
 All compilation, tests and postprocessing run on n2 in finite Slurm allocations,
 with ccache. Inputs are native molecular water7 (o=5,v=2,q=7) and ethane230
@@ -152,8 +152,8 @@ Large maximum force difference is 5.309e-9 Eh/Bohr and energy spread at most
 3.269e-13 Eh. All residual/stationarity and existing independent two-coordinate,
 two-step FD re-audits pass. This adds no all-coordinate independent large audit.
 
-Latest parent `c7486bf2e` is composed separately as `d3548f1fd`. It passes the
-expanded 77-case host admission/lifetime suite in 2351; latest GPU and complete
+Parent `c7486bf2e` is composed separately as `d3548f1fd`. It passes the
+expanded 77-case host admission/lifetime suite in 2351; that version's GPU and complete
 endpoints have separate manifests and gates below. Earlier measurements are not
 relabeled as that source.
 
@@ -199,3 +199,55 @@ The tracked summaries retain their checksums, checked file counts, exact Git
 revision, pathspecs and deterministic reconstruction recipe. Existing Git
 history reconstructs the lists without duplicating repository-wide hashes in
 the PR. All numerical observations and binary/probe/input hashes remain tracked.
+
+## Post-merge integration
+
+Production `1b288e1d52f76a15f026382b24fa91855b38d9ca` composes parent
+`33083727b` and master `12d709e46`, including the current public DF energy and
+triples provider contracts. This is integration acceptance; the single energy
+pair and packed-only force call do not replace the frozen optimization ablation.
+Public `df-rccsd(t)` remains energy-only and fails closed for forces. Force
+records here exercise the internal complete endpoint.
+
+Build 2368 and 104 host admission/lifetime cases in 2369 pass. GPU 2371 passes
+29 solver/generated-consumer cases, two Gram cases and both independent
+small-water all-coordinate force/publication cases with packing required.
+Shared 2372 passes the native Lambda denominator oracle/fallback/budget suite,
+18 Lambda/factor cases and 25 triples cases. Three generated-provider test-hook
+cases are explicitly skipped because this Release library lacks test hooks;
+they are not counted as passing.
+
+| Ethane energy, job 2374 | Full | Packed |
+| --- | ---: | ---: |
+| Complete s | 304.018339 | 286.108312 |
+| RHF s | 149.458573 | 131.412036 |
+| CCSD s | 145.806161 | 145.948957 |
+| CCSD device bytes | 4,051,955,712 | 3,800,872,192 |
+| Complete energy capacity bytes | 4,413,131,064 | 4,162,047,544 |
+
+The complete-time difference follows RHF variation; CCSD does not accelerate.
+The capacity saving remains 251,083,520 bytes. The force and constrained-budget
+allocations retain their own GPU identities and timings; no cross-allocation
+timing subtraction or ratio is used.
+
+Packed-only complete force 2375 takes 1433.757267 s, including RHF 260.441067 s,
+CCSD 145.512684 s, Lambda 271.847878 s and orbital/nuclear response 638.837503 s.
+This branch retains the original 28 exact J/K actions; it does not include
+the sibling response-checkpoint change. Its complete-force peak remains
+7,107,791,849 bytes. There is no new full/packed force timing pair on this
+source and no comparison to the sibling branch's GPU allocation.
+
+Budget 2376 again refuses full history at 2,735,193,944 bytes while packed
+history completes in 420.776 s; both use the scalar/one-Q schedule. Rejected
+native time, energy and phase work remain unavailable, not zero. This is
+capacity admission, not a speedup against a failed run.
+
+Report 2378 passes all original energy/force, replay, residual, stationarity,
+translation and existing independent large two-coordinate/two-step FD gates.
+The maximum large force difference from the frozen reference is 1.393e-9
+Eh/Bohr, energy difference 4.547e-13 Eh and translation residual 2.397e-12.
+Packing stays active without refusal in every requested endpoint.
+`post-merge-summary.json` preserves all observations, validation-log outcomes
+and hashes, per-allocation GPU/binary identities, and the reconstructable
+`v3-sources.sha256` receipt verified after endpoints. The limited independent
+large-force scope and capacity-only opt-in policy are unchanged.

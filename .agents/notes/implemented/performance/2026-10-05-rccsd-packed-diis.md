@@ -148,7 +148,7 @@ selector, without reinstating obsolete method-local providers. The expanded
 solver/independent small all-coordinate FD 2353, shared Lambda/factor 2354,
 complete energy/force/budget 2356–2358 and report 2360 subsequently pass.
 
-On this latest version, large energy CCSD medians are 145.958333 / 145.959855 s
+On this retained-RHF version, large energy CCSD medians are 145.958333 / 145.959855 s
 (full / packed). Complete medians 354.075731 / 298.333061 s reflect RHF medians
 199.615963 / 143.875171 s, not a packing speedup. The separate complete-force
 pair is 1336.988423 / 1351.807057 s. Memory savings remain 251,083,520 bytes in
@@ -157,3 +157,26 @@ CCSD/energy, with no complete-force peak reduction. At the unchanged
 Maximum force difference is 3.365e-9 Eh/Bohr and all original gates, including
 limited independent large FD re-audits, pass. Preserve the capacity-only opt-in
 selection; do not extend packing to full contraction state without new evidence.
+
+## Post-merge integration qualification
+
+Source `1b288e1d5` composes master `12d709e46` through parent `33083727b`.
+Build 2368, 104 host cases in 2369, real solver/Gram/independent small-force
+2371, shared Lambda/triples 2372, energy/force/budget 2374–2376 and report 2378
+pass. Three triples test-hook cases explicitly skip; 25 pass. The energy pair
+has CCSD times 145.806161 / 145.948957 s (full / packed); complete times
+304.018339 / 286.108312 s follow RHF variation, not packing acceleration.
+
+Device/energy capacity still saves 251,083,520 bytes. The packed-only force
+call takes 1433.757267 s and retains the 7,107,791,849-byte complete peak.
+It uses the original 28 exact J/K actions; the sibling checkpoint change is
+not present. No new matched force timing comparison is claimed. Full history
+again refuses a 2,735,193,944-byte scalar budget while packed converges there
+in 420.776 s. Rejected unpublished work stays unavailable.
+
+Maximum force difference from the frozen reference is 1.393e-9 Eh/Bohr; all
+original residual/stationarity and limited independent large FD gates pass.
+`post-merge-summary.json` retains this version's source/GPU identities and
+validation outcomes. Keep packing opt-in for capacity and do not extend full
+state packing without a consuming algorithm. These are internal complete force
+endpoints; the new public DF registration remains energy-only.
