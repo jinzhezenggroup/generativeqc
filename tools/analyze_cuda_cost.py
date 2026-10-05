@@ -161,6 +161,12 @@ def _report(args: argparse.Namespace) -> dict[str, object]:
         ncu_assessment = assess_ncu_execution(ncu_evidence)
 
     target = cuda_target_info(args.arch)
+    if ncu_evidence is not None and ncu_evidence.architecture != target.architecture:
+        raise ValueError(
+            "NCU evidence architecture "
+            f"{ncu_evidence.architecture} does not match requested target "
+            f"{target.architecture}"
+        )
     ptxas_evidence = None
     if args.ptxas is not None:
         resources, architecture_verified = _ptxas_resources(
