@@ -88,3 +88,7 @@ last-good-result assertions remain unchanged.
 A representative complete XC/KS endpoint profile demonstrates a benefit and
 qualifies simultaneous provider resources. That promotion belongs in a separate
 reviewable change, with preparation and physical replay evidence retained.
+
+The subsequent [384/768-AO crossover qualification](../performance/2026-10-05-large-xc-rank2k-crossover.md)
+extends this evidence to larger dense domains; it does not invalidate the
+small-domain loss or by itself promote a full SCF/force production default.

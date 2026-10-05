@@ -877,6 +877,10 @@ int main(int argc, char** argv) {
       potential_lowering_benchmark();
       return 0;
     }
+    if (argc == 2 && std::string(argv[1]) == "--potential-large-benchmark") {
+      potential_lowering_benchmark(true);
+      return 0;
+    }
     if (argc == 2 && std::string(argv[1]) == "--potential-lowering") {
       potential_lowering_cases();
       return 0;

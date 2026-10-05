@@ -102,46 +102,88 @@ void potential_lowering_cases() {
  * do not by themselves establish a production molecule/SCF promotion profile.
  * Every warm sample includes density H2D and explicit E/Vxc exports.
  */
-void potential_lowering_benchmark() {
-  for (unsigned shells : {8U, 18U}) {
+void potential_lowering_benchmark(bool large = false) {
+  // Exact large AO extents revisit the small-domain negative evidence. Keep
+  // this explicit qualification command out of routine correctness runs.
+  for (unsigned nao :
+       (large ? std::array<unsigned, 2>{384, 768} : std::array<unsigned, 2>{82, 182})) {
     auto molecule = system();
-    for (unsigned i = 0; i < shells; ++i)
+    for (unsigned i = 0; i < (nao - 2) / 10; ++i)
       molecule.shells.push_back({i % 2, 3, {{0.3 + 0.015 * i, 1.0}}});
-    const AoBasis basis(molecule);
-    const MolecularGrid grid(molecule, {1, 12, 8, 12, 3, 1e-12});
-    const auto d = density(basis.nao, 1);
-    const auto reference = integrate_pbe_rks_with_tail(basis, grid, d, 128);
-    for (bool trial : {false, true}) {
-      xc_potential_qualification_for_test(false, false);
-      Fixture fixture(basis, grid, 1, false, 128);
-      xc_potential_qualification_for_test(trial, false);
-      fixture.plan->prepare_potential(96ULL << 20);
-      xc_potential_qualification_for_test(false, false);
-      std::array<double, 6> times{};
-      double max_error = 0;
-      for (auto& seconds : times) {
-        const auto start = std::chrono::steady_clock::now();
-        fixture.submit(d);
-        const auto e = fixture.scalars();
-        const auto v = fixture.potential();
-        seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        require(e.error == 0, "benchmark finite publication");
-        close(e.energy, reference.energy, "benchmark independent energy", 2e-9);
-        for (std::size_t i = 0; i < v.size(); ++i) {
-          max_error = std::max(max_error, std::abs(v[i] - reference.potential[i]));
-          close(v[i], reference.potential[i], "benchmark independent potential", 2e-9);
+    for (unsigned i = 0; i < (nao - 2) % 10; ++i)
+      molecule.shells.push_back({i % 2, 0, {{0.25 + 0.02 * i, 1.0}}});
+    for (unsigned geometry = 0; geometry != (large ? 2U : 1U); ++geometry) {
+      if (geometry) molecule.atoms[1].position[0] += 0.02;
+      const AoBasis basis(molecule);
+      require(basis.nao == nao, "crossover AO extent changed");
+      const MolecularGrid grid(molecule, {1, 12, 8, 12, 3, 1e-12});
+      // PBE0's semilocal exchange weight exercises the same potential algebra;
+      // the full hybrid SCF/exact-exchange endpoint is a separate promotion gate.
+      const double exchange_scale = large ? 0.75 : 1.0;
+      const auto d = density(basis.nao, 1);
+      const auto reference =
+          integrate_pbe_rks_with_tail_scaled(basis, grid, d, 128, {}, exchange_scale, 1.0);
+      for (std::size_t tile : {128U, 256U, 512U}) {
+        if (!large && tile != 128) continue;
+        for (bool trial : {false, true}) {
+          const auto prepared_start = std::chrono::steady_clock::now();
+          xc_potential_qualification_for_test(false, false);
+          Fixture fixture(basis, grid, 1, false, tile, CudaXcAoPrecision::Fp64, false,
+                          exchange_scale, 1.0);
+          xc_potential_qualification_for_test(trial, false);
+          fixture.plan->prepare_potential(96ULL << 20);
+          xc_potential_qualification_for_test(false, false);
+          require(fixture.plan->potential_lowering().candidate.provider ==
+                      (trial ? "cublas" : "generated.cuda"),
+                  "crossover candidate unavailable; comparison would be invalid");
+          const auto prepared_seconds =
+              std::chrono::duration<double>(std::chrono::steady_clock::now() - prepared_start)
+                  .count();
+          std::array<double, 6> times{};
+          double max_error = 0;
+          for (auto& seconds : times) {
+            const auto start = std::chrono::steady_clock::now();
+            fixture.submit(d);
+            const auto e = fixture.scalars();
+            const auto v = fixture.potential();
+            seconds =
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            require(e.error == 0, "benchmark finite publication");
+            close(e.energy, reference.energy, "benchmark independent energy", 2e-9);
+            for (std::size_t i = 0; i < v.size(); ++i) {
+              max_error = std::max(max_error, std::abs(v[i] - reference.potential[i]));
+              close(v[i], reference.potential[i], "benchmark independent potential", 2e-9);
+            }
+          }
+          const auto first = times[0];
+          const auto samples = times;
+          std::sort(times.begin() + 1, times.end());
+          const auto& diag = fixture.plan->potential_lowering();
+          std::cout << std::setprecision(12) << "endpoint nao=" << basis.nao
+                    << " points=" << grid.point_count() << " tile=" << tile
+                    << " geometry=" << geometry << " exchange_scale=" << exchange_scale
+                    << " provider=" << diag.candidate.provider
+                    << " owner_prepare_s=" << prepared_seconds
+                    << " prepare_s=" << diag.prepare_seconds << " cold_s=" << first
+                    << " warm_median_s=" << times[3] << " max_v_error=" << max_error
+                    << " calls=" << fixture.plan->transfers().potential_calls
+                    << " summands=" << fixture.plan->transfers().potential_summands
+                    << " full_reduction=" << fixture.layout.work_jets * tile
+                    << " tail_reduction=" << fixture.layout.work_jets * (grid.point_count() % tile)
+                    << " packed_bytes_per_evaluation="
+                    << fixture.layout.spins * fixture.layout.work_jets * grid.point_count() *
+                           basis.nao * sizeof(double)
+                    << " arena_bytes=" << fixture.layout.device_bytes
+                    << " provider_allowance=" << diag.provider_allowance
+                    << " provider_version=" << diag.provider_version
+                    << " output_bytes=" << fixture.plan->transfers().output_d2h_bytes
+                    << " synchronizations=" << fixture.plan->transfers().synchronizations;
+          for (std::size_t i = 0; i != samples.size(); ++i)
+            std::cout << " sample" << i << "_s=" << samples[i];
+          std::cout << std::endl;
+          fixture.canary();
         }
       }
-      const auto first = times[0];
-      std::sort(times.begin() + 1, times.end());
-      const auto& diag = fixture.plan->potential_lowering();
-      std::cout << std::setprecision(12) << "endpoint nao=" << basis.nao
-                << " points=" << grid.point_count() << " provider=" << diag.candidate.provider
-                << " prepare_s=" << diag.prepare_seconds << " cold_s=" << first
-                << " warm_median_s=" << times[3] << " max_v_error=" << max_error
-                << " calls=" << fixture.plan->transfers().potential_calls
-                << " summands=" << fixture.plan->transfers().potential_summands << '\n';
-      fixture.canary();
     }
   }
 }
