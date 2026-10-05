@@ -17,51 +17,62 @@ struct CublasLtMatrixRecipe {
 
   static CublasLtMatrixRecipe from(const ContractionRequest& request) {
     request.validate_affine();
-    // Membership identifies M/N/K, even when all extents happen to be equal.
-    std::array<int, 8> mode{};
-    std::array<std::size_t, 8> count{};
-    for (std::size_t operand = 0; operand < 3; ++operand) {
+    // Derive ordered M/N/K/batch groups from the original modes. Flattening
+    // is legal only when each operand proves the same group address order;
+    // equal element counts cannot prove a transpose or reduction permutation.
+    struct Group {
+      std::array<int, ContractionOperand::kMaximumRank> modes{};
+      std::size_t size{};
+      void add(int mode) { modes[size++] = mode; }
+    } rows, columns, reduction, batch;
+    const auto contains = [&](std::size_t operand, int mode) {
       const auto& view = request.operands[operand];
-      if (view.rank < 2 || view.rank > 3)
-        throw std::invalid_argument("cuBLASLt adapter requires rank-2/3 matrix views");
-      for (std::size_t axis = 0; axis < view.rank; ++axis) {
-        const auto label = view.modes[axis];
-        unsigned membership = 0;
-        for (std::size_t other = 0; other < 3; ++other) {
-          const auto& peer = request.operands[other];
-          if (std::find(peer.modes.begin(), peer.modes.begin() + peer.rank, label) !=
-              peer.modes.begin() + peer.rank)
-            membership |= 1U << other;
-        }
-        // Count each label once, from the first operand in its membership.
-        if ((membership & ((1U << operand) - 1)) == 0) {
-          ++count[membership];
-          mode[membership] = label;
-        }
-      }
+      return std::find(view.modes.begin(), view.modes.begin() + view.rank, mode) !=
+             view.modes.begin() + view.rank;
+    };
+    const auto& output = request.operands[2];
+    for (std::size_t axis = 0; axis < output.rank; ++axis) {
+      const int mode = output.modes[axis];
+      (contains(0, mode) && contains(1, mode) ? batch
+       : contains(0, mode)                    ? rows
+                                              : columns)
+          .add(mode);
     }
-    if (count[3] != 1 || count[5] != 1 || count[6] != 1 || count[7] > 1 || count[1] || count[2] ||
-        count[4])
-      throw std::invalid_argument("cuBLASLt requires one M/N/K mode and optional batch");
+    const auto& left = request.operands[0];
+    for (std::size_t axis = 0; axis < left.rank; ++axis)
+      if (!contains(2, left.modes[axis])) reduction.add(left.modes[axis]);
+    if (!rows.size || !columns.size || !reduction.size)
+      throw std::invalid_argument("cuBLASLt requires nonempty M/N/K groups");
+    const auto collapse = [](const ContractionOperand& view, const Group& group) {
+      std::size_t extent = 1, stride = 0;
+      for (auto index = group.size; index != 0; --index) {
+        const auto axis =
+            std::find(view.modes.begin(), view.modes.begin() + view.rank, group.modes[index - 1]) -
+            view.modes.begin();
+        if (axis == view.rank) throw std::invalid_argument("cuBLASLt mode group is incomplete");
+        const auto size = view.shape[axis], physical = view.strides[axis];
+        if (size != 1) {
+          if (!stride) stride = physical;
+          if (physical != contraction_product(extent, stride))
+            throw std::invalid_argument("cuBLASLt mode group is not physically contiguous");
+        }
+        extent = contraction_product(extent, size);
+      }
+      return std::pair{extent, stride ? stride : 1};
+    };
     CublasLtMatrixRecipe result;
-    const std::array<int, 3> row_modes{mode[5], mode[3], mode[5]},
-        column_modes{mode[3], mode[6], mode[6]};
+    const std::array<const Group*, 3> row_groups{&rows, &reduction, &rows},
+        column_groups{&reduction, &columns, &columns};
     for (std::size_t operand = 0; operand < 3; ++operand) {
       const auto& view = request.operands[operand];
       auto& out = result.layouts[operand];
-      std::size_t rs{}, cs{};
-      for (std::size_t axis = 0; axis < view.rank; ++axis) {
-        if (view.modes[axis] == row_modes[operand]) {
-          out.rows = view.shape[axis];
-          rs = view.strides[axis];
-        } else if (view.modes[axis] == column_modes[operand]) {
-          out.columns = view.shape[axis];
-          cs = view.strides[axis];
-        } else if (count[7] && view.modes[axis] == mode[7]) {
-          result.batches = view.shape[axis];
-          out.batch_stride = view.strides[axis];
-        }
-      }
+      const auto [row_extent, rs] = collapse(view, *row_groups[operand]);
+      const auto [column_extent, cs] = collapse(view, *column_groups[operand]);
+      out.rows = row_extent;
+      out.columns = column_extent;
+      const auto [batches, batch_stride] = collapse(view, batch);
+      result.batches = batches;
+      out.batch_stride = batch.size ? batch_stride : 0;
       if ((out.columns == 1 || cs == 1) && (out.rows == 1 || rs >= out.columns)) {
         out.row_major = true;
         out.ld = out.rows > 1 ? rs : out.columns;

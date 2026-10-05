@@ -78,9 +78,12 @@ and decisions remain preparation metadata; they do not resolve executable owners
 ## Current integration
 
 `tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
-rank-2/3 matrix contractions, using the same canonical planned request as existing
+matrix contractions, using the same canonical planned request as existing
 cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and
-transposed outputs without packing/scatter. The first adapter supports homogeneous
+transposed outputs without packing/scatter. M/N/K and batch dimensions may group
+multiple semantic modes only when matching mode order and contiguous strides
+prove the flattened addresses; unit axes impose no stride constraint. Original
+axis identities remain in the request and provenance. The adapter supports homogeneous
 pedantic FP32/FP64 and rejects unimplemented precision obligations and aliases.
 Provider version and simultaneous workspace/provider/host/cache ceilings must be
 explicit. Ready means preparation eligibility; algorithm selection, exact queried
