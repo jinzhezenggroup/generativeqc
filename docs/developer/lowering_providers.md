@@ -51,6 +51,12 @@ does not admit indexed scatter; empty domains, insufficient cache/provider
 budget and unavailable providers retain generated execution. Map discovery
 must precede optional preparation. `--indexed-potential` qualifies this path
 against independent scalar/CPU references, capture and resource-failure gates.
+The native `--indexed-potential-benchmark ORIGINAL MOVED` command measures
+complete fixed-density XC for both mapped geometries at several tile sizes.
+It reports preparation, all timing samples, physical rank-2k work, compact
+publication/scatter traffic and paired E/V errors. The retained
+`benchmarks/results/xc-mapped-potential-1876/` receipt includes hash-bound input
+recovery and verifies the actual AO census; it does not qualify full SCF/forces.
 Device bodies can be captured without changing host work counters; physical
 replay publication counts the symmetric products and upper-triangle scalar
 summands. The deterministic point totals retain their original order.

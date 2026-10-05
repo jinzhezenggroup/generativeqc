@@ -1,0 +1,55 @@
+{
+  "source_commit": "d94502d945a939a7ff1dbb947ce43d7bae27a05c",
+  "binary_sha256": "d31a9fe2ecb0d7eb707a35099552cb64f5cbbee64fc3f954bf77b1bce36ed43c",
+  "source_manifest_verified": true,
+  "source_manifest_sha256": "8325c6009b7677dc7ae4330e04b892af764c3ce12474b3256330178289748064",
+  "source_sha256": {
+    "tests/native/dft_mapped_potential_benchmark.cuh": "159301d34f970318935b8f8f5864f5eb70c2dfab302062ac392a15690cc77ca3",
+    "tests/native/test_dft_cuda.cu": "3f30ce9f34d96a42e8ac34bc8b383982fce363ad1bb1ae0531bdbb010488c4fd",
+    "src/dft/cuda_xc.cpp": "b453d6a14e398e1c40b5aca9c3ffe33030feb2f9ba036358b48eab98d4712a8c",
+    "src/dft/cuda_xc_kernels.cuh": "f54a8e6e692e4e01fac18d97309f196c1158114102d5b0f0bce5a062cf0e49e0",
+    "src/tensor/cuda_symmetric_product.cuh": "b355555dc3b6562cb66949c3a1c5357dd2c22c13de4f125ab65768169ffb229c",
+    "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "0a4e7277f27c5bbf046404de9d2b2d87655b8b06afa33267d5126616f8671d00",
+    "python/generativeqc_compiler/dft/xc_potential_lowering.py": "18f9625d10e14fbb1dcd079350b6187636be18816f907749c2c7d48479a9830d",
+    "python/generativeqc_compiler/tensor/symmetric_product.py": "19065afb4341e88759febbc9a4e8b6ab75c209c700ff586ad3e206706086bb96"
+  },
+  "inputs": {
+    "source_commit": "b080c9bdcbf81aa952dee811bfd2dbb5a4162981",
+    "sha256": {
+      "input-48-0.txt.gz": "a74716f367006fefcc4929fd806bfa10a4835cedeab253a91d0220e9509a8717",
+      "input-48-1.txt.gz": "2def7c76714be074a4e24e224e311c1d3fa82bdd8bfec10d39bedea0cf3a3eed",
+      "input-96-0.txt.gz": "7e2b6a55bf0a6a569e0b950aeb29087f0c5bfa50a41da5d6f5b6492171083c32",
+      "input-96-1.txt.gz": "d6575f0e3d6605eb07147b75e3b37516132656b2ac9fad732af426d9dd676b75"
+    }
+  },
+  "target": "n1/node1 NVIDIA GeForce RTX 5090 sm_120",
+  "toolkit": "CUDA 12.9.86",
+  "cublas_version": 120901,
+  "slurm_job": 5972,
+  "time_limit": "00:20:00",
+  "visibility": "visibility=2",
+  "native_gate": "Indexed potential scalar, capture, local-map CPU and resource gates passed",
+  "prior_independent_qualification": {
+    "source_commit": "26239bc96b834c3230a0c13972887c02d2dad876",
+    "binary_sha256": "42c5a0dd96e01913f743c6fd961b66ffa23dd80496d89749fa232be4b81e24d8",
+    "host_checks": 50,
+    "memcheck_errors": 0,
+    "initcheck_errors": 0
+  },
+  "compiler_commands": [
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  -I/data/jzzeng/qc-dft-indexed-potential-1876/include -I/data/jzzeng/qc-dft-indexed-potential-1876/src -I/data/jzzeng/qc-dft-indexed-potential-1876/src/dft -I/data/jzzeng/qc-dft-indexed-potential-1876/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE -MD -MT CMakeFiles/generativeqc_dft_cuda_tests.dir/tests/native/test_dft_cuda.cu.o -MF CMakeFiles/generativeqc_dft_cuda_tests.dir/tests/native/test_dft_cuda.cu.o.d -x cu -c /data/jzzeng/qc-dft-indexed-potential-1876/tests/native/test_dft_cuda.cu -o CMakeFiles/generativeqc_dft_cuda_tests.dir/tests/native/test_dft_cuda.cu.o",
+    "ccache /usr/bin/c++ -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-indexed-potential-1876/include -I/data/jzzeng/qc-dft-indexed-potential-1876/src -I/data/jzzeng/qc-dft-indexed-potential-1876/src/dft -I/data/jzzeng/qc-dft-indexed-potential-1876/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 -fPIE -MD -MT CMakeFiles/generativeqc_dft_cuda_tests.dir/src/dft/cuda_xc.cpp.o -MF CMakeFiles/generativeqc_dft_cuda_tests.dir/src/dft/cuda_xc.cpp.o.d -o CMakeFiles/generativeqc_dft_cuda_tests.dir/src/dft/cuda_xc.cpp.o -c /data/jzzeng/qc-dft-indexed-potential-1876/src/dft/cuda_xc.cpp"
+  ],
+  "data_sha256": {
+    "endpoint-48.json.gz": "a023c5ce653b9890e55bdc8d9a30c1510576fe0ebc1460bf68d46faf624c5ce5",
+    "endpoint-96.json.gz": "e336eb97cb4fd122625e84ec9b6959e8c9945688d805bbe27bacc4ebae632415"
+  },
+  "ignored_raw_log_sha256": {
+    "endpoint-48.log": "d95e89b877320a5d20e63c6e720773127dd32b19c8c8326fdecb789dca371166",
+    "endpoint-96.log": "d37cdc22584112f87daa742fa457602494ad84c745cf458aaf6d314c0859bfc8"
+  },
+  "baseline_census_sha256": {
+    "components-48.json.gz": "520f056451eb56c87e64223ece9c15874af008b71816a8c160ba90e686814e6e",
+    "components-96.json.gz": "97208bdc450a703a570031da49af1a344aefe4ff15f630a8155cf780f45759da"
+  }
+}
