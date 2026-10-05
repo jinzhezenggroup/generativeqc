@@ -28,6 +28,13 @@ macro(generativeqc_add_native_tests)
                          tests/native/test_native_cublaslt.cu NO_GENERATIVEQC
                          LIBRARIES CUDA::cudart CUDA::cublasLt CUDA::cublas)
       set_tests_properties(generativeqc_native_cublaslt_tests PROPERTIES TIMEOUT 180)
+      target_compile_definitions(generativeqc_native_cublaslt_tests PRIVATE GENERATIVEQC_TEST_HOOKS=1)
+      if(TARGET generativeqc_cublaslt)
+        target_link_libraries(generativeqc_native_cublaslt_tests PRIVATE generativeqc_cublaslt)
+      endif()
+      if(TARGET generativeqc_cutensor)
+        target_link_libraries(generativeqc_native_cublaslt_tests PRIVATE generativeqc_cutensor)
+      endif()
     endif()
     if(TARGET generativeqc_cutensor)
       generativeqc_native_test(generativeqc_native_cutensor_tests

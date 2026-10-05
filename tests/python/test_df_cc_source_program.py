@@ -407,6 +407,11 @@ def cuda_source_response_probe(tmp_path_factory: pytest.TempPathFactory) -> typi
         ]
     else:
         includes += ["-DGENERATIVEQC_HAS_CUTENSOR=0"]
+    if os.environ.get("GENERATIVEQC_CUBLASLT_CUDA_TEST") == "1":
+        includes += ["-DGENERATIVEQC_HAS_CUBLASLT=1"]
+        provider_link += ["-lcublasLt"]
+    else:
+        includes += ["-DGENERATIVEQC_HAS_CUBLASLT=0"]
     objects = []
     for source, command in (
         (
@@ -566,23 +571,33 @@ def test_cuda_streamed_source_response_matches_independent_complete_expression(
     assert all(np.isnan(x).all() for x in failed)
 
 
-@pytest.mark.parametrize("provider_test", [1, 2, 3])
+@pytest.mark.parametrize("provider_test", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("n,q", [(1, 1), (2, 3), (5, 4), (3, 7)])
 def test_cuda_source_response_optional_providers(
     cuda_source_response_probe: typing.Any, provider_test: int, n: int, q: int
 ) -> None:
     if os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY"):
         pytest.skip("provider controls are qualification-only")
-    if provider_test >= 2 and os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1":
+    if (
+        provider_test in (2, 3)
+        and os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1"
+    ):
+        pytest.skip("requires optional provider qualification")
+    if (
+        provider_test in (4, 5)
+        and os.environ.get("GENERATIVEQC_CUBLASLT_CUDA_TEST") != "1"
+    ):
         pytest.skip("requires optional provider qualification")
     arrays = _response_inputs(n, q, False)
     status, outputs, counts, error = _run_cuda_source(
         cuda_source_response_probe, arrays, budget=8 << 30, provider_test=provider_test
     )
     assert status == 0, error
-    assert counts[11] == 8 and counts[12] == (2 if provider_test == 2 else 1)
+    assert counts[11] == 8 and counts[12] == {2: 2, 4: 3}.get(provider_test, 1)
     if provider_test == 2:
         assert counts[10] >= 20800 and counts[10] // 10000 == 2
+    elif provider_test == 4:
+        assert counts[10] > 0 and counts[13] > 0
     else:
         assert counts[10] == 0
     assert counts[4] == 3 * n + 5 and counts[5] == 6 * n**3 * q + 2 * n * n * q * q
@@ -595,31 +610,76 @@ def test_cuda_source_response_optional_providers(
         np.testing.assert_allclose(actual, expected[name], atol=3e-11, rtol=3e-13)
 
 
+@pytest.mark.parametrize("provider_test,capability", [(2, "CUTENSOR"), (4, "CUBLASLT")])
+def test_cuda_source_optional_budget_boundary(
+    cuda_source_response_probe: typing.Any,
+    provider_test: int,
+    capability: str,
+) -> None:
+    """All eight plans coexist; one byte below selects the ranked generated fallback."""
+    if (
+        os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY")
+        or os.environ.get(f"GENERATIVEQC_{capability}_CUDA_TEST") != "1"
+    ):
+        pytest.skip("requires standalone optional provider qualification")
+    arrays = _response_inputs(2, 3, False)
+    status, expected, counts, error = _run_cuda_source(
+        cuda_source_response_probe, arrays, budget=8 << 30, provider_test=provider_test
+    )
+    assert status == 0, error
+    for budget, selected in (
+        (int(counts[7]), {2: 2, 4: 3}[provider_test]),
+        (int(counts[7]) - 1, 1),
+    ):
+        status, actual, bounded, error = _run_cuda_source(
+            cuda_source_response_probe,
+            arrays,
+            budget=budget,
+            provider_test=provider_test,
+        )
+        assert status == 0, error
+        assert bounded[12] == selected and bounded[7] <= budget
+        np.testing.assert_array_equal(bounded[:6], counts[:6])
+        for output, reference in zip(actual, expected, strict=True):
+            np.testing.assert_allclose(output, reference, atol=3e-11, rtol=3e-13)
+
+
+@pytest.mark.parametrize("provider_test,capability", [(2, "CUTENSOR"), (4, "CUBLASLT")])
 def test_cuda_source_missing_optional_provider_retains_incumbent(
     cuda_source_response_probe: typing.Any,
+    provider_test: int,
+    capability: str,
 ) -> None:
     if (
         os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY")
-        or os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") == "1"
+        or os.environ.get(f"GENERATIVEQC_{capability}_CUDA_TEST") == "1"
     ):
         pytest.skip("requires the standalone provider-absent build")
     status, _, counts, error = _run_cuda_source(
         cuda_source_response_probe,
         _response_inputs(2, 3, False),
         budget=8 << 30,
-        provider_test=2,
+        provider_test=provider_test,
     )
     assert status == 0, error
     assert counts[12] == 0 and counts[11] == 8 and counts[10] > 0
 
 
-@pytest.mark.parametrize("provider_test", [1, 2, 3])
+@pytest.mark.parametrize("provider_test", [1, 2, 3, 4, 5])
 def test_cuda_source_provider_failure_is_sticky(
     cuda_source_response_probe: typing.Any, provider_test: int
 ) -> None:
     if os.environ.get("GENERATIVEQC_DF_MO_RESPONSE_LIBRARY"):
         pytest.skip("provider controls are qualification-only")
-    if provider_test >= 2 and os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1":
+    if (
+        provider_test in (2, 3)
+        and os.environ.get("GENERATIVEQC_CUTENSOR_CUDA_TEST") != "1"
+    ):
+        pytest.skip("requires optional provider qualification")
+    if (
+        provider_test in (4, 5)
+        and os.environ.get("GENERATIVEQC_CUBLASLT_CUDA_TEST") != "1"
+    ):
         pytest.skip("requires optional provider qualification")
     raw, c, root, bar = _response_inputs(2, 3, False)
     raw[:] = 1e308

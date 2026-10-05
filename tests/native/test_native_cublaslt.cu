@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 
+#include "tensor/cuda_contraction.cuh"
 #include "tensor/cuda_cublaslt.cuh"
 
 using namespace generativeqc::tensor;
@@ -16,19 +17,38 @@ void rejects(F call) {
   throw std::runtime_error("invalid cuBLASLt binding was accepted");
 }
 
+template <class F>
+void unavailable(F call) {
+  try {
+    call();
+  } catch (const ContractionPreparationUnavailable&) {
+    return;
+  }
+  throw std::runtime_error("optional rejection was not preserved");
+}
+
 // Independent mode addressing: do not reuse the provider's matrix recognition.
 std::size_t offset(const ContractionOperand& view, std::size_t batch, std::size_t m, std::size_t n,
                    std::size_t k) {
   const std::array<std::size_t, 4> coordinates{m, n, k, batch};
   std::size_t result = 0;
-  for (std::size_t axis = 0; axis < view.rank; ++axis)
-    result += coordinates[view.modes[axis]] * view.strides[axis];
+  for (std::size_t axis = 0; axis < view.rank; ++axis) {
+    const auto mode = view.modes[axis];
+    auto coordinate = coordinates[mode % 4];
+    if (mode >= 4) {
+      coordinate %= view.shape[axis];
+    } else {
+      for (std::size_t second = 0; second < view.rank; ++second)
+        if (view.modes[second] == mode + 4) coordinate /= view.shape[second];
+    }
+    result += coordinate * view.strides[axis];
+  }
   return result;
 }
 
 template <class T>
 void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t n, std::size_t k,
-           double beta) {
+           double beta, bool grouped = false) {
   constexpr auto dtype = std::is_same_v<T, double> ? PrecisionDtype::Fp64 : PrecisionDtype::Fp32;
   constexpr std::string_view identity =
       "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -45,6 +65,22 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     const auto ld = extents[second] + 2;
     result.strides[result.rank - 2] = ld;
     if (batches > 1) result.strides[0] = extents[first] * ld + 3;
+    if (grouped) {
+      // Split every physical dimension while retaining its exact addresses.
+      // The oracle decodes those semantic axes independently of the recipe.
+      const auto original = result;
+      result.rank *= 2;
+      for (std::size_t axis = 0; axis < original.rank; ++axis) {
+        const auto outer = original.shape[axis] % 2 == 0 ? 2 : 1;
+        const auto inner = original.shape[axis] / outer;
+        result.modes[2 * axis] = original.modes[axis];
+        result.modes[2 * axis + 1] = original.modes[axis] + 4;
+        result.shape[2 * axis] = outer;
+        result.shape[2 * axis + 1] = inner;
+        result.strides[2 * axis] = inner * original.strides[axis];
+        result.strides[2 * axis + 1] = original.strides[axis];
+      }
+    }
     return result;
   };
   ContractionRequest request{
@@ -56,6 +92,13 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
       dtype};
   request.coefficient = -0.75;
   request.beta = beta;
+  if (grouped && k % 2 == 0) {
+    auto invalid = request;
+    auto& right = invalid.operands[1];
+    for (std::size_t axis = 0; axis < right.rank; ++axis)
+      if (right.modes[axis] == 2) ++right.strides[axis];
+    rejects([&] { (void)CublasLtMatrixRecipe::from(invalid); });
+  }
   const T nan = std::numeric_limits<T>::quiet_NaN();
   std::vector<T> a(request.operands[0].storage_elements(), nan),
       b(request.operands[1].storage_elements(), nan),
@@ -90,6 +133,53 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     if (!binding.prepare(request, stream, 64ULL << 20, 256ULL << 20, 64ULL << 20))
       throw std::runtime_error(std::string(binding.rejection()));
     const auto provenance = binding.provenance();
+    CudaContractionContext context;
+    context.prepare_generated(stream);
+    PreparedContractions shared;
+    std::size_t calls{}, summands{};
+    const ContractionProviderReservation reservation{64ULL << 20, 256ULL << 20, 64ULL << 20};
+#if GENERATIVEQC_HAS_CUBLASLT
+#if defined(GENERATIVEQC_TEST_HOOKS)
+    // Reject after one provisional plan. No failed variant or resources may be
+    // published, and retrying the same shape must remain legal.
+    cublaslt_preparations_before_rejection_for_test = 1;
+    unavailable([&] {
+      shared.add(m, n, k, {request, request}, context, calls, summands,
+                 {ContractionAlgorithm::CublasLtMatmul, ContractionAlgorithm::CublasLtMatmul},
+                 reservation);
+    });
+    cublaslt_preparations_before_rejection_for_test = -1;
+#if GENERATIVEQC_HAS_CUTENSOR
+    cublaslt_preparations_before_rejection_for_test = 0;
+    unavailable([&] {
+      shared.add(m, n, k, {request, request}, context, calls, summands,
+                 {ContractionAlgorithm::CutensorAffine, ContractionAlgorithm::CublasLtMatmul},
+                 reservation);
+    });
+    cublaslt_preparations_before_rejection_for_test = -1;
+#endif
+    if (shared || shared.optional_resources().total_bytes(1))
+      throw std::runtime_error("failed preparation retained a published variant");
+#endif
+    shared.add(m, n, k, {request}, context, calls, summands, {ContractionAlgorithm::CublasLtMatmul},
+               reservation);
+    const auto resources = shared.optional_resources();
+    if (resources.total_bytes(1) > reservation.total_bytes(1) ||
+        resources.host_bytes != reservation.host_bytes)
+      throw std::runtime_error("shared cuBLASLt reservation accounting");
+    std::size_t visited{};
+    shared.visit_matmul_provenance([&](auto o, auto v, auto q, auto slot, const auto& facts) {
+      ++visited;
+      if (o != m || v != n || q != k || slot != 0 || facts.algorithm != provenance.algorithm)
+        throw std::runtime_error("shared cuBLASLt lost algorithm provenance");
+    });
+    if (visited != 1) throw std::runtime_error("shared cuBLASLt omitted a plan");
+#else
+    unavailable([&] {
+      shared.add(m, n, k, {request}, context, calls, summands,
+                 {ContractionAlgorithm::CublasLtMatmul}, reservation);
+    });
+#endif
     int device{}, major{}, minor{};
     cuda_check(cudaGetDevice(&device));
     cuda_check(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device));
@@ -109,11 +199,24 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     auto *da = ra + 1, *db = rb + 1, *dc = rc + 1;
     cuda_check(cudaMemcpyAsync(da, a.data(), a.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
     cuda_check(cudaMemcpyAsync(db, b.data(), b.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
-    for (int replay = 0; replay < 3; ++replay) {
+    const int replays =
+#if GENERATIVEQC_HAS_CUBLASLT
+        6;
+#else
+        3;
+#endif
+    for (int replay = 0; replay < replays; ++replay) {
       cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
       cuda_check(cudaMemcpyAsync(dc, initial.data(), initial.size() * sizeof(T),
                                  cudaMemcpyHostToDevice, stream));
-      binding.execute(stream, da, db, dc, error);
+#if GENERATIVEQC_HAS_CUBLASLT
+      if (replay >= 3) {
+        shared.execute(0, m, n, k, stream, da, db, dc, error);
+        if (calls != std::size_t(replay - 2) || summands != calls * request.affine_summands())
+          throw std::runtime_error("shared cuBLASLt lost semantic work counts");
+      } else
+#endif
+        binding.execute(stream, da, db, dc, error);
       cuda_check(cudaMemcpyAsync(actual.data(), dc, actual.size() * sizeof(T),
                                  cudaMemcpyDeviceToHost, stream));
       int failed{};
@@ -122,7 +225,8 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
       for (std::size_t i = 0; i < actual.size(); ++i)
         if (std::isnan(expected[i]) ? !std::isnan(actual[i]) : actual[i] != expected[i])
           throw std::runtime_error("cuBLASLt differs from independent affine oracle");
-      if (failed || binding.heuristic_calls() != 1 || binding.calls() != std::size_t(replay + 1) ||
+      if (failed || binding.heuristic_calls() != 1 ||
+          binding.calls() != std::size_t(std::min(replay + 1, 3)) ||
           binding.provenance().algorithm != provenance.algorithm ||
           binding.provenance().workspace_bytes != provenance.workspace_bytes)
         throw std::runtime_error("cuBLASLt replay changed its prepared algorithm");
@@ -146,6 +250,14 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     cuda_check(cudaMemcpyAsync(&failed, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaStreamSynchronize(stream));
     if (!failed) throw std::runtime_error("cuBLASLt lost a sticky finite error");
+    context.reset();
+#if GENERATIVEQC_HAS_CUBLASLT
+    rejects([&] { shared.execute(0, m, n, k, stream, da, db, dc, error); });
+    rejects([&] { shared.visit_matmul_provenance([](auto...) {}); });
+#endif
+    shared.release();
+    if (shared || shared.optional_resources().total_bytes(1))
+      throw std::runtime_error("shared cuBLASLt release retained resources");
     binding.release();
     if (binding.workspace_bytes() || binding.provider_bytes() || binding.host_bytes())
       throw std::runtime_error("cuBLASLt release retained resources");
@@ -168,7 +280,14 @@ int main() {
             check<double>(transpose, batches, dims[0], dims[1], dims[2], beta);
             check<float>(transpose, batches, dims[0], dims[1], dims[2], beta);
           }
-    std::cout << "192 cuBLASLt layout/precision/beta cases passed\n";
+    for (unsigned transpose = 0; transpose < 8; ++transpose)
+      for (auto batches : {1U, 4U})
+        for (const auto dims : {std::array<std::size_t, 3>{6, 10, 14}, {1, 3, 1}})
+          for (auto beta : {0.0, 0.5}) {
+            check<double>(transpose, batches, dims[0], dims[1], dims[2], beta, true);
+            check<float>(transpose, batches, dims[0], dims[1], dims[2], beta, true);
+          }
+    std::cout << "320 cuBLASLt layout/precision/beta cases passed\n";
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;

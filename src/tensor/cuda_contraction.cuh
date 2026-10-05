@@ -11,6 +11,9 @@
 #if GENERATIVEQC_HAS_CUTENSOR
 #include "tensor/cuda_cutensor.cuh"
 #endif
+#if GENERATIVEQC_HAS_CUBLASLT
+#include "tensor/cuda_cublaslt.cuh"
+#endif
 
 namespace generativeqc::tensor {
 
@@ -156,7 +159,12 @@ static __global__ void audit_contraction(const T* values, std::size_t count, int
 
 /** Backend implementation identities, supplied only by compiler/provider
  * preparation. Scientific request metadata never includes this choice. */
-enum class ContractionAlgorithm : std::uint8_t { PedanticBlas, GeneratedOrdered, CutensorAffine };
+enum class ContractionAlgorithm : std::uint8_t {
+  PedanticBlas,
+  GeneratedOrdered,
+  CutensorAffine,
+  CublasLtMatmul
+};
 
 /** Optional-provider rejection is distinct from malformed science or execution
  * failures. Only this exception authorizes preparation of an admitted fallback. */
@@ -167,7 +175,7 @@ class ContractionPreparationUnavailable : public std::runtime_error {
 
 /** Per-plan ceilings, supplied by provider qualification and admitted by the
  * enclosing owner before preparation. Zero defaults intentionally admit no
- * opaque cuTENSOR host storage. There is no production reservation heuristic.
+ * opaque optional-provider host storage. There is no production reservation heuristic.
  * host_bytes includes the native plan object and opaque provider host storage;
  * descriptor/pointer tables are charged separately by storage_bytes(). */
 struct ContractionProviderReservation {
@@ -189,7 +197,9 @@ struct ContractionProviderReservation {
 // Provider-layer qualification controls, absent from production builds and
 // method APIs. Negative means no injection; zero rejects the next preparation.
 inline thread_local ContractionProviderReservation cutensor_reservation_for_test;
+inline thread_local ContractionProviderReservation cublaslt_reservation_for_test;
 inline thread_local int cutensor_preparations_before_rejection_for_test = -1;
+inline thread_local int cublaslt_preparations_before_rejection_for_test = -1;
 #endif
 
 /** Resource evidence is independent of build availability. No production
@@ -207,6 +217,24 @@ inline ContractionProviderReservation qualified_cutensor_reservation() noexcept 
 inline std::size_t cutensor_provider_version() noexcept {
 #if GENERATIVEQC_HAS_CUTENSOR
   return cutensorGetVersion();
+#else
+  return 0;
+#endif
+}
+
+/** cuBLASLt remains unavailable to production selection without measured
+ * simultaneous host/cache/provider and lazy-execution resource bounds. */
+inline ContractionProviderReservation qualified_cublaslt_reservation() noexcept {
+#if GENERATIVEQC_HAS_CUBLASLT && defined(GENERATIVEQC_TEST_HOOKS)
+  return cublaslt_reservation_for_test;
+#else
+  return {};
+#endif
+}
+
+inline std::size_t cublaslt_provider_version() noexcept {
+#if GENERATIVEQC_HAS_CUBLASLT
+  return cublasLtGetVersion();
 #else
   return 0;
 #endif
@@ -272,13 +300,17 @@ class PreparedContractions {
 #if GENERATIVEQC_HAS_CUTENSOR
                 + sizeof(std::unique_ptr<CudaCutensorContraction>)
 #endif
+#if GENERATIVEQC_HAS_CUBLASLT
+                + sizeof(std::unique_ptr<CudaCublasLtContraction>)
+#endif
                );
   }
 
-  /** Bind one shape transactionally. Optional cuTENSOR plans are fully prepared
+  /** Bind one shape transactionally. Optional provider plans are fully prepared
    * before publishing the variant; rejection releases all provisional plans and
    * leaves the table unchanged. The caller owns fallback selection and budgets
-   * reservation.total_bytes(number_of_cutensor_plans) in addition to the table.
+   * reservation.total_bytes(number_of_optional_plans) in addition to the table.
+   * A mixed table must supply ceilings valid for every selected provider.
    * Pure affine requests need no matrix recipe when that provider is selected. */
   void add(std::size_t o, std::size_t v, std::size_t q, std::vector<ContractionRequest> requests,
            CudaContractionContext& context, std::size_t& calls, std::size_t& summands,
@@ -292,12 +324,17 @@ class PreparedContractions {
     for (auto algorithm : algorithms) {
       if ((algorithm != ContractionAlgorithm::PedanticBlas &&
            algorithm != ContractionAlgorithm::GeneratedOrdered &&
-           algorithm != ContractionAlgorithm::CutensorAffine) ||
+           algorithm != ContractionAlgorithm::CutensorAffine &&
+           algorithm != ContractionAlgorithm::CublasLtMatmul) ||
           (algorithm == ContractionAlgorithm::PedanticBlas && !context.handle()))
         throw std::invalid_argument("native contraction provider unavailable");
 #if !GENERATIVEQC_HAS_CUTENSOR
       if (algorithm == ContractionAlgorithm::CutensorAffine)
         throw ContractionPreparationUnavailable("cuTENSOR was not enabled in this build");
+#endif
+#if !GENERATIVEQC_HAS_CUBLASLT
+      if (algorithm == ContractionAlgorithm::CublasLtMatmul)
+        throw ContractionPreparationUnavailable("cuBLASLt was not enabled in this build");
 #endif
     }
     cudaStreamCaptureStatus capture{};
@@ -308,7 +345,8 @@ class PreparedContractions {
       if (variant.o == o && variant.v == v && variant.q == q)
         throw std::invalid_argument("duplicate native contraction batch variant");
     for (std::size_t i = 0; i < requests.size(); ++i) {
-      if (algorithms[i] == ContractionAlgorithm::CutensorAffine)
+      if (algorithms[i] == ContractionAlgorithm::CutensorAffine ||
+          algorithms[i] == ContractionAlgorithm::CublasLtMatmul)
         requests[i].validate_affine();
       else
         requests[i].validate();
@@ -324,39 +362,54 @@ class PreparedContractions {
     generativeqc_tensor::cuda_check(cudaGetDevice(&device));
     if (device != context.device()) throw std::logic_error("native preparation device changed");
     Variant variant{o, v, q, std::move(requests), std::move(algorithms)};
-#if GENERATIVEQC_HAS_CUTENSOR
-    const auto count = std::count(variant.algorithms.begin(), variant.algorithms.end(),
-                                  ContractionAlgorithm::CutensorAffine);
-    if (count) {
-      // Check aggregate arithmetic before allocating any provider storage.
-      (void)reservation.total_bytes(count);
-      if (reservation.host_bytes < sizeof(CudaCutensorContraction))
-        throw ContractionPreparationUnavailable("cuTENSOR host reservation is insufficient");
-      variant.cutensor.resize(variant.requests.size());
-      if (variant.cutensor.capacity() > variant.cutensor.size())
+#if GENERATIVEQC_HAS_CUTENSOR || GENERATIVEQC_HAS_CUBLASLT
+    // Both provider families are live together during transactional preparation.
+    // Check their combined reservation before allocating either family's plans.
+    const auto count =
+        std::count_if(variant.algorithms.begin(), variant.algorithms.end(), [](auto algorithm) {
+          return algorithm == ContractionAlgorithm::CutensorAffine ||
+                 algorithm == ContractionAlgorithm::CublasLtMatmul;
+        });
+    (void)reservation.total_bytes(count);
+    const auto prepare_optional = [&]<class Plan>(std::vector<std::unique_ptr<Plan>>& plans,
+                                                  ContractionAlgorithm algorithm) {
+      if (std::find(variant.algorithms.begin(), variant.algorithms.end(), algorithm) ==
+          variant.algorithms.end())
+        return;
+      if (reservation.host_bytes < sizeof(Plan))
+        throw ContractionPreparationUnavailable(
+            "optional provider host reservation is insufficient");
+      plans.resize(variant.requests.size());
+      if (plans.capacity() > plans.size())
         throw std::length_error("native provider pointer table exceeds admitted bound");
-      try {
-        for (std::size_t i = 0; i < variant.requests.size(); ++i) {
-          if (variant.algorithms[i] != ContractionAlgorithm::CutensorAffine) continue;
+      for (std::size_t i = 0; i < variant.requests.size(); ++i) {
+        if (variant.algorithms[i] != algorithm) continue;
 #if defined(GENERATIVEQC_TEST_HOOKS)
-          if (cutensor_preparations_before_rejection_for_test == 0)
-            throw ContractionPreparationUnavailable("injected optional provider rejection");
-          if (cutensor_preparations_before_rejection_for_test > 0)
-            --cutensor_preparations_before_rejection_for_test;
+        auto& remaining = algorithm == ContractionAlgorithm::CutensorAffine
+                              ? cutensor_preparations_before_rejection_for_test
+                              : cublaslt_preparations_before_rejection_for_test;
+        if (remaining == 0)
+          throw ContractionPreparationUnavailable("injected optional provider rejection");
+        if (remaining > 0) --remaining;
 #endif
-          auto& plan = variant.cutensor[i];
-          plan = std::make_unique<CudaCutensorContraction>();
-          if (!plan->prepare(variant.requests[i], context.stream(), reservation.workspace_bytes,
-                             reservation.provider_bytes, reservation.host_bytes))
-            throw ContractionPreparationUnavailable(std::string(plan->rejection()));
-        }
-      } catch (...) {
-        // A live cleanup error propagates as a hard failure, never as optional
-        // rejection. Destructors still release remaining plans best effort.
-        for (auto& plan : variant.cutensor)
-          if (plan) plan->release();
-        throw;
+        auto& plan = plans[i];
+        plan = std::make_unique<Plan>();
+        if (!plan->prepare(variant.requests[i], context.stream(), reservation.workspace_bytes,
+                           reservation.provider_bytes, reservation.host_bytes))
+          throw ContractionPreparationUnavailable(std::string(plan->rejection()));
       }
+    };
+    try {
+#if GENERATIVEQC_HAS_CUTENSOR
+      prepare_optional(variant.cutensor, ContractionAlgorithm::CutensorAffine);
+#endif
+#if GENERATIVEQC_HAS_CUBLASLT
+      prepare_optional(variant.cublaslt, ContractionAlgorithm::CublasLtMatmul);
+#endif
+    } catch (...) {
+      // Failure of the second family must also drain the first family's plans.
+      release_variant(variant);
+      throw;
     }
 #else
     (void)reservation;
@@ -374,9 +427,9 @@ class PreparedContractions {
    * remain the externally supplied reservation, excluding storage_bytes(). */
   ContractionProviderReservation optional_resources() const {
     ContractionProviderReservation result;
-#if GENERATIVEQC_HAS_CUTENSOR
-    for (const auto& variant : variants_)
-      for (const auto& plan : variant.cutensor) {
+#if GENERATIVEQC_HAS_CUTENSOR || GENERATIVEQC_HAS_CUBLASLT
+    const auto accumulate = [&](const auto& plans) {
+      for (const auto& plan : plans) {
         if (!plan) continue;
         result.workspace_bytes = ContractionProviderReservation::checked_add(
             result.workspace_bytes, plan->workspace_bytes());
@@ -385,6 +438,15 @@ class PreparedContractions {
         result.host_bytes =
             ContractionProviderReservation::checked_add(result.host_bytes, plan->host_bytes());
       }
+    };
+    for (const auto& variant : variants_) {
+#if GENERATIVEQC_HAS_CUTENSOR
+      accumulate(variant.cutensor);
+#endif
+#if GENERATIVEQC_HAS_CUBLASLT
+      accumulate(variant.cublaslt);
+#endif
+    }
 #endif
     return result;
   }
@@ -406,13 +468,23 @@ class PreparedContractions {
   }
 #endif
 
+#if GENERATIVEQC_HAS_CUBLASLT
+  /** Provider-typed visitor keeps algorithm provenance available without
+   * forcing existing cuTENSOR visitors to understand a different record type. */
+  template <class F>
+  void visit_matmul_provenance(F&& consume) const {
+    if (!variants_.empty() &&
+        (!context_ || !context_->prepared() || generation_ != context_->generation()))
+      throw std::logic_error("stale native contraction context; prepare again");
+    for (const auto& variant : variants_)
+      for (std::size_t slot = 0; slot < variant.cublaslt.size(); ++slot)
+        if (variant.cublaslt[slot])
+          consume(variant.o, variant.v, variant.q, slot, variant.cublaslt[slot]->provenance());
+  }
+#endif
   /** Drain and release a live table before re-admitting a fallback. */
   void release() {
-#if GENERATIVEQC_HAS_CUTENSOR
-    for (auto& variant : variants_)
-      for (auto& plan : variant.cutensor)
-        if (plan) plan->release();
-#endif
+    for (auto& variant : variants_) release_variant(variant);
     variants_.clear();
     context_ = nullptr;
     calls_ = summands_ = nullptr;
@@ -446,6 +518,14 @@ class PreparedContractions {
 #if GENERATIVEQC_HAS_CUTENSOR
     if (selected->algorithms[slot] == ContractionAlgorithm::CutensorAffine) {
       selected->cutensor[slot]->execute(stream, a, b, output, error);
+      ++*calls_;
+      *summands_ += work;
+      return;
+    }
+#endif
+#if GENERATIVEQC_HAS_CUBLASLT
+    if (selected->algorithms[slot] == ContractionAlgorithm::CublasLtMatmul) {
+      selected->cublaslt[slot]->execute(stream, a, b, output, error);
       ++*calls_;
       *summands_ += work;
       return;
@@ -517,7 +597,21 @@ class PreparedContractions {
 #if GENERATIVEQC_HAS_CUTENSOR
     std::vector<std::unique_ptr<CudaCutensorContraction>> cutensor;
 #endif
+#if GENERATIVEQC_HAS_CUBLASLT
+    std::vector<std::unique_ptr<CudaCublasLtContraction>> cublaslt;
+#endif
   };
+  static void release_variant(Variant& variant) {
+#if GENERATIVEQC_HAS_CUTENSOR
+    for (auto& plan : variant.cutensor)
+      if (plan) plan->release();
+#endif
+#if GENERATIVEQC_HAS_CUBLASLT
+    for (auto& plan : variant.cublaslt)
+      if (plan) plan->release();
+#endif
+    (void)variant;
+  }
   std::vector<Variant> variants_;
   CudaContractionContext* context_{};
   std::size_t generation_{};

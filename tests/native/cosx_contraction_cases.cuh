@@ -134,11 +134,22 @@ void endpoint_cases() {
           const bool library = route < 4 && (mask & (1U << (slot % 2)));
           require(site.candidate.provider == (library ? "cublas" : "generated.cuda"),
                   "COSX did not independently bind projection/accumulation");
-          require(site.offer_count == 3 && !site.offers[2].rejection.empty() &&
+          const auto& candidates = slot % 2 ? cosx_lowering::accumulation_candidates
+                                            : cosx_lowering::projection_candidates;
+          require(site.offer_count == candidates.size() && site.selected < site.offer_count &&
+                      site.selected == (library ? 0U : 1U) &&
                       site.offers[site.selected].identity == site.candidate.identity &&
-                      info.contraction_device == 0 && info.compute_major > 0 &&
-                      info.runtime_version > 0,
+                      site.offers[site.selected].provider == site.candidate.provider &&
+                      site.offers[site.selected].rejection.empty() &&
+                      site.offers[1].rejection.empty() &&
+                      site.offers[0].rejection.empty() == library && info.contraction_device == 0 &&
+                      info.compute_major > 0 && info.runtime_version > 0,
                   "COSX discarded negative candidates or runtime provenance");
+          for (std::size_t i = 0; i < candidates.size(); ++i)
+            require(site.offers[i].identity == candidates[i].identity &&
+                        site.offers[i].provider == candidates[i].provider &&
+                        (i < 2 || !site.offers[i].rejection.empty()),
+                    "COSX changed the generated catalog or admitted an optional provider");
           const auto calls = slot < 2 ? 17 / tile : std::size_t(17 % tile != 0);
           const auto points = slot < 2 ? tile : 17 % tile;
           require(site.calls == (changed + 1) * calls &&

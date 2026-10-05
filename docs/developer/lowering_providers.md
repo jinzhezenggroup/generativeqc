@@ -97,9 +97,12 @@ and decisions remain preparation metadata; they do not resolve executable owners
 ## Current integration
 
 `tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
-rank-2/3 matrix contractions, using the same canonical planned request as existing
+matrix contractions, using the same canonical planned request as existing
 cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and
-transposed outputs without packing/scatter. The first adapter supports homogeneous
+transposed outputs without packing/scatter. M/N/K and batch dimensions may group
+multiple semantic modes only when matching mode order and contiguous strides
+prove the flattened addresses; unit axes impose no stride constraint. Original
+axis identities remain in the request and provenance. The adapter supports homogeneous
 pedantic FP32/FP64 and rejects unimplemented precision obligations and aliases.
 Provider version and simultaneous workspace/provider/host/cache ceilings must be
 explicit. Ready means preparation eligibility; algorithm selection, exact queried
@@ -111,8 +114,17 @@ custom/inner/cluster configuration, version, target and exact queried workspace.
 Logical output audits preserve sticky errors and ignore row/batch padding.
 Capture is rejected. The opaque host and global heuristic-cache footprint still
 needs external qualification; cache capacity is reported without changing global
-policy. Standalone native qualification uses explicit test reservations. No
-production portfolio execution or measured default promotion is connected yet.
+policy. Native qualification uses explicit test reservations.
+`PreparedContractions` accepts cuBLASLt plans alongside generated, cuBLAS and
+cuTENSOR bindings. Enable this optional capability with
+`GENERATIVEQC_ENABLE_CUBLASLT=ON` on NVIDIA CUDA; it defaults to OFF. The build
+propagates the provider macro and link dependency together to internal consumers.
+All optional plans for a shape prepare transactionally, including cleanup across
+different providers. Admission charges the simultaneous per-plan reservations
+and descriptor/pointer tables. cuBLASLt provenance is available by shape/slot via
+`visit_matmul_provenance`, with the same context-generation checks as execution.
+No scientific region portfolio selects cuBLASLt by default yet; qualified
+resource profiles and complete endpoint evidence remain required.
 
 `tensor.lowering.TensorLoweringAdapter` projects existing TensorIR nodes for CPU
 or CUDA consumers. It resolves program-wide precision and node hashes once per
@@ -254,6 +266,15 @@ its resource assumptions or claiming a speedup. Validation/benchmark adapters us
 the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
 rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
+
+Streamed DF MO source response offers cuBLASLt alongside cuBLAS, cuTENSOR and
+generated execution for the same compiler region. `PreparedContractionRegion`
+reserves all eight simultaneous plans before source callbacks and reuses their
+cached algorithms for every row. Reservations are provider-specific; a partial
+optional preparation failure drains provisional plans before selecting the
+same-precision generated fallback. Diagnostics report the actual provider,
+version, preparation time, work and resource counts. No production cuBLASLt
+resource profile is installed, so ordinary selection retains the incumbent.
 
 The native cuTENSOR executor fixes the GETT family and kernel rank zero at
 preparation, with JIT, cache and incremental autotuning disabled. Unsupported

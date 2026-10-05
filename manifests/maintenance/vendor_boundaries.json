@@ -410,6 +410,7 @@
         "cublasDgemm": 1,
         "cublasDgemmStridedBatched": 1,
         "cublasGetVersion": 1,
+        "cublasLtGetVersion": 1,
         "cublasSetMathMode": 1,
         "cublasSetPointerMode": 1,
         "cublasSetStream": 1,

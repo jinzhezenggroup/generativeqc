@@ -12,6 +12,27 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 
+# Historical, current, and pending five-offer catalogs share the same prefix.
+# Pin identities so accepting further rejected offers cannot admit arbitrary
+# providers or relabel the historical measurements as a different program.
+PROVIDERS = ("cublas", "generated.cuda", "cutensor", "cublaslt", "cutlass-aot")
+OFFER_IDENTITIES = (
+    (
+        "2a0fd6bf4976be9afc848fea6eef8d04ca0e861245645403c83a3ddbc4b1d5f2",
+        "db2668397f341cbd3c818f7c00d94b0ab79665b6702a4f542661f30b71d575da",
+        "319ac640bb643d612dbf8da7ead024277cb2989395f108e864a5e22a4efe389e",
+        "00dff5462534cb1a8b434bd927d8143e0feb0a496273e6e357fd62cb57422bac",
+        "ff53e1fd39838e003a268984b0bcb1c858b9b1eeef30b0e836bf52f03365b78d",
+    ),
+    (
+        "f6313629029b73fadfcf61d7ad65f62136490adff1373871f0dcbcb013a50871",
+        "231c45ec6392ee44f3253292e115ef320e6d63afc76f1c56c79aa36999d6610b",
+        "3b563fbe632ffaa540a238d3c3e829f2dafbc7aa4c98d53d87ffc3a53b2013d5",
+        "9056f036ca8a3bc2c405e11f0e1d8c7d5f5ce4160f05359a99d380bd2d927887",
+        "60f1ad777b0005edf568ce034691f964d00ff2d77941cacfcba176b40af6322a",
+    ),
+)
+
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -65,9 +86,16 @@ def main() -> None:
                 (extent, n, n) if slot % 2 == 0 else (n, n, extent)
             )
             assert site["provider"] == ("cublas" if mask & (1 << (slot % 2)) else "generated.cuda")
-            assert len(site["offers"]) == 3
-            assert site["offers"][site["selected"]]["identity"] == site["candidate"]
-            assert site["offers"][2]["rejection"]
+            offers = site["offers"]
+            assert len(offers) in (3, 4, 5)
+            assert tuple(o["provider"] for o in offers) == PROVIDERS[:len(offers)]
+            assert tuple(o["identity"] for o in offers) == OFFER_IDENTITIES[slot % 2][:len(offers)]
+            selected = 0 if mask & (1 << (slot % 2)) else 1
+            assert site["selected"] == selected
+            assert offers[selected]["identity"] == site["candidate"]
+            assert not offers[selected]["rejection"] and not offers[1]["rejection"]
+            assert bool(offers[0]["rejection"]) == bool(selected)
+            assert all(o["rejection"] for o in offers[2:])
             for identity in ("candidate", "scientific", "semantic", "precision"):
                 assert len(site[identity]) == 64 and int(site[identity], 16) >= 0
     summary = []
