@@ -59,3 +59,28 @@ reference gates, final-source CUDA/owner and sanitizer checks, and resource/work
 verification are still pending. A full tuned current-source native build is in
 progress; the generic-library rejection in the earlier square-product experiment
 does not count as an endpoint measurement.
+
+## Final-source composed qualification (Slurm5928)
+
+The final phase sources in PR #1950 (`ef91a6617`) are byte-identical to the
+composed candidate `e92cf75b0`, measured against order-five control `8f90f0ac3`.
+The full stack retains #1830/#1833/#1847/indexed policy. All 288 independent
+E/F pairings pass (max E 1.06411e-10, max F 2.72972e-11). Final-source device
+coverage comprises 21 emitted CUDA tests, 24 shared-owner cases and all four
+sanitisers with zero errors/hazards; 28 iteration-specialization skips remain
+explicit. Host Becke/resource gates pass 79 + 17 cases.
+
+96-atom complete warm improves 25.672614→25.182758 s (1.91%); moved-warm
+25.750174→25.199025 s (2.14%). Grid response improves about 0.49 s.
+48-atom grid response improves only 0.067–0.068 s; the substantially larger
+48-atom endpoint median gaps include noise outside this treatment. Do not claim
+those full gaps or the isolated 12.3% as its stable endpoint benefit.
+Cold/moved trajectories and slight 48-atom regressions remain in the evidence.
+No iteration normalization, standalone-master timing or automatic profile
+promotion is inferred. The ten-second/#1895 target remains open.
+
+`benchmarks/results/pbe0-order5-pair-logs-20261005/` retains full raw samples,
+reconstructable source, binary and scheduler receipts, work counts, actual
+histories and an inventory-aware verifier. This completes the scoped
+composition/device gates listed above; separate default-selection decisions
+still belong to #1834.
