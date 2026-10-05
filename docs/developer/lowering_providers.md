@@ -142,16 +142,37 @@ The owner requires a build artifact digest, exact host capacity and an externall
 qualified reservation for context-retained module storage. It resolves lazy
 kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
-release does not zero this charge. This native slice has no production profile
-or registry selection yet. The enclosing context/build owner must retain the
-reservation after a local binding is destroyed. Loading failures preserve the
-known charge and permanently poison that binding's admission, including warm
-retries. Observed growth accumulates across released plans and different kernels
-within the reserved envelope. A binding with a retained charge cannot change
-device or artifact. Fixed-family admission also bounds CUTLASS's signed-integer rounded dimensions
-before constructing its parameters. The opt-in `test_native_cutlass_binding.py`
-probe uses an external CUTLASS 3.9.2 include tree and hashes its contents, owned source,
-toolchain and flags into the actual validation artifact.
+release does not zero this charge. This native slice has no production profile.
+The enclosing context/build owner must retain the reservation after a local
+binding is destroyed. Loading failures preserve the known charge and permanently
+poison that binding's admission, including warm retries. Observed growth
+accumulates across released plans and different kernels within the reserved
+envelope. A binding with a retained charge cannot change device or artifact.
+Fixed-family admission also bounds CUTLASS's signed-integer rounded dimensions
+before constructing its parameters.
+
+`tensor.cuda_cutlass.CutlassAotProvider` registers the same canonical request with
+explicit compiled-family/version/artifact and host/module qualification facts.
+The common registry charges module bytes as retained cache storage and enforces
+precision, resource, determinism and capture obligations. Missing facts retain
+unsupported evidence; unknown costs cannot promote a default. Registry offers
+are preparation eligibility, not a loader or region integration.
+Native CMake builds can enable the optional header dependency with
+`GENERATIVEQC_ENABLE_CUTLASS=ON` and
+`GENERATIVEQC_CUTLASS_ROOT=/path/to/cutlass-3.9.2`. The option defaults to OFF;
+ordinary builds do not search for or fetch CUTLASS. The shared interface target
+propagates the same SDK and capability macro to the library and native consumers.
+Only NVIDIA CUDA and the qualified 3.9.2 headers are admitted. Wheel artifact
+packaging is not implemented. This build capability does not select a region
+provider or supply resource qualification.
+
+The opt-in `test_native_cutlass_binding.py` probe builds through that CMake
+interface. It hashes external headers, owned sources, toolchain, effective
+generated compilation commands and linked executable bytes into its validation
+artifact, then passes the digest to the native executor. Run it inside a finite
+Slurm GPU allocation with `GENERATIVEQC_CUTLASS_CUDA_TEST=1` and the SDK root
+above; CMake, Ninja, nvcc and ccache must be available. Its module reservation
+is a test bound, not a production resource profile.
 
 `tensor.matrix_view` and `src/tensor/native_matrix_view.hpp` prove the direct
 matrix address mapping of an existing affine contraction. Providers share this
