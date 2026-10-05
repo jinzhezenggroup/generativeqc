@@ -403,20 +403,31 @@ def emit_order4_weighted_header() -> str:
     coefficient, or queue policy belongs in this compiler boundary. The caller
     supplies Boys moments and recovers the fourth center by translation.
     """
+    return _emit_weighted_force_classes(
+        ((1, 1, 1, 1), (2, 0, 1, 1), (2, 0, 2, 0), (2, 1, 1, 0), (2, 2, 0, 0))
+    )
+
+
+def emit_order5_weighted_header() -> str:
+    """Contract the complete s/p/d order-five cotangent before differentiation.
+
+    All three classes exceed the bounded 64-component scalar lowering domain.
+    Additive partitions retain global component weights and the same shared
+    scientific IR; no new recurrence or physical screening is introduced.
+    """
+    return _emit_weighted_force_classes(((2, 1, 1, 1), (2, 1, 2, 0), (2, 2, 1, 0)))
+
+
+def _emit_weighted_force_classes(classes: tuple[tuple[int, int, int, int], ...]) -> str:
+    """Emit complete force contractions from bounded component partitions."""
     functions = []
-    for angular in (
-        (1, 1, 1, 1),
-        (2, 0, 1, 1),
-        (2, 0, 2, 0),
-        (2, 1, 1, 0),
-        (2, 2, 0, 0),
-    ):
+    for angular in classes:
         integral = build_weighted_eri_ir(angular)
         count = prod(integral.signature.component_shape)
         name = "".join("spdf"[value] for value in angular) + "_force"
         parts = []
-        # Keep the existing 64-component lowering bound. PPPP's 81 entries
-        # require two additive roots, with complete global weight indexing.
+        # Keep the existing 64-component lowering bound. Every partition
+        # retains global weight indexing; their sum covers the full class.
         for begin in range(0, count, 64):
             kernel = build_weighted_eri_kernel(
                 integral, tuple(range(begin, min(begin + 64, count)))
