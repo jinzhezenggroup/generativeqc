@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -16,6 +17,7 @@
 #include "api/handles.hpp"
 #include "api/ks_snapshot.hpp"
 #include "dft/cuda_ks.hpp"
+#include "dft/cuda_xc.hpp"
 #include "dft/xc.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "methods/dft_method.hpp"
@@ -29,6 +31,7 @@ extern "C" void xc_cuda_fail_next_nonlocal_runtime_for_test_v1();
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
 
 extern "C" void ks_cuda_fail_next_runtime_for_test_v1();
+extern "C" void xc_density_provider_for_test(bool library, bool unavailable);
 
 namespace {
 using namespace generativeqc;
@@ -1960,12 +1963,18 @@ void rejected_api_requests_revoke_tokens() {
               "rejected C batch request retained a previous token");
   }
 }
+#include "ks_density_provider_cases.hpp"
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--density-provider") {
+      ks_density_provider_cases();
+      return 0;
+    }
+    ks_density_provider_cases();
     prepared_cuda_fock_seam();
     registered_functional_code_seam();
     for (const auto* ao_selection : std::array<const char*, 3>{nullptr, "0", "1"}) {

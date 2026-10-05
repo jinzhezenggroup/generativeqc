@@ -378,10 +378,14 @@ void CudaXcPlan::prepare_potential(std::size_t provider_budget) {
 }
 
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
-                                 std::uint64_t expected_replays) {
+                                 std::uint64_t expected_replays, std::size_t provider_budget) {
   check_device();
   if (evaluation_started_)
     throw std::invalid_argument("density binding is immutable after first evaluation");
+  cudaStreamCaptureStatus capture{};
+  check(cudaStreamIsCapturing(stream_, &capture));
+  if (capture != cudaStreamCaptureStatusNone)
+    throw std::invalid_argument("density preparation cannot capture");
   if (!admitted.is_strict_fp64() &&
       !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
     throw std::invalid_argument("mixed density contraction is not qualified for this domain");
@@ -403,11 +407,36 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   }
   if (layout_.local_ao && local_density_launchers_.empty())
     local_density_launchers_ = local_density_launchers(layout_, ao_offsets_);
+  // Optional resources are prepared transactionally. The generated tables
+  // remain available for mixed arithmetic, signed response and local maps.
+  auto provider = provider_budget
+                      ? cuda_xc_detail::prepare_density_provider(layout_, stream_, provider_budget)
+                      : nullptr;
+  std::unique_ptr<CudaXcDensityBinding> provider_binding;
+  if (provider && provider->enabled()) {
+    provider_binding = std::make_unique<CudaXcDensityBinding>(strict[0]);
+    provider_binding->candidate = provider->diagnostic().candidate;
+  }
   strict_density_ = strict;
   admitted_density_ = selected;
+  provider_density_binding_ = std::move(provider_binding);
+  density_provider_ = std::move(provider);
+}
+
+const tensor::PreparedPanelProduct* CudaXcPlan::density_execution_provider(
+    PrecisionPhase phase) const {
+  if (phase != PrecisionPhase::StrictAudit && phase != PrecisionPhase::Admitted)
+    throw std::invalid_argument("unknown execution precision phase");
+  const auto& binding =
+      phase == PrecisionPhase::Admitted ? admitted_density_[0] : strict_density_[0];
+  return density_provider_ && density_provider_->enabled() && !layout_.local_ao &&
+                 !layout_.response && binding.precision.arithmetic.is_strict_fp64()
+             ? density_provider_.get()
+             : nullptr;
 }
 
 const CudaXcDensityBinding& CudaXcPlan::density_binding(PrecisionPhase phase) const {
+  if (density_execution_provider(phase)) return *provider_density_binding_;
   if (phase == PrecisionPhase::Admitted) return admitted_density_[0];
   if (phase == PrecisionPhase::StrictAudit) return strict_density_[0];
   throw std::invalid_argument("unknown execution precision phase");
@@ -710,12 +739,12 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     fail_next_xc_status = cudaSuccess;
     generativeqc_tensor::cuda_check(injected);
 #endif
-    cuda_xc_detail::enqueue(layout_, point_launcher_, stream_, basis_, points_, weights_, density,
-                            ao_, work_, features_, coefficients_, point_totals_, potential_,
-                            totals_, error_,
-                            phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
-                            local_density_launchers_, direction, delta_features_, total_density,
-                            total_gradient, ao_offsets_, ao_ids_, potential_binding_.get());
+    cuda_xc_detail::enqueue(
+        layout_, point_launcher_, stream_, basis_, points_, weights_, density, ao_, work_,
+        features_, coefficients_, point_totals_, potential_, totals_, error_,
+        phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
+        local_density_launchers_, direction, delta_features_, total_density, total_gradient,
+        ao_offsets_, ao_ids_, density_execution_provider(phase), potential_binding_.get());
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     // The generated executor has a separate exception vocabulary. Translate at
     // this native owner boundary so both single-point and batch APIs preserve it.

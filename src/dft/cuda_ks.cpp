@@ -608,7 +608,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
 
   Impl(const scf::PreparedFockPlan& plan, const AoBasis& basis, const MolecularGrid& grid,
        const scf::ScfOptions& control, std::uint32_t functional, std::size_t tile,
-       const scf::ResolvedFockBuild* range, nlc::Vv10Plan* nonlocal, nlc::Vv10DensityDomain domain)
+       const scf::ResolvedFockBuild* range, nlc::Vv10Plan* nonlocal, nlc::Vv10DensityDomain domain,
+       CudaXcPreparationBudget xc_budget)
       : provider(plan),
         basis(basis),
         grid(grid),
@@ -858,8 +859,21 @@ struct CudaKsPlan::Impl : KsStateStorage {
         const auto admitted_precision = resolve_cuda_ks_iteration_precision(
             precision_schedule, false,
             cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
+        // Host and device reservations must both precede optional preparation.
+        // The lowering layer owns qualification and implementation selection.
+        const auto density_budget =
+            xc_budget.host_bytes >= tensor::PreparedPanelProduct::host_reservation
+                ? xc_budget.device_bytes
+                : 0;
         xc->prepare_density(*admitted_precision.find(cuda_ks_precision_region::kDensityContraction),
-                            options.max_iterations);
+                            options.max_iterations, density_budget);
+        if (const auto* prepared = xc->density_provider_diagnostic()) {
+          resource.xc_device_bytes = sum(resource.xc_device_bytes, prepared->matrix_bytes);
+          resource.provider_device_bytes =
+              sum(resource.provider_device_bytes, prepared->provider_allowance);
+          resource.retained_host_numeric_bytes =
+              sum(resource.retained_host_numeric_bytes, prepared->host_bytes);
+        }
         prepared_ao_work = xc->ao_selection_work();
         prepared_ao_work.requested = select_ao;
         if (!admit_ao) {
@@ -1988,17 +2002,20 @@ CudaKsPlan::CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis,
                        const MolecularGrid& grid, const scf::ScfOptions& options,
                        std::uint32_t functional_code, std::size_t tile_points,
                        const scf::ResolvedFockBuild* range_correction,
-                       nlc::Vv10Plan* nonlocal_correlation, nlc::Vv10DensityDomain nonlocal_domain)
+                       nlc::Vv10Plan* nonlocal_correlation, nlc::Vv10DensityDomain nonlocal_domain,
+                       CudaXcPreparationBudget xc_budget)
     : impl_(std::make_unique<Impl>(fock, basis, grid, options, functional_code, tile_points,
-                                   range_correction, nonlocal_correlation, nonlocal_domain)) {}
+                                   range_correction, nonlocal_correlation, nonlocal_domain,
+                                   xc_budget)) {}
 
 CudaKsPlan::CudaKsPlan(const scf::PreparedFockPlan& fock, const AoBasis& basis,
                        const MolecularGrid& grid, const scf::ScfOptions& options,
                        SemilocalFamily functional, std::size_t tile_points,
                        const scf::ResolvedFockBuild* range_correction,
-                       nlc::Vv10Plan* nonlocal_correlation, nlc::Vv10DensityDomain nonlocal_domain)
+                       nlc::Vv10Plan* nonlocal_correlation, nlc::Vv10DensityDomain nonlocal_domain,
+                       CudaXcPreparationBudget xc_budget)
     : CudaKsPlan(fock, basis, grid, options, semilocal_family_code(functional), tile_points,
-                 range_correction, nonlocal_correlation, nonlocal_domain) {}
+                 range_correction, nonlocal_correlation, nonlocal_domain, xc_budget) {}
 CudaKsPlan::~CudaKsPlan() = default;
 void CudaKsPlan::begin(const std::vector<double>* seed, bool reuse_warm) {
   impl_->begin(seed, reuse_warm);
@@ -2369,6 +2386,9 @@ generativeqc_status CudaKsPlan::read_final_state(const CudaKsFinalStateToken& ex
   }
 }
 const CudaKsResources& CudaKsPlan::resources() const noexcept { return impl_->resource; }
+const tensor::PanelProductDiagnostic* CudaKsPlan::density_provider_diagnostic() const noexcept {
+  return impl_->xc ? impl_->xc->density_provider_diagnostic() : nullptr;
+}
 CudaKsTransfers CudaKsPlan::transfers() const noexcept {
   auto out = impl_->movement;
   const auto& region = impl_->device_chunk_region.metrics();

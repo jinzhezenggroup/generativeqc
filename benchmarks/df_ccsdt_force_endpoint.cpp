@@ -35,14 +35,14 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 17)
+    if (argc < 4 || argc > 18)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
           "[ORBITAL_SCHWARZ "
           "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
           "[DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 "
-          "[Z_RECYCLE_REPEAT_0_OR_1]]]]]]]]]]]]]");
+          "[Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1]]]]]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -87,6 +87,7 @@ int main(int argc, char** argv) {
     generativeqc::hf::RHFFrameResponseRecycle recycling;
     const bool recycle_repeat = argc > 16 && selector(16);
     if (recycle_repeat) frame_options.recycling = &recycling;
+    const bool packed_diis = argc > 17 && selector(17);
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -125,7 +126,7 @@ int main(int argc, char** argv) {
     for (int repetition = 0; repetition < (recycle_repeat ? 2 : 1); ++repetition) {
       const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
           execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
-          batch_limit, ccsd_batch_limit, frame_options, derived_denominators);
+          batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis);
       std::ofstream output(std::string(argv[2]) + (repetition ? ".warm.json" : ""));
       if (!output) throw std::runtime_error("cannot open completed force output");
       output << std::setprecision(17) << "{\n";
@@ -183,6 +184,15 @@ int main(int argc, char** argv) {
       field("ccsd_diis_history", diis_history);
       work_field("ccsd_diis_seconds", result.solver.diis_seconds);
       work_field("ccsd_diis_restarts", result.solver.diis_restarts);
+      field("ccsd_packed_diis", result.solver.packed_diis ? 1 : 0);
+      field("ccsd_packed_diis_refused", result.solver.packed_diis_refused ? 1 : 0);
+      field("ccsd_diis_disabled_after_packing_refusal",
+            result.solver.diis_disabled_after_packing_refusal ? 1 : 0);
+      work_field("ccsd_diis_history_capacity_bytes", result.solver.diis_history_capacity_bytes);
+      work_field("ccsd_diis_conversion_bytes", result.solver.diis_conversion_bytes);
+      work_field("ccsd_diis_metric_weight_terms", result.solver.diis_metric_weight_terms);
+      work_field("ccsd_diis_pack_calls", result.solver.diis_pack_calls);
+      field("ccsd_diis_maximum_pair_asymmetry", result.solver.diis_maximum_pair_asymmetry);
       work_field("ccsd_diis_gram_calls", result.solver.diis_gram_calls);
       work_field("ccsd_diis_coefficient_calls", result.solver.diis_coefficient_calls);
       work_field("ccsd_diis_combine_calls", result.solver.diis_combine_calls);
