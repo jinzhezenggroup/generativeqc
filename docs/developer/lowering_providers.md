@@ -90,6 +90,14 @@ qualified reservation for context-retained module storage. It resolves lazy
 kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
 release does not zero this charge. This native slice has no production profile.
+The enclosing context/build owner must retain the reservation after a local
+binding is destroyed. Loading failures preserve the known charge and permanently
+poison that binding's admission, including warm retries. Observed growth
+accumulates across released plans and different kernels within the reserved
+envelope. A binding with a retained charge cannot change device or artifact.
+Fixed-family admission also bounds CUTLASS's signed-integer rounded dimensions
+before constructing its parameters.
+
 `tensor.cuda_cutlass.CutlassAotProvider` registers the same canonical request with
 explicit compiled-family/version/artifact and host/module qualification facts.
 The common registry charges module bytes as retained cache storage and enforces
