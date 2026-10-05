@@ -1,11 +1,12 @@
 # DF-CCSD(T) analytic-gradient composition
 
-The native internal components target the correlation-only DF Hamiltonian:
-conventional all-electron RHF supplies the reference Fock/orbitals, while the
-correlation two-electron interaction is density fitted. The internal
-`methods::detail::run_df_ccsdt_native` composes a complete energy/force endpoint.
-Small-molecule force qualification is available; public registration and
-hundreds-AO qualification remain separate.
+The native components target the correlation-only DF Hamiltonian: conventional
+all-electron RHF supplies the reference Fock/orbitals, while the correlation
+two-electron interaction is density fitted. The
+`methods::detail::run_df_ccsdt_native` owner composes the complete energy/force
+endpoint and is also the public `df-rccsd(t)` / `df-ccsd(t)` Calculator force
+owner. Public force publication adds no alternate response equations or
+scientific fallback.
 
 ## Correlation response
 
@@ -155,11 +156,14 @@ duplicate-auxiliary metrics, translation and failure publication. PySCF and its
 tiny dense ERIs are test oracles only. Set `GENERATIVEQC_DF_COMPLETE_FORCE_TEST=1`
 and `GENERATIVEQC_DF_COMPLETE_FORCE_PROBE` for the native validation seam.
 
-Cold hundreds-AO force timings, independent force gates and complete work/traffic
-qualification are still required before broad promotion. The pre-existing
-strict large-factor gates (`atol=rtol=3e-10`) are not qualified by small-molecule
-force agreement and must not be relaxed. See the
-[composition decision](../../.agents/notes/implemented/architecture/2026-10-04-complete-native-df-ccsdt-forces.md).
+Hundreds-AO complete-force qualification is retained separately from the public
+wrapper: the 230-AO / 488-auxiliary ethane endpoint has completed on merged
+production sources with bounded-memory, response-residual, stationarity and
+independent finite-difference checks. Later response optimizations may change
+wall time but not the public Hamiltonian or force acceptance contract. See the
+[composition decision](../../.agents/notes/implemented/architecture/2026-10-04-complete-native-df-ccsdt-forces.md)
+and the retained `rhf-response-accelerators-1901` / `cc-packed-diis-1902`
+evidence.
 
 ## Native benchmark controls
 
