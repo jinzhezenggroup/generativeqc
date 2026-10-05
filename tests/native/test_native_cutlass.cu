@@ -1,12 +1,10 @@
 #include <iostream>
 #include <vector>
 
-#include "tensor/cuda_contraction.cuh"
-#include "tensor/cuda_cublaslt.cuh"
-
+#include "tensor/cuda_cutlass.cuh"
 using namespace generativeqc::tensor;
 using generativeqc_tensor::cuda_check;
-
+static std::string_view artifact;
 template <class F>
 void rejects(F call) {
   try {
@@ -14,19 +12,8 @@ void rejects(F call) {
   } catch (const std::exception&) {
     return;
   }
-  throw std::runtime_error("invalid cuBLASLt binding was accepted");
+  throw std::runtime_error("invalid CUTLASS binding accepted");
 }
-
-template <class F>
-void unavailable(F call) {
-  try {
-    call();
-  } catch (const ContractionPreparationUnavailable&) {
-    return;
-  }
-  throw std::runtime_error("optional rejection was not preserved");
-}
-
 // Independent mode addressing: do not reuse the provider's matrix recognition.
 std::size_t offset(const ContractionOperand& view, std::size_t batch, std::size_t m, std::size_t n,
                    std::size_t k) {
@@ -106,10 +93,12 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
   for (std::size_t batch = 0; batch < batches; ++batch) {
     for (std::size_t i = 0; i < m; ++i)
       for (std::size_t p = 0; p < k; ++p)
-        a[offset(request.operands[0], batch, i, 0, p)] = T(int(3 * batch + i * k + p) - 7) / 16;
+        a[offset(request.operands[0], batch, i, 0, p)] =
+            T(int((3 * batch + i * k + p) % 17) - 8) / 16;
     for (std::size_t p = 0; p < k; ++p)
       for (std::size_t j = 0; j < n; ++j)
-        b[offset(request.operands[1], batch, 0, j, p)] = T(int(5 * batch + p * n + j) - 11) / 32;
+        b[offset(request.operands[1], batch, 0, j, p)] =
+            T(int((5 * batch + p * n + j) % 13) - 6) / 32;
     for (std::size_t i = 0; i < m; ++i)
       for (std::size_t j = 0; j < n; ++j) {
         double sum = 0;
@@ -124,99 +113,34 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
   cudaStream_t stream{};
   cuda_check(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
   {
-    CudaCublasLtContraction binding;
+    CudaCutlassContraction binding;
     rejects([&] { (void)binding.provenance(); });
-    if (binding.prepare(request, stream, 0, 0, 0) || binding.heuristic_calls())
-      throw std::runtime_error("unreserved binding performed preparation");
-    // Explicit test ceilings, not a production resource qualification. Cache
-    // capacity and first-execution growth still need broader endpoint evidence.
-    if (!binding.prepare(request, stream, 64ULL << 20, 256ULL << 20, 64ULL << 20))
-      throw std::runtime_error(std::string(binding.rejection()));
+    rejects([&] { binding.prepare(request, stream, "unverified", 1 << 20, 256ULL << 20); });
+    if (binding.prepare(request, stream, artifact, 0, 256ULL << 20) ||
+        binding.prepare(request, stream, artifact, 1 << 20, 0) || binding.preparations())
+      throw std::runtime_error("unreserved CUTLASS preparation");
+    if (!binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20))
+      throw std::runtime_error("CUTLASS preparation unavailable");
+    const auto host = binding.host_bytes();
     const auto provenance = binding.provenance();
-    CudaContractionContext context;
-    context.prepare_generated(stream);
-    PreparedContractions shared;
-    std::size_t calls{}, summands{};
-    const ContractionProviderReservation reservation{64ULL << 20, 256ULL << 20, 64ULL << 20};
-#if GENERATIVEQC_HAS_CUBLASLT
-#if defined(GENERATIVEQC_TEST_HOOKS)
-    // Reject after one provisional plan. No failed variant or resources may be
-    // published, and retrying the same shape must remain legal.
-    cublaslt_preparations_before_rejection_for_test = 1;
-    unavailable([&] {
-      shared.add(m, n, k, {request, request}, context, calls, summands,
-                 {ContractionAlgorithm::CublasLtMatmul, ContractionAlgorithm::CublasLtMatmul},
-                 reservation);
-    });
-    cublaslt_preparations_before_rejection_for_test = -1;
-#if GENERATIVEQC_HAS_CUTENSOR
-    cublaslt_preparations_before_rejection_for_test = 0;
-    unavailable([&] {
-      shared.add(m, n, k, {request, request}, context, calls, summands,
-                 {ContractionAlgorithm::CutensorAffine, ContractionAlgorithm::CublasLtMatmul},
-                 reservation);
-    });
-    cublaslt_preparations_before_rejection_for_test = -1;
-#endif
-    if (shared || shared.optional_resources().total_bytes(1))
-      throw std::runtime_error("failed preparation retained a published variant");
-#endif
-    shared.add(m, n, k, {request}, context, calls, summands, {ContractionAlgorithm::CublasLtMatmul},
-               reservation);
-    const auto resources = shared.optional_resources();
-    if (resources.total_bytes(1) > reservation.total_bytes(1) ||
-        resources.host_bytes != reservation.host_bytes)
-      throw std::runtime_error("shared cuBLASLt reservation accounting");
-    std::size_t visited{};
-    shared.visit_matmul_provenance([&](auto o, auto v, auto q, auto slot, const auto& facts) {
-      ++visited;
-      if (o != m || v != n || q != k || slot != 0 || facts.algorithm != provenance.algorithm)
-        throw std::runtime_error("shared cuBLASLt lost algorithm provenance");
-    });
-    if (visited != 1) throw std::runtime_error("shared cuBLASLt omitted a plan");
-#else
-    unavailable([&] {
-      shared.add(m, n, k, {request}, context, calls, summands,
-                 {ContractionAlgorithm::CublasLtMatmul}, reservation);
-    });
-#endif
-    int device{}, major{}, minor{};
-    cuda_check(cudaGetDevice(&device));
-    cuda_check(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device));
-    cuda_check(cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device));
-    if (provenance.provider_version != cublasLtGetVersion() ||
-        provenance.architecture != 10 * major + minor || !provenance.runtime_version ||
-        provenance.workspace_bytes > (64ULL << 20) || binding.heuristic_calls() != 1 ||
-        provenance.request.operands[2].strides != request.operands[2].strides)
-      throw std::runtime_error("cuBLASLt prepared provenance changed");
+    if (std::string_view(provenance.artifact_identity.data(), 64) != artifact ||
+        provenance.version != CUTLASS_VERSION || provenance.tile != std::array<int, 3>{32, 64, 8} ||
+        !provenance.architecture)
+      throw std::runtime_error("incomplete CUTLASS provenance");
     T *ra{}, *rb{}, *rc{};
     int* error{};
     cuda_check(cudaMalloc(reinterpret_cast<void**>(&ra), (a.size() + 1) * sizeof(T)));
     cuda_check(cudaMalloc(reinterpret_cast<void**>(&rb), (b.size() + 1) * sizeof(T)));
     cuda_check(cudaMalloc(reinterpret_cast<void**>(&rc), (initial.size() + 1) * sizeof(T)));
     cuda_check(cudaMalloc(reinterpret_cast<void**>(&error), sizeof(int)));
-    // Actual pointers deliberately provide only the advertised scalar alignment.
     auto *da = ra + 1, *db = rb + 1, *dc = rc + 1;
     cuda_check(cudaMemcpyAsync(da, a.data(), a.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
     cuda_check(cudaMemcpyAsync(db, b.data(), b.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
-    const int replays =
-#if GENERATIVEQC_HAS_CUBLASLT
-        6;
-#else
-        3;
-#endif
-    for (int replay = 0; replay < replays; ++replay) {
+    for (std::size_t replay = 0; replay < 3; ++replay) {
       cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
       cuda_check(cudaMemcpyAsync(dc, initial.data(), initial.size() * sizeof(T),
                                  cudaMemcpyHostToDevice, stream));
-#if GENERATIVEQC_HAS_CUBLASLT
-      if (replay >= 3) {
-        shared.execute(0, m, n, k, stream, da, db, dc, error);
-        if (calls != std::size_t(replay - 2) || summands != calls * request.affine_summands())
-          throw std::runtime_error("shared cuBLASLt lost semantic work counts");
-      } else
-#endif
-        binding.execute(stream, da, db, dc, error);
+      binding.execute(stream, da, db, dc, error);
       cuda_check(cudaMemcpyAsync(actual.data(), dc, actual.size() * sizeof(T),
                                  cudaMemcpyDeviceToHost, stream));
       int failed{};
@@ -224,22 +148,19 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
       cuda_check(cudaStreamSynchronize(stream));
       for (std::size_t i = 0; i < actual.size(); ++i)
         if (std::isnan(expected[i]) ? !std::isnan(actual[i]) : actual[i] != expected[i])
-          throw std::runtime_error("cuBLASLt differs from independent affine oracle");
-      if (failed || binding.heuristic_calls() != 1 ||
-          binding.calls() != std::size_t(std::min(replay + 1, 3)) ||
-          binding.provenance().algorithm != provenance.algorithm ||
-          binding.provenance().workspace_bytes != provenance.workspace_bytes)
-        throw std::runtime_error("cuBLASLt replay changed its prepared algorithm");
+          throw std::runtime_error("CUTLASS differs from independent semantic oracle");
+      if (failed || binding.calls() != replay + 1 || binding.preparations() != 1 ||
+          binding.summands() != (replay + 1) * request.affine_summands())
+        throw std::runtime_error("CUTLASS repeated work accounting");
     }
     rejects([&] { binding.execute(stream, da, db, da, error); });
     rejects([&] { binding.execute(nullptr, da, db, dc, error); });
-    rejects([&] { binding.prepare(request, stream, 0, 0, 0); });
+    rejects([&] { binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20); });
     cuda_check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
     rejects([&] { binding.execute(stream, da, db, dc, error); });
     cudaGraph_t graph{};
     cuda_check(cudaStreamEndCapture(stream, &graph));
     cuda_check(cudaGraphDestroy(graph));
-    // A later finite replay cannot clear an earlier arithmetic failure.
     cuda_check(cudaMemcpyAsync(da, &nan, sizeof(T), cudaMemcpyHostToDevice, stream));
     binding.execute(stream, da, db, dc, error);
     cuda_check(cudaMemcpyAsync(da, a.data(), a.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
@@ -249,47 +170,61 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     int failed{};
     cuda_check(cudaMemcpyAsync(&failed, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaStreamSynchronize(stream));
-    if (!failed) throw std::runtime_error("cuBLASLt lost a sticky finite error");
-    context.reset();
-#if GENERATIVEQC_HAS_CUBLASLT
-    rejects([&] { shared.execute(0, m, n, k, stream, da, db, dc, error); });
-    rejects([&] { shared.visit_matmul_provenance([](auto...) {}); });
-#endif
-    shared.release();
-    if (shared || shared.optional_resources().total_bytes(1))
-      throw std::runtime_error("shared cuBLASLt release retained resources");
+    if (!failed) throw std::runtime_error("CUTLASS lost sticky finite error");
     binding.release();
-    if (binding.workspace_bytes() || binding.provider_bytes() || binding.host_bytes())
-      throw std::runtime_error("cuBLASLt release retained resources");
     rejects([&] { binding.execute(stream, da, db, dc, error); });
-    rejects([&] { (void)binding.provenance(); });
+    // The CUDA context retains loaded code even after the local plan is gone.
+    if (binding.module_bytes() != (256ULL << 20) || binding.host_bytes() >= host)
+      throw std::runtime_error("CUTLASS lifetime accounting");
+    if (binding.prepare(request, stream, artifact, host, 1))
+      throw std::runtime_error("CUTLASS forgot retained module reservation");
+    if (binding.prepare(request, stream, artifact, host - 1, 256ULL << 20))
+      throw std::runtime_error("CUTLASS admitted one byte below exact host floor");
+    if (!binding.prepare(request, stream, artifact, host, 256ULL << 20))
+      throw std::runtime_error("CUTLASS rejected exact host floor");
+    binding.release();
+    // nullptr is a valid default stream, including its checked live release.
+    if (!binding.prepare(request, nullptr, artifact, host, 256ULL << 20))
+      throw std::runtime_error("CUTLASS rejected default stream");
+    cuda_check(cudaMemset(error, 0, sizeof(int)));
+    cuda_check(cudaMemcpy(dc, initial.data(), initial.size() * sizeof(T), cudaMemcpyHostToDevice));
+    binding.execute(nullptr, da, db, dc, error);
+    binding.release();
+    cuda_check(cudaMemcpy(actual.data(), dc, actual.size() * sizeof(T), cudaMemcpyDeviceToHost));
+    for (std::size_t i = 0; i < actual.size(); ++i)
+      if (std::isnan(expected[i]) ? !std::isnan(actual[i]) : actual[i] != expected[i])
+        throw std::runtime_error("CUTLASS default-stream publication differs");
+    cuda_check(cudaFree(error));
     cuda_check(cudaFree(ra));
     cuda_check(cudaFree(rb));
     cuda_check(cudaFree(rc));
-    cuda_check(cudaFree(error));
   }
   cuda_check(cudaStreamDestroy(stream));
 }
-
-int main() {
+int main(int argc, char** argv) {
   try {
-    for (unsigned transpose = 0; transpose < 8; ++transpose)
-      for (auto batches : {1U, 2U})
-        for (const auto dims : {std::array<std::size_t, 3>{3, 5, 7}, {1, 3, 1}, {1, 1, 1}})
-          for (auto beta : {0.0, 0.5}) {
-            check<double>(transpose, batches, dims[0], dims[1], dims[2], beta);
-            check<float>(transpose, batches, dims[0], dims[1], dims[2], beta);
+    if (argc != 2) throw std::invalid_argument("expected build artifact identity");
+    artifact = argv[1];
+    int count = 0;
+    for (unsigned order = 0; order < 8; ++order)
+      for (auto batches : {1u, 2u})
+        for (double beta : {0.0, 0.5})
+          for (bool grouped : {false, true}) {
+            check<float>(order, batches, 5, 7, 11, beta, grouped);
+            check<double>(order, batches, 5, 7, 11, beta, grouped);
+            count += 2;
           }
-    for (unsigned transpose = 0; transpose < 8; ++transpose)
-      for (auto batches : {1U, 4U})
-        for (const auto dims : {std::array<std::size_t, 3>{6, 10, 14}, {1, 3, 1}})
-          for (auto beta : {0.0, 0.5}) {
-            check<double>(transpose, batches, dims[0], dims[1], dims[2], beta, true);
-            check<float>(transpose, batches, dims[0], dims[1], dims[2], beta, true);
-          }
-    std::cout << "320 cuBLASLt layout/precision/beta cases passed\n";
-  } catch (const std::exception& error) {
-    std::cerr << error.what() << '\n';
+    for (unsigned order = 0; order < 8; ++order) {
+      check<float>(order, 1, 1, 1, 1, 0);
+      check<double>(order, 1, 1, 1, 1, 0);
+      check<float>(order, 2, 36, 66, 18, 0.5, true);
+      check<double>(order, 2, 36, 66, 18, 0.5, true);
+      count += 4;
+    }
+    std::cout << "CUTLASS " << CUTLASS_VERSION << ": " << count
+              << " independent layout/precision/beta cases passed\n";
+  } catch (const std::exception& e) {
+    std::cerr << e.what() << '\n';
     return 1;
   }
 }

@@ -103,6 +103,35 @@ and decisions remain preparation metadata; they do not resolve executable owners
 
 ## Current integration
 
+`src/tensor/cuda_cutlass.cuh` provides an optional native CUTLASS AOT SIMT owner
+for the same canonical affine contractions. It uses the shared matrix view proof,
+homogeneous FP32/FP64 arithmetic, a fixed scalar-aligned tile family and the
+canonical alpha/beta epilogue. Preparation initializes kernel parameters once;
+replay only replaces borrowed addresses and submits the retained specialization.
+It supports padded/batched row/column views without separate packing or scatter,
+and audits only logical output elements. Capture remains explicitly unsupported.
+
+The owner requires a build artifact digest, exact host capacity and an externally
+qualified reservation for context-retained module storage. It resolves lazy
+kernel loading during preparation. Module growth beyond that reservation is a
+hard failure: CUDA can retain loaded modules after local plan destruction, so
+release does not zero this charge. This native slice has no production profile
+or registry selection yet. The enclosing context/build owner must retain the
+reservation after a local binding is destroyed. Loading failures preserve the
+known charge and permanently poison that binding's admission, including warm
+retries. Observed growth accumulates across released plans and different kernels
+within the reserved envelope. A binding with a retained charge cannot change
+device or artifact. Fixed-family admission also bounds CUTLASS's signed-integer rounded dimensions
+before constructing its parameters. The opt-in `test_native_cutlass_binding.py`
+probe uses an external CUTLASS 3.9.2 include tree and hashes its contents, owned source,
+toolchain and flags into the actual validation artifact.
+
+`tensor.matrix_view` and `src/tensor/native_matrix_view.hpp` prove the direct
+matrix address mapping of an existing affine contraction. Providers share this
+mode-group/stride proof and retain their own precision, toolkit and resource
+admission. A matrix recipe does not define another scientific operation or imply
+that a particular library/kernel can execute it.
+
 `tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
 matrix contractions, using the same canonical planned request as existing
 cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and

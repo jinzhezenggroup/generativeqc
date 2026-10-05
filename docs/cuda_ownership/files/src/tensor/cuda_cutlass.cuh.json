@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_cutlass.cuh",
+  "reason": "Optional fixed CUTLASS AOT SIMT execution of compiler-owned canonical contractions. Owns prepared kernel parameters and logical finite audits; reuses the shared affine matrix proof without introducing method policy or precision admission.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
