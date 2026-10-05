@@ -1,5 +1,5 @@
 {
-  "schema": "generativeqc.native-semilocal-families.v1",
+  "schema": "generativeqc.native-semilocal-families.v2",
   "families": [
     {
       "symbol": "Lda",
@@ -24,7 +24,14 @@
       "requires_gradient": false,
       "requires_tau": false,
       "stationary_kernel": "lda",
-      "stationary_ecp_gradient": true
+      "stationary_ecp_gradient": true,
+      "cuda_fast_paths": {
+        "component_scaling": "qualification-required",
+        "mixed_ao_precision": "qualified",
+        "mixed_density_precision": "qualified",
+        "response": "qualified",
+        "graph_replay": "qualified"
+      }
     },
     {
       "symbol": "Pbe",
@@ -49,7 +56,14 @@
       "requires_gradient": true,
       "requires_tau": false,
       "stationary_kernel": "pbe",
-      "stationary_ecp_gradient": true
+      "stationary_ecp_gradient": true,
+      "cuda_fast_paths": {
+        "component_scaling": "qualified",
+        "mixed_ao_precision": "qualified",
+        "mixed_density_precision": "qualified",
+        "response": "qualified",
+        "graph_replay": "qualified"
+      }
     },
     {
       "symbol": "R2scan",
@@ -74,7 +88,14 @@
       "requires_gradient": true,
       "requires_tau": true,
       "stationary_kernel": "r2scan",
-      "stationary_ecp_gradient": false
+      "stationary_ecp_gradient": false,
+      "cuda_fast_paths": {
+        "component_scaling": "unavailable",
+        "mixed_ao_precision": "qualification-required",
+        "mixed_density_precision": "qualified",
+        "response": "unavailable",
+        "graph_replay": "qualification-required"
+      }
     },
     {
       "symbol": "B3lyp",
@@ -107,7 +128,14 @@
       "requires_gradient": true,
       "requires_tau": false,
       "stationary_kernel": "composed",
-      "stationary_ecp_gradient": true
+      "stationary_ecp_gradient": true,
+      "cuda_fast_paths": {
+        "component_scaling": "unavailable",
+        "mixed_ao_precision": "qualification-required",
+        "mixed_density_precision": "qualification-required",
+        "response": "unavailable",
+        "graph_replay": "qualification-required"
+      }
     },
     {
       "symbol": "Wb97mv",
@@ -133,7 +161,14 @@
       "requires_gradient": true,
       "requires_tau": true,
       "stationary_kernel": "wb97mv",
-      "stationary_ecp_gradient": true
+      "stationary_ecp_gradient": true,
+      "cuda_fast_paths": {
+        "component_scaling": "unavailable",
+        "mixed_ao_precision": "qualification-required",
+        "mixed_density_precision": "qualification-required",
+        "response": "unavailable",
+        "graph_replay": "qualification-required"
+      }
     }
   ]
 }

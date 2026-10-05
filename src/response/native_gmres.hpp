@@ -17,6 +17,7 @@ enum class GmresStatus {
   stagnation,
   nonfinite_input,
   nonfinite_operator,
+  nonfinite_preconditioner,
 };
 
 struct GmresOptions {
@@ -27,6 +28,9 @@ struct GmresOptions {
   std::size_t max_workspace_bytes{64ULL << 20};
   unsigned reorthogonalize{2};
   double breakdown_tolerance{1e-14};
+  // Maximum iteration interval between full candidate-residual actions.
+  // Predicted convergence, restart, breakdown and exhaustion also force a
+  // fresh action. Only that true unpreconditioned residual can accept a solve.
   std::size_t true_residual_every{1};
   std::size_t stagnation_window{25};
   double stagnation_tolerance{1e-14};
@@ -64,8 +68,14 @@ struct GmresResult {
 
 double stable_norm(std::span<const double> values);
 GmresPlan prepare_gmres(std::size_t dimension, const GmresOptions& options);
+/** Solve with either a diagonal or a caller-owned right preconditioner.
+ * The callback overwrites its output; nonfinite output is refused before the
+ * physical operator runs. Callback exceptions propagate. Its storage/setup
+ * belong to the caller's complete budget, not this controller's workspace.
+ */
 GmresResult solve_gmres(const GmresPlan& plan, const LinearOperator& apply,
                         std::span<const double> rhs, std::span<const double> initial_guess = {},
-                        std::span<const double> diagonal_preconditioner = {});
+                        std::span<const double> diagonal_preconditioner = {},
+                        const LinearOperator& right_preconditioner = {});
 
 }  // namespace generativeqc::response

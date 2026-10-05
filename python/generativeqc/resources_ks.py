@@ -95,7 +95,10 @@ def _item_host_inventory(
     solver_host = (
         1024 * 1024 + byte_product(16, 8, n2) if backend == "cuda" and n > 16 else 0
     )
-    retained += solver_host
+    # Match the native two-candidate solver metadata reservation independently
+    # of queried numeric workspace; tiny native matrices also retain a binding.
+    solver_binding_host = 16 * 1024 if backend == "cuda" else 0
+    retained += solver_host + solver_binding_host
     quadrature = 16 * (model.grid.radial_points + model.grid.angular_polar) + 8 * a
     if backend == "cuda":
         # Shared rule/center/radius upload coexists with the small rule vectors.
@@ -172,6 +175,7 @@ def _item_host_inventory(
             "history": history,
             "provider": provider,
             "solver_host": solver_host,
+            "solver_binding_host": solver_binding_host,
             "xc_schedule_staging": xc_schedule_staging,
             "nonlocal_provider": nonlocal_provider,
             "ao_grid_cache": ao_grid_cache,
@@ -445,6 +449,7 @@ def ks_resource_request(
         "history",
         "provider",
         "solver_host",
+        "solver_binding_host",
         "xc_schedule_staging",
         "nonlocal_provider",
     ):

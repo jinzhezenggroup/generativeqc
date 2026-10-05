@@ -1,0 +1,1168 @@
+{
+  "schema": "generativeqc.pbe0-scf-local-ao-qualified.v1",
+  "source_identity": "7f0770695009fee99ed7a4b08f55f1367eb52d81fbc204bf065aa47b26511358",
+  "library_sha256": "d95626509e4eb44756947138df156d91217e0c7a3cb794662527ebcda007666d",
+  "slurm_job": "5752",
+  "node": "node1",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "scheduler_visible_device": "3",
+  "gpu4pyscf": "1.8.1",
+  "reference_xc_backend": "cuda-libxc",
+  "gates": {
+    "energy_Eh": 1e-8,
+    "force_Eh_per_Bohr": 1e-7
+  },
+  "raw_retention": "/data/jzzeng/qc-pbe0-scf-local-ao-20261004/.artifacts/qualification-5752/",
+  "interpretation": [
+    "Complete synchronized energy plus analytic forces, including host force return.",
+    "24 atoms has one warm replay per geometry; 96 atoms has five.",
+    "Ordered runs and shared ccache do not establish a causal cold speedup.",
+    "Missing Fock-build and integral-stage counters remain null, not zero.",
+    "AO matrix-work proxies are not FLOPs; discovery is repeated after geometry change.",
+    "Standalone SCF admission only; not latest-master integrated force performance."
+  ],
+  "cases": [
+    {
+      "atoms": 24,
+      "aos": 192,
+      "repeats": 1,
+      "reference_sha256": "5c1fbe5062f2fdda28125561877c0182906b8d381ff8d2ddc81c564031b25069",
+      "protocol": {
+        "case": "water-24",
+        "atoms": 24,
+        "aos": 192,
+        "method": "PBE0/RKS",
+        "basis": "def2-SVP",
+        "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+        "representation": "spherical",
+        "grid": {
+          "radial_points": 48,
+          "angular_polar": 16,
+          "angular_azimuth": 32,
+          "element_radii": [],
+          "partition_iterations": 3,
+          "coincident_tolerance": 1e-12,
+          "version": 1,
+          "radial_rule": "rational-legendre",
+          "angular_rule": "legendre-trapezoid",
+          "partition": "becke-equal-radius",
+          "pruning": "none",
+          "units": "Bohr",
+          "ordering": "atom-radial-polar-azimuth"
+        },
+        "properties": [
+          "energy",
+          "forces"
+        ],
+        "force_return": "host_array_in_timed_endpoint",
+        "density_fitting": false,
+        "repeats": 1,
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "reference_gradient_tolerance": 1e-10,
+        "screening_tolerance": 1e-12,
+        "reference_direct_scf_tolerance": 1e-14,
+        "reference_fock_policy": "full-density-rebuild",
+        "max_iterations": 100,
+        "energy_gate": 1e-8,
+        "force_gate": 1e-7,
+        "cold_definition": "preparation plus first synchronized energy/force endpoint",
+        "warm_definition": "1 fixed engine-local post-cold/post-move density replays",
+        "threads": {
+          "OMP_NUM_THREADS": "8",
+          "OPENBLAS_NUM_THREADS": "8",
+          "MKL_NUM_THREADS": "8"
+        }
+      },
+      "reference": {
+        "cold": {
+          "seconds": [
+            32.58965101093054
+          ],
+          "median_seconds": 32.58965101093054,
+          "iterations": [
+            43
+          ],
+          "scf_jk_builds": [
+            44
+          ]
+        },
+        "warm": {
+          "seconds": [
+            2.104556430131197
+          ],
+          "median_seconds": 2.104556430131197,
+          "iterations": [
+            1
+          ],
+          "scf_jk_builds": [
+            2
+          ]
+        },
+        "moved": {
+          "seconds": [
+            29.193502344191074
+          ],
+          "median_seconds": 29.193502344191074,
+          "iterations": [
+            43
+          ],
+          "scf_jk_builds": [
+            44
+          ]
+        },
+        "moved-warm": {
+          "seconds": [
+            2.1686171740293503
+          ],
+          "median_seconds": 2.1686171740293503,
+          "iterations": [
+            1
+          ],
+          "scf_jk_builds": [
+            2
+          ]
+        }
+      },
+      "native": {
+        "0": {
+          "source_commit": "c99e524b3b1c4c2091420cbec78724fc1ac6d9f6",
+          "raw_sha256": "f70243c9ab78e43833f731999a2680c93421212315737094dcbb9d0ecb0840ee",
+          "validation_sha256": "4bc999dd063130c38c182d6d69d1c8123e5add37940714df39ea87004357a0b4",
+          "compared_repeat_pairs": 8,
+          "maximum_energy_error": 5.002220859751105e-12,
+          "maximum_force_error": 2.4652557772952832e-11,
+          "discarded_attempt_work": "no reported fallback",
+          "phases": {
+            "cold": {
+              "seconds": [
+                271.5282252430916
+              ],
+              "median_seconds": 271.5282252430916,
+              "iterations": [
+                21
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                false
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 2304,
+                "empty_tiles": 0,
+                "min_active": 192,
+                "max_active": 192,
+                "active_sum": 442368,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 113246208,
+                "point_ao_square_sum": 21743271936,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 2311520,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 21,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                230.89087237417698
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.2806195728480816
+              ]
+            },
+            "warm": {
+              "seconds": [
+                4.992398992180824
+              ],
+              "median_seconds": 4.992398992180824,
+              "iterations": [
+                1
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 2304,
+                "empty_tiles": 0,
+                "min_active": 192,
+                "max_active": 192,
+                "active_sum": 442368,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 113246208,
+                "point_ao_square_sum": 21743271936,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 2311520,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 1,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                2.993071500211954
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.2849284708499908
+              ]
+            },
+            "moved": {
+              "seconds": [
+                26.856836650520563
+              ],
+              "median_seconds": 26.856836650520563,
+              "iterations": [
+                12
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 2304,
+                "empty_tiles": 0,
+                "min_active": 192,
+                "max_active": 192,
+                "active_sum": 442368,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 113246208,
+                "point_ao_square_sum": 21743271936,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 2311520,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 12,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                3.4223278388381004
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.282536756247282
+              ]
+            },
+            "moved-warm": {
+              "seconds": [
+                4.997141271829605
+              ],
+              "median_seconds": 4.997141271829605,
+              "iterations": [
+                1
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 2304,
+                "empty_tiles": 0,
+                "min_active": 192,
+                "max_active": 192,
+                "active_sum": 442368,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 113246208,
+                "point_ao_square_sum": 21743271936,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 2311520,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 1,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                2.9873503483831882
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.2813930585980415
+              ]
+            }
+          }
+        },
+        "1": {
+          "source_commit": "c99e524b3b1c4c2091420cbec78724fc1ac6d9f6",
+          "raw_sha256": "b3234459b4b78d30114c991ede79c541aa6a3b6fdc103170d0e899b6a3c89b40",
+          "validation_sha256": "c52cd28de8b5bd22736f5659aef2f9966b81b528f5da5f9dac2952bf8462a1f2",
+          "compared_repeat_pairs": 8,
+          "maximum_energy_error": 4.774847184307873e-12,
+          "maximum_force_error": 2.4572607837392013e-11,
+          "discarded_attempt_work": "no reported fallback",
+          "phases": {
+            "cold": {
+              "seconds": [
+                267.9856953471899
+              ],
+              "median_seconds": 267.9856953471899,
+              "iterations": [
+                21
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                false
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 2304,
+                "empty_tiles": 284,
+                "min_active": 0,
+                "max_active": 190,
+                "active_sum": 271332,
+                "discovery_ao_jet_values": 452984832,
+                "point_ao_visits": 69460992,
+                "point_ao_square_sum": 9896403968,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 1778688,
+                "reserved_device_bytes": 5850464,
+                "host_peak_bytes": 3558152,
+                "xc_evaluations": 21,
+                "cutoff": 1e-16,
+                "discovery_seconds": 0.233330328
+              },
+              "force_endpoint_seconds": [
+                229.9415694475174
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.2840403504669666
+              ]
+            },
+            "warm": {
+              "seconds": [
+                4.827157571911812
+              ],
+              "median_seconds": 4.827157571911812,
+              "iterations": [
+                1
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 2304,
+                "empty_tiles": 284,
+                "min_active": 0,
+                "max_active": 190,
+                "active_sum": 271332,
+                "discovery_ao_jet_values": 452984832,
+                "point_ao_visits": 69460992,
+                "point_ao_square_sum": 9896403968,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 1778688,
+                "reserved_device_bytes": 5850464,
+                "host_peak_bytes": 3558152,
+                "xc_evaluations": 1,
+                "cutoff": 1e-16,
+                "discovery_seconds": 0.233330328
+              },
+              "force_endpoint_seconds": [
+                2.9798701032996178
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.282061729580164
+              ]
+            },
+            "moved": {
+              "seconds": [
+                25.454882692545652
+              ],
+              "median_seconds": 25.454882692545652,
+              "iterations": [
+                12
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 2304,
+                "empty_tiles": 284,
+                "min_active": 0,
+                "max_active": 190,
+                "active_sum": 271337,
+                "discovery_ao_jet_values": 452984832,
+                "point_ao_visits": 69462272,
+                "point_ao_square_sum": 9896731392,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 1778688,
+                "reserved_device_bytes": 5850464,
+                "host_peak_bytes": 3558152,
+                "xc_evaluations": 12,
+                "cutoff": 1e-16,
+                "discovery_seconds": 0.213668821
+              },
+              "force_endpoint_seconds": [
+                3.4148053489625454
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.2795033566653728
+              ]
+            },
+            "moved-warm": {
+              "seconds": [
+                4.8250559493899345
+              ],
+              "median_seconds": 4.8250559493899345,
+              "iterations": [
+                1
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 2304,
+                "empty_tiles": 284,
+                "min_active": 0,
+                "max_active": 190,
+                "active_sum": 271337,
+                "discovery_ao_jet_values": 452984832,
+                "point_ao_visits": 69462272,
+                "point_ao_square_sum": 9896731392,
+                "dense_point_ao_square_sum": 21743271936,
+                "discovery_d2h_bytes": 1778688,
+                "reserved_device_bytes": 5850464,
+                "host_peak_bytes": 3558152,
+                "xc_evaluations": 1,
+                "cutoff": 1e-16,
+                "discovery_seconds": 0.213668821
+              },
+              "force_endpoint_seconds": [
+                2.9775978177785873
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                1.27902652323246
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "atoms": 96,
+      "aos": 768,
+      "repeats": 5,
+      "reference_sha256": "d3b7f404973045142db9f901e9019679021a6279c93e6e1bed9ddcc6f685bbfa",
+      "protocol": {
+        "case": "water-96",
+        "atoms": 96,
+        "aos": 768,
+        "method": "PBE0/RKS",
+        "basis": "def2-SVP",
+        "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+        "representation": "spherical",
+        "grid": {
+          "radial_points": 48,
+          "angular_polar": 16,
+          "angular_azimuth": 32,
+          "element_radii": [],
+          "partition_iterations": 3,
+          "coincident_tolerance": 1e-12,
+          "version": 1,
+          "radial_rule": "rational-legendre",
+          "angular_rule": "legendre-trapezoid",
+          "partition": "becke-equal-radius",
+          "pruning": "none",
+          "units": "Bohr",
+          "ordering": "atom-radial-polar-azimuth"
+        },
+        "properties": [
+          "energy",
+          "forces"
+        ],
+        "force_return": "host_array_in_timed_endpoint",
+        "density_fitting": false,
+        "repeats": 5,
+        "energy_tolerance": 1e-12,
+        "density_tolerance": 1e-10,
+        "reference_gradient_tolerance": 1e-10,
+        "screening_tolerance": 1e-12,
+        "reference_direct_scf_tolerance": 1e-14,
+        "reference_fock_policy": "full-density-rebuild",
+        "max_iterations": 100,
+        "energy_gate": 1e-8,
+        "force_gate": 1e-7,
+        "cold_definition": "preparation plus first synchronized energy/force endpoint",
+        "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+        "threads": {
+          "OMP_NUM_THREADS": "8",
+          "OPENBLAS_NUM_THREADS": "8",
+          "MKL_NUM_THREADS": "8"
+        }
+      },
+      "reference": {
+        "cold": {
+          "seconds": [
+            97.76095549017191
+          ],
+          "median_seconds": 97.76095549017191,
+          "iterations": [
+            49
+          ],
+          "scf_jk_builds": [
+            50
+          ]
+        },
+        "warm": {
+          "seconds": [
+            16.89288203418255,
+            9.899744909256697,
+            9.900446329265833,
+            20.443708695471287,
+            9.929292123764753
+          ],
+          "median_seconds": 9.929292123764753,
+          "iterations": [
+            5,
+            1,
+            1,
+            7,
+            1
+          ],
+          "scf_jk_builds": [
+            6,
+            2,
+            2,
+            8,
+            2
+          ]
+        },
+        "moved": {
+          "seconds": [
+            89.52307742089033
+          ],
+          "median_seconds": 89.52307742089033,
+          "iterations": [
+            46
+          ],
+          "scf_jk_builds": [
+            47
+          ]
+        },
+        "moved-warm": {
+          "seconds": [
+            20.44074337184429,
+            18.71115956455469,
+            13.444437585771084,
+            13.413624167442322,
+            13.448167327791452
+          ],
+          "median_seconds": 13.448167327791452,
+          "iterations": [
+            7,
+            6,
+            3,
+            3,
+            3
+          ],
+          "scf_jk_builds": [
+            8,
+            7,
+            4,
+            4,
+            4
+          ]
+        }
+      },
+      "native": {
+        "0": {
+          "source_commit": "c99e524b3b1c4c2091420cbec78724fc1ac6d9f6",
+          "raw_sha256": "a3d40374d339a590beeae5511a4ada9d1a219aba6d9a9d3202f2a2fcc6b6ecaa",
+          "validation_sha256": "593a71ddf89e943e8a5485345e7ffa13480d5ae8d971061099f59eefad260888",
+          "compared_repeat_pairs": 72,
+          "maximum_energy_error": 1.064108801074326e-10,
+          "maximum_force_error": 3.289600536415804e-11,
+          "discarded_attempt_work": "no reported fallback",
+          "phases": {
+            "cold": {
+              "seconds": [
+                736.894027043134
+              ],
+              "median_seconds": 736.894027043134,
+              "iterations": [
+                29
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                false
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 9216,
+                "empty_tiles": 0,
+                "min_active": 768,
+                "max_active": 768,
+                "active_sum": 7077888,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 1811939328,
+                "point_ao_square_sum": 1391569403904,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 12717344,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 29,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                285.18448893353343
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.374270860105753
+              ]
+            },
+            "warm": {
+              "seconds": [
+                76.00789049640298,
+                76.12501671910286,
+                76.11371702700853,
+                76.12043338268995,
+                76.03750828653574
+              ],
+              "median_seconds": 76.11371702700853,
+              "iterations": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "reported_fock_builds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "warm_start_used": [
+                true,
+                true,
+                true,
+                true,
+                true
+              ],
+              "warm_start_fallback": [
+                false,
+                false,
+                false,
+                false,
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 9216,
+                "empty_tiles": 0,
+                "min_active": 768,
+                "max_active": 768,
+                "active_sum": 7077888,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 1811939328,
+                "point_ao_square_sum": 1391569403904,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 12717344,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 1,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                59.06910342723131,
+                59.04483054950833,
+                59.015470668673515,
+                59.00781441107392,
+                59.01076005026698
+              ],
+              "stationary_integral_derivative_seconds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.465389735996723,
+                31.457203537225723,
+                31.45730835944414,
+                31.45004051923752,
+                31.449648316949606
+              ]
+            },
+            "moved": {
+              "seconds": [
+                251.1613547578454
+              ],
+              "median_seconds": 251.1613547578454,
+              "iterations": [
+                12
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 9216,
+                "empty_tiles": 0,
+                "min_active": 768,
+                "max_active": 768,
+                "active_sum": 7077888,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 1811939328,
+                "point_ao_square_sum": 1391569403904,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 12717344,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 12,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                59.445679258555174
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.449501287192106
+              ]
+            },
+            "moved-warm": {
+              "seconds": [
+                75.92281807214022,
+                76.04463943466544,
+                75.9540627412498,
+                75.88388780876994,
+                75.8011262267828
+              ],
+              "median_seconds": 75.92281807214022,
+              "iterations": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "reported_fock_builds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "warm_start_used": [
+                true,
+                true,
+                true,
+                true,
+                true
+              ],
+              "warm_start_fallback": [
+                false,
+                false,
+                false,
+                false,
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 0,
+                "selected": 0,
+                "tiles": 9216,
+                "empty_tiles": 0,
+                "min_active": 768,
+                "max_active": 768,
+                "active_sum": 7077888,
+                "discovery_ao_jet_values": 0,
+                "point_ao_visits": 1811939328,
+                "point_ao_square_sum": 1391569403904,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 0,
+                "reserved_device_bytes": 12717344,
+                "host_peak_bytes": 0,
+                "xc_evaluations": 1,
+                "cutoff": 0,
+                "discovery_seconds": 0
+              },
+              "force_endpoint_seconds": [
+                58.99415947496891,
+                59.017947137355804,
+                59.02474846318364,
+                59.005167707800865,
+                59.01798586919904
+              ],
+              "stationary_integral_derivative_seconds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.445599537342787,
+                31.448666226118803,
+                31.451219853013754,
+                31.448238909244537,
+                31.447609677910805
+              ]
+            }
+          }
+        },
+        "1": {
+          "source_commit": "c99e524b3b1c4c2091420cbec78724fc1ac6d9f6",
+          "raw_sha256": "8354e5210fd3a6a779c13e61a70b3dde54ac502246d46a5b9f8b36ffc02f28aa",
+          "validation_sha256": "d95a64887377b8ca78593ade163020bef7621b62ce1a87f96deeb8be534c8c6d",
+          "compared_repeat_pairs": 72,
+          "maximum_energy_error": 1.07775122160092e-10,
+          "maximum_force_error": 2.5001695158621828e-11,
+          "discarded_attempt_work": "no reported fallback",
+          "phases": {
+            "cold": {
+              "seconds": [
+                501.5256366059184
+              ],
+              "median_seconds": 501.5256366059184,
+              "iterations": [
+                28
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                false
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 9216,
+                "empty_tiles": 768,
+                "min_active": 0,
+                "max_active": 536,
+                "active_sum": 1460424,
+                "discovery_ao_jet_values": 7247757312,
+                "point_ao_visits": 373868544,
+                "point_ao_square_sum": 75674112000,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 28348416,
+                "reserved_device_bytes": 69340448,
+                "host_peak_bytes": 56699912,
+                "xc_evaluations": 28,
+                "cutoff": 1e-16,
+                "discovery_seconds": 1.94580015
+              },
+              "force_endpoint_seconds": [
+                285.5962070636451
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.372089352458715
+              ]
+            },
+            "warm": {
+              "seconds": [
+                67.89882469177246,
+                68.1396038196981,
+                68.19219968095422,
+                68.06463580206037,
+                67.89453983306885
+              ],
+              "median_seconds": 68.06463580206037,
+              "iterations": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "reported_fock_builds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "warm_start_used": [
+                true,
+                true,
+                true,
+                true,
+                true
+              ],
+              "warm_start_fallback": [
+                false,
+                false,
+                false,
+                false,
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 9216,
+                "empty_tiles": 768,
+                "min_active": 0,
+                "max_active": 536,
+                "active_sum": 1460424,
+                "discovery_ao_jet_values": 7247757312,
+                "point_ao_visits": 373868544,
+                "point_ao_square_sum": 75674112000,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 28348416,
+                "reserved_device_bytes": 69340448,
+                "host_peak_bytes": 56699912,
+                "xc_evaluations": 1,
+                "cutoff": 1e-16,
+                "discovery_seconds": 1.94580015
+              },
+              "force_endpoint_seconds": [
+                59.054842848330736,
+                59.032141368836164,
+                59.04072153195739,
+                59.03215825557709,
+                59.02601393312216
+              ],
+              "stationary_integral_derivative_seconds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.470694445073605,
+                31.462296102195978,
+                31.460644148290157,
+                31.456977900117636,
+                31.459819063544273
+              ]
+            },
+            "moved": {
+              "seconds": [
+                172.32378105446696
+              ],
+              "median_seconds": 172.32378105446696,
+              "iterations": [
+                14
+              ],
+              "reported_fock_builds": [
+                null
+              ],
+              "warm_start_used": [
+                true
+              ],
+              "warm_start_fallback": [
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 9216,
+                "empty_tiles": 768,
+                "min_active": 0,
+                "max_active": 536,
+                "active_sum": 1460431,
+                "discovery_ao_jet_values": 7247757312,
+                "point_ao_visits": 373870336,
+                "point_ao_square_sum": 75674636032,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 28348416,
+                "reserved_device_bytes": 69340448,
+                "host_peak_bytes": 56699912,
+                "xc_evaluations": 14,
+                "cutoff": 1e-16,
+                "discovery_seconds": 1.916756164
+              },
+              "force_endpoint_seconds": [
+                59.47682844847441
+              ],
+              "stationary_integral_derivative_seconds": [
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.460302148014307
+              ]
+            },
+            "moved-warm": {
+              "seconds": [
+                67.89391881227493,
+                67.88070392236114,
+                67.86356750130653,
+                67.91983372718096,
+                67.89133193716407
+              ],
+              "median_seconds": 67.89133193716407,
+              "iterations": [
+                1,
+                1,
+                1,
+                1,
+                1
+              ],
+              "reported_fock_builds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "warm_start_used": [
+                true,
+                true,
+                true,
+                true,
+                true
+              ],
+              "warm_start_fallback": [
+                false,
+                false,
+                false,
+                false,
+                false
+              ],
+              "scf_ao_work_per_call": {
+                "requested": 1,
+                "selected": 1,
+                "tiles": 9216,
+                "empty_tiles": 768,
+                "min_active": 0,
+                "max_active": 536,
+                "active_sum": 1460431,
+                "discovery_ao_jet_values": 7247757312,
+                "point_ao_visits": 373870336,
+                "point_ao_square_sum": 75674636032,
+                "dense_point_ao_square_sum": 1391569403904,
+                "discovery_d2h_bytes": 28348416,
+                "reserved_device_bytes": 69340448,
+                "host_peak_bytes": 56699912,
+                "xc_evaluations": 1,
+                "cutoff": 1e-16,
+                "discovery_seconds": 1.916756164
+              },
+              "force_endpoint_seconds": [
+                59.0315191373229,
+                59.048021875321865,
+                59.042510110884905,
+                59.06390592455864,
+                59.04492672160268
+              ],
+              "stationary_integral_derivative_seconds": [
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
+              "semilocal_geometry_seconds": [
+                31.45454378798604,
+                31.455387838184834,
+                31.451398827135563,
+                31.45630757510662,
+                31.45300429686904
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

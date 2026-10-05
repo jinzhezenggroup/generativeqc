@@ -22,6 +22,7 @@ from tools.generate_xc_split_hybrid_registry import (
     emit_python_registry,
     emit_registry,
     registry_entries,
+    split_hybrid_fast_path_statuses,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +61,8 @@ def test_split_hybrid_registry_is_host_safe_and_device_generated() -> None:
         "HYB_MGGA_X_MN15",
         "MGGA_C_MN15",
         "split_hybrid_is_mgga",
+        "split_hybrid_fast_path_capabilities",
+        "CudaXcCapability::QualificationRequired",
         "split_hybrid_composition",
         "return {27U, 50U, true};",
         "return {11U, 25U, true};",
@@ -76,6 +79,21 @@ def test_split_hybrid_registry_is_host_safe_and_device_generated() -> None:
 
 def test_split_hybrid_registry_generation_is_deterministic() -> None:
     assert emit_registry() == emit_registry()
+
+
+def test_split_hybrid_fast_paths_follow_program_class_not_identifier() -> None:
+    expected = (
+        "unavailable",
+        "qualification-required",
+        "qualification-required",
+        "unavailable",
+        "qualification-required",
+    )
+    for entry in registry_entries():
+        alias = dict(entry)
+        alias["identifier"] = "renamed-structural-alias"
+        assert split_hybrid_fast_path_statuses(entry) == expected
+        assert split_hybrid_fast_path_statuses(alias) == expected
 
 
 def test_split_hybrid_python_registry_is_fresh() -> None:

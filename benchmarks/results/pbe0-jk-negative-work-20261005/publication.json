@@ -1,0 +1,185 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "All numerical comparisons pass, but no complete-endpoint benefit is established. Separate intrusive J/K admissions do not supply missing clean-endpoint work counts.",
+    "scope": "performance",
+    "status": "rejected"
+  },
+  "files": [
+    {
+      "bytes": 4112,
+      "path": "README.md",
+      "role": "reproduction",
+      "sha256": "3915bfc3020a144a91281c70c3772ae3564a151feff12ccd21ec121248eebc8f"
+    },
+    {
+      "bytes": 10297,
+      "path": "audit_census.py",
+      "role": "reproduction",
+      "sha256": "7a5b0502f7070dec76e6109e5ae98c23110ec28a7efe3efae62332dfd0159c97"
+    },
+    {
+      "bytes": 25465,
+      "path": "candidate-48.json.gz",
+      "role": "samples",
+      "sha256": "62d33e55a62b9a9ad29de2311d2e020adcd55ea5c0a1c8a005338840d9a7f11b"
+    },
+    {
+      "bytes": 39216,
+      "path": "candidate-96.json.gz",
+      "role": "samples",
+      "sha256": "f076589734ebd51f453f404f5f73b422836908a6282a802d42d4b8875c1a0a50"
+    },
+    {
+      "bytes": 11772,
+      "path": "candidate-source.patch",
+      "role": "source-patch",
+      "sha256": "e89242bc36964166a8fc94ceab2e79c42ee8323a9a2c047ad8d166df829b434c"
+    },
+    {
+      "bytes": 15005,
+      "path": "census/input-48-0.txt",
+      "role": "input",
+      "sha256": "aac69c2dc7c422d8b2408c0b048b24b06103ed7d97d48fe9801aa798a68b0753"
+    },
+    {
+      "bytes": 15005,
+      "path": "census/input-48-1.txt",
+      "role": "input",
+      "sha256": "56ad6956d848af22c6a4a0058d7e0c85946973bca83553940f204bbcac990756"
+    },
+    {
+      "bytes": 29997,
+      "path": "census/input-96-0.txt",
+      "role": "input",
+      "sha256": "71834b44897bf16c22edc0741680803361adfe97928aca07d71b9bf50060daad"
+    },
+    {
+      "bytes": 29997,
+      "path": "census/input-96-1.txt",
+      "role": "input",
+      "sha256": "4ffe4ce27aaaba751fb4c19d903abc5928fdaa70b58a09b2018ce7ff04ae4c38"
+    },
+    {
+      "bytes": 9298,
+      "path": "census/ks-work-probe.cpp.txt",
+      "role": "reproduction",
+      "sha256": "01fd39cf5045226cb0c5e59f0c0c14174f3f8336286c9240dcce0120ddc4d96f"
+    },
+    {
+      "bytes": 554,
+      "path": "census/probe.sha256",
+      "role": "reproduction",
+      "sha256": "5dc2513870b8b3d8e10f08219fb177ed33cd603f43b6ab53424fc30b5d6f7f41"
+    },
+    {
+      "bytes": 2229,
+      "path": "census/work-48.jsonl.gz",
+      "role": "samples",
+      "sha256": "bab73cf94ce9cb0f9cb128bd949cd31ccb9b69da97a751c94f802592961ec714"
+    },
+    {
+      "bytes": 2440,
+      "path": "census/work-96.jsonl.gz",
+      "role": "samples",
+      "sha256": "c56e6014fbb389ab41969cb9c1084bcb39a50c14dd6d15d020b07c53a72981f8"
+    },
+    {
+      "bytes": 926,
+      "path": "census-n1.sh.txt",
+      "role": "reproduction",
+      "sha256": "94a3a9da033aa2f817f246ddab71350a5f3264f371b31c1d0b73e2184533bc1e"
+    },
+    {
+      "bytes": 888,
+      "path": "check-source.py.txt",
+      "role": "reproduction",
+      "sha256": "f3ccdf1305d574f136b617cd5c6e4209c243000604ae24643695a7e2a8a70e49"
+    },
+    {
+      "bytes": 25670,
+      "path": "control-48.json.gz",
+      "role": "samples",
+      "sha256": "17b005c0ffd3ebeee30dd35ac5a56bfc972d657489446b4153915ae98ea329ed"
+    },
+    {
+      "bytes": 39231,
+      "path": "control-96.json.gz",
+      "role": "samples",
+      "sha256": "60c7b76e5c6cfeb63d0b583ce3bf2c3ebd8b230ad15112323fc234f238bc3ee0"
+    },
+    {
+      "bytes": 28369,
+      "path": "control-source.patch",
+      "role": "source-patch",
+      "sha256": "1eb438c2b27dd6e8b97e17f6b09ae70e0a4eca0edb27a6a538b288b25842315d"
+    },
+    {
+      "bytes": 1487,
+      "path": "gpu-env-n1.sh.txt",
+      "role": "reproduction",
+      "sha256": "5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d"
+    },
+    {
+      "bytes": 3597,
+      "path": "original-verify-endpoint.py.txt",
+      "role": "reproduction",
+      "sha256": "d04e3cdad0005f8b70275af74836f4f5a8c7d20e380a8e2215c402edae3f39dd"
+    },
+    {
+      "bytes": 2450,
+      "path": "paired-endpoint-n1.sh.txt",
+      "role": "reproduction",
+      "sha256": "bdd998e2fee254c840aa02e6210a172dcfee333e9c9734de3dd14b005b3113b6"
+    },
+    {
+      "bytes": 5824,
+      "path": "provenance.json",
+      "role": "reproduction",
+      "sha256": "659659de597d63d42ecb94136b944c737d3cf6bfa6fe8ae3a07a47ebf3f88795"
+    },
+    {
+      "bytes": 18138,
+      "path": "reference-48.json.gz",
+      "role": "samples",
+      "sha256": "accd459a866bbc404e984a7c4b9e8440add8768ccfdf68f78eb67a3a7752e186"
+    },
+    {
+      "bytes": 30954,
+      "path": "reference-96.json.gz",
+      "role": "samples",
+      "sha256": "35f8be7a51aa64492159781c040e4b2458040e44038a4e50ad612e4fcbbc8355"
+    },
+    {
+      "bytes": 23157,
+      "path": "summary.json",
+      "role": "summary",
+      "sha256": "575de6d880fe9a0444c87cad8cede1ceb2f7205b390a0fc440b4b749517b3288"
+    },
+    {
+      "bytes": 10066,
+      "path": "verify.py",
+      "role": "reproduction",
+      "sha256": "455f48f96ac6980de04b1536ae644cf9241bb3784bb8939ee1836a1f574f1496"
+    },
+    {
+      "bytes": 39771,
+      "path": "validation.json",
+      "role": "evidence",
+      "sha256": "f7a752569b8aeb330dfa09d66823f5dbc22c0bc18243642c2c93d2c15f7cee3e"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-jk-negative-work-20261005/verify.py"
+    ]
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "control_revision": "7e5343ff567deae29e4feb6232cdb8620e35ec4f",
+    "dirty": false,
+    "reconstruction_base": "1de139fa59401802e07aa20730ec7e842195f4f4",
+    "revision": "5f957d696a8786d5fb0eb319145289bea9225c34"
+  }
+}

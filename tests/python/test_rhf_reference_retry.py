@@ -3,6 +3,7 @@
 The exact owner block and download helper run with deferred transport and
 fault-injected numerical actions. This tests control flow/ownership, not device
 numerics, physical convergence, or complete correlated-endpoint performance.
+Admission snapshots must record only the final validated publication capacities.
 """
 
 from __future__ import annotations
@@ -45,6 +46,12 @@ _PREFIX = r"""
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaMemcpyDeviceToHost=2;
 static int mode=0, validations=0, copies=0, builds=0, solves=0, products=0, energies=0;
+static int plan_capacity_samples=0, candidate_capacity_samples=0;
+struct MockPlan {
+  std::size_t reference_admitted_plan_host_bytes=101;
+  std::size_t reference_admitted_candidate_host_bytes=202;
+};
+static MockPlan plan;
 static std::vector<std::function<void()>> pending;
 static std::vector<std::string> actions;
 void require(bool ok, const char* message) {if(!ok)throw std::logic_error(message);}
@@ -64,6 +71,10 @@ namespace generativeqc::scf {
 void validate_physical_reference(PhysicalReference& ref) {
   ++validations;actions.push_back("validate");
   require(pending.empty(),"validation precedes transport completion");
+  require(plan.reference_admitted_plan_host_bytes==101 &&
+              plan.reference_admitted_candidate_host_bytes==202 &&
+              plan_capacity_samples==0 && candidate_capacity_samples==0,
+          "admission snapshots changed before final validation");
   if(mode==5)throw std::invalid_argument("shape");
   if(mode==6)throw std::bad_alloc();
   if(mode==2 || ((mode==1 || mode==3 || mode==4 || (mode>=9 && mode<=12) ||
@@ -79,6 +90,17 @@ void validate_physical_reference(PhysicalReference& ref) {
 
 _ACTIONS = r"""
 using namespace generativeqc::scf;
+struct MockHost {std::vector<std::size_t> occupied{1};};
+std::size_t hf_cuda_retained_host_numeric_bytes(const MockPlan&) {
+  ++plan_capacity_samples;actions.push_back("snapshot-plan");
+  return 3000+100*builds;
+}
+namespace cuda_execution {
+std::size_t host_batch_numeric_bytes(const MockHost&) {
+  ++candidate_capacity_samples;actions.push_back("snapshot-candidate");
+  return 4000+100*builds;
+}
+}
 struct Item {generativeqc_status status=GENERATIVEQC_STATUS_SUCCESS;ScfResult scf;};
 void fill_global_failure(std::vector<Item>& out,generativeqc_status status) {
   for(auto& row:out)row.status=status;
@@ -122,7 +144,7 @@ std::vector<Item> run() {
   ScfOptions options;options.export_physical_reference=true;
   struct {int stream_=0;std::size_t reference_peak_bytes_=1000,reference_eri_bytes_=0;
           int eigensolver_view(){return 0;}} resources;
-  const struct {std::vector<std::size_t> occupied{1};} host;
+  const MockHost host;
   const std::size_t nbf=2,batch_size=1,spin_count=1,spin_matrix_elements=4;
   const unsigned threads=32,matrix_reduction_threads=32;
   double overlap[4]{1,2,3,4},hcore[4]{},fock[4]{33},coefficients[4]{},density[4]{11};
@@ -175,8 +197,15 @@ int main(int argc,char**argv) {
               "incorrect published work counts");
       require(validations==mode+1 && builds==mode && solves==mode && products==3*mode &&
                   energies==mode,"retry work is not bounded");
-      if(mode==1)require(actions==std::vector<std::string>{"validate","copy","build","product",
-                          "product","solve","product","energy","validate"},"retry ordering");
+      require(plan.reference_admitted_plan_host_bytes==3000+100*mode &&
+                  plan.reference_admitted_candidate_host_bytes==4000+100*mode &&
+                  plan_capacity_samples==1 && candidate_capacity_samples==1,
+              "admission snapshots did not capture final validated capacities exactly once");
+      const auto expected_actions=mode==0 ?
+          std::vector<std::string>{"validate","snapshot-plan","snapshot-candidate"} :
+          std::vector<std::string>{"validate","copy","build","product","product","solve",
+                                   "product","energy","validate","snapshot-plan","snapshot-candidate"};
+      require(actions==expected_actions,"validation/retry/snapshot ordering");
     } else if(mode==2 || mode==3 || mode==4) {
       require(caught=="canonicality" && result.empty(),"validation rejection was swallowed");
       require(builds==(mode==2 ? 1 : 0) && validations==(mode==2 ? 2 : 1),"unbounded/forbidden retry");
@@ -193,6 +222,12 @@ int main(int argc,char**argv) {
       require(result[0].status==expected,"lost failure status");
       require(builds==((mode==13 || mode==14) ? 0 : 1),"incorrect failure-path build count");
       require(validations==((mode==13 || mode==14) ? 0 : 1),"validated failed retry");
+    }
+    if(mode!=0 && mode!=1) {
+      require(plan.reference_admitted_plan_host_bytes==101 &&
+                  plan.reference_admitted_candidate_host_bytes==202 &&
+                  plan_capacity_samples==0 && candidate_capacity_samples==0,
+              "rejection or failure changed admission snapshots");
     }
     std::cout<<"scenario "<<mode<<" passed\n";
   } catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}

@@ -15,6 +15,13 @@ Fock/integral block cotangents and Q-major `df_bov/df_bvv` cotangents. The latte
 cover the virtual residual only. Fresh primal replay and an independently
 expanded Lambda action retain the ordinary CC residual acceptance gates.
 
+Staged Lambda already batches its auxiliary primal, transpose and factor
+actions under its own complete budget. The residual owner reuses that Q-axis
+transform and the same generated ordered accumulation consumer. This does not
+change Lambda's program equations, Q order, scalar fallback or independent
+expanded audit; the residual and response owners select their tile capacities
+independently.
+
 `cc::triples::pullback_df_cuda` supplies all fixed-canonical-input (T)
 cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
 `fock_response_df_cuda` supplies same-space Fock matrices, including internal
@@ -66,10 +73,34 @@ Z seed is subtracted. Same-space stationarity never divides same-space gaps.
 An occupied/virtual gap and residual checks qualify the local solve; they do
 **not** certify global RHF stability or the minimum Hessian eigenvalue.
 
+The internal `orbital_screening_tolerance` defaults to zero. A positive value
+requests a provisional GMRES solve with a fixed geometry-only Schwarz mask over
+complete canonical ERI permutation orbits. This path bypasses density-dependent
+shell screening, preserving a fixed self-adjoint action for signed densities.
+The immutable source is still prepared unscreened. A provisional solution must
+pass the original zero-screening Z residual gate (`1e-10`); otherwise exact GMRES
+refines it and the independent audit runs again. Missing optional canonical
+storage retains the exact solve. Final reference, stationarity and nuclear
+sources always use the original unscreened Hamiltonian. Positive thresholds
+are experimental solver controls, not promoted force approximations.
+
 The reference nuclear branch contracts AO hcore and Pulay weights with existing
-CUDA derivative providers. Its two-electron source `P:G'(D)` uses the bounded
-polarization identity `E2'(D+P)-E2'(D)-E2'(P)`, with `E2(D)=D:G(D)/2`. Three
-passes are independent of the orbital-response dimension. The result is an
+CUDA derivative providers. Its two-electron source `P:G'(D)` defaults to
+symmetric polarization `[E2'(D+P)-E2'(D-P)]/2`, with `E2(D)=D:G(D)/2`. This
+retains the admitted shell consumer and its primitive/component reuse in two
+bounded passes. The identity requires the same fixed unscreened linear source
+for both operands. Set `symmetric_polarization=false` to retain the original
+three-pass identity `E2'(D+P)-E2'(D)-E2'(P)` for matched validation.
+
+The separate `bilinear_derivative` opt-in uses compiler-owned direct weights,
+Cartesian projection, symmetry-unique angular buckets and translation
+reconstruction. It can replace generic or bounded through-f consumers when
+canonical storage is admitted; specialized SPD leases retain their existing
+consumer. This experimental route requires a measured crossover: a single
+canonical AO pass can lose reuse present in a shell consumer. Neither route
+materializes a derivative ERI tensor, and both retain explicit capacity
+fallbacks. All routes are independent of orbital-response dimension.
+The result is an
 **electronic gradient**: the final method must add the correlation-source and
 nuclear-repulsion gradients, then negate once to publish forces.
 
@@ -93,9 +124,19 @@ separate closure validation.
 The internal interfaces admit complete numeric payloads before execution;
 outer callers must charge all other live owners. Matrix response reports zero
 explicit Hessian elements, J/K actions, derivative passes, generated contraction
-summands, BLAS calls and matrix-owner transfers. Integral-provider setup and
-nuclear-consumer transfers are separate; these counters are not a complete
-endpoint traffic ledger.
+summands, BLAS calls and owner-managed transfers, including derivative operand
+uploads. Provider-internal setup and execution transfers are excluded; these
+counters are not a complete endpoint traffic ledger.
+
+Response wall times separately report setup, reference audit, weight assembly,
+Z solve, independent residual audit, one-electron and two-electron derivatives.
+Optional `profile_jk` synchronizes each J/K call and records time and canonical
+integral counts. It selects the canonical provider where available, so compare
+matched selectors and hardware. J/K times are subsets of the phase times;
+quartet visits, contracted ERI values and three-axis derivative jets are distinct
+work units and are not FLOPs. Census/timing flags and action counts distinguish
+unmeasured fields from measured zeros. Provider-internal transfers remain outside
+the owner-managed traffic counters.
 
 Relevant validation modules include `test_df_cc_lambda.py`,
 `test_df_source_metric_response.py`, `test_df_nuclear_sink.py`,
@@ -117,3 +158,40 @@ qualification are still required before broad promotion. The pre-existing
 strict large-factor gates (`atol=rtol=3e-10`) are not qualified by small-molecule
 force agreement and must not be relaxed. See the
 [composition decision](../../.agents/notes/implemented/architecture/2026-10-04-complete-native-df-ccsdt-forces.md).
+
+## Native benchmark controls
+
+The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
+positional arguments (brackets denote optional trailing controls):
+
+```text
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1]]]]]]]]]]
+```
+
+`MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
+`CCSD_Q_BATCH_LIMIT` to eight, and `DIIS_HISTORY` to six. `DIIS_HISTORY` retains argument position eight and
+accepts zero (disabled) or integers two through twenty. A decimal or scientific
+notation token in this position is rejected; it is never guessed to be a
+screening threshold. `CCSD_Q_BATCH_LIMIT` retains position nine. Both batch
+limits require complete unsigned integer tokens. Response controls follow at
+positions ten through twelve: `ORBITAL_SCHWARZ` defaults to
+zero and requires a complete finite nonnegative number, `PROFILE_JK` to zero and `NUCLEAR` to two (symmetric polarization).
+`NUCLEAR=0` selects the legacy three-pass identity and `NUCLEAR=1` explicitly
+opts into the experimental canonical bilinear derivative.
+`DERIVED_DENOMINATORS` follows all existing controls at argument thirteen and
+defaults to one. Zero retains the explicit CUDA denominator representation.
+It accepts only the complete token `0` or `1`; it does not change the meaning
+of the screening token at argument ten, profiling at eleven, or the nuclear
+response schedule at twelve.
+
+For example, an exact force endpoint with the default six-vector DIIS history
+and explicit symmetric response is:
+
+```sh
+./df-force-endpoint molecule.input force.json 1 1 1 1 8 6 8 0 0 2
+```
+
+Historical response benchmark receipts retain the CLI for their recorded source
+revision. When adapting such a command to the current executable, insert the
+DIIS history and CCSD Q batch limit before the orbital screening threshold.
+Do not rewrite retained receipt commands or imply that they used this layout.

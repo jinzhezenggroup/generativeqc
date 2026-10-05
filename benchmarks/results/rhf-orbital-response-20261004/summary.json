@@ -1,0 +1,338 @@
+{
+  "schema": "generativeqc.rhf-orbital-response.v2",
+  "validation": {
+    "legacy": {
+      "force_validation": {
+        "oracle": "../df-lambda-gemm-20261004/oracle-energy-fd.json",
+        "oracle_recomputed": false,
+        "steps_bohr": [
+          0.0001,
+          3e-05
+        ],
+        "reference_directional_derivatives": [
+          0.01808580748274835,
+          0.01808581799878084
+        ],
+        "analytic_directional_derivative": 0.01808581100458243,
+        "absolute_errors": [
+          3.521834077840902e-09,
+          6.994198411408581e-09
+        ],
+        "fd_gate": 3e-07,
+        "fd_passed": true,
+        "z_residual": 1.3584117820122886e-13,
+        "z_gate": 1e-10,
+        "z_passed": true,
+        "stationarity": 1.4002771164811634e-11,
+        "stationarity_gate": 1e-08,
+        "stationarity_passed": true,
+        "force_sum": [
+          7.0728021963478716e-12,
+          -3.400163180525273e-12,
+          5.980459183430042e-13
+        ]
+      },
+      "orbital_work": {
+        "derivative_passes": 3,
+        "shell_passes": 3,
+        "generic_passes": 0,
+        "shell_internal_quartet_visits": null,
+        "canonical_quartet_visits": null,
+        "canonical_three_axis_jets": null,
+        "jk_census_actions": 28,
+        "jk_canonical_quartet_visits": 16117903620,
+        "jk_eri_evaluations": 16117903620,
+        "hardware_flops": null
+      },
+      "screening": {
+        "requested_threshold": 0,
+        "applied_threshold": 0,
+        "available": true,
+        "provisional_converged": null,
+        "provisional_physical_residual": null,
+        "provisional_iterations": null,
+        "screened_jk_actions": 0,
+        "exact_jk_actions_including_audits_and_weights": 28,
+        "exact_corrective_solves": 0
+      },
+      "orbital_unassigned_seconds": 0.006209958999988885
+    },
+    "canonical": {
+      "force_validation": {
+        "oracle": "../df-lambda-gemm-20261004/oracle-energy-fd.json",
+        "oracle_recomputed": false,
+        "steps_bohr": [
+          0.0001,
+          3e-05
+        ],
+        "reference_directional_derivatives": [
+          0.01808580748274835,
+          0.01808581799878084
+        ],
+        "analytic_directional_derivative": 0.01808581445398481,
+        "absolute_errors": [
+          6.971236459624164e-09,
+          3.544796029625319e-09
+        ],
+        "fd_gate": 3e-07,
+        "fd_passed": true,
+        "z_residual": 1.363988918208226e-13,
+        "z_gate": 1e-10,
+        "z_passed": true,
+        "stationarity": 1.578631811567603e-11,
+        "stationarity_gate": 1e-08,
+        "stationarity_passed": true,
+        "force_sum": [
+          -4.991408762006211e-13,
+          5.791398176996365e-13,
+          1.1191846061020527e-12
+        ]
+      },
+      "orbital_work": {
+        "derivative_passes": 1,
+        "shell_passes": 0,
+        "generic_passes": 0,
+        "shell_internal_quartet_visits": null,
+        "canonical_quartet_visits": 575639415,
+        "canonical_three_axis_jets": 1276669675,
+        "jk_census_actions": 28,
+        "jk_canonical_quartet_visits": 16117903620,
+        "jk_eri_evaluations": 16117903620,
+        "hardware_flops": null
+      },
+      "screening": {
+        "requested_threshold": 0,
+        "applied_threshold": 0,
+        "available": true,
+        "provisional_converged": null,
+        "provisional_physical_residual": null,
+        "provisional_iterations": null,
+        "screened_jk_actions": 0,
+        "exact_jk_actions_including_audits_and_weights": 28,
+        "exact_corrective_solves": 0
+      },
+      "orbital_unassigned_seconds": 0.006179312999961439
+    },
+    "energy": {
+      "force_validation": null,
+      "orbital_work": null
+    },
+    "symmetric": {
+      "force_validation": {
+        "oracle": "../df-lambda-gemm-20261004/oracle-energy-fd.json",
+        "oracle_recomputed": false,
+        "steps_bohr": [
+          0.0001,
+          3e-05
+        ],
+        "reference_directional_derivatives": [
+          0.01808580748274835,
+          0.01808581799878084
+        ],
+        "analytic_directional_derivative": 0.01808581237866831,
+        "absolute_errors": [
+          4.89591996111205e-09,
+          5.620112528137433e-09
+        ],
+        "fd_gate": 3e-07,
+        "fd_passed": true,
+        "z_residual": 1.3598080029076777e-13,
+        "z_gate": 1e-10,
+        "z_passed": true,
+        "stationarity": 1.1394026347422148e-11,
+        "stationarity_gate": 1e-08,
+        "stationarity_passed": true,
+        "force_sum": [
+          3.4742363066303517e-12,
+          -3.008437682999743e-13,
+          2.815605387729292e-12
+        ]
+      },
+      "orbital_work": {
+        "derivative_passes": 2,
+        "shell_passes": 2,
+        "generic_passes": 0,
+        "shell_internal_quartet_visits": null,
+        "canonical_quartet_visits": null,
+        "canonical_three_axis_jets": null,
+        "jk_census_actions": 28,
+        "jk_canonical_quartet_visits": 16117903620,
+        "jk_eri_evaluations": 16117903620,
+        "hardware_flops": null
+      },
+      "screening": {
+        "requested_threshold": 0,
+        "applied_threshold": 0,
+        "available": true,
+        "provisional_converged": null,
+        "provisional_physical_residual": null,
+        "provisional_iterations": null,
+        "screened_jk_actions": 0,
+        "exact_jk_actions_including_audits_and_weights": 28,
+        "exact_corrective_solves": 0
+      },
+      "orbital_unassigned_seconds": 0.006273092000014913
+    },
+    "screened-1e-12": {
+      "force_validation": {
+        "oracle": "../df-lambda-gemm-20261004/oracle-energy-fd.json",
+        "oracle_recomputed": false,
+        "steps_bohr": [
+          0.0001,
+          3e-05
+        ],
+        "reference_directional_derivatives": [
+          0.01808580748274835,
+          0.01808581799878084
+        ],
+        "analytic_directional_derivative": 0.01808581136771938,
+        "absolute_errors": [
+          3.884971028905726e-09,
+          6.631061460343757e-09
+        ],
+        "fd_gate": 3e-07,
+        "fd_passed": true,
+        "z_residual": 1.358493035588773e-13,
+        "z_gate": 1e-10,
+        "z_passed": true,
+        "stationarity": 1.035870000887229e-11,
+        "stationarity_gate": 1e-08,
+        "stationarity_passed": true,
+        "force_sum": [
+          3.823734514782351e-12,
+          -1.3963493989549436e-12,
+          3.750968285975986e-12
+        ]
+      },
+      "orbital_work": {
+        "derivative_passes": 2,
+        "shell_passes": 2,
+        "generic_passes": 0,
+        "shell_internal_quartet_visits": null,
+        "canonical_quartet_visits": null,
+        "canonical_three_axis_jets": null,
+        "jk_census_actions": 28,
+        "jk_canonical_quartet_visits": 16117903620,
+        "jk_eri_evaluations": 16112979372,
+        "hardware_flops": null
+      },
+      "screening": {
+        "requested_threshold": 1e-12,
+        "applied_threshold": 1e-12,
+        "available": true,
+        "provisional_converged": true,
+        "provisional_physical_residual": 1.358493035588773e-13,
+        "provisional_iterations": 12,
+        "screened_jk_actions": 24,
+        "exact_jk_actions_including_audits_and_weights": 4,
+        "exact_corrective_solves": 0
+      },
+      "orbital_unassigned_seconds": 0.006201690000011695
+    }
+  },
+  "comparisons": {
+    "legacy_to_canonical": {
+      "same_gpu_uuid": true,
+      "same_binary_and_allocation": true,
+      "cold_force_max_abs_difference": 2.550483380048263e-09,
+      "cold_force_gate": 3e-09,
+      "cold_force_passed": true,
+      "energy_abs_difference": 8.526512829121202e-14,
+      "speedup_ratios": {
+        "native": 0.9098982355827515,
+        "reference": 0.7970948625778279,
+        "orbital": 0.8668715759188862,
+        "orbital_two_electron": 0.6022622458629562,
+        "orbital_solve": 1.0000959275560786
+      },
+      "seconds_saved": {
+        "native": -133.92382726999995,
+        "reference": -31.178037289999992,
+        "orbital": -102.69953623999993,
+        "orbital_two_electron": -102.87223620699999,
+        "orbital_solve": 0.04214365799998632
+      }
+    },
+    "legacy_to_symmetric": {
+      "same_gpu_uuid": true,
+      "same_binary_and_allocation": false,
+      "cold_force_max_abs_difference": 1.118932502208736e-09,
+      "cold_force_gate": 3e-09,
+      "cold_force_passed": true,
+      "energy_abs_difference": 1.7053025658242404e-13,
+      "speedup_ratios": {
+        "native": 1.034934273615854,
+        "reference": 0.9521278007313225,
+        "orbital": 1.084148245067845,
+        "orbital_two_electron": 1.5004808216061003,
+        "orbital_solve": 1.0000510551532156
+      },
+      "seconds_saved": {
+        "native": 45.65163404400005,
+        "reference": -6.158201177999985,
+        "orbital": 51.90495828600001,
+        "orbital_two_electron": 51.956991254,
+        "orbital_solve": 0.0224309629999766
+      }
+    },
+    "symmetric_to_screened": {
+      "same_gpu_uuid": true,
+      "same_binary_and_allocation": true,
+      "cold_force_max_abs_difference": 1.0196465893841378e-09,
+      "cold_force_gate": 3e-09,
+      "cold_force_passed": true,
+      "energy_abs_difference": 7.105427357601002e-14,
+      "speedup_ratios": {
+        "native": 0.9679826623017914,
+        "reference": 0.7480149221244623,
+        "orbital": 1.0003875400710123,
+        "orbital_two_electron": 1.0000184907595742,
+        "orbital_solve": 1.000081234502538
+      },
+      "seconds_saved": {
+        "native": -43.22373060399991,
+        "reference": -43.334626181000004,
+        "orbital": 0.23895279999999275,
+        "orbital_two_electron": 0.0019195669999874099,
+        "orbital_solve": 0.03568729099998791
+      }
+    }
+  },
+  "legacy_amdahl_ideal_upper_bounds": {
+    "remove_all_nuclear_two_electron": 1.1301708446368384,
+    "remove_entire_z_solve": 1.481201990666709,
+    "remove_all_jk_including_audits_and_weights": 1.6104159996674283,
+    "note": "Idealized bounds, not achieved speedups or screening predictions."
+  },
+  "all_cold_force_pairs": {
+    "maximum_component_errors": {
+      "legacy_vs_canonical": 2.550483380048263e-09,
+      "legacy_vs_symmetric": 1.118932502208736e-09,
+      "legacy_vs_screened-1e-12": 7.648228717016536e-10,
+      "canonical_vs_symmetric": 1.850176234441392e-09,
+      "canonical_vs_screened-1e-12": 2.701779244773661e-09,
+      "symmetric_vs_screened-1e-12": 1.0196465893841378e-09
+    },
+    "maximum": 2.701779244773661e-09,
+    "gate": 3e-09,
+    "passed": true,
+    "note": "Includes rejected canonical and all retained force schedules; no sample filtered by iteration count or timing."
+  },
+  "limitations": [
+    "One cold sample per configuration; no timing confidence interval.",
+    "Independent RHF/source/CCSD solves introduce force and timing variability.",
+    "Cold energy/force total differences are not an exact incremental force cost.",
+    "J/K times overlap enclosing phases and must not be added to them.",
+    "Unmeasured shell work and hardware FLOPs remain null.",
+    "Large source-factor atol=rtol=3e-10 qualification remains outstanding.",
+    "Global RHF stability remains uncertified.",
+    "Earlier #1829 cold-pair discrepancy remains a separate unresolved record."
+  ],
+  "raw_sha256": {
+    "legacy.json": "5d8465d31c3314225ed3c320bed47510ea29ae8572168e13079305388e320c63",
+    "canonical.json": "ce263d6f29cb6301e57722a387e8137cad27839bc408843cb7a0ddcefd6d5184",
+    "energy.json": "9e5b47d1332c6a41d77280eabfb3c02ab57e6d5056b8be82cde5f99938224ac6",
+    "symmetric.json": "50517d303c7e34fe614d61a5f25298d8b1952057886615b161173a0ef10853b4",
+    "screened-1e-12.json": "eec95870385d968d9471d79feb7b9458df1549f4e537b88aa5c0cb73ba0232f1"
+  }
+}

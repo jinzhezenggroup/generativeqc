@@ -950,6 +950,20 @@ jobs:
             tests/python/test_rccsdt_native_codegen_dependencies.py
             tests/python/test_df_cc_native_codegen.py
           )
+          # PR #1934 / run 37238512811 still left the broad core shards with
+          # a large measured long tail. Keep these newly measured files out of
+          # worksteal, but count them in the existing core parity before
+          # excluding them so unrelated core files do not swap owners.
+          rebalance_paths=(
+            tests/python/test_df_cc_native_solver.py
+            tests/python/test_df_lambda_matrix.py
+            tests/python/test_df_lambda_reduction.py
+            tests/python/test_xc_retirement.py
+            tests/python/test_stationary_cooperative_kernel_host.py
+            tests/python/test_hessian_reference.py
+            tests/python/test_hessian_hvp.py
+            tests/python/test_ecp_halogen_dft.py
+          )
           case "${{ matrix.shard }}" in
             core-a|core-b)
               # Split the broad remainder by file, not by collected test node:
@@ -961,6 +975,10 @@ jobs:
               for path in "${slow_paths[@]}"; do
                 slow_lookup["${path}"]=1
               done
+              declare -A rebalance_lookup=()
+              for path in "${rebalance_paths[@]}"; do
+                rebalance_lookup["${path}"]=1
+              done
               test_targets=()
               core_index=0
               target_parity=0
@@ -971,10 +989,14 @@ jobs:
                 if [[ -n "${slow_lookup[${path}]:-}" ]]; then
                   continue
                 fi
-                if (( core_index % 2 == target_parity )); then
+                current_index="${core_index}"
+                ((core_index += 1))
+                if [[ -n "${rebalance_lookup[${path}]:-}" ]]; then
+                  continue
+                fi
+                if (( current_index % 2 == target_parity )); then
                   test_targets+=("${path}")
                 fi
-                ((core_index += 1))
               done < <(git ls-files tests/python | grep -E '(^|/)test_[^/]*\.py$' | sort)
               if (( ${#test_targets[@]} == 0 )); then
                 echo "::error::core shard selected no tests"
@@ -1005,6 +1027,11 @@ jobs:
                 tests/python/test_one_electron_cpu_codegen.py
                 tests/python/test_cc_solver.py
                 tests/python/test_cc_lambda_solver.py
+                # Keep the module-scoped native solver probe on one worker:
+                # worksteal repeated its ~131-160 s setup across four workers.
+                tests/python/test_df_cc_native_solver.py
+                tests/python/test_df_lambda_matrix.py
+                tests/python/test_df_lambda_reduction.py
               )
               ;;
             posthf)
@@ -1023,6 +1050,8 @@ jobs:
                 tests/python/test_hessian_analytic.py
                 tests/python/test_hessian_directional.py
                 tests/python/test_response_operator.py
+                tests/python/test_hessian_reference.py
+                tests/python/test_hessian_hvp.py
               )
               ;;
             ecp-forces)
@@ -1034,6 +1063,7 @@ jobs:
                 tests/python/test_ecp_spd_cartesian_cpu.py
                 tests/python/test_ecp_spd_spherical_cpu.py
                 tests/python/test_ecp_stuttgart_dft.py
+                tests/python/test_ecp_halogen_dft.py
               )
               ;;
             compiler-heavy)
@@ -1051,6 +1081,8 @@ jobs:
                 tests/python/test_eri_cpu_codegen.py
                 tests/python/test_rccsdt_native_codegen_dependencies.py
                 tests/python/test_df_cc_native_codegen.py
+                tests/python/test_xc_retirement.py
+                tests/python/test_stationary_cooperative_kernel_host.py
               )
               ;;
             *)
