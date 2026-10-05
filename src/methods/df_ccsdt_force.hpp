@@ -13,6 +13,9 @@ namespace generativeqc::methods::detail {
  * a DF correlation Hamiltonian. The public energy-only selector reuses this
  * owner; public force promotion remains separate. */
 struct DFCCSDTResult {
+  // If true, total_seconds includes a resource-refused precursor whose work
+  // counters are unavailable; successful-attempt counters are not endpoint totals.
+  bool recycling_discarded_primal_attempt{};
   double energy{}, reference_energy{}, correlation_energy{}, triples_energy{};
   std::vector<double> forces;
   Result method_result;
