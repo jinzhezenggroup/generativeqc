@@ -1,6 +1,7 @@
 // Complete cold DF-CCSD(T) energy/force benchmark with explicit schedule selectors.
 // The input contains no orbitals, Fock matrix, factors or amplitudes from an oracle.
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -34,11 +35,13 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 10)
+    if (argc < 4 || argc > 14)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
-          "[CCSD_Q_BATCH_LIMIT]]]]]]");
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
+          "[ORBITAL_SCHWARZ "
+          "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
+          "[DERIVED_DENOMINATORS_0_OR_1]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -49,11 +52,35 @@ int main(int argc, char** argv) {
       return value == "1";
     };
     const bool matrix = selector(4), forces = selector(5), lambda_matrix = selector(6);
-    const std::size_t batch_limit = argc > 7 ? std::stoull(argv[7]) : 8;
-    const auto diis_history = argc > 8 ? std::stoul(argv[8]) : 6;
-    const auto ccsd_batch_limit = argc > 9 ? std::stoull(argv[9]) : 8;
+    const auto unsigned_argument = [&](int index, unsigned long long fallback) {
+      if (argc <= index) return fallback;
+      const std::string token = argv[index];
+      if (token.empty() || token.find_first_not_of("0123456789") != std::string::npos)
+        throw std::invalid_argument("invalid unsigned endpoint argument");
+      return std::stoull(token);
+    };
+    const std::size_t batch_limit = unsigned_argument(7, 8);
+    // Preserve the established DIIS and CCSD batch slots; append response controls.
+    const auto diis_history = unsigned_argument(8, 6);
     if (diis_history == 1 || diis_history > 20)
       throw std::invalid_argument("invalid endpoint DIIS history");
+    const auto ccsd_batch_limit = unsigned_argument(9, 8);
+    generativeqc::hf::RHFFrameResponseOptions frame_options;
+    const std::string screening_argument = argc > 10 ? argv[10] : "0";
+    std::size_t screening_consumed = 0;
+    frame_options.orbital_screening_tolerance = std::stod(screening_argument, &screening_consumed);
+    if (screening_consumed != screening_argument.size() ||
+        !std::isfinite(frame_options.orbital_screening_tolerance) ||
+        frame_options.orbital_screening_tolerance < 0.0)
+      throw std::invalid_argument("invalid orbital screening threshold");
+    frame_options.profile_jk = argc > 11 && selector(11);
+    const std::string nuclear_selector = argc > 12 ? argv[12] : "2";
+    if (nuclear_selector != "0" && nuclear_selector != "1" && nuclear_selector != "2")
+      throw std::invalid_argument("invalid nuclear response selector");
+    const auto nuclear_schedule = nuclear_selector[0] - '0';
+    frame_options.bilinear_derivative = nuclear_schedule == 1;
+    frame_options.symmetric_polarization = nuclear_schedule == 2;
+    const bool derived_denominators = selector(13);
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -90,7 +117,7 @@ int main(int argc, char** argv) {
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
         execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
-        batch_limit, ccsd_batch_limit);
+        batch_limit, ccsd_batch_limit, frame_options, derived_denominators);
     std::ofstream output(argv[2]);
     if (!output) throw std::runtime_error("cannot open completed force output");
     output << std::setprecision(17) << "{\n";
@@ -129,6 +156,10 @@ int main(int argc, char** argv) {
     field("ccsd_contraction_terms", result.solver.df_contraction_terms);
     field("ccsd_evaluations", result.solver.iteration_graph_calls);
     field("ccsd_capacity", result.solver.numeric_capacity_bytes);
+    field("ccsd_device_bytes", result.solver.owned_device_bytes);
+    field("ccsd_setup_h2d_bytes", result.solver.setup_h2d_bytes);
+    field("denominator_identity", result.solver.denominator_identity);
+    field("derived_d2_iteration_evaluations", result.solver.derived_d2_iteration_evaluations);
     field("ccsd_iterations", result.solver.iterations);
     field("ccsd_replay_r1_max", result.solver.replay_r1_max);
     field("ccsd_replay_r2_max", result.solver.replay_r2_max);
@@ -148,6 +179,36 @@ int main(int argc, char** argv) {
     field("source_response_seconds", result.source_response_seconds);
     field("orbital_seconds", result.orbital_seconds);
     field("jk_actions", result.orbital.jk_actions);
+    field("orbital_setup_seconds", result.orbital.setup_seconds);
+    field("orbital_reference_audit_seconds", result.orbital.reference_audit_seconds);
+    field("orbital_weights_seconds", result.orbital.weights_seconds);
+    field("orbital_solve_seconds", result.orbital.solve_seconds);
+    field("orbital_independent_audit_seconds", result.orbital.independent_audit_seconds);
+    field("orbital_one_electron_seconds", result.orbital.one_electron_seconds);
+    field("orbital_two_electron_seconds", result.orbital.two_electron_seconds);
+    field("orbital_bilinear_derivative_used", result.orbital.bilinear_derivative_used);
+    field("orbital_symmetric_polarization_used", result.orbital.symmetric_polarization_used);
+    field("orbital_derivative_census_measured", result.orbital.derivative_census_measured);
+    field("orbital_derivative_quartet_visits", result.orbital.derivative_quartet_visits);
+    field("orbital_derivative_jet_evaluations", result.orbital.derivative_jet_evaluations);
+    field("orbital_jk_seconds", result.orbital.jk_seconds);
+    field("orbital_screened_jk_seconds", result.orbital.screened_jk_seconds);
+    field("orbital_screened_residual", result.orbital.screened_residual);
+    field("orbital_requested_screening", result.orbital.requested_screening);
+    field("orbital_applied_screening", result.orbital.applied_screening);
+    field("orbital_screened_jk_actions", result.orbital.screened_jk_actions);
+    field("orbital_jk_census_actions", result.orbital.jk_census_actions);
+    field("orbital_exact_refinements", result.orbital.exact_refinements);
+    field("orbital_screened_iterations", result.orbital.screened_iterations);
+    field("orbital_screened_operator_actions", result.orbital.screened_operator_actions);
+    field("orbital_jk_quartet_visits", result.orbital.jk_quartet_visits);
+    field("orbital_jk_eri_evaluations", result.orbital.jk_eri_evaluations);
+    field("orbital_jk_timing_measured", result.orbital.jk_timing_measured);
+    field("orbital_linear_screening_available", result.orbital.linear_screening_available);
+    field("orbital_screened_converged", result.orbital.screened_converged);
+    field("orbital_derivative_passes", result.orbital.derivative_passes);
+    field("orbital_shell_derivative_passes", result.orbital.shell_derivative_passes);
+    field("orbital_generic_derivative_passes", result.orbital.generic_derivative_passes);
     field("hessian_elements", result.orbital.explicit_hessian_elements);
     field("source_weight_values", result.source_weight_values);
     field("metric_weight_values", result.metric_weight_values);

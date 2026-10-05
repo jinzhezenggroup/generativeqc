@@ -15,6 +15,8 @@ struct CudaState {
   double *foo{}, *fov{}, *fvv{};
   double *ovov{}, *ovvo{}, *oovv{}, *ovvv{}, *ovoo{}, *oooo{}, *vvvv{};
   double *d1{}, *d2{}, *t1{}, *t2{};
+  double* canonical_eps{};
+  double canonical_level_shift{};
   double *iteration_arena{}, *replay_arena{}, *response_arena{};
   // Borrowed semantic table; the native owner keeps it and its context alive.
   tensor::PreparedContractions* conventional_contractions{};

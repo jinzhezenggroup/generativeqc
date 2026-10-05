@@ -591,7 +591,7 @@ def native_execution_header() -> str:
         {
             "descriptors": [panel_descriptors, strict_descriptors, mixed_descriptors],
             "calls": [panel_call, strict_calls, mixed_calls],
-            "schema": "prepared-w-v1",
+            "schema": "prepared-w-v2",
         }
     )
     return (
@@ -605,7 +605,26 @@ struct WPlan {
   runtime::NativeLoweringPrecision precision;
   bool retained_incumbent{};
   std::string_view schedule_identity;
-  std::size_t provider_bytes() const { return w_lowering_candidates[selected].provider_bytes; }
+  tensor::ContractionProviderReservation optional_reservation;
+  tensor::ContractionAlgorithm algorithm() const {
+    const auto provider=w_lowering_candidates[selected].provider;
+    if(provider=="cublas") return tensor::ContractionAlgorithm::PedanticBlas;
+    if(provider=="generated.cuda") return tensor::ContractionAlgorithm::GeneratedOrdered;
+    if(provider=="cutensor") return tensor::ContractionAlgorithm::CutensorAffine;
+    throw std::logic_error("unbound triples W provider");
+  }
+  std::size_t provider_bytes() const {
+    if(algorithm()!=tensor::ContractionAlgorithm::CutensorAffine)
+      return w_lowering_candidates[selected].provider_bytes;
+    // One strict panel and two W plans coexist; workspace is owned by those
+    // prepared plans outside the method arena, and must be admitted with them.
+    return checked_mul(3,checked_add(optional_reservation.workspace_bytes,
+                                    optional_reservation.provider_bytes));
+  }
+  std::size_t optional_host_bytes() const {
+    return algorithm()==tensor::ContractionAlgorithm::CutensorAffine
+        ? checked_mul(3,optional_reservation.host_bytes) : 0;
+  }
   std::size_t storage_bytes(std::size_t o,std::size_t v,std::size_t panels) const {
     if(precision.arithmetic.storage_dtype==runtime::PrecisionDtype::Fp64) return 0;
     const auto v3=checked_product({v,v,v});
@@ -621,22 +640,49 @@ inline WPlan prepare_w_plan(runtime::PrecisionDirective admitted,bool library_av
                    admitted.accumulation_dtype!=runtime::PrecisionDtype::Fp32 ||
                    admitted.qualification!="issue1764/df-triples-w-fp32-candidate-v1")))
     throw std::invalid_argument("unqualified triples W arithmetic");
+  const auto reservation=tensor::qualified_cutensor_reservation();
+  const auto version=tensor::cutensor_provider_version();
   auto offers=w_lowering_candidates;
+  std::optional<std::size_t> incumbent;
   for(std::size_t i=0;i<offers.size();++i) {
-    if(strict && i>=2) offers[i].rejection="scientific owner did not admit this precision";
-    if(!library_available && i%2==0) offers[i].rejection="optional provider preparation unavailable";
+    auto& offer=offers[i];
+    const bool offer_strict=w_lowering_precisions[offer.precision].arithmetic.is_strict_fp64();
+    if(strict && !offer_strict) offer.rejection="scientific owner did not admit this precision";
+    if(!library_available && offer.provider!="generated.cuda")
+      offer.rejection="optional provider preparation unavailable";
+    if(offer.provider=="cutensor") {
+      if(!reservation.host_bytes || version<20800 || version/10000!=2)
+        offer.rejection="qualified cuTENSOR resource profile unavailable";
+      offer.workspace_bytes=checked_mul(3,reservation.workspace_bytes);
+      offer.provider_bytes=checked_mul(3,reservation.provider_bytes);
+      offer.host_bytes=checked_mul(3,reservation.host_bytes);
+    }
+    if(offer_strict==strict && offer.provider==(library_available?"cublas":"generated.cuda"))
+      incumbent=i;
+#if defined(GENERATIVEQC_TEST_HOOKS)
+    // Synthetic complete costs exercise joint selection only in qualification
+    // builds. They are not measured performance evidence or production policy.
+    if(library_available && reservation.host_bytes) {
+      offer.cost.source="test-only-provider-ranking";
+      offer.cost.prepare_ns=0;offer.cost.cast_ns=0;offer.cost.pack_ns=0;
+      offer.cost.refinement_ns=0;offer.cost.audit_ns=0;offer.cost.fallback_ns=0;
+      offer.cost.kernel_ns=(offer.provider=="cutensor"?1:100)+(offer_strict==strict?0:10);
+    }
+#endif
   }
-  const auto incumbent=(strict?0:2)+(library_available?0:1);
+  if(!incumbent) throw std::logic_error("qualified W incumbent is missing");
   const auto selected=runtime::select_native_lowering(w_lowering_request,offers,w_lowering_target,
                                                      w_lowering_compilation,1,incumbent);
   return {selected.selected,w_lowering_precisions[offers[selected.selected].precision],selected.retained_incumbent,
-          strict ? "@STRICT_SCHEDULE@" : "@MIXED_SCHEDULE@"};
+          w_lowering_precisions[offers[selected.selected].precision].arithmetic.is_strict_fp64()
+              ? "@STRICT_SCHEDULE@" : "@MIXED_SCHEDULE@",reservation};
 }
 
 // Finite resource fallback order: retain precision with generated execution,
 // then restore strict precision. No method owner chooses a vendor or dtype.
 inline std::optional<WPlan> lower_resource_w_plan(const WPlan& plan) {
-  if(plan.selected%2==0) return prepare_w_plan(plan.precision.arithmetic,false);
+  if(plan.algorithm()!=tensor::ContractionAlgorithm::GeneratedOrdered)
+    return prepare_w_plan(plan.precision.arithmetic,false);
   if(!plan.precision.arithmetic.is_strict_fp64()) return prepare_w_plan(runtime::strict_fp64_precision(),false);
   return std::nullopt;
 }
@@ -647,35 +693,47 @@ inline std::optional<WPlan> lower_resource_w_plan(const WPlan& plan) {
  * The caller's tensor Context and arena must outlive this object. */
 class WExecution {
  public:
-  static std::size_t host_bytes() {
-    return sizeof(WExecution)+tensor::PreparedContractions::storage_bytes(1)+
-           tensor::PreparedContractions::storage_bytes(2);
+  static std::size_t host_bytes(const WPlan& plan) {
+    return checked_add(plan.optional_host_bytes(),sizeof(WExecution)+
+        tensor::PreparedContractions::storage_bytes(1)+tensor::PreparedContractions::storage_bytes(2));
   }
   WExecution(WPlan plan,std::size_t o_,std::size_t v_,std::size_t q_,generativeqc_tensor::Context& context,
              unsigned char* storage,std::size_t panels,std::size_t& fp64_calls,std::size_t& fp32_calls,
              std::size_t& summands,std::size_t& casts)
       : o(o_),v(v_),q(q_),v3(checked_product({v,v,v})),plan_(plan),casts_(&casts) {
-    if(plan_.selected%2) provider_.prepare_generated(context.stream);
+    if(plan_.algorithm()!=tensor::ContractionAlgorithm::PedanticBlas)
+      provider_.prepare_generated(context.stream);
     else if(!provider_.prepare(context.stream)) {
       provider_.prepare_generated(context.stream);
       plan_=prepare_w_plan(plan.precision.arithmetic,false);
     }
-    const auto algorithm=plan_.selected%2 ? tensor::ContractionAlgorithm::GeneratedOrdered
-                                        : tensor::ContractionAlgorithm::PedanticBlas;
+    const auto bind=[&] {
+      const auto algorithm=plan_.algorithm();
 """,
                 "    panel_table_.add(o,v,q,{"
                 + ",".join(panel_descriptors)
-                + "},provider_,fp64_calls,summands,{algorithm});",
+                + "},provider_,fp64_calls,summands,{algorithm},plan_.optional_reservation);",
                 "    if(plan_.precision.arithmetic.storage_dtype==runtime::PrecisionDtype::Fp64) {",
                 "      w_table_.add(o,v,q,{"
                 + ",".join(strict_descriptors)
-                + "},provider_,fp64_calls,summands,{algorithm,algorithm});",
-                "      launch_=&WExecution::strict_w;",
+                + "},provider_,fp64_calls,summands,{algorithm,algorithm},plan_.optional_reservation);",
                 "    } else {",
                 "      w_table_.add(o,v,q,{"
                 + ",".join(mixed_descriptors)
-                + "},provider_,fp32_calls,summands,{algorithm,algorithm});",
+                + "},provider_,fp32_calls,summands,{algorithm,algorithm},plan_.optional_reservation);",
                 r"""
+      }
+    };
+    try { bind(); }
+    catch(const tensor::ContractionPreparationUnavailable&) {
+      // Same-precision generated storage is a subset of the already admitted
+      // layout. Checked release must succeed before the one permitted retry.
+      w_table_.release();panel_table_.release();
+      plan_=prepare_w_plan(plan_.precision.arithmetic,false);
+      bind();
+    }
+    if(plan_.precision.arithmetic.is_strict_fp64()) launch_=&WExecution::strict_w;
+    else {
       auto* cursor=reinterpret_cast<float*>(storage);
       ovoo_=cursor;cursor+=checked_product({o,v,o,o});
       t2_=cursor;cursor+=checked_product({o,o,v,v});
@@ -685,8 +743,14 @@ class WExecution {
     }
   }
   const WPlan& plan() const noexcept { return plan_; }
-  std::size_t provider_bytes() const noexcept { return provider_.retained_bytes(); }
-  int provider_version() const noexcept { return provider_.provider_version(); }
+  std::size_t provider_bytes() const {
+    return checked_add(provider_.retained_bytes(),checked_add(panel_table_.optional_resources().provider_bytes,
+                                                             w_table_.optional_resources().provider_bytes));
+  }
+  int provider_version() const {
+    return plan_.algorithm()==tensor::ContractionAlgorithm::CutensorAffine
+        ? int(tensor::cutensor_provider_version()) : provider_.provider_version();
+  }
   int runtime_version() const noexcept { return provider_.runtime_version(); }
   void initialize(generativeqc_tensor::Context& context,const Inputs& in) {
     if(!ovoo_) return;

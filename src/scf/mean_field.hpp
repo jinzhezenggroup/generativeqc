@@ -21,6 +21,7 @@ class OverlapOrthogonalizer;
  * detached row-major spatial AO/MO conventions on every backend. */
 void validate_physical_reference(PhysicalReference& reference);
 
+struct CudaRhfSourceHandoff;
 struct CudaDensityFittingMetricDiagnostic;
 struct CudaDensityFittingJkPlan;
 class PreparedFockPlan;
@@ -316,16 +317,20 @@ std::vector<RhfBucketItem> run_uhf_density_fitting_cuda_bucket_cached(
 ScfResult run_rhf_cuda(
     const core::System& system, const ScfOptions& options, int device_id,
     const std::vector<double>* initial_density = nullptr,
-    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source = nullptr);
+    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source = nullptr,
+    CudaRhfSourceHandoff* handoff = nullptr);
 
 /** Single-system adapter over the caller-owned CUDA bucket plan. The optional
  * flag reports executable-plan reuse only; it says nothing about warm-density
  * or physical-reference reuse. An admitted interaction_source takes exclusive
- * ownership and clears the caller's slot until explicit successful reclaim. */
+ * ownership and clears the caller's slot until explicit successful reclaim.
+ * Otherwise compact metadata may coexist with the reusable slot; both live
+ * reservations are charged. The handoff reports optional compaction capacity. */
 ScfResult run_rhf_cuda_cached(
     CudaRhfBucketPlan** plan, const core::System& system, const ScfOptions& options, int device_id,
     const std::vector<double>* initial_density = nullptr, bool* execution_plan_reused = nullptr,
-    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source = nullptr);
+    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source = nullptr,
+    CudaRhfSourceHandoff* handoff = nullptr);
 
 /** Return an exclusively held resident source's executable to an empty cache
  * only after its complete correlated endpoint succeeds. Drains consumer uses;

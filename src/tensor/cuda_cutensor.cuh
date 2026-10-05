@@ -1,7 +1,7 @@
 #pragma once
 
-// Optional provider implementation. CPU builds and ordinary CUDA bindings do
-// not include this header or acquire a cuTENSOR dependency.
+// Optional provider implementation, included by the shared executor only when
+// the build explicitly enables and links cuTENSOR.
 #include <cutensor.h>
 
 #include <chrono>
@@ -81,6 +81,10 @@ class CudaCutensorContraction {
     stream_ = stream;
     generativeqc_tensor::cuda_check(cudaGetDevice(&device_));
     version_ = cutensorGetVersion();
+    if (version_ / 10000 != 2 || version_ < 20800) {
+      rejection_ = "native provider requires cuTENSOR 2.8 or later in 2.x";
+      return false;
+    }
     generativeqc_tensor::cuda_check(cudaRuntimeGetVersion(&runtime_version_));
     std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     try {
@@ -211,6 +215,23 @@ class CudaCutensorContraction {
     clear_locked(false);
     (void)cudaSetDevice(previous);
   }
+  /** Checked live release for transactional preparation/fallback. The owner
+   * may retry another provider only after all pending work and cleanup succeed.
+   * Destructors instead use best-effort reset(). */
+  void release() {
+    if (!handle_ && !workspace_) return;
+    std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+    int previous{};
+    generativeqc_tensor::cuda_check(cudaGetDevice(&previous));
+    generativeqc_tensor::cuda_check(cudaSetDevice(device_));
+    try {
+      clear_locked(true);
+    } catch (...) {
+      (void)cudaSetDevice(previous);
+      throw;
+    }
+    generativeqc_tensor::cuda_check(cudaSetDevice(previous));
+  }
   std::size_t workspace_bytes() const noexcept { return workspace_bytes_; }
   std::size_t provider_bytes() const noexcept { return provider_bytes_; }
   std::size_t host_bytes() const noexcept { return host_bytes_; }
@@ -236,7 +257,8 @@ class CudaCutensorContraction {
     auto retain = [&](auto result) {
       if (status == CUTENSOR_STATUS_SUCCESS) status = result;
     };
-    if (stream_ && handle_) cuda_status = cudaStreamSynchronize(stream_);
+    // nullptr is the valid default CUDA stream and must be drained too.
+    if (handle_) cuda_status = cudaStreamSynchronize(stream_);
     if (plan_) retain(cutensorDestroyPlan(plan_));
     if (preference_) retain(cutensorDestroyPlanPreference(preference_));
     if (operation_) retain(cutensorDestroyOperationDescriptor(operation_));

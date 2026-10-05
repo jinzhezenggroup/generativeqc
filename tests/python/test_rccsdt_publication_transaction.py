@@ -17,9 +17,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(scope="module")
 def publication(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler and ccache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = (ROOT / "src/methods/rccsdt_method.cpp").read_text(encoding="utf-8")
     start = source.index("      auto diagnostic = state.diagnostic;")
     stop = source.index("      return std::move(state.result);", start)
@@ -214,6 +215,7 @@ int main(int argc,char** argv) {
     )
     compiled = subprocess.run(
         [
+            cache,
             compiler,
             "-std=c++20",
             "-Wall",

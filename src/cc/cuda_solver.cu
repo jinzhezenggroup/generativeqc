@@ -71,7 +71,7 @@ __global__ void accumulate_df(const double* values, std::size_t count, double* s
 }
 
 struct Layout {
-  std::array<std::size_t, 14> inputs{};
+  std::array<std::size_t, 15> inputs{};
   std::size_t iteration{}, replay{}, last_t1{}, last_t2{}, vectors{}, errors{};
   std::size_t gram{}, system{}, coefficients{}, r1_partials{}, r2_partials{}, scalars{};
   std::size_t status{}, generated_error{}, arithmetic{}, total{};
@@ -127,9 +127,9 @@ struct Owner {
     if (naux)
       plan = df_iteration_plan(p.nocc, p.nvir, naux, true, options.df_auxiliary_reduction,
                                options.df_matrix_gemm && matrix_dimensions_fit);
-    const std::array<const std::vector<double>*, 14> host = {
-        &p.foo,  &p.fov,  &p.fvv,  &p.ovov, &p.ovvo, &p.oovv,       &p.ovvv,
-        &p.ovoo, &p.oooo, &p.vvvv, &p.d1,   &p.d2,   &p.initial_t1, &p.initial_t2};
+    const std::array<const std::vector<double>*, 15> host = {
+        &p.foo,  &p.fov,  &p.fvv, &p.ovov, &p.ovvo,       &p.oovv,       &p.ovvv,         &p.ovoo,
+        &p.oooo, &p.vvvv, &p.d1,  &p.d2,   &p.initial_t1, &p.initial_t2, &p.canonical_eps};
     auto build_layout = [&]() {
       layout = {};
       std::size_t cursor = 0;
@@ -265,9 +265,10 @@ struct Owner {
       }
       cuda_check(allocation);
 
-      std::array<double**, 14> fields = {
-          &state.foo,  &state.fov,  &state.fvv,  &state.ovov, &state.ovvo, &state.oovv, &state.ovvv,
-          &state.ovoo, &state.oooo, &state.vvvv, &state.d1,   &state.d2,   &state.t1,   &state.t2};
+      std::array<double**, 15> fields = {&state.foo,  &state.fov,  &state.fvv,          &state.ovov,
+                                         &state.ovvo, &state.oovv, &state.ovvv,         &state.ovoo,
+                                         &state.oooo, &state.vvvv, &state.d1,           &state.d2,
+                                         &state.t1,   &state.t2,   &state.canonical_eps};
       for (std::size_t i = 0; i < host.size(); ++i) {
         *fields[i] = reinterpret_cast<double*>(base + layout.inputs[i]);
         const auto amount = host[i]->size() * sizeof(double);
@@ -276,6 +277,10 @@ struct Owner {
               cudaMemcpyAsync(*fields[i], host[i]->data(), amount, cudaMemcpyHostToDevice, stream));
         diagnostic.setup_h2d_bytes += amount;
       }
+      if (p.canonical_eps.empty()) state.canonical_eps = nullptr;
+      if (p.d2.empty()) state.d2 = nullptr;
+      state.canonical_level_shift = p.canonical_level_shift;
+      diagnostic.denominator_identity = denominator_identity(p);
       state.o = p.nocc;
       state.v = p.nvir;
       state.stream = stream;
@@ -656,6 +661,8 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
       } else {
         output = owner.iteration();
         ++owner.diagnostic.iteration_graph_calls;
+        if (owner.state.canonical_eps)
+          owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
       }
       const auto status = owner.read_status(output);
       owner.diagnostic.iteration_seconds +=
@@ -700,6 +707,8 @@ SolverResult solve_cuda(const Problem& p, const SolverOptions& options, int devi
         const auto trial = owner.iteration();
         cuda_check(cudaEventRecord(owner.trial_end, owner.stream));
         ++owner.diagnostic.iteration_graph_calls;
+        if (owner.state.canonical_eps)
+          owner.diagnostic.derived_d2_iteration_evaluations += owner.n2;
         const bool diis_modified_state = run_diis(owner, options, trial);
         if (!diis_modified_state) {
           carried_output = trial;

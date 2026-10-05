@@ -1385,14 +1385,16 @@ std::size_t density_fitting_source_metadata_bytes(std::size_t batch, std::size_t
   // The v1 caller supplies the historical dense-transform element bound.
   // Keep that ABI conservative while also covering fixed-size sparse records
   // for very small Cartesian bases, where a record can exceed a dense row.
+  // Public DF records reserve the auxiliary-g width even for s/p-only bases;
+  // the normalized Cartesian metadata above retains the legacy three-term ABI.
   std::size_t dense_bytes = 0, sparse_bytes = 0;
   if (!checked_multiply(transform_elements, 8, dense_bytes) ||
-      !checked_multiply(
-          cartesian_aos,
-          sizeof(std::uint32_t) +
-              molecule::kMaximumAoExpansionTerms * (sizeof(std::int32_t) + sizeof(double)) +
-              alignof(double) - 1,
-          sparse_bytes))
+      !checked_multiply(cartesian_aos,
+                        sizeof(std::uint32_t) +
+                            molecule::kMaximumAuxiliaryAoExpansionTerms *
+                                (sizeof(std::int32_t) + sizeof(double)) +
+                            alignof(double) - 1,
+                        sparse_bytes))
     throw std::overflow_error("DF transform metadata overflows size_t");
   add(std::max(dense_bytes, sparse_bytes), 1);
   return bytes;

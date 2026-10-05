@@ -56,10 +56,18 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "struct CudaXcAoSelectionResources",
         )
     )
+    # Keep the exact production launcher signature in the host-storage census.
+    # The CUDA stream is opaque here; this probe never calls a launcher.
+    launcher_start = header.index("using CudaXcDensityLauncher =")
+    launcher_end = header.index(";", launcher_start) + 1
+    declarations += "\nstruct CUstream_st; using cudaStream_t = CUstream_st*;\n"
+    declarations += header[launcher_start:launcher_end]
     xc_source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
+    declarations += "\n" + _definition(xc_source, "struct CudaXcProgramTraits") + ";"
     definitions = "\n".join(
         _definition(xc_source, signature)
         for signature in (
+            "CudaXcProgramTraits cuda_xc_program_traits(",
             "CudaXcLayout cuda_xc_layout_shape(",
             "CudaXcExecutionCapabilities cuda_xc_execution_capabilities(",
             "CudaXcLayout cuda_xc_local_ao_layout(",
@@ -81,6 +89,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <string>
 #include <vector>
 #include "dft/cuda_ks_precision.hpp"
+#include "dft/semilocal_family.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "generated_split_hybrid_registry.cuh"
 using namespace generativeqc;
@@ -135,7 +144,7 @@ int main(int argc, char** argv) {
     }
     const auto schedule = resolve_cuda_ks_precision_schedule(
         automatic ? GENERATIVEQC_PRECISION_AUTO : GENERATIVEQC_PRECISION_FP64,
-        functional, false, nonlocal);
+        xc_layout.fast_paths, false, nonlocal);
     const auto iteration = resolve_cuda_ks_iteration_precision(
         schedule, false, cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
     std::cout << (admit_ao ? "local" : "dense") << ":"
@@ -145,7 +154,7 @@ int main(int argc, char** argv) {
 }
 """
     )
-    subprocess.run(
+    built = subprocess.run(
         [
             cache,
             compiler,
@@ -164,12 +173,13 @@ int main(int argc, char** argv) {
             "-o",
             str(executable),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=60,
         env={**os.environ, "CCACHE_BASEDIR": str(ROOT)},
     )
+    assert built.returncode == 0, built.stderr
     return executable
 
 

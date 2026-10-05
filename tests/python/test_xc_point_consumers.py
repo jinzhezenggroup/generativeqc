@@ -9,6 +9,8 @@ from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 def test_admitted_point_consumers(tmp_path: Path) -> None:
     """Admitted legacy and split keys resolve; unsupported keys must fail.
@@ -94,6 +96,8 @@ int main() {
             "-O2",
             "-I",
             str(tmp_path),
+            "-I",
+            str(ROOT / "src"),
             str(source),
             "-o",
             str(binary),

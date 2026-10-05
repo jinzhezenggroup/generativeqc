@@ -13,6 +13,7 @@
 #include "runtime/resource_usage.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/rhf_bucket_internal.hpp"
+#include "scf/cuda/rhf_source_handoff.hpp"
 #include "scf/cuda/topology.hpp"
 #include "scf/cuda_batch.hpp"
 #include "scf/mean_field.hpp"
@@ -194,18 +195,20 @@ class CudaRhfReferenceInteractionSource final : public integrals::ElectronIntera
 ScfResult run_rhf_cuda(
     const core::System& system, const ScfOptions& options, int device_id,
     const std::vector<double>* initial_density,
-    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source) {
+    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source,
+    CudaRhfSourceHandoff* handoff) {
   if (options.hooks || options.strict_initial_density)
     throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
   if (interaction_source) interaction_source->reset();
+  if (handoff) *handoff = {};
 
-  if (interaction_source) {
+  if (interaction_source || handoff) {
     struct LocalPlan {
       CudaRhfBucketPlan* plan{};
       ~LocalPlan() { destroy_rhf_cuda_bucket_plan(plan); }
     } owner;
     return run_rhf_cuda_cached(&owner.plan, system, options, device_id, initial_density, nullptr,
-                               interaction_source);
+                               interaction_source, handoff);
   }
   const std::vector<core::System> systems{system};
   const std::vector<const std::vector<double>*> initial_densities{initial_density};
@@ -229,14 +232,16 @@ ScfResult run_rhf_cuda(
 ScfResult run_rhf_cuda_cached(
     CudaRhfBucketPlan** plan, const core::System& system, const ScfOptions& options, int device_id,
     const std::vector<double>* initial_density, bool* execution_plan_reused,
-    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source) {
+    std::shared_ptr<const integrals::ElectronInteractionSource>* interaction_source,
+    CudaRhfSourceHandoff* handoff) {
   if (options.hooks || options.strict_initial_density)
     throw std::invalid_argument("SCF proposal callbacks require the CPU reference backend");
   if (!plan) throw std::invalid_argument("CUDA RHF cached execution requires a plan owner");
   if (execution_plan_reused) *execution_plan_reused = false;
   if (interaction_source) interaction_source->reset();
+  if (handoff) *handoff = {};
 
-  const std::vector<core::System> systems{system};
+  std::vector<core::System> systems{system};
   const std::vector<const std::vector<double>*> initial_densities{initial_density};
   std::vector<RhfBucketItem> result;
   try {
@@ -267,10 +272,12 @@ ScfResult run_rhf_cuda_cached(
   if (status != GENERATIVEQC_STATUS_SUCCESS && status != GENERATIVEQC_STATUS_SCF_NOT_CONVERGED)
     throw std::runtime_error("CUDA RHF execution failed");
   ScfResult scf = std::move(result.front().scf);
-  if (interaction_source && scf.converged && scf.reference &&
-      exact_reference_source_identity(*plan, system, options, device_id)) {
+  if (handoff && scf.reference) handoff->numeric_peak_bytes = scf.reference->numeric_capacity_bytes;
+  const bool resident_eligible = interaction_source && scf.converged && scf.reference &&
+                                 exact_reference_source_identity(*plan, system, options, device_id);
+  if (resident_eligible) {
     try {
-      core::System source_system = system;
+      auto& source_system = systems.front();
       auto retained = posthf::checked_add(hf_cuda_retained_numeric_bytes(*plan),
                                           posthf::source_capacity(source_system));
       // The generic source allowance covers atoms/shells/primitive data, but
@@ -289,7 +296,27 @@ ScfResult run_rhf_cuda_cached(
       interaction_source->reset();
     }
   }
+  // Resident values have priority. Otherwise detach only immutable metadata,
+  // leaving a cached executable in its original slot for geometry replay. The
+  // reference peak already covers that live plan; compaction adds its complete
+  // source reservation before allocation. Resource rejection keeps RHF valid.
+  if ((interaction_source || handoff) && !resident_eligible && *plan && scf.converged &&
+      scf.reference) {
+    auto compact = detach_rhf_cuda_source(**plan, std::move(systems.front()),
+                                          scf.reference->numeric_capacity_bytes,
+                                          options.reference_memory_budget_bytes);
+    if (interaction_source) *interaction_source = compact.source;
+    if (handoff) *handoff = std::move(compact);
+  }
   return scf;
+}
+
+ScfResult run_rhf_cuda_with_source(const core::System& system, const ScfOptions& options,
+                                   int device_id, const std::vector<double>* initial_density,
+                                   CudaRhfSourceHandoff& handoff) {
+  // This explicit compaction probe/API preserves the detached-source contract.
+  // Normal correlated adapters request the preferred resident source as well.
+  return run_rhf_cuda(system, options, device_id, initial_density, nullptr, &handoff);
 }
 
 bool reclaim_rhf_cuda_reference_plan(
