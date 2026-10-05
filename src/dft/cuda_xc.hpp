@@ -178,8 +178,10 @@ class CudaXcPlan {
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
   /** Setup-only provider preparation within an explicit additional allowance.
-   * Zero retains the generated incumbent. The allowance is not numeric arena
-   * space; an optional provider owns it separately and reports its reservation.
+   * Zero retains the generated incumbent. The allowance is separate from the
+   * numeric arena and covers opaque provider storage plus any compact-output
+   * cache, reported separately by the binding. Discover maps before preparing
+   * optional resources; a dense preparation does not qualify indexed scatter.
    * Production currently has no qualified alternative endpoint profile. */
   void prepare_potential(std::size_t provider_budget = 0);
   const tensor::SymmetricProductDiagnostic& potential_lowering() const noexcept {
