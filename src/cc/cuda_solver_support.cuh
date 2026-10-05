@@ -15,6 +15,8 @@ struct CudaState {
   double *foo{}, *fov{}, *fvv{};
   double *ovov{}, *ovvo{}, *oovv{}, *ovvv{}, *ovoo{}, *oooo{}, *vvvv{};
   double *d1{}, *d2{}, *t1{}, *t2{};
+  double* canonical_eps{};
+  double canonical_level_shift{};
   double *iteration_arena{}, *replay_arena{}, *response_arena{};
   double *bar_correlation_energy{}, *bar_singles_residual{}, *bar_doubles_residual{};
   double *bar_foo{}, *bar_fov{}, *bar_fvv{};

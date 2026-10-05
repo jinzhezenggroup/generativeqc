@@ -15,10 +15,11 @@ using namespace generativeqc_tensor;
 constexpr size_t record_stride = 26, task_stride = 9;
 struct Owner {
   Context context;
+  generativeqc::runtime::OwnedCudaBuffer<unsigned char> phased_storage;
   size_t atoms{}, aos{}, primitives{}, points{}, task_capacity{}, spin_blocks{},
       max_page_primitive_work{}, bytes{}, geometry_lanes{}, geometry_threads{},
       geometry_peak_lanes{}, center_geometry_bytes{}, becke_threads_per_point{1},
-      becke_shared_bytes{};
+      becke_shared_bytes{}, byte_budget{}, phased_bytes{};
   bool failed = true, topology_ready = false;
   bool profile = false, geometry_pending = false;
   cudaStream_t geometry_stream{};
@@ -34,7 +35,11 @@ struct Owner {
       task_count{}, task_batches{};
   uint64_t h2d_calls{}, d2h_calls{}, synchronizations{}, geometry_batches{};
   uint64_t center_distance_evaluations{}, center_geometry_preparations{},
-      becke_pair_state_evaluations{};
+      becke_pair_state_evaluations{}, phased_batches{};
+  bool retains_becke_pair_state() const {
+    return bool(phased_storage) ||
+           (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
+  }
   // Primitive metrics are cumulative across one reset/force execution. Admission
   // is page-local so arbitrarily many bounded pages may contribute to one force.
   void check_page_primitive_work(size_t work) const {
@@ -47,6 +52,23 @@ struct Owner {
     primitive_count += work;
   }
 };
+size_t phased_allocation(size_t atoms, size_t points) {
+  static_assert(sizeof(size_t) == 8 && sizeof(double) == 8 && sizeof(uint2) == 8);
+  const size_t pairs = atoms * (atoms - 1) / 2;
+  return 8 * (4 * pairs * points + (12 * atoms + 2) * points + pairs);
+}
+PhasedBeckeInput phased_input(Owner& owner, size_t points) {
+  const size_t pairs = owner.atoms * (owner.atoms - 1) / 2;
+  auto* pair_storage = reinterpret_cast<double*>(owner.phased_storage.get());
+  double* fields = pair_storage + 4 * pairs * owner.points;
+  auto* zeros = reinterpret_cast<size_t*>(fields + 11 * owner.atoms * owner.points);
+  double* maximum = reinterpret_cast<double*>(zeros + owner.atoms * owner.points);
+  PhasedBeckeInput input{};
+  input.work = {owner.atoms, points, pair_storage, fields, zeros, maximum};
+  input.seeds = maximum + owner.points;
+  input.indices = reinterpret_cast<uint2*>(input.seeds + owner.points);
+  return input;
+}
 // Caps make all products below representable before any allocation or pointer
 // dereference. D/W and AO metadata have no fixed-size AO array; 2048 admits
 // full 96-atom def2-TZVPD without changing allocation formulas. Compiler-planned
@@ -159,7 +181,8 @@ __global__ void geometry_cooperative_kernel(
     const int64_t* owners, size_t owner_offset, size_t points_per_atom, const double* centers,
     size_t na, const double* weights, const double* raw, const double* external,
     size_t external_stride, size_t external_offset, size_t geometry_lanes, double* partial,
-    double* scratch, const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error);
+    double* scratch, const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
+    double* phase_seeds);
 __global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
                                 double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
@@ -170,19 +193,46 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
                      size_t external_stride, size_t external_offset, size_t geometry_lanes,
                      double* partial, double* scratch,
                      const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error) {
+  PhasedBeckeInput phased{};
+  if (owner.phased_storage) {
+    if (geometry_lanes != view.npoint || !center_pairs || owner.becke_threads_per_point <= 1)
+      throw std::invalid_argument("phased Becke lane/cache contract changed");
+    phased = phased_input(owner, view.npoint);
+    phased.points = view.points;
+    phased.centers = centers;
+    phased.owners = owners;
+    phased.owner_offset = owner_offset;
+    phased.points_per_atom = points_per_atom;
+    phased.center_pairs = center_pairs;
+    phased.partial = partial;
+    phased.error = error;
+  }
   if (owner.becke_threads_per_point > 1)
     geometry_cooperative_kernel<<<geometry_lanes, owner.becke_threads_per_point,
                                   owner.becke_shared_bytes - stationary_becke_control_bytes,
                                   stream>>>(view, work, ao_atoms, owners, owner_offset,
                                             points_per_atom, centers, na, weights, raw, external,
                                             external_stride, external_offset, geometry_lanes,
-                                            partial, scratch, center_pairs, error);
+                                            partial, scratch, center_pairs, error, phased.seeds);
   else
     geometry_kernel<<<blocks(geometry_lanes, owner.geometry_threads), owner.geometry_threads, 0,
                       stream>>>(view, work, ao_atoms, owners, owner_offset, points_per_atom,
                                 centers, na, weights, raw, external, external_stride,
                                 external_offset, geometry_lanes, partial, scratch, center_pairs,
                                 error);
+  if (owner.phased_storage) {
+    const dim3 atom_blocks(blocks(view.npoint, 128), na);
+    const dim3 pair_blocks(blocks(view.npoint, 128), na * (na - 1) / 2);
+    phased_becke_atom<0><<<atom_blocks, 128, 0, stream>>>(phased);
+    phased_becke_pair<false><<<pair_blocks, 128, 0, stream>>>(phased);
+    phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
+    phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
+    phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
+    phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
+    phased_becke_atom<3><<<atom_blocks, 128, 0, stream>>>(phased);
+    owner.launches += 7;
+    ++owner.phased_batches;
+  }
 }
 }  // namespace generativeqc_stationary_cuda
 
@@ -237,6 +287,7 @@ int stationary_create(int device, int major, int minor, size_t na, size_t n, siz
     p->spin_blocks = ns;
     p->max_page_primitive_work = max_primitive_work;
     p->bytes = bytes;
+    p->byte_budget = budget;
     p->geometry_lanes = geometry_lanes;
     p->geometry_threads = geometry_threads;
     p->center_geometry_bytes = center_bytes;
@@ -304,6 +355,52 @@ int stationary_configure_becke(void* pointer, size_t threads, size_t shared_byte
     p->becke_threads_per_point = threads;
     p->becke_shared_bytes = shared_bytes;
   });
+}
+int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  return guarded(owner, error, size, [&] {
+    if (!owner || owner->topology_ready || owner->phased_storage)
+      throw std::invalid_argument("phased Becke must be configured once before topology");
+    owner->context.check_device();
+    if (bytes != phased_allocation(owner->atoms, owner->points) ||
+        bytes > owner->byte_budget - owner->bytes)
+      throw std::invalid_argument("phased Becke concurrent byte budget mismatch");
+    if (owner->atoms <= stationary_becke_retained_max_atoms ||
+        owner->geometry_lanes != owner->points || !owner->center_pairs ||
+        owner->becke_threads_per_point <= 1)
+      return;
+    cudaDeviceProp property{};
+    cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
+    const size_t pairs = owner->atoms * (owner->atoms - 1) / 2;
+    if (property.major != 12 || property.minor != 0 || property.maxThreadsPerBlock < 128 ||
+        property.maxThreadsDim[0] < 128 || pairs > size_t(property.maxGridSize[1]) ||
+        blocks(owner->points, 128) > size_t(property.maxGridSize[0]))
+      return;
+    try {
+      owner->phased_storage.allocate(owner->context.device, bytes, owner->context.stream);
+    } catch (const std::bad_alloc&) {
+      // Optional retention must not revoke the already admitted bounded path.
+      (void)cudaGetLastError();
+      return;
+    }
+    auto input = phased_input(*owner, owner->points);
+    phased_becke_indices<<<owner->atoms, 128, 0, owner->context.stream>>>(
+        owner->atoms, const_cast<uint2*>(input.indices));
+    cuda_check(cudaGetLastError());
+    cuda_check(cudaStreamSynchronize(owner->context.stream));
+    owner->phased_bytes = bytes;
+    owner->bytes += bytes;
+    ++owner->launches;
+    ++owner->synchronizations;
+  });
+}
+int stationary_phased_becke_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 2) return 1;
+  output[0] = owner->phased_bytes;
+  output[1] = owner->phased_batches;
+  return 0;
 }
 int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
                         const double* ao_norms, const int64_t* ao_atoms, char* error, size_t size) {
@@ -566,9 +663,7 @@ int stationary_geometry_external(void* pointer, const generativeqc::dft::GridTas
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
       p->becke_pair_state_evaluations +=
-          view->npoint * p->atoms * (p->atoms - 1) /
-          (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2
-                                                                                             : 1);
+          view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
       if (!p->center_pairs)
         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
@@ -633,9 +728,7 @@ int stationary_geometry_external_device(void* pointer, const generativeqc::dft::
       p->point_count += view->npoint;
       p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
       p->becke_pair_state_evaluations +=
-          view->npoint * p->atoms * (p->atoms - 1) /
-          (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2
-                                                                                             : 1);
+          view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
       if (!p->center_pairs)
         p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
       ++p->geometry_batches;
@@ -696,8 +789,7 @@ int stationary_geometry_external_device_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) /
-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -744,8 +836,7 @@ int stationary_geometry_external_device_molecular_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) /
-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -791,8 +882,7 @@ int stationary_geometry_external_device_molecular_resident_weights_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) /
-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -834,8 +924,7 @@ int stationary_geometry_molecular_resident_weights_enqueue(
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) /
-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -880,8 +969,7 @@ int stationary_geometry_molecular_enqueue(void* pointer,
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) /
-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
@@ -926,8 +1014,7 @@ int stationary_geometry_enqueue(void* pointer, const generativeqc::dft::GridTask
     p->point_count += view->npoint;
     p->pair_visits += view->npoint * p->atoms * (p->atoms - 1);
     p->becke_pair_state_evaluations +=
-        view->npoint * p->atoms * (p->atoms - 1) /
-        (p->becke_threads_per_point > 1 && p->atoms <= stationary_becke_retained_max_atoms ? 2 : 1);
+        view->npoint * p->atoms * (p->atoms - 1) / (p->retains_becke_pair_state() ? 2 : 1);
     if (!p->center_pairs)
       p->center_distance_evaluations += view->npoint * p->atoms * (p->atoms - 1);
     ++p->geometry_batches;
