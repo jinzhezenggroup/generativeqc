@@ -138,6 +138,7 @@ std::vector<double> symmetric_density(std::size_t n) {
 // Reuse only fixture construction; arithmetic oracles are independent.
 #include "cosx_contraction_cases.cuh"
 #include "cosx_endpoint_benchmark.cuh"
+#include "cosx_weighted_endpoint_benchmark.cuh"
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -148,8 +149,13 @@ int main(int argc, char** argv) {
       cosx_endpoint_benchmark(argv + 2);
       return 0;
     }
+    if (argc == 8 && std::string(argv[1]) == "--weighted-endpoint-benchmark") {
+      cosx_weighted_endpoint_benchmark(argv + 2);
+      return 0;
+    }
     require(argc == 1 || (argc == 2 && std::string(argv[1]) == "--contractions"),
-            "usage: --endpoint-benchmark original moved radial polar azimuth tile");
+            "usage: [--contractions] or --endpoint-benchmark/--weighted-endpoint-benchmark "
+            "original moved radial polar azimuth tile");
     cosx_contraction_cases();
     if (argc == 2 && std::string(argv[1]) == "--contractions") return 0;
     const int device = 0;
