@@ -1,0 +1,10 @@
+"""Read already-recorded CUPTI events; this is CPU-only report analysis."""
+import json,sqlite3
+from pathlib import Path
+p=Path('.artifacts/profile-5917')
+c=sqlite3.connect(str(p/'warm96.sqlite'));c.row_factory=sqlite3.Row
+rows=c.execute('''SELECT k.start,k.end,s.value AS name,k.registersPerThread,k.localMemoryPerThread,k.staticSharedMemory,k.dynamicSharedMemory,k.gridX,k.gridY,k.blockX,k.streamId FROM CUPTI_ACTIVITY_KIND_KERNEL k JOIN StringIds s ON s.id=k.demangledName WHERE k.end-k.start>100000000 OR s.value LIKE '%shell_class_fock_rhf_streaming_kernel%' ORDER BY k.start''').fetchall()
+(p/'major-kernel-events.json').write_text(json.dumps([dict(r) for r in rows],indent=2)+'\n')
+for row in rows:
+ r=dict(row)
+ if 'bounded_direct_shell_quartet_kernel' in r['name']: print(json.dumps(r))

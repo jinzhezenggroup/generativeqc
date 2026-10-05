@@ -50,3 +50,58 @@ def test_native_semilocal_execution_traits_are_manifest_owned() -> None:
     assert by_name["R2SCAN"]["stationary_ecp_gradient"] is False
     assert by_name["B3LYP"]["stationary_kernel"] == "composed"
     assert by_name["WB97M-V"]["stationary_kernel"] == "wb97mv"
+
+
+CUDA_FAST_PATH_CENSUS = {
+    "LDA": {
+        "component_scaling": "qualification-required",
+        "mixed_ao_precision": "qualified",
+        "mixed_density_precision": "qualified",
+        "response": "qualified",
+        "graph_replay": "qualified",
+    },
+    "PBE": {
+        "component_scaling": "qualified",
+        "mixed_ao_precision": "qualified",
+        "mixed_density_precision": "qualified",
+        "response": "qualified",
+        "graph_replay": "qualified",
+    },
+    "R2SCAN": {
+        "component_scaling": "unavailable",
+        "mixed_ao_precision": "qualification-required",
+        "mixed_density_precision": "qualified",
+        "response": "unavailable",
+        "graph_replay": "qualification-required",
+    },
+    "B3LYP": {
+        "component_scaling": "unavailable",
+        "mixed_ao_precision": "qualification-required",
+        "mixed_density_precision": "qualification-required",
+        "response": "unavailable",
+        "graph_replay": "qualification-required",
+    },
+    "WB97M-V": {
+        "component_scaling": "unavailable",
+        "mixed_ao_precision": "qualification-required",
+        "mixed_density_precision": "qualification-required",
+        "response": "unavailable",
+        "graph_replay": "qualification-required",
+    },
+}
+
+
+def test_cuda_fast_path_capability_census_is_manifest_owned() -> None:
+    families = generator.load_manifest()
+    assert {
+        item["name"]: item["cuda_fast_paths"] for item in families
+    } == CUDA_FAST_PATH_CENSUS
+
+
+def test_cuda_fast_path_capabilities_ignore_display_names() -> None:
+    for item in generator.load_manifest():
+        renamed = dict(item)
+        renamed["name"] = f"alias-{item['code']}"
+        assert generator.cpp_fast_path_capabilities(
+            renamed
+        ) == generator.cpp_fast_path_capabilities(item)
