@@ -20,11 +20,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-if __package__:
-    from .generate_cuda_implib import generate
-else:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+try:
     from tools.generate_cuda_implib import generate
+except ModuleNotFoundError:
+    from generate_cuda_implib import generate
 
 
 @dataclass(frozen=True)
