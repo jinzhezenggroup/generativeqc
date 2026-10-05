@@ -39,7 +39,13 @@ def test_region_requires_context_lifetime_before_cutlass(
 #include <vector>
 #include <utility>
 #include <string>
+#include "tensor/native_contraction.hpp"
 using cudaStream_t=void*;
+using cudaStreamCaptureStatus=int;
+constexpr int cudaStreamCaptureStatusNone=0;
+inline int cudaGetDevice(int* d){*d=0;return 0;}
+inline int cudaStreamIsCapturing(cudaStream_t,int* s){*s=0;return 0;}
+namespace generativeqc_tensor { inline void cuda_check(int){} }
 #define CUTLASS_VERSION 392
 namespace generativeqc::tensor {
 inline int setup_calls{}, table_calls{};
@@ -48,9 +54,6 @@ enum class ContractionAlgorithm { PedanticBlas, GeneratedOrdered,
 struct ContractionPreparationUnavailable:std::runtime_error {
   using std::runtime_error::runtime_error;
 };
-inline std::size_t contraction_product(std::size_t a,std::size_t b) {
-  return runtime::lowering_multiply(a,b);
-}
 struct ContractionProviderReservation {
   std::size_t workspace_bytes{},provider_bytes{},host_bytes{},cache_bytes{};
   static std::size_t checked_add(std::size_t a,std::size_t b) {
@@ -72,7 +75,12 @@ struct CudaContractionContext {
   void prepare_generated(cudaStream_t){++setup_calls;}
   std::size_t retained_bytes()const{return 0;}
   int provider_version()const{return 12090;}
+  cudaStream_t stream()const{return nullptr;}
+  int device()const{return 0;}
 };
+// The bounded-domain sibling shares this header but is not executed by this
+// lifetime-admission test; use the real descriptor and a no-op launch double.
+template<class... A>void execute_matrix_contraction(A&&...){}
 struct PreparedContractions {
   static std::size_t storage_bytes(std::size_t n){return 128+n*128;}
   template<class... A>void add(A&&...){++table_calls;}

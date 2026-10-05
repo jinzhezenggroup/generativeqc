@@ -40,6 +40,48 @@ and full frame stationarity audits remain mandatory. Setting
 `gmres.true_residual_every=1` retains per-iteration candidate auditing for
 comparisons and difficult numerical domains.
 
+`RHFFrameResponseOptions::resident_jk_maximum_bytes` controls immutable full-range
+canonical AO source values in the shared Direct provider. Its unset default
+selects a conservative automatic policy: relaxed, unscreened frames with at
+least 64 public AOs may use a lease capped at 8 GiB. Explicit zero retains
+ordinary bounded recomputation; a positive ceiling requests reuse independently
+of that crossover, including small validation frames. Admission also respects
+the complete endpoint budget; unavailable canonical storage or
+allocation refusal keeps the original exact route. If a published lease crowds
+out a later required allocation, the entire frame attempt unwinds before one
+retry with resident values disabled and the optional inverse released. Numerical
+and non-allocation CUDA failures propagate; a second allocation failure does too.
+`resident_jk_discarded_attempt` flags this case and `resident_jk_retry_seconds`
+records its elapsed time separately. Other frame work and phase diagnostics
+describe the successful attempt; complete endpoint time and the conservative
+numeric-capacity bound cover both attempts, and the benchmark marks incomplete
+work receipts unavailable.
+Geometry, basis, device and stream lifetime belong to the Direct owner, not to a
+dimension-only cache key.
+The existing recurrence dispatcher prepares finite-audited values once; repeated
+signed J/K actions reuse the same compiler-owned orbit scatter without evaluating
+new integrals. Storage remains quartic in Cartesian source dimension, so this
+is a bounded optional lease, not a new asymptotically memory-bounded algorithm.
+The independent final scalar-CUDA residual and any positive fixed-mask action
+explicitly recompute the unscreened/requested source rather than trusting the
+lease. Preparation time, retained values, replay reads and uncached integral
+evaluations are distinct diagnostics. The 64-AO gate is a conservative large-frame
+selection, not a claim of a universally optimal crossover. Changing the default
+policy requires renewed complete-endpoint qualification.
+The [resident-source decision](../../.agents/notes/implemented/performance/2026-10-05-exact-response-resident-source.md)
+retains the rationale, measured evidence and conditions for revisiting it.
+
+With `profile_jk`, synchronized wall and CUDA-event device times cover the same
+J/K composition; resident timings are subsets of total J/K time. Profiling does
+not change the ordinary dispatch. A complete canonical census is reported only
+when all selected channels provide it. Cache preparation is charged to setup,
+not hidden in or added twice to the J/K subset. The basis-only diagnostic
+`benchmarks/rhf_resident_jk.py` records paired action times, source admission and
+loaded binary hashes; its wall times include test transfers and do not replace
+complete-force endpoint timing. In `benchmarks/df_ccsdt_force_endpoint.cpp`, omit
+the final resident ceiling to measure the automatic policy, append `0` for
+recomputation, or append a positive byte ceiling for explicit reuse.
+
 Native `RHFFrameResponseOptions::df_preconditioning` optionally prepares a
 same-frame DF numerical inverse from `D_ia=gap_ia-(ii|aa)-(ia|ia)` and
 `U_Qia=2 B_Qia`. The compiler owns these expressions. A bounded host

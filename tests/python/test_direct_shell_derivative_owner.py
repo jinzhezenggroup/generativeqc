@@ -413,7 +413,7 @@ def test_channel_dispatch_is_independent(tmp_path: Path) -> None:
         + r"""
 DirectJkValueDispatch device_dispatch(bool generated_coulomb_available,
     bool generated_exchange_available, bool want_j, bool want_k, bool mixed_j,
-    bool canonical, bool fixed) {
+    bool canonical, bool fixed, bool resident = false) {
   struct Channel { bool present; };
   struct { Channel coulomb, exchange; } spec{{want_j},{want_k}};
   struct Plan { const void* canonical_pairs; } storage{canonical ? &spec : nullptr};
@@ -457,6 +457,13 @@ int main() {
       assert(fixed.canonical_coulomb == j && fixed.canonical_exchange == k);
       assert(!fixed.generated_coulomb && !fixed.generated_exchange);
       assert(!fixed.generic_coulomb && !fixed.generic_exchange);
+      // An admitted full-range resident source overrides generated values for
+      // both requested channels while retaining the canonical orbit scatter.
+      const auto replay = device_dispatch(generated_j, generated_k, j, k, false,
+                                            true, false, true);
+      assert(replay.canonical_coulomb == j && replay.canonical_exchange == k);
+      assert(!replay.generated_coulomb && !replay.generated_exchange);
+      assert(!replay.generic_coulomb && !replay.generic_exchange);
     }
   }
 }

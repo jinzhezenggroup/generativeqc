@@ -343,4 +343,44 @@ struct ContractionRequest {
   }
 };
 
+/** Immutable dense runtime domain of a compiler-emitted einsum template.
+ * Exact-shape plan providers cannot bind this domain. Its shape-polymorphic
+ * implementations accept any positive subextent, with the same mode ordering,
+ * arithmetic, update semantics and packed physical layout. Validation uses
+ * fixed-size stack storage; no descriptor cache grows with the tile count. */
+struct BoundedContractionDomain {
+  ContractionRequest maximum;
+
+  explicit BoundedContractionDomain(ContractionRequest upper) : maximum(upper) {
+    maximum.validate();
+    if (!maximum.checked_update_identity.empty() || !maximum.checked_publication_identity.empty())
+      throw std::invalid_argument("bounded contraction does not implement checked scalar programs");
+    if (maximum.batches != 1 || maximum.leading_dimensions != std::array<std::size_t, 3>{})
+      throw std::invalid_argument("bounded contraction requires packed unbatched matrices");
+  }
+
+  void validate(const ContractionRequest& actual) const {
+    actual.validate();
+    if (!actual.checked_update_identity.empty() || !actual.checked_publication_identity.empty())
+      throw std::invalid_argument("bounded contraction does not implement checked scalar programs");
+    if (actual.scientific_identity != maximum.scientific_identity ||
+        actual.semantic_template_identity != maximum.semantic_template_identity ||
+        actual.precision_identity != maximum.precision_identity ||
+        actual.precision.storage_dtype != maximum.precision.storage_dtype ||
+        actual.batches != maximum.batches || actual.a_trans != maximum.a_trans ||
+        actual.b_trans != maximum.b_trans || actual.coefficient != maximum.coefficient ||
+        actual.beta != maximum.beta || actual.leading_dimensions != maximum.leading_dimensions)
+      throw std::invalid_argument("bounded contraction template changed; prepare again");
+    for (std::size_t i = 0; i < maximum.operands.size(); ++i) {
+      const auto& a = actual.operands[i];
+      const auto& b = maximum.operands[i];
+      if (a.rank != b.rank || a.modes != b.modes)
+        throw std::invalid_argument("bounded contraction mode order changed");
+      for (std::size_t j = 0; j < a.rank; ++j)
+        if (a.shape[j] > b.shape[j])
+          throw std::length_error("contraction exceeds its prepared runtime domain");
+    }
+  }
+};
+
 }  // namespace generativeqc::tensor

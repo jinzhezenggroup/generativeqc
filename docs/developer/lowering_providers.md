@@ -76,6 +76,25 @@ diagnostics retain both outputs' exact semantic work.
 Composed ESP response and molecular pullback contractions retain their existing scalar
 helpers and require further shared-region migration.
 
+The DFT grid owner uses this boundary for its density-matrix and orbital-factor
+projections. `dft.grid_contraction` defines the canonical `jpu,uv->jpv` TensorIR
+operation; requested contiguous jet/point axes form a packed matrix view with
+no replication of the coefficient panel. `PreparedBoundedContraction` binds
+positive runtime subextents of immutable capacity bounds once. Each tile checks
+its resolved descriptor against those bounds and submits through the same
+matrix executor used by fixed-shape post-HF bindings. It does not create plans,
+allocate storage or grow a shape cache during execution.
+
+The current bounded domain admits strict-FP64 cuBLAS and generated CUDA.
+Exact-shape cuTENSOR, cuBLASLt and CUTLASS plans remain rejected candidates for
+this domain; optional-provider failure admits the same-precision generated
+fallback. `CudaGrid.metrics()["lowering"]` reports provider, candidate, precision
+and semantic identities, preparation time/count, complete binding reservation,
+submitted calls and scalar summands. The grid capacity charges 32 KiB of host
+binding storage in addition to its existing provider allowance. Capture is
+rejected until logical replay work accounting is connected for this owner.
+Native XC density/Vxc fused kernels are a separate migration consumer.
+
 `common.lowering_provider.LoweringRequest` carries one bounded set of admitted
 `LoweringPrecision` variants. These refer directly to
 `common.precision.ExecutionPrecisionSchedule` and its `PrecisionDirective`;

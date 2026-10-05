@@ -294,25 +294,46 @@ def test_discarded_attempt_work_is_unavailable_in_benchmark(tmp_path: Path) -> N
         if name.endswith(suffixes) and name not in {
             "native_seconds",
             "previous_endpoint_seconds",
+            # This separately measured discarded-attempt receipt is complete.
+            "resident_jk_retry_seconds",
         }:
             assert kind == "work_field", name
     assert fields["native_seconds"] == fields["total_energy"] == "field"
+    assert fields["resident_jk_retry_seconds"] == "field"
+    retry_receipt = next(
+        line
+        for line in source.splitlines()
+        if 'field("resident_jk_retry_seconds",' in line
+    )
     probe = tmp_path / "report.cpp"
     probe.write_text(
         r"""
 #include <cassert>
 #include <iomanip>
 #include <sstream>
-struct Result {bool recycling_discarded_primal_attempt;};
-int main() {Result result{true};std::ostringstream output;
+struct Result {
+  bool recycling_discarded_primal_attempt;
+  struct {bool resident_jk_discarded_attempt;double resident_jk_retry_seconds;} orbital;
+};
+int main() {
+for (unsigned mask=0;mask<4;++mask) {
+  Result result{bool(mask&1),{bool(mask&2),1.25}};
+  std::ostringstream output;
 """
         + reporting
         + r"""
 work_field("triples_work",17);work_field("lambda_actions",19);work_field("jk_actions",23);
 work_field("orbital_seconds",2.0);field("native_seconds",3.0);
-assert(output.str()=="  \"triples_work\": null,\n  \"lambda_actions\": null,\n  \"jk_actions\": null,\n  \"orbital_seconds\": null,\n  \"native_seconds\": 3,\n");
-output.str("");result.recycling_discarded_primal_attempt=false;work_field("triples_work",17);
-assert(output.str()=="  \"triples_work\": 17,\n");}
+"""
+        + retry_receipt
+        + r"""
+if (mask) {
+  assert(output.str()=="  \"triples_work\": null,\n  \"lambda_actions\": null,\n  \"jk_actions\": null,\n  \"orbital_seconds\": null,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
+} else {
+  assert(output.str()=="  \"triples_work\": 17,\n  \"lambda_actions\": 19,\n  \"jk_actions\": 23,\n  \"orbital_seconds\": 2,\n  \"native_seconds\": 3,\n  \"resident_jk_retry_seconds\": 1.25,\n");
+}
+}}
+
 """
     )
     binary = tmp_path / "report"

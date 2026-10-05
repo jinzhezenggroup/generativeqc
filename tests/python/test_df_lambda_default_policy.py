@@ -256,7 +256,22 @@ int main() {
                       "6","8","0","0","2","1","7","0","0",token};
     try { (void)select(18,bad);return 28; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,19}) {
+  for(const char* ceiling : {"0", "1", "8589934592"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1",ceiling};
+    const auto explicit_cache = select(19,selected);
+    if(!explicit_cache.frame.resident_jk_maximum_bytes ||
+       *explicit_cache.frame.resident_jk_maximum_bytes != std::stoull(ceiling) ||
+       !explicit_cache.packed_diis || explicit_cache.frame.gmres.true_residual_every != 7)
+      return 29;
+    if(select(18,selected).frame.resident_jk_maximum_bytes) return 30;
+  }
+  for(const char* token : {"", "-1", "+1", "1junk", "1.0"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0","1",token};
+    try { (void)select(19,bad);return 31; } catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,20}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

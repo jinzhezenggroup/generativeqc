@@ -14,7 +14,7 @@ NumPy remains the existing dependency for recurrence/reference arithmetic.
 | `cc` | Production RCCSD energy/residual scientific inventory and TensorIR construction | `tensor`, `common` |
 | `mp2` | Production canonical restricted MP2 TensorIR energy equations | `tensor`, `common` |
 | `array_api` | Bounded symbolic array frontend that lowers ordinary array expressions directly to TensorIR; no method/runtime policy | `tensor` |
-| `dft` | Discrete grids, AO jets, density ingredients, prepared tile execution | `common`; `ao_cuda` alone also uses the existing scalar `integral.expr` and `integral.cuda` |
+| `dft` | Discrete grids, AO jets, density ingredients, prepared tile execution and TensorIR panel contractions | `common`, `tensor`; designated scalar clients also use the existing IntegralIR scalar algebra/emission |
 | `xc` | Audited functional expressions, derivatives, point coefficients and XC execution | `common`, `integral`, `dft` |
 | `method` | Canonical MethodIR, stationary-gradient source plans and implicit-solve derivative rules; no solver/runtime policy | `common`, `xc`, `tensor` |
 | `common` | Backend/target contracts, finite compiler processes, artifacts, hashes, resources and evidence | none of the scientific or user-runtime packages |

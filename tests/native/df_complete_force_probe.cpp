@@ -36,11 +36,17 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     // optional accelerator without changing public method semantics.
     if (const auto* mode = std::getenv("GENERATIVEQC_TEST_Z_PRECONDITIONER"))
       options.df_preconditioning = std::string(mode) == "1";
+    if (const auto* resident = std::getenv("GENERATIVEQC_TEST_RHF_RESIDENT_JK_BYTES"))
+      options.resident_jk_maximum_bytes = std::stoull(resident);
     const auto* selected = std::getenv("GENERATIVEQC_TEST_PACKED_CC_HISTORY");
     const bool packed = selected && std::string(selected) == "1";
     const auto result = methods::detail::run_df_ccsdt_native(
         execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
         8, options, true, packed);
+    if (forces && options.resident_jk_maximum_bytes.value_or(0) > 0 &&
+        !result.orbital.resident_jk_bytes)
+      throw std::runtime_error(
+          "resident complete-force qualification did not exercise source reuse");
     if (packed && !result.solver.packed_diis)
       throw std::runtime_error("packed history qualification did not exercise packed storage");
     const double scalars[]{result.energy,

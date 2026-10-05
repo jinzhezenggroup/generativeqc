@@ -178,15 +178,17 @@ def compile_cuda(
         headers=headers,
         libraries=("cublas",),
         options=(
+            "-std=c++20",
             "--fmad=false",
             f"-I{headers[0].parent}",
+            f"-I{headers[0].parent.parent}",
             f"-I{include_root}",
         ),
     )
 
 
 class CudaGrid:
-    """Own basis/D/B/tiles and execute AO jets, cuBLAS contractions and invariants.
+    """Own basis/D/B/tiles and execute AO jets, prepared contractions and invariants.
 
     Grid generation and partition weights remain on the CPU. Points upload
     explicitly, features download explicitly, and AO jets download only when
@@ -437,6 +439,14 @@ class CudaGrid:
             DOUBLE,
             ct.c_int,
             DOUBLE,
+            ct.c_char_p,
+            ct.c_size_t,
+        ]
+        lib.grid_cuda_lowering_v1.argtypes = [
+            ct.c_void_p,
+            ct.POINTER(ct.c_char_p),
+            SIZE,
+            ct.POINTER(ct.c_double),
             ct.c_char_p,
             ct.c_size_t,
         ]
@@ -1101,8 +1111,42 @@ class CudaGrid:
             self._call(
                 "grid_cuda_metrics_v1", self._handle, ct.byref(metrics), versions
             )
+            labels = (ct.c_char_p * 4)()
+            work = (ct.c_size_t * 5)()
+            prepare = ct.c_double()
+            self._call(
+                "grid_cuda_lowering_v1", self._handle, labels, work, ct.byref(prepare)
+            )
             return {
                 **{name: getattr(metrics, name) for name, _ in metrics._fields_},
+                "lowering": {
+                    **dict(
+                        zip(
+                            (
+                                "provider",
+                                "candidate_identity",
+                                "precision_identity",
+                                "semantic_identity",
+                            ),
+                            (value.decode() for value in labels),
+                            strict=True,
+                        )
+                    ),
+                    **dict(
+                        zip(
+                            (
+                                "calls",
+                                "summands",
+                                "binding_bytes",
+                                "host_bytes",
+                                "preparations",
+                            ),
+                            work,
+                            strict=True,
+                        )
+                    ),
+                    "prepare_seconds": prepare.value,
+                },
                 "runtime_version": versions[0],
                 "driver_version": versions[1],
                 "cublas_version": versions[2],
