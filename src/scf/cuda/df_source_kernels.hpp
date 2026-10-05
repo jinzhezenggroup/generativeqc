@@ -16,7 +16,8 @@ namespace generativeqc::scf::cuda_execution {
  * exactly one term. The g, m=0 solid harmonic has six Cartesian terms.
  * This bound is local to DF value transforms; the legacy f ABI stays unchanged.
  */
-inline constexpr std::size_t kDfPublicAoExpansionTerms = 6;
+inline constexpr std::size_t kDfPublicAoExpansionTerms =
+    molecule::kMaximumAuxiliaryAoExpansionTerms;
 struct DfPublicAoExpansion {
   std::uint32_t count{};
   std::int32_t cartesian[kDfPublicAoExpansionTerms]{};
