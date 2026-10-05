@@ -132,7 +132,8 @@ int main(int argc, char** argv) {
     plan.density_provider_ = std::make_unique<tensor::PreparedPanelProduct>();
     plan.provider_density_binding_ = std::make_unique<CudaXcDensityBinding>();
   }
-  expected_density_provider = local ? nullptr : plan.density_provider_.get();
+  // Strict physical execution admits both dense and indexed/local providers.
+  expected_density_provider = plan.density_provider_.get();
   const auto initial = mode == 2 ? std::numeric_limits<std::uint64_t>::max() : 0;
   plan.transfers_.potential_calls = initial;
   failure = mode == 1;

@@ -287,13 +287,118 @@ static __global__ void generated_contraction(const T* a, const T* b, T* output, 
   }
 }
 
+/** Fused batch weighting preserves the incumbent increasing-k FMA chain.
+ * Only the weighted publication is checked, as in the original fused consumer;
+ * invalid publications become zero while the device error remains sticky. */
+template <class T>
+static __global__ void generated_batch_scaled_contraction(
+    const T* left, const T* right, const T* scale, T* output, std::size_t count, std::size_t rows,
+    std::size_t columns, std::size_t reduction_extent, std::size_t left_stride,
+    std::size_t right_stride, std::size_t output_stride, bool transpose_left, bool transpose_right,
+    T coefficient, int* error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto batch = index / (rows * columns), row = index / columns % rows,
+               column = index % columns;
+    T value = 0;
+    for (std::size_t reduction = 0; reduction < reduction_extent; ++reduction) {
+      const auto left_index =
+          batch * rows * reduction_extent +
+          (transpose_left ? reduction * left_stride + row : row * left_stride + reduction);
+      const auto right_index =
+          batch * reduction_extent * columns +
+          (transpose_right ? column * right_stride + reduction : reduction * right_stride + column);
+      if constexpr (std::is_same_v<T, double>)
+        value = __fma_rn(left[left_index], right[right_index], value);
+      else
+        value = __fmaf_rn(left[left_index], right[right_index], value);
+    }
+    value = contraction_multiply(scale[batch], contraction_multiply(coefficient, value));
+    if (!isfinite(value)) {
+      atomicCAS(error, 0, 1);
+      value = 0;
+    }
+    output[batch * rows * columns + row * output_stride + column] = value;
+  }
+}
+
+/** Library output is an unobservable intermediate in the publication buffer.
+ * Combine scaling and finite checks in one pass, with no extra numeric cache. */
+template <class T>
+static __global__ void publish_batch_scaled_contraction(T* output, const T* scale,
+                                                        std::size_t count, std::size_t rows,
+                                                        std::size_t columns,
+                                                        std::size_t output_stride, int* error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto batch = index / (rows * columns), row = index / columns % rows,
+               column = index % columns;
+    const auto address = batch * rows * columns + row * output_stride + column;
+    T value = contraction_multiply(scale[batch], output[address]);
+    if (!isfinite(value)) {
+      atomicCAS(error, 0, 1);
+      value = 0;
+    }
+    output[address] = value;
+  }
+}
+
+/** Execute the compiler's existing scalar helper at every increasing-k step.
+ * The helper owns rounding and input/update checks. Invalid intermediate work
+ * cannot be hidden by later cancellation or a zero publication weight. */
+template <class Step>
+static __global__ void generated_checked_contraction(
+    const double* left, const double* right, const double* scale, double* output, std::size_t count,
+    std::size_t rows, std::size_t columns, std::size_t reduction_extent, std::size_t left_stride,
+    std::size_t right_stride, std::size_t output_stride, bool transpose_left, bool transpose_right,
+    int* error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto batch = index / (rows * columns), row = index / columns % rows,
+               column = index % columns;
+    double value = 0;
+    bool valid = true;
+    for (std::size_t reduction = 0; reduction < reduction_extent; ++reduction) {
+      const auto ai =
+          batch * rows * reduction_extent +
+          (transpose_left ? reduction * left_stride + row : row * left_stride + reduction);
+      const auto bi =
+          batch * reduction_extent * columns +
+          (transpose_right ? column * right_stride + reduction : reduction * right_stride + column);
+      bool updated;
+      if constexpr (requires { Step::right_symmetrization; }) {
+        // The prepared recipe proves a single square RHS. This second
+        // readonly view uses the same allocation, including any row padding.
+        updated =
+            Step::update(left[ai], right[bi], right[column * right_stride + reduction], value);
+      } else {
+        updated = Step::update(left[ai], right[bi], value);
+      }
+      if (!updated) {
+        valid = false;
+        break;
+      }
+    }
+    if (valid && scale) {
+      double published = 0;
+      valid = Step::publish(scale[batch], value, published);
+      value = published;
+    }
+    if (!valid) {
+      atomicCAS(error, 0, 1);
+      value = 0;
+    }
+    output[batch * rows * columns + row * output_stride + column] = value;
+  }
+}
+
 /** Execute an already validated matrix recipe. Shared by fixed-shape tables
  * and bounded runtime domains; this function performs no planning/allocation.
  * The owner proves stream/device/lifetime and accounts logical work separately. */
-template <class T>
+template <class T, class CheckedStep = void>
 void execute_matrix_contraction(const CudaContractionContext& context, const ContractionRequest& r,
                                 ContractionAlgorithm algorithm, cudaStream_t stream, const T* a,
-                                const T* b, T* output, int* error) {
+                                const T* b, T* output, int* error, const T* batch_scale = nullptr) {
   if (algorithm != ContractionAlgorithm::GeneratedOrdered &&
       algorithm != ContractionAlgorithm::PedanticBlas)
     throw std::logic_error("matrix executor received an unprepared implementation");
@@ -309,7 +414,9 @@ void execute_matrix_contraction(const CudaContractionContext& context, const Con
   if (overlaps(a, r.operands[0].storage_elements() * sizeof(T), output,
                r.operands[2].storage_elements() * sizeof(T)) ||
       overlaps(b, r.operands[1].storage_elements() * sizeof(T), output,
-               r.operands[2].storage_elements() * sizeof(T)))
+               r.operands[2].storage_elements() * sizeof(T)) ||
+      (batch_scale && overlaps(batch_scale, r.batches * sizeof(T), output,
+                               r.operands[2].storage_elements() * sizeof(T))))
     throw std::invalid_argument("native contraction output must not alias its inputs");
   const T alpha = static_cast<T>(r.coefficient), beta = static_cast<T>(r.beta);
   if (!std::isfinite(alpha) || !std::isfinite(beta))
@@ -322,9 +429,22 @@ void execute_matrix_contraction(const CudaContractionContext& context, const Con
   // The matrix layout implements the original einsum: C^T = op(B)^T op(A)^T.
   // Batches are explicitly materialized by TensorIR, including broadcasts.
   if (algorithm == ContractionAlgorithm::GeneratedOrdered) {
-    generated_contraction<<<generativeqc_tensor::blocks(r.output_elements(), 256), 256, 0,
-                            stream>>>(a, b, output, r.output_elements(), r.m, r.n, r.k, lda, ldb,
-                                      ldc, r.a_trans == 'T', r.b_trans == 'T', alpha, beta, error);
+    if constexpr (!std::is_void_v<CheckedStep>) {
+      generated_checked_contraction<CheckedStep>
+          <<<generativeqc_tensor::blocks(r.output_elements(), 128), 128, 0, stream>>>(
+              a, b, batch_scale, output, r.output_elements(), r.m, r.n, r.k, lda, ldb, ldc,
+              r.a_trans == 'T', r.b_trans == 'T', error);
+    } else if (batch_scale) {
+      generated_batch_scaled_contraction<<<generativeqc_tensor::blocks(r.output_elements(), 128),
+                                           128, 0, stream>>>(
+          a, b, batch_scale, output, r.output_elements(), r.m, r.n, r.k, lda, ldb, ldc,
+          r.a_trans == 'T', r.b_trans == 'T', alpha, error);
+    } else {
+      generated_contraction<<<generativeqc_tensor::blocks(r.output_elements(), 256), 256, 0,
+                              stream>>>(a, b, output, r.output_elements(), r.m, r.n, r.k, lda, ldb,
+                                        ldc, r.a_trans == 'T', r.b_trans == 'T', alpha, beta,
+                                        error);
+    }
     generativeqc_tensor::cuda_check(cudaGetLastError());
   } else {
     cublasStatus_t status;
@@ -345,10 +465,46 @@ void execute_matrix_contraction(const CudaContractionContext& context, const Con
     // may change schedule; a failed enqueue must never silently replay work.
     generativeqc_tensor::blas_check(status);
     const auto count = r.output_elements();
-    audit_contraction<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(count),
-                                                    256),
-                        256, 0, stream>>>(output, count, error, r.n, ldc);
+    if (batch_scale) {
+      publish_batch_scaled_contraction<<<generativeqc_tensor::blocks(count, 256), 256, 0, stream>>>(
+          output, batch_scale, count, r.m, r.n, ldc, error);
+    } else {
+      audit_contraction<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(count),
+                                                      256),
+                          256, 0, stream>>>(output, count, error, r.n, ldc);
+    }
     generativeqc_tensor::cuda_check(cudaGetLastError());
+  }
+}
+
+/** Traverse two original matrix/vector contractions in one checked region.
+ * Both reductions advance together. The compiler helper owns every input and
+ * update check, so either failure zeroes both publications without exposing a
+ * successful partial output. The square matrix is one borrowed allocation. */
+template <class Step>
+static __global__ void generated_checked_transpose_pair(const double* matrix,
+                                                        const double* first_vector,
+                                                        const double* second_vector,
+                                                        double* first_output, double* second_output,
+                                                        std::size_t count, std::size_t columns,
+                                                        int* error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto batch = index / columns, row = index % columns;
+    double first = 0, second = 0;
+    bool valid = true;
+    for (std::size_t k = 0; k < columns; ++k) {
+      if (!Step::update(matrix[(batch * columns + row) * columns + k],
+                        matrix[(batch * columns + k) * columns + row],
+                        first_vector[batch * columns + k], second_vector[batch * columns + k],
+                        first, second)) {
+        valid = false;
+        break;
+      }
+    }
+    if (!valid) atomicCAS(error, 0, 1);
+    first_output[index] = valid ? first : 0;
+    second_output[index] = valid ? second : 0;
   }
 }
 
@@ -368,7 +524,8 @@ class PreparedContractions {
   static constexpr std::size_t storage_bytes(std::size_t requests, std::size_t variants = 1) {
     return sizeof(PreparedContractions) + 2 * sizeof(Variant) +
            2 * variants * requests *
-               (sizeof(ContractionRequest) + sizeof(ContractionAlgorithm)
+               (sizeof(ContractionRequest) + sizeof(ContractionAlgorithm) +
+                sizeof(ContractionOperand)
 #if GENERATIVEQC_HAS_CUTENSOR
                 + sizeof(std::unique_ptr<CudaCutensorContraction>)
 #endif
@@ -395,13 +552,27 @@ class PreparedContractions {
   void add(std::size_t o, std::size_t v, std::size_t q, std::vector<ContractionRequest> requests,
            CudaContractionContext& context, std::size_t& calls, std::size_t& summands,
            std::vector<ContractionAlgorithm> algorithms = {},
-           ContractionProviderReservation reservation = {}, std::string_view artifact = {}) {
+           ContractionProviderReservation reservation = {}, std::string_view artifact = {},
+           std::vector<ContractionOperand> batch_scales = {}) {
     require_safe_retained_cache();
     if (variants_.size() == 2) throw std::length_error("native contraction batch variant bound");
     if (!context.prepared()) throw std::logic_error("native contraction provider is not prepared");
     if (algorithms.empty()) algorithms.assign(requests.size(), ContractionAlgorithm::PedanticBlas);
     if (algorithms.size() != requests.size() || algorithms.capacity() > algorithms.size())
       throw std::invalid_argument("native contraction algorithm table bound");
+    if (batch_scales.empty()) batch_scales.resize(requests.size());
+    if (batch_scales.size() != requests.size() || batch_scales.capacity() > batch_scales.size())
+      throw std::invalid_argument("native contraction batch-scale table bound");
+    for (std::size_t slot = 0; slot < requests.size(); ++slot) {
+      requests[slot].validate_batch_scale(batch_scales[slot]);
+      if (!requests[slot].checked_update_identity.empty() &&
+          algorithms[slot] != ContractionAlgorithm::GeneratedOrdered)
+        throw ContractionPreparationUnavailable(
+            "provider does not implement ordered scalar checks");
+      if (batch_scales[slot].rank && algorithms[slot] != ContractionAlgorithm::GeneratedOrdered &&
+          algorithms[slot] != ContractionAlgorithm::PedanticBlas)
+        throw ContractionPreparationUnavailable("provider does not implement weighted publication");
+    }
     for (auto algorithm : algorithms) {
       if ((algorithm != ContractionAlgorithm::PedanticBlas &&
            algorithm != ContractionAlgorithm::GeneratedOrdered &&
@@ -450,7 +621,7 @@ class PreparedContractions {
     if (device != context.device()) throw std::logic_error("native preparation device changed");
     if (retained_cache_bytes_ && device != retained_cache_device_)
       throw std::logic_error("native contraction retained module device changed");
-    Variant variant{o, v, q, std::move(requests), std::move(algorithms)};
+    Variant variant{o, v, q, std::move(requests), std::move(algorithms), std::move(batch_scales)};
 #if GENERATIVEQC_HAS_CUTENSOR || GENERATIVEQC_HAS_CUBLASLT || GENERATIVEQC_HAS_CUTLASS
     // All optional families can be live together during preparation. Include
     // retained cache charges from earlier attempts before allocating new plans.
@@ -669,27 +840,32 @@ class PreparedContractions {
     calls_ = summands_ = nullptr;
   }
 
-  template <class T>
+  template <class T, class CheckedStep = void>
   void execute(std::size_t slot, std::size_t o, std::size_t v, std::size_t q, cudaStream_t stream,
-               const T* a, const T* b, T* output, int* error) const {
+               const T* a, const T* b, T* output, int* error,
+               const T* batch_scale = nullptr) const {
     static_assert(std::is_same_v<T, double> || std::is_same_v<T, float>);
-    require_safe_retained_cache();
-    if (!context_ || !context_->prepared() || generation_ != context_->generation() ||
-        stream != context_->stream())
-      throw std::logic_error("stale native contraction context; prepare again");
-    cudaStreamCaptureStatus capture{};
-    generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
-    if (capture != cudaStreamCaptureStatusNone)
-      throw std::logic_error("native contraction capture requires replay work accounting");
-    int device{};
-    generativeqc_tensor::cuda_check(cudaGetDevice(&device));
-    if (device != context_->device()) throw std::logic_error("native contraction device changed");
-    const Variant* selected = nullptr;
-    for (const auto& variant : variants_)
-      if (variant.o == o && variant.v == v && variant.q == q) selected = &variant;
-    if (!selected || slot >= selected->requests.size())
+    const auto* selected = &bound_variant(o, v, q, stream);
+    if (slot >= selected->requests.size())
       throw std::logic_error("native contraction shape changed; prepare again");
     const auto& r = selected->requests[slot];
+    if (r.checked_transpose_pair_role)
+      throw std::invalid_argument("coupled checked contractions require joint execution");
+    if constexpr (std::is_void_v<CheckedStep>) {
+      if (!r.checked_update_identity.empty())
+        throw std::invalid_argument("checked contraction requires its compiler scalar helper");
+    } else {
+      static_assert(std::is_same_v<T, double>);
+      if (r.checked_update_identity.empty() ||
+          r.checked_update_identity != CheckedStep::update_identity ||
+          r.checked_publication_identity != CheckedStep::publication_identity)
+        throw std::invalid_argument("scalar helper differs from the prepared contraction");
+      constexpr bool symmetric = requires { CheckedStep::right_symmetrization; };
+      if (r.checked_right_symmetrization != symmetric)
+        throw std::invalid_argument("scalar helper differs from its prepared input views");
+    }
+    if (bool(selected->batch_scales[slot].rank) != bool(batch_scale))
+      throw std::invalid_argument("contraction batch-scale input differs from prepared region");
     // Semantic work remains valid for both matrix and general affine layouts.
     const auto work = r.affine_summands();
     if (*calls_ == std::numeric_limits<std::size_t>::max() ||
@@ -719,9 +895,65 @@ class PreparedContractions {
       return;
     }
 #endif
-    execute_matrix_contraction(*context_, r, selected->algorithms[slot], stream, a, b, output,
-                               error);
+    execute_matrix_contraction<T, CheckedStep>(*context_, r, selected->algorithms[slot], stream, a,
+                                               b, output, error, batch_scale);
     ++*calls_;
+    *summands_ += work;
+  }
+
+  /** Execute a compiler-proven forward/transpose pair with joint checked
+   * publication. All binding, pointer and counter checks occur
+   * before enqueue; failure never falls back to separate partial contractions. */
+  template <class Step>
+  void execute_checked_transpose_pair(std::size_t first_slot, std::size_t second_slot,
+                                      std::size_t o, std::size_t v, std::size_t q,
+                                      cudaStream_t stream, const double* matrix,
+                                      const double* first_vector, const double* second_vector,
+                                      double* first_output, double* second_output,
+                                      int* error) const {
+    const auto& selected = bound_variant(o, v, q, stream);
+    if (first_slot >= selected.requests.size() || second_slot >= selected.requests.size())
+      throw std::out_of_range("unknown coupled contraction sites");
+    const auto& first = selected.requests[first_slot];
+    const auto& second = selected.requests[second_slot];
+    if (first.checked_transpose_pair_role != 1 || second.checked_transpose_pair_role != 2 ||
+        first.checked_update_identity != Step::update_identity ||
+        second.checked_update_identity != Step::update_identity ||
+        first.scientific_identity != second.scientific_identity ||
+        first.batches != second.batches || first.m != second.m ||
+        selected.batch_scales[first_slot].rank || selected.batch_scales[second_slot].rank ||
+        selected.algorithms[first_slot] != ContractionAlgorithm::GeneratedOrdered ||
+        selected.algorithms[second_slot] != ContractionAlgorithm::GeneratedOrdered)
+      throw std::invalid_argument("scalar helper differs from the coupled contraction binding");
+    if (!matrix || !first_vector || !second_vector || !first_output || !second_output || !error)
+      throw std::invalid_argument("coupled contraction buffer address mismatch");
+    const auto overlaps = [](const void* a, std::size_t a_bytes, const void* b,
+                             std::size_t b_bytes) {
+      const auto left = reinterpret_cast<std::uintptr_t>(a);
+      const auto right = reinterpret_cast<std::uintptr_t>(b);
+      return left <= right ? right - left < a_bytes : left - right < b_bytes;
+    };
+    const auto vector_bytes = contraction_product(first.output_elements(), sizeof(double));
+    const auto matrix_bytes =
+        contraction_product(first.operands[0].storage_elements(), sizeof(double));
+    for (const auto* output : {first_output, second_output})
+      if (overlaps(output, vector_bytes, matrix, matrix_bytes) ||
+          overlaps(output, vector_bytes, first_vector, vector_bytes) ||
+          overlaps(output, vector_bytes, second_vector, vector_bytes))
+        throw std::invalid_argument("coupled contraction output aliases a readonly input");
+    if (overlaps(first_output, vector_bytes, second_output, vector_bytes))
+      throw std::invalid_argument("coupled contraction outputs overlap");
+    const auto work = contraction_product(first.summands(), 2);
+    if (*calls_ > std::numeric_limits<std::size_t>::max() - 2 ||
+        work > std::numeric_limits<std::size_t>::max() - *summands_)
+      throw std::length_error("native contraction diagnostic counter overflow");
+    const auto count = first.output_elements();
+    generated_checked_transpose_pair<Step>
+        <<<generativeqc_tensor::blocks(count, 256), 256, 0, stream>>>(
+            matrix, first_vector, second_vector, first_output, second_output, count, first.m,
+            error);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+    *calls_ += 2;
     *summands_ += work;
   }
 
@@ -734,6 +966,7 @@ class PreparedContractions {
     std::size_t o, v, q;
     std::vector<ContractionRequest> requests;
     std::vector<ContractionAlgorithm> algorithms;
+    std::vector<ContractionOperand> batch_scales;
 #if GENERATIVEQC_HAS_CUTENSOR
     std::vector<std::unique_ptr<CudaCutensorContraction>> cutensor;
 #endif
@@ -744,6 +977,25 @@ class PreparedContractions {
     std::vector<std::unique_ptr<CudaCutlassContraction>> cutlass;
 #endif
   };
+  const Variant& bound_variant(std::size_t o, std::size_t v, std::size_t q,
+                               cudaStream_t stream) const {
+    // Every execution entry, including joint checked publication, must honor
+    // context-retained module quarantine before looking up an older binding.
+    require_safe_retained_cache();
+    if (!context_ || !context_->prepared() || generation_ != context_->generation() ||
+        stream != context_->stream())
+      throw std::logic_error("stale native contraction context; prepare again");
+    cudaStreamCaptureStatus capture{};
+    generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::logic_error("native contraction capture requires replay work accounting");
+    int device{};
+    generativeqc_tensor::cuda_check(cudaGetDevice(&device));
+    if (device != context_->device()) throw std::logic_error("native contraction device changed");
+    for (const auto& variant : variants_)
+      if (variant.o == o && variant.v == v && variant.q == q) return variant;
+    throw std::logic_error("native contraction shape changed; prepare again");
+  }
   static void release_variant(Variant& variant) {
 #if GENERATIVEQC_HAS_CUTENSOR
     for (auto& plan : variant.cutensor)

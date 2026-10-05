@@ -790,6 +790,17 @@ macro(generativeqc_register_cuda_generated_sources target)
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/integral/one_electron_derivative_policy_cuda.py"
     ARGS --derivatives --output "${GENERATIVEQC_ONE_ELECTRON_DERIVATIVE_HEADER}")
 
+  set(GENERATIVEQC_COSX_CONTRACTION_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_contractions.cuh")
+  generativeqc_register_generated_sources(
+    NAME generativeqc_cosx_contraction_codegen
+    TARGET ${target}
+    ADD_TO_TARGET
+    GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cosx_contractions.py"
+    OUTPUTS "${GENERATIVEQC_COSX_CONTRACTION_HEADER}"
+    ARGS --output "${GENERATIVEQC_COSX_CONTRACTION_HEADER}"
+    COMMENT "Generating semantic COSX matrix contraction sites")
+
   set(GENERATIVEQC_COSX_DERIVATIVE_CONTRACTION_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_cosx_derivative_contractions.cuh")
   generativeqc_register_generated_sources(
@@ -800,6 +811,8 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS "${GENERATIVEQC_COSX_DERIVATIVE_CONTRACTION_HEADER}"
     DEPENDS
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/cosx_derivative_runtime.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/dft/cosx_contraction.py"
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/checked_contraction.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/ir.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/program.py"

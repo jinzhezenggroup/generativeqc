@@ -83,6 +83,39 @@ int main() {
     subprocess.run([str(binary)], check=True, capture_output=True, timeout=30)
 
 
+@pytest.mark.parametrize("publication", [False, True])
+@pytest.mark.parametrize("prepare", [False, True])
+def test_bounded_domain_rejects_checked_scalar_contracts(
+    tmp_path: Path, publication: bool, prepare: bool
+) -> None:
+    compiler = shutil.which("c++")
+    if compiler is None:
+        pytest.skip("host compiler required")
+    source = tmp_path / "checked_domain.cpp"
+    source.write_text(
+        emit_grid_contraction()
+        + f"\n#define TEST_PUBLICATION {int(publication)}\n#define TEST_PREPARE {int(prepare)}\n"
+        + r"""
+using namespace generativeqc::tensor;
+using generativeqc::dft::generated::grid_panel_descriptor;
+int main() {
+  auto r=grid_panel_descriptor(3,7,5,2);
+  r.checked_update_identity=std::string_view("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  if(TEST_PUBLICATION) r.checked_publication_identity=r.checked_update_identity;
+  r.validate(); // A valid fixed-shape checked contract is outside this domain.
+  try {
+    if(TEST_PREPARE) {BoundedContractionDomain domain(r);}
+    else {BoundedContractionDomain domain(grid_panel_descriptor(4,31,17,9)); domain.validate(r);}
+  } catch(const std::invalid_argument&) {return 0;}
+  return 1;
+}
+"""
+    )
+    binary = tmp_path / "checked_domain"
+    compile_owner(compiler, tmp_path, [source], binary)
+    subprocess.run([str(binary)], check=True, capture_output=True, timeout=30)
+
+
 @pytest.fixture(scope="module")
 def fallback_artifact(tmp_path_factory: pytest.TempPathFactory) -> typing.Any:
     if os.environ.get("GENERATIVEQC_GRID_CUDA_TEST") != "1":

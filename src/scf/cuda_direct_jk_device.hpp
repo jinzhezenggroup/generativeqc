@@ -19,6 +19,22 @@ cudaStream_t cuda_direct_jk_stream(const CudaDirectJkPlan* plan);
 /** Device ordinal in the current process's visibility namespace; null returns -1. */
 int cuda_direct_jk_device(const CudaDirectJkPlan* plan) noexcept;
 
+/** Inventory for an optional unscreened full-range canonical source lease.
+ * Zero denotes an unavailable domain. This query neither evaluates integrals
+ * nor initializes CUDA; the immutable Direct plan remains its scientific owner.
+ */
+std::size_t cuda_direct_jk_resident_value_bytes(const CudaDirectJkPlan* plan);
+
+/** Evaluate each canonical source value once on the owning stream and retain
+ * it under maximum_bytes. Preparation fences and finite-audits the complete
+ * source before publication. Insufficient capacity returns OUT_OF_MEMORY with
+ * the original exact route intact; driver/numerical failures must propagate.
+ * Values are released with the plan. Repeated preparation is idempotent.
+ */
+generativeqc_status prepare_cuda_direct_jk_resident_values(CudaDirectJkPlan* plan,
+                                                           std::size_t maximum_bytes,
+                                                           std::string& detail);
+
 /** Enqueue one exact, unscreened full-range AO ERI tile into caller-owned
  * device storage on caller_stream. The tile is row-major [i,j,k,l] with the
  * last axis fastest and uses the prepared Direct plan's public AO basis.
@@ -53,7 +69,13 @@ generativeqc_status enqueue_cuda_direct_jk_device(CudaDirectJkPlan* plan, FockBu
                                                   const double* density, const double* beta,
                                                   std::size_t matrix_elements, double* coulomb,
                                                   double* alpha_exchange, double* beta_exchange,
-                                                  int* numerical_error, std::string& detail);
+                                                  int* numerical_error, std::string& detail,
+                                                  std::uint64_t* census = nullptr);
+
+/** Whether an ordinary value action has complete canonical census coverage.
+ * Generated/generic channels do not silently report zero as measured work. */
+bool cuda_direct_jk_value_census_available(const CudaDirectJkPlan* plan,
+                                           FockBuildSpec spec) noexcept;
 
 /** Whether the immutable canonical quartet source can supply a density-independent
  * linear action. This optional schedule retains no four-index integral tensor. */

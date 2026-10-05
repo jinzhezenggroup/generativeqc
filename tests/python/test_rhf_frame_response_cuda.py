@@ -378,6 +378,177 @@ def test_fixed_mask_signed_jk_matches_dense_oracle(threshold: float) -> None:
 
 @pytest.mark.parametrize("through_f", [False, True])
 @pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+@pytest.mark.parametrize("unrestricted", [False, True])
+@pytest.mark.parametrize("cache_budget", [1, 1 << 20])
+def test_resident_exact_jk_signed_oracle_and_bounded_fallback(
+    through_f: bool,
+    representation: str,
+    unrestricted: bool,
+    cache_budget: int,
+    allocation_refused: bool = False,
+) -> None:
+    """Cached sources retain the exact signed Hamiltonian and a real capacity fallback."""
+    assert os.environ.get("SLURM_JOB_ID")
+    metadata, _ = load_fixture("water")
+    metadata["inputs"]["basis_representation"] = representation
+    if through_f:
+        metadata["inputs"]["shells"].append(
+            {"atom_index": 1, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
+        )
+        # Libcint groups shells by atom; keep the native public AO order identical.
+        metadata["inputs"]["shells"].sort(key=lambda shell: shell["atom_index"])
+    mol, scale, _ = pyscf_molecule(metadata["inputs"])
+    eri = mol.intor("int2e") * np.einsum("i,j,k,l->ijkl", scale, scale, scale, scale)
+    dimension = len(scale)
+    spin_count = 2 if unrestricted else 1
+    rng = np.random.default_rng(1972)
+    first, second = (
+        rng.normal(size=(spin_count, dimension, dimension)) for _ in range(2)
+    )
+    first = first + first.swapaxes(-1, -2)
+    second = second + second.swapaxes(-1, -2)
+    densities = np.ascontiguousarray(
+        [first, second, 2.3 * first - 0.7 * second, np.zeros_like(first), -first]
+    )
+    channel_count = 3 if unrestricted else 2
+    output = np.full((len(densities), 2, channel_count, dimension, dimension), np.nan)
+    counts = np.zeros(8, dtype=np.uint64)
+    timings = np.zeros(5)
+    error = ct.create_string_buffer(2048)
+    double_pointer = ct.POINTER(ct.c_double)
+    call = ct.CDLL(
+        str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve())
+    ).rhf_resident_jk_probe
+    call.argtypes = [
+        ct.c_void_p,
+        double_pointer,
+        ct.c_size_t,
+        ct.c_bool,
+        ct.c_size_t,
+        double_pointer,
+        ct.POINTER(ct.c_uint64),
+        double_pointer,
+        ct.c_void_p,
+        ct.c_size_t,
+    ]
+    call.restype = ct.c_int
+    with NativeSource(**source_arguments(metadata)) as source:
+        status = call(
+            source._handle,
+            densities.ctypes.data_as(double_pointer),
+            len(densities),
+            unrestricted,
+            cache_budget,
+            output.ctypes.data_as(double_pointer),
+            counts.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+            timings.ctypes.data_as(double_pointer),
+            error,
+            len(error),
+        )
+    assert status == 0, error.value.decode()
+    assert counts[0] > 0
+    if cache_budget >= counts[0] and not allocation_refused:
+        assert counts[1] == counts[0] == 8 * counts[2]
+        assert counts[6] == 0 and counts[7] == 1
+        assert counts[4] == len(densities) * counts[2]
+        assert counts[5] == 0
+    else:
+        assert counts[1] == counts[2] == 0
+        assert counts[6] == 7
+    expected = []
+    for density in densities:
+        channels = [np.einsum("ijkl,kl->ij", eri, density.sum(axis=0))]
+        channels.extend(np.einsum("ikjl,kl->ij", eri, spin) for spin in density)
+        expected.append(channels)
+    expected = np.asarray(expected)
+    for route in range(2):
+        np.testing.assert_allclose(output[:, route], expected, atol=2e-11, rtol=2e-12)
+    actual = output[:, 0]
+    np.testing.assert_allclose(
+        actual[2], 2.3 * actual[0] - 0.7 * actual[1], atol=3e-11, rtol=2e-12
+    )
+    np.testing.assert_array_equal(actual[3], np.zeros_like(actual[3]))
+    np.testing.assert_allclose(actual[4], -actual[0], atol=2e-11, rtol=2e-12)
+    exchange_scale = 1.0 if unrestricted else 0.5
+    potentials = actual[:, :1] - exchange_scale * actual[:, 1:]
+    np.testing.assert_allclose(
+        np.sum(first * potentials[1]),
+        np.sum(second * potentials[0]),
+        atol=3e-11,
+        rtol=2e-12,
+    )
+    assert np.isfinite(timings).all() and (timings > 0).all()
+
+
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+@pytest.mark.parametrize("unrestricted", [False, True])
+def test_resident_allocation_refusal_keeps_exact_signed_actions(
+    monkeypatch: pytest.MonkeyPatch, representation: str, unrestricted: bool
+) -> None:
+    """A rejected device lease must not poison later ordinary Direct actions."""
+    monkeypatch.setenv("GENERATIVEQC_TEST_RHF_RESIDENT_ALLOCATION_REFUSAL", "1")
+    test_resident_exact_jk_signed_oracle_and_bounded_fallback(
+        True, representation, unrestricted, 1 << 20, allocation_refused=True
+    )
+
+
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
+def test_resident_quartic_inventory_cliff_refuses_without_allocating_values(
+    representation: str,
+) -> None:
+    """A large metadata-only inventory cannot silently exceed the 8-GiB ceiling."""
+    assert os.environ.get("SLURM_JOB_ID")
+    metadata, _ = load_fixture("water")
+    metadata["inputs"]["basis_representation"] = representation
+    for _ in range(31):
+        metadata["inputs"]["shells"].append(
+            {"atom_index": 0, "angular_momentum": 3, "primitives": [[0.8, 1.0]]}
+        )
+    metadata["inputs"]["shells"].sort(key=lambda shell: shell["atom_index"])
+    counts = np.zeros(8, dtype=np.uint64)
+    timings = np.zeros(5)
+    unused = np.zeros(1)
+    error = ct.create_string_buffer(2048)
+    double_pointer = ct.POINTER(ct.c_double)
+    call = ct.CDLL(
+        str(Path(os.environ["GENERATIVEQC_RHF_FRAME_PROBE"]).resolve())
+    ).rhf_resident_jk_probe
+    call.argtypes = [
+        ct.c_void_p,
+        double_pointer,
+        ct.c_size_t,
+        ct.c_bool,
+        ct.c_size_t,
+        double_pointer,
+        ct.POINTER(ct.c_uint64),
+        double_pointer,
+        ct.c_void_p,
+        ct.c_size_t,
+    ]
+    call.restype = ct.c_int
+    with NativeSource(**source_arguments(metadata)) as source:
+        status = call(
+            source._handle,
+            unused.ctypes.data_as(double_pointer),
+            0,
+            False,
+            8 << 30,
+            unused.ctypes.data_as(double_pointer),
+            counts.ctypes.data_as(ct.POINTER(ct.c_uint64)),
+            timings.ctypes.data_as(double_pointer),
+            error,
+            len(error),
+        )
+    assert status == 0, error.value.decode()
+    cartesian_dimension = 7 + 31 * 10
+    pair_count = cartesian_dimension * (cartesian_dimension + 1) // 2
+    assert counts[0] == 8 * pair_count * (pair_count + 1) // 2 > 8 << 30
+    np.testing.assert_array_equal(counts[1:6], 0)
+    assert counts[6] == 7
+
+
+@pytest.mark.parametrize("through_f", [False, True])
+@pytest.mark.parametrize("representation", ["real_spherical", "cartesian"])
 @pytest.mark.parametrize("centers", [2, 4])
 def test_bilinear_derivative_signed_density_oracle(
     through_f: bool, representation: str, centers: int
