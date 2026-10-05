@@ -1,5 +1,6 @@
 #include <cuda_runtime_api.h>
 
+#include <chrono>
 #include <cmath>
 #include <iostream>
 #include <limits>
@@ -66,6 +67,37 @@ void verify(int n) {
   const auto bound = generativeqc::scf::ordinary_eigensolver_workspace_allowance(n);
   require(solver.device_bytes() <= bound && solver.host_bytes() <= bound,
           "solver query exceeded the shape bound");
+  const auto& diagnostic = solver.diagnostic();
+  const auto& selected = diagnostic.candidates[diagnostic.selected];
+  const bool small = n <= generativeqc::scf::cuda_execution::kSmallEigensolverLimit;
+  require(diagnostic.dimension == n && diagnostic.retained_incumbent &&
+              diagnostic.selected == (small ? 0U : 1U),
+          "prepared solver did not retain its qualified size-domain incumbent");
+  require(generativeqc::runtime::lowering_digest(diagnostic.request.scientific_identity) &&
+              generativeqc::runtime::lowering_digest(selected.identity) &&
+              selected.request_identity == diagnostic.request.identity &&
+              selected.precision_identity == diagnostic.request.precisions[0].identity,
+          "solver lacks canonical scientific/request/candidate/precision identities");
+  require(selected.capture_safe == small && diagnostic.opaque_provider_bytes_known == small &&
+              selected.workspace_bytes == solver.device_bytes() &&
+              selected.host_bytes == solver.host_bytes() + solver.metadata_bytes() &&
+              solver.metadata_bytes() == generativeqc::scf::kOrdinaryEigensolverBindingHostBytes &&
+              !diagnostic.rejections[small ? 1 : 0].empty() && diagnostic.runtime_version > 0 &&
+              diagnostic.driver_version > 0,
+          "solver lost resource/version/capture or negative-candidate evidence");
+  if (!small) {
+    int major{}, minor{}, patch{};
+    require(cusolverGetProperty(MAJOR_VERSION, &major) == CUSOLVER_STATUS_SUCCESS &&
+                cusolverGetProperty(MINOR_VERSION, &minor) == CUSOLVER_STATUS_SUCCESS &&
+                cusolverGetProperty(PATCH_LEVEL, &patch) == CUSOLVER_STATUS_SUCCESS,
+            "independent runtime provider version query failed");
+    require(selected.provider_version ==
+                std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch),
+            "prepared solver reported a guessed provider version");
+  }
+  const auto prepared_ns = diagnostic.prepare_ns;
+  const auto candidate_identity = selected.identity;
+  const auto started = std::chrono::steady_clock::now();
   for (int repeat = 0; repeat < 2; ++repeat) {
     for (int spin = 0; spin < 2; ++spin)
       check(cudaMemcpyAsync(input + spin * matrix, a.data(), matrix * sizeof(double),
@@ -106,6 +138,18 @@ void verify(int n) {
       }
     }
   }
+  require(solver.diagnostic().prepare_ns == prepared_ns &&
+              solver.diagnostic().candidates[diagnostic.selected].identity == candidate_identity,
+          "repeated solves unexpectedly repeated preparation");
+  std::cout << "n=" << n << " provider=" << selected.provider
+            << " version=" << selected.provider_version << " prepare_ns=" << prepared_ns
+            << " two_batch2_solves_with_oracle_ns="
+            << std::chrono::duration_cast<std::chrono::nanoseconds>(
+                   std::chrono::steady_clock::now() - started)
+                   .count()
+            << " device_workspace=" << solver.device_bytes()
+            << " host_workspace=" << solver.host_bytes()
+            << " binding_host=" << solver.metadata_bytes() << '\n';
   if (n > generativeqc::scf::cuda_execution::kSmallEigensolverLimit) {
     // Library providers still receive the full batch. The common dispatcher
     // must sanitize an inactive nonfinite matrix before calling cuSOLVER.
@@ -135,6 +179,16 @@ void verify(int n) {
     check(cudaStreamSynchronize(owner.stream));
   }
   check(cudaStreamBeginCapture(owner.stream, cudaStreamCaptureModeThreadLocal));
+  bool preparation_rejected = false;
+  try {
+    generativeqc::scf::cuda_execution::OrdinaryStreamEigensolver forbidden(owner.stream, n, input,
+                                                                           values);
+  } catch (const std::invalid_argument&) {
+    preparation_rejected = true;
+  }
+  require(preparation_rejected, "solver preparation silently ran inside capture");
+  // The rejected construction must leave the borrowed graph valid for work
+  // recorded with the already-prepared owner below.
   const auto capture_status = solver.launch(2, input, scratch, values, info, active);
   if (n <= generativeqc::scf::cuda_execution::kSmallEigensolverLimit) {
     require(capture_status == GENERATIVEQC_STATUS_SUCCESS,
@@ -149,8 +203,12 @@ void verify(int n) {
     cudaGraphExec_t executable{};
     check(cudaGraphInstantiate(&executable, graph, 0));
     for (int replay = 0; replay < 2; ++replay) {
+      // Replay changes device values while preserving the prepared contract.
+      auto shifted = a;
+      const double shift = 0.125 * (replay + 1);
+      for (int i = 0; i < n; ++i) shifted[i + std::size_t(i) * n] += shift;
       for (int spin = 0; spin < 2; ++spin)
-        check(cudaMemcpyAsync(input + spin * matrix, a.data(), matrix * sizeof(double),
+        check(cudaMemcpyAsync(input + spin * matrix, shifted.data(), matrix * sizeof(double),
                               cudaMemcpyHostToDevice, owner.stream));
       check(cudaGraphLaunch(executable, owner.stream));
       std::vector<double> replay_values(n * 2);
@@ -163,7 +221,7 @@ void verify(int n) {
       for (int spin = 0; spin < 2; ++spin) {
         require(replay_info[spin] == 0, "captured small-native eigensolver reported failure");
         for (int j = 0; j < n; ++j)
-          require(std::abs(replay_values[spin * n + j] - d[j]) < 2e-11,
+          require(std::abs(replay_values[spin * n + j] - (d[j] + shift)) < 2e-11,
                   "captured small-native eigenvalue mismatch");
       }
     }
@@ -175,7 +233,7 @@ void verify(int n) {
 
 int main() {
   try {
-    for (int n : {7, 24, 192, 768}) verify(n);
+    for (int n : {7, 16, 17, 24, 192, 768}) verify(n);
     std::cout << "ordinary eigensolver independent spectrum/residual/replay/capture PASS\n";
     return 0;
   } catch (const std::exception& error) {

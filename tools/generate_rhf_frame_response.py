@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if __package__ in (None, ""):
     sys.path[:0] = [str(ROOT), str(ROOT / "python")]
 
+from generativeqc_compiler.method.rhf_orbital_preconditioner import (
+    build_rhf_df_preconditioner,
+)
 from generativeqc_compiler.method.rhf_orbital_response import build_rhf_frame_response
 
 from tools.generate_df_ccsd_hoisted import contraction_query
@@ -83,6 +86,31 @@ def cpu_header() -> str:
                 output_fields=tuple(p.outputs),
             ),
         ]
+    # The optional host numerical preconditioner uses the same scalar IR
+    # emitter as other bounded maps; it never replaces a physical CUDA action.
+    preconditioner = build_rhf_df_preconditioner(*REPRESENTATIVE, 3)
+    lines += [
+        "struct PreconditionerInputs {",
+        *(f"  const double* {name}{{}};" for name in inputs(preconditioner)),
+        "};",
+        "struct PreconditionerOutputs { const double *diagonal{}, *low_rank{}; };",
+        f'inline constexpr const char* preconditioner_hash="{preconditioner.logical_hash}";',
+        _required_function(
+            preconditioner, "preconditioner_arena_elements", batch_dim=True
+        ),
+        contraction_query(
+            preconditioner, "preconditioner_contraction_terms", batch_dim=True
+        ),
+        _cpu_function(
+            preconditioner,
+            "run_preconditioner_cpu",
+            "PreconditionerOutputs",
+            signature="const PreconditionerInputs& inputs",
+            input_overrides={key: "inputs." + key for key in inputs(preconditioner)},
+            batch_dim=True,
+            output_fields=("diagonal", "low_rank"),
+        ),
+    ]
     return "\n".join([*lines, "}", ""])
 
 

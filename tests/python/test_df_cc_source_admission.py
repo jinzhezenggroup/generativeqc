@@ -64,6 +64,7 @@ namespace runtime {
 struct CudaDeviceScope { explicit CudaDeviceScope(int) { ++device_entries; } };
 }
 namespace scf {
+__SOURCE_METADATA_CAPACITY__
 struct CudaDensityFittingIntegralSource {};
 namespace cuda_execution {
 // The host-only boundary has no CUDA implementation or ABI claim. Its size is
@@ -88,6 +89,14 @@ FACTORY_END = r"""
   const auto device_bytes = observed_device_bytes(host, public_nbf, public_naux, metric_elements);
   if (device_bytes != capacity.device_bytes)
     throw std::logic_error("source uploads disagree with the construction device ledger");
+  // The public shape-only ABI must also cover the actual uploaded record
+  // inventory. The generated metric is temporary, so exclude it here.
+  const auto shape_capacity = density_fitting_source_metadata_bytes(
+      batch_size, host.atomic_numbers.size(), host.shell_atoms.size(),
+      host.ao_shells.size(), host.primitive_exponents.size(),
+      batch_size * (public_nbf * cartesian_nbf + public_naux * cartesian_naux));
+  if (device_bytes - metric_elements * sizeof(double) > shape_capacity)
+    throw std::logic_error("shape-only source capacity underestimates owned uploads");
   std::vector<std::byte> device_payload(device_bytes);
   auto candidate = std::make_unique<CudaDensityFittingIntegralSourceImpl>();
   auto atom_prefix = host.atom_offsets;
@@ -238,6 +247,24 @@ int main(int argc, char** argv) {
       allocation_probe::enabled=false;
       if (allocation_probe::peak>bound.numeric_bytes || allocation_probe::live) return 11;
     }
+  } else if (mode==7) {
+    // Small sources take the sparse-record branch even with only s/p shells;
+    // also cover spherical d/f and auxiliary g against the same owned ledger.
+    for (unsigned l=0; l<=4; ++l) for (bool spherical : {false, true}) {
+      auto o=system(2,std::min(l,3U),1,spherical), a=system(2,l,1,spherical);
+      auto r=reference(o);
+      (void)cc::build_df_source_cuda(o,a,r,1ULL<<30,1e-10,0,0,false,&policy);
+    }
+    try {
+      (void)scf::density_fitting_source_metadata_bytes(
+          1,0,0,std::numeric_limits<std::size_t>::max()/64,0,0);
+      return 12;
+    } catch (const std::overflow_error&) {}
+    try {
+      (void)scf::density_fitting_source_metadata_bytes(
+          1,0,0,0,0,std::numeric_limits<std::size_t>::max()/8+1);
+      return 13;
+    } catch (const std::overflow_error&) {}
   } else return 10;
   return 0;
 }
@@ -307,11 +334,8 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     kernels = (ROOT / "src/scf/cuda/df_source_kernels.hpp").read_text()
     start = kernels.index("struct DfPublicAoExpansion {")
     expansion = kernels[start : kernels.index("\n};", start) + 4]
-    constants = "\n".join(
-        line
-        for line in kernels.splitlines()
-        if "kDfPublicAoExpansionTerms" in line and "constexpr" in line
-    )
+    start = kernels.index("inline constexpr std::size_t kDfPublicAoExpansionTerms")
+    constants = kernels[start : kernels.index(";", start) + 1]
     uploads = re.findall(
         r"GENERATIVEQC_UPLOAD_SOURCE_FIELD\(\w+,\s*host\.(\w+)\);", setup
     )
@@ -325,6 +349,15 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         + "  return bytes+(n+q)*sizeof(DfPublicAoExpansion)+metric*sizeof(double);\n}\n"
     )
     prelude = PRELUDE.replace("__DF_PUBLIC_EXPANSION__", constants + "\n" + expansion)
+    planner = (ROOT / "src/scf/density_fitting.cpp").read_text()
+    start = planner.index("bool checked_multiply(")
+    multiply = planner[start : planner.index("\n}", start) + 2]
+    start = planner.index("std::size_t density_fitting_source_metadata_bytes(")
+    metadata = planner[start : planner.index("\n}", start) + 2]
+    prelude = prelude.replace(
+        "__SOURCE_METADATA_CAPACITY__",
+        "namespace {\n" + multiply + "\n}\n" + metadata,
+    )
     prelude = prelude.replace("__DEVICE_OBSERVER__", observer)
     program = prelude + transform + factory + FACTORY_END + helpers + prefix
     program += (
@@ -381,7 +414,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("mode", range(7))
+@pytest.mark.parametrize("mode", range(8))
 def test_source_setup_admission_and_allocation_peak(
     admission_probe: Path, mode: int
 ) -> None:

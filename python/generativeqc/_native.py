@@ -399,6 +399,8 @@ class CorrelationDiagnostic(ctypes.Structure):
         ("ccsd_t_virtual_triples", ctypes.c_uint64),
         ("ccsd_t_workspace_bytes", ctypes.c_uint64),
         ("ccsd_t_equation_hash", ctypes.c_char * 65),
+        ("reference_execution_plan_reused", ctypes.c_int32),
+        ("reference_execution_plan_owned_device_bytes", ctypes.c_uint64),
     ]
 
 

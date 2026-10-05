@@ -1,0 +1,232 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "255d64b8d28ae5432c7cfa175cbaf75dcd12fc44",
+    "dirty": false,
+    "reconstruction_base": "9d0f4fc0ddbe9c1dc4539cd4f6ad8a6e019ba990"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6107,
+      "sha256": "ce5c7db0ac8d0eceb481b721245eacc48564dd6b89772eaae94accc1beaf727c",
+      "role": "reproduction"
+    },
+    {
+      "path": "check-source.py.txt",
+      "bytes": 888,
+      "sha256": "f3ccdf1305d574f136b617cd5c6e4209c243000604ae24643695a7e2a8a70e49",
+      "role": "reproduction"
+    },
+    {
+      "path": "control-source.patch.gz",
+      "bytes": 24724,
+      "sha256": "561b7b72fba18cc938c67724da54bde81d83a9755982e0879b9566c13805f58f",
+      "role": "source-patch"
+    },
+    {
+      "path": "fresh-cache/1-dense-control.json.gz",
+      "bytes": 20195,
+      "sha256": "a09f48b406763609122d036bedbd7f3b72c88ec4ac8b742a1123bdeff11c93b6",
+      "role": "samples"
+    },
+    {
+      "path": "fresh-cache/2-default.json.gz",
+      "bytes": 20537,
+      "sha256": "34b3c3794d08c0c5b739da665b32ac82345fea305844a168e40c12f6b68144af",
+      "role": "samples"
+    },
+    {
+      "path": "fresh-cache/3-default.json.gz",
+      "bytes": 20572,
+      "sha256": "586e3569f04bf0bff32ae7c14f009782c733ce12d66f56eb25681b1fea7c115f",
+      "role": "samples"
+    },
+    {
+      "path": "fresh-cache/4-dense-control.json.gz",
+      "bytes": 20234,
+      "sha256": "3c9863b4c3c3b032063af3dd49e42046276fac39340787889df563bc80f4f51f",
+      "role": "samples"
+    },
+    {
+      "path": "fresh-cache/cold-fresh-n1.sh.txt",
+      "bytes": 1561,
+      "sha256": "4f4b6b7886a034e0e69ab2a8ec94b235743151787f6def8fee8a52c7b6d05c93",
+      "role": "reproduction"
+    },
+    {
+      "path": "fresh-cache/reference-96.json.gz",
+      "bytes": 15546,
+      "sha256": "bf04b2b0505b07963f00d59a87a97d3a1647d019a28a2e93b40e982bc1a1257f",
+      "role": "samples"
+    },
+    {
+      "path": "fresh-cache/verify-cold-repeat.py.txt",
+      "bytes": 4378,
+      "sha256": "653d64fa364441fc7be55b86a9610397b81ad9b310306496df4575fc8aa7af42",
+      "role": "reproduction"
+    },
+    {
+      "path": "gpu-env-n1.sh.txt",
+      "bytes": 1487,
+      "sha256": "5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d",
+      "role": "reproduction"
+    },
+    {
+      "path": "identities.json",
+      "bytes": 755,
+      "sha256": "e2a8f091b4ea26efee2dd489379382aadc6bbb78a96ea12a18ea252e75c2ac28",
+      "role": "reproduction"
+    },
+    {
+      "path": "public-default-endpoint.py.txt",
+      "bytes": 1982,
+      "sha256": "25e9148dfab87b32821300ecbf1aa834ec5f7536585f532295c1d3ea68c51345",
+      "role": "reproduction"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 43862,
+      "sha256": "fddb653300c6662e6c4493ebecd29eb49291a58749f560a0663e03344f2d45b5",
+      "role": "reproduction"
+    },
+    {
+      "path": "reconstruction.json",
+      "bytes": 695,
+      "sha256": "1908d62fee6aaf9cde719eb9c9eef6d5de4a57944649ed1a0038873a8775deaa",
+      "role": "reproduction"
+    },
+    {
+      "path": "root-reuse/candidate-48.json.gz",
+      "bytes": 25857,
+      "sha256": "301e6183e179bdd22e0534c1f4cee8283c7ab47c8d724a4201782ccfcdc78fa0",
+      "role": "samples"
+    },
+    {
+      "path": "root-reuse/candidate-96.json.gz",
+      "bytes": 39362,
+      "sha256": "ee5958d548e50936409919db5eb1de97fdcbb0dbe260c0acf30c9f9ba83059dd",
+      "role": "samples"
+    },
+    {
+      "path": "root-reuse/control-48.json.gz",
+      "bytes": 25793,
+      "sha256": "28f326e20a9e715552c6959dd182d11f127706d8d6a34805bf972c4eefbfa6b5",
+      "role": "samples"
+    },
+    {
+      "path": "root-reuse/control-96.json.gz",
+      "bytes": 39458,
+      "sha256": "2e136083192ad3ee201e25c5f6b966fd8c9fdc8ea6f3fdc65111c60d9f7948be",
+      "role": "samples"
+    },
+    {
+      "path": "root-reuse/paired-roots-n1.sh.txt",
+      "bytes": 1929,
+      "sha256": "f3c78b9a41a0883eaf9c3161ed6a9fd68cb49628d08a447098ac817a47f97352",
+      "role": "reproduction"
+    },
+    {
+      "path": "root-reuse/qualify-roots-n1.sh.txt",
+      "bytes": 896,
+      "sha256": "e6b1bf1a4077e2da541fc1972722b4073bf8dbd97639912dc8d5a22a59a15be0",
+      "role": "reproduction"
+    },
+    {
+      "path": "root-reuse/reference-48.json.gz",
+      "bytes": 18158,
+      "sha256": "fce5708b5376851878ea8e0b2e4783a3767e9af1f2bf6ce11cb65fcc542242a5",
+      "role": "samples"
+    },
+    {
+      "path": "root-reuse/reference-96.json.gz",
+      "bytes": 30677,
+      "sha256": "79a37a138fb6324d59634450c4f3b5ef07d185ae2b8f255f350b0b60f9bd9426",
+      "role": "samples"
+    },
+    {
+      "path": "root-reuse.patch.gz",
+      "bytes": 2949,
+      "sha256": "3d96dd1c859896b369c84ffe0a9001fa67ace33a15fcc459a8e9651ae86262c8",
+      "role": "source-patch"
+    },
+    {
+      "path": "shared-cache/1-default.json.gz",
+      "bytes": 20586,
+      "sha256": "0f53b10fc79f751be8acfdcd44cb8348ba7d05c805116a43b70686ac59c62d0a",
+      "role": "samples"
+    },
+    {
+      "path": "shared-cache/2-dense-control.json.gz",
+      "bytes": 20233,
+      "sha256": "2484790af3df6c3baadb34b7230df4bc2b3b4150db38d67e473d09f00cadcc1d",
+      "role": "samples"
+    },
+    {
+      "path": "shared-cache/3-dense-control.json.gz",
+      "bytes": 20198,
+      "sha256": "c925798b00c4250452fc4b3b8afce6cc91ee927b4aa55624b9d2d2fecef5dedd",
+      "role": "samples"
+    },
+    {
+      "path": "shared-cache/4-default.json.gz",
+      "bytes": 20590,
+      "sha256": "b689daf2a35515d96b9204a943bd31509068cb94ca591025a15675231cdca7ef",
+      "role": "samples"
+    },
+    {
+      "path": "shared-cache/cold-repeat-n1.sh.txt",
+      "bytes": 1506,
+      "sha256": "c4daa4055e8e6c16b75a5ff6d2c2f2c55db8e6841ee441e980a64da263efcf67",
+      "role": "reproduction"
+    },
+    {
+      "path": "shared-cache/reference-96.json.gz",
+      "bytes": 15525,
+      "sha256": "8f8aa03153ca7326b27c0830292d57aebcac853129fc5a63209873c2aa6c58c6",
+      "role": "samples"
+    },
+    {
+      "path": "shared-cache/verify-cold-repeat.py.txt",
+      "bytes": 4378,
+      "sha256": "653d64fa364441fc7be55b86a9610397b81ad9b310306496df4575fc8aa7af42",
+      "role": "reproduction"
+    },
+    {
+      "path": "summary.json.gz",
+      "bytes": 3038,
+      "sha256": "954c0025763bed68421533ae1230679ed61fe1b4abfdfc54093068c250fca754",
+      "role": "summary"
+    },
+    {
+      "path": "validation.json.gz",
+      "bytes": 6975,
+      "sha256": "f36961dc5febfa56aaa61b6c9272c3f4d04006af47e6164bdd600884f4a85285",
+      "role": "evidence"
+    },
+    {
+      "path": "verify-public-default.py.txt",
+      "bytes": 4371,
+      "sha256": "e4908f052cd5f2de8a96260cbaa54171458449d52fcbc9317869712c66d36e29",
+      "role": "reproduction"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 10533,
+      "sha256": "f81f04613ffe98a7001a3716e7356f64a3939e45efa0e5c47180066eeaf3acbf",
+      "role": "reproduction"
+    }
+  ],
+  "decision": {
+    "scope": "performance",
+    "status": "inconclusive",
+    "reason": "Root reuse improves warm observations but regresses moved endpoints; cold force-map repeats retain cache conditions and variable SCF counts. No code, default or parity promotion."
+  },
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-force-followups-20261005/verify.py"
+    ]
+  }
+}

@@ -47,7 +47,9 @@ if TYPE_CHECKING:
 _METHODS = _method_manifest.METHOD_NAME_TO_ID
 _COMPOSITE_METHOD_ALIASES = _method_manifest.COMPOSITE_METHOD_ALIASES
 _HF_METHODS = _method_manifest.HF_METHOD_IDS
-_COUPLED_CLUSTER_METHODS = frozenset((_native.METHOD_RCCSD, _native.METHOD_RCCSD_T))
+_COUPLED_CLUSTER_METHODS = frozenset(
+    (_native.METHOD_RCCSD, _native.METHOD_RCCSD_T, _native.METHOD_DF_RCCSD_T)
+)
 _CORRELATED_METHODS = frozenset((_native.METHOD_MP2, *_COUPLED_CLUSTER_METHODS))
 
 
@@ -557,6 +559,20 @@ class Calculator:
                     )
                     else basis_representation,
                 )
+        intrinsic_df_rccsdt = method_id == _native.METHOD_DF_RCCSD_T
+        if intrinsic_df_rccsdt:
+            if device != "cuda":
+                raise NotImplementedError(
+                    "df-rccsd(t) currently requires device='cuda'"
+                )
+            if auxiliary_basis is None:
+                raise ValueError("df-rccsd(t) requires an explicit auxiliary_basis")
+            if (
+                density_fitting is True
+                or density_fitting is False
+                or str(density_fitting).lower() == "none"
+            ):
+                density_fitting = "cuda"
         if isinstance(density_fitting, bool):
             density_fitting = "cpu" if density_fitting else "none"
         density_fitting_modes = {
@@ -572,6 +588,13 @@ class Calculator:
             raise ValueError(
                 "density_fitting must be 'none', 'cpu', 'cuda', or 'auto'"
             ) from error
+        if intrinsic_df_rccsdt and density_fitting_mode not in (
+            _native.DENSITY_FITTING_CUDA,
+            _native.DENSITY_FITTING_AUTO,
+        ):
+            raise NotImplementedError(
+                "df-rccsd(t) currently requires CUDA density fitting"
+            )
         if (
             auxiliary_basis is not None
             and density_fitting_mode == _native.DENSITY_FITTING_NONE
@@ -987,7 +1010,7 @@ class Calculator:
                 self._capabilities,
                 supported_second_order=frozenset(("hvp", "hessian")),
             )
-        if self._method in _COUPLED_CLUSTER_METHODS:
+        if self._method in _COUPLED_CLUSTER_METHODS and not intrinsic_df_rccsdt:
             if density_fitting_mode != _native.DENSITY_FITTING_NONE:
                 raise NotImplementedError(
                     "native coupled-cluster density fitting is not implemented"

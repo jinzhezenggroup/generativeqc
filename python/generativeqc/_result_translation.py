@@ -50,6 +50,9 @@ def read_correlation_result(
         if field_name not in ("struct_size", "abi_version")
     }
     values["mo_host_staging"] = bool(values["mo_host_staging"])
+    values["reference_execution_plan_reused"] = bool(
+        values["reference_execution_plan_reused"]
+    )
     for field_name in (
         "equation_hash",
         "response_operator_hash",

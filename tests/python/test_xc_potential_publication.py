@@ -35,10 +35,12 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "void CudaXcPlan::publish_submitted_generation(",
             "void CudaXcPlan::publish_potential_work(",
             "void CudaXcPlan::enqueue_impl(",
+            "const CudaXcDensityBinding& CudaXcPlan::density_binding(",
         )
     )
     source = r"""
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -64,7 +66,8 @@ namespace generativeqc_tensor {
 struct DeviceAllocationError : std::bad_alloc {};
 struct DeviceRuntimeError : std::runtime_error { using std::runtime_error::runtime_error; };
 }
-enum class CudaXcDensityPrecision { Fp64, Fp32ComputeFp64Accumulate };
+using runtime::PrecisionPhase;
+struct CudaXcDensityBinding {};
 struct Layout {
   std::size_t nao{3}, npoint{7}, tile_points{3}, work_jets{4}, spins{2};
   bool local_ao{}, response{};
@@ -89,11 +92,14 @@ struct CudaXcPlan {
   std::vector<std::size_t> ao_offsets_{0, 2, 2, 3};
   const std::size_t* ao_ids_{};
   std::unique_ptr<int> potential_binding_;
+  std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
+  std::vector<int> local_density_launchers_;
+  const CudaXcDensityBinding& density_binding(PrecisionPhase) const;
   void check_device() const {}
   void publish_submitted_generation(std::uint64_t);
   void publish_potential_work();
   void enqueue_impl(const double*, const double*, std::size_t, std::uint64_t,
-                    CudaXcDensityPrecision, double*, double*, bool);
+                    PrecisionPhase, double*, double*, bool);
 };
 """
     driver = r"""
@@ -113,7 +119,7 @@ int main(int argc, char** argv) {
     else {
       double density[18]{};
       plan.enqueue_impl(density, nullptr, 9 * plan.layout_.spins, generation,
-                        CudaXcDensityPrecision::Fp64, nullptr, nullptr, true);
+                        PrecisionPhase::StrictAudit, nullptr, nullptr, true);
     }
   };
   bool rejected = false;
