@@ -6,7 +6,7 @@
 #include <type_traits>
 
 #include "tensor/cuda_affine_audit.cuh"
-#include "tensor/native_cublaslt.hpp"
+#include "tensor/native_matrix_view.hpp"
 
 namespace generativeqc::tensor {
 
@@ -53,7 +53,7 @@ class CudaCublasLtContraction {
   bool prepare(const ContractionRequest& request, cudaStream_t stream, std::size_t workspace_limit,
                std::size_t provider_limit, std::size_t host_reservation) {
     if (handle_) throw std::logic_error("cuBLASLt binding is already prepared");
-    const auto recipe = CublasLtMatrixRecipe::from(request);
+    const auto recipe = MatrixContractionRecipe::from(request);
     require_uncaptured(stream);
     rejection_ = {};
     // Include the bounded temporary heuristic array, simultaneous with the owner.

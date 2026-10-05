@@ -422,7 +422,7 @@
     },
     "src/tensor/cuda_cublaslt.cuh": {
       "classification": "provider",
-      "contract": "src/tensor/native_cublaslt.hpp",
+      "contract": "src/tensor/native_matrix_view.hpp",
       "reason": "Shared cuBLASLt prepared-contraction provider owns vendor submission, admission, provenance and lifetime; scientific consumers use canonical lowering bindings.",
       "references": {
         "cublasLtCreate": 1,

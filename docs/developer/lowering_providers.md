@@ -96,6 +96,12 @@ and decisions remain preparation metadata; they do not resolve executable owners
 
 ## Current integration
 
+`tensor.matrix_view` and `src/tensor/native_matrix_view.hpp` prove the direct
+matrix address mapping of an existing affine contraction. Providers share this
+mode-group/stride proof and retain their own precision, toolkit and resource
+admission. A matrix recipe does not define another scientific operation or imply
+that a particular library/kernel can execute it.
+
 `tensor.cuda_cublaslt.CublasLtMatmulProvider` supplies pure compiler offers for
 matrix contractions, using the same canonical planned request as existing
 cuBLAS/generated diagnostics. Native row/column layouts include padded inputs and

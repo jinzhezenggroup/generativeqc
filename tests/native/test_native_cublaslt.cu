@@ -97,7 +97,7 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
     auto& right = invalid.operands[1];
     for (std::size_t axis = 0; axis < right.rank; ++axis)
       if (right.modes[axis] == 2) ++right.strides[axis];
-    rejects([&] { (void)CublasLtMatrixRecipe::from(invalid); });
+    rejects([&] { (void)MatrixContractionRecipe::from(invalid); });
   }
   const T nan = std::numeric_limits<T>::quiet_NaN();
   std::vector<T> a(request.operands[0].storage_elements(), nan),
