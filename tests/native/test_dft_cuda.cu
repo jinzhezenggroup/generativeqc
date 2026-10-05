@@ -108,14 +108,15 @@ struct Fixture {
   }
   ~Fixture() { cleanup(); }
   void submit(const std::vector<double>& d,
-              CudaXcDensityPrecision precision = CudaXcDensityPrecision::Fp64) {
+              generativeqc::runtime::PrecisionPhase phase =
+                  generativeqc::runtime::PrecisionPhase::StrictAudit) {
     check(cudaMemcpyAsync(density, d.data(), d.size() * sizeof(double), cudaMemcpyHostToDevice,
                           stream));
     // Reference input transfer is an explicit test stage. Complete it before
     // a temporary host density can die; the measured native enqueue follows.
     check(cudaStreamSynchronize(stream));
     const auto before = plan->transfers();
-    plan->enqueue(density, d.size(), ++generation, precision);
+    plan->enqueue(density, d.size(), ++generation, phase);
     const auto after = plan->transfers();
     require(after.output_d2h_bytes == before.output_d2h_bytes &&
                 after.setup_h2d_bytes == before.setup_h2d_bytes &&
@@ -566,7 +567,9 @@ void mixed_density_contraction(const AoBasis& basis, const MolecularGrid& grid,
             "mixed tiled qualification must admit its target schedule");
   const auto d = density(basis.nao, uks ? 2 : 1);
   strict.submit(d);
-  mixed.submit(d, CudaXcDensityPrecision::Fp32ComputeFp64Accumulate);
+  mixed.plan->prepare_density(generativeqc::runtime::fp32_compute_fp64_accumulation(
+      "dft.cuda.auto/density-contraction-v1"));
+  mixed.submit(d, generativeqc::runtime::PrecisionPhase::Admitted);
   const auto reference = strict.scalars(), candidate = mixed.scalars();
   require(reference.error == 0 && candidate.error == 0, "mixed-density XC rejected finite input");
   const auto tol = [](double x) { return 2e-6 + 2e-6 * std::abs(x); };
@@ -587,6 +590,18 @@ void mixed_density_contraction(const AoBasis& basis, const MolecularGrid& grid,
 void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bool uks,
                              std::uint32_t functional) {
   Fixture test(basis, grid, functional, uks, 13);
+  bool domain_rejected = false;
+  try {
+    test.plan->prepare_density(generativeqc::runtime::fp32_compute_fp64_accumulation(
+        "dft.cuda.auto/density-contraction-v1"));
+  } catch (const std::invalid_argument& error) {
+    // Physical support and formal qualification independently gate preparation.
+    const std::string detail = error.what();
+    domain_rejected =
+        detail == "mixed density contraction is not qualified for this domain" ||
+        detail == "mixed CUDA XC density precision is not qualified for this point program";
+  }
+  require(domain_rejected, "unqualified density binding admitted during preparation");
   const auto d = density(basis.nao, uks ? 2 : 1);
   compare(test, basis, grid, d);
   const auto previous = test.scalars();
@@ -594,11 +609,11 @@ void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bo
   const auto before = test.plan->transfers();
   bool rejected = false;
   try {
-    test.plan->enqueue(test.density, d.size(), test.generation + 1,
-                       CudaXcDensityPrecision::Fp32ComputeFp64Accumulate);
+    test.plan->prepare_density(generativeqc::runtime::fp32_compute_fp64_accumulation(
+        "dft.cuda.auto/density-contraction-v1"));
   } catch (const std::invalid_argument& error) {
-    rejected = std::string(error.what()).find("mixed CUDA XC density precision is not qualified") !=
-               std::string::npos;
+    rejected =
+        std::string(error.what()).find("immutable after first evaluation") != std::string::npos;
   }
   require(rejected, "unqualified functional mixed density was not rejected");
   const auto after = test.plan->transfers();
@@ -837,6 +852,7 @@ void matrix_schedule_cases() {
 // clang-format off
 #include "dft_local_ao_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
+#include "dft_pbe0_ao_discovery_cases.cuh"
 #include "dft_potential_lowering_cases.cuh"
 #include "dft_indexed_potential_cases.cuh"
 #include "dft_mapped_potential_benchmark.cuh"
@@ -867,6 +883,11 @@ int main(int argc, char** argv) {
       potential_lowering_cases();
       return 0;
     }
+    pbe0_ao_discovery_cases();
+    if (argc == 2 && std::string(argv[1]) == "--pbe0-local-ao") {
+      std::cout << "CUDA scaled-PBE local-AO independent CPU E/V and budget gates passed\n";
+      return 0;
+    }
     ao_discovery_cases();
     if (argc == 2 && std::string(argv[1]) == "--ao-discovery") {
       std::cout << "CUDA XC AO discovery, independent CPU E/V and bounded fallback gates passed\n";
@@ -887,6 +908,47 @@ int main(int argc, char** argv) {
     const AoBasis basis(molecule);
     resident_grid_borrow_case(molecule, basis);
     const MolecularGrid grid(molecule, {1, 2, 2, 4, 3, 1e-12});
+    {
+      const auto lda = cuda_xc_fast_path_capabilities(0U);
+      const auto pbe = cuda_xc_fast_path_capabilities(1U);
+      const auto r2scan = cuda_xc_fast_path_capabilities(2U);
+      const auto b3lyp = cuda_xc_fast_path_capabilities(3U);
+      const auto wb97mv = cuda_xc_fast_path_capabilities(4U);
+      require(cuda_xc_capability_qualified(lda.mixed_ao_precision) &&
+                  cuda_xc_capability_qualified(lda.mixed_density_precision) &&
+                  cuda_xc_capability_qualified(lda.response) &&
+                  cuda_xc_capability_qualified(lda.graph_replay),
+              "LDA fast-path capability census regressed");
+      require(cuda_xc_capability_qualified(pbe.component_scaling) &&
+                  cuda_xc_capability_qualified(pbe.mixed_ao_precision) &&
+                  cuda_xc_capability_qualified(pbe.mixed_density_precision) &&
+                  cuda_xc_capability_qualified(pbe.response) &&
+                  cuda_xc_capability_qualified(pbe.graph_replay),
+              "PBE fast-path capability census regressed");
+      require(r2scan.mixed_ao_precision == CudaXcCapability::QualificationRequired &&
+                  cuda_xc_capability_qualified(r2scan.mixed_density_precision) &&
+                  r2scan.response == CudaXcCapability::Unavailable &&
+                  r2scan.graph_replay == CudaXcCapability::QualificationRequired,
+              "r2SCAN fast-path capability census regressed");
+      for (const auto caps : {b3lyp, wb97mv}) {
+        require(caps.component_scaling == CudaXcCapability::Unavailable &&
+                    caps.mixed_ao_precision == CudaXcCapability::QualificationRequired &&
+                    caps.mixed_density_precision == CudaXcCapability::QualificationRequired &&
+                    caps.response == CudaXcCapability::Unavailable &&
+                    caps.graph_replay == CudaXcCapability::QualificationRequired,
+                "hybrid fast-path capability census regressed");
+      }
+      for (const auto functional :
+           {generated::kM062XFunctionalCode, generated::kMN15FunctionalCode}) {
+        const auto caps = cuda_xc_fast_path_capabilities(functional);
+        require(caps.component_scaling == CudaXcCapability::Unavailable &&
+                    caps.mixed_ao_precision == CudaXcCapability::QualificationRequired &&
+                    caps.mixed_density_precision == CudaXcCapability::QualificationRequired &&
+                    caps.response == CudaXcCapability::Unavailable &&
+                    caps.graph_replay == CudaXcCapability::QualificationRequired,
+                "generated split-hybrid fast-path capability census regressed");
+      }
+    }
     for (bool unrestricted : {false, true}) density_feature_capture_case(basis, grid, unrestricted);
     for (bool unrestricted : {false, true}) nonlocal_potential_case(basis, grid, unrestricted);
     for (const auto functional :

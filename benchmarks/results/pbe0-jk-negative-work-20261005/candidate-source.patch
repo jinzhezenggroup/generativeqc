@@ -1,0 +1,197 @@
+diff --git a/src/scf/cuda/direct_coulomb.cpp b/src/scf/cuda/direct_coulomb.cpp
+index f485f7d58..03de022be 100644
+--- a/src/scf/cuda/direct_coulomb.cpp
++++ b/src/scf/cuda/direct_coulomb.cpp
+@@ -833,6 +833,10 @@ cudaError_t execute_generated_rsh_energy_derivatives(GeneratedExchangePlan& p, b
+ 
+ namespace {
+ 
++/** Contract J from an already normalized Cartesian total density. The caller
++ * owns the same-stream density lifetime; this traversal never modifies it. */
++cudaError_t enqueue_generated_coulomb_cartesian(GeneratedCoulombPlan& p, const double* density);
++
+ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const double* density,
+                                              const double* beta) {
+   const auto b = p.batch;
+@@ -850,6 +854,13 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
+   launch_transform_density_to_direct_left_kernel(blocks(cartesian), 128, 0, p.stream, b.batch_size,
+                                                  1, b.nbf, b.direct_nbf, b.ao_to_direct_transform,
+                                                  p.temporary, p.active, p.density);
++  const auto error = cudaGetLastError();
++  return error == cudaSuccess ? enqueue_generated_coulomb_cartesian(p, p.density) : error;
++}
++
++cudaError_t enqueue_generated_coulomb_cartesian(GeneratedCoulombPlan& p, const double* density) {
++  const auto b = p.batch;
++  const auto cartesian = std::size_t(b.batch_size) * b.direct_nbf * b.direct_nbf;
+   auto error = cudaMemsetAsync(p.coulomb, 0, cartesian * sizeof(double), p.stream);
+   if (error != cudaSuccess) return error;
+   error = cudaMemsetAsync(p.heads, 0, detail::kDirectQuartetShellClassCount * sizeof(std::uint32_t),
+@@ -864,14 +875,14 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
+     error = generated::launch_shell_class_streaming_fock(
+         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
+         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
+-        p.schwarz, p.density, p.coulomb, p.heads + cls,
++        p.schwarz, density, p.coulomb, p.heads + cls,
+         p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr, nullptr);
+     if (error != cudaSuccess) return error;
+   }
+   if (p.value_class_mask & kNativeStreamingFockShellClassMask) {
+     launch_bounded_direct_dddd_streaming_kernel(
+         false, DirectScreeningPurpose::Fock, false, p.worker_blocks, 32, 0, p.stream, b, p.topology,
+-        p.screening, p.schwarz, p.density, p.active, p.coulomb, p.heads + kDdddShellClass, nullptr,
++        p.screening, p.schwarz, density, p.active, p.coulomb, p.heads + kDdddShellClass, nullptr,
+         p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
+   }
+   return cudaGetLastError();
+@@ -911,6 +922,44 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricte
+              : error;
+ }
+ 
++cudaError_t enqueue_generated_full_range_jk(GeneratedExchangePlan& p, bool unrestricted,
++                                            const double* alpha, const double* beta,
++                                            double* coulomb, double* alpha_exchange,
++                                            double* beta_exchange) {
++  if (!p.shared || !p.shared->value_capability || p.bounded_value_capability)
++    return cudaErrorNotSupported;
++  if (!coulomb || !alpha_exchange ||
++      (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr))
++    return cudaErrorInvalidValue;
++  auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
++  if (error != cudaSuccess) return error;
++  auto& shared = *p.shared;
++  const double* total_density = p.direct_spin;
++  if (unrestricted) {
++    // K's layout interleaves alpha/beta matrices by system. Transform each spin
++    // once, then form J's total density in the existing Cartesian scratch. No
++    // public-AO total-density matrix or second basis transform is required.
++    const auto matrix = product(std::size_t(shared.batch.direct_nbf), shared.batch.direct_nbf);
++    for (std::size_t item = 0; item < std::size_t(shared.batch.batch_size); ++item)
++      cuda_df::launch_sum_spin_density_kernel(
++          blocks(matrix), 128, 0, shared.stream, matrix, p.direct_spin + 2 * item * matrix,
++          p.direct_spin + (2 * item + 1) * matrix, shared.density + item * matrix);
++    error = cudaGetLastError();
++    if (error != cudaSuccess) return error;
++    total_density = shared.density;
++  }
++  // The integral traversals, their screening domains and outputs stay
++  // independent. Only the common input transform is shared within this call;
++  // no pointer/epoch cache or assumption about a previous request is added.
++  error = enqueue_generated_coulomb_cartesian(shared, total_density);
++  if (error != cudaSuccess) return error;
++  error = project_generated_coulomb(shared, coulomb);
++  return error == cudaSuccess
++             ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange, beta_exchange,
++                                                   DirectCoulombRange::Full, 0.0)
++             : error;
++}
++
+ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& p, bool unrestricted,
+                                          const double* alpha, const double* beta, double* coulomb,
+                                          double* full_alpha_exchange, double* full_beta_exchange,
+diff --git a/src/scf/cuda/direct_coulomb.hpp b/src/scf/cuda/direct_coulomb.hpp
+index cce7283b5..53b1b800e 100644
+--- a/src/scf/cuda/direct_coulomb.hpp
++++ b/src/scf/cuda/direct_coulomb.hpp
+@@ -124,6 +124,16 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& plan, bool unrestr
+                                        DirectCoulombRange range = DirectCoulombRange::Full,
+                                        double omega = 0.0);
+ 
++/** Share one spin-density transform between independent full-range J/K
++ * traversals when generated/native streaming covers every present class.
++ * Standalone, mixed, range and bounded higher-l routes keep their own complete
++ * preparation. This call neither allocates nor caches density across requests.
++ */
++cudaError_t enqueue_generated_full_range_jk(GeneratedExchangePlan& plan, bool unrestricted,
++                                            const double* alpha, const double* beta,
++                                            double* coulomb, double* alpha_exchange,
++                                            double* beta_exchange);
++
+ /** Enqueue primary full-range J/K plus one SR/LR correction after a
+  * single public-to-Cartesian spin-density transform and shell-density-bound
+  * reduction. Through-f bounded shell value capability is required. */
+diff --git a/src/scf/cuda/direct_jk.cpp b/src/scf/cuda/direct_jk.cpp
+index a5cc96f9b..a7bddf289 100644
+--- a/src/scf/cuda/direct_jk.cpp
++++ b/src/scf/cuda/direct_jk.cpp
+@@ -1050,14 +1050,21 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
+     // Resolve and execute J/K independently over the same immutable ERI owner.
+     // In particular, recurrence-only mixed J must not replace strict generated
+     // K; a range-K fallback must not pull a qualified full-range J into it.
+-    if (dispatch.generated_coulomb) {
++    const bool shared_density = dispatch.generated_coulomb && dispatch.generated_exchange &&
++                                spec.exchange.op == FockOperator::FullRange &&
++                                plan->generated_exchange->shared->value_capability;
++    if (shared_density)
++      direct_jk_check(enqueue_generated_full_range_jk(*plan->generated_exchange, unrestricted,
++                                                      density, beta, coulomb, alpha_exchange,
++                                                      beta_exchange));
++    else if (dispatch.generated_coulomb) {
+       if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
+         direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted, density,
+                                                   beta, coulomb));
+       else
+         direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+     }
+-    if (dispatch.generated_exchange)
++    if (dispatch.generated_exchange && !shared_density)
+       direct_jk_check(enqueue_generated_exchange(
+           *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
+           direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0));
+diff --git a/tests/native/test_cuda_fock_provider.cpp b/tests/native/test_cuda_fock_provider.cpp
+index 65c797e8f..b836464af 100644
+--- a/tests/native/test_cuda_fock_provider.cpp
++++ b/tests/native/test_cuda_fock_provider.cpp
+@@ -123,6 +123,36 @@ struct DirectValueCensus {
+   }
+ };
+ 
++/** Observe the real joint path, not just its dispatch predicate. RKS can borrow
++ * K's Cartesian density directly; UKS needs only a Cartesian sum. Neither
++ * path may rebuild the standalone J input scratch selected below. */
++struct JointDensitySentinel {
++  cudaStream_t stream{};
++  void* pointer{};
++  std::size_t bytes{};
++  JointDensitySentinel(CudaDirectJkPlan& plan, const FockBuildSpec& spec) : stream(plan.stream) {
++    auto* owner = plan.generated_exchange.get();
++    if (!spec.coulomb.present || !spec.exchange.present ||
++        spec.exchange.op != FockOperator::FullRange || !owner || !owner->shared ||
++        !owner->shared->value_capability || owner->bounded_value_capability)
++      return;
++    auto& shared = *owner->shared;
++    const bool unrestricted = spec.spin == FockSpin::Unrestricted;
++    pointer = unrestricted ? shared.total_density : shared.density;
++    const auto dimension = unrestricted ? shared.batch.nbf : shared.batch.direct_nbf;
++    bytes = std::size_t(shared.batch.batch_size) * dimension * dimension * sizeof(double);
++    check(cudaMemsetAsync(pointer, 0xa5, bytes, stream));
++  }
++  void verify() const {
++    if (!pointer) return;
++    std::vector<unsigned char> actual(bytes);
++    check(cudaMemcpyAsync(actual.data(), pointer, bytes, cudaMemcpyDeviceToHost, stream));
++    check(cudaStreamSynchronize(stream));
++    require(std::all_of(actual.begin(), actual.end(), [](auto byte) { return byte == 0xa5; }),
++            "joint J/K repeated standalone J density preparation");
++  }
++};
++
+ /** Exercise the same resident boundary consumed by native KS: enqueue on the
+  * provider stream, then explicitly export only at this reference boundary. */
+ void direct_device(CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector<double>& a,
+@@ -132,6 +162,7 @@ void direct_device(CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector
+   const bool unrestricted = spec.spin == FockSpin::Unrestricted;
+   const std::vector<double> sentinel(a.size(), 123.0);
+   DeviceMatrix da(a), db(b), j(sentinel), ka(sentinel), kb(sentinel), error({0.0});
++  JointDensitySentinel density_preparation(*plan, spec);
+   std::string detail;
+   const auto status = enqueue_cuda_direct_jk_device(
+       plan, spec, da.pointer, unrestricted ? db.pointer : nullptr, a.size(),
+@@ -143,6 +174,7 @@ void direct_device(CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector
+   int failure = -1;
+   check(cudaMemcpyAsync(&failure, error.pointer, sizeof(failure), cudaMemcpyDeviceToHost, stream));
+   check(cudaStreamSynchronize(stream));
++  density_preparation.verify();
+   require(failure == 0, "valid resident J/K data failed numerical validation");
+   j.verify(spec.coulomb.present ? expected_j : sentinel);
+   ka.verify(spec.exchange.present ? expected_a : sentinel);

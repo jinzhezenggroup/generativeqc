@@ -107,7 +107,9 @@ function(generativeqc_attach_cuda_implib target)
     cublasDgemv_v2
     cublasDsyr2k_v2
     cublasDsyrk_v2
+    cublasGetPointerMode_v2
     cublasGetProperty
+    cublasGetStream_v2
     cublasGetVersion_v2
     cublasSetMathMode
     cublasSetPointerMode_v2

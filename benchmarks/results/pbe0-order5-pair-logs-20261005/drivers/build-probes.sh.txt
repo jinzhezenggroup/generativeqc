@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-1895-order5-pair-logs-20261005
+export PATH=/group/software/cuda-12.9.1/bin:$PATH
+export CCACHE_DIR=/data/jzzeng/ccache CCACHE_BASEDIR="$PWD"
+export PYTHONPATH="$PWD/python:$PWD:$PWD/tests/python" PYTHONDONTWRITEBYTECODE=1
+probe="$PWD/.artifacts/probes"
+mkdir -p "$probe"
+ccache --version > "$probe/ccache-version.txt"
+ccache --show-stats > "$probe/ccache-before.txt"
+python=/home/jzzeng/vibeqc-build-venv/bin/python
+"$python" -m benchmarks.becke_phased_probe --emit "$probe/pair.cu"
+ccache nvcc -O3 -std=c++20 --expt-relaxed-constexpr --fmad=false -arch=sm_120 -Xcompiler=-fPIC -c "$probe/pair.cu" -o "$probe/pair.o"
+nvcc -shared "$probe/pair.o" -o "$probe/pair.so"
+"$python" tools/generate_stationary_force_aot.py --profile pbe0_rks --output "$probe/owner.cu"
+ccache nvcc -O3 -std=c++20 --expt-relaxed-constexpr --fmad=false -arch=sm_120 -Isrc -Xcompiler=-fPIC -c "$probe/owner.cu" -o "$probe/owner.o"
+nvcc -shared "$probe/owner.o" -lcublas -o "$probe/owner.so"
+ccache --show-stats > "$probe/ccache-after.txt"
+sha256sum .artifacts/probes/pair.cu .artifacts/probes/pair.so .artifacts/probes/owner.cu .artifacts/probes/owner.so > "$probe/binaries.sha256"
