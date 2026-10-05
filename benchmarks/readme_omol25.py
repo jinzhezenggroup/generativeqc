@@ -635,6 +635,16 @@ def main(benchmark: EndpointSpec = OMOL25) -> None:
                         "fock_builds": item.fock_builds,
                         "energy_change": item.energy_change,
                         "density_rms": item.density_rms,
+                        "physical_residual_rms": item.physical_residual_rms,
+                        # Public execution already copied this physical history.
+                        # Preserve it after timing so trajectory changes remain
+                        # auditable; a warm retry describes its final attempt,
+                        # while item.fock_builds retains the complete work count.
+                        "native_ks_diagnostic": (
+                            item.ks_diagnostic.to_payload()
+                            if item.ks_diagnostic is not None
+                            else None
+                        ),
                         "warm_start_used": item.warm_start_used,
                         "warm_start_fallback": item.warm_start_fallback,
                         "seconds": seconds,

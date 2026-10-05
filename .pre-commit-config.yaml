@@ -77,6 +77,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: vendor-boundaries
+        name: Check CUDA tensor and solver vendor ownership
+        entry: python3 tools/check_vendor_boundaries.py
+        language: system
+        pass_filenames: false
+        always_run: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.9
     hooks:

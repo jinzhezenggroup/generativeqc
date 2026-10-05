@@ -1,0 +1,183 @@
+{
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "tier": "gpu-numerical",
+  "subject": "Intrusive PBE0 derivative admissions and angular replay",
+  "inputs_hash": "49b1f2d7e4633ef25c25b18f6e4296f7f1ab36e26960de69de3e15f66a329868",
+  "revision": "9ba032c783addfeede96890c894b7cc9447cde95",
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "source": "1c0b0ea35a9d34f179ab9b48c64685d70e1369a7bfc9455906fc83f8ccb657fc",
+    "schedule": "986e963080e614f74228eb39a37a8d159cb9eb199c212786dab34f363f4c4b7a"
+  },
+  "hash_reasons": {
+    "equation": "Exact diagnostic sources are retained; independent equation hashes were not captured.",
+    "ir": "Standalone IR hashes were not captured."
+  },
+  "device": {
+    "source_identity": "1c0b0ea35a9d34f179ab9b48c64685d70e1369a7bfc9455906fc83f8ccb657fc",
+    "native_abi": 0,
+    "schema": 1,
+    "policy": {
+      "precision": "fp64",
+      "spin": [
+        "rhf",
+        "uhf"
+      ],
+      "consumers": [
+        "fock",
+        "force"
+      ]
+    },
+    "host": {
+      "system": "Linux",
+      "machine": "x86_64",
+      "libc": [
+        "glibc",
+        "2.39"
+      ]
+    },
+    "device": {
+      "name": "NVIDIA GeForce RTX 5090",
+      "official_profile": "sm_120",
+      "major": 12,
+      "minor": 0,
+      "warp_size": 32,
+      "maximum_threads_per_block": 1024,
+      "maximum_threads_per_sm": 1536,
+      "maximum_blocks_per_sm": 24,
+      "registers_per_sm": 65536,
+      "maximum_registers_per_thread": 255,
+      "sm_count": 170,
+      "shared_memory_per_block": 49152,
+      "shared_memory_per_block_optin": 101376,
+      "shared_memory_per_sm": 102400,
+      "runtime_version": 12090,
+      "driver_version": 13000,
+      "toolkit_version": 12090,
+      "release_build": 1,
+      "fast_compile": 0,
+      "portable": 0
+    }
+  },
+  "toolchain": {
+    "nvcc": {
+      "path": "/group/software/cuda-12.9.1/bin/nvcc",
+      "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "ptxas": {
+      "path": "/group/software/cuda-12.9.1/bin/ptxas",
+      "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "cuobjdump": {
+      "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+      "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+    },
+    "host_cxx": {
+      "path": "/data/jzzeng/qc-1895-current-defaults-20261005/.artifacts/bin/c++",
+      "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    }
+  },
+  "settings": {
+    "device": "cuda",
+    "fast_compile": false,
+    "default_promoted": false,
+    "diagnostic_only": true,
+    "source_major": [
+      "J",
+      "K"
+    ],
+    "coefficients": [
+      1.0,
+      -0.25
+    ],
+    "semantic_counts": "shell admissions and inner-work upper bounds; shared derivative recurrence",
+    "provenance_context": "Device/toolchain description from the same build control endpoint; diagnostic job and driver identities retained separately."
+  },
+  "backend_selected": "cuda",
+  "hardware": {
+    "status": "pass",
+    "reason": null,
+    "slurm_jobs": [
+      5857,
+      5859
+    ],
+    "host": "node1",
+    "retained_failed_job": 5856
+  },
+  "stages": {
+    "representation": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    },
+    "source": {
+      "status": "pass",
+      "reason": null,
+      "reconstruction": "reconstruction.json"
+    },
+    "compilation": {
+      "status": "pass",
+      "reason": null,
+      "library_sha256": "429a609e109352a47c01b4e421cbc1c17b4c744d9ea2ffac2f58ebcf785df46a"
+    },
+    "numerical": {
+      "status": "not-run",
+      "reason": "Observer and angular replay match the same production implementation within 1e-9. This diagnostic did not run an independent scientific oracle."
+    },
+    "endpoint": {
+      "status": "not-run",
+      "reason": "Fixed-density force replay after a diagnostic native SCF solve; not complete E+F timing."
+    },
+    "production": {
+      "status": "not-run",
+      "reason": "no evidence registered"
+    }
+  },
+  "timings": [],
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "Observer capacity is 880 bytes for value J/K and 1760 bytes for derivative classes. Allocator peaks not measured."
+  },
+  "compilation": {
+    "seconds": null,
+    "reason": "Original ccache/source/binary receipts retained; isolated clean build cost not measured."
+  },
+  "residuals": {},
+  "block_errors": {},
+  "solver_iterations": [],
+  "solver_trace_reason": "Per-iteration J/K value admissions and final native residuals retained; full diagnostic per-iteration energy/residual history and independent residual recomputation were not captured.",
+  "attachments": [
+    {
+      "path": "census/work-48.jsonl.gz",
+      "sha256": "4b96eb4211e61f38d8537df9d2f462ed354843dcebb5902e0390282330efa313",
+      "kind": "intrusive-diagnostic"
+    },
+    {
+      "path": "census/work-96.jsonl.gz",
+      "sha256": "2bc7640fec86fb170c09f73932475d7722e73b9f721d4cd0211dc803bbdf61b3",
+      "kind": "intrusive-diagnostic"
+    },
+    {
+      "path": "angular/work-48.txt.gz",
+      "sha256": "4845776d4aa3ad102e6f004ac77a71e962c0473248e4d340204309a6fb825f2f",
+      "kind": "intrusive-diagnostic"
+    },
+    {
+      "path": "angular/work-96.txt.gz",
+      "sha256": "e6f89054a058449887e320b4228840adf284a39a8824cc993045d11c77658d8e",
+      "kind": "intrusive-diagnostic"
+    }
+  ],
+  "performance": {
+    "status": "not-run",
+    "reason": "Thirteen angular passes repeat traversal and change compilation/occupancy. No production timing partition or endpoint comparison."
+  },
+  "observer_checks": {
+    "status": "pass",
+    "reason": null,
+    "atol": 1e-09,
+    "summary": "summary.json"
+  }
+}

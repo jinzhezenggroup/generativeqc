@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-1895-order5-weighted-forces-20261005
+source .artifacts/gpu-env-n1.sh
+output="$PWD/.artifacts/profile-${SLURM_JOB_ID}"
+mkdir -p "$output"
+trap 'printf "%s\n" "$?" > "$output/job.exit"' EXIT
+scontrol show job "$SLURM_JOB_ID" -o > "$output/job.txt"
+sha256sum -c .artifacts/build/binaries.sha256 > "$output/binary-check.txt"
+"$python" .artifacts/check-source.py > "$output/source-check.txt"
+sha256sum .artifacts/profile-public-warm.py .artifacts/profile-public-warm-n1.sh .artifacts/public-default-endpoint.py > "$output/driver.sha256"
+reference=/data/jzzeng/qc-1895-order5-weighted-forces-20261005/.artifacts/endpoint-5905/reference-96.json
+"$python" - "$reference" <<'PY'
+import json,sys
+record=json.load(open(sys.argv[1]))
+assert record['status']=='measured' and len(record['records'])==12
+PY
+cp "$reference" "$output/reference-96.json"
+nsys --version > "$output/nsys-version.txt"
+export GENERATIVEQC_STATIONARY_CACHE="$output/cache"
+nsys profile --sample=none --trace=cuda,nvtx --capture-range=cudaProfilerApi --capture-range-end=stop --force-overwrite=true --output="$output/warm96" "$python" .artifacts/profile-public-warm.py --force-policy default native --atoms 96 --basis-file benchmarks/results/pbe0-def2-svp-20261003/def2-svp-ho.json --repeats 5 --reference "$output/reference-96.json" --output "$output/profiled-native-96.json" > "$output/profile.log" 2>&1
+"$python" .artifacts/verify-public-default.py "$output/profiled-native-96.json" "$output/reference-96.json" > "$output/verified.json"
+nsys stats --report cuda_gpu_kern_sum,cuda_api_sum,nvtx_sum --format csv --output "$output/statistics" "$output/warm96.nsys-rep" > "$output/stats.log" 2>&1

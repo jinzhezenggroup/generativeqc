@@ -13,7 +13,7 @@
 // clang-format off
 namespace generativeqc::methods::generated {
 
-enum class PublicProvider : std::uint8_t { Reserved, Hf, Mp2, Rccsd, Rccsdt, Dft, Xtb };
+enum class PublicProvider : std::uint8_t { Reserved, Hf, Mp2, Rccsd, Rccsdt, DfRccsdt, Dft, Xtb };
 
 struct MethodManifestEntry {
   std::string_view name;
@@ -25,7 +25,7 @@ struct MethodManifestEntry {
   std::string_view unavailable_reason;
 };
 
-inline constexpr std::array<MethodManifestEntry, 13> kMethodManifest{{
+inline constexpr std::array<MethodManifestEntry, 14> kMethodManifest{{
     {"rhf", GENERATIVEQC_METHOD_RHF, GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK, GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES, true, PublicProvider::Hf, ""},
     {"uhf", GENERATIVEQC_METHOD_UHF, GENERATIVEQC_METHOD_FAMILY_HARTREE_FOCK, GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES, true, PublicProvider::Hf, ""},
     {"rccsd(t)", GENERATIVEQC_METHOD_RCCSD_T, GENERATIVEQC_METHOD_FAMILY_COUPLED_CLUSTER, GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES, true, PublicProvider::Rccsdt, ""},
@@ -39,6 +39,7 @@ inline constexpr std::array<MethodManifestEntry, 13> kMethodManifest{{
     {"rccsd", GENERATIVEQC_METHOD_RCCSD, GENERATIVEQC_METHOD_FAMILY_COUPLED_CLUSTER, GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES, true, PublicProvider::Rccsd, ""},
     {"gfn2-xtb", GENERATIVEQC_METHOD_GFN2_XTB, GENERATIVEQC_METHOD_FAMILY_SEMIEMPIRICAL, GENERATIVEQC_PROPERTY_ENERGY | GENERATIVEQC_PROPERTY_FORCES, false, PublicProvider::Xtb, ""},
     {"pbe-d4-rks", GENERATIVEQC_METHOD_PBE_D4_RKS, GENERATIVEQC_METHOD_FAMILY_DENSITY_FUNCTIONAL, GENERATIVEQC_PROPERTY_ENERGY, true, PublicProvider::Dft, ""},
+    {"df-rccsd(t)", GENERATIVEQC_METHOD_DF_RCCSD_T, GENERATIVEQC_METHOD_FAMILY_COUPLED_CLUSTER, GENERATIVEQC_PROPERTY_ENERGY, false, PublicProvider::DfRccsdt, ""},
 }};
 
 inline constexpr const MethodManifestEntry* find_method(

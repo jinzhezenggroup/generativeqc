@@ -170,12 +170,12 @@ struct CudaKsFixedDensityProfile {
   std::uint32_t present_mask{};
 };
 struct CudaXcView { int* error{}; };
-enum class CudaXcDensityPrecision { Fp64 };
+namespace generativeqc::runtime { enum class PrecisionPhase { StrictAudit, Admitted }; }
 struct Xc {
   int error{};
   double potential{99};
   CudaXcView enqueue_replay_body(const double* density, std::size_t elements,
-                               CudaXcDensityPrecision) {
+                               generativeqc::runtime::PrecisionPhase) {
     assert(timing && density && (elements == 4 || elements == 8));
     ++submissions; stages.push_back('X');
     pending.emplace_back([this] { potential = 42; error = mode == 12; });

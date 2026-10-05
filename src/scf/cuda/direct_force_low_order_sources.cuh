@@ -77,12 +77,15 @@ struct LowOrderSourceRoots {
  * independent center derivative, instead of repeating a Dual3 recurrence for
  * each AO quartet and atom. Higher angular orders keep their existing owner.
  */
-template <bool Unrestricted, unsigned ShellClass, bool LongRange = false>
+// The default root family preserves the qualified order-zero-through-three
+// specialization. Other callers may bind compiler-owned external-weight roots
+// while retaining exactly this density, orientation and scatter contract.
+template <bool Unrestricted, unsigned ShellClass, bool LongRange = false,
+          class Roots = LowOrderSourceRoots<ShellClass>>
 __device__ inline __noinline__ void contract_two_electron_force_low_order_sources_task(
     const DeviceBatch& batch, ActiveShellQuartetTile task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     double coulomb_coefficient, double exchange_coefficient, double omega = 0.0) {
-  using Roots = LowOrderSourceRoots<ShellClass>;
   constexpr unsigned source_count = LongRange ? 1U : 2U;
   if (task.tile != 0U) return;
   const std::size_t first_pair = task.first_pair;
