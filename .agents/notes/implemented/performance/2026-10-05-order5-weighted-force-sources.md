@@ -1,6 +1,6 @@
 # Decision: qualify precontracted order-five force sources
 
-Status: proposed; composed endpoint qualification complete, master transplant pending
+Status: implemented; composed endpoint and master transplant qualified
 Date: 2026-10-05
 
 ## Problem
@@ -23,7 +23,7 @@ The scalar lane drains each accepted shell task once and the warp fallback
 skips exactly those classes. f-containing classes, combined HF and range-separated
 sources retain their old consumers. All queue, shell/AO screening, spin and
 precision contracts remain unchanged. No persistent memory or scientific
-threshold is added. This branch is an experiment, not public default evidence.
+threshold is added. This code qualification does not promote a provider/profile registry.
 
 ## Acceptance
 
@@ -69,3 +69,25 @@ Full samples, histories, source/binary receipts and the decision summary remain
 under `/data/jzzeng/qc-1895-order5-weighted-forces-20261005/.artifacts/` in
 `endpoint-5905/`, `gpu-5905/` and `endpoint-decision.json`. Current-master source
 and binary qualification must complete before extending the shipping change.
+
+
+## Shipping qualification (Slurm5922)
+
+The master-based shipping code was frozen at
+`e828d51bbb9e9b39e4a4c388e6b4c9c6641cfe0d`, source identity
+`c084c16a2d87344a4914c13ae148792d94be461a3ceb50e17bec58bc0101f247`.
+All seven scientific/dispatch files match the composed candidate byte-for-byte.
+The native build and all six stationary AOT modules use verified ccache launchers;
+27 focused host tests, native through-f values/derivatives, memcheck and initcheck
+pass. Both sanitizers report zero errors. The host coverage comprises 54,864
+independent Hermite displaced-value coordinate checks and 746,496 retained-adapter
+comparisons; do not describe the combined count as entirely independent.
+
+`benchmarks/results/pbe0-weighted-order5-20261005/` retains every endpoint sample,
+actual SCF history, source reconstruction patches, binary/source receipts,
+shipping transplant and a source-matched intrusive warm profile from Slurm5917.
+Both reconstructed source identities match the original measured arms. The
+verifier enforces a complete geometry/phase/repeat inventory before pairing.
+Shipping-master full endpoints were not measured: retain that boundary rather
+than assigning composed timings to master. The next-step engineering plan is
+`../../proposed/2026-10-05-pbe0-post-order5-roadmap.md`.

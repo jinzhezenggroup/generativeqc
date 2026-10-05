@@ -98,6 +98,8 @@ def test_weighted_order5_independent_values_and_native_source_adapter(
     )
     assert result.returncode == 0, result.stderr
     assert "order-five weighted gates PASS" in result.stdout
+    assert "independent coordinates 54864 " in result.stdout
+    assert "adapter comparisons 746496 " in result.stdout
     print(result.stdout)
 
 
@@ -111,7 +113,7 @@ PREFIX = r"""
 #include <vector>
 using namespace generativeqc::scf::cuda_execution;
 namespace weighted = generativeqc::scf::generated_weighted_eri;
-unsigned long long checks=0;
+unsigned long long independent_checks=0, adapter_checks=0;
 double max_independent_error=0, max_adapter_error=0;
 
 std::vector<Angular> components(unsigned order) {
@@ -175,7 +177,7 @@ void independent() {
               std::fprintf(stderr,"independent class=%u component=%u axis=%u/%u %.17g %.17g\n",
                            Class,target,center,axis,gradient[center][axis],expected);std::exit(1);
             }
-            max_independent_error=std::max(max_independent_error,error);++checks;
+            max_independent_error=std::max(max_independent_error,error);++independent_checks;
           }
         }
       }
@@ -237,7 +239,7 @@ void adapters() {
               std::fprintf(stderr,"adapter class=%u spin=%u pairs=%u,%u axis=%u %.17g %.17g\n",
                   cls,Unrestricted,bra,ket,i,actual[i],expected[i]);std::exit(2);
             }
-            max_adapter_error=std::max(max_adapter_error,error);++checks;
+            max_adapter_error=std::max(max_adapter_error,error);++adapter_checks;
           }
           actual.fill(0);active=0;
           contract_two_electron_force_order5_sources<Unrestricted>(cls,b,task,screening,
@@ -254,7 +256,8 @@ int main() {
   independent<kDpppShellClass,2,1,1,1>();independent<kDpdsShellClass,2,1,2,0>();
   independent<kDdpsShellClass,2,2,1,0>();
   adapters<false>();adapters<true>();
-  std::printf("%llu coordinates: order-five weighted gates PASS; independent %.12g adapter %.12g\n",
-              checks,max_independent_error,max_adapter_error);
+  std::printf("order-five weighted gates PASS; independent coordinates %llu error %.12g; "
+              "adapter comparisons %llu error %.12g\n",
+              independent_checks,max_independent_error,adapter_checks,max_adapter_error);
 }
 """

@@ -29,7 +29,7 @@ Each full-range shell task retains the exact shell/AO predicates and canonical o
 
 Original endpoint ledgers retain 1,179,648/2,359,296 grid points, 4,608/9,216 AO tiles and 1,330,642,944/10,758,389,760 pair productions per geometry. Pair-production counts are semantic work, not FLOPs. Integral root execution and spill traffic were not instrumented in the timed endpoint; prior shell admission counts are upper bounds and are not borrowed as exact work for these densities.
 
-The independent host Hermite displaced-value gate checks 1,761,696 coordinates (worst error 3.36e-10; adapter error 1.67e-16). GPU Slurm5880 through-f values/derivatives and memcheck/initcheck pass with zero sanitizer errors. See the retained build/test receipts; master transplant qualification is reported separately in the code PR.
+The host gates contain 38,304 independent Hermite displaced-value coordinate checks (worst error 3.36e-10) and 1,723,392 retained-adapter comparisons (worst error 1.67e-16), totaling 1,761,696 checks. The adapter comparisons are not independent oracle coverage. GPU Slurm5880 through-f values/derivatives and memcheck/initcheck pass with zero sanitizer errors. See the retained build/test receipts; master transplant qualification is reported separately in the code PR.
 
 The validation envelope accepts scientific equivalence. Its generic automatic-provider promotion assay is explicitly unmeasured: these runs are alternating complete arms across sizes, not an interleaved fixed-state assay with isolated whole-build cost and allocator peaks. Observed complete endpoint results above are retained separately. No provider/profile registry is promoted by this evidence.
 
