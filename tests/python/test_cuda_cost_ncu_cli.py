@@ -98,9 +98,7 @@ def test_cli_reports_ncu_mechanism_and_static_occupancy_calibration(
         },
     ],
 )
-def test_cli_rejects_malformed_ncu_evidence(
-    tmp_path: Path, evidence: object
-) -> None:
+def test_cli_rejects_malformed_ncu_evidence(tmp_path: Path, evidence: object) -> None:
     result = _run(tmp_path, evidence)
 
     assert result.returncode != 0

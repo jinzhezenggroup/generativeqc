@@ -97,7 +97,7 @@ class NcuExecutionEvidence:
             _optional_count(getattr(self, name), name)
 
     @classmethod
-    def from_payload(cls, payload: dict[str, object]) -> "NcuExecutionEvidence":
+    def from_payload(cls, payload: dict[str, object]) -> NcuExecutionEvidence:
         """Load the strict v1 retained-evidence schema."""
         if not isinstance(payload, dict):
             raise TypeError("NCU execution evidence must be a JSON object")
@@ -112,7 +112,9 @@ class NcuExecutionEvidence:
         known = set(cls.__dataclass_fields__)
         unknown = set(fields) - known
         if unknown:
-            raise ValueError(f"unknown NCU execution evidence fields: {sorted(unknown)}")
+            raise ValueError(
+                f"unknown NCU execution evidence fields: {sorted(unknown)}"
+            )
         return cls(**fields)
 
     def to_payload(self) -> dict[str, object]:
@@ -213,14 +215,11 @@ def assess_ncu_execution(evidence: NcuExecutionEvidence) -> NcuExecutionAssessme
         mechanisms.append("resource-limited-occupancy-confirmed")
 
     issue_starved = (
-        (
-            evidence.issue_active_fraction is not None
-            and evidence.issue_active_fraction < 0.15
-        )
-        or (
-            evidence.eligible_warps_per_scheduler is not None
-            and evidence.eligible_warps_per_scheduler < 0.25
-        )
+        evidence.issue_active_fraction is not None
+        and evidence.issue_active_fraction < 0.15
+    ) or (
+        evidence.eligible_warps_per_scheduler is not None
+        and evidence.eligible_warps_per_scheduler < 0.25
     )
     if issue_starved:
         mechanisms.append("issue-starved")
@@ -248,10 +247,7 @@ def assess_ncu_execution(evidence: NcuExecutionEvidence) -> NcuExecutionAssessme
             "dynamic local-memory requests are measured requests, not proven spill bytes"
         )
 
-    if (
-        evidence.dram_busy_fraction is not None
-        and evidence.dram_busy_fraction < 0.50
-    ):
+    if evidence.dram_busy_fraction is not None and evidence.dram_busy_fraction < 0.50:
         mechanisms.append("dram-not-saturated")
 
     serial_or_underexposed = (
@@ -323,11 +319,7 @@ def assess_ncu_execution(evidence: NcuExecutionEvidence) -> NcuExecutionAssessme
         )
     )
     confidence = (
-        "high"
-        if evidence_groups >= 4
-        else "medium"
-        if evidence_groups >= 2
-        else "low"
+        "high" if evidence_groups >= 4 else "medium" if evidence_groups >= 2 else "low"
     )
     if evidence_groups < 2:
         diagnostics.append(

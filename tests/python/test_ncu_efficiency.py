@@ -7,7 +7,9 @@ from generativeqc_compiler.common.ncu_efficiency import (
 )
 
 
-def test_direct_force_capture_separates_resource_bound_from_execution_mechanism() -> None:
+def test_direct_force_capture_separates_resource_bound_from_execution_mechanism() -> (
+    None
+):
     assessment = assess_ncu_execution(
         NcuExecutionEvidence(
             theoretical_occupancy_fraction=1 / 6,
@@ -41,7 +43,9 @@ def test_direct_force_capture_separates_resource_bound_from_execution_mechanism(
     assert any("homogeneous class/queue/CTA" in row for row in assessment.guidance)
 
 
-def test_scalar_cc_reduction_is_not_misclassified_as_register_or_spill_problem() -> None:
+def test_scalar_cc_reduction_is_not_misclassified_as_register_or_spill_problem() -> (
+    None
+):
     assessment = assess_ncu_execution(
         NcuExecutionEvidence(
             theoretical_occupancy_fraction=1 / 48,
@@ -65,7 +69,9 @@ def test_scalar_cc_reduction_is_not_misclassified_as_register_or_spill_problem()
     assert any("cooperative/tiled reduction" in row for row in assessment.guidance)
 
 
-def test_exact_jk_capture_distinguishes_scoreboard_local_state_from_barrier_tail() -> None:
+def test_exact_jk_capture_distinguishes_scoreboard_local_state_from_barrier_tail() -> (
+    None
+):
     assessment = assess_ncu_execution(
         NcuExecutionEvidence(
             achieved_occupancy_fraction=0.15178221,
