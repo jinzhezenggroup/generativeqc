@@ -1,6 +1,6 @@
 {
   "path": "src/dft/cuda_cosx_derivative.cu",
-  "reason": "Bounded CUDA execution for COSX point and molecular derivatives. AO-density projection, borrowed spatial-jet projection and weighted value ESP consume shared prepared tensor sites with compiler-owned checked scalar updates. Remaining response composition, point-gradient symmetrization, molecular AO cotangents and weight sensitivity use existing TensorIR scalar helpers; native CUDA retains tiling, validation, atom scatter and ESP integral assembly.",
+  "reason": "Bounded CUDA execution for COSX point and molecular derivatives. AO-density projection, borrowed spatial-jet projection, weighted value ESP and symmetric density projection consume shared prepared tensor sites with compiler-owned checked scalar updates. Remaining response composition, point-gradient symmetrization, molecular AO cotangents and weight sensitivity use existing TensorIR scalar helpers; native CUDA retains tiling, validation, atom scatter and ESP integral assembly.",
   "regions": [
     {
       "reason": "ESP value/probe derivative assembly still expands contracted AO pairs around compiler-generated one-electron attraction primitives. Retire this region when a generated weighted ESP consumer owns the contraction and point-center pullback.",

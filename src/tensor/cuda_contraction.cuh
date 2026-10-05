@@ -365,7 +365,16 @@ static __global__ void generated_checked_contraction(
       const auto bi =
           batch * reduction_extent * columns +
           (transpose_right ? column * right_stride + reduction : reduction * right_stride + column);
-      if (!Step::update(left[ai], right[bi], value)) {
+      bool updated;
+      if constexpr (requires { Step::right_symmetrization; }) {
+        // The prepared recipe proves a single square RHS. This second
+        // readonly view uses the same allocation, including any row padding.
+        updated =
+            Step::update(left[ai], right[bi], right[column * right_stride + reduction], value);
+      } else {
+        updated = Step::update(left[ai], right[bi], value);
+      }
+      if (!updated) {
         valid = false;
         break;
       }
@@ -746,6 +755,9 @@ class PreparedContractions {
           r.checked_update_identity != CheckedStep::update_identity ||
           r.checked_publication_identity != CheckedStep::publication_identity)
         throw std::invalid_argument("scalar helper differs from the prepared contraction");
+      constexpr bool symmetric = requires { CheckedStep::right_symmetrization; };
+      if (r.checked_right_symmetrization != symmetric)
+        throw std::invalid_argument("scalar helper differs from its prepared input views");
     }
     if (bool(selected->batch_scales[slot].rank) != bool(batch_scale))
       throw std::invalid_argument("contraction batch-scale input differs from prepared region");

@@ -273,7 +273,7 @@ GENERATIVEQC_COSX_DERIVATIVE_HD inline bool scale_pair(
 }}  // namespace generativeqc::dft::generated_cosx_derivative
 
 #undef GENERATIVEQC_COSX_DERIVATIVE_HD
-""" + emit_cosx_derivative_contractions(projection, scale)
+""" + emit_cosx_derivative_contractions(projection, scale, symmetric)
 
 
 def main() -> None:

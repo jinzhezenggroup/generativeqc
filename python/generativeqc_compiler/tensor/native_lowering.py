@@ -247,6 +247,7 @@ def contraction_initializer(
     batch_scale: Node | None = None,
     checked_update: Program | None = None,
     checked_publication: Program | None = None,
+    checked_right_symmetrization: tuple[str, str, str] = (),
     fixed_modes: tuple[int, ...] = (),
     operand_order: tuple[int, int] = (0, 1),
 ) -> str:
@@ -257,6 +258,10 @@ def contraction_initializer(
     einsum-plus-input region and its donated seed, rather than hiding beta in a
     binary operation identity. Native validation checks the physical recipe against
     the original semantic modes before execution.
+
+    A checked symmetric RHS additionally binds the original sum/transpose region
+    and scalar input roles. It borrows one square matrix twice, preserving the
+    original helper's half-factor order instead of materializing a new matrix.
 
     Matrix recognition belongs to the existing physical lowerer. The descriptor
     retains original mode labels and operand shapes, so provider execution can
@@ -291,7 +296,31 @@ def contraction_initializer(
         if node not in accumulation.inputs or beta != "1.0":
             raise ValueError("native update must preserve its unit seed contribution")
         request = contraction_update_request(adapter, accumulation, backend="cuda")
-    if checked_update is not None:
+    if checked_right_symmetrization:
+        from .checked_contraction import checked_symmetric_right_request
+
+        if (
+            checked_update is None
+            or checked_publication is not None
+            or accumulation is not None
+            or batch_scale is not None
+            or fixed_modes
+            or operand_order != (0, 1)
+            or beta != "0.0"
+            or coefficient != "0.5"
+            or transpose != ("N", "N")
+        ):
+            raise ValueError(
+                "checked symmetric RHS requires its complete fresh half-scaled recipe"
+            )
+        request = checked_symmetric_right_request(
+            adapter,
+            node,
+            checked_update,
+            scalar_inputs=checked_right_symmetrization,
+            backend="cuda",
+        )
+    elif checked_update is not None:
         from .checked_contraction import checked_contraction_request
 
         if accumulation is not None or beta != "0.0" or coefficient != "1.0":
@@ -393,5 +422,6 @@ def contraction_initializer(
             if checked_update is not None
             else ""
         )
+        + (",true" if checked_right_symmetrization else "")
         + "}"
     )
