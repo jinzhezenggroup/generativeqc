@@ -1,0 +1,9 @@
+{
+  "scope": "host packet/warp model only; not a device gate",
+  "pair_block": 32,
+  "indexed_pages": 16,
+  "page_candidates": 64,
+  "warp_threads": 32,
+  "cases": 6150,
+  "result": "pass"
+}
