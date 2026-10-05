@@ -1,6 +1,6 @@
 {
   "path": "src/hf/rhf_frame_response.cu",
-  "reason": "Owns bounded RHF frame-response storage, generated matrix AD/BLAS callbacks, exact J/K assembly, matrix-free GMRES control and publication audits. Frame/Pulay/orbital derivatives are generated from shared TensorIR; exact integral and nuclear contractions reuse the existing providers.",
+  "reason": "Owns bounded RHF frame-response storage, borrowed prepared contraction tables for generated matrix AD, exact J/K assembly, matrix-free GMRES control and publication audits. Shared tensor execution owns contraction submission and finite audits. Frame/Pulay/orbital derivatives are generated from shared TensorIR; exact integral and nuclear contractions reuse the existing providers.",
   "regions": [],
   "role": "runtime",
   "subsystem": "runtime"

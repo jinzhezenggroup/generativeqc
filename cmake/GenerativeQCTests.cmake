@@ -42,6 +42,13 @@ macro(generativeqc_add_native_tests)
                          LIBRARIES generativeqc_cutensor CUDA::cudart CUDA::cublas)
       set_tests_properties(generativeqc_native_cutensor_tests PROPERTIES TIMEOUT 120)
     endif()
+    generativeqc_native_test(generativeqc_cuda_vector_contraction_tests
+                       tests/native/test_cuda_vector_contraction.cpp NO_GENERATIVEQC
+                       LIBRARIES CUDA::cudart CUDA::cublas SKIP_77)
+    target_sources(generativeqc_cuda_vector_contraction_tests PRIVATE src/tensor/cuda_vector_contraction.cpp)
+    add_dependencies(generativeqc_cuda_vector_contraction_tests generativeqc_df_coulomb_lowering_codegen)
+    target_include_directories(generativeqc_cuda_vector_contraction_tests PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/generated")
     generativeqc_native_test(generativeqc_hf_resource_layout_tests tests/native/test_hf_resource_layout.cpp)
     generativeqc_native_test(generativeqc_incremental_direct_jk_cuda_tests
                        tests/native/test_incremental_direct_jk_cuda.cpp

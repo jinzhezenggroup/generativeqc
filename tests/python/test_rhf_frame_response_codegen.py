@@ -85,11 +85,13 @@ def test_runtime_shapes_match_all_matrix_maps(tmp_path: Path) -> None:
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
-def test_packed_blas_lowering_is_opt_in_with_scalar_fallback() -> None:
+def test_prepared_lowering_retains_scalar_kernels_and_sticky_audit() -> None:
     source = cuda_source()
-    assert "s.gemm('" in source
+    assert "s.contractions[0].execute(" in source
     for name in STAGES:
-        assert f"run_{name}_blas(s) : run_{name}_scalar(s)" in source
+        assert f"run_{name}_prepared(s) : run_{name}_scalar(s)" in source
+        assert f"bind_{name}_prepared(s,context,1,calls,summands)" in source
+        assert f"__global__ void {name}_prepared_node_" not in source
     # Multiple maps compose under one sticky arithmetic audit. Only their owner
     # may clear it; a later map must not erase an earlier failed intermediate.
     assert "cudaMemsetAsync" not in source

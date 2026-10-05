@@ -36,9 +36,13 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
     // optional accelerator without changing public method semantics.
     if (const auto* mode = std::getenv("GENERATIVEQC_TEST_Z_PRECONDITIONER"))
       options.df_preconditioning = std::string(mode) == "1";
+    const auto* selected = std::getenv("GENERATIVEQC_TEST_PACKED_CC_HISTORY");
+    const bool packed = selected && std::string(selected) == "1";
     const auto result = methods::detail::run_df_ccsdt_native(
         execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
-        8, options, true);
+        8, options, true, packed);
+    if (packed && !result.solver.packed_diis)
+      throw std::runtime_error("packed history qualification did not exercise packed storage");
     const double scalars[]{result.energy,
                            result.reference_energy,
                            result.correlation_energy,
