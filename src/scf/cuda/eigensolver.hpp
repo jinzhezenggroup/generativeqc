@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "runtime/lowering_binding.hpp"
 #include "scf/cuda/eigensolver_types.hpp"
 #include "scf/cuda_batch.hpp"
 
@@ -45,6 +46,24 @@ generativeqc_status launch_solver(const EigensolverResources& resources,
 /** Whether this family requires provider input sanitization and cuSOLVER workspace. */
 bool provider_eigensolver(CudaEigensolverFamily family);
 
+/** Immutable preparation evidence. Identities describe the AOT template;
+ * dimension/device/toolkit and queried resources complete this owner's runtime
+ * binding. There is no cross-owner executable cache. Residuals are qualified by
+ * independent tests, not measured on every launch; info remains caller-visible.
+ */
+struct OrdinaryEigensolverDiagnostic {
+  runtime::NativeLoweringRequest request;
+  std::array<runtime::NativeLoweringCandidate, 2> candidates;
+  std::array<std::string_view, 2> rejections;
+  std::size_t selected{};
+  bool retained_incumbent{};
+  int dimension{}, device{}, compute_major{}, compute_minor{}, runtime_version{}, driver_version{};
+  std::uint64_t prepare_ns{};
+  // Numeric resources only. cuSOLVER's opaque allocations are not bounded by
+  // Xsyevd_bufferSize and must never be reported as zero total provider storage.
+  bool opaque_provider_bytes_known{};
+};
+
 /** Prepared ordinary-stream eigensolver with explicit numeric workspace.
  * Borrows its owner's stream and matrix/eigenvalue buffers. Small matrices
  * retain the capture-safe native path; larger matrices reuse the existing
@@ -64,12 +83,17 @@ class OrdinaryStreamEigensolver {
                              double* eigenvalues, int* info, const std::uint8_t* active) const;
   std::size_t device_bytes() const noexcept { return resources_.solver_workspace_bytes_; }
   std::size_t host_bytes() const noexcept { return host_workspace_.capacity(); }
+  std::size_t metadata_bytes() const noexcept;
+  const OrdinaryEigensolverDiagnostic& diagnostic() const noexcept { return diagnostic_; }
 
  private:
   void cleanup() noexcept;
   int n_{}, device_{};
+  CudaEigensolverFamily family_{};
   EigensolverResources resources_{};
   std::vector<unsigned char> host_workspace_;
+  std::array<char, 48> provider_version_{};
+  OrdinaryEigensolverDiagnostic diagnostic_{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

@@ -6,6 +6,12 @@
 
 namespace generativeqc::scf {
 
+/** Conservative retained host reservation for the two-candidate prepared
+ * binding and its version/provenance records; excludes numeric workspace and
+ * opaque library allocations. Keep the Python KS inventory in agreement.
+ */
+inline constexpr std::size_t kOrdinaryEigensolverBindingHostBytes = 16U * 1024U;
+
 /** Shape-only bound for one serialized ordinary FP64 Xsyevd workspace.
  * Both host and device provider queries must fit before allocation. The fixed
  * floor covers small matrices; spins/items reuse the same workspace in order.

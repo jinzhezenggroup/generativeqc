@@ -97,6 +97,7 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
         "scf/cuda_batch.hpp",
         "scf/eigensolver_workspace.hpp",
         "runtime/resource_cuda.cuh",
+        "runtime/lowering_binding.hpp",
         "generativeqc/generativeqc.hpp",
     ),
 }

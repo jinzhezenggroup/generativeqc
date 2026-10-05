@@ -354,7 +354,7 @@
     "src/scf/cuda/eigensolver.cpp": {
       "classification": "migration",
       "contract": "#1890",
-      "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
+      "reason": "Ordinary DFT/KS solves now use a canonical prepared binding with queried cuSOLVER provenance. RHF and DF launch_solver selectors remain migration debt; classification stays partial.",
       "references": {
         "cusolverDnCreate": 1,
         "cusolverDnCreateParams": 1,
@@ -364,7 +364,8 @@
         "cusolverDnSetStream": 1,
         "cusolverDnXsyevBatched": 1,
         "cusolverDnXsyevd": 1,
-        "cusolverDnXsyevd_bufferSize": 1
+        "cusolverDnXsyevd_bufferSize": 1,
+        "cusolverGetProperty": 3
       }
     },
     "src/scf/cuda/matrix_library.cpp": {
