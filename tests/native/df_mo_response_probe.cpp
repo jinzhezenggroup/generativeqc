@@ -41,10 +41,15 @@ extern "C" int df_mo_response_probe_v2(std::size_t n, std::size_t q, const doubl
     tensor::contraction_libraries_unavailable_for_test = provider_test == 1;
     // Synthetic qualification ceilings and ranking never become production defaults.
     tensor::cutensor_reservation_for_test =
-        provider_test >= 2
+        (provider_test == 2 || provider_test == 3)
             ? tensor::ContractionProviderReservation{64ULL << 20, 256ULL << 20, 64ULL << 20}
             : tensor::ContractionProviderReservation{};
     tensor::cutensor_preparations_before_rejection_for_test = provider_test == 3 ? 2 : -1;
+    tensor::cublaslt_reservation_for_test =
+        (provider_test == 4 || provider_test == 5)
+            ? tensor::ContractionProviderReservation{64ULL << 20, 256ULL << 20, 64ULL << 20}
+            : tensor::ContractionProviderReservation{};
+    tensor::cublaslt_preparations_before_rejection_for_test = provider_test == 5 ? 2 : -1;
 #else
     if (provider_test) throw std::invalid_argument("provider qualification requires test hooks");
 #endif
@@ -113,6 +118,7 @@ extern "C" int df_mo_response_probe_v2(std::size_t n, std::size_t q, const doubl
                              result.prepared_contractions,
                              result.provider == "cublas"           ? 0UL
                              : result.provider == "generated.cuda" ? 1UL
+                             : result.provider == "cublaslt"       ? 3UL
                                                                    : 2UL,
                              result.preparation_ns,
                              result.optional_workspace_bytes,

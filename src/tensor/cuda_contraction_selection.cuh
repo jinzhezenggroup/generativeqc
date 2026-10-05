@@ -39,8 +39,9 @@ ContractionRegionPlan select_contraction_region(
   library_available = library_available && !contraction_libraries_unavailable_for_test;
 #endif
   auto offers = candidates;
-  const auto reservation = qualified_cutensor_reservation();
-  const auto version = cutensor_provider_version();
+  const auto cutensor_reservation = qualified_cutensor_reservation();
+  const auto cublaslt_reservation = qualified_cublaslt_reservation();
+  std::array<ContractionProviderReservation, N> reservations{};
   std::array<std::size_t, N> complete_bytes{};
   std::optional<std::size_t> library, generated;
   for (std::size_t i = 0; i < N; ++i) {
@@ -52,13 +53,20 @@ ContractionRegionPlan select_contraction_region(
       offer.host_bytes = host_bytes;
     } else if (offer.provider == "generated.cuda") {
       offer.host_bytes = host_bytes;
-    } else if (offer.provider == "cutensor") {
+    } else if (offer.provider == "cutensor" || offer.provider == "cublaslt") {
+      const auto reservation =
+          offer.provider == "cutensor" ? cutensor_reservation : cublaslt_reservation;
+      reservations[i] = reservation;
       offer.workspace_bytes = contraction_product(plans, reservation.workspace_bytes);
       offer.provider_bytes = contraction_product(plans, reservation.provider_bytes);
       offer.host_bytes = ContractionProviderReservation::checked_add(
           host_bytes, contraction_product(plans, reservation.host_bytes));
-      if (!reservation.host_bytes || version < 20800 || version / 10000 != 2)
-        offer.rejection = "qualified cuTENSOR resource profile unavailable";
+      const auto version =
+          offer.provider == "cutensor" ? cutensor_provider_version() : cublaslt_provider_version();
+      const bool version_available =
+          offer.provider == "cutensor" ? version >= 20800 && version / 10000 == 2 : version != 0;
+      if (!reservation.host_bytes || !version_available)
+        offer.rejection = "qualified optional contraction resource profile unavailable";
     } else {
       offer.rejection = "contraction region has no prepared implementation";
     }
@@ -78,11 +86,11 @@ ContractionRegionPlan select_contraction_region(
       if (offer.provider == "generated.cuda") generated = i;
     }
 #if defined(GENERATIVEQC_TEST_HOOKS)
-    if (library_available && reservation.host_bytes) {
+    if (library_available && (cutensor_reservation.host_bytes || cublaslt_reservation.host_bytes)) {
       offer.cost.source = "test-only-provider-ranking";
       offer.cost.prepare_ns = offer.cost.cast_ns = offer.cost.pack_ns = 0;
       offer.cost.refinement_ns = offer.cost.audit_ns = offer.cost.fallback_ns = 0;
-      offer.cost.kernel_ns = offer.provider == "cutensor" ? 1 : 100;
+      offer.cost.kernel_ns = reservations[i].host_bytes ? 1 : 100;
     }
 #endif
   }
@@ -90,10 +98,11 @@ ContractionRegionPlan select_contraction_region(
   const auto decision = runtime::select_native_lowering(request, offers, target, compilation, 1,
                                                         library ? library : generated);
   const auto i = decision.selected;
-  const auto algorithm = offers[i].provider == "cutensor" ? ContractionAlgorithm::CutensorAffine
+  const auto algorithm = offers[i].provider == "cutensor"   ? ContractionAlgorithm::CutensorAffine
+                         : offers[i].provider == "cublaslt" ? ContractionAlgorithm::CublasLtMatmul
                          : offers[i].provider == "cublas" ? ContractionAlgorithm::PedanticBlas
                                                           : ContractionAlgorithm::GeneratedOrdered;
-  return {algorithm, reservation, i, complete_bytes[i], decision.retained_incumbent};
+  return {algorithm, reservations[i], i, complete_bytes[i], decision.retained_incumbent};
 }
 
 /** Provider-owned lifetime of one homogeneous compiler region. The compiler
@@ -125,7 +134,8 @@ class PreparedContractionRegion {
     if (plan_.algorithm == ContractionAlgorithm::PedanticBlas)
       minimum = ContractionProviderReservation::checked_add(
           minimum, CudaContractionContext::kProviderAllowance);
-    else if (plan_.algorithm == ContractionAlgorithm::CutensorAffine)
+    else if (plan_.algorithm == ContractionAlgorithm::CutensorAffine ||
+             plan_.algorithm == ContractionAlgorithm::CublasLtMatmul)
       minimum = ContractionProviderReservation::checked_add(
           minimum, plan_.reservation.total_bytes(requests));
     else if (plan_.algorithm != ContractionAlgorithm::GeneratedOrdered)
@@ -171,8 +181,9 @@ class PreparedContractionRegion {
   }
   const ContractionRegionPlan& selected() const noexcept { return plan_; }
   std::size_t provider_version() const noexcept {
-    return plan_.algorithm == ContractionAlgorithm::CutensorAffine
-               ? cutensor_provider_version()
+    return plan_.algorithm == ContractionAlgorithm::CutensorAffine ? cutensor_provider_version()
+           : plan_.algorithm == ContractionAlgorithm::CublasLtMatmul
+               ? cublaslt_provider_version()
                : std::size_t(context_.provider_version());
   }
 

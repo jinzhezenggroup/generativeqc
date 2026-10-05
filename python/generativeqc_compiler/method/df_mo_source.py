@@ -507,7 +507,7 @@ def _native_response_execution_header(
         scientific_identity=adapter.precision.source_equation,
         operands=tuple(operands),
         precisions=(precision,),
-        constraints=LoweringConstraints(maximum_candidates=3),
+        constraints=LoweringConstraints(maximum_candidates=4),
         semantics=(
             ("program_identity", program.logical_hash),
             ("traversal", "two-pass-leading-source-rows"),
