@@ -165,7 +165,7 @@ def test_checked_symmetric_region_rejects_changed_half_or_published_intermediate
     program = cosx_symmetric_projection_program(5, 4)
     root = program.outputs["result"]
     update = build_cosx_symmetric_projection_update_program()
-    for coefficient in (1, 2, -0.5):
+    for coefficient in (1, 2, "-1/2"):
         changed = einsum("pm,mn->pn", *root.inputs, coefficient=coefficient)
         adapter = TensorLoweringAdapter(Program({"result": changed}))
         with pytest.raises(ValueError, match="half-scaled graph"):
