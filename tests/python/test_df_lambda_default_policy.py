@@ -32,7 +32,7 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     definition += (
         " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
-        "ccsd_batch_limit}; }\n"
+        "ccsd_batch_limit,derived_denominators}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -72,6 +72,7 @@ struct DFCCSDTResult {
   unsigned diis_history;
   bool reduction;
   std::size_t batch_limit, ccsd_batch_limit;
+  bool derived_denominators;
 };
 """
         + declaration
@@ -106,7 +107,8 @@ int main() {
   auto ordinary=run_df_ccsdt_native(context,system,system,descriptor);
   auto explicit_matrix=run_df_ccsdt_native(context,system,system,descriptor,
                                          true,true,true,true,true,8);
-  if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda) return 3;
+  if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda ||
+     !ordinary.derived_denominators || !explicit_matrix.derived_denominators) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame)) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
@@ -127,7 +129,7 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction) return 9;
+     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction || !defaults.derived_denominators) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
@@ -151,7 +153,7 @@ int main() {
                            token.c_str()};
     const auto old = select(9,selected);
     if(old.diis_history != history || !default_frame(old.frame) || old.reduction ||
-       old.primal || old.forces || old.lambda || old.batch_limit != 3 || old.ccsd_batch_limit != 8) return 12;
+       old.primal || old.forces || old.lambda || old.batch_limit != 3 || old.ccsd_batch_limit != 8 || !old.derived_denominators) return 12;
   }
   // No numeric guessing: even an integer zero in argv[8] always means DIIS zero.
   // Fractional/scientific legacy screening tokens must not partially parse.
@@ -168,7 +170,7 @@ int main() {
        selected.ccsd_batch_limit != (argc > 9 ? 3U : 8U) ||
        selected.frame.orbital_screening_tolerance != (argc > 10 ? 1e-7 : 0.0) ||
        selected.frame.profile_jk || !selected.frame.symmetric_polarization ||
-       selected.frame.bilinear_derivative) return 14;
+       selected.frame.bilinear_derivative || !selected.derived_denominators) return 14;
   }
   for(int index : {3,4,5,6,11,12}) {
     const char* bad[]{"endpoint","input","output","1","1","1","1","8",
@@ -196,7 +198,31 @@ int main() {
     try { (void)select(11,bad);return 19; }
     catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,14}) {
+    for(bool derived : {false,true}) {
+    const auto direct=run_df_ccsdt_native(context,system,system,descriptor,
+                                          true,true,true,true,true,5,3,explicit_frame,derived);
+    if(direct.derived_denominators!=derived || direct.batch_limit!=5 ||
+       direct.ccsd_batch_limit!=3 || direct.frame.orbital_screening_tolerance!=1e-7 ||
+       !direct.frame.profile_jk || !direct.frame.bilinear_derivative) return 20;
+    for(const char* schedule : {"0","1","2"}) {
+      const char* selected[]{"endpoint","input","output","1","1","1","1","5",
+                             "4","3","1e-7","1",schedule,derived?"1":"0"};
+      const auto result=select(14,selected);
+      if(result.derived_denominators!=derived || result.diis_history!=4 ||
+         result.batch_limit!=5 || result.ccsd_batch_limit!=3 ||
+         result.frame.orbital_screening_tolerance!=1e-7 || !result.frame.profile_jk ||
+         result.frame.bilinear_derivative!=(schedule[0]=='1') ||
+         result.frame.symmetric_polarization!=(schedule[0]=='2')) return 21;
+      if(!select(13,selected).derived_denominators) return 22;
+    }
+  }
+  for(const char* token : {"", "2", "-1", "+1", "true", "0.0", "1junk"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2",token};
+    try { (void)select(14,bad);return 23; }
+    catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,15}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }
@@ -228,3 +254,87 @@ def test_shared_state_probe_keeps_a_scalar_control() -> None:
     scalar_option = source.index("options.df_matrix_gemm = false;", matrix)
     scalar = source.index("const auto scalar =", scalar_option)
     assert first < matrix < scalar_option < scalar
+
+
+def test_force_owner_forwards_denominators_after_reference_and_batch(
+    tmp_path: Path,
+) -> None:
+    """Compile the real middle-owner call against its current RCCSD declaration."""
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if not compiler or not cache:
+        pytest.skip("requires host C++ and ccache")
+    header = (ROOT / "src/methods/rccsd_method.hpp").read_text()
+    declaration = (
+        "RccsdNativeState run_rccsd_native_state("
+        + header.split("RccsdNativeState run_rccsd_native_state(", 1)[1].split(");", 1)[
+            0
+        ]
+        + ");\n"
+    )
+    definition = re.sub(r"\s*=\s*[^,)]+", "", declaration).strip().removesuffix(";")
+    definition += (
+        " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
+        "retain_df_response,df_matrix_gemm,correlation_auxiliary}; }\n"
+    )
+    owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
+    call = "auto state =" + owner.split("auto state =", 1)[1].split(";", 1)[0] + ";\n"
+    source = tmp_path / "forward.cpp"
+    source.write_text(
+        r"""
+#include <memory>
+#include <vector>
+#include <cstddef>
+struct generativeqc_method_descriptor {};
+namespace generativeqc {
+namespace runtime { struct ExecutionContext {}; }
+namespace core { struct System {}; }
+namespace scf { struct PreparedFockPlan {}; struct CudaRhfBucketPlan {}; }
+namespace methods::detail {
+struct RccsdNativeState {
+  scf::CudaRhfBucketPlan** reference_plan;
+  std::size_t batch;
+  bool derived, retained, matrix;
+  const core::System* auxiliary;
+};
+"""
+        + declaration
+        + definition
+        + r"""
+int probe() {
+  runtime::ExecutionContext execution;
+  core::System system, auxiliary;
+  generativeqc_method_descriptor descriptor;
+  for(bool derived_denominators : {false,true})
+  for(bool forces : {false,true})
+  for(bool df_matrix_gemm : {false,true})
+  for(std::size_t ccsd_batch_limit : {1,3,8}) {
+"""
+        + call
+        + r"""
+    if(state.reference_plan || state.batch!=ccsd_batch_limit ||
+       state.derived!=derived_denominators || state.retained!=forces ||
+       state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary) return 1;
+  }
+  const auto ordinary=run_rccsd_native_state(execution,system,descriptor);
+  if(ordinary.reference_plan || ordinary.batch!=8 || !ordinary.derived ||
+     ordinary.retained || !ordinary.matrix || ordinary.auxiliary) return 2;
+  scf::CudaRhfBucketPlan resident;
+  auto* reference=&resident;
+  const auto explicit_state=run_rccsd_native_state(execution,system,descriptor,
+      nullptr,nullptr,nullptr,0,&auxiliary,true,true,&reference,3,false);
+  if(explicit_state.reference_plan!=&reference || reference!=&resident ||
+     explicit_state.batch!=3 || explicit_state.derived) return 3;
+  return 0;
+}
+}}
+int main() { return generativeqc::methods::detail::probe(); }
+"""
+    )
+    executable = tmp_path / "forward"
+    subprocess.run(
+        [cache, compiler, "-std=c++20", str(source), "-o", str(executable)],
+        check=True,
+        capture_output=True,
+        timeout=60,
+    )
+    subprocess.run([str(executable)], check=True, capture_output=True, timeout=10)
