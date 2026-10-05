@@ -392,6 +392,8 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_scatter",
     "direct_force_low_order",
     "direct_force_low_order_sources",
+    "direct_force_order4_sources",
+    "direct_force_order5_sources",
     "direct_force_order2",
     "direct_force_order3",
     "direct_force_quartet",
@@ -471,8 +473,8 @@ CUDA_ALLOWED["cuda_hf_bucket"] = (
     "scf/cuda/arena.",
     "scf/cuda/topology.",
     "scf/cuda/rhf_policy.",
-    # Pure reference cache/quartet admission policy, shared with device setup;
-    # the bucket still cannot include the physical export implementation.
+    # #1792 shares this pure topology/budget policy with reference export;
+    # the bucket still cannot depend on the reference-export implementation.
     "scf/cuda/reference_eri_policy.hpp",
     "scf/cuda/direct_constants.",
     "scf/cuda/checked_layout.",
@@ -569,6 +571,21 @@ CUDA_MODULES["cuda_reference_export"] = ("reference_export", "reference_eri_poli
 CUDA_ALLOWED["cuda_reference_export"] = (
     "posthf/capacity.hpp",
     "scf/mean_field.hpp",
+    "tensor/cuda_error.hpp",
+)
+# A compact post-RHF source is a host lifetime adapter, not another recurrence
+# or a consumer of solver equations. Only the raw ERI provider surface is used.
+CUDA_MODULES["cuda_rhf_source_handoff"] = ("rhf_source_handoff",)
+CUDA_ALLOWED["cuda_rhf_source_handoff"] = (
+    "core/types.hpp",
+    "integrals/electron_interaction_source.hpp",
+    "posthf/capacity.hpp",
+    "runtime/",
+    "scf/rhf_source_handoff.hpp",
+    "scf/cuda/rhf_source_handoff.hpp",
+    "scf/cuda/rhf_bucket_internal.hpp",
+    "scf/cuda/direct_jk_plan.hpp",
+    "scf/cuda_direct_jk_device.hpp",
     "tensor/cuda_error.hpp",
 )
 SUFFIXES = {".cpp", ".hpp", ".cu", ".cuh"}

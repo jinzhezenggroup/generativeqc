@@ -1,0 +1,590 @@
+{
+  "schema": 1,
+  "files": {
+    "python/generativeqc_compiler/method/df_hf_response_cuda.py": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "HF response equations still submit or emit vendor contractions; retain equations while moving submission to shared bindings.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
+    "python/generativeqc_compiler/method/df_occupied_response_cuda.py": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Occupied DF response emits vendor matrix products from method code; canonical lowering must own these submissions.",
+      "references": {
+        "cublasDgemm": 5,
+        "cublasDgemmStridedBatched": 2,
+        "cublasDsyrk": 2
+      }
+    },
+    "python/generativeqc_compiler/tensor/cuda_emit.py": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/tensor/ir.py",
+      "reason": "TensorIR CUDA provider templates own dense primitives, admitted reductions and provider provenance; scientific generators consume semantic operations.",
+      "references": {
+        "cub::BLOCK_REDUCE_WARP_REDUCTIONS": 1,
+        "cub::BlockReduce": 1,
+        "cublasGetProperty": 3,
+        "cublasSetMathMode": 1
+      }
+    },
+    "src/api/c_api_fock.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Public prepared Fock/response adapter still owns direct dense contractions and vector algebra; migrate through shared semantic operations.",
+      "references": {
+        "cublasCreate": 2,
+        "cublasDaxpy": 14,
+        "cublasDcopy": 7,
+        "cublasDdot": 2,
+        "cublasDestroy": 4,
+        "cublasDgeam": 1,
+        "cublasDgemm": 29,
+        "cublasDnrm2": 2,
+        "cublasDscal": 4,
+        "cublasSetPointerMode": 2,
+        "cublasSetStream": 2
+      }
+    },
+    "src/cc/cuda_state.cuh": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
+    "src/cc/df_source_cuda.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
+    "src/cc/df_triples_cuda.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Remaining CC-local source/triples contractions must consume canonical prepared bindings. Current references are frozen migration debt, not provider approval.",
+      "references": {
+        "cublasDgemm": 2
+      }
+    },
+    "src/dft/cuda_grid.cu": {
+      "classification": "diagnostic",
+      "contract": "#1886",
+      "reason": "Read library versions for execution provenance only. This exception does not authorize tensor/solver submissions.",
+      "references": {
+        "cublasGetVersion": 1
+      }
+    },
+    "src/hf/rhf_frame_response.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "HF response equations still submit or emit vendor contractions; retain equations while moving submission to shared bindings.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 1,
+        "cublasDgemm": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetStream": 1,
+        "cublasSetWorkspace": 1
+      }
+    },
+    "src/posthf/cuda_low_rank.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Post-HF contraction/transform owners still couple equations to direct vendor matrix/vector calls; preserve source residency and numerical gates during migration.",
+      "references": {
+        "cublasDdot": 1,
+        "cublasDgemm": 2,
+        "cublasSetPointerMode": 2
+      }
+    },
+    "src/posthf/cuda_transform.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Post-HF contraction/transform owners still couple equations to direct vendor matrix/vector calls; preserve source residency and numerical gates during migration.",
+      "references": {
+        "cublasDaxpy": 2,
+        "cublasDgemm": 2,
+        "cublasGetVersion": 1
+      }
+    },
+    "src/posthf/ri_mp2_cuda.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Post-HF contraction/transform owners still couple equations to direct vendor matrix/vector calls; preserve source residency and numerical gates during migration.",
+      "references": {
+        "cublasDgemm": 2,
+        "cublasDgemmStridedBatched": 2
+      }
+    },
+    "src/runtime/nvidia_host_api/generativeqc_nvidia_host_api.h": {
+      "classification": "runtime_abi",
+      "contract": "#933",
+      "reason": "Host ABI declarations and macro aliases for optional NVIDIA library loading; no scientific execution policy.",
+      "references": {
+        "cublasContext": 1,
+        "cublasCreate": 1,
+        "cublasCreate_v2": 2,
+        "cublasDaxpy": 1,
+        "cublasDaxpy_v2": 2,
+        "cublasDcopy": 1,
+        "cublasDcopy_v2": 2,
+        "cublasDdot": 1,
+        "cublasDdot_v2": 2,
+        "cublasDestroy": 1,
+        "cublasDestroy_v2": 2,
+        "cublasDgeam": 1,
+        "cublasDgemm": 1,
+        "cublasDgemmStridedBatched": 1,
+        "cublasDgemm_v2": 2,
+        "cublasDgemv": 1,
+        "cublasDgemv_v2": 2,
+        "cublasDnrm2": 1,
+        "cublasDnrm2_v2": 2,
+        "cublasDscal": 1,
+        "cublasDscal_v2": 2,
+        "cublasDsyrk": 1,
+        "cublasDsyrk_v2": 2,
+        "cublasGetPointerMode": 1,
+        "cublasGetPointerMode_v2": 2,
+        "cublasGetProperty": 1,
+        "cublasGetStream": 1,
+        "cublasGetStream_v2": 2,
+        "cublasGetVersion": 1,
+        "cublasGetVersion_v2": 2,
+        "cublasSetMathMode": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetPointerMode_v2": 2,
+        "cublasSetStream": 1,
+        "cublasSetStream_v2": 2,
+        "cublasSetWorkspace": 1,
+        "cublasSetWorkspace_v2": 2,
+        "cublasSgemm": 1,
+        "cublasSgemmStridedBatched": 1,
+        "cublasSgemm_v2": 2,
+        "cusolverDnContext": 1,
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnCreateSyevjInfo": 1,
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1,
+        "cusolverDnDestroySyevjInfo": 1,
+        "cusolverDnDsyevjBatched": 1,
+        "cusolverDnDsyevjBatched_bufferSize": 1,
+        "cusolverDnParams": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevBatched": 1,
+        "cusolverDnXsyevBatched_bufferSize": 1,
+        "cusolverDnXsyevd": 1,
+        "cusolverDnXsyevd_bufferSize": 1,
+        "cusolverDnXsyevjSetMaxSweeps": 1,
+        "cusolverDnXsyevjSetSortEig": 1,
+        "cusolverDnXsyevjSetTolerance": 1,
+        "cusolverGetProperty": 1
+      }
+    },
+    "src/scf/cuda/df_coulomb.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgemmStridedBatched": 2,
+        "cublasDgemv": 6
+      }
+    },
+    "src/scf/cuda/df_eigensystem.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
+      "references": {
+        "cusolverDnXsyevd_bufferSize": 1
+      }
+    },
+    "src/scf/cuda/df_exchange.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgemm": 1,
+        "cublasDgemmStridedBatched": 7
+      }
+    },
+    "src/scf/cuda/df_final_validation.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
+    "src/scf/cuda/df_generated_tiles.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
+    "src/scf/cuda/df_gradient_bridge.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgemm": 4,
+        "cublasDgemv": 1
+      }
+    },
+    "src/scf/cuda/df_occupied_exchange.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgemm": 3,
+        "cublasDgemmStridedBatched": 4,
+        "cublasDsyrk": 2
+      }
+    },
+    "src/scf/cuda/df_plan_lifetime.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
+      "references": {
+        "cublasDestroy": 1,
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1
+      }
+    },
+    "src/scf/cuda/df_plan_setup.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDgemm": 6,
+        "cublasDgemmStridedBatched": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetStream": 1,
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevd": 1,
+        "cusolverDnXsyevd_bufferSize": 1
+      }
+    },
+    "src/scf/cuda/df_response_weights.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgeam": 2,
+        "cublasDgemm": 38,
+        "cublasDgemmStridedBatched": 3,
+        "cublasDgemv": 5
+      }
+    },
+    "src/scf/cuda/df_scf_factor.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF equation/force/validation owner still submits vendor algebra directly; reuse the retained DF primitive adapter or canonical tensor bindings without changing equations.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
+    "src/scf/cuda/df_scf_library.cpp": {
+      "classification": "provider",
+      "contract": "src/scf/cuda/df_scf_library.hpp",
+      "reason": "Retained reusable DF SCF matrix/eigensolver adapter: semantic strides, alpha/beta and solve requests; provider workspace and lifetime belong to DeviceSolver. Keep this implementation while its surrounding callers migrate to canonical bindings.",
+      "references": {
+        "cublasDgemmStridedBatched": 1,
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnCreateSyevjInfo": 1,
+        "cusolverDnDsyevjBatched": 1,
+        "cusolverDnDsyevjBatched_bufferSize": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevBatched": 1,
+        "cusolverDnXsyevBatched_bufferSize": 1,
+        "cusolverDnXsyevjSetMaxSweeps": 1,
+        "cusolverDnXsyevjSetSortEig": 1,
+        "cusolverDnXsyevjSetTolerance": 1
+      }
+    },
+    "src/scf/cuda/df_scf_state.hpp": {
+      "classification": "provider",
+      "contract": "src/scf/cuda/df_scf_library.hpp",
+      "reason": "Retained reusable DF SCF matrix/eigensolver adapter: semantic strides, alpha/beta and solve requests; provider workspace and lifetime belong to DeviceSolver. Keep this implementation while its surrounding callers migrate to canonical bindings.",
+      "references": {
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1,
+        "cusolverDnDestroySyevjInfo": 1
+      }
+    },
+    "src/scf/cuda/direct_jk_kernels.cu": {
+      "classification": "infrastructure",
+      "contract": "#934",
+      "reason": "CUB scan/sort builds screened integral task queues and block queue offsets. This bounded scheduling exception does not classify scientific tensor reductions as infrastructure.",
+      "references": {
+        "cub::DeviceScan": 2,
+        "cub::DeviceSegmentedRadixSort": 2
+      }
+    },
+    "src/scf/cuda/direct_queue_scan.cu": {
+      "classification": "infrastructure",
+      "contract": "#934",
+      "reason": "CUB scan/sort builds screened integral task queues and block queue offsets. This bounded scheduling exception does not classify scientific tensor reductions as infrastructure.",
+      "references": {
+        "cub::BlockScan": 2
+      }
+    },
+    "src/scf/cuda/eigensolver.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
+      "references": {
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1,
+        "cusolverDnDsyevjBatched": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevBatched": 1,
+        "cusolverDnXsyevd": 1,
+        "cusolverDnXsyevd_bufferSize": 1
+      }
+    },
+    "src/scf/cuda/matrix_library.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
+      "references": {
+        "cublasDgemmStridedBatched": 2
+      }
+    },
+    "src/scf/cuda/resources.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
+      "references": {
+        "cublasDestroy": 1,
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1,
+        "cusolverDnDestroySyevjInfo": 1
+      }
+    },
+    "src/scf/cuda_eigensolver_policy.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Reusable adapters are retained, but upstream implementation selectors and exact-stack policy still need canonical binding integration; do not whitelist them solely by filename.",
+      "references": {
+        "cusolverDnXsyevBatched": 3,
+        "cusolverDnXsyevBatched_bufferSize": 3
+      }
+    },
+    "src/scf/cuda_eigensolver_probe.cu": {
+      "classification": "diagnostic",
+      "contract": "src/scf/cuda_eigensolver_policy.hpp",
+      "reason": "Prepared exact-stack capability probe uses synthetic matrices to qualify batched eigensolver support; it is not molecular science.",
+      "references": {
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevBatched": 1,
+        "cusolverDnXsyevBatched_bufferSize": 1,
+        "cusolverGetProperty": 3
+      }
+    },
+    "src/scf/cuda_rhf.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Prepared SCF resources currently expose vendor-specific setup/lifetime to scientific owners. Retain #933 ownership while binding through semantic solver/tensor requests.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetStream": 1,
+        "cublasSetWorkspace": 1,
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnCreateSyevjInfo": 1,
+        "cusolverDnDsyevjBatched_bufferSize": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevBatched_bufferSize": 1,
+        "cusolverDnXsyevd_bufferSize": 1,
+        "cusolverDnXsyevjSetMaxSweeps": 1,
+        "cusolverDnXsyevjSetSortEig": 1,
+        "cusolverDnXsyevjSetTolerance": 1
+      }
+    },
+    "src/tensor/cuda_contraction.cuh": {
+      "classification": "provider",
+      "contract": "src/tensor/native_contraction.hpp",
+      "reason": "Shared typed prepared contraction executor owns provider setup, matrix submission and result auditing.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 2,
+        "cublasDgemm": 1,
+        "cublasDgemmStridedBatched": 1,
+        "cublasGetVersion": 1,
+        "cublasSetMathMode": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetStream": 1,
+        "cublasSetWorkspace": 1,
+        "cublasSgemm": 1,
+        "cublasSgemmStridedBatched": 1,
+        "cutensorGetVersion": 1
+      }
+    },
+    "src/tensor/cuda_cutensor.cuh": {
+      "classification": "provider",
+      "contract": "src/tensor/native_contraction.hpp",
+      "reason": "Shared optional affine contraction provider consumes canonical ContractionRequest semantics and owns cuTENSOR descriptors, preparation, workspace, replay auditing and checked release; scientific consumers do not submit vendor calls.",
+      "references": {
+        "cutensorContract": 1,
+        "cutensorCreate": 1,
+        "cutensorCreateContraction": 1,
+        "cutensorCreatePlan": 1,
+        "cutensorCreatePlanPreference": 1,
+        "cutensorCreateTensorDescriptor": 1,
+        "cutensorDestroy": 1,
+        "cutensorDestroyOperationDescriptor": 1,
+        "cutensorDestroyPlan": 1,
+        "cutensorDestroyPlanPreference": 1,
+        "cutensorDestroyTensorDescriptor": 1,
+        "cutensorGetErrorString": 1,
+        "cutensorGetVersion": 1,
+        "cutensorHandleResizePlanCache": 1,
+        "cutensorOperationDescriptorGetAttribute": 1,
+        "cutensorPlanGetAttribute": 1,
+        "cutensorPlanPreferenceSetAttribute": 2
+      }
+    },
+    "src/tensor/cuda_runtime.cuh": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/tensor/ir.py",
+      "reason": "TensorIR CUDA provider templates own dense primitives, admitted reductions and provider provenance; scientific generators consume semantic operations.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 1,
+        "cublasDgemm": 1,
+        "cublasDgemmStridedBatched": 1,
+        "cublasSetMathMode": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetStream": 1,
+        "cublasSetWorkspace": 1,
+        "cublasSgemm": 1,
+        "cublasSgemmStridedBatched": 1
+      }
+    },
+    "src/xtb/native/src/backends/cuda/gfn2_eigensolver.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "GFN prepared execution owns handles and generalized eigensolve work; migrate solver/tensor choices without changing occupation or precision admission.",
+      "references": {
+        "cublasDtrsmBatched": 1,
+        "cublasGetMathMode": 1,
+        "cublasGetPointerMode": 1,
+        "cublasGetStream": 1,
+        "cublasSetMathMode": 2,
+        "cublasSetPointerMode": 2,
+        "cublasSetStream": 2,
+        "cublasSetWorkspace": 1,
+        "cusolverDnDormtr": 1,
+        "cusolverDnDormtr_bufferSize": 2,
+        "cusolverDnDpotrfBatched": 1,
+        "cusolverDnDsyevjBatched": 1,
+        "cusolverDnDsyevjBatched_bufferSize": 1,
+        "cusolverDnDsytrd": 1,
+        "cusolverDnDsytrd_bufferSize": 2,
+        "cusolverDnGetStream": 1,
+        "cusolverDnSetStream": 2,
+        "cusolverDnXsyevBatched": 1,
+        "cusolverDnXsyevBatched_bufferSize": 1
+      }
+    },
+    "src/xtb/native/src/backends/cuda/gfn2_scc_setup_eigensolver.cu": {
+      "classification": "diagnostic",
+      "contract": "#1886",
+      "reason": "Read library versions for execution provenance only. This exception does not authorize tensor/solver submissions.",
+      "references": {
+        "cublasGetVersion": 1,
+        "cusolverGetProperty": 3
+      }
+    },
+    "src/xtb/native/src/runtime/gfn2_cuda_execution.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "GFN prepared execution owns handles and generalized eigensolve work; migrate solver/tensor choices without changing occupation or precision admission.",
+      "references": {
+        "cublasCreate": 1,
+        "cublasDestroy": 2,
+        "cublasSetStream": 1,
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnCreateSyevjInfo": 1,
+        "cusolverDnDestroy": 2,
+        "cusolverDnDestroyParams": 2,
+        "cusolverDnDestroySyevjInfo": 2,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevjSetMaxSweeps": 1,
+        "cusolverDnXsyevjSetSortEig": 1,
+        "cusolverDnXsyevjSetTolerance": 1
+      }
+    },
+    "src/xtb/native/src/runtime/nvidia_host_api.h": {
+      "classification": "runtime_abi",
+      "contract": "#933",
+      "reason": "Host ABI declarations and macro aliases for optional NVIDIA library loading; no scientific execution policy.",
+      "references": {
+        "cublasContext": 1,
+        "cublasCreate": 1,
+        "cublasCreate_v2": 2,
+        "cublasDestroy": 1,
+        "cublasDestroy_v2": 2,
+        "cublasDtrsmBatched": 1,
+        "cublasGetMathMode": 1,
+        "cublasGetPointerMode": 1,
+        "cublasGetPointerMode_v2": 2,
+        "cublasGetStream": 1,
+        "cublasGetStream_v2": 2,
+        "cublasGetVersion": 1,
+        "cublasGetVersion_v2": 2,
+        "cublasSetMathMode": 1,
+        "cublasSetPointerMode": 1,
+        "cublasSetPointerMode_v2": 2,
+        "cublasSetStream": 1,
+        "cublasSetStream_v2": 2,
+        "cublasSetWorkspace": 1,
+        "cublasSetWorkspace_v2": 2,
+        "cusolverDnContext": 1,
+        "cusolverDnCreate": 1,
+        "cusolverDnCreateParams": 1,
+        "cusolverDnCreateSyevjInfo": 1,
+        "cusolverDnDestroy": 1,
+        "cusolverDnDestroyParams": 1,
+        "cusolverDnDestroySyevjInfo": 1,
+        "cusolverDnDormtr": 1,
+        "cusolverDnDormtr_bufferSize": 1,
+        "cusolverDnDpotrfBatched": 1,
+        "cusolverDnDsyevjBatched": 1,
+        "cusolverDnDsyevjBatched_bufferSize": 1,
+        "cusolverDnDsytrd": 1,
+        "cusolverDnDsytrd_bufferSize": 1,
+        "cusolverDnGetStream": 1,
+        "cusolverDnParams": 1,
+        "cusolverDnSetStream": 1,
+        "cusolverDnXsyevBatched": 1,
+        "cusolverDnXsyevBatched_bufferSize": 1,
+        "cusolverDnXsyevjSetMaxSweeps": 1,
+        "cusolverDnXsyevjSetSortEig": 1,
+        "cusolverDnXsyevjSetTolerance": 1,
+        "cusolverGetProperty": 1
+      }
+    }
+  }
+}

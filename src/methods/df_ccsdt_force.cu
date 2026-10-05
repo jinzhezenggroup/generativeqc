@@ -41,7 +41,9 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
                                   const generativeqc_method_descriptor& descriptor, bool forces,
                                   bool with_triples, bool df_auxiliary_reduction,
                                   bool df_matrix_gemm, bool lambda_matrix_gemm,
-                                  std::size_t lambda_batch_limit) {
+                                  std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+                                  const hf::RHFFrameResponseOptions& frame_options,
+                                  bool derived_denominators) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -55,7 +57,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
   auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr, 0,
-                                      &auxiliary, forces, df_matrix_gemm);
+                                      &auxiliary, forces, df_matrix_gemm, nullptr, ccsd_batch_limit,
+                                      derived_denominators);
   if (!state.solved.converged()) throw std::runtime_error("DF force CCSD did not converge");
   DFCCSDTResult result;
   result.reference_energy = state.reference->energy;
@@ -63,6 +66,8 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   result.energy = state.solved.total_energy;
   result.primal = state.performance;
   result.solver = state.solved.diagnostic;
+  result.method_result = state.result;
+  result.correlation = state.diagnostic;
   result.numeric_capacity_bytes = state.diagnostic.numeric_capacity_bytes;
   const auto budget = state.budget;
   const auto device = execution.device_id();
@@ -109,6 +114,15 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     result.energy += result.triples_energy;
   }
   result.triples_seconds = elapsed(phase);
+  result.method_result.energy = result.energy;
+  result.correlation.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  result.correlation.ccsd_t_triples_energy = result.triples_energy;
+  result.correlation.ccsd_t_virtual_triples = result.triples.virtual_triples;
+  result.correlation.ccsd_t_workspace_bytes = result.triples.workspace_bytes;
+  if (with_triples)
+    result.correlation.minimum_absolute_denominator =
+        std::min(result.correlation.minimum_absolute_denominator,
+                 result.triples.minimum_absolute_denominator);
   if (!forces) {
     result.total_seconds = elapsed(started);
     return result;
@@ -233,7 +247,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
   std::vector<double>().swap(state.eps_v);
   phase = Clock::now();
   if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
-  hf::RHFFrameResponseOptions orbital_options;
+  auto orbital_options = frame_options;
   orbital_options.maximum_bytes = budget;
   orbital_options.caller_bytes =
       checked_add(posthf::source_capacity(auxiliary),
@@ -250,6 +264,7 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
     value = -value;
     if (!std::isfinite(value)) throw std::runtime_error("nonfinite complete DF CCSD(T) force");
   }
+  result.method_result.forces = result.forces;
   result.total_seconds = elapsed(started);
   return result;
 }

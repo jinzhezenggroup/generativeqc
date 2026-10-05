@@ -19,6 +19,7 @@ PREFIX = r"""
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "cc/solver.hpp"
 #include "scf/cuda/df_source_domain.hpp"
 namespace probe {
 namespace core = generativeqc::core;
@@ -42,6 +43,7 @@ struct Reference {
   double screening_tolerance = 0;
 };
 namespace scf {
+struct CudaRhfBucketPlan;
 namespace cuda_execution = generativeqc::scf::cuda_execution;
 using namespace cuda_execution;
 enum class FockSpin { Restricted };
@@ -83,14 +85,15 @@ struct RccsdNativeState {
 };
 void validate_descriptor(const generativeqc_method_descriptor&, const runtime::ExecutionContext&) {}
 std::size_t correlation_budget(const generativeqc_method_descriptor&) { return 100; }
-struct SolverOptions { bool df_matrix_gemm = true; };
+using SolverOptions = generativeqc::cc::SolverOptions;
 SolverOptions cc_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
 Reference reference_options(const generativeqc_method_descriptor&, std::size_t) { return {}; }
 RccsdNativeState execute_rccsd_prepared(
     runtime::ExecutionContext&, const core::System& orbital, Reference, SolverOptions options, std::size_t,
     scf::PreparedFockPlan*, const std::vector<double>*, bool* warm_fallback,
     std::unique_ptr<scf::PreparedFockPlan>*, const core::System* auxiliary, bool retain_df_response,
-    const scf::cuda_execution::CudaDfSourcePolicy* policy) {
+    const scf::cuda_execution::CudaDfSourcePolicy* policy, scf::CudaRhfBucketPlan** plan) {
+  assert(plan == nullptr);
   ++rhf_calls;
   assert(auxiliary && policy && retain_df_response && !options.df_matrix_gemm);
   // A mid-RHF diagnostic change must not alter the already admitted source.
@@ -156,7 +159,7 @@ int main(int argc, char** argv) {
     RccsdNativeState output;
     try {
       output = run_rccsd_native_state(execution, orbital, descriptor, &cache, &density,
-                                      &warm_fallback, 0, &auxiliary, true, false);
+                                      &warm_fallback, 0, &auxiliary, true, false, nullptr);
       assert(admitted && rhf_calls == 1 && source_calls == 1);
       assert(!warm_fallback);
     } catch (const MethodError& error) {
@@ -200,8 +203,20 @@ def host_policy_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/methods/rccsd_method.cpp").read_text()
     start = source.index("RccsdNativeState run_rccsd_native_state(")
     end = source.index("\ngenerativeqc_status validate_rccsd_system", start)
+    # Use the real declaration's defaults and SolverOptions fields while
+    # retaining the intercepted RHF/source owners and their no-work assertions.
+    header = (ROOT / "src/methods/rccsd_method.hpp").read_text()
+    declaration = (
+        "RccsdNativeState run_rccsd_native_state("
+        + header.split("RccsdNativeState run_rccsd_native_state(", 1)[1].split(");", 1)[
+            0
+        ]
+        + ");\n"
+    )
     probe = tmp / "probe.cpp"
-    probe.write_text(PREFIX + factory + AFTER_FACTORY + source[start:end] + MAIN)
+    probe.write_text(
+        PREFIX + factory + AFTER_FACTORY + declaration + source[start:end] + MAIN
+    )
     objects = []
     env = dict(os.environ, CCACHE_BASEDIR=str(ROOT))
     # Compile the complete real policy/domain translation units, not test reimplementations.

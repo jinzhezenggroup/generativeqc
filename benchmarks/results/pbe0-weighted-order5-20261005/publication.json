@@ -1,0 +1,291 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "8f90f0ac33ee6bd8a755fb85d71291e1f66c5884",
+    "dirty": false
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 6701,
+      "sha256": "f440813c1a2933812e066189ce288c2c34198f2a270421a224adc78a48ff7407",
+      "role": "reproduction"
+    },
+    {
+      "path": "candidate-48.json.gz",
+      "bytes": 29839,
+      "sha256": "5e5bea3f788f708d989a56625eed00b6e74ee1bb12e3845ee46845865e750005",
+      "role": "samples"
+    },
+    {
+      "path": "candidate-96.json.gz",
+      "bytes": 45891,
+      "sha256": "09f011d9dd90bbdafe6b749a9c32c7719edeb2d418ee0af7d9345815a243aeec",
+      "role": "samples"
+    },
+    {
+      "path": "candidate-source.patch.gz",
+      "bytes": 8277,
+      "sha256": "8710eca608bfd0c7f1540e97b3330d7e6d8a3578835353547373f0398e7d3e68",
+      "role": "source-patch"
+    },
+    {
+      "path": "control-48.json.gz",
+      "bytes": 30000,
+      "sha256": "fbe5214865dc25069b5b34d15ff5fe0ffce4a58d77407f85aa09e64fa849e73d",
+      "role": "samples"
+    },
+    {
+      "path": "control-96.json.gz",
+      "bytes": 46444,
+      "sha256": "34d8eddd0baacd21d7a29b0087d73dc5691084326dcf2ef2e17155883a2bad9e",
+      "role": "samples"
+    },
+    {
+      "path": "control-source.patch.gz",
+      "bytes": 76502,
+      "sha256": "b4f5c4182f74852f71b0797adb19e8822397162a42419619994bee33328c6141",
+      "role": "source-patch"
+    },
+    {
+      "path": "drivers/build-aot.sh.txt",
+      "bytes": 1254,
+      "sha256": "35c0491a707a09f83f280903b2ebb755998a9b7134d6e67719242d9cf9e67711",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/build-local.sh.txt",
+      "bytes": 1938,
+      "sha256": "d8b915ea878da3eb3c995fe48f1cab9f645091e17a2181407754ade53fff1666",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/check-source.py.txt",
+      "bytes": 888,
+      "sha256": "f3ccdf1305d574f136b617cd5c6e4209c243000604ae24643695a7e2a8a70e49",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/gpu-env-n1.sh.txt",
+      "bytes": 1487,
+      "sha256": "5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/paired-order5-n1.sh.txt",
+      "bytes": 1955,
+      "sha256": "b43e9575ed85fb7a2c07d21c59112a4809efb4e1de3ed263d1ba7fc33c5a0725",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/public-default-endpoint.py.txt",
+      "bytes": 3045,
+      "sha256": "202f832b49d1bc39d1c3dd12349a964dd5df56f96573a3c014933e5de0e72f12",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/qualify-order5-n1.sh.txt",
+      "bytes": 903,
+      "sha256": "5fbbf7e5bc89b20675f692e3f957cad893dc79497ef4b66066929d0ea475ad2a",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/shipping-build-aot.sh.txt",
+      "bytes": 1247,
+      "sha256": "bae8182aa9d35d9a16f9845df813461d6dad0d72385a4326c52fea14c7169fcb",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/shipping-build-local.sh.txt",
+      "bytes": 1931,
+      "sha256": "e2855e036e4fb76a0cc1bf32bca5399a6e70f1dc5a5027182fe881e3476bb0bc",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/shipping-check-source.py.txt",
+      "bytes": 888,
+      "sha256": "f3ccdf1305d574f136b617cd5c6e4209c243000604ae24643695a7e2a8a70e49",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/shipping-freeze-and-run-native-n1.sh.txt",
+      "bytes": 1480,
+      "sha256": "af9b8e8d0380b2e45f50a9ccefa1a59e4d25b77630b990d875f4de20f5ec7e6e",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/shipping-gpu-env-n1.sh.txt",
+      "bytes": 1487,
+      "sha256": "5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/shipping-qualify-order5-n1.sh.txt",
+      "bytes": 896,
+      "sha256": "8bc7f9e178700048a56e6f05e70e0ab2c94f16e2c7b5966f02e3bbe1f3ae5e7d",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/verify-public-default.py.txt",
+      "bytes": 4371,
+      "sha256": "e4908f052cd5f2de8a96260cbaa54171458449d52fcbc9317869712c66d36e29",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/analysis.json",
+      "bytes": 1481,
+      "sha256": "3da0ae2ada6fd48edd1755296715fa8fda31abd50f608e2b6c8674f22e5954d4",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/binary-check.txt",
+      "bytes": 228,
+      "sha256": "1eb77ddb16456566ec1d0721145203a12eefb475e32931df45c67ae2f35f9aac",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/driver.sha256",
+      "bytes": 307,
+      "sha256": "47270c72141ae44c754e7122716643037d2a00858803b2212a676a85961b6c11",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/job.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/job.txt.gz",
+      "bytes": 666,
+      "sha256": "5f85c5abef61acc41893bdd32e10cc626ad84f94f5207a670001e49487c7eb3f",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/major-kernel-events.json",
+      "bytes": 15234,
+      "sha256": "59082962857f6ae28e865be028d7c1b6c5f6564e3797b0e4bb3173b417cf2f95",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/nsys-version.txt",
+      "bytes": 58,
+      "sha256": "96ee6a04a390c528d5eafc7b21d5524f5e3f5864367724288ca2429a0b5445db",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/profile-public-warm-n1.sh.txt",
+      "bytes": 1712,
+      "sha256": "bdb6119f96dcfc1042cdfeb0cbbe0a6bdb352bab05aaec3d298b46feaf1a66b8",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/profile-public-warm.py.txt",
+      "bytes": 1290,
+      "sha256": "4b042e200f09a88800ed67626f7e6123e5aa1e66cf31871fd07e6da896f2bed9",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/profiled-native-96.json.gz",
+      "bytes": 46244,
+      "sha256": "ba5db53fcf68dfc6581e4d3f7a6451b0ed80918e83a8578a7818bb089cef82b0",
+      "role": "samples"
+    },
+    {
+      "path": "profile/read-profile-events.py.txt",
+      "bytes": 796,
+      "sha256": "1992e731ba1fc349109bac4ae5f0d6cf0dc13d1943a1878aa9003577f85664fe",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/source-check.txt",
+      "bytes": 119,
+      "sha256": "cf18dec7c3feac244481b16cafbb674838d3a5f3347c716ba7e40866604930e6",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/statistics_cuda_api_sum.csv",
+      "bytes": 1006,
+      "sha256": "14c09e5199e3c2f43bd2529e07cc4cd030e2c783909e153974d7675bdf9e6c62",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/statistics_cuda_gpu_kern_sum.csv",
+      "bytes": 24649,
+      "sha256": "990815b940639dfe76e225f9b5a53280586f5aa3e16b8116a033fab37e573c09",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/statistics_nvtx_sum.csv",
+      "bytes": 205,
+      "sha256": "25dfb1a1cfa6ef473c5d413dd6435eb29ee77da5ef2a7821edf1508080e103c7",
+      "role": "reproduction"
+    },
+    {
+      "path": "profile/verified.json",
+      "bytes": 2693,
+      "sha256": "350599fc61447b2309aa8e87581a1ff14c5973dbbc4642beb7cbdd96b9d8f1ea",
+      "role": "reproduction"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 16243,
+      "sha256": "4fb1de6716d66e631d4c5fe0dfe450c2d9fb8f3f4cb352cab3be968d2c9206c7",
+      "role": "reproduction"
+    },
+    {
+      "path": "reconstruction.json",
+      "bytes": 549,
+      "sha256": "aafd5203bf5d571133cca34c41b697532a3aa30329b83ba954659f6b994fd689",
+      "role": "reproduction"
+    },
+    {
+      "path": "reference-48.json.gz",
+      "bytes": 17962,
+      "sha256": "4ebe6be0d18d0fc110dd79a2cf327e9e9366f1b159c76100e5c2016e6066c6c7",
+      "role": "samples"
+    },
+    {
+      "path": "reference-96.json.gz",
+      "bytes": 30758,
+      "sha256": "9ac89753d7e50b6d34b2cbfca916e8c3f80653095ffbae01b2c1cce64fe9a13d",
+      "role": "samples"
+    },
+    {
+      "path": "shipping-transplant.json",
+      "bytes": 11244,
+      "sha256": "35ee8f82474f00fb031a24de32dace2ac131b588e2d17b3ffed0df0212bba9c4",
+      "role": "reproduction"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 14285,
+      "sha256": "af51338732f8426e4e1b30fd084b3d2c14c01febbf91c83a3b948b10d61326cb",
+      "role": "summary"
+    },
+    {
+      "path": "validation.json",
+      "bytes": 21469,
+      "sha256": "3a118e3cde7ab653b2acb9ee38e4c07bb936f550ac3ce1aff02b5478b216b5b1",
+      "role": "evidence"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 7709,
+      "sha256": "85035c3af298f2f4decba467516c65112c0fe0bf8e11f679a8572aedba853e81",
+      "role": "reproduction"
+    }
+  ],
+  "decision": {
+    "scope": "numerical",
+    "status": "accepted",
+    "reason": "All 288 same-geometry reference pairings pass unchanged E/F gates. Complete endpoint improvements are reported separately; #1895 parity and automatic profile promotion are not established."
+  },
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-weighted-order5-20261005/verify.py"
+    ]
+  }
+}

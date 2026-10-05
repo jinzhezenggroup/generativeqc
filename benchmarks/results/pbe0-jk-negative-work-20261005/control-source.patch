@@ -1,0 +1,481 @@
+diff --git a/src/scf/cuda/direct_coulomb.cpp b/src/scf/cuda/direct_coulomb.cpp
+index 521ad2689..f485f7d58 100644
+--- a/src/scf/cuda/direct_coulomb.cpp
++++ b/src/scf/cuda/direct_coulomb.cpp
+@@ -537,14 +537,16 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
+           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
+           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
+           b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
+-          p.heads + cls, nullptr, nullptr);
++          p.heads + cls, p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr,
++          nullptr);
+       if (error != cudaSuccess) return error;
+     }
+     if (shared.class_mask & kNativeStreamingFockShellClassMask) {
+       launch_bounded_direct_dddd_streaming_kernel(
+           unrestricted, DirectScreeningPurpose::Fock, false, shared.worker_blocks, 32, 0,
+           shared.stream, b, p.topology, shared.screening, shared.schwarz, p.direct_spin,
+-          shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr, nullptr);
++          shared.active, p.direct_exchange, p.heads + kDdddShellClass, nullptr,
++          p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
+       error = cudaGetLastError();
+       if (error != cudaSuccess) return error;
+     }
+@@ -862,14 +864,15 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
+     error = generated::launch_shell_class_streaming_fock(
+         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
+         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
+-        p.schwarz, p.density, p.coulomb, p.heads + cls, nullptr, nullptr);
++        p.schwarz, p.density, p.coulomb, p.heads + cls,
++        p.admitted_shell_counts ? p.admitted_shell_counts + cls : nullptr, nullptr);
+     if (error != cudaSuccess) return error;
+   }
+   if (p.value_class_mask & kNativeStreamingFockShellClassMask) {
+     launch_bounded_direct_dddd_streaming_kernel(
+         false, DirectScreeningPurpose::Fock, false, p.worker_blocks, 32, 0, p.stream, b, p.topology,
+         p.screening, p.schwarz, p.density, p.active, p.coulomb, p.heads + kDdddShellClass, nullptr,
+-        nullptr);
++        p.admitted_shell_counts ? p.admitted_shell_counts + kDdddShellClass : nullptr);
+   }
+   return cudaGetLastError();
+ }
+diff --git a/src/scf/cuda/direct_coulomb.hpp b/src/scf/cuda/direct_coulomb.hpp
+index ef9099316..cce7283b5 100644
+--- a/src/scf/cuda/direct_coulomb.hpp
++++ b/src/scf/cuda/direct_coulomb.hpp
+@@ -46,6 +46,12 @@ struct GeneratedCoulombPlan {
+   const std::uint32_t* pair_order{};
+   const std::uint32_t* pair_class_offsets{};
+   GeneratedShellPairStream* topology{};
++  /** Optional borrowed profiler array, one entry per direct shell class.
++   * Counts admitted streaming J task dispatches, not primitive recurrences or
++   * rejected candidates. Bounded fallback classes are unobserved. The caller
++   * owns zeroing, charged storage and stream-ordered lifetime; null in normal
++   * execution. These intrusive observations must not supply clean timing. */
++  unsigned long long* admitted_shell_counts{};
+   ~GeneratedCoulombPlan();
+ };
+ 
+@@ -91,6 +97,9 @@ struct GeneratedExchangePlan {
+   std::uint32_t* bounded_value_overflow{};
+   double *shell_pair_block_bounds{}, *force{};
+   unsigned long long* force_cursor{};
++  /** Same borrowed streaming-task census as the J owner, but for raw K.
++   * The separate array prevents a J traversal being mislabeled as K work. */
++  unsigned long long* admitted_shell_counts{};
+   ~GeneratedExchangePlan();
+ };
+ 
+diff --git a/src/scf/cuda/direct_jk.cpp b/src/scf/cuda/direct_jk.cpp
+index 2d2822de8..a5cc96f9b 100644
+--- a/src/scf/cuda/direct_jk.cpp
++++ b/src/scf/cuda/direct_jk.cpp
+@@ -1037,18 +1037,31 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
+     // silently widening its FP32 arithmetic. Retire this fallback when the
+     // generated streaming owner can express FP32 ERI recurrence + FP64 density
+     // product/Fock accumulation and passes the existing mixed-work/numerical
+-    // gates; do not remove the !mixed_j guards before that contract exists.
++    // gates; keep the J-only !mixed_j guard until that contract exists.
+     const bool generated_coulomb_available =
+         !mixed_j && (plan->generated_exchange
+                          ? direct_jk_generated_full_range_value_available(*plan)
+                          : generated_coulomb != nullptr && generated_coulomb->value_capability);
+     const bool generated_exchange_available =
+-        !mixed_j && direct_jk_generated_exchange_value_available(*plan, spec);
+-    const bool shell_values_cover_request =
+-        !mixed_j && (!spec.coulomb.present || generated_coulomb_available) &&
+-        (!spec.exchange.present || generated_exchange_available);
+-    if ((spec.coulomb.present || spec.exchange.present) && plan->canonical_pairs && !mixed_j &&
+-        !shell_values_cover_request) {
++        direct_jk_generated_exchange_value_available(*plan, spec);
++    const auto dispatch = direct_jk_value_dispatch(
++        generated_coulomb_available, generated_exchange_available, spec.coulomb.present,
++        spec.exchange.present, mixed_j, plan->canonical_pairs != nullptr);
++    // Resolve and execute J/K independently over the same immutable ERI owner.
++    // In particular, recurrence-only mixed J must not replace strict generated
++    // K; a range-K fallback must not pull a qualified full-range J into it.
++    if (dispatch.generated_coulomb) {
++      if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
++        direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted, density,
++                                                  beta, coulomb));
++      else
++        direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
++    }
++    if (dispatch.generated_exchange)
++      direct_jk_check(enqueue_generated_exchange(
++          *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
++          direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0));
++    if (dispatch.canonical_coulomb || dispatch.canonical_exchange) {
+       const auto dimension = static_cast<std::size_t>(plan->canonical_batch.nbf);
+       const auto matrix = direct_jk_product(dimension, dimension);
+       const auto spin_count = unrestricted ? 2U : 1U;
+@@ -1056,9 +1069,9 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
+           direct_jk_product(matrix * plan->diagnostic.batch_size * spin_count, sizeof(double));
+       direct_jk_canonical_density(plan, unrestricted, density, beta, 0,
+                                   plan->diagnostic.batch_size);
+-      if (spec.coulomb.present)
++      if (dispatch.canonical_coulomb)
+         direct_jk_check(cudaMemsetAsync(plan->canonical_coulomb, 0, scratch_bytes, plan->stream));
+-      if (spec.exchange.present)
++      if (dispatch.canonical_exchange)
+         direct_jk_check(cudaMemsetAsync(plan->canonical_exchange, 0, scratch_bytes, plan->stream));
+       for (std::size_t item = 0; item < plan->diagnostic.batch_size; ++item) {
+         const auto& offsets = plan->canonical_pair_offsets[item];
+@@ -1069,58 +1082,34 @@ static generativeqc_status enqueue_cuda_direct_jk_device_impl(
+                 static_cast<std::int32_t>(item), first + second, plan->canonical_pairs,
+                 direct_jk_pair_rows(plan, second, offsets[first]), offsets[first],
+                 offsets[first + 1U] - offsets[first], offsets[second],
+-                offsets[second + 1U] - offsets[second], first == second, spec.coulomb.present,
+-                spec.exchange.present, unrestricted, direct_exchange_range(spec.exchange),
+-                spec.exchange.present ? spec.exchange.omega : 0.0, plan->screening_tolerance,
++                offsets[second + 1U] - offsets[second], first == second, dispatch.canonical_coulomb,
++                dispatch.canonical_exchange, unrestricted, direct_exchange_range(spec.exchange),
++                dispatch.canonical_exchange ? spec.exchange.omega : 0.0, plan->screening_tolerance,
+                 plan->canonical_bounds, plan->canonical_density, plan->canonical_coulomb,
+                 plan->canonical_exchange, plan->canonical_work_count);
+             direct_jk_check(cudaGetLastError());
+           }
+       }
+-      if (spec.coulomb.present)
++      if (dispatch.canonical_coulomb)
+         direct_jk_canonical_output(plan, unrestricted, plan->canonical_coulomb, coulomb, nullptr);
+-      if (spec.exchange.present)
++      if (dispatch.canonical_exchange)
+         direct_jk_canonical_output(plan, unrestricted, plan->canonical_exchange, alpha_exchange,
+                                    unrestricted ? beta_exchange : nullptr);
+-      for (const auto* output : outputs)
+-        if (output) {
+-          launch_independent_jk_finite_kernel(plan->stream, output, elements, numerical_error);
+-          direct_jk_check(cudaGetLastError());
+-        }
+-    } else if (spec.coulomb.present || spec.exchange.present) {
+-      // Derivative capability is an owner maximum, not a value-schedule request.
+-      // Full-range value ownership can combine generated/native classes with
+-      // the bounded higher-l shell fallback.
+-      const auto dispatch =
+-          direct_jk_value_dispatch(generated_coulomb_available, generated_exchange_available,
+-                                   spec.coulomb.present, spec.exchange.present, mixed_j);
+-      if (dispatch.generated_coulomb) {
+-        if (plan->generated_exchange && !plan->generated_exchange->shared->value_capability)
+-          direct_jk_check(enqueue_generated_coulomb(*plan->generated_exchange, unrestricted,
+-                                                    density, beta, coulomb));
+-        else
+-          direct_jk_check(enqueue_generated_coulomb(*generated_coulomb, density, beta, coulomb));
+-      }
+-      if (dispatch.generated_exchange)
+-        direct_jk_check(enqueue_generated_exchange(
+-            *plan->generated_exchange, unrestricted, density, beta, alpha_exchange, beta_exchange,
+-            direct_exchange_range(spec.exchange),
+-            spec.exchange.present ? spec.exchange.omega : 0.0));
+-      if (dispatch.generic_coulomb || dispatch.generic_exchange) {
+-        launch_independent_jk_kernel(
+-            static_cast<unsigned>(elements), kIndependentJkThreads, 0, plan->stream, plan->batch, 0,
+-            dispatch.generic_coulomb, dispatch.generic_exchange, unrestricted, mixed_j,
+-            direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0,
+-            plan->screening_tolerance, plan->bounds, density, beta, coulomb, alpha_exchange,
+-            beta_exchange, mixed_coulomb_work_count);
++    }
++    if (dispatch.generic_coulomb || dispatch.generic_exchange) {
++      launch_independent_jk_kernel(
++          static_cast<unsigned>(elements), kIndependentJkThreads, 0, plan->stream, plan->batch, 0,
++          dispatch.generic_coulomb, dispatch.generic_exchange, unrestricted, mixed_j,
++          direct_exchange_range(spec.exchange), spec.exchange.present ? spec.exchange.omega : 0.0,
++          plan->screening_tolerance, plan->bounds, density, beta, coulomb, alpha_exchange,
++          beta_exchange, mixed_coulomb_work_count);
++      direct_jk_check(cudaGetLastError());
++    }
++    for (const auto* output : outputs)
++      if (output) {
++        launch_independent_jk_finite_kernel(plan->stream, output, elements, numerical_error);
+         direct_jk_check(cudaGetLastError());
+       }
+-      for (const auto* output : outputs)
+-        if (output) {
+-          launch_independent_jk_finite_kernel(plan->stream, output, elements, numerical_error);
+-          direct_jk_check(cudaGetLastError());
+-        }
+-    }
+   });
+ }
+ 
+diff --git a/src/scf/cuda/direct_jk_plan.hpp b/src/scf/cuda/direct_jk_plan.hpp
+index 8f616cb20..2800fb655 100644
+--- a/src/scf/cuda/direct_jk_plan.hpp
++++ b/src/scf/cuda/direct_jk_plan.hpp
+@@ -15,19 +15,27 @@ namespace generativeqc::scf {
+ /** Select resident value sources without changing the requested mathematics.
+  * Generated J/K are exact FP64 full-range consumers on the same provider stream.
+  * Through-f SR/LR K requires the explicit bounded value qualification opt-in;
+- * mixed-J and missing optional capacity retain the canonical/generic source.
++ * Each channel retains its own fallback: mixed J does not change strict K's
++ * provider, and an uncovered exchange operator does not discard generated J.
+  */
+ struct DirectJkValueDispatch {
+   bool generated_coulomb{}, generated_exchange{}, generic_coulomb{}, generic_exchange{};
++  bool canonical_coulomb{}, canonical_exchange{};
+ };
+-constexpr DirectJkValueDispatch direct_jk_value_dispatch(bool generated_coulomb_available,
+-                                                         bool generated_exchange_available,
+-                                                         bool want_coulomb, bool want_exchange,
+-                                                         bool mixed_coulomb) noexcept {
++constexpr DirectJkValueDispatch direct_jk_value_dispatch(
++    bool generated_coulomb_available, bool generated_exchange_available, bool want_coulomb,
++    bool want_exchange, bool mixed_coulomb, bool canonical_available = false) noexcept {
+   const bool generated_coulomb = generated_coulomb_available && want_coulomb && !mixed_coulomb;
+-  const bool generated_exchange = generated_exchange_available && want_exchange && !mixed_coulomb;
+-  return {generated_coulomb, generated_exchange, want_coulomb && !generated_coulomb,
+-          want_exchange && !generated_exchange};
++  const bool generated_exchange = generated_exchange_available && want_exchange;
++  const bool canonical_coulomb =
++      canonical_available && want_coulomb && !generated_coulomb && !mixed_coulomb;
++  const bool canonical_exchange = canonical_available && want_exchange && !generated_exchange;
++  return {generated_coulomb,
++          generated_exchange,
++          want_coulomb && !generated_coulomb && !canonical_coulomb,
++          want_exchange && !generated_exchange && !canonical_exchange,
++          canonical_coulomb,
++          canonical_exchange};
+ }
+ constexpr DirectJkValueDispatch direct_jk_value_dispatch(bool generated_coulomb_available,
+                                                          bool want_coulomb, bool want_exchange,
+diff --git a/tests/native/test_cuda_fock_provider.cpp b/tests/native/test_cuda_fock_provider.cpp
+index 0696a0dfa..65c797e8f 100644
+--- a/tests/native/test_cuda_fock_provider.cpp
++++ b/tests/native/test_cuda_fock_provider.cpp
+@@ -15,6 +15,7 @@
+ 
+ #include "integrals/s_integrals.hpp"
+ #include "molecule/basis.hpp"
++#include "runtime/resource_cuda.cuh"
+ #include "runtime/resource_ledger.hpp"
+ #include "scf/cuda/direct_jk_kernels.hpp"
+ #include "scf/cuda/direct_jk_plan.hpp"
+@@ -77,6 +78,51 @@ struct DeviceCounter {
+   }
+ };
+ 
++/** Observe actual streaming/canonical dispatch, independently of selector flags.
++ * This intrusive census is only a numerical/routing gate, never a timing run.
++ * Detach after draining so neither a failed test nor plan teardown keeps a
++ * dangling borrowed pointer. All optional storage is charged to the runtime.
++ */
++struct DirectValueCensus {
++  static constexpr auto classes = detail::kDirectQuartetShellClassCount;
++  CudaDirectJkPlan& plan;
++  unsigned long long* device{};
++  explicit DirectValueCensus(CudaDirectJkPlan& owner) : plan(owner) {
++    require(plan.generated_exchange && plan.generated_exchange->shared &&
++                !plan.canonical_work_count && !plan.generated_exchange->admitted_shell_counts &&
++                !plan.generated_exchange->shared->admitted_shell_counts,
++            "census requires an unobserved generated shell owner");
++    check(generativeqc::runtime::resource_cuda_malloc(reinterpret_cast<void**>(&device),
++                                                      (2 * classes + 2) * sizeof(*device)));
++    plan.generated_exchange->shared->admitted_shell_counts = device;
++    plan.generated_exchange->admitted_shell_counts = device + classes;
++    plan.canonical_work_count = reinterpret_cast<std::uint64_t*>(device + 2 * classes);
++  }
++  ~DirectValueCensus() {
++    cudaStreamSynchronize(plan.stream);
++    plan.generated_exchange->shared->admitted_shell_counts = nullptr;
++    plan.generated_exchange->admitted_shell_counts = nullptr;
++    plan.canonical_work_count = nullptr;
++    generativeqc::runtime::resource_cuda_free(device);
++  }
++  void reset() {
++    check(cudaMemsetAsync(device, 0, (2 * classes + 2) * sizeof(*device), plan.stream));
++  }
++  std::array<unsigned long long, 3> totals() {
++    std::array<unsigned long long, 2 * classes + 2> counts{};
++    check(cudaMemcpyAsync(counts.data(), device, sizeof(counts), cudaMemcpyDeviceToHost,
++                          plan.stream));
++    check(cudaStreamSynchronize(plan.stream));
++    std::array<unsigned long long, 3> result{};
++    for (std::size_t cls = 0; cls < classes; ++cls) {
++      result[0] += counts[cls];
++      result[1] += counts[classes + cls];
++    }
++    result[2] = counts[2 * classes + 1];  // Actual canonical radial evaluations.
++    return result;
++  }
++};
++
+ /** Exercise the same resident boundary consumed by native KS: enqueue on the
+  * provider stream, then explicitly export only at this reference boundary. */
+ void direct_device(CudaDirectJkPlan* plan, FockBuildSpec spec, const std::vector<double>& a,
+@@ -456,54 +502,75 @@ void prepared_interaction_source_device(const generativeqc::core::System& system
+           "prepared CUDA interaction source silently published a host ERI");
+ }
+ 
++/** Independent CPU ERIs protect strict K while J alone uses mixed recurrence.
++ * Include DDDD, canonical through-f, signed nonsymmetric spins, moved geometry
++ * and both public AO representations. Counters must prove the intended source
++ * executed: merely checking a populated owner would miss dispatch coupling.
++ */
+ void mixed_coulomb_preserves_strict_exchange() {
+-  generativeqc::core::System system;
+-  system.atoms = {{1, {0.0, 0.0, -0.7}}, {1, {0.0, 0.0, 0.7}}};
+-  system.shells = {{0, 0, {{0.8, 1.0}}}, {1, 0, {{0.6, 1.0}}}};
+-  system.electron_count = 2;
+-  system.basis_representation = GENERATIVEQC_BASIS_CARTESIAN;
+-  std::string detail;
+-  require(
+-      generativeqc::molecule::validate_and_normalize(system, detail) == GENERATIVEQC_STATUS_SUCCESS,
+-      detail.c_str());
+-  const std::size_t n = generativeqc::molecule::ao_count(system), matrix = n * n;
+-  const std::vector<double> density{0.9, 0.2, -0.1, 0.7};
+-  const std::vector<double> zeros(matrix, 0.0);
+-  CudaDirectJkPlan* raw{};
+-  CudaDirectJkDiagnostic diagnostic;
+-  require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, 32U * 1024U * 1024U, &raw, diagnostic,
+-                                     detail) == GENERATIVEQC_STATUS_SUCCESS,
+-          detail.c_str());
+-  std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
+-      raw, &destroy_cuda_direct_jk_plan);
+-  auto spec = make_hf_fock_spec(FockSpin::Restricted);
+-  spec.derivative_order = 0;
+-  DeviceMatrix device_density(density), strict_j(zeros), strict_k(zeros), mixed_j(zeros),
+-      mixed_k(zeros), error({0.0});
+-  DeviceCounter count;
+-  auto* failure = reinterpret_cast<int*>(error.pointer);
+-  require(enqueue_cuda_direct_jk_device(plan.get(), spec, device_density.pointer, nullptr, matrix,
+-                                        strict_j.pointer, strict_k.pointer, nullptr, failure,
+-                                        detail) == GENERATIVEQC_STATUS_SUCCESS,
+-          detail.c_str());
+-  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+-  count.set(0);
+-  require(enqueue_cuda_direct_jk_device_mixed_j(plan.get(), spec, device_density.pointer, nullptr,
+-                                                matrix, mixed_j.pointer, mixed_k.pointer, nullptr,
+-                                                failure, detail,
+-                                                count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
+-          detail.c_str());
+-  check(cudaStreamSynchronize(cuda_direct_jk_stream(plan.get())));
+-  require(count.get() > 0, "mixed-J hybrid did not execute mixed Coulomb work");
+-  std::vector<double> strict_exchange(matrix), mixed_exchange(matrix);
+-  check(cudaMemcpy(strict_exchange.data(), strict_k.pointer, matrix * sizeof(double),
+-                   cudaMemcpyDeviceToHost));
+-  check(cudaMemcpy(mixed_exchange.data(), mixed_k.pointer, matrix * sizeof(double),
+-                   cudaMemcpyDeviceToHost));
+-  for (std::size_t i = 0; i < matrix; ++i)
+-    require(std::isfinite(strict_exchange[i]) && std::isfinite(mixed_exchange[i]) &&
+-                std::abs(strict_exchange[i] - mixed_exchange[i]) < 3e-12,
+-            "mixed-J hybrid changed strict FP64 exchange");
++  for (unsigned angular : {0U, 1U, 2U, 3U})
++    for (auto representation : {GENERATIVEQC_BASIS_CARTESIAN, GENERATIVEQC_BASIS_SPHERICAL}) {
++      generativeqc::core::System system;
++      system.atoms = {{1, {0.0, 0.1, -0.7}}, {1, {0.2, -0.1, 0.7 + 0.03 * angular}}};
++      system.shells = {{0, 0, {{0.8, 1.0}}}, {1, angular, {{0.6, 1.0}}}};
++      if (angular == 2) system.shells.push_back({0, 1, {{1.1, 1.0}}});
++      system.electron_count = 2;
++      system.basis_representation = representation;
++      std::string detail;
++      require(generativeqc::molecule::validate_and_normalize(system, detail) ==
++                  GENERATIVEQC_STATUS_SUCCESS,
++              detail.c_str());
++      const auto oracle = generativeqc::integrals::build_integrals(system, false);
++      const std::size_t n = oracle.nbf, matrix = n * n;
++      std::vector<double> alpha(matrix), beta(matrix), zeros(matrix, 0.0);
++      for (std::size_t ij = 0; ij < matrix; ++ij) {
++        alpha[ij] = std::cos(0.3 * (ij / n) + 0.7 * (ij % n)) / n;
++        beta[ij] = std::sin(0.8 * (ij / n) - 0.2 * (ij % n)) / n;
++      }
++      CudaDirectJkPlan* raw{};
++      CudaDirectJkDiagnostic diagnostic;
++      require(create_cuda_direct_jk_plan(0, {system}, 0, 0.0, 32U << 20, &raw, diagnostic,
++                                         detail) == GENERATIVEQC_STATUS_SUCCESS,
++              detail.c_str());
++      std::unique_ptr<CudaDirectJkPlan, decltype(&destroy_cuda_direct_jk_plan)> plan(
++          raw, &destroy_cuda_direct_jk_plan);
++      DirectValueCensus census(*plan);
++      DeviceMatrix da(alpha), db(beta), j(zeros), ka(zeros), kb(zeros), error({0.0});
++      DeviceCounter count;
++      for (bool unrestricted : {false, true}) {
++        auto spec = make_hf_fock_spec(unrestricted ? FockSpin::Unrestricted : FockSpin::Restricted);
++        spec.derivative_order = 0;
++        const auto expected =
++            build_exact_direct_jk(resolve_fock_build(spec, FockBackend::Cpu, 0.0), n, oracle.eri,
++                                  alpha, unrestricted ? beta : std::vector<double>{});
++        census.reset();
++        require(enqueue_cuda_direct_jk_device_mixed_j(
++                    plan.get(), spec, da.pointer, unrestricted ? db.pointer : nullptr, matrix,
++                    j.pointer, ka.pointer, unrestricted ? kb.pointer : nullptr,
++                    reinterpret_cast<int*>(error.pointer), detail,
++                    count.pointer) == GENERATIVEQC_STATUS_SUCCESS,
++                detail.c_str());
++        const auto work = census.totals();
++        require(count.get() > 0 && work[0] == 0,
++                "mixed-J request changed its recurrence-only arithmetic route");
++        require(angular <= 2 ? (work[1] > 0 && work[2] == 0) : (work[1] == 0 && work[2] > 0),
++                "mixed J displaced strict generated/canonical K");
++        ka.verify(expected.exchange_alpha);
++        if (unrestricted) kb.verify(expected.exchange_beta);
++        std::vector<double> actual_j(matrix);
++        check(cudaMemcpy(actual_j.data(), j.pointer, matrix * sizeof(double),
++                         cudaMemcpyDeviceToHost));
++        for (std::size_t ij = 0; ij < matrix; ++ij)
++          require(
++              std::isfinite(actual_j[ij]) && std::abs(actual_j[ij] - expected.coulomb[ij]) < 3e-6,
++              "mixed-J matrix differs from independent CPU beyond its acceptance gate");
++        int failure = -1;
++        check(cudaMemcpy(&failure, error.pointer, sizeof(failure), cudaMemcpyDeviceToHost));
++        require(failure == 0, "mixed-J/strict-K split reported a numerical failure");
++        da.verify(alpha);
++        db.verify(beta);
++      }
++    }
+ }
+ 
+ void direct_value_dispatch_selection() {
+@@ -538,9 +605,17 @@ void direct_value_dispatch_selection() {
+           "qualified K-only request did not select generated exchange");
+ 
+   const auto generated_mixed = direct_jk_value_dispatch(true, true, true, true, true);
+-  require(!generated_mixed.generated_coulomb && !generated_mixed.generated_exchange &&
+-              generated_mixed.generic_coulomb && generated_mixed.generic_exchange,
+-          "mixed-J request incorrectly entered generated exchange route");
++  require(!generated_mixed.generated_coulomb && generated_mixed.generated_exchange &&
++              generated_mixed.generic_coulomb && !generated_mixed.generic_exchange,
++          "mixed J displaced an independently qualified strict exchange route");
++  const auto range_fallback = direct_jk_value_dispatch(true, false, true, true, false, true);
++  require(range_fallback.generated_coulomb && range_fallback.canonical_exchange &&
++              !range_fallback.canonical_coulomb && !range_fallback.generic_exchange,
++          "canonical range K displaced generated J");
++  const auto mixed_fallback = direct_jk_value_dispatch(false, false, true, true, true, true);
++  require(mixed_fallback.generic_coulomb && mixed_fallback.canonical_exchange &&
++              !mixed_fallback.canonical_coulomb && !mixed_fallback.generic_exchange,
++          "mixed J displaced canonical strict K");
+ }
+ 
+ void device_selection() {
+@@ -812,8 +887,7 @@ void spd_canonical_range_values() {
+                   constrained->generated_exchange->force_capability &&
+                   constrained_diagnostic.device_bytes == generated_budget,
+               "optional canonical range storage displaced the constrained SPD owner");
+-      DeviceMatrix census(std::vector<double>(2U, 0.0));
+-      plan->canonical_work_count = reinterpret_cast<std::uint64_t*>(census.pointer);
++      DirectValueCensus census(*plan);
+       const auto source_n = static_cast<std::size_t>(plan->canonical_batch.nbf);
+       const auto pairs = source_n * (source_n + 1U) / 2U;
+       const auto quartets = 2U * pairs * (pairs + 1U) / 2U;
+@@ -863,14 +937,19 @@ void spd_canonical_range_values() {
+                   }
+                 }
+               }
++              census.reset();
+               direct_device(plan.get(), spec, alpha, beta, expected_j, expected_a, expected_b);
++              const auto channels = census.totals();
++              require((channels[0] > 0) == want_j &&
++                          (channels[1] > 0) == (want_k && op == FockOperator::FullRange),
++                      "range fallback displaced an independently generated J/K channel");
+               std::array<std::uint64_t, 2> work{};
+               check(cudaMemcpy(work.data(), plan->canonical_work_count, sizeof(work),
+                                cudaMemcpyDeviceToHost));
+               const bool canonical = want_k && op != FockOperator::FullRange;
+-              require(work[0] == (canonical ? quartets : 0U) &&
+-                          work[1] == (canonical ? quartets * (want_j ? 2U : 1U) : 0U),
+-                      "SPD generated/canonical selection disagrees with actual source work");
++              require(
++                  work[0] == (canonical ? quartets : 0U) && work[1] == (canonical ? quartets : 0U),
++                  "SPD generated/canonical selection disagrees with actual source work");
+               direct_device(constrained.get(), spec, alpha, beta, expected_j, expected_a,
+                             expected_b);
+             }

@@ -444,6 +444,9 @@ macro(generativeqc_register_host_generated_sources target)
   file(GLOB GENERATIVEQC_RCCSD_GENERATOR_INPUTS CONFIGURE_DEPENDS
        "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/cc/*.py"
        "${CMAKE_CURRENT_SOURCE_DIR}/tools/generativeqc_cc/*.py")
+  list(APPEND GENERATIVEQC_RCCSD_GENERATOR_INPUTS
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/method/cc_denominators.py"
+       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py")
   set(GENERATIVEQC_GFN2_SDQ_CPU_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_gfn2_sdq_native.hpp")
   generativeqc_register_generated_sources(
@@ -796,12 +799,19 @@ macro(generativeqc_register_cuda_generated_sources target)
 
   set(GENERATIVEQC_WEIGHTED_ERI_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/weighted_eri.cuh")
+  set(GENERATIVEQC_ORDER4_WEIGHTED_ERI_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/order4_weighted_eri.cuh")
+  set(GENERATIVEQC_ORDER5_WEIGHTED_ERI_HEADER
+      "${CMAKE_CURRENT_BINARY_DIR}/generated/order5_weighted_eri.cuh")
   generativeqc_register_generated_sources(
     TARGET ${target}
     ADD_TO_TARGET
     GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_weighted_eri_kernels.py"
-    OUTPUTS "${GENERATIVEQC_WEIGHTED_ERI_HEADER}"
-    ARGS --output "${GENERATIVEQC_WEIGHTED_ERI_HEADER}")
+    OUTPUTS "${GENERATIVEQC_WEIGHTED_ERI_HEADER}" "${GENERATIVEQC_ORDER4_WEIGHTED_ERI_HEADER}"
+            "${GENERATIVEQC_ORDER5_WEIGHTED_ERI_HEADER}"
+    ARGS --output "${GENERATIVEQC_WEIGHTED_ERI_HEADER}"
+         --order4-output "${GENERATIVEQC_ORDER4_WEIGHTED_ERI_HEADER}"
+         --order5-output "${GENERATIVEQC_ORDER5_WEIGHTED_ERI_HEADER}")
 
   set(GENERATIVEQC_DIRECT_RESIDENT_PSSS_SCHEDULE_HEADER
       "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_direct_resident_psss_schedule.cuh")

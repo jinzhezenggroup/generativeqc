@@ -87,6 +87,33 @@ def test_deep_scalar_evaluation_does_not_depend_on_python_call_stack() -> None:
     )
 
 
+def test_topological_order_cache_is_append_safe_for_existing_roots() -> None:
+    """Reuse immutable DAG traversal while preserving the public list API."""
+
+    graph = Graph()
+    x = graph.variable("x")
+    y = graph.variable("y")
+    root = (x + y) * x
+
+    cached = graph._topological_order_tuple((root,))
+    assert graph._topological_order_tuple((root,)) is cached
+    assert graph.topological_order((root,)) == list(cached)
+
+    # Appending unrelated immutable nodes cannot change an existing root's
+    # reachable subgraph, so the cached order remains valid without invalidation.
+    graph.exponential(graph.variable("unreachable"))
+    assert graph._topological_order_tuple((root,)) is cached
+
+    extra = graph.variable("extra")
+    combined = graph._topological_order_tuple((root, extra))
+    assert combined is graph._topological_order_tuple((root, extra))
+    assert combined != cached
+
+    for index in range(16):
+        graph._topological_order_tuple((root, graph.variable(f"cache_{index}")))
+    assert len(graph._topological_orders) == 8
+
+
 def test_ssa_analysis_records_shared_last_uses_and_peak_liveness() -> None:
     """Count a shared operand through its final consumer and root output."""
 

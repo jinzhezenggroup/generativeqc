@@ -1,0 +1,55 @@
+{
+  "schema": "generativeqc.weighted-force-transplant.v1",
+  "revision": "dfeabdc0d6b0985c89e2a7c88442504c32efa801",
+  "source_identity": "a1236412fe2b155036897275049af74e39a888765a73b8f9d32d70b5459b92e0",
+  "base_master": "a32b6cfd63ad07d66f8494591031822e1483e69f",
+  "slurm_job": 5907,
+  "endpoint_measured": false,
+  "scientific_dispatch_sources": {
+    "src/scf/cuda/direct_bounded_fallback.cu": {
+      "sha256": "a051086353936ab24ab4eebb5231026c835d0a7ac559fc1a9a2ed15330ac9e9a",
+      "identical_to_composed_candidate": true
+    },
+    "src/scf/cuda/direct_force_low_order_sources.cuh": {
+      "sha256": "1b25a20cd92d91cf2b3c4a84cabb2c25d02de64d4c75a4b91a94186e6efed9b2",
+      "identical_to_composed_candidate": true
+    },
+    "src/scf/cuda/direct_force_order4_sources.cuh": {
+      "sha256": "a2f1c546d6a9234b2ee44a33cb6b7a6a0acbec1c2a31aab41225df1a0759c87e",
+      "identical_to_composed_candidate": true
+    },
+    "src/scf/cuda/direct_constants.hpp": {
+      "sha256": "22ba6a588a572a5af2ff99910adaab9db77fb30222a73ad997ff2104907ee21f",
+      "identical_to_composed_candidate": true
+    },
+    "python/generativeqc_compiler/integral/weighted_eri_cuda.py": {
+      "sha256": "3b5cc655fd76f5310ef43c0ba2fe7c1c6cd588971881c4f52c14922572d2c74b",
+      "identical_to_composed_candidate": true
+    },
+    "tools/generate_weighted_eri_kernels.py": {
+      "sha256": "1ec295e769c56855cb19a90782e74367e9af4b0d173dbc110ef2bfabca6345fe",
+      "identical_to_composed_candidate": true
+    }
+  },
+  "receipts": {
+    "gpu/job.txt": "JobId=5907 JobName=1895-order4-ship UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=01:00:00 TimeMin=N/A SubmitTime=2026-10-05T09:02:12 EligibleTime=2026-10-05T09:02:12 AccrueTime=Unknown StartTime=2026-10-05T09:02:12 EndTime=2026-10-05T10:02:12 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T09:02:12 Scheduler=Main Partition=main AllocNode:Sid=localhost:3365858 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n",
+    "gpu/driver.sha256": "8925b4ef39b70d2d021e6ecec447715d82ef4e16f414f0b2402c761a01783a2a  .artifacts/qualify-order4-n1.sh\n5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d  .artifacts/gpu-env-n1.sh\n",
+    "gpu/native-through-f.log": "screening=0 budget=66866 indexed=1 products=12 max_error=3.60822e-16\nscreening=0 budget=66865 indexed=0 products=12 max_error=2.498e-16\nscreening=0 budget=66810 indexed=0 products=12 max_error=2.77556e-16\nscreening=1e-12 budget=66866 indexed=1 products=6 max_error=3.88578e-16\nscreening=1e-12 budget=66865 indexed=0 products=12 max_error=2.22045e-16\nscreening=1e-12 budget=66810 indexed=0 products=12 max_error=2.77556e-16\nCUDA indexed Schwarz batch and prefix-budget gates PASS\n{\"spd_source_aos\":2,\"batch\":2,\"lr_quartets\":12,\"device_bytes\":7477,\"generated_only_bytes\":5230}\n{\"spd_source_aos\":2,\"batch\":2,\"lr_quartets\":12,\"device_bytes\":7477,\"generated_only_bytes\":5230}\n{\"spd_source_aos\":4,\"batch\":2,\"lr_quartets\":110,\"device_bytes\":15125,\"generated_only_bytes\":10242}\n{\"spd_source_aos\":4,\"batch\":2,\"lr_quartets\":110,\"device_bytes\":15125,\"generated_only_bytes\":10242}\n{\"spd_source_aos\":10,\"batch\":2,\"lr_quartets\":3080,\"device_bytes\":68679,\"generated_only_bytes\":45440}\n{\"spd_source_aos\":10,\"batch\":2,\"lr_quartets\":3080,\"device_bytes\":75101,\"generated_only_bytes\":40756}\nCUDA Cartesian order-two derivative seed/CPU finite-difference gates PASS\nCUDA independent J/K: DF layouts/selection and direct through-f values, through-f derivatives PASS\n",
+    "gpu/memcheck.log": "========= COMPUTE-SANITIZER\nCUDA Cartesian order-two derivative seed/CPU finite-difference gates PASS\nCUDA s/p/d/f SR/LR derivative gates PASS\n========= ERROR SUMMARY: 0 errors\n",
+    "gpu/binary-check.txt": "build/cuda-release-sm120/libgenerativeqc.so: OK\nbuild/cuda-release-sm120/generativeqc_dft_cuda_tests: OK\nbuild/cuda-release-sm120/generativeqc_ks_cuda_tests: OK\nbuild/cuda-release-sm120/generativeqc_cuda_fock_provider_tests: OK\n",
+    "gpu/job.exit": "0\n",
+    "gpu/initcheck.log": "========= COMPUTE-SANITIZER\nCUDA Cartesian order-two derivative seed/CPU finite-difference gates PASS\nCUDA s/p/d/f SR/LR derivative gates PASS\n========= ERROR SUMMARY: 0 errors\n",
+    "gpu/source-check.txt": "SOURCE_MATCH dfeabdc0d6b0985c89e2a7c88442504c32efa801 a1236412fe2b155036897275049af74e39a888765a73b8f9d32d70b5459b92e0\n",
+    "build/ccache-version.txt": "ccache version 4.5.1\nFeatures: file-storage http-storage redis-storage\n\nCopyright (C) 2002-2007 Andrew Tridgell\nCopyright (C) 2009-2021 Joel Rosdahl and other contributors\n\nSee <https://ccache.dev/credits.html> for a complete list of contributors.\n\nThis program is free software; you can redistribute it and/or modify it under\nthe terms of the GNU General Public License as published by the Free Software\nFoundation; either version 3 of the License, or (at your option) any later\nversion.\n",
+    "build/binaries.sha256": "94da71148c1eb4a84c2510918d40ca6aaa2a04fb19f54d8eed4b2985c7c43fa3  build/cuda-release-sm120/libgenerativeqc.so\n56b7639ec9d9de80e972b699e9d702a6a3c0c20d74e3d5728917c4f56433980d  build/cuda-release-sm120/generativeqc_dft_cuda_tests\ne8d5d0ccc0b6973469519039b3c967cdca159e41cea5934fa0b868f22819f876  build/cuda-release-sm120/generativeqc_ks_cuda_tests\nb7a4387771e46889d033305091f24e5668ae806acf011d3c3858573b546d5842  build/cuda-release-sm120/generativeqc_cuda_fock_provider_tests\n",
+    "build/aot-ccache-before.txt": "Summary:\n  Hits:             76105 / 245341 (31.02 %)\n    Direct:         63824 / 246472 (25.90 %)\n    Preprocessed:   12281 / 182599 (6.73 %)\n  Misses:          169236\n    Direct:        182648\n    Preprocessed:  170318\n  Errors:             922\n  Uncacheable:       4169\nPrimary storage:\n  Hits:            156018 / 492895 (31.65 %)\n  Misses:          336877\n  Cache size (GB):   7.44 /  30.00 (24.80 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/source-identity.txt": "a1236412fe2b155036897275049af74e39a888765a73b8f9d32d70b5459b92e0\n",
+    "build/aot-ccache-after.txt": "Summary:\n  Hits:             76576 / 245819 (31.15 %)\n    Direct:         64295 / 246950 (26.04 %)\n    Preprocessed:   12281 / 182606 (6.73 %)\n  Misses:          169243\n    Direct:        182655\n    Preprocessed:  170325\n  Errors:             922\n  Uncacheable:       4169\nPrimary storage:\n  Hits:            156967 / 493851 (31.78 %)\n  Misses:          336884\n  Cache size (GB):   7.49 /  30.00 (24.96 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/ccache-before.txt": "Summary:\n  Hits:             75976 / 244855 (31.03 %)\n    Direct:         63695 / 245986 (25.89 %)\n    Preprocessed:   12281 / 182242 (6.74 %)\n  Misses:          168879\n    Direct:        182291\n    Preprocessed:  169961\n  Errors:             922\n  Uncacheable:       4167\nPrimary storage:\n  Hits:            155418 / 491923 (31.59 %)\n  Misses:          336505\n  Cache size (GB):   7.15 /  30.00 (23.84 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/aot-binaries.sha256": "8fd2fc38c7445724c2c9e3d450e70e7d6348017c1ac68a17ebbf53f7d36a2486  build/cuda-release-sm120/libgenerativeqc_stationary_lda_rks.so\ne1cf8eb018d3a9c9fcb275a84bafc2ceb54098c63f7a136892afc0a52ee33c6c  build/cuda-release-sm120/generativeqc_stationary_lda_rks.json\n525ab48241162ce0b6c0b711b528aa46843262c5628eb63a67a92659611960b9  build/cuda-release-sm120/libgenerativeqc_stationary_lda_uks.so\n2ac7461bd53a9ddf2535cfeb98c0753eca534ddf40d99010ec116a1efd146c29  build/cuda-release-sm120/generativeqc_stationary_lda_uks.json\n62966513bff8d927c1d164ddf16ccaf3f9bdda15801217a19589a12e585f117e  build/cuda-release-sm120/libgenerativeqc_stationary_pbe_rks.so\n20ce972494435b9d4b9fadc1c96e0b7074561413a3439db0dab95007fe0f1abe  build/cuda-release-sm120/generativeqc_stationary_pbe_rks.json\n4e7969bea0338422697ab7f863b03ca56186b698be7dae913ca8c329a15356ef  build/cuda-release-sm120/libgenerativeqc_stationary_pbe_uks.so\nd3614ec97401192adcbc53ac4770c1dba7925df53ab93216b3808ba6b9ab20f4  build/cuda-release-sm120/generativeqc_stationary_pbe_uks.json\nad15e3d95f078017a4419c6ea3d8bdae534db05edd33e6c6d332c1064752de30  build/cuda-release-sm120/libgenerativeqc_stationary_r2scan_rks.so\nfb736af50035e53073fc24f6dc45d94efa6063a59db9075d608326f1b6ca85d4  build/cuda-release-sm120/generativeqc_stationary_r2scan_rks.json\n217a1baeb944fb760ba09f0906f4b1c3eb34e7a2dcf5737a336560bff5462013  build/cuda-release-sm120/libgenerativeqc_stationary_r2scan_uks.so\n9fe23b13a9705436a3c358ddda82635cf92fdc7db85d20d9cc217111a801bfee  build/cuda-release-sm120/generativeqc_stationary_r2scan_uks.json\n",
+    "build/ccache-after.txt": "Summary:\n  Hits:             76105 / 245341 (31.02 %)\n    Direct:         63824 / 246472 (25.90 %)\n    Preprocessed:   12281 / 182599 (6.73 %)\n  Misses:          169236\n    Direct:        182648\n    Preprocessed:  170318\n  Errors:             922\n  Uncacheable:       4169\nPrimary storage:\n  Hits:            156018 / 492895 (31.65 %)\n  Misses:          336877\n  Cache size (GB):   7.44 /  30.00 (24.80 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/source-head.txt": "dfeabdc0d6b0985c89e2a7c88442504c32efa801\n",
+    "build/aot-ccache-version.txt": "ccache version 4.5.1\nFeatures: file-storage http-storage redis-storage\n\nCopyright (C) 2002-2007 Andrew Tridgell\nCopyright (C) 2009-2021 Joel Rosdahl and other contributors\n\nSee <https://ccache.dev/credits.html> for a complete list of contributors.\n\nThis program is free software; you can redistribute it and/or modify it under\nthe terms of the GNU General Public License as published by the Free Software\nFoundation; either version 3 of the License, or (at your option) any later\nversion.\n",
+    "host-focused.log": "...............................................                          [100%]\n47 passed in 46.74s\n"
+  }
+}

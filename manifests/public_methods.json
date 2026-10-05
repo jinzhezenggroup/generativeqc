@@ -155,6 +155,20 @@
         "energy"
       ],
       "supports_batch": true
+    },
+    {
+      "name": "df-rccsd(t)",
+      "symbol": "DF_RCCSD_T",
+      "abi_id": 19,
+      "family": "coupled_cluster",
+      "provider": "df_rccsdt",
+      "properties": [
+        "energy"
+      ],
+      "supports_batch": false,
+      "aliases": [
+        "df-ccsd(t)"
+      ]
     }
   ],
   "composite_methods": [
