@@ -34,6 +34,7 @@ from generativeqc_compiler.common.specialization import (
 )
 
 from .xc_bilinear import density_summand
+from .xc_density_provider import emit_density_provider
 
 QUALIFICATION = "dft.cuda.auto/density-contraction-v1"
 
@@ -47,7 +48,7 @@ def density_portfolio(
     TargetCapabilities,
     CompilationIdentity,
 ]:
-    """Project the two existing schedules at two admitted arithmetic contracts.
+    """Project existing schedules and a separately resourced strict candidate.
 
     Costs intentionally remain unknown. Native preparation may retain only the
     established qualified incumbent, never use these templates as benchmark
@@ -67,7 +68,7 @@ def density_portfolio(
                 for i in graph.topological_order([root])
             ],
             "root": root.identifier,
-            "reduction": "increasing-nu",
+            "reduction": "sum-nu",
         }
     )
     strict = LoweringPrecision(
@@ -107,7 +108,7 @@ def density_portfolio(
         "float64",
         (2, 4, 17, 16),
         scientific_identity=science,
-        semantics=(("reduction", "increasing-nu"), ("shape-kind", "aot-template")),
+        semantics=(("reduction", "sum-nu"), ("shape-kind", "aot-template")),
         operands=(
             OperandLayout("density", (0, 3, 4), (2, 16, 16), (256, 16, 1)),
             OperandLayout("ao", (1, 2, 4), (4, 17, 16), (272, 16, 1)),
@@ -118,17 +119,17 @@ def density_portfolio(
         precisions=(strict, mixed),
         constraints=LoweringConstraints(
             workspace_bytes=0,
-            provider_bytes=0,
-            additional_device_bytes=0,
             capture_required=True,
             determinism="reproducible",
-            maximum_candidates=4,
+            maximum_candidates=5,
         ),
     )
     target = TargetCapabilities(
         TargetInfo("cuda", "current-aot-module", 32, 1024, None)
     )
-    source_identity = canonical_hash({"source": source, "tile": tile})
+    source_identity = canonical_hash(
+        {"source": source, "tile": tile, "materializer": emit_density_provider()}
+    )
     compiler = CompilationIdentity(science, source_identity)
     provider = ProviderDescriptor(
         "generated.cuda", "generated", "symmetric-density-ao", version=source_identity
@@ -159,7 +160,37 @@ def density_portfolio(
         for precision in (strict, mixed)
         for tiled in (False, True)
     )
-    return request, candidates, target, compiler
+    # Strict FP64 may use a reproducible provider reduction after the exact
+    # symmetric factor is materialized. Explicit RN mixed arithmetic retains
+    # its existing ordered implementation; GEMM does not implement that variant.
+    library = LoweringCandidate(
+        request,
+        "density-materialized-gemm-strict",
+        (
+            ProviderDescriptor(
+                "cublas", "library", "matrix-panel", version="runtime-query-required"
+            ),
+        ),
+        "ready",
+        strict.directive.math_mode,
+        provider_bytes=96 << 20,
+        execution=CandidateExecution(
+            strict,
+            "matrix-panel-gemm",
+            request.operands,
+            ScheduleTopology(
+                fusion="materialize-symmetric-factor/gemm/finite-audit",
+                materialization="one-density-factor-per-evaluation",
+                reduction="provider-reproducible",
+            ),
+            determinism="reproducible",
+            capture_safe=True,
+            cache_bytes=2 * 16 * 16 * 8,
+            host_bytes=16 << 10,
+        ),
+        target=target,
+    )
+    return request, (*candidates, library), target, compiler
 
 
 def emit_density_binding(tile: int, source: str) -> str:
@@ -191,9 +222,10 @@ CudaXcDensityBinding prepare_density_binding(I n, I count, I spins, I work_jets,
   auto offers = density_lowering_candidates;
   const bool tiled = tiled_xc_admitted(n,count,spins,work_jets);
   for (std::size_t i=0; i<offers.size(); ++i) {
-    if (i>=2 && strict) offers[i].rejection="precision not admitted by scientific owner";
+    if (i>=2 && i<4 && strict) offers[i].rejection="precision not admitted by scientific owner";
     if (i%2 && !tiled) offers[i].rejection="shape outside qualified tiled launch domain";
   }
+  offers[4].rejection="matrix-panel candidate requires separately prepared resources";
   const std::size_t incumbent=(strict ? 0 : 2)+(tiled ? 1 : 0);
   const auto decision=select_native_lowering(density_lowering_request,offers,
       density_lowering_target,density_lowering_compilation,expected_replays,incumbent);
