@@ -91,9 +91,14 @@ kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
 release does not zero this charge. This native slice has no production profile.
 The reservation is charged before the first module-loading call and survives
-failed preparation as well as successful-plan release. An observed excess remains
-visible in the charge while the exception aborts admission. A retained owner
-cannot be re-prepared on another device.
+failed preparation as well as successful-plan release. The enclosing context/build
+owner must retain it after the local binding is destroyed. Loading failures
+preserve the known charge and permanently poison that binding's admission,
+including warm retries. Observed growth accumulates across released plans and
+different kernels within the reserved envelope; any known excess remains visible
+while admission fails hard. A binding with a retained charge cannot change device
+or artifact. Fixed-family admission bounds CUTLASS's signed-integer rounded
+dimensions before constructing its parameters.
 `tensor.cuda_cutlass.CutlassAotProvider` registers the same canonical request with
 explicit compiled-family/version/artifact and host/module qualification facts.
 The common registry charges module bytes as retained cache storage and enforces
