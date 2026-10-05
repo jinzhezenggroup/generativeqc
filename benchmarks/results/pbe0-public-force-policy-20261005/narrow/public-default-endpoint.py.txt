@@ -1,0 +1,42 @@
+"""Measure the ordinary public endpoint and one explicit empty-registry control."""
+from contextlib import ExitStack
+import argparse
+import os
+import json
+from pathlib import Path
+import sys
+from unittest.mock import patch
+
+from generativeqc import _force_active_ao
+from benchmarks.readme_pbe0 import PBE0
+from benchmarks.readme_omol25 import main
+
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('--force-policy', choices=('default', 'dense-control'), required=True)
+arguments, remaining = parser.parse_known_args()
+# Unset diagnostic selectors so production defaults determine SCF and force
+# schedules. This deliberately does not touch Slurm device visibility.
+for name in ('GENERATIVEQC_CUDA_KS_ACTIVE_AO', 'GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE'):
+    os.environ.pop(name, None)
+os.environ['GENERATIVEQC_FORCE_DENSITY_PRODUCT_SCREENING'] = '0'
+with ExitStack() as stack:
+    if arguments.force_policy == 'dense-control':
+        stack.enter_context(patch.object(_force_active_ao, 'QUALIFIED_FORCE_ACTIVE_AO_PROFILES', ()))
+    stack.enter_context(patch.object(sys, 'argv', [sys.argv[0], *remaining]))
+    policy = {
+        'force_policy': arguments.force_policy,
+        'scf_active_ao': 'production-default',
+        'indexed_force': 'production-default',
+        'becke_phases': 'production-default',
+        'registry_profile_ids': [p.profile_id for p in _force_active_ao.QUALIFIED_FORCE_ACTIVE_AO_PROFILES],
+    }
+    output = Path(remaining[remaining.index('--output') + 1]) if '--output' in remaining else None
+    try:
+        main(PBE0)
+    finally:
+        # Add experiment metadata outside the measured public endpoint. Preserve
+        # the harness journal even when a native sample raises an exception.
+        if output is not None and output.exists():
+            record = json.loads(output.read_text())
+            record['qualification_policy'] = policy
+            output.write_text(json.dumps(record, indent=2, allow_nan=False) + '\n')

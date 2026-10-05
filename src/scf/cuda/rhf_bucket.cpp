@@ -247,6 +247,28 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
   return true;
 }
 
+/** Retained numeric buffers, including cleared vectors and nested ECP payloads.
+ * Object/container headers and allocator rounding are outside this contract. */
+std::size_t cuda_execution::host_batch_numeric_bytes(const HostBatch& h) noexcept {
+  auto bytes = runtime::vector_capacities(
+      h.atom_offsets, h.atom_systems, h.atomic_numbers, h.positions, h.system_shell_offsets,
+      h.shell_atoms, h.shell_angular, h.shell_ao_offsets, h.shell_direct_ao_offsets,
+      h.shell_primitive_offsets, h.system_shell_pair_offsets, h.system_shell_quartet_offsets,
+      h.system_shell_pair_block_offsets, h.system_shell_pair_block_quartet_offsets,
+      h.shell_pair_systems, h.shell_pair_first, h.shell_pair_second, h.shell_pair_primitive_offsets,
+      h.psss_resident_tasks, h.psss_resident_ket_pairs, h.ao_shells, h.ao_term_counts,
+      h.ao_term_angular, h.ao_term_coefficients, h.direct_ao_shells, h.direct_ao_angular,
+      h.direct_ao_coefficients, h.ao_to_direct_transform, h.primitive_exponents,
+      h.primitive_coefficients, h.occupied, h.warm_mask, h.warm_density);
+  for (const auto& system : h.ecp_systems) {
+    bytes =
+        runtime::add_capacity(bytes, runtime::vector_capacities(system.atoms, system.ecp_terms));
+    for (const auto& shell : system.shells)
+      bytes = runtime::add_capacity(bytes, runtime::vector_bytes(shell.primitives));
+  }
+  return bytes;
+}
+
 std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan* plan) noexcept {
   if (plan == nullptr) return 0;
   const auto& resources = plan->resources;
@@ -258,6 +280,54 @@ std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan* plan) noexcept {
   if (resources.reference_eri_ != nullptr)
     bytes = runtime::add_capacity(bytes, resources.reference_eri_bytes_);
   return bytes;
+}
+
+std::size_t hf_cuda_retained_host_numeric_bytes(const CudaRhfBucketPlan& plan) noexcept {
+  auto bytes = runtime::add_capacity(
+      cuda_execution::host_batch_numeric_bytes(plan.topology),
+      runtime::vector_capacities(
+          plan.cached_positions, plan.resident_warm_positions, plan.resident_warm_density,
+          plan.resident_previous_energy, plan.frozen_warm_positions, plan.frozen_warm_density,
+          plan.frozen_previous_energy, plan.bounded_direct_shell_pair_order,
+          plan.bounded_stream_shell_pair_order, plan.bounded_stream_pair_class_offsets,
+          plan.mixed_precision_system_census));
+  if (plan.last_ppps_queue_profile)
+    bytes = runtime::add_capacity(
+        bytes, runtime::vector_bytes(plan.last_ppps_queue_profile->ket_count_histogram));
+  if (plan.last_inactive_eigensolver_profile)
+    bytes = runtime::add_capacity(bytes,
+                                  runtime::vector_bytes(*plan.last_inactive_eigensolver_profile));
+  return bytes;
+}
+
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexcept {
+  if (plan == nullptr) return 0;
+  const auto& resources = plan->resources;
+  auto bytes = runtime::add_capacity(hf_cuda_owned_device_bytes(plan),
+                                     hf_cuda_retained_host_numeric_bytes(*plan));
+  if (resources.solver_host_workspace_ != nullptr)
+    bytes = runtime::add_capacity(bytes, resources.solver_host_workspace_bytes_);
+  return runtime::add_capacity(bytes, resources.provider_retained_bytes_);
+}
+
+std::size_t hf_cuda_reference_reuse_capacity(const CudaRhfBucketPlan& plan,
+                                             const cuda_execution::HostBatch& candidate) noexcept {
+  if (!plan.initialized || plan.resources.reference_peak_bytes_ == 0)
+    return std::numeric_limits<std::size_t>::max();
+  // The complete cold admission already includes candidate/topology copies,
+  // construction schedules, and publication matrices. Charge only capacities
+  // acquired since that successful admission; clear() does not free them.
+  auto peak = plan.resources.reference_peak_bytes_;
+  const auto host_bytes = hf_cuda_retained_host_numeric_bytes(plan);
+  if (host_bytes > plan.reference_admitted_plan_host_bytes)
+    peak = runtime::add_capacity(peak, host_bytes - plan.reference_admitted_plan_host_bytes);
+  const auto candidate_bytes = cuda_execution::host_batch_numeric_bytes(candidate);
+  if (candidate_bytes > plan.reference_admitted_candidate_host_bytes) {
+    const auto growth = candidate_bytes - plan.reference_admitted_candidate_host_bytes;
+    // Match reference_detail::base_capacity's four simultaneous host copies.
+    for (unsigned copy = 0; copy != 4; ++copy) peak = runtime::add_capacity(peak, growth);
+  }
+  return std::max(peak, hf_cuda_retained_numeric_bytes(&plan));
 }
 
 CudaRhfBasisLayoutStats inspect_rhf_cuda_basis_layout(const std::vector<core::System>& systems) {
@@ -382,7 +452,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
   const bool graph_native_eigensolver_override = graph_native_eigensolver_override_requested();
   if (*plan != nullptr && (*plan)->initialized &&
       ((*plan)->resources.device_id_ != device_id || !same_topology((*plan)->topology, candidate) ||
-       !same_hf_bucket_options((*plan)->options, options) ||
+       !compatible_hf_bucket_options(**plan, candidate, options) ||
        (*plan)->unrestricted != unrestricted ||
        (*plan)->shell_class_profiling != shell_class_profiling ||
        (*plan)->inactive_eigensolver_profiling != inactive_eigensolver_profiling ||
@@ -398,6 +468,12 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
        (*plan)->mixed_precision_fock_threshold != mixed_precision_fock_threshold)) {
     delete *plan;
     *plan = nullptr;
+  }
+  bool execution_plan_reused = *plan != nullptr && (*plan)->initialized;
+  if (execution_plan_reused) {
+    // Admission proved the complete retained reference fits. Keep the driver's
+    // exact option invariant aligned with the budget that this execution owns.
+    (*plan)->options.reference_memory_budget_bytes = options.reference_memory_budget_bytes;
   }
   if (*plan == nullptr) {
     *plan = new (std::nothrow) CudaRhfBucketPlan{};
@@ -416,6 +492,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
     *plan = nullptr;
   }
   if (retry_without_cublas) {
+    execution_plan_reused = false;
     // Provider setup or graph capture can reject a cuBLAS implementation on a
     // particular CUDA release. Rebuild once with the numerically identical
     // native kernel so public CUDA execution remains available.
@@ -433,6 +510,7 @@ std::vector<RhfBucketItem> run_hf_cuda_bucket_cached(
       *plan = nullptr;
     }
   }
+  for (auto& output : outputs) output.execution_plan_reused = execution_plan_reused;
   return outputs;
 }
 

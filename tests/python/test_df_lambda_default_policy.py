@@ -1,5 +1,6 @@
 """Protect matrix Lambda defaults and explicit scalar fallback selection."""
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -21,6 +22,10 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
         + header.split("DFCCSDTResult run_df_ccsdt_native(", 1)[1].split(");", 1)[0]
         + ");\n"
     )
+    # Define the extracted overload itself. Maintaining a second hand-written
+    # signature silently turns new trailing selectors into an unresolved call.
+    definition = re.sub(r"\s*=\s*[^,)]+", "", declaration).strip().removesuffix(";")
+    definition += " { return {df_matrix_gemm,lambda_matrix_gemm}; }\n"
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
         "const auto selector ="
@@ -39,14 +44,13 @@ struct generativeqc_method_descriptor {};
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
 namespace core { struct System {}; }
+namespace hf { struct RHFFrameResponseOptions; }
 namespace methods::detail {
 struct DFCCSDTResult { bool primal, lambda; };
 """
         + declaration
+        + definition
         + r"""
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&,const core::System&,
-    const core::System&,const generativeqc_method_descriptor&,bool,bool,bool,
-    bool primal,bool lambda,std::size_t) { return {primal,lambda}; }
 }}
 std::array<bool,3> select(int argc,const char** argv) {
 """

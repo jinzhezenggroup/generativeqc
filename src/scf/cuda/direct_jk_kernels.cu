@@ -260,6 +260,25 @@ __global__ void independent_eri_tile_kernel(DeviceBatch batch, std::int32_t syst
   }
 }
 
+__global__ void copy_resident_eri_tile_kernel(const double* resident, std::size_t n, std::size_t b0,
+                                              std::size_t b1, std::size_t b2, std::size_t b3,
+                                              std::size_t c0, std::size_t c1, std::size_t c2,
+                                              std::size_t c3, std::size_t elements, double* eri) {
+  const std::size_t stride = static_cast<std::size_t>(blockDim.x) * gridDim.x;
+  for (std::size_t element = static_cast<std::size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+       element < elements; element += stride) {
+    std::size_t local = element;
+    const std::size_t l = b3 + local % c3;
+    local /= c3;
+    const std::size_t k = b2 + local % c2;
+    local /= c2;
+    const std::size_t j = b1 + local % c1;
+    local /= c1;
+    const std::size_t i = b0 + local;
+    eri[element] = resident[((i * n + j) * n + k) * n + l];
+  }
+}
+
 /** Schwarz bounds in public AO order, including sparse spherical expansions. */
 template <bool Cartesian>
 __global__ void independent_jk_bounds_kernel(DeviceBatch batch, double* bounds, int* failure) {
@@ -690,6 +709,19 @@ void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::in
       static_cast<unsigned>(std::min<std::size_t>((elements + threads - 1) / threads, 65535));
   independent_eri_tile_kernel<<<blocks, threads, 0, stream>>>(
       batch, system, begin[0], begin[1], begin[2], begin[3], count[0], count[1], count[2], count[3],
+      elements, eri);
+}
+
+void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, std::size_t nbf,
+                                   const std::array<std::size_t, 4>& begin,
+                                   const std::array<std::size_t, 4>& count, std::size_t elements,
+                                   double* eri) {
+  if (!elements) return;
+  constexpr unsigned threads = 128;
+  const unsigned blocks =
+      static_cast<unsigned>(std::min<std::size_t>((elements + threads - 1) / threads, 65535));
+  copy_resident_eri_tile_kernel<<<blocks, threads, 0, stream>>>(
+      resident, nbf, begin[0], begin[1], begin[2], begin[3], count[0], count[1], count[2], count[3],
       elements, eri);
 }
 

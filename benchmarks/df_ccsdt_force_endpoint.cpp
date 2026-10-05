@@ -34,10 +34,11 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 9)
+    if (argc < 4 || argc > 10)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
-          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY]]]]]");
+          "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY "
+          "[CCSD_Q_BATCH_LIMIT]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -50,6 +51,7 @@ int main(int argc, char** argv) {
     const bool matrix = selector(4), forces = selector(5), lambda_matrix = selector(6);
     const std::size_t batch_limit = argc > 7 ? std::stoull(argv[7]) : 8;
     const auto diis_history = argc > 8 ? std::stoul(argv[8]) : 6;
+    const auto ccsd_batch_limit = argc > 9 ? std::stoull(argv[9]) : 8;
     if (diis_history == 1 || diis_history > 20)
       throw std::invalid_argument("invalid endpoint DIIS history");
     std::ifstream input(argv[1]);
@@ -88,7 +90,7 @@ int main(int argc, char** argv) {
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
         execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
-        batch_limit);
+        batch_limit, ccsd_batch_limit);
     std::ofstream output(argv[2]);
     if (!output) throw std::runtime_error("cannot open completed force output");
     output << std::setprecision(17) << "{\n";
@@ -118,6 +120,12 @@ int main(int argc, char** argv) {
     field("ccsd_gemm_summands", result.solver.df_gemm_summands);
     field("ccsd_packing_bytes", result.solver.df_packing_bytes);
     field("ccsd_provider_capacity", result.solver.df_provider_capacity_bytes);
+    field("ccsd_q_batch_size", result.solver.df_auxiliary_batch_size);
+    field("ccsd_q_tiles", result.solver.df_auxiliary_tiles);
+    field("ccsd_q_slices", result.solver.df_auxiliary_slices);
+    field("ccsd_q_operations", result.solver.df_virtual_operations);
+    field("ccsd_accumulation_calls", result.solver.df_accumulation_calls);
+    field("ccsd_accumulation_bytes", result.solver.df_accumulation_bytes);
     field("ccsd_contraction_terms", result.solver.df_contraction_terms);
     field("ccsd_evaluations", result.solver.iteration_graph_calls);
     field("ccsd_capacity", result.solver.numeric_capacity_bytes);

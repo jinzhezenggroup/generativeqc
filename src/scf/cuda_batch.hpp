@@ -19,6 +19,9 @@ struct RhfBucketItem {
   /** A completed isolated Fock measurement deliberately has no converged SCF
    * result. Fleet must preserve its input instead of retrying a cold solve. */
   bool fock_only_diagnostic{};
+  /** The successful execution used a compatible caller-retained CUDA plan.
+   * This is execution-owner reuse, not evidence of a reused converged density. */
+  bool execution_plan_reused{};
 };
 
 struct CudaRhfBucketPlan;
@@ -76,6 +79,12 @@ bool small_hf_cuda_resource_layout_v2(std::size_t nbf, std::size_t direct_nbf, s
 
 /** Currently allocated numeric arenas/workspaces of an opaque direct plan. */
 std::size_t hf_cuda_owned_device_bytes(const CudaRhfBucketPlan* plan) noexcept;
+
+/** All retained numeric allocations of an opaque direct plan: host/device
+ * workspaces, observed provider storage, topology, schedules and warm caches.
+ * Counts vector capacities; excludes object headers, graphs and allocator rounding.
+ * Unlike the device-only diagnostic above, this is the downstream phase reservation. */
+std::size_t hf_cuda_retained_numeric_bytes(const CudaRhfBucketPlan* plan) noexcept;
 
 /** Final-density work retained by CUDA direct screening for one shell class. */
 struct CudaRhfShellClassProfileEntry {
