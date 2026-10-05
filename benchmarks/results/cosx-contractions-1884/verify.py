@@ -30,6 +30,8 @@ def main() -> None:
     for record in records:
         assert record["schema"] == "cosx-endpoint-v1"
         n, points, tile, mask = (record[k] for k in ("nao", "points", "tile", "mask"))
+        effective_tile = record.get("effective_tile", min(points, tile))
+        assert type(effective_tile) is int and effective_tile == min(points, tile)
         assert points == record["atoms"] * math.prod(record["grid"])
         assert 0 <= mask < 4 and record["geometry"] in (0, 1)
         key = (n, tuple(record["grid"]), tile, record["geometry"])
@@ -55,8 +57,8 @@ def main() -> None:
         assert record["compute_capability"] == "12.0"
         assert len(record["sites"]) == 4
         for slot, site in enumerate(record["sites"]):
-            count = points // tile if slot < 2 else int(points % tile != 0)
-            extent = tile if slot < 2 or not points % tile else points % tile
+            count = points // effective_tile if slot < 2 else int(points % effective_tile != 0)
+            extent = effective_tile if slot < 2 or not points % effective_tile else points % effective_tile
             assert site["calls"] == 6 * count
             assert site["summands"] == 6 * count * extent * n * n
             assert (site["m"], site["n"], site["k"]) == (

@@ -179,12 +179,14 @@ void cosx_endpoint_benchmark(char** args) {
     }
     for (unsigned mask = 0; mask < 4; ++mask) {
       const auto& info = plans[mask]->diagnostic();
+      const auto effective_tile = info.tile_points;
       require(info.provider_allowance == (mask ? 96ULL << 20 : 0), "wrong provider allowance");
       for (unsigned slot = 0; slot < 4; ++slot) {
         const auto& site = info.contractions[slot];
         const bool library = mask & (1U << (slot % 2));
-        const auto count = slot < 2 ? points / tile : std::size_t(points % tile != 0);
-        const auto extent = slot < 2 ? tile : points % tile;
+        const auto count =
+            slot < 2 ? points / effective_tile : std::size_t(points % effective_tile != 0);
+        const auto extent = slot < 2 ? effective_tile : points % effective_tile;
         require(site.candidate.provider == (library ? "cublas" : "generated.cuda") &&
                     site.calls == repeats * count &&
                     site.summands == repeats * count * extent * n * n,
@@ -194,8 +196,8 @@ void cosx_endpoint_benchmark(char** args) {
                 << "{\"schema\":\"cosx-endpoint-v1\",\"atoms\":" << system.atoms.size()
                 << ",\"nao\":" << n << ",\"geometry\":" << geometry << ",\"grid\":[" << radial
                 << ',' << polar << ',' << azimuth << ']' << ",\"points\":" << points
-                << ",\"tile\":" << tile << ",\"mask\":" << mask
-                << ",\"geometry_prepare_s\":" << geometry_seconds
+                << ",\"tile\":" << tile << ",\"effective_tile\":" << effective_tile
+                << ",\"mask\":" << mask << ",\"geometry_prepare_s\":" << geometry_seconds
                 << ",\"prepare_s\":" << setup[mask]
                 << ",\"provider_prepare_s\":" << info.contraction_prepare_seconds
                 << ",\"device_bytes\":" << info.device_bytes
