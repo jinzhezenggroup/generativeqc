@@ -143,7 +143,7 @@ int main() {
   current_cache = &cache;
   auto call = [&] {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
-                               true, 8, 8, true, &opts);
+                               true, 8, 8, opts, true);
   };
   auto reset = [&] {
     assert(live == 0);

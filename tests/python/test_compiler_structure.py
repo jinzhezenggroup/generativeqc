@@ -44,8 +44,10 @@ def test_grid_native_generator_matches_jit_policy(tmp_path: typing.Any) -> None:
     assert "__fmul_rn" in native_contractions
     assert "__dadd_rn" in native_contractions
     assert "template <bool Mixed>\n__global__ void tiled_density_product" in native
-    assert "tiled_density_product<true>" in native
-    assert "density_product<true>" in native
+    assert "tiled_density_product<Mixed>" in native
+    assert "density_product<Mixed>" in native
+    assert "launch_density_product<true,false>" in native
+    assert "launch_density_product<true,true>" in native
     runtime = source.index('#include "cuda_grid.cu"')
     for scientific in (
         "__global__ void ao_kernel",

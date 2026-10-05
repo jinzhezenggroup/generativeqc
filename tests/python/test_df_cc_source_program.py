@@ -284,15 +284,16 @@ def test_staged_source_response_matches_direct_and_directional_difference(
 
 @pytest.mark.parametrize("n,q", [(1, 1), (2, 3), (5, 4), (3, 7)])
 @pytest.mark.parametrize("symmetric", [False, True])
+@pytest.mark.parametrize("prepared", [False, True])
 def test_native_source_reverse_layout_reuse_and_complete_work(
-    native_source_probe: Path, n: int, q: int, symmetric: bool
+    native_source_probe: Path, n: int, q: int, symmetric: bool, prepared: bool
 ) -> None:
     arrays = _response_inputs(n, q, symmetric)
     data = f"{n} {q}\n" + "\n".join(
         " ".join(map(repr, x.ravel().tolist())) for x in arrays
     )
     completed = subprocess.run(
-        [str(native_source_probe), "--response"],
+        [str(native_source_probe), "--response-prepared" if prepared else "--response"],
         input=data,
         text=True,
         check=True,
@@ -319,6 +320,22 @@ def test_native_source_reverse_layout_reuse_and_complete_work(
             atol=3e-11,
             rtol=3e-13,
         )
+
+
+@pytest.mark.parametrize("n", [1, 2, 5, 230])
+@pytest.mark.parametrize("q", [1, 3, 7, 488])
+def test_source_response_descriptors_validate(
+    native_source_probe: Path, n: int, q: int
+) -> None:
+    """Validate the matrix recipe against semantic axes, including unit dimensions."""
+    subprocess.run(
+        [str(native_source_probe), "--response-descriptors"],
+        input=f"{n} {q}\n",
+        text=True,
+        check=True,
+        capture_output=True,
+        timeout=10,
+    )
 
 
 @pytest.mark.parametrize("n,q", [(230, 488), (264, 666)])

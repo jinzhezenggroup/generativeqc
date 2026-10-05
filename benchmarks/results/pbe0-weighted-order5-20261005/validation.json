@@ -1,0 +1,707 @@
+{
+  "attachments": [
+    {
+      "kind": "complete-endpoint",
+      "path": "candidate-48.json.gz",
+      "sha256": "5e5bea3f788f708d989a56625eed00b6e74ee1bb12e3845ee46845865e750005"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "candidate-96.json.gz",
+      "sha256": "09f011d9dd90bbdafe6b749a9c32c7719edeb2d418ee0af7d9345815a243aeec"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "control-48.json.gz",
+      "sha256": "fbe5214865dc25069b5b34d15ff5fe0ffce4a58d77407f85aa09e64fa849e73d"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "control-96.json.gz",
+      "sha256": "34d8eddd0baacd21d7a29b0087d73dc5691084326dcf2ef2e17155883a2bad9e"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "reference-48.json.gz",
+      "sha256": "4ebe6be0d18d0fc110dd79a2cf327e9e9366f1b159c76100e5c2016e6066c6c7"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "reference-96.json.gz",
+      "sha256": "9ac89753d7e50b6d34b2cbfca916e8c3f80653095ffbae01b2c1cce64fe9a13d"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "candidate-48-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 8.86757334228605e-12,
+      "max_scaled_error": 0.000886757334228605,
+      "passed": true,
+      "rms_error": 6.240476612631471e-12,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "candidate-48-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 2.686992295330981e-11,
+      "max_scaled_error": 0.0002686992295330981,
+      "passed": true,
+      "rms_error": 7.54481898337403e-12,
+      "rtol": 0,
+      "shape": [
+        3456,
+        3
+      ]
+    },
+    "candidate-96-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 9.958966984413564e-11,
+      "max_scaled_error": 0.009958966984413564,
+      "passed": true,
+      "rms_error": 9.232509887925747e-11,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "candidate-96-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 3.1801783428875297e-11,
+      "max_scaled_error": 0.00031801783428875297,
+      "passed": true,
+      "rms_error": 9.098029657709874e-12,
+      "rtol": 0,
+      "shape": [
+        6912,
+        3
+      ]
+    },
+    "control-48-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 8.640199666842818e-12,
+      "max_scaled_error": 0.0008640199666842818,
+      "passed": true,
+      "rms_error": 6.5352079869625766e-12,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "control-48-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 2.7027186044747964e-11,
+      "max_scaled_error": 0.00027027186044747964,
+      "passed": true,
+      "rms_error": 6.81588337095799e-12,
+      "rtol": 0,
+      "shape": [
+        3456,
+        3
+      ]
+    },
+    "control-96-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.0413714335300028e-10,
+      "max_scaled_error": 0.010413714335300028,
+      "passed": true,
+      "rms_error": 9.483381400252275e-11,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "control-96-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 2.2173513025691705e-11,
+      "max_scaled_error": 0.00022173513025691705,
+      "passed": true,
+      "rms_error": 7.436766848816289e-12,
+      "rtol": 0,
+      "shape": [
+        6912,
+        3
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "device": {
+      "driver_version": 13000,
+      "fast_compile": 0,
+      "major": 12,
+      "maximum_blocks_per_sm": 24,
+      "maximum_registers_per_thread": 255,
+      "maximum_threads_per_block": 1024,
+      "maximum_threads_per_sm": 1536,
+      "minor": 0,
+      "name": "NVIDIA GeForce RTX 5090",
+      "official_profile": "sm_120",
+      "portable": 0,
+      "registers_per_sm": 65536,
+      "release_build": 1,
+      "runtime_version": 12090,
+      "shared_memory_per_block": 49152,
+      "shared_memory_per_block_optin": 101376,
+      "shared_memory_per_sm": 102400,
+      "sm_count": 170,
+      "toolkit_version": 12090,
+      "warp_size": 32
+    },
+    "host": {
+      "libc": [
+        "glibc",
+        "2.39"
+      ],
+      "machine": "x86_64",
+      "system": "Linux"
+    },
+    "native_abi": 0,
+    "policy": {
+      "consumers": [
+        "fock",
+        "force"
+      ],
+      "precision": "fp64",
+      "spin": [
+        "rhf",
+        "uhf"
+      ]
+    },
+    "schema": 1,
+    "source_identity": "e9d3f9226346d0ee60e93a6c93be88629af7c45bb28a49635649b276b6cfcab6"
+  },
+  "endpoint_observations": {
+    "all_regimes_lower_median": true,
+    "reason": null,
+    "status": "pass",
+    "summary": "summary.json"
+  },
+  "hardware": {
+    "host": "node1",
+    "reason": null,
+    "slurm_jobs": [
+      5905
+    ],
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "Canonical WeightedIntegralIR is reused; no standalone equation digest was captured.",
+    "ir": "Exact compiler source and candidate patch are retained; standalone IR digest was not captured."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": "b07feeedea5c6b62339fc4748657de87aef98d2a2dc9ab1b23c484f10010b608",
+    "source": "e9d3f9226346d0ee60e93a6c93be88629af7c45bb28a49635649b276b6cfcab6"
+  },
+  "inputs_hash": "74e6d4bb13014d374e07d50fdb2493d426371a89f3151a4896f583f7db91b347",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "Complete cold/five-warm/moved/five-moved-warm rows improve, but a strict interleaved automatic-provider promotion assay with isolated compilation/allocator peaks was not performed. This does not qualify a provider/profile registry or meet #1895 parity.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "8f90f0ac33ee6bd8a755fb85d71291e1f66c5884",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "comparison_kind": "solver",
+    "default_profile_promoted": false,
+    "device": "cuda",
+    "fast_compile": false,
+    "per_iteration_normalization": false
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Full native SCF histories and actual Fock counts are retained in every native JSON attachment.",
+  "stages": {
+    "compilation": {
+      "library_sha256": "370315e607f40b48412a86ddfd5243ff403b9521a55e11fa51107ff6ce424763",
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": null,
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": null,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": null,
+      "status": "pass"
+    }
+  },
+  "subject": "Weighted order-five complete exact-direct PBE0 E+F",
+  "tier": "endpoint",
+  "timings": [
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 25,
+      "phase": "cold",
+      "seconds": 124.33162073045969,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.016145668923855,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.97404257580638,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.987770114094019,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.063389420509338,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.982929982244968,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 12,
+      "phase": "moved",
+      "seconds": 54.05550965666771,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.047222390770912,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.005737982690334,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.039489269256592,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 9.962498057633638,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.006720967590809,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 23,
+      "phase": "cold",
+      "seconds": 116.43313981965184,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.36327425390482,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.328911282122135,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.273797791451216,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.286528035998344,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 9.25091926753521,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 12,
+      "phase": "moved",
+      "seconds": 53.350329138338566,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 9.583322826772928,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 9.16690295189619,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 9.221575517207384,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 9.20090925693512,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 9.19983547180891,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 30,
+      "phase": "cold",
+      "seconds": 283.94864428043365,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 29.06091170012951,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 29.131394550204277,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 28.715760625898838,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 28.91381861269474,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 28.824530251324177,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 13,
+      "phase": "moved",
+      "seconds": 133.0214339569211,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.905198641121387,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.777183704078197,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.7505721449852,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.771110460162163,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.780925299972296,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 25,
+      "phase": "cold",
+      "seconds": 244.97573813423514,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 26.989123575389385,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 28.034387562423944,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 27.414518255740404,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 26.41201100498438,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 25.889454565942287,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 12,
+      "phase": "moved",
+      "seconds": 123.1661822758615,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 26.161007843911648,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 26.12693776935339,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 25.97741835564375,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 25.990377880632877,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 26.01483976468444,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    }
+  ],
+  "toolchain": {
+    "cuobjdump": {
+      "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+      "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+    },
+    "host_cxx": {
+      "path": "/data/jzzeng/qc-1895-order5-weighted-forces-20261005/.artifacts/bin/c++",
+      "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "nvcc": {
+      "path": "/group/software/cuda-12.9.1/bin/nvcc",
+      "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "ptxas": {
+      "path": "/group/software/cuda-12.9.1/bin/ptxas",
+      "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    }
+  }
+}

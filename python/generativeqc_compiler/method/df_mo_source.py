@@ -22,6 +22,8 @@ from generativeqc_compiler.tensor import (
     transpose_program,
 )
 from generativeqc_compiler.tensor.cuda_gemm import gemm_contract
+from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
+from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 
 
 def build_df_mo_source_program(nbf: int, naux: int) -> Program:
@@ -101,6 +103,9 @@ class _PackedStep:
     a: str
     b: str
     output: str
+    node: Node
+    fixed_modes: tuple[int, ...]
+    operand_order: tuple[int, int]
 
     def call(self, *, accumulate: bool | None = None) -> str:
         """Optionally expose beta=0/1 to response callbacks sharing an output."""
@@ -153,8 +158,10 @@ def _packed_step(
         (g.a_labels, g.b_labels, g.output_labels, g.m_labels, g.n_labels, g.k_labels),
     )
     pa, pb = pointers
+    operand_order = (0, 1)
     if c != m + n:
         a, b, m, n, pa, pb = b, a, n, m, pb, pa
+        operand_order = (1, 0)
     if c != m + n:
         raise ValueError("DF source contraction needs a non-packed output")
 
@@ -194,6 +201,9 @@ def _packed_step(
         pb,
         pa,
         output,
+        node,
+        fixed,
+        operand_order,
     )
 
 
@@ -410,6 +420,64 @@ def native_response_header() -> str:
             "  }",
             "}",
             "}  // namespace generativeqc::posthf::generated",
+            "",
+        ]
+    ) + _native_response_execution_header(program, steps)
+
+
+def _native_response_execution_header(
+    program: Program, steps: list[_PackedStep]
+) -> str:
+    """Bind the same AD traversal to prepared native semantic slices.
+
+    CPU callbacks retain their column-major compatibility surface. The prepared
+    path reverses that physical transpose, while descriptors retain original
+    TensorIR labels and explicit compiler-owned leading-row projections.
+    """
+    adapter = TensorLoweringAdapter(program)
+    descriptors = [
+        contraction_initializer(
+            adapter,
+            step.node,
+            lambda index: "q" if index.space.kind == "auxiliary" else "n",
+            transpose=(step.tb, step.ta),
+            extents=("1", step.n, step.m, step.k),
+            coefficient="1.0",
+            beta="1.0" if slot == 6 else "0.0",
+            fixed_modes=step.fixed_modes,
+            operand_order=step.operand_order,
+        )
+        for slot, step in enumerate(steps)
+    ]
+    call = lambda slot: (
+        f"execute({slot},{steps[slot].b},{steps[slot].a},{steps[slot].output});"
+    )
+    return "\n".join(
+        [
+            '#include "tensor/native_contraction.hpp"',
+            "#include <vector>",
+            "namespace generativeqc::posthf::generated {",
+            "inline std::vector<tensor::ContractionRequest> df_mo_response_descriptors(std::size_t n,std::size_t q) {",
+            "(void)df_mo_source_response_work(n,q); return {"
+            + ",\n".join(descriptors)
+            + "};}",
+            "// Execute(slot,a,b,c) consumes row-major operands of the matching descriptor.",
+            "// Slot 6 accumulates each fixed reduction row into the existing bar_C.",
+            "// Read/Consume share the lifetime and immutable-source contract above.",
+            "template<class Read,class Consume,class Execute>",
+            "void pullback_df_mo_source_prepared(std::size_t n,std::size_t q,const double* coefficients,",
+            "const double* inverse_root,const double* bar_whitened,double* first,double* transformed,",
+            "double* raw_cotangent_row,double* bar_coefficients,double* bar_inverse_root,",
+            "Read&& read,Consume&& consume,Execute&& execute) {",
+            "(void)df_mo_source_response_work(n,q);const auto row=checked_mul(n,q);",
+            "for(std::size_t mu=0;mu<n;++mu) " + call(0),
+            *(call(slot) for slot in range(1, 6)),
+            "for(std::size_t mu=0;mu<n;++mu) {",
+            call(6),
+            call(7),
+            "consume(mu,raw_cotangent_row);}",
+            "}",
+            "}",
             "",
         ]
     )

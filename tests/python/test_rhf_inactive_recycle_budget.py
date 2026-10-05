@@ -72,6 +72,7 @@ std::size_t cuda_direct_coulomb_device_bytes(std::size_t, std::size_t, std::size
 }
 }
 namespace generativeqc::hf {
+using Clock = std::chrono::steady_clock;
 namespace maps = scf::generated::rhf_frame;
 using posthf::checked_add;
 using posthf::checked_mul;

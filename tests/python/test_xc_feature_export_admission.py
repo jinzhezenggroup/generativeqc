@@ -13,10 +13,7 @@ PREFIX = r"""
 #include <cstdint>
 #include <cstdlib>
 #include <stdexcept>
-enum class CudaXcDensityPrecision : std::uint8_t {
- Fp64=0,
- Fp32ComputeFp64Accumulate=1,
-};
+enum class PrecisionPhase : std::uint8_t { StrictAudit, Admitted };
 struct CudaXcView {
  std::uint64_t generation;
  std::size_t nao;
@@ -36,13 +33,13 @@ struct CudaXcPlan {
  const double* seen_density=nullptr;
  double *seen_rho=nullptr,*seen_gradient=nullptr;
  void enqueue(const double*,std::size_t,std::uint64_t,
-              CudaXcDensityPrecision precision=CudaXcDensityPrecision::Fp64);
+              PrecisionPhase phase=PrecisionPhase::StrictAudit);
  void enqueue_density_features(const double*,std::size_t,std::uint64_t,double*,double*);
  CudaXcView enqueue_replay_density_features(const double*,std::size_t,double*,double*);
  void enqueue_impl(const double* d,const double*,std::size_t,std::uint64_t generation,
-                   CudaXcDensityPrecision precision,double* rho=nullptr,double* gradient=nullptr,
+                   PrecisionPhase phase,double* rho=nullptr,double* gradient=nullptr,
                    bool publish_generation=true) {
-  (void)precision;
+  (void)phase;
   // Ordinary physical enqueue intentionally allows both optional outputs absent.
   if((rho==nullptr)!=(gradient==nullptr)) throw std::invalid_argument("partial output");
   ++submissions;seen_density=d;seen_rho=rho;seen_gradient=gradient;

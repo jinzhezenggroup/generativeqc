@@ -38,7 +38,7 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
       options.df_preconditioning = std::string(mode) == "1";
     const auto result = methods::detail::run_df_ccsdt_native(
         execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
-        8, true, &options);
+        8, options, true);
     const double scalars[]{result.energy,
                            result.reference_energy,
                            result.correlation_energy,

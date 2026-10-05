@@ -821,7 +821,9 @@ def emit_native_xc_contraction_kernels(
         raise TypeError("native XC contraction emission requires XcMatrixSchedule")
     return _NATIVE_XC_CONTRACTION_KERNELS.replace(
         "@POINT_DISPATCH@", emit_native_xc_point_dispatch()
-    ) + emit_native_xc_matrix_schedule(matrix_schedule)
+    ) + emit_native_xc_matrix_schedule(
+        matrix_schedule, density_source=_NATIVE_XC_CONTRACTION_KERNELS
+    )
 
 
 def _emit_ao_radial_kernels() -> str:

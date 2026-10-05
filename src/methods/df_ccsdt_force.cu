@@ -40,8 +40,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     runtime::ExecutionContext& execution, const core::System& system, const core::System& auxiliary,
     const generativeqc_method_descriptor& descriptor, bool forces, bool with_triples,
     bool df_auxiliary_reduction, bool df_matrix_gemm, bool lambda_matrix_gemm,
-    std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit, bool derived_denominators,
-    const hf::RHFFrameResponseOptions* response_options) {
+    std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
+    const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace("df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -54,9 +54,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     if (system.atoms[a].position != auxiliary.atoms[a].position ||
         system.atoms[a].atomic_number != auxiliary.atoms[a].atomic_number)
       throw std::invalid_argument("DF force auxiliary geometry differs from orbital system");
-  const auto recycle_bytes = response_options && response_options->recycling
-                                 ? response_options->recycling->storage_bytes()
-                                 : 0;
+  const auto recycle_bytes = frame_options.recycling ? frame_options.recycling->storage_bytes() : 0;
   // A caller-owned recycled subspace is live during RHF/CC as well. Reserve it
   // in every phase, then let the response owner rebind/release it explicitly.
   auto state = run_rccsd_native_state(execution, system, descriptor, nullptr, nullptr, nullptr,
@@ -247,8 +245,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   result.source_response_seconds = elapsed(phase);
   phase = Clock::now();
   if (trace.enabled()) Trace::label("phase", "exact_orbital_and_nuclear_response");
-  hf::RHFFrameResponseOptions orbital_options =
-      response_options ? *response_options : hf::RHFFrameResponseOptions{};
+  auto orbital_options = frame_options;
   hf::RHFFrameDFPreconditionerPreparation preconditioner;
   if (orbital_options.df_preconditioning) {
     // Preparation precedes source release so it consumes the very same frame
@@ -305,16 +302,16 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext& execution, const co
                                   bool with_triples, bool df_auxiliary_reduction,
                                   bool df_matrix_gemm, bool lambda_matrix_gemm,
                                   std::size_t lambda_batch_limit, std::size_t ccsd_batch_limit,
-                                  bool derived_denominators,
-                                  const hf::RHFFrameResponseOptions* response_options) {
+                                  const hf::RHFFrameResponseOptions& frame_options,
+                                  bool derived_denominators) {
   const auto started = Clock::now();
-  auto* const recycling = response_options ? response_options->recycling : nullptr;
+  auto* const recycling = frame_options.recycling;
   const bool had_retained_cache = recycling && recycling->storage_bytes();
   const auto attempt = [&] {
     return run_df_ccsdt_native_attempt(execution, system, auxiliary, descriptor, forces,
                                        with_triples, df_auxiliary_reduction, df_matrix_gemm,
                                        lambda_matrix_gemm, lambda_batch_limit, ccsd_batch_limit,
-                                       derived_denominators, response_options);
+                                       frame_options, derived_denominators);
   };
   try {
     return attempt();

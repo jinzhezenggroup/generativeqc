@@ -519,3 +519,19 @@ explicit NVIDIA device allocation (`GENERATIVEQC_RESOURCE_CUDA_TEST=1`) and skip
 resident-response numerical qualification. NVIDIA compilation, host GMRES tests,
 and ownership tests are distinct from executing the resident operator/solver
 against the independent host-orchestrated CUDA reference.
+
+### Combining screened response with optional accelerators
+
+A recycled initial guess and optional DF inverse can seed the screened provisional
+solve. Acceptance still requires the fresh scalar, zero-screening physical
+residual. A refused provisional solve or failed physical audit receives one exact
+diagonal correction; a failed optional accelerator in the unscreened path also
+receives one exact diagonal retry. All attempted operator, iteration, and
+preconditioner counts are retained. Only the final independently audited exact
+operator image is eligible for recycling after the nuclear derivative gates.
+
+The private force benchmark retains DIIS at argument 8, CCSD Q batch at 9, orbital
+screening/profile/nuclear controls at 10–12, and the derived-denominator selector
+at 13. Residual interval, DF preconditioning, and repeated recycling append at
+14–16. After an abandoned resource-limited force attempt, incomplete phase work
+and timing fields are null; complete elapsed endpoint time remains available.

@@ -8,21 +8,37 @@
 
 // Optional test-library hook: production libraries need not export test controls.
 extern "C" void df_triples_reject_library_for_test_v1(bool) __attribute__((weak));
+extern "C" bool tensor_cutensor_qualification_for_test_v1(bool, int) __attribute__((weak));
 
-extern "C" int df_triples_probe(std::size_t o, std::size_t v, std::size_t q,
-                                const double* const* inputs, double threshold, std::size_t budget,
-                                std::size_t panels, int precision, double* values,
-                                std::size_t* counts, char* error, std::size_t error_size) noexcept {
+// Version the validation ABI: older adapters had neither precision admission
+// nor provider diagnostics. A mismatched caller must fail symbol lookup rather
+// than shift pointer arguments or overrun its diagnostic buffer.
+extern "C" int df_triples_probe_v2(std::size_t o, std::size_t v, std::size_t q,
+                                   const double* const* inputs, double threshold,
+                                   std::size_t budget, std::size_t panels, int precision,
+                                   double* values, std::size_t* counts, std::size_t counts_size,
+                                   char* error, std::size_t error_size) noexcept {
   try {
-    if (precision < 0 || precision > 3) throw std::invalid_argument("invalid precision admission");
+    if (!values || !counts || counts_size < 26)
+      throw std::invalid_argument("insufficient triples diagnostic buffer");
+    if (precision != 0 && precision != 1 && precision != 2 && precision != 3 && precision != 4 &&
+        precision != 5 && precision != 12 && precision != 13)
+      throw std::invalid_argument("invalid precision admission");
     struct Reset {
       ~Reset() {
         if (df_triples_reject_library_for_test_v1) df_triples_reject_library_for_test_v1(false);
+        if (tensor_cutensor_qualification_for_test_v1)
+          (void)tensor_cutensor_qualification_for_test_v1(false, -1);
       }
     } reset;
-    if (precision >= 2) {
+    if (precision & 2) {
       if (!df_triples_reject_library_for_test_v1) throw std::runtime_error("test hook unavailable");
       df_triples_reject_library_for_test_v1(true);
+    }
+    if (precision & 4) {
+      if (!tensor_cutensor_qualification_for_test_v1 ||
+          !tensor_cutensor_qualification_for_test_v1(true, (precision & 8) ? 2 : -1))
+        throw std::runtime_error("cuTENSOR test hook unavailable");
     }
     const auto mode = precision % 2 == 0 ? generativeqc::runtime::strict_fp64_precision()
                                          : generativeqc::runtime::PrecisionDirective{
@@ -57,7 +73,9 @@ extern "C" int df_triples_probe(std::size_t o, std::size_t v, std::size_t q,
                                 std::size_t(result.w_provider == "generated.cuda"),
                                 std::size_t(result.retained_incumbent),
                                 std::size_t(result.resource_fallback),
-                                result.host_binding_bytes};
+                                result.host_binding_bytes,
+                                std::size_t(result.w_provider == "cutensor"),
+                                std::size_t(result.w_provider_version)};
     std::copy(std::begin(scalars), std::end(scalars), values);
     std::copy(std::begin(work), std::end(work), counts);
     return 0;
