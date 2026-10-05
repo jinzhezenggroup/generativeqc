@@ -92,6 +92,34 @@ recipe. Representative AOT hashes identify templates; they are not hashes of
 resolved runtime shapes. The native validator checks collapsed matrix axes
 against the semantic labels, including batches and transposes.
 
+DF MO source response also emits eight descriptors and a prepared callback
+traversal from its existing TensorIR reverse program. Leading source rows and
+leading reduction rows are explicit projections of the parent request; the
+projection retains scientific identity, parent semantic identity and operand
+order. Interior-axis slices are rejected. The caller traverses every fixed
+reduction row and accumulates its contribution. The native validator checks all
+eight matrix recipes against their projected axes. The CUDA response consumer
+prepares all eight sites through the shared contraction table and runs its two
+row passes without plan search. Method interfaces accept device inputs and a
+stream; they do not accept a vendor handle or provider selector.
+
+The homogeneous contraction-region portfolio offers strict cuBLAS, generated
+CUDA and optional cuTENSOR execution. Unknown complete costs preserve a legal
+cuBLAS incumbent. A remaining budget that cannot hold the library reservation
+selects generated execution; optional preparation rejection releases provisional
+plans before the same-precision fallback. The region cannot implement casts,
+mixed arithmetic, refinement or precision audits and refuses such obligations.
+
+Source-response admission adds descriptor host storage and every simultaneous
+plan/provider/workspace reservation to its borrowed inputs and scratch. The
+physical source/metric wrapper removes only the exact borrowed overlap. The
+response currently owns a separate context, so cuBLAS adds the shared 96 MiB
+conservative reservation even when the retained physical source owns a handle.
+Diagnostics report binding bytes, selected compiler candidate identity, provider
+version, preparation time, queried optional workspace and observed provider
+device growth. cuTENSOR still has no qualified production resource profile;
+test-only ceilings and costs exercise execution without promoting it.
+
 `src/tensor/cuda_contraction.cuh` owns preparation, provider resources and typed
 execution. Each stage pre-binds its full and tail batch shapes outside iteration;
 replay checks dtype, shape, device, stream and context generation. The owner
@@ -122,7 +150,48 @@ disables JIT, global plan caching and incremental autotuning; capture is rejecte
 Workspace is queried exactly and observed retained device storage is checked
 against a reservation. Opaque host allocations have no cuTENSOR query, so host
 bytes are an externally qualified reservation, not an exact measured footprint.
-This provider is not linked or selected by a production method by default.
+`PreparedContractions` can bind `CutensorAffine` alongside the existing matrix
+algorithms. Each plan requires an explicit `ContractionProviderReservation`;
+the enclosing owner admits its workspace/provider ceilings and qualified host
+reservation before calling `add`. Charge `reservation.total_bytes(plan_count)`
+in addition to `storage_bytes`, including all simultaneously live shape variants.
+`optional_resources()` reports queried workspace, observed retained device growth
+and reserved host bytes. These observations do not qualify lazy allocation during
+first execution. Zero host reservation rejects preparation. No reservation values
+are production defaults.
+
+Preparation publishes a shape only after all its plans succeed. A
+`ContractionPreparationUnavailable` permits the caller to prepare another
+scientifically admitted candidate; malformed requests, execution failures and
+checked cleanup failures propagate. `release()` drains a live table before a
+fallback is admitted. Call it outside the global allocation measurement lock and
+before destroying the borrowed context/stream. Destruction uses best-effort cleanup.
+
+Native builds opt in with `GENERATIVEQC_ENABLE_CUTENSOR=ON` and
+`GENERATIVEQC_CUTENSOR_ROOT=/path/to/cutensor`, using an external cuTENSOR 2.8+
+installation within major version 2. The default is OFF; CPU and ordinary CUDA
+builds do not probe or link it. Enabling it requires NVIDIA CUDA and an available
+header/library; wheel packaging is not implemented. The native CMake test target
+`generativeqc_native_cutensor_tests` qualifies the shared and standalone paths.
+Build capability alone does not admit a provider for any scientific method.
+The occupied-triples energy owner can execute strict and scientifically admitted
+mixed W through this table. Its single W request offers cuBLAS, generated CUDA
+and cuTENSOR for both admitted precisions. The generated region owns provider
+binding, casts and FP64 combination; the method receives no vendor selector.
+Preparation admits all three simultaneous plans (one FP64 panel and two W
+products), and diagnoses actual provider/version, arithmetic and semantic work.
+Resource rejection first retains precision with generated execution; a partial
+preparation failure drains both W and panel plans before that retry.
+
+No production cuTENSOR resource profile is installed. The candidate retains an
+explicit rejection until provider qualification supplies its reservation. Test
+builds can inject reservations and synthetic complete ranking costs to qualify
+the real method path; these controls are absent from production builds. Existing
+production selection therefore retains its qualified incumbent. Pinned molecular
+energy gates and complete endpoint accounting exercise cuTENSOR without promoting
+its resource assumptions or claiming a speedup. Validation/benchmark adapters use
+the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
+rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.

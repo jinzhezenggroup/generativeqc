@@ -13,6 +13,9 @@ namespace generativeqc::methods::detail {
  * a DF correlation Hamiltonian. The public energy-only selector reuses this
  * owner; public force promotion remains separate. */
 struct DFCCSDTResult {
+  // If true, total_seconds includes a resource-refused precursor whose work
+  // counters are unavailable; successful-attempt counters are not endpoint totals.
+  bool recycling_discarded_primal_attempt{};
   double energy{}, reference_energy{}, correlation_energy{}, triples_energy{};
   std::vector<double> forces;
   Result method_result;
@@ -47,5 +50,6 @@ DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System
                                   bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
                                   std::size_t lambda_batch_limit = 8,
                                   std::size_t ccsd_batch_limit = 8,
+                                  const hf::RHFFrameResponseOptions& frame_options = {},
                                   bool derived_denominators = true, bool packed_diis = false);
 }  // namespace generativeqc::methods::detail

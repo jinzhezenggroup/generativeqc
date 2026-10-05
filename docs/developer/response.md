@@ -30,6 +30,37 @@ method-specific adjoint solver.
 
 ## Problem snapshot
 
+The native host/resident GMRES controllers force an exact candidate residual
+when the projected Hessenberg residual predicts convergence, at restart,
+breakdown or iteration exhaustion, and at the configured periodic interval.
+The projected norm only requests an exact action; it never accepts a solution.
+The native exact-RHF frame response defaults that interval to its restart size
+to amortize repeated J/K traversal. Its separate scalar-CUDA final residual
+and full frame stationarity audits remain mandatory. Setting
+`gmres.true_residual_every=1` retains per-iteration candidate auditing for
+comparisons and difficult numerical domains.
+
+Native `RHFFrameResponseOptions::df_preconditioning` optionally prepares a
+same-frame DF numerical inverse from `D_ia=gap_ia-(ii|aa)-(ia|ia)` and
+`U_Qia=2 B_Qia`. The compiler owns these expressions. A bounded host
+Woodbury/Cholesky helper applies `(D+U^T U)^-1`; it supplies no physical response
+values. Nonpositive/unsafe diagonals, failed Cholesky, short budgets or failed
+accelerated solves retain the exact diagonal solver. Preparation consumes the
+existing correlation source before its release, and all setup/workspace time
+and capacities belong to the complete force endpoint. This option remains
+opt-in until a representative complete-endpoint benefit is qualified.
+
+An optional caller-owned `RHFFrameResponseRecycle` retains one solved direction
+and its independent scalar-CUDA exact image, plus projection scratch. It binds
+the exact geometry/basis, bitwise reference arrays/energy, occupation, device,
+operator hash and provider policy. A new RHS may project onto that subspace;
+the fresh exact residual still controls acceptance. Nearby geometries and
+approximately equal canonical frames are rejected. There is no global cache
+or promise of reuse across freshly recomputed RHF references. Retained cache
+payload is charged during earlier RHF/CC phases as well. A resource-refused
+primal attempt releases the optional cache before one cold retry; its elapsed
+time is included and its unavailable work counters are explicitly flagged.
+
 `ResponseProblem` binds all scientific state before an operator or subspace is
 created:
 
@@ -488,3 +519,20 @@ explicit NVIDIA device allocation (`GENERATIVEQC_RESOURCE_CUDA_TEST=1`) and skip
 resident-response numerical qualification. NVIDIA compilation, host GMRES tests,
 and ownership tests are distinct from executing the resident operator/solver
 against the independent host-orchestrated CUDA reference.
+
+### Combining screened response with optional accelerators
+
+A recycled initial guess and optional DF inverse can seed the screened provisional
+solve. Acceptance still requires the fresh scalar, zero-screening physical
+residual. A refused provisional solve or failed physical audit receives one exact
+diagonal correction; a failed optional accelerator in the unscreened path also
+receives one exact diagonal retry. All attempted operator, iteration, and
+preconditioner counts are retained. Only the final independently audited exact
+operator image is eligible for recycling after the nuclear derivative gates.
+
+The private force benchmark retains DIIS at argument 8, CCSD Q batch at 9, orbital
+screening/profile/nuclear controls at 10–12, and the derived-denominator selector
+at 13. Residual interval, DF preconditioning, and repeated recycling append at
+14–16, followed by packed DIIS at 17 (off by default). After an abandoned
+resource-limited force attempt, incomplete phase work
+and timing fields are null; complete elapsed endpoint time remains available.

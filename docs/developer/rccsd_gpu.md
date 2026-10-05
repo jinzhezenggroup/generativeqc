@@ -117,6 +117,12 @@ conversion logical bytes and weighted-metric terms. These are not measured
 memory-bus traffic or total endpoint FLOPs. Full-layout history remains selectable
 for numerical audits and performance comparisons.
 
+The private complete-force benchmark selects packing at argument 17, after
+residual interval, DF preconditioning, and repeated recycling at 14–16.
+Packing is forwarded unchanged through both complete attempts of the bounded
+resource retry. If an attempt is discarded, its DIIS capacity, conversion,
+metric-work, and packing-call totals are unavailable and reported as null.
+
 ## B: resident single-system solver
 
 `tools.generativeqc_cc.resident_solver.PreparedResidentCCSD` now binds the existing

@@ -43,9 +43,15 @@ using Gemm = cublasStatus_t (*)(cublasHandle_t,cublasOperation_t,cublasOperation
 using Batch = cublasStatus_t (*)(cublasHandle_t,cublasOperation_t,cublasOperation_t,
  int,int,int,const float*,const float*,int,long long,const float*,int,long long,
  const float*,float*,int,long long,int);
+using GetStream = cublasStatus_t (*)(cublasHandle_t,cudaStream_t*);
+using GetPointerMode = cublasStatus_t (*)(cublasHandle_t,cublasPointerMode_t*);
 static_assert(std::is_same_v<decltype(&cublasSgemm), Gemm>);
 static_assert(std::is_same_v<decltype(&cublasSgemm_v2), Gemm>);
 static_assert(std::is_same_v<decltype(&cublasSgemmStridedBatched), Batch>);
+static_assert(std::is_same_v<decltype(&cublasGetStream), GetStream>);
+static_assert(std::is_same_v<decltype(&cublasGetStream_v2), GetStream>);
+static_assert(std::is_same_v<decltype(&cublasGetPointerMode), GetPointerMode>);
+static_assert(std::is_same_v<decltype(&cublasGetPointerMode_v2), GetPointerMode>);
 """)
     subprocess.run(
         [
@@ -69,6 +75,8 @@ static_assert(std::is_same_v<decltype(&cublasSgemmStridedBatched), Batch>);
     )
     assert "cublasSgemm_v2" in symbols
     assert "cublasSgemmStridedBatched" in symbols
+    assert "cublasGetStream_v2" in symbols
+    assert "cublasGetPointerMode_v2" in symbols
 
 
 def test_sgemm_trampolines_link_without_providers_and_forward_abi(
@@ -135,6 +143,12 @@ def test_sgemm_trampolines_link_without_providers_and_forward_abi(
 extern "C" int probe() {
   float alpha=2, beta=3, a=4, b=5, c=6;
   auto handle=reinterpret_cast<cublasHandle_t>(&a);
+  cudaStream_t stream=nullptr;
+  cublasPointerMode_t mode=CUBLAS_POINTER_MODE_DEVICE;
+  if(cublasGetStream(handle,&stream)!=CUBLAS_STATUS_SUCCESS ||
+     stream!=reinterpret_cast<cudaStream_t>(handle) ||
+     cublasGetPointerMode(handle,&mode)!=CUBLAS_STATUS_SUCCESS ||
+     mode!=CUBLAS_POINTER_MODE_HOST) return 3;
   auto status=cublasSgemm(handle,CUBLAS_OP_T,CUBLAS_OP_N,7,8,9,
                          &alpha,&a,11,&b,12,&beta,&c,13);
   if(status!=CUBLAS_STATUS_SUCCESS || c!=58) return 1;
@@ -174,6 +188,17 @@ static bool arguments(cublasHandle_t h,int m,int n,int k,const float* alpha,
   return h==reinterpret_cast<cublasHandle_t>(const_cast<float*>(a)) &&
          m==7 && n==8 && k==9 && lda==11 && ldb==12 && ldc==13 &&
          *alpha==2 && *beta==3 && *a==4 && *b==5 && c;
+}
+extern "C" cublasStatus_t cublasGetStream_v2(cublasHandle_t h,cudaStream_t* stream) {
+  if(!stream) return CUBLAS_STATUS_INVALID_VALUE;
+  *stream=reinterpret_cast<cudaStream_t>(h);
+  return CUBLAS_STATUS_SUCCESS;
+}
+extern "C" cublasStatus_t cublasGetPointerMode_v2(cublasHandle_t,
+  cublasPointerMode_t* mode) {
+  if(!mode) return CUBLAS_STATUS_INVALID_VALUE;
+  *mode=CUBLAS_POINTER_MODE_HOST;
+  return CUBLAS_STATUS_SUCCESS;
 }
 extern "C" cublasStatus_t cublasSgemm_v2(cublasHandle_t h,cublasOperation_t ta,
   cublasOperation_t tb,int m,int n,int k,const float* alpha,const float* a,int lda,

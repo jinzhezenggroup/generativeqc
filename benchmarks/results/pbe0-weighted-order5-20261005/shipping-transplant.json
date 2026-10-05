@@ -1,0 +1,61 @@
+{
+  "schema": "generativeqc.weighted-force-transplant.v1",
+  "revision": "e828d51bbb9e9b39e4a4c388e6b4c9c6641cfe0d",
+  "source_identity": "c084c16a2d87344a4914c13ae148792d94be461a3ceb50e17bec58bc0101f247",
+  "base_master": "a32b6cfd63ad07d66f8494591031822e1483e69f",
+  "base_shipping_order4": "5957568a05f586db93eec5b9ea4ec1994916645b",
+  "slurm_job": 5922,
+  "endpoint_measured": false,
+  "scientific_dispatch_sources": {
+    "src/scf/cuda/direct_bounded_fallback.cu": {
+      "sha256": "de827959f32298ca2ce344d9539b726317460027dde38101825897d078613664",
+      "identical_to_composed_candidate": true
+    },
+    "src/scf/cuda/direct_force_low_order_sources.cuh": {
+      "sha256": "1b25a20cd92d91cf2b3c4a84cabb2c25d02de64d4c75a4b91a94186e6efed9b2",
+      "identical_to_composed_candidate": true
+    },
+    "src/scf/cuda/direct_force_order4_sources.cuh": {
+      "sha256": "a2f1c546d6a9234b2ee44a33cb6b7a6a0acbec1c2a31aab41225df1a0759c87e",
+      "identical_to_composed_candidate": true
+    },
+    "src/scf/cuda/direct_force_order5_sources.cuh": {
+      "sha256": "c833088f86a9ee05288b3ad9f5900edd2d4e5878f4f19a4addd286d28288835f",
+      "identical_to_composed_candidate": true
+    },
+    "src/scf/cuda/direct_constants.hpp": {
+      "sha256": "22ba6a588a572a5af2ff99910adaab9db77fb30222a73ad997ff2104907ee21f",
+      "identical_to_composed_candidate": true
+    },
+    "python/generativeqc_compiler/integral/weighted_eri_cuda.py": {
+      "sha256": "7a176192e66cad6b6ce7381cd987e8d170e8f1de9f2b6e127b92532926ad4bc2",
+      "identical_to_composed_candidate": true
+    },
+    "tools/generate_weighted_eri_kernels.py": {
+      "sha256": "ad9c98c4ae268f849182211cea5de79810baa66a37afdb692c02be8920ea744f",
+      "identical_to_composed_candidate": true
+    }
+  },
+  "receipts": {
+    "gpu/job.txt": "JobId=5922 JobName=1895-order5-ship UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=01:00:00 TimeMin=N/A SubmitTime=2026-10-05T10:07:06 EligibleTime=2026-10-05T10:07:06 AccrueTime=Unknown StartTime=2026-10-05T10:07:06 EndTime=2026-10-05T11:07:06 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-05T10:07:06 Scheduler=Main Partition=main AllocNode:Sid=localhost:3426091 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/home/jzzeng Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT \n",
+    "gpu/driver.sha256": "8bc7f9e178700048a56e6f05e70e0ab2c94f16e2c7b5966f02e3bbe1f3ae5e7d  .artifacts/qualify-order5-n1.sh\n5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d  .artifacts/gpu-env-n1.sh\n",
+    "gpu/native-through-f.log": "screening=0 budget=66866 indexed=1 products=12 max_error=3.88578e-16\nscreening=0 budget=66865 indexed=0 products=12 max_error=3.33067e-16\nscreening=0 budget=66810 indexed=0 products=12 max_error=3.33067e-16\nscreening=1e-12 budget=66866 indexed=1 products=6 max_error=3.33067e-16\nscreening=1e-12 budget=66865 indexed=0 products=12 max_error=3.33067e-16\nscreening=1e-12 budget=66810 indexed=0 products=12 max_error=2.498e-16\nCUDA indexed Schwarz batch and prefix-budget gates PASS\n{\"spd_source_aos\":2,\"batch\":2,\"lr_quartets\":12,\"device_bytes\":7477,\"generated_only_bytes\":5230}\n{\"spd_source_aos\":2,\"batch\":2,\"lr_quartets\":12,\"device_bytes\":7477,\"generated_only_bytes\":5230}\n{\"spd_source_aos\":4,\"batch\":2,\"lr_quartets\":110,\"device_bytes\":15125,\"generated_only_bytes\":10242}\n{\"spd_source_aos\":4,\"batch\":2,\"lr_quartets\":110,\"device_bytes\":15125,\"generated_only_bytes\":10242}\n{\"spd_source_aos\":10,\"batch\":2,\"lr_quartets\":3080,\"device_bytes\":68679,\"generated_only_bytes\":45440}\n{\"spd_source_aos\":10,\"batch\":2,\"lr_quartets\":3080,\"device_bytes\":75101,\"generated_only_bytes\":40756}\nCUDA Cartesian order-two derivative seed/CPU finite-difference gates PASS\nCUDA independent J/K: DF layouts/selection and direct through-f values, through-f derivatives PASS\n",
+    "gpu/memcheck.log": "========= COMPUTE-SANITIZER\nCUDA Cartesian order-two derivative seed/CPU finite-difference gates PASS\nCUDA s/p/d/f SR/LR derivative gates PASS\n========= ERROR SUMMARY: 0 errors\n",
+    "gpu/binary-check.txt": "build/cuda-release-sm120/libgenerativeqc.so: OK\nbuild/cuda-release-sm120/generativeqc_dft_cuda_tests: OK\nbuild/cuda-release-sm120/generativeqc_ks_cuda_tests: OK\nbuild/cuda-release-sm120/generativeqc_cuda_fock_provider_tests: OK\n",
+    "gpu/job.exit": "0\n",
+    "gpu/initcheck.log": "========= COMPUTE-SANITIZER\nCUDA Cartesian order-two derivative seed/CPU finite-difference gates PASS\nCUDA s/p/d/f SR/LR derivative gates PASS\n========= ERROR SUMMARY: 0 errors\n",
+    "gpu/source-check.txt": "SOURCE_MATCH e828d51bbb9e9b39e4a4c388e6b4c9c6641cfe0d c084c16a2d87344a4914c13ae148792d94be461a3ceb50e17bec58bc0101f247\n",
+    "build/ccache-version.txt": "ccache version 4.5.1\nFeatures: file-storage http-storage redis-storage\n\nCopyright (C) 2002-2007 Andrew Tridgell\nCopyright (C) 2009-2021 Joel Rosdahl and other contributors\n\nSee <https://ccache.dev/credits.html> for a complete list of contributors.\n\nThis program is free software; you can redistribute it and/or modify it under\nthe terms of the GNU General Public License as published by the Free Software\nFoundation; either version 3 of the License, or (at your option) any later\nversion.\n",
+    "build/binaries.sha256": "4df8a3a33ea8897c293eeea727e9514c4c3a2d6d64c21de76f58d13960b532fe  build/cuda-release-sm120/libgenerativeqc.so\n56b7639ec9d9de80e972b699e9d702a6a3c0c20d74e3d5728917c4f56433980d  build/cuda-release-sm120/generativeqc_dft_cuda_tests\nc66466e140ac719685ae35fa9af65a585a8d4a8ca8e71478c9039d26d378ba23  build/cuda-release-sm120/generativeqc_ks_cuda_tests\n2643b9134a3b0df60ae0ce41ff7533004e399026094625160a2d629bba425cf1  build/cuda-release-sm120/generativeqc_cuda_fock_provider_tests\n",
+    "build/aot-ccache-before.txt": "Summary:\n  Hits:             77509 / 246769 (31.41 %)\n    Direct:         65228 / 247900 (26.31 %)\n    Preprocessed:   12281 / 182623 (6.72 %)\n  Misses:          169260\n    Direct:        182672\n    Preprocessed:  170342\n  Errors:             922\n  Uncacheable:       4170\nPrimary storage:\n  Hits:            158844 / 495751 (32.04 %)\n  Misses:          336907\n  Cache size (GB):   7.58 /  30.00 (25.26 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/source-identity.txt": "c084c16a2d87344a4914c13ae148792d94be461a3ceb50e17bec58bc0101f247\n",
+    "build/aot-ccache-after.txt": "Summary:\n  Hits:             77515 / 246775 (31.41 %)\n    Direct:         65234 / 247906 (26.31 %)\n    Preprocessed:   12281 / 182623 (6.72 %)\n  Misses:          169260\n    Direct:        182672\n    Preprocessed:  170342\n  Errors:             922\n  Uncacheable:       4170\nPrimary storage:\n  Hits:            158856 / 495763 (32.04 %)\n  Misses:          336907\n  Cache size (GB):   7.58 /  30.00 (25.26 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/ccache-before.txt": "Summary:\n  Hits:             76576 / 245825 (31.15 %)\n    Direct:         64295 / 246956 (26.04 %)\n    Preprocessed:   12281 / 182612 (6.73 %)\n  Misses:          169249\n    Direct:        182661\n    Preprocessed:  170331\n  Errors:             922\n  Uncacheable:       4170\nPrimary storage:\n  Hits:            156967 / 493863 (31.78 %)\n  Misses:          336896\n  Cache size (GB):   7.53 /  30.00 (25.11 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/aot-binaries.sha256": "8fd2fc38c7445724c2c9e3d450e70e7d6348017c1ac68a17ebbf53f7d36a2486  build/cuda-release-sm120/libgenerativeqc_stationary_lda_rks.so\ncbfba4fb798efbca95f66f474e1cf83074126a1109ac19df7080a9bc5435e33e  build/cuda-release-sm120/generativeqc_stationary_lda_rks.json\n525ab48241162ce0b6c0b711b528aa46843262c5628eb63a67a92659611960b9  build/cuda-release-sm120/libgenerativeqc_stationary_lda_uks.so\na29194a500c98d004d504a8b18a0bb123a35823b2252ea11045bfd322e832133  build/cuda-release-sm120/generativeqc_stationary_lda_uks.json\n62966513bff8d927c1d164ddf16ccaf3f9bdda15801217a19589a12e585f117e  build/cuda-release-sm120/libgenerativeqc_stationary_pbe_rks.so\nad232c48987e33f8741c347c2325c18d471c7cc94f3a51a903c1bc188c6b2184  build/cuda-release-sm120/generativeqc_stationary_pbe_rks.json\n4e7969bea0338422697ab7f863b03ca56186b698be7dae913ca8c329a15356ef  build/cuda-release-sm120/libgenerativeqc_stationary_pbe_uks.so\n0b793023821dd304c9848ec8560ddb7c83a21bf3a1f4ab576e29b4f3154861cf  build/cuda-release-sm120/generativeqc_stationary_pbe_uks.json\nad15e3d95f078017a4419c6ea3d8bdae534db05edd33e6c6d332c1064752de30  build/cuda-release-sm120/libgenerativeqc_stationary_r2scan_rks.so\nd5cf49e2c47609dad078a0247dcf17d7f4d91fc330181e2c76a849ac4679b5d9  build/cuda-release-sm120/generativeqc_stationary_r2scan_rks.json\n217a1baeb944fb760ba09f0906f4b1c3eb34e7a2dcf5737a336560bff5462013  build/cuda-release-sm120/libgenerativeqc_stationary_r2scan_uks.so\n6331dd68dc5a2d7f471c1a395028b1cef78a9446837935b3ca210831bb38dc12  build/cuda-release-sm120/generativeqc_stationary_r2scan_uks.json\n",
+    "build/ccache-after.txt": "Summary:\n  Hits:             77509 / 246769 (31.41 %)\n    Direct:         65228 / 247900 (26.31 %)\n    Preprocessed:   12281 / 182623 (6.72 %)\n  Misses:          169260\n    Direct:        182672\n    Preprocessed:  170342\n  Errors:             922\n  Uncacheable:       4170\nPrimary storage:\n  Hits:            158844 / 495751 (32.04 %)\n  Misses:          336907\n  Cache size (GB):   7.58 /  30.00 (25.26 %)\n  Cleanups:           570\n\nUse the -v/--verbose option for more details.\n",
+    "build/source-head.txt": "e828d51bbb9e9b39e4a4c388e6b4c9c6641cfe0d\n",
+    "build/aot-ccache-version.txt": "ccache version 4.5.1\nFeatures: file-storage http-storage redis-storage\n\nCopyright (C) 2002-2007 Andrew Tridgell\nCopyright (C) 2009-2021 Joel Rosdahl and other contributors\n\nSee <https://ccache.dev/credits.html> for a complete list of contributors.\n\nThis program is free software; you can redistribute it and/or modify it under\nthe terms of the GNU General Public License as published by the Free Software\nFoundation; either version 3 of the License, or (at your option) any later\nversion.\n",
+    "host-focused.log": "...........................                                              [100%]\n27 passed in 118.92s (0:01:58)\n",
+    "host-oracle-and-evidence.log": "order-five weighted gates PASS; independent coordinates 54864 error 6.84327261524e-10; adapter comparisons 746496 error 1.11022302463e-16\n\n.................\n17 passed in 83.94s (0:01:23)\n"
+  }
+}

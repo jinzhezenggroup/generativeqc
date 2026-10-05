@@ -16,6 +16,8 @@ struct CudaRhfBucketPlan;
 namespace generativeqc::methods::detail {
 struct RccsdNativeState {
   std::shared_ptr<const hf::PhysicalReference> reference;
+  // Sole source owner from this exact RHF: resident storage when eligible,
+  // otherwise compact immutable metadata. Shared retirement covers all CC stages.
   std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source;
   cc::Problem problem;
   cc::SolverResult solved;

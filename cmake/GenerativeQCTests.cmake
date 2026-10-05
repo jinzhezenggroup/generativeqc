@@ -23,6 +23,12 @@ endfunction()
 macro(generativeqc_add_native_tests)
   enable_testing()
   if(GENERATIVEQC_ENABLE_CUDA)
+    if(TARGET generativeqc_cutensor)
+      generativeqc_native_test(generativeqc_native_cutensor_tests
+                         tests/native/test_native_cutensor.cu NO_GENERATIVEQC
+                         LIBRARIES generativeqc_cutensor CUDA::cudart CUDA::cublas)
+      set_tests_properties(generativeqc_native_cutensor_tests PROPERTIES TIMEOUT 120)
+    endif()
     generativeqc_native_test(generativeqc_hf_resource_layout_tests tests/native/test_hf_resource_layout.cpp)
     generativeqc_native_test(generativeqc_incremental_direct_jk_cuda_tests
                        tests/native/test_incremental_direct_jk_cuda.cpp
@@ -77,6 +83,8 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_preliminary_initial_guess_tests tests/native/test_preliminary_initial_guess.cpp)
     generativeqc_native_test(generativeqc_mp2_contract_tests tests/native/test_mp2_contract.cpp)
     generativeqc_native_test(generativeqc_native_gmres_tests tests/native/test_native_gmres.cpp)
+    generativeqc_native_test(generativeqc_low_rank_preconditioner_tests tests/native/test_low_rank_preconditioner.cpp)
+    generativeqc_native_test(generativeqc_rhf_frame_recycle_tests tests/native/test_rhf_frame_recycle.cpp)
     generativeqc_native_test(generativeqc_cc_lambda_preconditioner_tests tests/native/test_cc_lambda_preconditioner.cpp)
     generativeqc_native_test(generativeqc_triples_fock_response_tests tests/native/test_triples_fock_response.cpp)
     generativeqc_native_test(generativeqc_mp2_gradient_tests tests/native/test_mp2_gradient.cpp)
@@ -84,6 +92,9 @@ macro(generativeqc_add_native_tests)
   endif()
 
   if(GENERATIVEQC_ENABLE_CUDA AND NOT WIN32)
+    generativeqc_native_test(generativeqc_rhf_df_preconditioner_tests tests/native/test_rhf_df_preconditioner.cpp)
+    target_include_directories(generativeqc_rhf_df_preconditioner_tests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    add_dependencies(generativeqc_rhf_df_preconditioner_tests generativeqc)
     generativeqc_native_test(generativeqc_cuda_reference_export_tests tests/native/test_cuda_reference_export.cpp
                        LIBRARIES CUDA::cudart)
     generativeqc_native_test(generativeqc_mp2_cuda_status_tests tests/native/test_mp2_cuda_status.cu
@@ -382,7 +393,7 @@ macro(generativeqc_add_native_tests)
              COMMAND generativeqc_cuda_fock_provider_tests --canonical-values-only)
     set_tests_properties(generativeqc_cuda_fock_canonical_tests PROPERTIES TIMEOUT 900)
     generativeqc_native_test(generativeqc_cuda_stream_eigensolver_tests tests/native/test_cuda_stream_eigensolver.cpp
-                       LIBRARIES CUDA::cudart)
+                       LIBRARIES CUDA::cudart CUDA::cusolver)
     generativeqc_native_test(generativeqc_ecp_cuda_error_tests tests/native/test_ecp_cuda_errors.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_ecp_policy_cuda_tests tests/native/test_ecp_policy_cuda.cu

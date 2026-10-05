@@ -1,6 +1,6 @@
 {
   "path": "src/posthf/df_mo_response.cu",
-  "reason": "Owns bounded DF MO-source response scratch, immutable source-row callbacks, same-stream BLAS admission, generic finite audits and synchronous completion. The scientific reverse traversal is generated from shared TensorIR AD.",
+  "reason": "Owns bounded DF MO-source response scratch, immutable source-row callbacks, complete prepared binding admission and synchronous completion. Shared tensor execution owns providers and finite audits; shared TensorIR AD owns the scientific traversal.",
   "regions": [],
   "role": "runtime",
   "subsystem": "runtime"

@@ -22,7 +22,6 @@
 #include "cc/solver.hpp"
 #include "generated_rccsd_cpu.hpp"
 #include "methods/correlated_cuda_reference.hpp"
-#include "methods/correlated_cuda_source.hpp"
 #include "methods/correlated_warm_reference.hpp"
 #include "molecule/basis.hpp"
 #include "posthf/capacity.hpp"
@@ -33,8 +32,8 @@
 #include "scf/fock_prepared.hpp"
 #include "scf/interaction_source_view.hpp"
 #include "scf/mean_field.hpp"
+#include "scf/rhf_source_handoff.hpp"
 #if GENERATIVEQC_HAS_CUDA
-#include "generated_direct_resident_psss_schedule.cuh"
 #include "scf/cuda/df_source_domain.hpp"
 #endif
 
@@ -195,9 +194,9 @@ std::size_t retained_reference_bytes(const hf::PhysicalReference& ref) {
 }
 
 cc::Problem build_problem(
-    const integrals::ElectronInteractionSource& source, const hf::PhysicalReference& ref,
-    const cc::SolverOptions& options, bool cuda, int device, posthf::ProviderWork& provider_work,
-    generativeqc_tensor::Metrics& provider_metrics,
+    const core::System& system, const integrals::ElectronInteractionSource* source,
+    const hf::PhysicalReference& ref, const cc::SolverOptions& options, bool cuda, int device,
+    posthf::ProviderWork& provider_work, generativeqc_tensor::Metrics& provider_metrics,
     const core::System* correlation_auxiliary = nullptr,
     cc::DFSourceResult* retained_df_response = nullptr,
     const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr) {
@@ -235,13 +234,11 @@ cc::Problem build_problem(
     auto caller_elements = posthf::checked_add(fmo.capacity(), n);
     for (const auto* values : {&p.foo, &p.fov, &p.fvv, &p.d1, &p.d2, &p.canonical_eps})
       caller_elements = posthf::checked_add(caller_elements, values->capacity());
-    // RawSource owns a basis copy while the caller's original system stays
-    // alive. The new source already counts the supplied copy and auxiliary.
-    const auto caller_bytes =
-        posthf::checked_add(posthf::checked_mul(caller_elements, sizeof(double)),
-                            posthf::source_capacity(source.orbital()));
-    auto fitted = cc::build_df_source_cuda(source.orbital(), *correlation_auxiliary, ref,
-                                           options.max_bytes, 1e-10, device, caller_bytes,
+    // The DF builder already charges the caller's original orbital/auxiliary
+    // systems. No compatibility RawSource or duplicate AO expansion is needed.
+    const auto caller_bytes = posthf::checked_mul(caller_elements, sizeof(double));
+    auto fitted = cc::build_df_source_cuda(system, *correlation_auxiliary, ref, options.max_bytes,
+                                           1e-10, device, caller_bytes,
                                            retained_df_response != nullptr, correlation_policy);
     attach_df_source(p, std::move(fitted), provider_work, provider_metrics);
     if (retained_df_response) {
@@ -249,18 +246,21 @@ cc::Problem build_problem(
           posthf::checked_add(p.reference_retained_bytes, fitted.retained_source_bytes);
       *retained_df_response = std::move(fitted);
     }
-    // RawSource is released before solve, but both caller systems and the
-    // split orbital spectrum remain live beside the detached RHF reference.
+    // Both caller systems and the split orbital spectrum remain live beside
+    // the detached RHF reference after DF source preparation.
     p.reference_retained_bytes = posthf::checked_add(
         p.reference_retained_bytes,
         posthf::checked_add(posthf::checked_mul(n, sizeof(double)),
-                            posthf::checked_add(posthf::source_capacity(source.orbital()),
+                            posthf::checked_add(posthf::source_capacity(system),
                                                 posthf::source_capacity(*correlation_auxiliary))));
 #else
+    (void)system;
+    (void)retained_df_response;
     (void)correlation_policy;
     throw std::runtime_error("native molecular DF-CC source requires a CUDA build");
 #endif
   } else {
+    if (!source) throw std::invalid_argument("conventional RCCSD requires an interaction source");
     const auto occ = range(0, o), vir = range(o, n);
     const std::array<posthf::MOSlots, 7> requests{{
         {occ, vir, occ, vir},
@@ -301,7 +301,7 @@ cc::Problem build_problem(
                                                           options.max_bytes, schedule_requests);
     };
 
-    posthf::NativeBlockProvider widest_provider(source, ref, options.max_bytes,
+    posthf::NativeBlockProvider widest_provider(*source, ref, options.max_bytes,
                                                 std::numeric_limits<unsigned>::max(),
                                                 posthf::AOTileDomain::Basis);
     const auto maximum_axis_tile = widest_provider.tile_shape()[0];
@@ -309,7 +309,7 @@ cc::Problem build_problem(
     tile_candidates.reserve(maximum_axis_tile);
     for (std::size_t axis_tile = 1; axis_tile <= maximum_axis_tile; ++axis_tile) {
       try {
-        posthf::NativeBlockProvider candidate(source, ref, options.max_bytes,
+        posthf::NativeBlockProvider candidate(*source, ref, options.max_bytes,
                                               static_cast<unsigned>(axis_tile),
                                               posthf::AOTileDomain::Basis);
         const auto candidate_reuse = schedule_for(candidate);
@@ -322,7 +322,7 @@ cc::Problem build_problem(
     if (tile_candidates.empty())
       throw std::length_error("RCCSD MO provider exceeds numeric memory budget");
     const auto source_tile_plan = posthf::generated::select_source_tile(n, tile_candidates);
-    posthf::NativeBlockProvider provider(source, ref, options.max_bytes,
+    posthf::NativeBlockProvider provider(*source, ref, options.max_bytes,
                                          static_cast<unsigned>(source_tile_plan.axis_tile),
                                          posthf::AOTileDomain::Basis);
     const auto reuse = schedule_for(provider);
@@ -386,16 +386,20 @@ RccsdNativeState execute_rccsd_prepared(
   try {
     const bool cuda = execution.cuda_requested();
     if (warm_start_fallback) *warm_start_fallback = false;
-    // A previous correlation source must not coexist with the next native
-    // CUDA RHF arena. CPU keeps its qualified shared reference/source owner.
+    // CPU retains its shared Fock owner. CUDA receives the resident RHF source
+    // when eligible, otherwise compact immutable metadata from this execution.
+    // Neither route builds a second prepared Fock plan.
     if (cuda) {
       if (cuda_source_cache) cuda_source_cache->reset();
       prepared_exact = nullptr;
     }
+    scf::CudaRhfSourceHandoff reference_source;
     const auto reference_started = std::chrono::steady_clock::now();
     bool reference_plan_reused = false;
     std::shared_ptr<const integrals::ElectronInteractionSource> borrowed_reference_source;
     const auto run_reference = [&](const std::vector<double>* seed) {
+      borrowed_reference_source.reset();
+      reference_source = {};
       if (prepared_exact) {
         auto prepared_options = reference_options;
         prepared_options.resolved_fock_build = prepared_exact->strategy();
@@ -408,7 +412,8 @@ RccsdNativeState execute_rccsd_prepared(
         try {
           auto result = scf::run_rhf_cuda_cached(
               cuda_reference_plan, system, reference_options, execution.device_id(), seed,
-              &attempt_reused, correlation_auxiliary ? nullptr : &borrowed_reference_source);
+              &attempt_reused, correlation_auxiliary ? nullptr : &borrowed_reference_source,
+              correlation_auxiliary ? nullptr : &reference_source);
           reference_plan_reused = attempt_reused;
           return result;
         } catch (...) {
@@ -418,7 +423,8 @@ RccsdNativeState execute_rccsd_prepared(
       }
       auto result =
           cuda ? scf::run_rhf_cuda(system, reference_options, execution.device_id(), seed,
-                                   correlation_auxiliary ? nullptr : &borrowed_reference_source)
+                                   correlation_auxiliary ? nullptr : &borrowed_reference_source,
+                                   correlation_auxiliary ? nullptr : &reference_source)
                : scf::run_rhf(system, reference_options, seed);
       reference_plan_reused = false;
       return result;
@@ -458,46 +464,11 @@ RccsdNativeState execute_rccsd_prepared(
     hf.density.clear();
     hf.density.shrink_to_fit();
     const auto problem_started = std::chrono::steady_clock::now();
-    std::size_t source_preparation_peak = 0;
-#if GENERATIVEQC_HAS_CUDA
-    if (cuda && cuda_source_cache && !correlation_auxiliary && !borrowed_reference_source) {
-      std::size_t primitives = 0, s_shells = 0, p_shells = 0;
-      for (const auto& shell : system.shells) {
-        primitives = posthf::checked_add(primitives, shell.primitives.size());
-        s_shells += shell.angular_momentum == 0;
-        p_shells += shell.angular_momentum == 1;
-      }
-      const auto n = molecule::ao_count(system);
-      const auto device_bytes = scf::cuda_direct_jk_device_bytes(
-          1, n, system.atoms.size(), system.shells.size(), primitives, 0);
-      const auto source_plan = plan_correlated_cuda_source(
-          n, molecule::cartesian_ao_count(system), system.atoms.size(), system.shells.size(),
-          primitives, s_shells, p_shells, scf::cuda_execution::kResidentPsssThreads,
-          posthf::source_capacity(system), retained_reference_bytes(*reference), device_bytes,
-          correlation_options.max_bytes);
-      if (source_plan.admitted) {
-        // Preserve this admitted capacity even if construction allocates only
-        // part of it before failing and the bounded source fallback is used.
-        source_preparation_peak =
-            posthf::checked_add(retained_plan_bytes(), source_plan.peak_bytes);
-        try {
-          auto spec = scf::make_hf_fock_spec(scf::FockSpin::Restricted);
-          // Admission above reserves value-only Direct storage. The default
-          // Fock spec requests derivatives and would make this exact allowance
-          // fail, silently routing every source tile through the host fallback.
-          spec.derivative_order = 0;
-          const auto strategy = scf::resolve_fock_build(spec, scf::FockBackend::Cuda, 0.0);
-          auto candidate = std::make_unique<scf::PreparedFockPlan>(
-              system, nullptr, strategy, execution.device_id(), source_plan.device_bytes);
-          *cuda_source_cache = std::move(candidate);
-          prepared_exact = cuda_source_cache->get();
-        } catch (const std::bad_alloc&) {
-          // Optional Direct storage cannot displace the existing bounded
-          // RawSource route. No partially prepared owner is published.
-        }
-      }
-    }
-#endif
+    const auto source_preparation_peak = reference_source.numeric_peak_bytes;
+    // The handoff describes this execution, but only the state slot may keep
+    // its owner alive: retirement and resident-plan reclaim require uniqueness.
+    if (!borrowed_reference_source) borrowed_reference_source = std::move(reference_source.source);
+    reference_source.source.reset();
     allocation_stage = "MO provider/problem";
     RccsdNativeState state;
     state.reference = reference;
@@ -523,16 +494,17 @@ RccsdNativeState execute_rccsd_prepared(
     }
     const auto build = [&] {
       state.df_source = {};
-      if (!prepared_exact && !state.reference_interaction_source) {
+      if (!correlation_auxiliary && !prepared_exact && !state.reference_interaction_source) {
         // A failed raw-source allocation may follow retirement of a prepared
         // source. Reconstruct inside the retry, before using its borrowed view.
         if (!raw_source) raw_source = std::make_unique<posthf::RawSource>(system);
         source = raw_source.get();
       }
       try {
-        return build_problem(*source, *reference, correlation_options, cuda, execution.device_id(),
-                             provider_work, provider_metrics, correlation_auxiliary,
-                             retain_df_response ? &state.df_source : nullptr, correlation_policy);
+        return build_problem(system, source, *reference, correlation_options, cuda,
+                             execution.device_id(), provider_work, provider_metrics,
+                             correlation_auxiliary, retain_df_response ? &state.df_source : nullptr,
+                             correlation_policy);
       } catch (...) {
         // A failed provider may have published its response owner before a
         // later capacity check. Drop only that unsuccessful output before the
@@ -542,15 +514,9 @@ RccsdNativeState execute_rccsd_prepared(
       }
     };
     const auto retire_optional_source = [&] {
-      if (state.reference_interaction_source) {
-        state.reference_interaction_source.reset();
-        source = nullptr;
-        return true;
-      }
-      if (!cuda || !cuda_source_cache || !*cuda_source_cache) return false;
-      prepared_source.reset();
-      cuda_source_cache->reset();
-      prepared_exact = nullptr;
+      if (!state.reference_interaction_source) return false;
+      state.reference_interaction_source.reset();
+      source = nullptr;
       return true;
     };
     run_with_cuda_reference_budget(cuda_reference_plan, solver_options.max_bytes,
@@ -571,8 +537,8 @@ RccsdNativeState execute_rccsd_prepared(
     const double problem_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - problem_started).count();
     // Provider planning already charged this source. Subsequent CC/(T)/force
-    // stages additionally retain whichever exact owner actually survived the
-    // build. Borrowed RHF storage and fallback PreparedFock storage are mutually
+    // stages additionally retain whichever exact owner survived the build.
+    // Resident/compact CUDA storage and CPU PreparedFock storage are mutually
     // exclusive, so overlapping reference/correlation bytes are charged once.
     const auto exact_source_retained =
         state.reference_interaction_source

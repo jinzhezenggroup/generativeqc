@@ -299,6 +299,14 @@ def test_source_response_budget_and_callback_recovery(
         )
         assert status == 0, error
         capacity = int(counts[0])
+        status, error, outputs, fallback = run(
+            probe, source, c, o, seeds, budget=capacity - 1
+        )
+        assert status == 0, error
+        assert fallback[0] < capacity
+        for want, actual in zip(expected, outputs, strict=True):
+            np.testing.assert_allclose(actual, want, atol=1e-12, rtol=1e-12)
+        capacity = int(fallback[0])
         status, error, outputs, _ = run(probe, source, c, o, seeds, budget=capacity - 1)
         assert status != 0 and "budget" in error
         assert all(np.isnan(a).all() for a in outputs)

@@ -100,7 +100,7 @@ __global__ void atom_phase(Workspace work, const double* points, const double* c
   if (point >= work.points || failed(error)) return;
   bool valid = true;
   if constexpr (Phase == 0) valid = distance_phase(work, point, atom, points, centers, local_norm);
-  if constexpr (Phase == 1) atom_logs_phase(work, point, atom, local_log);
+  if constexpr (Phase == 1) atom_logs_phase(work, point, atom);
   if constexpr (Phase == 2) atom_gather_phase(work, point, atom);
   if constexpr (Phase == 3) valid = point_motion_phase(work, point, atom, owners[point]);
   if (!valid) atomicExch(error, 1);
