@@ -1,5 +1,7 @@
 """NCU execution-efficiency calibration stays mechanism-specific."""
 
+import typing
+
 import pytest
 from generativeqc_compiler.common.ncu_efficiency import (
     NcuExecutionEvidence,
@@ -7,7 +9,7 @@ from generativeqc_compiler.common.ncu_efficiency import (
 )
 
 
-def _evidence(**kwargs: object) -> NcuExecutionEvidence:
+def _evidence(**kwargs: typing.Any) -> NcuExecutionEvidence:
     return NcuExecutionEvidence(
         architecture="sm_120",
         source_revision="c5ab37ec9e7b3d38d2e06729319f9eef66510e5c",
