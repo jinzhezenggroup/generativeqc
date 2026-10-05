@@ -137,7 +137,8 @@ int main(int argc, char** argv) {
       // A discarded attempt can include any completed phase. Final-attempt
       // counters, phase times and peaks cannot reconstruct total attempted work.
       const auto work_field = [&](const char* name, auto value) {
-        if (result.recycling_discarded_primal_attempt)
+        if (result.recycling_discarded_primal_attempt ||
+            result.orbital.resident_jk_discarded_attempt)
           field(name, "null");
         else
           field(name, value);
@@ -157,6 +158,8 @@ int main(int argc, char** argv) {
       field("stationarity", result.orbital.maximum_stationarity);
       work_field("numeric_capacity_bytes", result.numeric_capacity_bytes);
       field("native_seconds", result.total_seconds);
+      field("resident_jk_discarded_attempt", result.orbital.resident_jk_discarded_attempt ? 1 : 0);
+      field("resident_jk_retry_seconds", result.orbital.resident_jk_retry_seconds);
       work_field("reference_seconds", result.primal.reference_seconds);
       work_field("source_seconds", result.primal.problem_seconds);
       work_field("ccsd_seconds", result.primal.solver_seconds);

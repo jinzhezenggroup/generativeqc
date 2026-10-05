@@ -47,8 +47,17 @@ least 64 public AOs may use a lease capped at 8 GiB. Explicit zero retains
 ordinary bounded recomputation; a positive ceiling requests reuse independently
 of that crossover, including small validation frames. Admission also respects
 the complete endpoint budget; unavailable canonical storage or
-allocation refusal keeps the original exact route. Geometry, basis, device and
-stream lifetime belong to the Direct owner, not to a dimension-only cache key.
+allocation refusal keeps the original exact route. If a published lease crowds
+out a later required allocation, the entire frame attempt unwinds before one
+retry with resident values disabled and the optional inverse released. Numerical
+and non-allocation CUDA failures propagate; a second allocation failure does too.
+`resident_jk_discarded_attempt` flags this case and `resident_jk_retry_seconds`
+records its elapsed time separately. Other frame work and phase diagnostics
+describe the successful attempt; complete endpoint time and the conservative
+numeric-capacity bound cover both attempts, and the benchmark marks incomplete
+work receipts unavailable.
+Geometry, basis, device and stream lifetime belong to the Direct owner, not to a
+dimension-only cache key.
 The existing recurrence dispatcher prepares finite-audited values once; repeated
 signed J/K actions reuse the same compiler-owned orbit scatter without evaluating
 new integrals. Storage remains quartic in Cartesian source dimension, so this

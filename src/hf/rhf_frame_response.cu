@@ -81,7 +81,8 @@ class Owner {
  public:
   Owner(const core::System& system, const PhysicalReference& ref, int device,
         const RHFFrameResponseOptions& options, bool prepare, RHFFrameResponseResult& diagnostic,
-        std::size_t direct_budget, std::size_t arena_elements, std::size_t resident_budget)
+        std::size_t direct_budget, std::size_t arena_elements, std::size_t resident_budget,
+        bool& resident_values_prepared)
       : n(ref.nbf),
         o(ref.nocc),
         v(n - o),
@@ -112,8 +113,9 @@ class Owner {
       if (cache_status != GENERATIVEQC_STATUS_OUT_OF_MEMORY &&
           cache_status != GENERATIVEQC_STATUS_NOT_IMPLEMENTED)
         status(cache_status, detail);
-      stats.resident_jk_reason = detail;
       const auto cache_info = scf::cuda_direct_jk_plan_diagnostic(direct.get());
+      resident_values_prepared = cache_info.resident_value_bytes != 0;
+      stats.resident_jk_reason = detail;
       stats.resident_jk_bytes = cache_info.resident_value_bytes;
       stats.resident_jk_values = cache_info.resident_value_count;
       stats.direct_device_bytes = cache_info.device_bytes;
@@ -501,10 +503,11 @@ RHFFrameDFPreconditionerPreparation prepare_rhf_frame_df_preconditioner(
   return result;
 }
 
-RHFFrameResponseResult rhf_frame_response_cuda(
+static RHFFrameResponseResult rhf_frame_response_cuda_attempt(
     const core::System& system, const PhysicalReference& ref, std::span<const double> bar_f,
     std::span<const double> bar_c, int device, const RHFFrameResponseOptions& options,
-    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner) {
+    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner, bool& resident_values_prepared,
+    std::size_t& attempted_capacity) {
   const auto started = Clock::now();
   require(std::isfinite(options.orbital_screening_tolerance) &&
               options.orbital_screening_tolerance >= 0,
@@ -650,9 +653,11 @@ RHFFrameResponseResult rhf_frame_response_cuda(
   }
   const auto resident_budget = options.resident_jk_allowance(n, options.maximum_bytes - total);
   result.numeric_capacity_bytes = checked_add(total, resident_budget);
+  attempted_capacity = result.numeric_capacity_bytes;
   result.operator_hash = maps::orbital_action_hash;
   runtime::CudaDeviceScope device_scope(device);
-  Owner owner(system, ref, device, options, prepare, result, direct_bound, arena, resident_budget);
+  Owner owner(system, ref, device, options, prepare, result, direct_bound, arena, resident_budget,
+              resident_values_prepared);
   // Cache identity includes the admitted execution policy. Optional provider
   // setup can reject prepared execution after cache admission; do not reuse or
   // publish an image under that now-stale policy. The scalar solve remains valid.
@@ -807,6 +812,46 @@ RHFFrameResponseResult rhf_frame_response_cuda(
   require(finite(result.gradient), "nonfinite RHF electronic gradient");
   if (recycling)
     result.recycle_published = recycling->capture(result.orbital_response.solution, exact_image);
+  return result;
+}
+RHFFrameResponseResult rhf_frame_response_cuda(
+    const core::System& system, const PhysicalReference& ref, std::span<const double> bar_f,
+    std::span<const double> bar_c, int device, const RHFFrameResponseOptions& options,
+    std::unique_ptr<RHFFrameDFPreconditioner> preconditioner) {
+  bool resident_values_prepared = false;
+  std::size_t attempted_capacity = 0;
+  const auto started = Clock::now();
+  try {
+    return rhf_frame_response_cuda_attempt(system, ref, bar_f, bar_c, device, options,
+                                           std::move(preconditioner), resident_values_prepared,
+                                           attempted_capacity);
+  } catch (const std::bad_alloc&) {
+    if (!resident_values_prepared) throw;
+  }
+  // Numeric admission is not a reservation of available device memory. A
+  // successful optional lease can crowd out mandatory owner storage or later
+  // contraction/derivative temporaries. Unwind every owner before one complete
+  // exact retry, rather than moving that allocation failure to a later phase.
+  // Only allocation failure permits retry; unrelated CUDA/numerical faults
+  // propagate, including a pending execution fault behind an allocation OOM.
+  const auto pending = cudaGetLastError();
+  if (pending != cudaErrorMemoryAllocation) cuda_resource_check(pending);
+  auto recompute = options;
+  recompute.resident_jk_maximum_bytes = 0;
+  resident_values_prepared = false;
+  const auto discarded_seconds = seconds(started);
+  const auto discarded_capacity = attempted_capacity;
+  std::string retry_reason =
+      "resident ERI storage retired after allocation failure; exact recomputation";
+  // The transferred optional inverse died with the failed attempt. The exact
+  // retry uses the supported diagonal fallback instead of rebuilding it.
+  auto result =
+      rhf_frame_response_cuda_attempt(system, ref, bar_f, bar_c, device, recompute, nullptr,
+                                      resident_values_prepared, attempted_capacity);
+  result.numeric_capacity_bytes = std::max(result.numeric_capacity_bytes, discarded_capacity);
+  result.resident_jk_discarded_attempt = true;
+  result.resident_jk_retry_seconds = discarded_seconds;
+  result.resident_jk_reason.swap(retry_reason);
   return result;
 }
 }  // namespace generativeqc::hf

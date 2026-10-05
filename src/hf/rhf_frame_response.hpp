@@ -139,6 +139,10 @@ struct RHFFrameResponseResult {
   std::size_t resident_jk_bytes{}, resident_jk_values{}, resident_jk_actions{};
   std::uint64_t resident_jk_value_reads{};
   double resident_jk_setup_seconds{}, resident_jk_seconds{}, resident_jk_device_seconds{};
+  // Other phase/work diagnostics describe only the successful attempt.
+  // Complete endpoint time and capacity also include the discarded attempt.
+  bool resident_jk_discarded_attempt{};
+  double resident_jk_retry_seconds{};
   std::string resident_jk_reason;
   std::size_t shell_derivative_passes{}, generic_derivative_passes{};
   // Generated matrix-map work and owner-managed transfers (including derivative
