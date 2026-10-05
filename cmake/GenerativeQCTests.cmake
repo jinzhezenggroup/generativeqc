@@ -388,7 +388,7 @@ macro(generativeqc_add_native_tests)
              COMMAND generativeqc_cuda_fock_provider_tests --canonical-values-only)
     set_tests_properties(generativeqc_cuda_fock_canonical_tests PROPERTIES TIMEOUT 900)
     generativeqc_native_test(generativeqc_cuda_stream_eigensolver_tests tests/native/test_cuda_stream_eigensolver.cpp
-                       LIBRARIES CUDA::cudart)
+                       LIBRARIES CUDA::cudart CUDA::cusolver)
     generativeqc_native_test(generativeqc_ecp_cuda_error_tests tests/native/test_ecp_cuda_errors.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
     generativeqc_native_test(generativeqc_ecp_policy_cuda_tests tests/native/test_ecp_policy_cuda.cu
