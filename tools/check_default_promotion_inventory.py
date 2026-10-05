@@ -304,6 +304,15 @@ def validate_inventory(
         errors.append(f"schema must be {SCHEMA!r}")
     if payload.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
+    classifications = payload.get("classifications")
+    if (
+        not isinstance(classifications, list)
+        or len(classifications) != len(set(classifications))
+        or set(classifications) != CLASSIFICATIONS
+    ):
+        errors.append(
+            "classifications must declare exactly the supported policy taxonomy"
+        )
 
     entries = payload.get("entries")
     if not isinstance(entries, list) or not entries:
