@@ -79,6 +79,10 @@ class OrdinaryStreamEigensolver {
   ~OrdinaryStreamEigensolver();
   OrdinaryStreamEigensolver(const OrdinaryStreamEigensolver&) = delete;
   OrdinaryStreamEigensolver& operator=(const OrdinaryStreamEigensolver&) = delete;
+  /** Borrow contiguous disjoint matrix/scratch (batch*n*n), eigenvalue
+   * (batch*n), info and mask buffers until the owning stream completes. Scratch
+   * is caller-owned and already charged in the KS arena, not provider workspace.
+   */
   generativeqc_status launch(int batch, double* matrices, double* native_workspace,
                              double* eigenvalues, int* info, const std::uint8_t* active) const;
   std::size_t device_bytes() const noexcept { return resources_.solver_workspace_bytes_; }

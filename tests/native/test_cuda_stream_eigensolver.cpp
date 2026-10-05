@@ -179,6 +179,16 @@ void verify(int n) {
     check(cudaStreamSynchronize(owner.stream));
   }
   check(cudaStreamBeginCapture(owner.stream, cudaStreamCaptureModeThreadLocal));
+  bool preparation_rejected = false;
+  try {
+    generativeqc::scf::cuda_execution::OrdinaryStreamEigensolver forbidden(owner.stream, n, input,
+                                                                           values);
+  } catch (const std::invalid_argument&) {
+    preparation_rejected = true;
+  }
+  require(preparation_rejected, "solver preparation silently ran inside capture");
+  // The rejected construction must leave the borrowed graph valid for work
+  // recorded with the already-prepared owner below.
   const auto capture_status = solver.launch(2, input, scratch, values, info, active);
   if (n <= generativeqc::scf::cuda_execution::kSmallEigensolverLimit) {
     require(capture_status == GENERATIVEQC_STATUS_SUCCESS,

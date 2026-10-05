@@ -48,12 +48,14 @@ OrdinaryStreamEigensolver::OrdinaryStreamEigensolver(cudaStream_t stream, int n,
       throw generativeqc::Error(status, "ordinary CUDA eigensolver preparation failed");
   };
   checked(cuda_status(cudaGetDevice(&device_)));
+  cudaStreamCaptureStatus capture{};
+  checked(cuda_status(cudaStreamIsCapturing(stream, &capture)));
+  if (capture != cudaStreamCaptureStatusNone)
+    // Reject before taking stream cleanup responsibility: synchronizing a
+    // borrowed capturing stream would invalidate its owner's graph.
+    throw std::invalid_argument("ordinary eigensolver preparation cannot capture");
   resources_.stream_ = stream;
   try {
-    cudaStreamCaptureStatus capture{};
-    checked(cuda_status(cudaStreamIsCapturing(stream, &capture)));
-    if (capture != cudaStreamCaptureStatusNone)
-      throw std::invalid_argument("ordinary eigensolver preparation cannot capture");
     diagnostic_.request = ordinary_eigh_request;
     diagnostic_.candidates = ordinary_eigh_candidates;
     diagnostic_.dimension = n;

@@ -83,6 +83,8 @@ def symmetric_eigh_request(
             ("completion", "stream-ordered-with-device-info"),
             ("residual", "independent-qualification-only"),
             ("batch", "runtime-serialized-workspace-reuse"),
+            ("caller-scratch", "disjoint-batch*n*n-fp64"),
+            ("buffers", "borrowed-disjoint-until-stream-completion"),
         ),
     )
 
