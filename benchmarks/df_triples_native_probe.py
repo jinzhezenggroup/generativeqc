@@ -34,6 +34,18 @@ COUNTS = (
     "contraction_summands",
     "h2d_bytes",
     "d2h_bytes",
+    "fp64_contractions",
+    "fp32_contractions",
+    "precision_cast_elements",
+    "w_storage_bits",
+    "w_compute_bits",
+    "w_accumulation_bits",
+    "generated_provider",
+    "retained_incumbent",
+    "resource_fallback",
+    "host_binding_bytes",
+    "cutensor_provider",
+    "provider_version",
 )
 
 
@@ -104,7 +116,7 @@ def main() -> None:
     # Preload the specified SONAME before the validation adapter resolves it.
     library = ct.CDLL(str(args.library.resolve()), mode=ct.RTLD_GLOBAL)
     probe = ct.CDLL(str(args.probe.resolve()))
-    call = probe.df_triples_probe
+    call = probe.df_triples_probe_v2
     call.argtypes = [
         ct.c_size_t,
         ct.c_size_t,
@@ -113,8 +125,10 @@ def main() -> None:
         ct.c_double,
         ct.c_size_t,
         ct.c_size_t,
+        ct.c_int,
         ct.POINTER(ct.c_double),
         ct.POINTER(ct.c_size_t),
+        ct.c_size_t,
         ct.c_void_p,
         ct.c_size_t,
     ]
@@ -131,8 +145,10 @@ def main() -> None:
         1e-10,
         args.max_bytes,
         args.panels,
+        0,  # Strict scientific admission; provider selection stays in preparation.
         values.ctypes.data_as(ct.POINTER(ct.c_double)),
         counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+        len(counts),
         error,
         len(error),
     )

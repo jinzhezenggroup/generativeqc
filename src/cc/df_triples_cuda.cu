@@ -17,6 +17,22 @@ thread_local bool reject_w_library_for_test = false;
 extern "C" void df_triples_reject_library_for_test_v1(bool reject) {
   reject_w_library_for_test = reject;
 }
+extern "C" bool tensor_cutensor_qualification_for_test_v1(bool enable, int reject_after) {
+#if GENERATIVEQC_HAS_CUTENSOR
+  // Synthetic resource limits belong to endpoint qualification, never to the
+  // production profile registry or the method's scientific admission API.
+  generativeqc::tensor::cutensor_reservation_for_test =
+      enable ? generativeqc::tensor::ContractionProviderReservation{64ULL << 20, 256ULL << 20,
+                                                                    64ULL << 20}
+             : generativeqc::tensor::ContractionProviderReservation{};
+  generativeqc::tensor::cutensor_preparations_before_rejection_for_test = reject_after;
+  return true;
+#else
+  (void)enable;
+  (void)reject_after;
+  return false;
+#endif
+}
 #endif
 
 namespace generativeqc::cc::triples {
@@ -285,7 +301,8 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
   auto execution_plan = generated_df::prepare_w_plan(admitted_w, library_available);
   const auto planned_layout = [&](std::size_t panels) {
     return layout(o, v, q, panels, execution_plan.storage_bytes(o, v, std::min(o, panels)),
-                  generated_df::WExecution::host_bytes(), execution_plan.provider_bytes(), 0);
+                  generated_df::WExecution::host_bytes(execution_plan),
+                  execution_plan.provider_bytes(), 0);
   };
   auto p = planned_layout(max_panel_buffers);
   if (p.total > max_bytes) p = planned_layout(1);
@@ -304,7 +321,6 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
   // Borrowed D2H destinations outlive Context's exception-path stream drain.
   DFCudaResult result;
   result.resource_fallback = resource_fallback;
-  result.host_binding_bytes = generated_df::WExecution::host_bytes();
   int failed = 0;
   {
     runtime::CudaDeviceScope device_scope(device);
@@ -318,6 +334,9 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
                                        result.fp64_gemms, result.fp32_gemms,
                                        result.contraction_summands, result.precision_cast_elements);
     const auto& selected = execution.plan();
+    result.host_binding_bytes = generated_df::WExecution::host_bytes(selected);
+    result.resource_fallback =
+        result.resource_fallback || selected.selected != execution_plan.selected;
     result.precision = selected.precision.arithmetic;
     result.w_contraction_storage_bits =
         result.precision.storage_dtype == runtime::PrecisionDtype::Fp64 ? 64 : 32;

@@ -146,7 +146,24 @@ builds do not probe or link it. Enabling it requires NVIDIA CUDA and an availabl
 header/library; wheel packaging is not implemented. The native CMake test target
 `generativeqc_native_cutensor_tests` qualifies the shared and standalone paths.
 Build capability alone does not admit a provider for any scientific method.
-This provider is not selected by a production method by default.
+The occupied-triples energy owner can execute strict and scientifically admitted
+mixed W through this table. Its single W request offers cuBLAS, generated CUDA
+and cuTENSOR for both admitted precisions. The generated region owns provider
+binding, casts and FP64 combination; the method receives no vendor selector.
+Preparation admits all three simultaneous plans (one FP64 panel and two W
+products), and diagnoses actual provider/version, arithmetic and semantic work.
+Resource rejection first retains precision with generated execution; a partial
+preparation failure drains both W and panel plans before that retry.
+
+No production cuTENSOR resource profile is installed. The candidate retains an
+explicit rejection until provider qualification supplies its reservation. Test
+builds can inject reservations and synthetic complete ranking costs to qualify
+the real method path; these controls are absent from production builds. Existing
+production selection therefore retains its qualified incumbent. Pinned molecular
+energy gates and complete endpoint accounting exercise cuTENSOR without promoting
+its resource assumptions or claiming a speedup. Validation/benchmark adapters use
+the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
+rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.

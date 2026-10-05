@@ -185,6 +185,33 @@ struct ContractionProviderReservation {
   }
 };
 
+#if defined(GENERATIVEQC_TEST_HOOKS)
+// Provider-layer qualification controls, absent from production builds and
+// method APIs. Negative means no injection; zero rejects the next preparation.
+inline thread_local ContractionProviderReservation cutensor_reservation_for_test;
+inline thread_local int cutensor_preparations_before_rejection_for_test = -1;
+#endif
+
+/** Resource evidence is independent of build availability. No production
+ * cuTENSOR resource profile is qualified yet, including lazy execution storage.
+ * Endpoint qualification may inject explicit test reservations without turning
+ * synthetic limits into production defaults. */
+inline ContractionProviderReservation qualified_cutensor_reservation() noexcept {
+#if GENERATIVEQC_HAS_CUTENSOR && defined(GENERATIVEQC_TEST_HOOKS)
+  return cutensor_reservation_for_test;
+#else
+  return {};
+#endif
+}
+
+inline std::size_t cutensor_provider_version() noexcept {
+#if GENERATIVEQC_HAS_CUTENSOR
+  return cutensorGetVersion();
+#else
+  return 0;
+#endif
+}
+
 template <class T>
 __device__ T contraction_multiply(T a, T b) {
   if constexpr (std::is_same_v<T, double>)
@@ -311,6 +338,12 @@ class PreparedContractions {
       try {
         for (std::size_t i = 0; i < variant.requests.size(); ++i) {
           if (variant.algorithms[i] != ContractionAlgorithm::CutensorAffine) continue;
+#if defined(GENERATIVEQC_TEST_HOOKS)
+          if (cutensor_preparations_before_rejection_for_test == 0)
+            throw ContractionPreparationUnavailable("injected optional provider rejection");
+          if (cutensor_preparations_before_rejection_for_test > 0)
+            --cutensor_preparations_before_rejection_for_test;
+#endif
           auto& plan = variant.cutensor[i];
           plan = std::make_unique<CudaCutensorContraction>();
           if (!plan->prepare(variant.requests[i], context.stream(), reservation.workspace_bytes,

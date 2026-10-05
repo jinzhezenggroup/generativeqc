@@ -446,7 +446,8 @@
         "cublasSetStream": 1,
         "cublasSetWorkspace": 1,
         "cublasSgemm": 1,
-        "cublasSgemmStridedBatched": 1
+        "cublasSgemmStridedBatched": 1,
+        "cutensorGetVersion": 1
       }
     },
     "src/tensor/cuda_cutensor.cuh": {
