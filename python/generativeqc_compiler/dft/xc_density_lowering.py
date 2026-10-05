@@ -8,6 +8,8 @@ runtime shapes and mapped AO lifetimes. No method admission or timing is inferre
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from generativeqc_compiler.common.backend import TargetInfo
 from generativeqc_compiler.common.lowering_contract import (
     CandidateExecution,
@@ -121,7 +123,7 @@ def density_portfolio(
             workspace_bytes=0,
             capture_required=True,
             determinism="reproducible",
-            maximum_candidates=5,
+            maximum_candidates=6,
         ),
     )
     target = TargetCapabilities(
@@ -190,7 +192,24 @@ def density_portfolio(
         ),
         target=target,
     )
-    return request, (*candidates, library), target, compiler
+    # Immutable local AO maps define views of the same mathematical operands.
+    # Packing those views per tile is a distinct materialization candidate;
+    # it cannot inherit the dense factor's once-per-evaluation cost profile.
+    assert library.execution is not None
+    indexed = replace(
+        library,
+        implementation="density-indexed-gemm-strict",
+        execution=replace(
+            library.execution,
+            algorithm="bounded-matrix-panel-gemm",
+            topology=ScheduleTopology(
+                fusion="gather-symmetric-factor/gemm/finite-audit",
+                materialization="one-density-factor-per-nonempty-map",
+                reduction="provider-reproducible",
+            ),
+        ),
+    )
+    return request, (*candidates, library, indexed), target, compiler
 
 
 def emit_density_binding(tile: int, source: str) -> str:
@@ -223,9 +242,9 @@ CudaXcDensityBinding prepare_density_binding(I n, I count, I spins, I work_jets,
   const bool tiled = tiled_xc_admitted(n,count,spins,work_jets);
   for (std::size_t i=0; i<offers.size(); ++i) {
     if (i>=2 && i<4 && strict) offers[i].rejection="precision not admitted by scientific owner";
-    if (i%2 && !tiled) offers[i].rejection="shape outside qualified tiled launch domain";
+    if (i<4 && i%2 && !tiled) offers[i].rejection="shape outside qualified tiled launch domain";
+    if (i>=4) offers[i].rejection="matrix-panel candidate requires separately prepared resources";
   }
-  offers[4].rejection="matrix-panel candidate requires separately prepared resources";
   const std::size_t incumbent=(strict ? 0 : 2)+(tiled ? 1 : 0);
   const auto decision=select_native_lowering(density_lowering_request,offers,
       density_lowering_target,density_lowering_compilation,expected_replays,incumbent);

@@ -272,6 +272,7 @@ struct PreparedFockPlan::Impl {
     }
     if (has_df) {
       const auto resolved = resolve_df_subbudget(df_workload, resolved_df, diagnostic.device_bytes);
+      diagnostic.response_device_bytes = resolved.response_bytes;
       const auto plan_budget = resolved.value_bytes;
       if (!resolved.feasible || !plan_budget || (df_derivatives && !resolved.response_bytes))
         throw std::bad_alloc();
@@ -339,6 +340,9 @@ struct PreparedFockPlan::Impl {
         diagnostic.device_bytes += diagnostic.fitted[0].device_resident_bytes;
       }
     }
+    diagnostic.peak_device_bytes =
+        add_size(diagnostic.device_bytes, diagnostic.response_device_bytes);
+    if (diagnostic.peak_device_bytes > diagnostic.device_budget_bytes) throw std::bad_alloc();
     auto provider = [&](const FockTermSpec& term) -> std::optional<CudaFockProviderView> {
       if (!term.present) return {};
       return term.approximation == FockApproximation::Exact

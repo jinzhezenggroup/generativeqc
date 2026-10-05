@@ -1,18 +1,29 @@
 #include <cuda_runtime.h>
 
 #include <algorithm>
+#include <bit>
+#include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "dft/ao_grid.hpp"
 #include "dft/cosx_reference.hpp"
 #include "dft/cuda_cosx.hpp"
 #include "dft/grid.hpp"
+#include "generated_cosx_contractions.cuh"
+#include "generated_cosx_derivative_contractions.cuh"
 #include "molecule/basis.hpp"
+
+extern "C" void cosx_contraction_qualification_for_test(unsigned mask, bool unavailable);
 
 #if defined(GENERATIVEQC_COSX_TEST_INTERPOSE)
 // Linker interposition is test-only: the production CUDA translation unit and
@@ -20,6 +31,8 @@
 namespace fault_injection {
 bool fail_download = false, awaiting_download = false, injected = false;
 bool fail_get_device = false, get_device_injected = false;
+bool fail_after_upload = false, awaiting_input = false;
+unsigned input_fences = 0;
 unsigned downloads = 0, failure_fences = 0;
 }  // namespace fault_injection
 extern "C" cudaError_t __real_cudaMemcpyAsync(void*, const void*, std::size_t, cudaMemcpyKind,
@@ -29,6 +42,11 @@ extern "C" cudaError_t __real_cudaGetDevice(int*);
 extern "C" cudaError_t __wrap_cudaMemcpyAsync(void* out, const void* in, std::size_t bytes,
                                               cudaMemcpyKind kind, cudaStream_t stream) {
   using namespace fault_injection;
+  if (fail_after_upload && kind == cudaMemcpyHostToDevice && bytes == 4 * sizeof(double)) {
+    fail_after_upload = false;
+    awaiting_input = true;
+    fail_get_device = true;
+  }
   if (fail_download && kind == cudaMemcpyDeviceToHost && bytes == 4 * sizeof(double)) {
     if (++downloads == 2) {
       injected = true;
@@ -41,6 +59,10 @@ extern "C" cudaError_t __wrap_cudaMemcpyAsync(void* out, const void* in, std::si
 }
 extern "C" cudaError_t __wrap_cudaStreamSynchronize(cudaStream_t stream) {
   const auto status = __real_cudaStreamSynchronize(stream);
+  if (fault_injection::awaiting_input) {
+    fault_injection::awaiting_input = false;
+    ++fault_injection::input_fences;
+  }
   if (fault_injection::awaiting_download) {
     fault_injection::awaiting_download = false;
     if (fault_injection::injected) ++fault_injection::failure_fences;
@@ -116,12 +138,31 @@ std::vector<double> symmetric_density(std::size_t n) {
   return density;
 }
 
+// Reuse only fixture construction; arithmetic oracles are independent.
+#include "cosx_checked_contraction_cases.cuh"
+#include "cosx_contraction_cases.cuh"
+#include "cosx_endpoint_benchmark.cuh"
+#include "cosx_weighted_endpoint_benchmark.cuh"
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   try {
     int devices = 0;
     if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
+    if (argc == 8 && std::string(argv[1]) == "--endpoint-benchmark") {
+      cosx_endpoint_benchmark(argv + 2);
+      return 0;
+    }
+    if (argc == 8 && std::string(argv[1]) == "--weighted-endpoint-benchmark") {
+      cosx_weighted_endpoint_benchmark(argv + 2);
+      return 0;
+    }
+    require(argc == 1 || (argc == 2 && std::string(argv[1]) == "--contractions"),
+            "usage: [--contractions] or --endpoint-benchmark/--weighted-endpoint-benchmark "
+            "original moved radial polar azimuth tile");
+    cosx_contraction_cases();
+    cosx_checked_test::cases();
+    if (argc == 2 && std::string(argv[1]) == "--contractions") return 0;
     const int device = 0;
     const auto system = h2();
     const generativeqc::dft::MolecularGrid grid(
@@ -172,11 +213,25 @@ int main() {
         generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     std::vector<double> first_point_derivative;
     for (std::size_t tile : {std::size_t(1), std::size_t(3), derivative_points}) {
+      generativeqc::dft::CudaCosxPointDerivativeDiagnostic report;
       const auto gpu_point_derivative = generativeqc::dft::cuda_cosx_point_derivative_reference(
           system, derivative_xyz, derivative_weights, density,
-          generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
+          generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device, &report);
       require(max_error(gpu_point_derivative, cpu_point_derivative.point_gradient) < 3.0e-11,
               "bounded CUDA COSX point derivative differs from the CPU analytic oracle");
+      require(!report.provider_allowance && report.contraction_host_bytes == (160U << 10),
+              "point derivative prepared resource mismatch");
+      for (std::size_t slot = 0; slot < report.contractions.size(); ++slot) {
+        const auto& site = report.contractions[slot];
+        const auto count =
+            slot % 2 ? std::size_t(derivative_points % tile != 0) : derivative_points / tile;
+        const auto extent = slot % 2 ? derivative_points % tile : tile;
+        const auto calls = count * (slot >= 2 && slot < 4 ? 3 : 1);
+        require(site.candidate.provider == "generated.cuda" && site.calls == calls &&
+                    site.summands == calls * extent * 4 &&
+                    site.scaled_elements == (slot >= 4 ? calls * extent * 2 : 0),
+                "point derivative lost actual full/tail/jet provenance");
+      }
       if (first_point_derivative.empty())
         first_point_derivative = gpu_point_derivative;
       else
@@ -188,8 +243,10 @@ int main() {
         grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
     std::vector<double> first_molecular;
     for (std::size_t tile : {std::size_t(1), std::size_t(7), grid.point_count()}) {
+      generativeqc::dft::CudaCosxMolecularDerivativeDiagnostic info;
       const auto gpu_molecular = generativeqc::dft::cuda_cosx_molecular_energy_derivative(
-          grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device);
+          grid, density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed, tile, device,
+          &info);
       require(max_error(gpu_molecular, cpu_molecular.nuclear_gradient) < 2.0e-10,
               "bounded CUDA COSX molecular derivative differs from the CPU analytic oracle");
       if (first_molecular.empty())
@@ -197,7 +254,17 @@ int main() {
       else
         require(max_error(gpu_molecular, first_molecular) < 2.0e-10,
                 "CUDA COSX molecular derivative changed with tile partition");
-      const auto info = generativeqc::dft::cuda_cosx_molecular_derivative_diagnostic(grid, tile);
+      require(!info.provider_allowance && info.contraction_host_bytes == (96U << 10),
+              "molecular derivative prepared resource mismatch");
+      for (std::size_t slot = 0; slot < info.contractions.size(); ++slot) {
+        const auto& site = info.contractions[slot];
+        const auto calls =
+            slot ? std::size_t(grid.point_count() % tile != 0) : grid.point_count() / tile;
+        const auto extent = slot ? grid.point_count() % tile : tile;
+        require(site.candidate.provider == "generated.cuda" && site.calls == calls &&
+                    site.summands == calls * extent * 4,
+                "molecular derivative lost actual prepared projection provenance");
+      }
       require(info.nbf == 2 && info.natom == system.atoms.size() &&
                   info.npoint == grid.point_count() &&
                   info.tile_points == std::min(tile, grid.point_count()) &&
@@ -318,6 +385,24 @@ int main() {
           owner->build(density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
       require(max_error(retry.exchange, cpu.exchange) < 3.0e-12,
               "COSX transfer failure contaminated the next replay");
+      fail_after_upload = true;
+      get_device_injected = false;
+      caught = false;
+      try {
+        // This temporary host input must survive any already-enqueued copy.
+        (void)owner->build(std::vector<double>(density),
+                           generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
+      } catch (const std::runtime_error&) {
+        caught = true;
+      }
+      require(caught && get_device_injected && !awaiting_input && input_fences == 1,
+              "COSX provider failure did not drain the borrowed host input");
+      require(
+          max_error(owner->build(density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed)
+                        .exchange,
+                    cpu.exchange) < 3e-12,
+          "COSX provider failure contaminated the next replay");
+      get_device_injected = false;
       fail_get_device = true;
       owner.reset();
       require(get_device_injected, "COSX teardown device-query failure was not exercised");
