@@ -80,19 +80,6 @@
         "cublasGetVersion": 1
       }
     },
-    "src/hf/rhf_frame_response.cu": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "HF response equations still submit or emit vendor contractions; retain equations while moving submission to shared bindings.",
-      "references": {
-        "cublasCreate": 1,
-        "cublasDestroy": 1,
-        "cublasDgemm": 1,
-        "cublasSetPointerMode": 1,
-        "cublasSetStream": 1,
-        "cublasSetWorkspace": 1
-      }
-    },
     "src/posthf/cuda_low_rank.cu": {
       "classification": "migration",
       "contract": "#1890",

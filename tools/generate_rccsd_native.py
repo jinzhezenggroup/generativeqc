@@ -1653,7 +1653,6 @@ def _cuda_program(
     output_fields: tuple[str, ...] | None = None,
     reset_error: bool = True,
     prepared_contractions: str | None = None,
-    matrix_gemm: str | None = None,
     kernel_prefix: str | None = None,
     emit_kernels: bool = True,
 ) -> str:
@@ -1667,10 +1666,7 @@ def _cuda_program(
             emit_kernels
             and node.op != "input"
             and not (
-                (
-                    (prepared_contractions or matrix_gemm)
-                    and _packed_matrix_gemm(node) is not None
-                )
+                (prepared_contractions and _packed_matrix_gemm(node) is not None)
                 or (
                     prepared_contractions
                     and _packed_batched_matrix_gemm(node) is not None
@@ -1732,16 +1728,6 @@ def _cuda_program(
             continue
         lines.append(f"  double* {names[number]}=slot{arena_plan.node_slots[number]};")
         sources = [names[x._emit_index] for x in node.inputs]
-        if matrix_gemm and (legacy_gemm := _packed_matrix_gemm(node)) is not None:
-            # The RHF frame-response owner still uses the legacy callback until
-            # its resource/response migration under #1890 is qualified.
-            ta, tb, m, columns, k = legacy_gemm
-            coefficient = _fraction(node.attrs["coefficient"])
-            lines.append(
-                f"  {matrix_gemm}('{ta}','{tb}',{m},{columns},{k},{coefficient},"
-                f"{sources[0]},{sources[1]},{names[number]});"
-            )
-            continue
         gemm = _packed_matrix_gemm(node) if prepared_contractions else None
         batch_gemm = (
             _packed_batched_matrix_gemm(node) if prepared_contractions else None
