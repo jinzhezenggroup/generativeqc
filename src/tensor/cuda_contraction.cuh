@@ -287,6 +287,71 @@ static __global__ void generated_contraction(const T* a, const T* b, T* output, 
   }
 }
 
+/** Execute an already validated matrix recipe. Shared by fixed-shape tables
+ * and bounded runtime domains; this function performs no planning/allocation.
+ * The owner proves stream/device/lifetime and accounts logical work separately. */
+template <class T>
+void execute_matrix_contraction(const CudaContractionContext& context, const ContractionRequest& r,
+                                ContractionAlgorithm algorithm, cudaStream_t stream, const T* a,
+                                const T* b, T* output, int* error) {
+  if (algorithm != ContractionAlgorithm::GeneratedOrdered &&
+      algorithm != ContractionAlgorithm::PedanticBlas)
+    throw std::logic_error("matrix executor received an unprepared implementation");
+  constexpr auto dtype = std::is_same_v<T, double> ? PrecisionDtype::Fp64 : PrecisionDtype::Fp32;
+  if (r.precision.storage_dtype != dtype || !a || !b || !output || !error)
+    throw std::invalid_argument("native contraction buffer dtype/address mismatch");
+  const auto overlaps = [](const void* left, std::size_t left_bytes, const void* right,
+                           std::size_t right_bytes) {
+    const auto l = reinterpret_cast<std::uintptr_t>(left);
+    const auto r = reinterpret_cast<std::uintptr_t>(right);
+    return l <= r ? r - l < left_bytes : l - r < right_bytes;
+  };
+  if (overlaps(a, r.operands[0].storage_elements() * sizeof(T), output,
+               r.operands[2].storage_elements() * sizeof(T)) ||
+      overlaps(b, r.operands[1].storage_elements() * sizeof(T), output,
+               r.operands[2].storage_elements() * sizeof(T)))
+    throw std::invalid_argument("native contraction output must not alias its inputs");
+  const T alpha = static_cast<T>(r.coefficient), beta = static_cast<T>(r.beta);
+  if (!std::isfinite(alpha) || !std::isfinite(beta))
+    throw std::invalid_argument("contraction coefficient is not representable");
+  const auto ta = r.a_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
+  const auto tb = r.b_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
+  const auto m = int(r.m), n = int(r.n), k = int(r.k), batches = int(r.batches);
+  const int lda = int(r.leading_dimension(0)), ldb = int(r.leading_dimension(1)),
+            ldc = int(r.leading_dimension(2));
+  // The matrix layout implements the original einsum: C^T = op(B)^T op(A)^T.
+  // Batches are explicitly materialized by TensorIR, including broadcasts.
+  if (algorithm == ContractionAlgorithm::GeneratedOrdered) {
+    generated_contraction<<<generativeqc_tensor::blocks(r.output_elements(), 256), 256, 0,
+                            stream>>>(a, b, output, r.output_elements(), r.m, r.n, r.k, lda, ldb,
+                                      ldc, r.a_trans == 'T', r.b_trans == 'T', alpha, beta, error);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+  } else {
+    cublasStatus_t status;
+    if constexpr (std::is_same_v<T, double>) {
+      status = batches == 1 ? cublasDgemm(context.handle(), tb, ta, n, m, k, &alpha, b, ldb, a, lda,
+                                          &beta, output, ldc)
+                            : cublasDgemmStridedBatched(context.handle(), tb, ta, n, m, k, &alpha,
+                                                        b, ldb, r.k * r.n, a, lda, r.m * r.k, &beta,
+                                                        output, n, r.m * r.n, batches);
+    } else {
+      status = batches == 1 ? cublasSgemm(context.handle(), tb, ta, n, m, k, &alpha, b, ldb, a, lda,
+                                          &beta, output, ldc)
+                            : cublasSgemmStridedBatched(context.handle(), tb, ta, n, m, k, &alpha,
+                                                        b, ldb, r.k * r.n, a, lda, r.m * r.k, &beta,
+                                                        output, n, r.m * r.n, batches);
+    }
+    // Execution and arithmetic failures propagate. Only preparation-time OOM
+    // may change schedule; a failed enqueue must never silently replay work.
+    generativeqc_tensor::blas_check(status);
+    const auto count = r.output_elements();
+    audit_contraction<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(count),
+                                                    256),
+                        256, 0, stream>>>(output, count, error, r.n, ldc);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+  }
+}
+
 /** Prepared projection of the canonical compiler requests for one AOT stage.
  * Each stage has at most a full batch and a tail batch. All descriptor storage,
  * validation and provider setup occur before execution; replay only selects an
@@ -630,60 +695,8 @@ class PreparedContractions {
       return;
     }
 #endif
-    constexpr auto dtype = std::is_same_v<T, double> ? PrecisionDtype::Fp64 : PrecisionDtype::Fp32;
-    if (r.precision.storage_dtype != dtype || !a || !b || !output || !error)
-      throw std::invalid_argument("native contraction buffer dtype/address mismatch");
-    const auto overlaps = [](const void* left, std::size_t left_bytes, const void* right,
-                             std::size_t right_bytes) {
-      const auto l = reinterpret_cast<std::uintptr_t>(left);
-      const auto r = reinterpret_cast<std::uintptr_t>(right);
-      return l <= r ? r - l < left_bytes : l - r < right_bytes;
-    };
-    if (overlaps(a, r.operands[0].storage_elements() * sizeof(T), output,
-                 r.operands[2].storage_elements() * sizeof(T)) ||
-        overlaps(b, r.operands[1].storage_elements() * sizeof(T), output,
-                 r.operands[2].storage_elements() * sizeof(T)))
-      throw std::invalid_argument("native contraction output must not alias its inputs");
-    const T alpha = static_cast<T>(r.coefficient), beta = static_cast<T>(r.beta);
-    if (!std::isfinite(alpha) || !std::isfinite(beta))
-      throw std::invalid_argument("contraction coefficient is not representable");
-    const auto ta = r.a_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
-    const auto tb = r.b_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
-    const auto m = int(r.m), n = int(r.n), k = int(r.k), batches = int(r.batches);
-    const int lda = int(r.leading_dimension(0)), ldb = int(r.leading_dimension(1)),
-              ldc = int(r.leading_dimension(2));
-    // The matrix layout implements the original einsum: C^T = op(B)^T op(A)^T.
-    // Batches are explicitly materialized by TensorIR, including broadcasts.
-    if (selected->algorithms[slot] == ContractionAlgorithm::GeneratedOrdered) {
-      generated_contraction<<<generativeqc_tensor::blocks(r.output_elements(), 256), 256, 0,
-                              stream>>>(a, b, output, r.output_elements(), r.m, r.n, r.k, lda, ldb,
-                                        ldc, r.a_trans == 'T', r.b_trans == 'T', alpha, beta,
-                                        error);
-      generativeqc_tensor::cuda_check(cudaGetLastError());
-    } else {
-      cublasStatus_t status;
-      if constexpr (std::is_same_v<T, double>) {
-        status = batches == 1 ? cublasDgemm(context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, a,
-                                            lda, &beta, output, ldc)
-                              : cublasDgemmStridedBatched(
-                                    context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, r.k * r.n,
-                                    a, lda, r.m * r.k, &beta, output, n, r.m * r.n, batches);
-      } else {
-        status = batches == 1 ? cublasSgemm(context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, a,
-                                            lda, &beta, output, ldc)
-                              : cublasSgemmStridedBatched(
-                                    context_->handle(), tb, ta, n, m, k, &alpha, b, ldb, r.k * r.n,
-                                    a, lda, r.m * r.k, &beta, output, n, r.m * r.n, batches);
-      }
-      // Execution and arithmetic failures propagate. Only preparation-time OOM
-      // may change schedule; a failed enqueue must never silently replay work.
-      generativeqc_tensor::blas_check(status);
-      const auto count = r.output_elements();
-      audit_contraction<<<generativeqc_tensor::blocks(static_cast<generativeqc_tensor::I>(count),
-                                                      256),
-                          256, 0, stream>>>(output, count, error, r.n, ldc);
-      generativeqc_tensor::cuda_check(cudaGetLastError());
-    }
+    execute_matrix_contraction(*context_, r, selected->algorithms[slot], stream, a, b, output,
+                               error);
     ++*calls_;
     *summands_ += work;
   }

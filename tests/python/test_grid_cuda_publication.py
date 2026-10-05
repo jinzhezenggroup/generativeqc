@@ -83,8 +83,30 @@ struct Context {
     }
   }
 };
+namespace generativeqc::dft::generated {
+struct Descriptor { std::size_t jets, points, active, width; };
+Descriptor grid_panel_descriptor(std::size_t j,std::size_t p,std::size_t a,std::size_t w) {
+  return {j,p,a,w};
+}
+}
+struct Projection {
+  void execute(generativeqc::dft::generated::Descriptor r, cudaStream_t,
+               const double* left, const double* right, double* output, int*) {
+    ++gemm_calls;
+    gemm_products += r.jets;
+    for (std::size_t row = 0; row < r.jets*r.points; ++row)
+      for (std::size_t column = 0; column < r.width; ++column) {
+        double value = 0;
+        for (std::size_t item = 0; item < r.active; ++item)
+          value += left[row*r.active+item]*right[item*r.width+column];
+        output[row*r.width+column] = value;
+      }
+  }
+};
 struct GridPlan {
   Context context;
+  Projection projection_value;
+  Projection* projection = &projection_value;
   bool view_ready=true,features_ready=true,density_jets_ready=true;
   bool local=true,density_ready=true,use_orbitals=false,orbital_ready=false,last_identity_map=false;
   bool identical_spin_density=false,orbital_enabled=true;
@@ -105,21 +127,6 @@ void scheduled_ao(int, const double*, std::size_t, std::size_t, std::size_t, con
   if (fault == 1) *error = 7;
 }
 template<class... A> void gather_factor(A&&...) {}
-void gemm(Context&, char, char, int rows, int columns, int inner, const double* left,
-          const double* right, double* output, I left_stride, I right_stride,
-          I output_stride, int batches, int) {
-  ++gemm_calls;
-  gemm_products += batches;
-  for (int batch = 0; batch < batches; ++batch)
-    for (int column = 0; column < columns; ++column)
-      for (int row = 0; row < rows; ++row) {
-        double value = 0;
-        for (int item = 0; item < inner; ++item)
-          value += left[batch*left_stride + item*rows + row] *
-                   right[batch*right_stride + column*inner + item];
-        output[batch*output_stride + column*rows + row] = value;
-      }
-}
 template<class... A> void orbital_feature_kernel(A&&...) {}
 template<class... A> void finish_orbital_sigma(A&&...) {}
 void gather_density(const double* density, const std::size_t* ids, I nao, I active,

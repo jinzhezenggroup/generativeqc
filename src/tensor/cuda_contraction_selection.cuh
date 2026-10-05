@@ -267,4 +267,83 @@ class PreparedContractionRegion {
   PreparedContractions table_;
 };
 
+/** Prepared binding for a packed contraction with bounded runtime extents.
+ * Providers needing exact-shape heuristics/plans are rejected before selection.
+ * Replay resolves only stack descriptors and guards the admitted domain; it
+ * performs no search, allocation, handle creation, or shape-cache insertion.
+ * As with fixed tables, capture needs explicit replay work accounting first. */
+class PreparedBoundedContraction {
+ public:
+  // Charge the retained owner plus the simultaneously live replay descriptor.
+  static constexpr std::size_t host_reservation = 16U << 10;
+
+  template <std::size_t N>
+  PreparedBoundedContraction(const runtime::NativeLoweringRequest& request,
+                             const std::array<runtime::NativeLoweringCandidate, N>& candidates,
+                             std::string_view target, std::string_view compilation,
+                             ContractionRequest maximum, cudaStream_t stream,
+                             std::size_t maximum_bytes)
+      : domain_(maximum) {
+    static_assert(sizeof(PreparedBoundedContraction) + sizeof(ContractionRequest) <=
+                  host_reservation);
+    if (maximum.scientific_identity != request.scientific_identity ||
+        maximum.semantic_template_identity != request.semantic_identity)
+      throw std::invalid_argument("bounded descriptor differs from its canonical request");
+    auto offers = candidates;
+    for (auto& offer : offers)
+      if (offer.provider != "cublas" && offer.provider != "generated.cuda")
+        offer.rejection = "exact-shape plans cannot bind a runtime extent domain";
+    const auto select = [&](bool available) {
+      return select_contraction_region(request, offers, target, compilation, 1, host_reservation,
+                                       maximum_bytes, available);
+    };
+    plan_ = select(true);
+    if (plan_.algorithm == ContractionAlgorithm::PedanticBlas && context_.prepare(stream)) {
+      // The handle and its immutable stream/math policy are now ready.
+    } else {
+      context_.prepare_generated(stream);
+      plan_ = select(false);
+    }
+    candidate_ = offers[plan_.selected];
+    if (candidate_.precision_identity != maximum.precision_identity)
+      throw std::invalid_argument("bounded binding precision differs from descriptor");
+  }
+
+  template <class T>
+  void execute(const ContractionRequest& actual, cudaStream_t stream, const T* a, const T* b,
+               T* output, int* error) {
+    if (stream != context_.stream())
+      throw std::logic_error("bounded contraction stream changed; prepare again");
+    int device{};
+    generativeqc_tensor::cuda_check(cudaGetDevice(&device));
+    if (device != context_.device()) throw std::logic_error("bounded contraction device changed");
+    cudaStreamCaptureStatus capture{};
+    generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::logic_error("bounded contraction capture requires replay work accounting");
+    domain_.validate(actual);
+    const auto work = actual.summands();
+    if (calls_ == std::numeric_limits<std::size_t>::max() ||
+        work > std::numeric_limits<std::size_t>::max() - summands_)
+      throw std::length_error("bounded contraction diagnostic counter overflow");
+    execute_matrix_contraction(context_, actual, plan_.algorithm, stream, a, b, output, error);
+    ++calls_;
+    summands_ += work;
+  }
+
+  const runtime::NativeLoweringCandidate& candidate() const noexcept { return candidate_; }
+  const ContractionRegionPlan& selected() const noexcept { return plan_; }
+  std::size_t calls() const noexcept { return calls_; }
+  std::size_t summands() const noexcept { return summands_; }
+  std::size_t retained_provider_bytes() const noexcept { return context_.retained_bytes(); }
+  int provider_version() const noexcept { return context_.provider_version(); }
+
+ private:
+  BoundedContractionDomain domain_;
+  ContractionRegionPlan plan_;
+  runtime::NativeLoweringCandidate candidate_;
+  CudaContractionContext context_;
+  std::size_t calls_{}, summands_{};
+};
+
 }  // namespace generativeqc::tensor

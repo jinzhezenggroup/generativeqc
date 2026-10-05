@@ -1,7 +1,8 @@
 /** Bounded FP64 AO spatial jets and spin density contractions on CUDA.
  * Host-built grid tiles are explicit inputs. Native normalized shell data,
- * D matrices, cuBLAS handle, stream and reusable arena are owned by the plan.
+ * D matrices, prepared tensor binding, stream and reusable arena belong to the plan.
  */
+#include <chrono>
 #include <climits>
 #include <cmath>
 #include <new>
@@ -19,6 +20,9 @@ thread_local bool fail_next_grid_runtime = false;
 #endif
 struct GridPlan {
   Context context;
+  // Destroy the binding before its borrowed stream/arena owner.
+  std::unique_ptr<generativeqc::tensor::PreparedBoundedContraction> projection;
+  double projection_prepare_seconds{};
   bool density_ready = false, density_jets_ready = false;
   // Only split_restricted_density establishes this witness for the owned copy.
   // Equal dimensions, aliased source pointers, and host values prove nothing.
@@ -243,7 +247,16 @@ int grid_cuda_create_v3(int device, int major, int minor, const size_t* dimensio
     if (expected_bytes && bytes != expected_bytes)
       throw std::invalid_argument("native/Python grid plan mismatch");
     p->context.prepare(device, major, minor, bytes, error_offset, workspace, 4U << 20, 96U << 20,
-                       true);
+                       false);
+    const auto started = std::chrono::steady_clock::now();
+    p->projection = generativeqc::dft::generated::prepare_grid_panel(
+        std::min(size_t{4}, p->jets), capacity, p->active_capacity,
+        std::max(p->active_capacity, p->orbital_tile), p->context.stream,
+        (96U << 20) + generativeqc::tensor::PreparedBoundedContraction::host_reservation);
+    p->projection_prepare_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    p->context.metrics.provider_retained_bytes = p->projection->retained_provider_bytes();
+    p->context.metrics.prepare_device_delta = p->context.device_delta();
     p->basis = reinterpret_cast<double*>(p->context.arena);
     p->density = p->basis + p->packed_size;
     p->points = p->density + matrices;
@@ -559,8 +572,12 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 14) ? 4 - first : 1;
           ctx.section(detailed_profile, ctx.metrics.library_ms, [&] {
-            gemm(ctx, 'N', 'N', npoint, width, active, p.ao + first * ao_stride, p.factor_panel,
-                 p.psi + first * psi_stride, ao_stride, 0, psi_stride, count, 0);
+            // Adjacent jet/point axes form one packed free-axis view; the
+            // factor panel is broadcast without replication or per-jet plans.
+            p.projection->execute(
+                generativeqc::dft::generated::grid_panel_descriptor(count, npoint, active, width),
+                ctx.stream, p.ao + first * ao_stride, p.factor_panel, p.psi + first * psi_stride,
+                ctx.error);
           });
           ctx.section(detailed_profile, ctx.metrics.packing_ms, [&] {
             orbital_feature_kernel<<<blocks(npoint, 128), 128, 0, ctx.stream>>>(
@@ -589,9 +606,10 @@ static int grid_cuda_run_selected_impl(void* pointer, const double* points, size
           const int first = (p.feature_mask & 7) ? 0 : 1;
           const int count = (p.feature_mask & 8) ? 4 - first : 1;
           for (int spin = 0; spin < (p.identical_spin_density ? 1 : 2); ++spin)
-            gemm(ctx, 'N', 'N', static_cast<int>(npoint), static_cast<int>(active),
-                 static_cast<int>(active), p.ao + first * stride, density + spin * active * active,
-                 p.work + (spin * 4 + first) * stride, stride, 0, stride, count, 0);
+            p.projection->execute(
+                generativeqc::dft::generated::grid_panel_descriptor(count, npoint, active, active),
+                ctx.stream, p.ao + first * stride, density + spin * active * active,
+                p.work + (spin * 4 + first) * stride, ctx.error);
           // Publish both ordered panels without repeating the identical GEMM.
           // The copy uses existing charged storage on the same owner stream;
           // first/count exclude unrequested jets, including the tau-only case.
@@ -856,6 +874,35 @@ int grid_cuda_scatter_v1(void* pointer, std::uint64_t generation, const double* 
     if (failure) throw std::runtime_error("nonfinite local grid consumer output");
   });
 }
+/** Additive lowering diagnostics; strings point to immutable generated metadata.
+ * Work counts refer to submitted nonempty projections, including only requested
+ * jets and actually executed spin/orbital panels. All counters are cumulative. */
+int grid_cuda_lowering_v1(void* pointer, const char** labels, size_t* work, double* prepare_seconds,
+                          char* error, size_t size) {
+  return guarded(error, size, [&] {
+    if (!pointer || !labels || !work || !prepare_seconds)
+      throw std::invalid_argument("null grid lowering diagnostics");
+    auto& p = *static_cast<GridPlan*>(pointer);
+    std::lock_guard<std::mutex> lock(p.context.mutex);
+    p.context.check_device();
+    const auto& candidate = p.projection->candidate();
+    labels[0] = candidate.provider.data();
+    labels[1] = candidate.identity.data();
+    labels[2] = candidate.precision_identity.data();
+    labels[3] = candidate.semantic_identity.data();
+    work[0] = p.projection->calls();
+    work[1] = p.projection->summands();
+    work[2] = p.projection->selected().binding_bytes;
+    work[3] = generativeqc::tensor::PreparedBoundedContraction::host_reservation;
+    work[4] = 1;  // Exactly one preparation per grid owner, never per tile.
+    *prepare_seconds = p.projection_prepare_seconds;
+  });
+}
+#if GENERATIVEQC_TEST_HOOKS
+void grid_cuda_lowering_unavailable_for_test(bool unavailable) {
+  generativeqc::tensor::contraction_libraries_unavailable_for_test = unavailable;
+}
+#endif
 int grid_cuda_metrics_v1(void* pointer, Metrics* metrics, int* versions, char* error, size_t size) {
   return guarded(error, size, [&] {
     if (!pointer || !metrics || !versions) throw std::invalid_argument("null grid metrics");
@@ -866,7 +913,7 @@ int grid_cuda_metrics_v1(void* pointer, Metrics* metrics, int* versions, char* e
     metrics->observed_device_delta = ctx.device_delta();
     cuda_check(cudaRuntimeGetVersion(versions));
     cuda_check(cudaDriverGetVersion(versions + 1));
-    blas_check(cublasGetVersion(ctx.handle, versions + 2));
+    versions[2] = static_cast<GridPlan*>(pointer)->projection->provider_version();
   });
 }
 }

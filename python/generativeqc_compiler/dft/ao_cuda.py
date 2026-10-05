@@ -17,6 +17,7 @@ from generativeqc_compiler.integral.expr import AlgebraForm, Graph
 
 from .ao import jet_indices
 from .feature_policy import emit_feature_policy
+from .grid_contraction import emit_grid_contraction
 from .xc_contraction_cuda import (
     DEFAULT_XC_MATRIX_SCHEDULE,
     XcMatrixSchedule,
@@ -1029,6 +1030,7 @@ def emit_grid_source(
     source = (
         policy
         + emit_grid_scientific_kernels(ao_radial_reuse=ao_radial_reuse)
+        + emit_grid_contraction()
         + '#include "cuda_grid.cu"\n'
     )
     if native_ks:
@@ -1047,6 +1049,13 @@ def emit_grid_source(
             asset_path("src/dft/grid_task_view.cuh"),
             asset_path("src/dft/xc_point.hpp"),
             asset_path("src/tensor/cuda_error.hpp"),
+            asset_path("src/tensor/cuda_contraction_selection.cuh"),
+            asset_path("src/tensor/cuda_contraction.cuh"),
+            asset_path("src/tensor/native_contraction.hpp"),
+            asset_path("src/runtime/lowering_binding.hpp"),
+            asset_path("src/runtime/execution_precision.hpp"),
+            asset_path("src/runtime/allocation_measurement.hpp"),
+            asset_path("src/tensor/metrics.hpp"),
             asset_path("include/generativeqc/generativeqc.h"),
         ),
     )

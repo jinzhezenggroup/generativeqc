@@ -24,13 +24,19 @@ if typing.TYPE_CHECKING:
 
 
 def emit_contraction_region_portfolio(
-    request: LoweringRequest, source_identity: str, *, name: str
+    request: LoweringRequest,
+    source_identity: str,
+    *,
+    name: str,
+    bounded_dense: bool = False,
 ) -> str:
     """Offer homogeneous prepared implementations for one compiler region.
 
     Native preparation resolves resource/version availability. This factory
     neither invents precision variants nor implements casts/refinement; regions
     requiring those obligations need a composite executor such as triples W.
+    Bounded dense domains admit varying extents without replay-time plan search;
+    providers requiring exact-shape plans retain explicit negative candidates.
     """
     from generativeqc_compiler.common.backend import TargetInfo
     from generativeqc_compiler.common.lowering_contract import CandidateExecution
@@ -78,13 +84,22 @@ def emit_contraction_region_portfolio(
         ):
             raise ValueError("contraction region requires homogeneous arithmetic")
         for provider in providers:
+            unavailable = bounded_dense and provider.name not in (
+                "cublas",
+                "generated.cuda",
+            )
             candidates.append(
                 LoweringCandidate(
                     request,
                     "region-" + provider.name,
                     (provider,),
-                    "ready",
+                    "unsupported" if unavailable else "ready",
                     d.math_mode,
+                    reason=(
+                        "exact-shape plans do not implement a bounded runtime domain"
+                        if unavailable
+                        else None
+                    ),
                     execution=CandidateExecution(
                         precision,
                         "prepared-affine-region",

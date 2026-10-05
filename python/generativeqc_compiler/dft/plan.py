@@ -163,6 +163,9 @@ def plan_tiles(
         )
     allocation = provider = 0
     if backend == "cuda":
+        # Shared lowering owns one bounded descriptor and provider context,
+        # plus the simultaneously live stack descriptor during replay.
+        host += 16 << 10
         elements = basis.packed.size + 2 * n * n + 16 * t + (jets + 8) * t * m
         if active_ao_capacity is not None:
             elements += 2 * n * n + 4 * m * m + m
