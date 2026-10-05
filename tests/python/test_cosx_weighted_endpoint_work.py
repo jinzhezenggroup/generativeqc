@@ -22,6 +22,10 @@ def test_weighted_harness_uses_production_effective_tile(tmp_path: Path) -> None
         pytest.skip("host C++ compiler unavailable")
     harness = (ROOT / "tests/native/cosx_weighted_endpoint_benchmark.cuh").read_text()
     runtime = (ROOT / "src/dft/cuda_cosx.cu").read_text()
+    bounds = re.findall(
+        r"constexpr std::size_t kRoutes = \d+, kReplays = \d+;", harness
+    )
+    assert len(bounds) == 1
     # Execute the actual harness assertions and production clamp/site choice.
     # This is a host accounting probe, not a substitute CUDA numerical path.
     checks = re.findall(
@@ -45,6 +49,9 @@ def test_weighted_harness_uses_production_effective_tile(tmp_path: Path) -> None
 #include <iostream>
 #include <stdexcept>
 #include <string_view>
+
+BOUND_CONSTANTS
+static_assert(kRoutes == 4 && kReplays == 6);
 
 void require(bool condition, const char* message) {
   if (!condition) throw std::runtime_error(message);
@@ -115,7 +122,8 @@ int main() {
     }
   }
 }
-""".replace("CLAMP", clamps[0])
+""".replace("BOUND_CONSTANTS", bounds[0])
+        .replace("CLAMP", clamps[0])
         .replace("ESP_SITE", esp_sites[0])
         .replace("SITE", sites[0])
         .replace("CHECKS", checks[0])
