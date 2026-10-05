@@ -302,7 +302,10 @@ class PreparedResidentCCSD:
         extension = _resident_extension(
             primary, diagnostic["state_segments"], n1, n2, self.options.diis_size
         )
-        dependency = asset_path("src/cc/cuda_state.cuh")
+        dependencies = tuple(
+            asset_path(path)
+            for path in ("src/cc/cuda_state.cuh", "src/tensor/cuda_history.cuh")
+        )
         with ExitStack() as cleanup:
             self.primary = cleanup.enter_context(
                 _ResidentCCOwner(
@@ -312,7 +315,7 @@ class PreparedResidentCCSD:
                         compiler,
                         cache,
                         extension=extension,
-                        dependencies=(dependency,),
+                        dependencies=dependencies,
                     ),
                     n1=n1,
                     n2=n2,

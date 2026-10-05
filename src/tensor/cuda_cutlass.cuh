@@ -114,13 +114,15 @@ class CudaCutlassContraction {
    * flags/header-content identity held by the enclosing build/artifact owner.
    * module_bytes is an externally qualified reservation for context-retained
    * AOT modules, not a claim of zero allocation or a reclaimable plan buffer.
-   * Rejection before loading returns false without increasing the charge.
-   * Once loading begins, the reservation survives every exception and release.
-   * A module-growth violation throws: CUDA may retain that module until context
-   * destruction, so the enclosing owner must not treat this as a free fallback.
+   * The enclosing context/build owner must keep this reservation after this
+   * instance dies. Once loading starts, this instance stays bound to its
+   * device/artifact; failed loading permanently poisons its admission.
+   * Pre-load resource/capability rejection returns false. A module-growth
+   * violation throws: CUDA may retain that module until context destruction.
    */
   bool prepare(const ContractionRequest& request, cudaStream_t stream, std::string_view artifact,
                std::size_t host_limit, std::size_t module_bytes) {
+    if (module_failed_) throw std::logic_error("CUTLASS retained module preparation failed");
     if (plan_) throw std::logic_error("CUTLASS contraction already prepared");
     const auto recipe = MatrixContractionRecipe::from(request);
     if (!valid_digest(artifact)) throw std::invalid_argument("CUTLASS artifact identity missing");
@@ -128,20 +130,27 @@ class CudaCutlassContraction {
     if (!module_bytes || module_bytes < module_bytes_) return false;
     int device{};
     generativeqc_tensor::cuda_check(cudaGetDevice(&device));
-    if (module_bytes_ && device != device_)
-      throw std::logic_error("CUTLASS retained module device changed");
-    device_ = device;
+    if (module_bytes_ && (device != device_ ||
+                          artifact != std::string_view(provenance_.artifact_identity.data(), 64)))
+      throw std::logic_error("CUTLASS retained module device or artifact changed");
     int major{}, minor{};
     generativeqc_tensor::cuda_check(
-        cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device_));
+        cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device));
     generativeqc_tensor::cuda_check(
-        cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device_));
+        cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device));
     if (major < 5) return false;
     // CUTLASS's fixed batched swizzle maps matrix columns and batch count to
     // CUDA grid y/z. Reject before module loading or submitting any work.
     const auto kernel_columns =
         recipe.layouts[2].row_major ? recipe.layouts[2].columns : recipe.layouts[2].rows;
+    const auto kernel_rows =
+        recipe.layouts[2].row_major ? recipe.layouts[2].rows : recipe.layouts[2].columns;
     if ((kernel_columns + 63) / 64 > 65535 || recipe.batches > 65535) return false;
+    // CUTLASS forms (dimension + tile - 1) in signed int during initialize,
+    // including the intermediate dimension + tile. Column output swaps M/N.
+    constexpr auto integer_limit = std::size_t(std::numeric_limits<int>::max());
+    if (kernel_rows > integer_limit - 32 || recipe.layouts[0].columns > integer_limit - 8)
+      return false;
     unsigned order{};
     for (unsigned i = 0; i < 3; ++i)
       if (recipe.layouts[i].row_major) order |= 1U << i;
@@ -157,20 +166,26 @@ class CudaCutlassContraction {
     std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     std::size_t before{}, after{}, total{};
     generativeqc_tensor::cuda_check(cudaMemGetInfo(&before, &total));
-    // Loading is not transactional: even a failed attribute query can leave
-    // previously loaded kernels in the CUDA context. Reserve before the first
-    // such call, while descriptor-only host rejection above stays reclaimable.
+    // Loading can retain code even if a later CUDA call fails. Publish the
+    // obligation first and keep failure sticky so warm retries cannot hide it.
+    device_ = device;
     module_bytes_ = module_bytes;
+    std::copy(artifact.begin(), artifact.end(), provenance_.artifact_identity.begin());
+    module_failed_ = true;
     prepared->load();
 #if defined(GENERATIVEQC_TEST_HOOKS)
     if (cutlass_fail_after_module_load_for_test)
       throw std::runtime_error("injected failure after CUTLASS module loading");
 #endif
     generativeqc_tensor::cuda_check(cudaMemGetInfo(&after, &total));
-    if (before > after && before - after > module_bytes) {
-      // Preserve the observed excess for diagnostics even though admission is
-      // invalid and must abort. Reporting the smaller ceiling hides real cost.
-      module_bytes_ = before - after;
+    const auto growth = before > after ? before - after : 0;
+    if (growth > std::numeric_limits<std::size_t>::max() - observed_module_bytes_) {
+      module_bytes_ = std::numeric_limits<std::size_t>::max();
+      throw std::length_error("CUTLASS retained module accounting overflow");
+    }
+    observed_module_bytes_ += growth;
+    module_bytes_ = std::max(module_bytes_, observed_module_bytes_);
+    if (observed_module_bytes_ > module_bytes) {
       throw std::length_error("CUTLASS AOT module exceeds qualified cache reservation");
     }
     int runtime{};
@@ -184,6 +199,7 @@ class CudaCutlassContraction {
     audit_.rank = request.operands[2].rank;
     stream_ = stream;
     plan_ = std::move(prepared);
+    module_failed_ = false;
     ++preparations_;
     return true;
   }
@@ -275,7 +291,8 @@ class CudaCutlassContraction {
   AffineAuditView audit_{};
   cudaStream_t stream_{};
   int device_{};
-  std::size_t module_bytes_{}, calls_{}, summands_{}, preparations_{};
+  bool module_failed_{};
+  std::size_t module_bytes_{}, observed_module_bytes_{}, calls_{}, summands_{}, preparations_{};
 };
 
 }  // namespace generativeqc::tensor

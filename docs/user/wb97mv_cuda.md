@@ -1,10 +1,14 @@
 # WB97M-V CUDA energy and forces
 
 The Python `Calculator` and prepared-batch interface compose the complete
-all-electron FP64 WB97M-V energy and stationary analytic forces on CUDA:
-semilocal meta-GGA, 15% short-range exchange, 100% long-range exchange
-(`omega=0.3`), and self-consistent VV10. Nuclear repulsion, overlap/Pulay,
-AO motion, quadrature-point motion and Becke partition response are included.
+all-electron WB97M-V energy and stationary analytic forces on CUDA: semilocal
+meta-GGA, 15% short-range exchange, 100% long-range exchange (`omega=0.3`),
+and self-consistent VV10. Nuclear repulsion, overlap/Pulay, AO motion,
+quadrature-point motion and Becke partition response are included. With explicit
+`precision="auto"`, the SCF may lower only the independently qualified Direct
+Coulomb J recurrence to FP32 compute with FP64 accumulation; SR/LR K, meta-GGA
+XC, VV10, the final physical audit and the stationary derivative owner remain
+strict FP64.
 
 Numerical acceptance covers restricted H2, unrestricted H3, spherical def2-SVP
 and def2-TZVP water, water with the full local spherical def2-TZVPD snapshot,
@@ -28,6 +32,10 @@ result = calculator.singlepoint(water, properties=("energy", "forces"))
 print(result.energy, result.forces)  # Hartree and Hartree/Bohr; coordinates in Bohr
 ```
 
+Set `precision="auto"` explicitly to opt into component-wise SCF precision.
+The default remains `"fp64"`; AUTO is not promoted as a default without a
+matched endpoint performance win.
+
 Use `method="wb97m-v-uks"` and an appropriate multiplicity for unrestricted
 spin. Energy-only requests avoid derivative work. Forces are the negative
 energy gradient. No CPU integral derivative, reference SCF or finite difference
@@ -41,8 +49,10 @@ CPU derivative or oracle fallback; its H2D work is reported explicitly.
 The complete Python force consumer admits built-in STO-3G, def2-SVP and
 def2-TZVP, or explicit/local all-electron bases through f angular momentum, in
 Cartesian or spherical representation. A basis such as def2-TZVPD is not
-bundled and must be supplied as a local basis record. ECPs, density fitting and
-mixed precision are outside this force contract.
+bundled and must be supplied as a local basis record. ECPs and density fitting
+remain outside this force contract. Component-wise `precision="auto"` is an SCF
+policy only; it does not lower stationary force arithmetic or expand the basis,
+ECP or resource domain.
 
 For the H/O-only benchmark snapshot in a repository checkout, load the exact
 diffuse basis rather than substituting the bundled def2-TZVP name:
