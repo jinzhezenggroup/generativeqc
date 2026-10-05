@@ -1,0 +1,3118 @@
+{
+  "schema": "generativeqc.pbe0-integrated-ao-qualified.v1",
+  "source_commit": "d40aeafee0bb1e73fc130a9a253efdbf9beb31e8",
+  "master_base": "8c1233a5c6f5dd0ff7d528a8c0772b9da06bf60f",
+  "source_identity": "60f730f179cef1c1649435f39915f85774f76ecc16dd0b5308d0cd11e42a60c8",
+  "library_sha256": "948c0d6892c8ad3ab05020b4e19b76f221a89d14b1e26ad83af715193015802d",
+  "slurm_job": "5757",
+  "node": "node1",
+  "gpu": "NVIDIA GeForce RTX 5090",
+  "scheduler_visible_device": "1",
+  "reference_sha256": "e2087de036bf01e681e95017de9341bf2a894e266d5b9d11a4adcc82c3e7d56d",
+  "gpu4pyscf": "1.8.1",
+  "reference_xc_backend": "cuda-libxc",
+  "protocol": {
+    "case": "water-96",
+    "atoms": 96,
+    "aos": 768,
+    "method": "PBE0/RKS",
+    "basis": "def2-SVP",
+    "basis_identity": "fad2c7433fe5fac19525d4c80fbd995a7ebed7816b7ea4bb88547e4f6a58a3d8",
+    "representation": "spherical",
+    "grid": {
+      "radial_points": 48,
+      "angular_polar": 16,
+      "angular_azimuth": 32,
+      "element_radii": [],
+      "partition_iterations": 3,
+      "coincident_tolerance": 1e-12,
+      "version": 1,
+      "radial_rule": "rational-legendre",
+      "angular_rule": "legendre-trapezoid",
+      "partition": "becke-equal-radius",
+      "pruning": "none",
+      "units": "Bohr",
+      "ordering": "atom-radial-polar-azimuth"
+    },
+    "properties": [
+      "energy",
+      "forces"
+    ],
+    "force_return": "host_array_in_timed_endpoint",
+    "density_fitting": false,
+    "repeats": 5,
+    "energy_tolerance": 1e-12,
+    "density_tolerance": 1e-10,
+    "reference_gradient_tolerance": 1e-10,
+    "screening_tolerance": 1e-12,
+    "reference_direct_scf_tolerance": 1e-14,
+    "reference_fock_policy": "full-density-rebuild",
+    "max_iterations": 100,
+    "energy_gate": 1e-8,
+    "force_gate": 1e-7,
+    "cold_definition": "preparation plus first synchronized energy/force endpoint",
+    "warm_definition": "5 fixed engine-local post-cold/post-move density replays",
+    "threads": {
+      "OMP_NUM_THREADS": "8",
+      "OPENBLAS_NUM_THREADS": "8",
+      "MKL_NUM_THREADS": "8"
+    }
+  },
+  "raw_retention": "/data/jzzeng/qc-pbe0-integrated-scf-ao-20261004/.artifacts/endpoint-5757/",
+  "interpretation": [
+    "Complete synchronized E/F with independent all-repeat numerical gates.",
+    "One source/binary/GPU for all three policies and the fresh reference.",
+    "Not interchangeable with Slurm5752 on another GPU or old Slurm5735.",
+    "Ordered policy runs, not ABBA causal attribution; shared compiler-cache history affects cold.",
+    "SCF iteration differences and all warm samples, including slow ones, are retained.",
+    "AO work proxies, semantic counts and resource bounds are not FLOPs or observed memory peaks.",
+    "Missing native Fock-build counts remain null; indexed force remains a request without an endpoint page counter.",
+    "Composition of existing PR1830/1833/1847, not a new scientific algorithm or default promotion."
+  ],
+  "reference": {
+    "cold": {
+      "seconds": [
+        88.74431547150016
+      ],
+      "median_seconds": 88.74431547150016,
+      "iterations": [
+        43
+      ],
+      "scf_jk_builds": [
+        44
+      ]
+    },
+    "warm": {
+      "seconds": [
+        15.412907049059868,
+        17.16700581088662,
+        17.198629409074783,
+        15.428177244961262,
+        17.204160820692778
+      ],
+      "median_seconds": 17.16700581088662,
+      "iterations": [
+        4,
+        5,
+        5,
+        4,
+        5
+      ],
+      "scf_jk_builds": [
+        5,
+        6,
+        6,
+        5,
+        6
+      ]
+    },
+    "moved": {
+      "seconds": [
+        85.54249368980527
+      ],
+      "median_seconds": 85.54249368980527,
+      "iterations": [
+        43
+      ],
+      "scf_jk_builds": [
+        44
+      ]
+    },
+    "moved-warm": {
+      "seconds": [
+        15.410039603710175,
+        10.039635304361582,
+        13.637878432869911,
+        10.080259662121534,
+        10.079141661524773
+      ],
+      "median_seconds": 10.080259662121534,
+      "iterations": [
+        4,
+        1,
+        3,
+        1,
+        1
+      ],
+      "scf_jk_builds": [
+        5,
+        2,
+        4,
+        2,
+        2
+      ]
+    }
+  },
+  "policies": {
+    "default-96": {
+      "request": {
+        "name": "default",
+        "indexed_force_requested": false,
+        "resident_ao_cutoff": null,
+        "resident_ao_cache_bytes": 16777216,
+        "phased_becke_requested": false,
+        "scf_active_ao_requested": false
+      },
+      "raw_sha256": "21b63a11b4d1c1b472bac2e5718c0db3da9f2ae15349903a4aff50f764830e90",
+      "validation_sha256": "b82d9f69b41b37c49d2a518ec8af7f760284d0d8f824e29c6e6f88e2efb6cd59",
+      "maximum_energy_error": 1.0459189070388675e-10,
+      "maximum_force_error": 2.4774765572388446e-11,
+      "compared_repeat_pairs": 72,
+      "discarded_attempt_work": "no reported fallback",
+      "phases": {
+        "cold": {
+          "seconds": [
+            751.783607468009
+          ],
+          "median_seconds": 751.783607468009,
+          "iterations": [
+            29
+          ],
+          "reported_fock_builds": [
+            null
+          ],
+          "warm_start_used": [
+            false
+          ],
+          "warm_start_fallback": [
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 29,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            291.1950269751251
+          ],
+          "integral_derivative_seconds": [
+            27.870511263608932
+          ],
+          "semilocal_geometry_seconds": [
+            32.0320799946785
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "warm": {
+          "seconds": [
+            77.52866481244564,
+            77.35670028626919,
+            77.409692119807,
+            77.36663135513663,
+            77.21994215995073
+          ],
+          "median_seconds": 77.36663135513663,
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "reported_fock_builds": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "warm_start_used": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "warm_start_fallback": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            60.11941650509834,
+            60.124233197420835,
+            60.20592773705721,
+            60.18956092745066,
+            60.18572208285332
+          ],
+          "integral_derivative_seconds": [
+            27.745214607566595,
+            27.73817092552781,
+            27.822725009173155,
+            27.815466459840536,
+            27.81423072144389
+          ],
+          "semilocal_geometry_seconds": [
+            32.0326519459486,
+            32.035785246640444,
+            32.03481301292777,
+            32.03088264539838,
+            32.03239085152745
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "moved": {
+          "seconds": [
+            271.6208691857755
+          ],
+          "median_seconds": 271.6208691857755,
+          "iterations": [
+            13
+          ],
+          "reported_fock_builds": [
+            null
+          ],
+          "warm_start_used": [
+            true
+          ],
+          "warm_start_fallback": [
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 13,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            60.680224139243364
+          ],
+          "integral_derivative_seconds": [
+            27.80520886182785
+          ],
+          "semilocal_geometry_seconds": [
+            32.10411465913057
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "moved-warm": {
+          "seconds": [
+            77.38509064912796,
+            77.36537972837687,
+            77.31781047210097,
+            77.27046438679099,
+            77.29080540314317
+          ],
+          "median_seconds": 77.31781047210097,
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "reported_fock_builds": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "warm_start_used": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "warm_start_fallback": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            60.262799732387066,
+            60.248488053679466,
+            60.217514868825674,
+            60.224619783461094,
+            60.23577795177698
+          ],
+          "integral_derivative_seconds": [
+            27.818350467830896,
+            27.80598510801792,
+            27.823023207485676,
+            27.821751780807972,
+            27.8194099329412
+          ],
+          "semilocal_geometry_seconds": [
+            32.111976746469736,
+            32.1129985563457,
+            32.07746123149991,
+            32.08122169598937,
+            32.07905551046133
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 22994,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 21516779520,
+              "phased_becke_batches": 0
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "disabled",
+              "cutoff": null,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 0,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": null
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 357022976,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 197047712,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        }
+      }
+    },
+    "force-local-96": {
+      "request": {
+        "name": "local-indexed-phased",
+        "indexed_force_requested": true,
+        "resident_ao_cutoff": 1e-16,
+        "resident_ao_cache_bytes": 16777216,
+        "phased_becke_requested": true,
+        "scf_active_ao_requested": false
+      },
+      "raw_sha256": "bfa3e94aa50450603109630eee5e03bdf2bac53249f947196b48f22a2c10b275",
+      "validation_sha256": "0b376e8c846f49ca0ad55532b5215059effb763530bb2d5d71c2f3e202f9ca17",
+      "maximum_energy_error": 1.0686562745831907e-10,
+      "maximum_force_error": 2.271073606952001e-11,
+      "compared_repeat_pairs": 72,
+      "discarded_attempt_work": "no reported fallback",
+      "phases": {
+        "cold": {
+          "seconds": [
+            708.8751968368888
+          ],
+          "median_seconds": 708.8751968368888,
+          "iterations": [
+            28
+          ],
+          "reported_fock_builds": [
+            null
+          ],
+          "warm_start_used": [
+            false
+          ],
+          "warm_start_fallback": [
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 28,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            263.1668170802295
+          ],
+          "integral_derivative_seconds": [
+            14.479553781449795
+          ],
+          "semilocal_geometry_seconds": [
+            14.011388000100851
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 0,
+                "discoveries": 9216,
+                "discovery_seconds": 12.949738923460245,
+                "discovery_ao_jet_values": 18119393280,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "warm": {
+          "seconds": [
+            40.95372053608298,
+            40.9130077958107,
+            41.08309780061245,
+            41.14041941985488,
+            40.88051287084818
+          ],
+          "median_seconds": 40.95372053608298,
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "reported_fock_builds": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "warm_start_used": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "warm_start_fallback": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            23.47358052060008,
+            23.50101936608553,
+            23.511988408863544,
+            23.591007009148598,
+            23.51929846405983
+          ],
+          "integral_derivative_seconds": [
+            14.341278620064259,
+            14.346612934023142,
+            14.368174355477095,
+            14.375886976718903,
+            14.381833232939243
+          ],
+          "semilocal_geometry_seconds": [
+            8.79389788210392,
+            8.800716575235128,
+            8.804664518684149,
+            8.80954422429204,
+            8.796183593571186
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "moved": {
+          "seconds": [
+            259.36259668692946
+          ],
+          "median_seconds": 259.36259668692946,
+          "iterations": [
+            14
+          ],
+          "reported_fock_builds": [
+            null
+          ],
+          "warm_start_used": [
+            true
+          ],
+          "warm_start_fallback": [
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 14,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            29.228590972721577
+          ],
+          "integral_derivative_seconds": [
+            14.386434976011515
+          ],
+          "semilocal_geometry_seconds": [
+            14.081863842904568
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 0,
+                "discoveries": 9216,
+                "discovery_seconds": 13.026332847774029,
+                "discovery_ao_jet_values": 18119393280,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "moved-warm": {
+          "seconds": [
+            41.102269031107426,
+            41.10857700929046,
+            41.145065035670996,
+            40.99266101792455,
+            44.88426178321242
+          ],
+          "median_seconds": 41.10857700929046,
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "reported_fock_builds": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "warm_start_used": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "warm_start_fallback": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            },
+            {
+              "requested": 0,
+              "selected": 0,
+              "tiles": 9216,
+              "empty_tiles": 0,
+              "min_active": 768,
+              "max_active": 768,
+              "active_sum": 7077888,
+              "discovery_ao_jet_values": 0,
+              "point_ao_visits": 1811939328,
+              "point_ao_square_sum": 1391569403904,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 0,
+              "reserved_device_bytes": 12717344,
+              "host_peak_bytes": 0,
+              "xc_evaluations": 1,
+              "cutoff": 0,
+              "discovery_seconds": 0
+            }
+          ],
+          "force_endpoint_seconds": [
+            23.510518338531256,
+            23.505365017801523,
+            23.51874141395092,
+            23.510309133678675,
+            23.521663818508387
+          ],
+          "integral_derivative_seconds": [
+            14.385505143553019,
+            14.37581268697977,
+            14.38683795183897,
+            14.387915380299091,
+            14.382777262479067
+          ],
+          "semilocal_geometry_seconds": [
+            8.79848913103342,
+            8.802503511309624,
+            8.807394873350859,
+            8.794264931231737,
+            8.808944199234247
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        }
+      }
+    },
+    "scf-force-local-96": {
+      "request": {
+        "name": "local-indexed-phased",
+        "indexed_force_requested": true,
+        "resident_ao_cutoff": 1e-16,
+        "resident_ao_cache_bytes": 16777216,
+        "phased_becke_requested": true,
+        "scf_active_ao_requested": true
+      },
+      "raw_sha256": "2249f58c1aad94b03c86acedc57ecb497003f284a0ff93bb4dfeda24bf1b5bc5",
+      "validation_sha256": "db583a34e52ca8626cd670cd3edbfc526b060bf8ceed84f6a394873d3390a27e",
+      "maximum_energy_error": 1.0732037480920553e-10,
+      "maximum_force_error": 2.347105843014674e-11,
+      "compared_repeat_pairs": 72,
+      "discarded_attempt_work": "no reported fallback",
+      "phases": {
+        "cold": {
+          "seconds": [
+            479.35417060926557
+          ],
+          "median_seconds": 479.35417060926557,
+          "iterations": [
+            28
+          ],
+          "reported_fock_builds": [
+            null
+          ],
+          "warm_start_used": [
+            false
+          ],
+          "warm_start_fallback": [
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460424,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373868544,
+              "point_ao_square_sum": 75674112000,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 28,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.964017926
+            }
+          ],
+          "force_endpoint_seconds": [
+            258.9079090207815
+          ],
+          "integral_derivative_seconds": [
+            14.433337032794952
+          ],
+          "semilocal_geometry_seconds": [
+            14.055672019720078
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 0,
+                "discoveries": 9216,
+                "discovery_seconds": 12.963743202388287,
+                "discovery_ao_jet_values": 18119393280,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "warm": {
+          "seconds": [
+            32.51214888319373,
+            32.473481975495815,
+            32.54424187541008,
+            32.52645889297128,
+            32.48942710086703
+          ],
+          "median_seconds": 32.51214888319373,
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "reported_fock_builds": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "warm_start_used": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "warm_start_fallback": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460424,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373868544,
+              "point_ao_square_sum": 75674112000,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.964017926
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460424,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373868544,
+              "point_ao_square_sum": 75674112000,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.964017926
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460424,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373868544,
+              "point_ao_square_sum": 75674112000,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.964017926
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460424,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373868544,
+              "point_ao_square_sum": 75674112000,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.964017926
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460424,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373868544,
+              "point_ao_square_sum": 75674112000,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.964017926
+            }
+          ],
+          "force_endpoint_seconds": [
+            23.487485513091087,
+            23.481839142739773,
+            23.482846915721893,
+            23.493735160678625,
+            23.492261938750744
+          ],
+          "integral_derivative_seconds": [
+            14.3456442207098,
+            14.354268621653318,
+            14.342741340398788,
+            14.352035239338875,
+            14.35864382609725
+          ],
+          "semilocal_geometry_seconds": [
+            8.815007653087378,
+            8.803410094231367,
+            8.815075516700745,
+            8.801492106169462,
+            8.813369076699018
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "moved": {
+          "seconds": [
+            137.3295853100717
+          ],
+          "median_seconds": 137.3295853100717,
+          "iterations": [
+            13
+          ],
+          "reported_fock_builds": [
+            null
+          ],
+          "warm_start_used": [
+            true
+          ],
+          "warm_start_fallback": [
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460431,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373870336,
+              "point_ao_square_sum": 75674636032,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 13,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.93477886
+            }
+          ],
+          "force_endpoint_seconds": [
+            29.243130411952734
+          ],
+          "integral_derivative_seconds": [
+            14.351923190057278
+          ],
+          "semilocal_geometry_seconds": [
+            14.102803479880095
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 0,
+                "discoveries": 9216,
+                "discovery_seconds": 13.012046493589878,
+                "discovery_ao_jet_values": 18119393280,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        },
+        "moved-warm": {
+          "seconds": [
+            32.525058172643185,
+            32.513391710817814,
+            32.56674336269498,
+            32.546870071440935,
+            32.55475493520498
+          ],
+          "median_seconds": 32.546870071440935,
+          "iterations": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "reported_fock_builds": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "warm_start_used": [
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "warm_start_fallback": [
+            false,
+            false,
+            false,
+            false,
+            false
+          ],
+          "scf_ao_work": [
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460431,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373870336,
+              "point_ao_square_sum": 75674636032,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.93477886
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460431,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373870336,
+              "point_ao_square_sum": 75674636032,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.93477886
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460431,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373870336,
+              "point_ao_square_sum": 75674636032,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.93477886
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460431,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373870336,
+              "point_ao_square_sum": 75674636032,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.93477886
+            },
+            {
+              "requested": 1,
+              "selected": 1,
+              "tiles": 9216,
+              "empty_tiles": 768,
+              "min_active": 0,
+              "max_active": 536,
+              "active_sum": 1460431,
+              "discovery_ao_jet_values": 7247757312,
+              "point_ao_visits": 373870336,
+              "point_ao_square_sum": 75674636032,
+              "dense_point_ao_square_sum": 1391569403904,
+              "discovery_d2h_bytes": 28348416,
+              "reserved_device_bytes": 69340448,
+              "host_peak_bytes": 56699912,
+              "xc_evaluations": 1,
+              "cutoff": 1e-16,
+              "discovery_seconds": 1.93477886
+            }
+          ],
+          "force_endpoint_seconds": [
+            23.510695423930883,
+            23.498534593731165,
+            23.521398559212685,
+            23.53522925078869,
+            23.52935015782714
+          ],
+          "integral_derivative_seconds": [
+            14.35873020812869,
+            14.364275317639112,
+            14.370162770152092,
+            14.38522470369935,
+            14.383191652595997
+          ],
+          "semilocal_geometry_seconds": [
+            8.820697538554668,
+            8.806847836822271,
+            8.818670958280563,
+            8.805016212165356,
+            8.81548735499382
+          ],
+          "force_observed_work": [
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            },
+            {
+              "native_primitive_records": 4560,
+              "native_task_descriptors": 0,
+              "native_task_batches": 0,
+              "native_launches": 87506,
+              "primitive_pages": 0,
+              "bulk_pack_chunks": 0,
+              "bulk_packed_descriptors": 0,
+              "scalar_packed_descriptors": 0,
+              "geometry_batches": 9216,
+              "becke_pair_state_evaluations": 10758389760,
+              "phased_becke_batches": 9216
+            }
+          ],
+          "force_ao_selection": [
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            },
+            {
+              "schema": "generativeqc.stationary-resident-ao-selection.v1",
+              "mode": "explicit-sampled-jet-cutoff",
+              "cutoff": 1e-16,
+              "cache_budget_requested_bytes": 16777216,
+              "cache_host_reserve_bytes": 16777216,
+              "full_ao_capacity": 768,
+              "derivative_order": 2,
+              "work": {
+                "lookups": 9216,
+                "cache_hits": 9216,
+                "discoveries": 0,
+                "discovery_seconds": 0,
+                "discovery_ao_jet_values": 0,
+                "discovery_density_contractions": 0,
+                "dense_budget_tiles": 0,
+                "dense_capability_tiles": 0,
+                "point_ao_visits": 388141056,
+                "point_ao_square_sum": 81057099776,
+                "dense_point_ao_square_sum": 1391569403904,
+                "active_aos_min": 0,
+                "active_aos_max": 553,
+                "active_aos_sum": 1516176,
+                "tile_count": 9216,
+                "empty_tile_count": 768,
+                "retained_map_bytes": 12129408,
+                "transient_reserve_bytes": 15360,
+                "budget_bytes": 16777216,
+                "numeric_peak_bound_bytes": 12144768
+              }
+            }
+          ],
+          "force_resource_bounds": [
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            },
+            {
+              "additional_device_peak_bound": 396778368,
+              "additional_device_budget": 536870912,
+              "additional_host_numeric_bound": 213824928,
+              "additional_host_budget": 268435456,
+              "snapshot_host_bytes": 136967464,
+              "native_integral_host_reserve": 4851008
+            }
+          ]
+        }
+      }
+    }
+  }
+}

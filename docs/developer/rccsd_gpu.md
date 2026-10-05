@@ -61,6 +61,36 @@ those are tracked under C.
 `AmplitudeSnapshot` still forbids shape-only reuse across reference changes, and
 cross-geometry amplitude transport remains unsupported.
 
+## Canonical native denominator representation
+
+Native molecular CUDA RCCSD retains canonical occupied/virtual orbital energies
+instead of a full doubles-denominator array. Singles denominators remain an
+`O(ov)` array. The shared scalar TensorIR preserves the original FP64 grouping
+`(eps_i - eps_a) + (eps_j - eps_b) - 2 * level_shift`; Jacobi updates reconstruct
+that value inside the division kernel. MP2-like initialization and the Lambda
+diagonal use the same expression without materializing a doubles tensor.
+
+Physical gaps must remain negative, finite, and strictly larger in absolute
+value than the configured threshold before shifting. Admission checks all
+single gaps and the most negative double gap: monotonic FP64 addition bounds
+every other double gap and any nonnegative level shift. This is `O(ov)` work;
+there is no standalone doubles reconstruction or validation pass.
+
+`Problem::denominator_representation` distinguishes canonical-spectrum and
+explicit inputs. The denominator fingerprint includes the representation,
+dimensions, numeric inputs, shift and physical threshold. Supplied/noncanonical
+problems retain explicit arrays; native CPU construction also retains explicit
+arrays. The internal `derived_denominators` selector retains the explicit CUDA
+comparison path. No source/orbital inference or new cache is introduced.
+
+For the primal owner, the nominal host and device payload each decrease from
+`8*o²*v²` bytes to `8*(o+v)` bytes, subject to allocator alignment and vector
+capacity. Five scalar FP64 operations reconstruct each consumed double gap;
+`derived_d2_iteration_evaluations` counts the iteration consumers only, separately
+from physical contraction summands. The full planner charges the remaining
+spectrum and all ordinary solver/response storage. Endpoint measurements must
+decide whether the bandwidth/arithmetic trade helps a given scale.
+
 ## B: resident single-system solver
 
 `tools.generativeqc_cc.resident_solver.PreparedResidentCCSD` now binds the existing

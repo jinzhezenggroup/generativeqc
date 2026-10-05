@@ -721,7 +721,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   }
   if (!first_setup &&
       (plan.resources.device_id_ != device_id || !same_topology(plan.topology, host) ||
-       !same_hf_bucket_options(plan.options, options) || plan.unrestricted != unrestricted ||
+       !same_hf_bucket_options(plan.options, options) ||
+       !compatible_hf_bucket_options(plan, host, options) || plan.unrestricted != unrestricted ||
        plan.bounded_direct_streaming != requested_bounded_direct_streaming ||
        plan.shell_class_profiling != shell_class_profiling ||
        plan.inactive_eigensolver_profiling != inactive_eigensolver_profiling ||
@@ -1040,6 +1041,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool use_cusolver = use_jacobi ||
                             ordinary_eigensolver_family == CudaEigensolverFamily::xsyev_batched ||
                             ordinary_eigensolver_family == CudaEigensolverFamily::xsyevd;
+  const auto retained_reference_peak = options.export_physical_reference && !first_setup
+                                           ? hf_cuda_reference_reuse_capacity(plan, host)
+                                           : 0;
   const bool geometry_changed = first_setup || plan.cached_positions != host.positions;
   ++plan.execution_generation;
   if (geometry_changed) ++plan.geometry_generation;
@@ -1892,7 +1896,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       }
     }
     resources.reference_peak_bytes_ = reference_detail::check_capacity(
-        required, resources.reference_eri_bytes_, options.reference_memory_budget_bytes);
+        std::max(retained_reference_peak,
+                 reference_detail::check_capacity(required, resources.reference_eri_bytes_,
+                                                  options.reference_memory_budget_bytes)),
+        0, options.reference_memory_budget_bytes);
     if (resources.reference_eri_ != nullptr) {
       eri = resources.reference_eri_;
       persistent_eri = true;
@@ -3964,6 +3971,10 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       }
       outputs[0].scf.precision.post_scf_fock_builds = post_scf_physical_fock_builds;
       outputs[0].scf.precision.skipped_final_fock_builds = reused_final_physical_fock ? 1U : 0U;
+      // Bind the complete admission to actual capacities after publication.
+      // Future freeze/growth is additional storage; clears retain capacity.
+      plan.reference_admitted_plan_host_bytes = hf_cuda_retained_host_numeric_bytes(plan);
+      plan.reference_admitted_candidate_host_bytes = cuda_execution::host_batch_numeric_bytes(host);
       // Download has synchronized the stream. Report semantic completed work,
       // not the one-time host graph-capture calls or allocator pool rounding.
       runtime::df_progress::Scope trace("cuda_rhf_reference_completed", "cuda_completed");

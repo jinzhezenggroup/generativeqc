@@ -17,6 +17,8 @@
 #include "scf/cuda/direct_force_low_order_sources.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_order3.cuh"
+#include "scf/cuda/direct_force_order4_sources.cuh"
+#include "scf/cuda/direct_force_order5_sources.cuh"
 #include "scf/cuda/direct_metadata.hpp"
 #include "scf/cuda/direct_queue_index.cuh"
 #include "scf/cuda/direct_queue_profile.cuh"
@@ -187,7 +189,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
       // assigning generic fallback classes one warp each. psss Fock is
       // compiler-owned; if that generated class is unavailable, order one
       // deliberately falls through to the generic full-warp oracle/fallback.
-      if constexpr (FixedAngularOrder < 0 || FixedAngularOrder <= 3) {
+      if constexpr (FixedAngularOrder < 0 || FixedAngularOrder <= 5) {
         for (std::uint32_t slot = threadIdx.x; slot < queue_count; slot += blockDim.x) {
           const ActiveShellQuartetTile task = queue[slot];
           const std::int32_t first_shell = batch.shell_pair_first[task.first_pair];
@@ -200,6 +202,30 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                   : batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
                         batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
           if constexpr (Force) {
+            if (radial_operator == DirectRangeOperator::FullSources && angular_order == 5U) {
+              const unsigned shell_class = direct_quartet_shell_class_device(
+                  batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+                  batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+              if (weighted_order5_source_class(shell_class)) {
+                contract_two_electron_force_order5_sources<Unrestricted>(
+                    shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
+                    output, coulomb_coefficient, exchange_coefficient);
+              }
+              // f-containing order-five classes still belong to the warp fallback.
+              continue;
+            }
+            if (radial_operator == DirectRangeOperator::FullSources && angular_order == 4U) {
+              const unsigned shell_class = direct_quartet_shell_class_device(
+                  batch.shell_angular[first_shell], batch.shell_angular[second_shell],
+                  batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
+              if (weighted_order4_source_class(shell_class)) {
+                contract_two_electron_force_order4_sources<Unrestricted>(
+                    shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
+                    output, coulomb_coefficient, exchange_coefficient);
+              }
+              // Uncovered order-four classes are consumed by the warp fallback.
+              continue;
+            }
             if (radial_operator == DirectRangeOperator::Long && angular_order <= 3U) {
               const unsigned shell_class = direct_quartet_shell_class_device(
                   batch.shell_angular[first_shell], batch.shell_angular[second_shell],
@@ -289,6 +315,10 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
               batch.shell_angular[first_shell], batch.shell_angular[second_shell],
               batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
           if constexpr (Force) {
+            if (radial_operator == DirectRangeOperator::FullSources &&
+                (weighted_order4_source_class(shell_class) ||
+                 weighted_order5_source_class(shell_class)))
+              continue;
             // Full/LR order 0--3 was consumed once by the scalar shell workers.
             // Short range, fused RSH and higher orders retain their qualified
             // Cartesian/AOT recurrence and bounded queue traversal.
@@ -522,7 +552,7 @@ void launch_bounded_direct_range_exchange_force_kernel(
     const std::uint32_t* bounded_generated_overflow, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega,
-    double exchange_coefficient) {
+    double exchange_coefficient, detail::BoundedDirectBlockDomain block_domain) {
   if (radial_operator == DirectRangeOperator::Full) return;
   // This consumer publishes only range-separated K derivatives. Select its
   // raw-K linear bound and same-spin force-product bounds; the mixed J/K
@@ -533,14 +563,16 @@ void launch_bounded_direct_range_exchange_force_kernel(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true);
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true,
+            block_domain);
   } else {
     bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Force, true>
         <<<grid, block, shared_bytes, stream>>>(
             batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
             shell_pair_order, shell_pair_block_bounds, system_density_bounds, nullptr, 0U,
             bounded_generated_overflow, schwarz_bounds, density, active, output, global_cursor,
-            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true);
+            nullptr, 0.0, exchange_coefficient, radial_operator, omega, 0.0, false, true,
+            block_domain);
   }
 }
 

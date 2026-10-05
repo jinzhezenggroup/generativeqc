@@ -1,0 +1,61 @@
+{
+  "public_aos_per_atom": [
+    46,
+    23,
+    23,
+    23,
+    46,
+    23,
+    23,
+    23
+  ],
+  "cartesian_aos_per_atom": [
+    55,
+    25,
+    25,
+    25,
+    55,
+    25,
+    25,
+    25
+  ],
+  "generic_polarization_visit_bound": 8395230000,
+  "generic_polarization_jet_upper_bound": 18840575166,
+  "canonical_visits": 575639415,
+  "canonical_jet_upper_bound": 1276669675,
+  "assumptions": "Exact unscreened traversal; jet bounds ignore density-coefficient zeros. Generic old model applies only if no shell derivative lease is used. No FLOP interpretation.",
+  "measured_legacy_consumer": "bounded shell, three passes",
+  "generic_model_applies_to_measured_legacy": false,
+  "measured_shell_quartet_visits": null,
+  "measured_shell_derivative_jets": null,
+  "quadratic_provider_work": {
+    "definition": "W(X) denotes one unscreened quadratic derivative consumer on density X, including shell primitive/component reuse and any exact zero-weight skips.",
+    "legacy": "W(D+P) + W(D) + W(P)",
+    "symmetric": "W(D+P) + W(D-P)",
+    "canonical": "sum over unique Cartesian ERI orbits of derivative work for u-1 distinct atom centers, weighted directly by P_ab*D_cd - P_ac*D_bd/2",
+    "equal_pass_model_ratio": 0.6666666666666666,
+    "equal_pass_model_status": "Derived only if the two schedules have equal per-pass cost. Not a measured shell work reduction or FLOP ratio.",
+    "asymptotic_change": false,
+    "extra_live_symmetric_payload_bytes": 0,
+    "capacity_note": "Reuses combined N*N host matrix after each consumer drains; retained three-pass complete numeric bound covers both schedules."
+  },
+  "screened_z_work": {
+    "unscreened": "n0*C(0) + fixed_exact_audits_and_weights",
+    "provisional_and_correction": "ns*C(tau) + nc*C(0) + independent_unscreened_audit(s) + fixed_exact_weights",
+    "definitions": "C(tau) is one geometry-only masked J/K action; ns/nc are measured provisional/corrective action counts. Canonical traversal count is unchanged by masking; evaluated ERIs can decrease. Extra audit/correction can outweigh that saving.",
+    "extra_warm_start_bytes_at_o9_v221": 15912,
+    "default_threshold": 0,
+    "physical_residual_gate": 1e-10
+  },
+  "legacy_to_symmetric_unchanged_measured_work": {
+    "ccsd_contraction_terms": 44063877939352,
+    "lambda_work": 64006668617241,
+    "lambda_gemm_summands": 52448827747914,
+    "triples_work": 12483272948276,
+    "fock_response_work": 9924048505176,
+    "orbital_jk_quartet_visits": 16117903620,
+    "orbital_jk_eri_evaluations": 16117903620,
+    "jk_actions": 28
+  },
+  "shell_work_note": "Only pass counts are measured for shell derivatives (3 versus 2). Per-pass primitive/component work is not counted; no 3*N^4 claim."
+}

@@ -58,6 +58,15 @@ void launch_independent_eri_tile(cudaStream_t stream, DeviceBatch batch, std::in
                                  const std::array<std::size_t, 4>& count, std::size_t elements,
                                  double* eri);
 
+/** Copy one exact public-AO tile from a resident row-major [i,j,k,l] tensor.
+ * Source ownership stays with the physical-reference plan; the caller owns the
+ * destination and stream.
+ */
+void launch_copy_resident_eri_tile(cudaStream_t stream, const double* resident, std::size_t nbf,
+                                   const std::array<std::size_t, 4>& begin,
+                                   const std::array<std::size_t, 4>& count, std::size_t elements,
+                                   double* eri);
+
 /** Materialize one validated system's complete public-AO ERI tensor.
  * The caller owns an nbf^4 output and its stream. No cache is retained here;
  * partial AO tiles must use the independent rectangular tile producer.
@@ -122,16 +131,14 @@ void launch_independent_rsh_derivative_kernel(
     const double* bounds, const double* density, const double* beta, double* out);
 
 /** Reuse the canonical geometry schedule and the existing RSH derivative algebra. */
-void launch_canonical_rsh_derivative_kernel(cudaStream_t stream, DeviceBatch batch, bool cartesian,
-                                            std::int32_t system, unsigned angular_order,
-                                            const std::int32_t* pairs, CanonicalPairRows rows,
-                                            std::size_t first_begin, std::size_t first_count,
-                                            std::size_t second_begin, std::size_t second_count,
-                                            bool same_bucket, std::size_t source_stride, double cj,
-                                            double short_ck, double long_ck, bool unrestricted,
-                                            double omega, double screening, const double* bounds,
-                                            const double* density, const double* beta, double* out,
-                                            std::uint64_t* work_count);
+void launch_canonical_rsh_derivative_kernel(
+    cudaStream_t stream, DeviceBatch batch, bool cartesian, std::int32_t system,
+    unsigned angular_order, const std::int32_t* pairs, CanonicalPairRows rows,
+    std::size_t first_begin, std::size_t first_count, std::size_t second_begin,
+    std::size_t second_count, bool same_bucket, std::size_t source_stride, double cj,
+    double short_ck, double long_ck, bool unrestricted, double omega, double screening,
+    const double* bounds, const double* density, const double* beta, double* out,
+    std::uint64_t* work_count, bool bilinear = false, int* error = nullptr);
 
 /** Provider-facing shell derivative seam. Queue/numerical ownership remains in
  * the Direct consumer layer; host source owners borrow only this launch ABI.
@@ -168,7 +175,8 @@ void launch_bounded_shell_range_exchange_derivative(
     const double* shell_pair_block_bounds, const double* system_density_bounds,
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
-    DirectCoulombRange range, double omega, double exchange_coefficient);
+    DirectCoulombRange range, double omega, double exchange_coefficient,
+    detail::BoundedDirectBlockDomain block_domain = {});
 
 /** Fill one raw SR/LR positive-K source through the bounded shell dispatcher. */
 void launch_bounded_shell_range_exchange_source(
