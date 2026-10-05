@@ -60,7 +60,6 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     # The CUDA stream is opaque here; this probe never calls a launcher.
     launcher_start = header.index("using CudaXcDensityLauncher =")
     launcher_end = header.index(";", launcher_start) + 1
-    declarations += "\nstruct CUstream_st; using cudaStream_t = CUstream_st*;\n"
     declarations += header[launcher_start:launcher_end]
     xc_source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
     declarations += "\n" + _definition(xc_source, "struct CudaXcProgramTraits") + ";"
@@ -75,6 +74,11 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
         )
     )
     directory = tmp_path_factory.mktemp("ks-local-ao-admission")
+    # The real potential-binding header needs only an opaque stream in this
+    # host admission probe; keep its production host reservation authoritative.
+    (directory / "cuda_runtime_api.h").write_text(
+        "#pragma once\nstruct CUstream_st; using cudaStream_t = CUstream_st*;\n"
+    )
     (directory / "generated_split_hybrid_registry.cuh").write_text(emit_registry())
     unit, executable = directory / "probe.cpp", directory / "probe"
     unit.write_text(
@@ -91,6 +95,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include "dft/cuda_ks_precision.hpp"
 #include "dft/semilocal_family.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "tensor/cuda_symmetric_product.hpp"
 #include "generated_split_hybrid_registry.cuh"
 using namespace generativeqc;
 using namespace generativeqc::dft;
@@ -165,6 +170,8 @@ int main(int argc, char** argv) {
             "-Werror",
             "-fsanitize=undefined",
             "-fno-sanitize-recover=undefined",
+            "-I",
+            str(directory),
             "-I",
             str(ROOT / "src"),
             "-I",

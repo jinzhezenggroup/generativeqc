@@ -28,9 +28,12 @@ extern "C" void xc_density_gather_for_test(cudaStream_t, const double*, std::siz
 extern "C" void xc_density_materialize_for_test(cudaStream_t, const double*, std::size_t,
                                                 std::size_t, double*, int*);
 extern "C" void xc_cuda_fail_next_nonlocal_allocation_for_test_v1();
+extern "C" void xc_potential_qualification_for_test(bool library, bool unavailable);
 
 namespace {
 using namespace generativeqc::dft;
+// Test-owned resource admission, independent of scientific method parameters.
+std::size_t potential_qualification_budget{};
 void require(bool condition, const std::string& message) {
   if (!condition) throw std::runtime_error(message);
 }
@@ -95,6 +98,7 @@ struct Fixture {
       plan =
           std::make_unique<CudaXcPlan>(layout, basis.packed, grid.points(), grid.weights(), arena,
                                        allocation_bytes, stream, CudaMolecularGridView{}, maps);
+      if (potential_qualification_budget) plan->prepare_potential(potential_qualification_budget);
       if (density_provider_qualification_budget)
         plan->prepare_density(generativeqc::runtime::strict_fp64_precision(), 10,
                               density_provider_qualification_budget);
@@ -857,6 +861,7 @@ void matrix_schedule_cases() {
 #include "dft_local_ao_cases.cuh"
 #include "dft_ao_discovery_cases.cuh"
 #include "dft_pbe0_ao_discovery_cases.cuh"
+#include "dft_potential_lowering_cases.cuh"
 #include "dft_density_provider_cases.cuh"
 #include "dft_density_provider_benchmark.cuh"
 #include "dft_indexed_density_cases.cuh"
@@ -868,6 +873,14 @@ int main(int argc, char** argv) {
   int devices = 0;
   if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
   try {
+    if (argc == 2 && std::string(argv[1]) == "--potential-benchmark") {
+      potential_lowering_benchmark();
+      return 0;
+    }
+    if (argc == 2 && std::string(argv[1]) == "--potential-lowering") {
+      potential_lowering_cases();
+      return 0;
+    }
     if (argc == 4 && std::string(argv[1]) == "--indexed-density-benchmark") {
       mapped_density_benchmark(argv[2], argv[3]);
       return 0;

@@ -17,6 +17,7 @@ from generativeqc_compiler.integral.cuda import CudaEmitter
 from .xc_bilinear import ao_pair_bilinear, symmetric_density_element
 from .xc_density_lowering import emit_density_binding
 from .xc_density_provider import emit_density_provider
+from .xc_potential_lowering import emit_potential_portfolio
 
 
 @dataclass(frozen=True, slots=True)
@@ -396,7 +397,7 @@ void launch_density_product(cudaStream_t stream, const double* density,
         density,ao,n,count,spins,work_jets,work,error,ao_ids,full_n);
   }
 }
-inline void scheduled_potential(cudaStream_t stream, const double* ao,
+inline void generated_potential(cudaStream_t stream, const double* ao,
     const double* coefficients, const double* weights, I n, I count, I spins,
     I terms, I work_jets, double* work, const double* point_totals,
     double* potential, double* totals, bool accumulate, int* error,
@@ -428,6 +429,53 @@ inline void scheduled_potential(cudaStream_t stream, const double* ao,
     if (point_totals) accumulate_totals<<<1,32,0,stream>>>(point_totals,count,totals,error);
   }
 }
+
+// This adapter only supplies semantic operands and the compiler-owned packing
+// and epilogue. Provider selection/handles remain in the shared tensor owner.
+struct PotentialCall {
+  cudaStream_t stream;
+  const double *ao, *coefficients, *weights;
+  I n, count, spins, terms, work_jets;
+  double* work;
+  const double* point_totals;
+  double *potential, *totals;
+  bool accumulate;
+  int* error;
+  const size_t* ids;
+  I full_n;
+};
+inline void scheduled_potential(cudaStream_t stream, const double* ao,
+    const double* coefficients, const double* weights, I n, I count, I spins,
+    I terms, I work_jets, double* work, const double* point_totals,
+    double* potential, double* totals, bool accumulate, int* error,
+    const size_t* ao_ids = nullptr, I full_n = 0,
+    const tensor::PreparedSymmetricProduct* binding = nullptr) {
+  PotentialCall state{stream,ao,coefficients,weights,n,count,spins,terms,work_jets,
+      work,point_totals,potential,totals,accumulate,error,ao_ids,full_n};
+  const auto generated=[](void* opaque) {
+    const auto& s=*static_cast<PotentialCall*>(opaque);
+    generated_potential(s.stream,s.ao,s.coefficients,s.weights,s.n,s.count,s.spins,s.terms,
+        s.work_jets,s.work,s.point_totals,s.potential,s.totals,s.accumulate,s.error,s.ids,s.full_n);
+  };
+  if (!binding) {generated(&state);return;}
+  const auto materialize=[](void* opaque) {
+    const auto& s=*static_cast<PotentialCall*>(opaque);
+    compact_potential_panels<<<generativeqc_tensor::blocks(s.spins*s.count*s.n,128),128,0,s.stream>>>(
+        s.ao,s.coefficients,s.weights,s.n,s.count,s.spins,s.terms,s.work_jets,s.work,s.error);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+  };
+  const auto epilogue=[](void* opaque) {
+    const auto& s=*static_cast<PotentialCall*>(opaque);
+    if (!s.point_totals) return;
+    if (!s.accumulate)
+      generativeqc_tensor::cuda_check(cudaMemsetAsync(s.totals,0,3*sizeof(double),s.stream));
+    accumulate_totals<<<1,32,0,s.stream>>>(s.point_totals,s.count,s.totals,s.error);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+  };
+  binding->execute(stream,{std::size_t(n),std::size_t(work_jets*count),std::size_t(spins),
+      ao,work,potential,error,accumulate,ao_ids!=nullptr || (full_n && full_n!=n),
+      &state,generated,materialize,epilogue});
+}
 """
 
 
@@ -453,8 +501,9 @@ def emit_native_xc_matrix_schedule(
 ) -> str:
     """Emit compact graph lowering for one explicitly qualified tile candidate."""
     return (
-        '\n#include "tensor/cuda_panel_product.cuh"\n'
-        "namespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
+        emit_potential_portfolio(_emit_panels() + _emit_tiled(schedule))
+        + '\n#include "tensor/cuda_panel_product.cuh"\n'
+        + "namespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
         + _emit_panels()
         + _emit_tiled(schedule)
         + _emit_density_factor()

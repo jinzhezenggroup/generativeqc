@@ -93,7 +93,24 @@ and semantic identities, preparation time/count, complete binding reservation,
 submitted calls and scalar summands. The grid capacity charges 32 KiB of host
 binding storage in addition to its existing provider allowance. Capture is
 rejected until logical replay work accounting is connected for this owner.
-Native XC density/Vxc fused kernels are a separate migration consumer.
+Native XC potential assembly also consumes a prepared shared binding.
+`dft.xc_potential_lowering` expresses the existing compact work-panel contraction
+as `einsum("jpm,jpn->mn", A, W)` plus its transpose. The shared tensor recognizer
+preserves that graph identity and offers generated execution and strict-FP64
+rank-2k execution. Functional coefficients continue to come exclusively from
+the existing compact bilinear. Generated execution remains the production
+incumbent; the library candidate is executable under test qualification but has
+no promoted endpoint profile. A provider budget alone does not promote it.
+
+`CudaXcPlan::potential_lowering()` reports the selected candidate, preparation
+time, resource reservation and alternative rejection. Its 16 KiB host binding
+allowance is separate from the unchanged numeric device arena; an optional
+library trial additionally admits the shared 96 MiB provider allowance.
+Indexed/local AO domains retain the generated scatter and finite policy.
+Device bodies can be captured without changing host work counters; physical
+replay publication counts the symmetric products and upper-triangle scalar
+summands. The deterministic point totals retain their original order.
+Native density and nonlocal potential assembly are separate migration consumers.
 
 `common.lowering_provider.LoweringRequest` carries one bounded set of admitted
 `LoweringPrecision` variants. These refer directly to

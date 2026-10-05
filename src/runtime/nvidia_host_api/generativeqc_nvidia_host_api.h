@@ -85,6 +85,10 @@ cublasStatus_t cublasDgemm_v2(cublasHandle_t handle, cublasOperation_t transa,
 cublasStatus_t cublasDsyrk_v2(cublasHandle_t handle, cublasFillMode_t uplo, cublasOperation_t trans,
                               int n, int k, const double* alpha, const double* a, int lda,
                               const double* beta, double* c, int ldc);
+cublasStatus_t cublasDsyr2k_v2(cublasHandle_t handle, cublasFillMode_t uplo,
+                               cublasOperation_t trans, int n, int k, const double* alpha,
+                               const double* a, int lda, const double* b, int ldb,
+                               const double* beta, double* c, int ldc);
 cublasStatus_t cublasDgemmStridedBatched(cublasHandle_t handle, cublasOperation_t transa,
                                          cublasOperation_t transb, int m, int n, int k,
                                          const double* alpha, const double* a, int lda,
@@ -113,6 +117,7 @@ cublasStatus_t cublasDgeam(cublasHandle_t handle, cublasOperation_t transa,
 #define cublasDgemm cublasDgemm_v2
 #define cublasSgemm cublasSgemm_v2
 #define cublasDsyrk cublasDsyrk_v2
+#define cublasDsyr2k cublasDsyr2k_v2
 
 typedef struct cusolverDnContext* cusolverDnHandle_t;
 typedef struct cusolverDnParams* cusolverDnParams_t;

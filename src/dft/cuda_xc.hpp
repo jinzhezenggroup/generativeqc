@@ -14,6 +14,7 @@
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/lowering_binding.hpp"
 #include "tensor/cuda_panel_product.hpp"
+#include "tensor/cuda_symmetric_product.hpp"
 
 namespace generativeqc::dft {
 
@@ -72,6 +73,9 @@ struct CudaXcLayout {
    * by nao, never by the mean selected column count. */
   bool local_ao{};
   std::size_t ao_map_entries{}, host_ao_map_bytes{};
+  // Prepared contraction metadata is separate from the exact numeric arena.
+  static constexpr std::size_t lowering_host_bytes =
+      tensor::PreparedSymmetricProduct::host_reservation;
   /** Immutable admission facts resolved from the point program, never its display name. */
   CudaXcFastPathCapabilities fast_paths{};
 };
@@ -128,6 +132,10 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
 
 struct CudaXcTransfers {
   std::uint64_t setup_h2d_bytes{}, output_d2h_bytes{}, synchronizations{}, evaluations{};
+  /** Semantic symmetric products in physically submitted semilocal bodies.
+   * Counts exclude graph recording and count two products per upper-triangle
+   * element/reduction term, regardless of the selected implementation. */
+  std::uint64_t potential_calls{}, potential_summands{};
 };
 
 /** Borrowed current result on the plan's stream. potential is row-major
@@ -180,6 +188,14 @@ class CudaXcPlan {
 
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
+  /** Setup-only provider preparation within an explicit additional allowance.
+   * Zero retains the generated incumbent. The allowance is not numeric arena
+   * space; an optional provider owns it separately and reports its reservation.
+   * Production currently has no qualified alternative endpoint profile. */
+  void prepare_potential(std::size_t provider_budget = 0);
+  const tensor::SymmetricProductDiagnostic& potential_lowering() const noexcept {
+    return potential_binding_->diagnostic();
+  }
   /** Setup-only binding of scientifically admitted arithmetic. Full/tail
    * entries and strict audit entries are immutable after the first evaluation.
    * Mixed admission requires executable physical-layout support and a Qualified
@@ -249,6 +265,7 @@ class CudaXcPlan {
 
  private:
   void check_device() const;
+  void publish_potential_work();
   void enqueue_impl(const double* density, const double* direction, std::size_t elements,
                     std::uint64_t generation, generativeqc::runtime::PrecisionPhase phase,
                     double* total_density = nullptr, double* total_gradient = nullptr,
@@ -259,6 +276,7 @@ class CudaXcPlan {
                                        const double* vsigma, const double* nonlocal_energy);
   CudaXcLayout layout_;
   CudaXcPointLauncher point_launcher_{};
+  std::unique_ptr<tensor::PreparedSymmetricProduct> potential_binding_;
   // Fixed full/tail slots avoid storage proportional to dense grid size.
   std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
   std::unique_ptr<tensor::PreparedPanelProduct> density_provider_;
@@ -287,6 +305,9 @@ class CudaXcPlan {
 };
 
 namespace cuda_xc_detail {
+std::unique_ptr<tensor::PreparedSymmetricProduct> prepare_potential(const CudaXcLayout& layout,
+                                                                    cudaStream_t stream,
+                                                                    std::size_t provider_budget);
 /** Compiler-emitted bounded selection; no CUDA calls and no runtime probing. */
 CudaXcDensityBinding prepare_density_binding(std::int64_t n, std::int64_t count, std::int64_t spins,
                                              std::int64_t work_jets,
@@ -316,7 +337,8 @@ void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cud
              const double* direction = nullptr, double* delta_features = nullptr,
              double* total_density = nullptr, double* total_gradient = nullptr,
              const std::vector<std::size_t>& ao_offsets = {}, const std::size_t* ao_ids = nullptr,
-             const tensor::PreparedPanelProduct* density_provider = nullptr);
+             const tensor::PreparedPanelProduct* density_provider = nullptr,
+             const tensor::PreparedSymmetricProduct* potential_binding = nullptr);
 void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* basis, const double* points,
                                 const double* effective_weights, const double* total_gradient,

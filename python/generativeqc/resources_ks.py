@@ -76,6 +76,9 @@ def _item_host_inventory(
     # descriptors and plan objects have a conservative LP64 value allowance.
     # Include fixed element-radius tables copied into method/grid/XC snapshots.
     metadata = 8192 + 512 * (a + s + p + n + c + orbital.get("ecp_terms", 0))
+    # Shared native XC potential binding, including bounded preparation scratch.
+    if backend == "cuda" and model.xc_schedule != "host_unfused":
+        metadata += 16 << 10
     grid = byte_product(36, points)
     basis = byte_product(8, packed)
     warm_and_matrices = byte_product(8, n2, 4 + 4 * spins) + 8 * 3 * a * 4

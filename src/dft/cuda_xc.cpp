@@ -357,6 +357,24 @@ CudaXcPlan::CudaXcPlan(CudaXcLayout layout, const std::vector<double>& packed_ba
                size_mul(l.ao_map_entries, sizeof(std::size_t), "CUDA XC transfer size overflow"),
                "CUDA XC transfer size overflow");
   transfers_.synchronizations = 1;
+  prepare_potential();
+}
+
+void CudaXcPlan::prepare_potential(std::size_t provider_budget) {
+  check_device();
+  if (evaluation_started_)
+    throw std::logic_error("XC potential preparation after evaluation began");
+  // Re-preparation may replace the allocation-free incumbent, but must not
+  // transiently own two optional-provider reservations under one allowance.
+  if (potential_binding_ && potential_binding_->diagnostic().provider_allowance)
+    throw std::logic_error("XC potential provider is already prepared");
+  try {
+    potential_binding_ = cuda_xc_detail::prepare_potential(layout_, stream_, provider_budget);
+  } catch (const generativeqc_tensor::DeviceAllocationError&) {
+    throw std::bad_alloc();
+  } catch (const generativeqc_tensor::DeviceRuntimeError& error) {
+    throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
+  }
 }
 
 void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admitted,
@@ -572,8 +590,31 @@ CudaXcView CudaXcPlan::enqueue_replay_body(const double* density, std::size_t el
 
 void CudaXcPlan::publish_submitted_generation(std::uint64_t generation) {
   generations_.begin(generation);
+  publish_potential_work();
   generations_.commit(generation);
   ++transfers_.evaluations;
+}
+
+void CudaXcPlan::publish_potential_work() {
+  // This is logical physical-submission accounting, never part of capture.
+  // Local maps are immutable after setup and empty tiles do no matrix work.
+  cudaStreamCaptureStatus capture{};
+  check(cudaStreamIsCapturing(stream_, &capture));
+  if (capture != cudaStreamCaptureStatusNone) return;
+  auto calls = transfers_.potential_calls, summands = transfers_.potential_summands;
+  for (std::size_t begin = 0; begin < layout_.npoint; begin += layout_.tile_points) {
+    const auto tile = begin / layout_.tile_points;
+    const auto n = layout_.local_ao ? ao_offsets_[tile + 1] - ao_offsets_[tile] : layout_.nao;
+    if (!n) continue;
+    const auto points = std::min(layout_.tile_points, layout_.npoint - begin);
+    calls = runtime::lowering_add(calls, layout_.spins);
+    const auto work = runtime::lowering_multiply(
+        runtime::lowering_multiply(n, n + 1),
+        runtime::lowering_multiply(points, layout_.work_jets * layout_.spins));
+    summands = runtime::lowering_add(summands, work);
+  }
+  transfers_.potential_calls = calls;
+  transfers_.potential_summands = summands;
 }
 
 void CudaXcPlan::enqueue_nonlocal_potential(std::uint64_t generation,
@@ -710,7 +751,7 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
         features_, coefficients_, point_totals_, potential_, totals_, error_,
         phase == PrecisionPhase::Admitted ? admitted_density_ : strict_density_,
         local_density_launchers_, direction, delta_features_, total_density, total_gradient,
-        ao_offsets_, ao_ids_, density_execution_provider(phase));
+        ao_offsets_, ao_ids_, density_execution_provider(phase), potential_binding_.get());
   } catch (const generativeqc_tensor::DeviceAllocationError&) {
     // The generated executor has a separate exception vocabulary. Translate at
     // this native owner boundary so both single-point and batch APIs preserve it.
@@ -719,6 +760,9 @@ void CudaXcPlan::enqueue_impl(const double* density, const double* direction, st
     throw generativeqc::Error(GENERATIVEQC_STATUS_CUDA_ERROR, error.what());
   }
   if (publish_generation) {
+    // Accounting may fail on a CUDA capture query or checked work overflow.
+    // Finish it before making this submission's output generation observable.
+    publish_potential_work();
     generations_.commit(generation);
     ++transfers_.evaluations;
   }
