@@ -13,6 +13,7 @@
 #include "dft/xc_capabilities.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/lowering_binding.hpp"
+#include "tensor/cuda_panel_product.hpp"
 
 namespace generativeqc::dft {
 
@@ -182,10 +183,17 @@ class CudaXcPlan {
   /** Setup-only binding of scientifically admitted arithmetic. Full/tail
    * entries and strict audit entries are immutable after the first evaluation.
    * Mixed admission requires executable physical-layout support and a Qualified
-   * entry in the resolved point-program census; local maps remain strict FP64. */
+   * entry in the resolved point-program census; local maps remain strict FP64.
+   * A nonzero provider_budget also requires the caller to reserve the separate
+   * PreparedPanelProduct::host_reservation; diagnostics report actual charges. */
   void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
-                       std::uint64_t expected_replays = 1);
+                       std::uint64_t expected_replays = 1, std::size_t provider_budget = 0);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
+  /** Optional owner charges are separate from the ordinary arena. A positive
+   * device allowance alone does not qualify a new endpoint/provider profile. */
+  const tensor::PanelProductDiagnostic* density_provider_diagnostic() const noexcept {
+    return density_provider_ ? &density_provider_->diagnostic() : nullptr;
+  }
 
   /** Explicit setup-only policy; no density work or external oracle is used.
    * Returns false without discovery if either numeric budget is insufficient.
@@ -253,6 +261,10 @@ class CudaXcPlan {
   CudaXcPointLauncher point_launcher_{};
   // Fixed full/tail slots avoid storage proportional to dense grid size.
   std::array<CudaXcDensityBinding, 2> strict_density_, admitted_density_;
+  std::unique_ptr<tensor::PreparedPanelProduct> density_provider_;
+  std::unique_ptr<CudaXcDensityBinding> provider_density_binding_;
+  const tensor::PreparedPanelProduct* density_execution_provider(
+      generativeqc::runtime::PrecisionPhase phase) const;
   // Local maps require one immutable launcher per tile, charged with host maps.
   std::vector<CudaXcDensityLauncher> local_density_launchers_;
 
@@ -280,6 +292,9 @@ CudaXcDensityBinding prepare_density_binding(std::int64_t n, std::int64_t count,
                                              std::int64_t work_jets,
                                              generativeqc::runtime::PrecisionDirective admitted,
                                              std::uint64_t expected_replays);
+std::unique_ptr<tensor::PreparedPanelProduct> prepare_density_provider(const CudaXcLayout& layout,
+                                                                       cudaStream_t stream,
+                                                                       std::size_t provider_budget);
 
 /** Populate one host flag per global AO from all actual jets in a point tile.
  * The caller lends full-capacity panels and owns stream/error lifetimes. */
@@ -300,7 +315,8 @@ void enqueue(const CudaXcLayout& layout, CudaXcPointLauncher point_launcher, cud
              const std::vector<CudaXcDensityLauncher>& local_density_launchers,
              const double* direction = nullptr, double* delta_features = nullptr,
              double* total_density = nullptr, double* total_gradient = nullptr,
-             const std::vector<std::size_t>& ao_offsets = {}, const std::size_t* ao_ids = nullptr);
+             const std::vector<std::size_t>& ao_offsets = {}, const std::size_t* ao_ids = nullptr,
+             const tensor::PreparedPanelProduct* density_provider = nullptr);
 void enqueue_nonlocal_potential(const CudaXcLayout& layout, cudaStream_t stream,
                                 const double* basis, const double* points,
                                 const double* effective_weights, const double* total_gradient,

@@ -69,7 +69,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
              const std::vector<CudaXcDensityLauncher>& local_density_launchers,
              const double* direction, double* delta_features, double* total_density,
              double* total_gradient, const std::vector<std::size_t>& ao_offsets,
-             const std::size_t* ao_ids) {
+             const std::size_t* ao_ids, const tensor::PreparedPanelProduct* density_provider) {
   const I matrices = l.spins * l.nao * l.nao;
   if ((total_density == nullptr) != (total_gradient == nullptr))
     throw std::invalid_argument("CUDA XC total-density capture requires rho and gradient together");
@@ -89,6 +89,13 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     cuda_check(cudaMemsetAsync(potential, 0, matrices * sizeof(double), stream));
     cuda_check(cudaMemsetAsync(totals, 0, 3 * sizeof(double), stream));
   }
+  if (density_provider) {
+    // The compiler-owned symmetric factor is invariant across point tiles.
+    // Rebuild it on every physical/captured body, never by density pointer identity.
+    materialize_density_factor<<<blocks(matrices, 128), 128, 0, stream>>>(
+        density, l.nao, l.spins, density_provider->materialized_matrices(), error);
+    cuda_check(cudaGetLastError());
+  }
   for (std::size_t begin = 0; begin < l.npoint; begin += l.tile_points) {
     const I count = std::min(l.tile_points, l.npoint - begin);
     const auto tile = begin / l.tile_points;
@@ -103,8 +110,11 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     const auto density_launcher = l.local_ao
                                       ? local_density_launchers[tile]
                                       : density_bindings[count == l.tile_points ? 0 : 1].launch;
-    density_launcher(stream, density, ao, active, count, l.spins, l.work_jets, work, error, ids,
-                     l.nao);
+    if (density_provider)
+      density_provider->execute(stream, count * l.work_jets, ao, work, error);
+    else
+      density_launcher(stream, density, ao, active, count, l.spins, l.work_jets, work, error, ids,
+                       l.nao);
     cuda_check(cudaGetLastError());
     scheduled_density_features(stream, ao, work, active, count, l.spins, l.jets, l.work_jets,
                                l.feature_terms, l.functional, features, error);

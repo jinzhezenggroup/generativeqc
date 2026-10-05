@@ -475,6 +475,14 @@
         "cutensorPlanPreferenceSetAttribute": 2
       }
     },
+    "src/tensor/cuda_panel_product.cuh": {
+      "classification": "provider",
+      "contract": "python/generativeqc_compiler/dft/xc_density_lowering.py",
+      "reason": "Shared prepared matrix-panel executor consumes the canonical density portfolio and owns strict GEMM submission, cache lifetime and finite publication.",
+      "references": {
+        "cublasDgemm": 1
+      }
+    },
     "src/tensor/cuda_runtime.cuh": {
       "classification": "provider",
       "contract": "python/generativeqc_compiler/tensor/ir.py",
