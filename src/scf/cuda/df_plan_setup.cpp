@@ -465,24 +465,40 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
   if (blas_status != CUBLAS_STATUS_SUCCESS) {
     return fail_plan(candidate, blas_failure(blas_status, "initialize CUDA DF cuBLAS", detail));
   }
-  if (!candidate->streamed) {
+  if (!candidate->streamed || integral_source != nullptr) {
     try {
-      // Packed panels serialize systems through one existing pair scratch
-      // vector. Dense tensors retain their original true batched contraction.
-      candidate->charge_contraction =
-          packed ? coulomb_lowering::packed_charge(1, nbf, naux, candidate->blas, candidate->stream)
-                 : coulomb_lowering::dense_charge(batch_size, nbf, naux, candidate->blas,
+      if (!candidate->streamed) {
+        // Packed panels serialize systems through one existing pair scratch
+        // vector. Dense tensors retain their original true batched contraction.
+        candidate->charge_contraction =
+            packed
+                ? coulomb_lowering::packed_charge(1, nbf, naux, candidate->blas, candidate->stream)
+                : coulomb_lowering::dense_charge(batch_size, nbf, naux, candidate->blas,
+                                                 candidate->stream);
+        candidate->coulomb_contraction =
+            packed
+                ? coulomb_lowering::packed_coulomb(1, nbf, naux, candidate->blas, candidate->stream)
+                : coulomb_lowering::dense_coulomb(batch_size, nbf, naux, candidate->blas,
                                                   candidate->stream);
-      candidate->coulomb_contraction =
-          packed
-              ? coulomb_lowering::packed_coulomb(1, nbf, naux, candidate->blas, candidate->stream)
-              : coulomb_lowering::dense_coulomb(batch_size, nbf, naux, candidate->blas,
-                                                candidate->stream);
+      } else {
+        candidate->metric_project =
+            coulomb_lowering::metric_project(naux, naux, candidate->blas, candidate->stream);
+        candidate->metric_rotate =
+            coulomb_lowering::metric_rotate(naux, naux, candidate->blas, candidate->stream);
+        const std::array<std::size_t, 2> panels{auxiliary_tile, naux % auxiliary_tile};
+        for (std::size_t i = 0; i != panels.size(); ++i) {
+          if (!panels[i]) continue;
+          candidate->metric_charge[i] =
+              coulomb_lowering::metric_charge(naux, panels[i], candidate->blas, candidate->stream);
+          candidate->metric_potential[i] = coulomb_lowering::metric_potential(
+              naux, panels[i], candidate->blas, candidate->stream);
+        }
+      }
     } catch (const Error& error) {
       detail = error.what();
       return fail_plan(candidate, error.status());
     } catch (const std::bad_alloc&) {
-      detail = "allocate resident Coulomb lowering metadata";
+      detail = "allocate Coulomb lowering metadata";
       return fail_plan(candidate, GENERATIVEQC_STATUS_OUT_OF_MEMORY);
     } catch (const std::exception& error) {
       detail = error.what();
@@ -879,7 +895,7 @@ generativeqc_status create_cuda_density_fitting_jk_plan_tiled_impl(
           : static_cast<std::size_t>(peak_estimate);
   const long double host_resident_estimate =
       static_cast<long double>(sizeof(*candidate)) + df_eigen_workspace_allowance(nbf) +
-      (candidate->charge_contraction ? 2.0L * sizeof(tensor::CudaVectorContraction) : 0.0L) +
+      static_cast<long double>(candidate->coulomb_binding_host_bytes()) +
       64.0L * batch_size +  // lazy final-frame occupation/eligibility metadata
       vector_capacity_bytes(candidate->metric_response_valid) +
       vector_capacity_bytes(candidate->metric_full_rank) +

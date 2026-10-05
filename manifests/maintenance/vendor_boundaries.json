@@ -198,14 +198,6 @@
         "cusolverGetProperty": 1
       }
     },
-    "src/scf/cuda/df_coulomb.cpp": {
-      "classification": "migration",
-      "contract": "#1890",
-      "reason": "Streamed raw/metric Coulomb panels still submit vendor vectors directly. Resident dense and packed contractions consume canonical prepared TensorIR bindings.",
-      "references": {
-        "cublasDgemv": 4
-      }
-    },
     "src/scf/cuda/df_eigensystem.cpp": {
       "classification": "migration",
       "contract": "#1890",
