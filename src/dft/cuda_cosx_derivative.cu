@@ -340,28 +340,6 @@ __global__ void contract_point_derivative_kernel(const double* ao, const double*
   }
 }
 
-__global__ void project_symmetric_density_kernel(const double* ao, const double* density,
-                                                 std::size_t npoint, std::size_t nbf,
-                                                 double* projected, int* error) {
-  const std::size_t total = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf;
-    const std::size_t column = index % nbf;
-    double value = 0.0;
-    for (std::size_t row = 0; row < nbf; ++row) {
-      if (!generated_cosx_derivative::accumulate_symmetric_projection(
-              ao[point * nbf + row], density[row * nbf + column], density[column * nbf + row],
-              value)) {
-        atomicCAS(error, 0, 1);
-        value = 0.0;
-        break;
-      }
-    }
-    projected[index] = finite_or_flag(value, error);
-  }
-}
-
 __global__ void apply_esp_bidirectional_kernel(const double* esp, const double* projected,
                                                const double* symmetric_projection,
                                                std::size_t npoint, std::size_t nbf,
@@ -607,7 +585,7 @@ CudaCosxMolecularDerivativeDiagnostic cuda_cosx_molecular_derivative_diagnostic(
   result.device_bytes = add(result.grid_device_bytes, result.derivative_device_bytes);
   result.bounded_tiling = true;
   result.atomic_coordinate_reduction = true;
-  result.contraction_host_bytes = tensor::contraction_sites_host_reservation(2);
+  result.contraction_host_bytes = tensor::contraction_sites_host_reservation(4);
   return result;
 }
 
@@ -716,9 +694,9 @@ std::vector<double> cuda_cosx_molecular_energy_derivative(
       check(cudaGetLastError());
       cosx_derivative_lowering::project(*contractions, count != tile_points, view.stream, view.ao,
                                         density.get(), projected.get(), error.get());
-      project_symmetric_density_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          view.ao, density.get(), count, n, symmetric_projection.get(), error.get());
-      check(cudaGetLastError());
+      cosx_derivative_lowering::project_symmetric(*contractions, count != tile_points, view.stream,
+                                                  view.ao, density.get(),
+                                                  symmetric_projection.get(), error.get());
       apply_esp_bidirectional_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
           esp.get(), projected.get(), symmetric_projection.get(), count, n, potential.get(),
           left_potential.get(), error.get());

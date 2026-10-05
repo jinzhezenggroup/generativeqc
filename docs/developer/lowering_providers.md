@@ -57,13 +57,17 @@ or zero weighting. A final-only audit cannot implement this request. Optional
 provider recipes are explicitly rejected until they preserve the complete
 checked contract, including when test qualification is requested.
 
-Molecular derivative projection uses two full/tail sites with a 96 KiB host
+Molecular derivative ordinary/symmetric projection uses four full/tail sites with a 128 KiB host
 reservation; explicit-point derivative assembly uses six with 160 KiB. Neither
 reserves a library device allowance or adds numeric buffers. The compiler
 traverses the three borrowed leading jet-axis slices without packing. Optional
 derivative diagnostics publish the prepared identities and actual work only
-after the complete response succeeds. Composed ESP response, symmetric
-projection and molecular pullback contractions retain their existing scalar
+after the complete response succeeds. Symmetric projection requests the original
+half-scaled `AO * (D + D^T)` graph and invokes the existing scalar helper with
+both readonly views of the same density allocation. The helper retains its
+`(AO * 0.5) * (D + D^T)` rounding and ordered finite checks. Virtual sum/transpose
+intermediates remain unmaterialized; generated execution is the supported recipe.
+Composed ESP response and molecular pullback contractions retain their existing scalar
 helpers and require further shared-region migration.
 
 `common.lowering_provider.LoweringRequest` carries one bounded set of admitted

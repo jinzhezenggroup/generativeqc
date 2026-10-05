@@ -254,13 +254,13 @@ int main(int argc, char** argv) {
       else
         require(max_error(gpu_molecular, first_molecular) < 2.0e-10,
                 "CUDA COSX molecular derivative changed with tile partition");
-      require(!info.provider_allowance && info.contraction_host_bytes == (96U << 10),
+      require(!info.provider_allowance && info.contraction_host_bytes == (128U << 10),
               "molecular derivative prepared resource mismatch");
       for (std::size_t slot = 0; slot < info.contractions.size(); ++slot) {
         const auto& site = info.contractions[slot];
         const auto calls =
-            slot ? std::size_t(grid.point_count() % tile != 0) : grid.point_count() / tile;
-        const auto extent = slot ? grid.point_count() % tile : tile;
+            slot % 2 ? std::size_t(grid.point_count() % tile != 0) : grid.point_count() / tile;
+        const auto extent = slot % 2 ? grid.point_count() % tile : tile;
         require(site.candidate.provider == "generated.cuda" && site.calls == calls &&
                     site.summands == calls * extent * 4,
                 "molecular derivative lost actual prepared projection provenance");

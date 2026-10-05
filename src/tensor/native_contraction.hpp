@@ -116,6 +116,9 @@ struct ContractionRequest {
   // Hashes of compiler-owned scalar programs used at each ordered reduction
   // step and optional weight publication. Empty hashes retain ordinary recipes.
   std::string_view checked_update_identity, checked_publication_identity;
+  // A compiler-recognized virtual symmetric RHS borrows one square matrix and
+  // its transpose. The original scalar helper owns the half-factor rounding.
+  bool checked_right_symmetrization{};
 
   std::size_t leading_dimension(std::size_t operand) const {
     if (leading_dimensions[operand]) return leading_dimensions[operand];
@@ -182,7 +185,10 @@ struct ContractionRequest {
     if ((!checked_publication_identity.empty() && checked_update_identity.empty()) ||
         (!checked_update_identity.empty() &&
          (!precision.is_strict_fp64() || publication_dtype != PrecisionDtype::Fp64 ||
-          coefficient != 1 || beta != 0)))
+          coefficient != (checked_right_symmetrization ? 0.5 : 1.0) || beta != 0)) ||
+        (checked_right_symmetrization &&
+         (checked_update_identity.empty() || !checked_publication_identity.empty() ||
+          batches != 1 || k != n || a_trans != 'N' || b_trans != 'N' || operands[1].rank != 2)))
       throw std::invalid_argument("invalid checked scalar contraction contract");
     for (const auto& view : operands) {
       if (view.rank > ContractionOperand::kMaximumRank || view.dtype != precision.storage_dtype)

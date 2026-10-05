@@ -8,17 +8,22 @@ from generativeqc_compiler.dft.cosx_contraction import (
     cosx_esp_program,
     cosx_jet_projection_program,
     cosx_matrix_program,
+    cosx_symmetric_projection_program,
     emit_cosx_derivative_contractions,
 )
 from generativeqc_compiler.method.cosx_derivative_runtime import (
     build_cosx_projection_update_program,
     build_cosx_scale_program,
+    build_cosx_symmetric_projection_update_program,
 )
 from generativeqc_compiler.tensor import Program, add, einsum, execute, input_tensor
 from generativeqc_compiler.tensor.batch_scaled_contraction import (
     batch_scaled_contraction_request,
 )
-from generativeqc_compiler.tensor.checked_contraction import checked_contraction_request
+from generativeqc_compiler.tensor.checked_contraction import (
+    checked_contraction_request,
+    checked_symmetric_right_request,
+)
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 
 
@@ -104,14 +109,93 @@ def test_asymmetric_jet_projection_against_independent_long_double() -> None:
 
 def test_derivative_emission_keeps_checked_scalar_owner_and_axis_schedule() -> None:
     update, scale = build_cosx_projection_update_program(), build_cosx_scale_program()
-    source = emit_cosx_derivative_contractions(update, scale)
-    assert source == emit_cosx_derivative_contractions(update, scale)
+    symmetric = build_cosx_symmetric_projection_update_program()
+    source = emit_cosx_derivative_contractions(update, scale, symmetric)
+    assert source == emit_cosx_derivative_contractions(update, scale, symmetric)
     assert update.logical_hash in source and scale.logical_hash in source
     assert "ordered-checked-scalar" in source
     assert "generated_cosx_derivative::accumulate_projection" in source
     assert "execute_checked<ScalarStep<false>>" in source
     assert "axis < 3" in source and "jets+axis*stride" in source
     assert "cublasDgemm(" not in source
+
+
+def test_checked_symmetric_region_preserves_original_graph_and_borrowed_view() -> None:
+    program = cosx_symmetric_projection_program(5, 4)
+    update = build_cosx_symmetric_projection_update_program()
+    adapter = TensorLoweringAdapter(program)
+    requests = [
+        checked_symmetric_right_request(
+            adapter,
+            program.outputs["result"],
+            update,
+            scalar_inputs=("ao", "density_rc", "density_cr"),
+            backend=backend,
+        )
+        for backend in ("cpu", "cuda")
+    ]
+    assert requests[0].semantic_identity == requests[1].semantic_identity
+    for request in requests:
+        assert request.scientific_identity == program.logical_hash
+        assert request.constraints.determinism == "exact-order"
+        assert dict(request.semantics)["scalar_update_hash"] == update.logical_hash
+        assert dict(request.semantics)["right_transform"] == "symmetric-part"
+        assert request.operands[1].strides == (4, 1)
+        assert request.operands[1].alias_group == "input:1"
+        assert request.input_dtypes == ("float64", "float64")
+    # Asymmetric density makes both read directions independently observable.
+    ao = (np.arange(20).reshape(5, 4) - 11) / 17
+    density = (np.arange(16).reshape(4, 4) - 7) / 23
+    expected = np.zeros((5, 4), dtype=np.longdouble)
+    for p in range(5):
+        for c in range(4):
+            for k in range(4):
+                expected[p, c] += (
+                    np.longdouble(ao[p, k])
+                    / 2
+                    * (np.longdouble(density[k, c]) + np.longdouble(density[c, k]))
+                )
+    actual = execute(program, {"ao": ao, "density": density}).outputs["result"]
+    np.testing.assert_allclose(actual, expected, atol=3e-14, rtol=3e-14)
+
+
+def test_checked_symmetric_region_rejects_changed_half_or_published_intermediate() -> (
+    None
+):
+    program = cosx_symmetric_projection_program(5, 4)
+    root = program.outputs["result"]
+    update = build_cosx_symmetric_projection_update_program()
+    for coefficient in (1, 2, "-1/2"):
+        changed = einsum("pm,mn->pn", *root.inputs, coefficient=coefficient)
+        adapter = TensorLoweringAdapter(Program({"result": changed}))
+        with pytest.raises(ValueError, match="half-scaled graph"):
+            checked_symmetric_right_request(
+                adapter,
+                changed,
+                update,
+                scalar_inputs=("ao", "density_rc", "density_cr"),
+                backend="cuda",
+            )
+    for intermediate in (root.inputs[1], root.inputs[1].inputs[1]):
+        adapter = TensorLoweringAdapter(
+            Program({"result": root, "published": intermediate})
+        )
+        with pytest.raises(ValueError, match="exclusive virtual"):
+            checked_symmetric_right_request(
+                adapter,
+                root,
+                update,
+                scalar_inputs=("ao", "density_rc", "density_cr"),
+                backend="cuda",
+            )
+    with pytest.raises(ValueError, match="scalar scaling or pairing"):
+        checked_symmetric_right_request(
+            TensorLoweringAdapter(program),
+            root,
+            update,
+            scalar_inputs=("density_rc", "ao", "density_cr"),
+            backend="cuda",
+        )
 
 
 @pytest.mark.parametrize("coefficient", (-1, 2))

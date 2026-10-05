@@ -14,11 +14,15 @@ from generativeqc_compiler.tensor import (
     add,
     einsum,
     input_tensor,
+    transpose,
 )
 from generativeqc_compiler.tensor.batch_scaled_contraction import (
     batch_scaled_contraction_request,
 )
-from generativeqc_compiler.tensor.checked_contraction import checked_contraction_request
+from generativeqc_compiler.tensor.checked_contraction import (
+    checked_contraction_request,
+    checked_symmetric_right_request,
+)
 from generativeqc_compiler.tensor.contraction_update import contraction_update_request
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import (
@@ -73,7 +77,17 @@ def cosx_jet_projection_program(points: int, columns: int) -> Program:
     return Program({"result": einsum("apm,mn->apn", jets, density)})
 
 
-def emit_cosx_derivative_contractions(update: Program, publication: Program) -> str:
+def cosx_symmetric_projection_program(points: int, columns: int) -> Program:
+    """Project the symmetric density part without assuming the input is symmetric."""
+    base = cosx_matrix_program(points, columns, update=False)
+    ao, density = base.outputs["result"].inputs
+    paired = add(density, transpose(density, (1, 0)))
+    return Program({"result": einsum("pm,mn->pn", ao, paired, coefficient="1/2")})
+
+
+def emit_cosx_derivative_contractions(
+    update: Program, publication: Program, symmetric_update: Program
+) -> str:
     """Prepare derivative sites around the existing checked scalar programs.
 
     The generator supplies method-owned scalar programs; this component does
@@ -91,6 +105,7 @@ namespace generativeqc::dft::cosx_derivative_lowering {
         ("projection", cosx_matrix_program(3, 2, update=False), False, False),
         ("jet_projection", cosx_jet_projection_program(3, 2), False, True),
         ("esp_application", cosx_esp_program(3, 2), True, False),
+        ("symmetric_projection", cosx_symmetric_projection_program(3, 2), False, False),
     ):
         root = program.outputs["result"]
         adapter = TensorLoweringAdapter(program)
@@ -103,8 +118,19 @@ namespace generativeqc::dft::cosx_derivative_lowering {
             if weighted
             else projected_contraction_request(adapter, product, fixed_modes=fixed)
         )
-        request = checked_contraction_request(
-            request, update, publication if weighted else None, contraction=product
+        symmetric = name == "symmetric_projection"
+        request = (
+            checked_symmetric_right_request(
+                adapter,
+                product,
+                symmetric_update,
+                scalar_inputs=("ao", "density_rc", "density_cr"),
+                backend="cuda",
+            )
+            if symmetric
+            else checked_contraction_request(
+                request, update, publication if weighted else None, contraction=product
+            )
         )
         descriptor = contraction_initializer(
             adapter,
@@ -114,11 +140,14 @@ namespace generativeqc::dft::cosx_derivative_lowering {
             extents=("points", "columns", "1", "columns")
             if weighted
             else ("1", "points", "columns", "columns"),
-            coefficient="1.0",
+            coefficient="0.5" if symmetric else "1.0",
             fixed_modes=fixed,
             batch_scale=root if weighted else None,
-            checked_update=update,
+            checked_update=symmetric_update if symmetric else update,
             checked_publication=publication if weighted else None,
+            checked_right_symmetrization=("ao", "density_rc", "density_cr")
+            if symmetric
+            else None,
         )
         pieces.append(
             emit_contraction_region_portfolio(
@@ -149,13 +178,25 @@ template <bool Weighted> struct ScalarStep {{
     return generated_cosx_derivative::scale(weight,value,output);
   }}
 }};
-using MolecularPrepared = tensor::PreparedContractionSites<2>;
+struct SymmetricStep {{
+  static constexpr bool right_symmetrization = true;
+  static constexpr std::string_view update_identity = "{symmetric_update.logical_hash}";
+  static constexpr std::string_view publication_identity = "";
+  __device__ static bool update(double a, double b, double bt, double& value) noexcept {{
+    return generated_cosx_derivative::accumulate_symmetric_projection(a,b,bt,value);
+  }}
+  __device__ static bool publish(double weight, double value, double& output) noexcept {{
+    return generated_cosx_derivative::scale(weight,value,output);
+  }}
+}};
+using MolecularPrepared = tensor::PreparedContractionSites<4>;
 using PointPrepared = tensor::PreparedContractionSites<6>;
 inline auto prepare_molecular(std::size_t columns, std::size_t full, std::size_t tail,
                               cudaStream_t stream) {{
   if (!columns || !full || tail > full) throw std::invalid_argument("invalid derivative tile domain");
   return std::make_unique<MolecularPrepared>(std::array{{
-      projection(full,columns),projection(tail ? tail : full,columns)}},stream,0);
+      projection(full,columns),projection(tail ? tail : full,columns),
+      symmetric_projection(full,columns),symmetric_projection(tail ? tail : full,columns)}},stream,0);
 }}
 inline auto prepare_point(std::size_t columns, std::size_t full, std::size_t tail,
                           cudaStream_t stream) {{
@@ -180,6 +221,10 @@ inline void project_jets(PointPrepared& plan, bool tail, cudaStream_t stream,
   for (std::size_t axis = 0; axis < 3; ++axis)
     plan.execute_checked<ScalarStep<false>>(slot,stream,jets+axis*stride,density,
                                            output+axis*stride,error);
+}}
+inline void project_symmetric(MolecularPrepared& plan, bool tail, cudaStream_t stream,
+                              const double* ao, const double* density, double* output, int* error) {{
+  plan.execute_checked<SymmetricStep>(tail ? 3 : 2,stream,ao,density,output,error);
 }}
 inline void apply_esp(PointPrepared& plan, bool tail, cudaStream_t stream,
                       const double* esp, const double* projected, const double* weights,
