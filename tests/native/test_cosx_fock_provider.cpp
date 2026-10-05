@@ -14,6 +14,8 @@
 #include "scf/fock_build.hpp"
 #include "scf/fock_prepared.hpp"
 
+extern "C" void cosx_contraction_qualification_for_test(unsigned mask, bool unavailable);
+
 namespace {
 
 void require(bool condition, const char* message) {
@@ -66,7 +68,41 @@ generativeqc::scf::ResolvedFockBuild cpu_j_strategy(
                                                mixed.metric_relative_threshold);
 }
 
-void verify_restricted(const generativeqc::core::System& system, int device) {
+void verify_admission(const generativeqc::dft::CosxFockPreparationDiagnostic& diagnostic,
+                      unsigned expected_mask, std::size_t spin_builds) {
+  const auto& j = diagnostic.coulomb;
+  const auto& k = diagnostic.exchange;
+  const auto response_peak = std::max(j.response_device_bytes, diagnostic.derivative.device_bytes);
+  require(j.peak_device_bytes == j.device_bytes + j.response_device_bytes &&
+              j.peak_device_bytes <= j.device_budget_bytes,
+          "Coulomb diagnostic lost its unallocated response reservation");
+  require(diagnostic.device_bytes == j.device_bytes + k.device_bytes &&
+              diagnostic.derivative_peak_device_bytes == diagnostic.device_bytes + response_peak &&
+              diagnostic.derivative_peak_device_bytes <= diagnostic.device_budget_bytes &&
+              diagnostic.exchange_budget_bytes ==
+                  diagnostic.device_budget_bytes - j.device_bytes - response_peak &&
+              k.device_budget_bytes == diagnostic.exchange_budget_bytes &&
+              diagnostic.contraction_peak_host_bytes ==
+                  k.contraction_host_bytes + diagnostic.derivative.contraction_host_bytes,
+          "enclosing Fock admission overlaps value/provider and response capacity");
+  const auto full_tiles = k.npoint / k.tile_points;
+  const auto tail_tiles = std::size_t{k.npoint % k.tile_points != 0};
+  for (std::size_t slot = 0; slot < k.contractions.size(); ++slot) {
+    const auto& site = k.contractions[slot];
+    const bool tail = slot < 4 ? slot >= 2 : slot == 5;
+    require(site.calls == spin_builds * (tail ? tail_tiles : full_tiles) &&
+                site.summands == site.calls * site.resolved.summands() &&
+                site.candidate.provider ==
+                    ((expected_mask & (1U << slot)) ? "cublas" : "generated.cuda"),
+            "enclosing Fock diagnostic lost selected full/tail provider or actual work");
+  }
+  require((k.provider_allowance != 0) == (expected_mask != 0) &&
+              k.retained_provider_bytes <= k.provider_allowance,
+          "enclosing Fock did not charge the selected shared provider once");
+}
+
+void verify_restricted(const generativeqc::core::System& system, int device,
+                       unsigned expected_mask) {
   using namespace generativeqc;
   const auto strategy = mixed_strategy(scf::FockSpin::Restricted);
   bool legacy_rejected = false;
@@ -107,6 +143,7 @@ void verify_restricted(const generativeqc::core::System& system, int device) {
           "prepared RI-J/COSX-K RHF assembly differs from the independent oracles");
 
   const auto& diagnostic = gpu.diagnostic();
+  verify_admission(diagnostic, expected_mask, 1);
   require(diagnostic.strategy == strategy &&
               diagnostic.coulomb.strategy.spec.exchange.present == false &&
               diagnostic.exchange.esp_on_device && diagnostic.exchange.assembly_on_device &&
@@ -159,6 +196,21 @@ void verify_restricted(const generativeqc::core::System& system, int device) {
                   force_gpu.diagnostic().device_budget_bytes,
           "prepared COSX force provider lost bounded peak-resource accounting");
 
+  if (expected_mask) {
+    // A small positive envelope still prepares the complete generated endpoint.
+    // It must not borrow either provider's future derivative capacity to make a
+    // qualified optional recipe fit. Include a modest independent headroom for
+    // the unchanged J tile planner, well below one shared provider reservation.
+    const auto tight_budget = cosx_only.device_bytes + force_gpu.diagnostic().coulomb.device_bytes +
+                              force_gpu.diagnostic().derivative.device_bytes + (16U << 20);
+    dft::PreparedCosxFockPlan tight(system, &system, force_strategy, 7, device, tight_budget);
+    const auto tight_value = tight.build(density);
+    verify_admission(tight.diagnostic(), 0, 1);
+    require(max_error(tight_value.exchange_alpha, reference_k.exchange) < 3.0e-12 &&
+                max_error(tight.energy_derivative(density), expected_derivative) < 3.0e-8,
+            "tight enclosing Fock fallback changed value or molecular response");
+  }
+
   auto scaled_spec = force_strategy.spec;
   scaled_spec.exchange.coefficient *= 0.5;
   const auto scaled_strategy = scf::resolve_fock_build(scaled_spec, scf::FockBackend::Cuda,
@@ -173,7 +225,8 @@ void verify_restricted(const generativeqc::core::System& system, int device) {
           "prepared COSX derivative ignored the resolved arbitrary exchange coefficient");
 }
 
-void verify_unrestricted(const generativeqc::core::System& system, int device) {
+void verify_unrestricted(const generativeqc::core::System& system, int device,
+                         unsigned expected_mask) {
   using namespace generativeqc;
   const auto strategy = mixed_strategy(scf::FockSpin::Unrestricted);
   dft::PreparedCosxFockPlan gpu(system, &system, strategy, 5, device);
@@ -181,6 +234,7 @@ void verify_unrestricted(const generativeqc::core::System& system, int device) {
   const std::vector<double> alpha{0.45, 0.10, 0.10, 0.35};
   const std::vector<double> beta{0.25, 0.04, 0.04, 0.18};
   const auto actual = gpu.build(alpha, beta);
+  verify_admission(gpu.diagnostic(), expected_mask, 2);
 
   scf::PreparedFockPlan cpu_j(system, &system, cpu_j_strategy(strategy));
   auto expected = cpu_j.build(alpha, beta);
@@ -228,8 +282,19 @@ int main() {
   try {
     int devices = 0;
     if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
-    verify_restricted(h2(), 0);
-    verify_unrestricted(h2(), 0);
+    // Qualification is below the scientific owner. Each route reuses the same
+    // independent RI-J/COSX value, energy, spin and molecular-derivative oracles.
+    for (unsigned mask : {0U, 1U, 2U, 3U, 48U, 63U}) {
+      cosx_contraction_qualification_for_test(mask, false);
+      verify_restricted(h2(), 0, mask);
+    }
+    for (unsigned mask : {0U, 63U}) {
+      cosx_contraction_qualification_for_test(mask, false);
+      verify_unrestricted(h2(), 0, mask);
+    }
+    cosx_contraction_qualification_for_test(63U, true);
+    verify_restricted(h2(), 0, 0);
+    cosx_contraction_qualification_for_test(0, false);
     std::cout << "prepared RI-J/COSX-K fixed-density RHF/UHF provider PASS\n";
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
