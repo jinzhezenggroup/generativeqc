@@ -122,7 +122,31 @@ disables JIT, global plan caching and incremental autotuning; capture is rejecte
 Workspace is queried exactly and observed retained device storage is checked
 against a reservation. Opaque host allocations have no cuTENSOR query, so host
 bytes are an externally qualified reservation, not an exact measured footprint.
-This provider is not linked or selected by a production method by default.
+`PreparedContractions` can bind `CutensorAffine` alongside the existing matrix
+algorithms. Each plan requires an explicit `ContractionProviderReservation`;
+the enclosing owner admits its workspace/provider ceilings and qualified host
+reservation before calling `add`. Charge `reservation.total_bytes(plan_count)`
+in addition to `storage_bytes`, including all simultaneously live shape variants.
+`optional_resources()` reports queried workspace, observed retained device growth
+and reserved host bytes. These observations do not qualify lazy allocation during
+first execution. Zero host reservation rejects preparation. No reservation values
+are production defaults.
+
+Preparation publishes a shape only after all its plans succeed. A
+`ContractionPreparationUnavailable` permits the caller to prepare another
+scientifically admitted candidate; malformed requests, execution failures and
+checked cleanup failures propagate. `release()` drains a live table before a
+fallback is admitted. Call it outside the global allocation measurement lock and
+before destroying the borrowed context/stream. Destruction uses best-effort cleanup.
+
+Native builds opt in with `GENERATIVEQC_ENABLE_CUTENSOR=ON` and
+`GENERATIVEQC_CUTENSOR_ROOT=/path/to/cutensor`, using an external cuTENSOR 2.8+
+installation within major version 2. The default is OFF; CPU and ordinary CUDA
+builds do not probe or link it. Enabling it requires NVIDIA CUDA and an available
+header/library; wheel packaging is not implemented. The native CMake test target
+`generativeqc_native_cutensor_tests` qualifies the shared and standalone paths.
+Build capability alone does not admit a provider for any scientific method.
+This provider is not selected by a production method by default.
 Production resource qualification and complete endpoint selection remain open.
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.

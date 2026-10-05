@@ -3,7 +3,7 @@
 #include <limits>
 #include <vector>
 
-#include "tensor/cuda_cutensor.cuh"
+#include "tensor/cuda_contraction.cuh"
 
 using namespace generativeqc::tensor;
 using generativeqc_tensor::cuda_check;
@@ -80,6 +80,28 @@ void check(double beta) {
     if (binding.workspace_bytes() > (64ULL << 20) || !binding.provider_version() ||
         binding.prepare_calls() != 1)
       throw std::runtime_error("invalid prepared provenance");
+    CudaContractionContext context;
+    context.prepare_generated(stream);
+    PreparedContractions shared;
+    std::size_t calls{}, summands{};
+    const ContractionProviderReservation reservation{64ULL << 20, 256ULL << 20, 64ULL << 20};
+    // A general affine request has no matrix recipe. Rejection must leave this
+    // same shape free for a subsequent admitted provider preparation.
+    try {
+      shared.add(2, 5, 12, {request}, context, calls, summands,
+                 {ContractionAlgorithm::CutensorAffine});
+      throw std::logic_error("unreserved optional provider was admitted");
+    } catch (const ContractionPreparationUnavailable&) {
+    }
+    if (shared) throw std::runtime_error("rejection published a partial variant");
+    shared.add(2, 5, 12, {request}, context, calls, summands,
+               {ContractionAlgorithm::CutensorAffine}, reservation);
+    const auto resources = shared.optional_resources();
+    if (resources.workspace_bytes > reservation.workspace_bytes ||
+        resources.provider_bytes > reservation.provider_bytes ||
+        resources.host_bytes != reservation.host_bytes ||
+        resources.total_bytes(1) > reservation.total_bytes(1))
+      throw std::runtime_error("shared binding resource accounting");
     T *da{}, *db{}, *dc{};
     int* error{};
     cuda_check(cudaMalloc(reinterpret_cast<void**>(&da), a.size() * sizeof(T)));
@@ -89,11 +111,14 @@ void check(double beta) {
     cuda_check(cudaMemcpyAsync(da, a.data(), a.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
     cuda_check(cudaMemcpyAsync(db, b.data(), b.size() * sizeof(T), cudaMemcpyHostToDevice, stream));
     std::vector<T> actual(initial.size());
-    for (int replay = 0; replay < 3; ++replay) {
+    for (int replay = 0; replay < 6; ++replay) {
       cuda_check(cudaMemsetAsync(error, 0, sizeof(int), stream));
       cuda_check(cudaMemcpyAsync(dc, initial.data(), initial.size() * sizeof(T),
                                  cudaMemcpyHostToDevice, stream));
-      binding.execute(stream, da, db, dc, error);
+      if (replay < 3)
+        binding.execute(stream, da, db, dc, error);
+      else
+        shared.execute(0, 2, 5, 12, stream, da, db, dc, error);
       cuda_check(cudaMemcpyAsync(actual.data(), dc, actual.size() * sizeof(T),
                                  cudaMemcpyDeviceToHost, stream));
       int failed{};
@@ -102,14 +127,22 @@ void check(double beta) {
       for (std::size_t i = 0; i < actual.size(); ++i)
         if (std::isnan(expected[i]) ? !std::isnan(actual[i]) : actual[i] != expected[i])
           throw std::runtime_error("cuTENSOR differs from independent affine oracle");
-      if (failed || binding.prepare_calls() != 1 || binding.calls() != std::size_t(replay + 1))
+      const auto direct_calls = std::size_t(std::min(replay + 1, 3));
+      const auto shared_calls = std::size_t(std::max(replay - 2, 0));
+      if (failed || binding.prepare_calls() != 1 || binding.calls() != direct_calls ||
+          calls != shared_calls || summands != shared_calls * request.affine_summands() ||
+          shared.optional_resources().total_bytes(1) != resources.total_bytes(1))
         throw std::runtime_error("cuTENSOR replay performed preparation or failed");
     }
+    reject([&] { shared.execute(0, 2, 5, 12, stream, da, db, da, error); });
+    reject([&] { shared.execute(0, 2, 5, 13, stream, da, db, dc, error); });
+    reject([&] { shared.execute(0, 2, 5, 12, nullptr, da, db, dc, error); });
     reject([&] { binding.execute(stream, da, db, da, error); });
     reject([&] { binding.execute(nullptr, da, db, dc, error); });
     reject([&] { binding.prepare(request, stream, 0, 0, 0); });
     cuda_check(cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal));
     reject([&] { binding.execute(stream, da, db, dc, error); });
+    reject([&] { shared.execute(0, 2, 5, 12, stream, da, db, dc, error); });
     cudaGraph_t graph{};
     cuda_check(cudaStreamEndCapture(stream, &graph));
     cuda_check(cudaGraphDestroy(graph));
@@ -120,6 +153,11 @@ void check(double beta) {
     cuda_check(cudaMemcpyAsync(&failed, error, sizeof(int), cudaMemcpyDeviceToHost, stream));
     cuda_check(cudaStreamSynchronize(stream));
     if (!failed) throw std::runtime_error("cuTENSOR nonfinite output was not audited");
+    context.reset();
+    reject([&] { shared.execute(0, 2, 5, 12, stream, da, db, dc, error); });
+    shared.release();
+    if (shared || shared.optional_resources().total_bytes(1))
+      throw std::runtime_error("shared release retained a provider plan");
     binding.reset();
     reject([&] { binding.execute(stream, da, db, dc, error); });
     if (binding.prepare(request, stream, 0, 0, 0) || binding.rejection().empty())
@@ -138,7 +176,8 @@ int main() {
       check<float>(beta);
       check<double>(beta);
     }
-    std::cout << "cuTENSOR affine dtype/replay/resource/lifetime gates passed\n";
+    std::cout << "cuTENSOR " << cutensorGetVersion()
+              << " standalone/shared affine dtype/replay/resource/lifetime gates passed\n";
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return 1;
