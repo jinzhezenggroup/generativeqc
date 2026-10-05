@@ -115,15 +115,23 @@ The owner requires a build artifact digest, exact host capacity and an externall
 qualified reservation for context-retained module storage. It resolves lazy
 kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
-release does not zero this charge. This native slice has no production profile
-or registry selection yet. The enclosing context/build owner must retain the
-reservation after a local binding is destroyed. Loading failures preserve the
-known charge and permanently poison that binding's admission, including warm
-retries. Observed growth accumulates across released plans and different kernels
-within the reserved envelope. A binding with a retained charge cannot change
-device or artifact. Fixed-family admission also bounds CUTLASS's signed-integer rounded dimensions
-before constructing its parameters. The opt-in `test_native_cutlass_binding.py`
-probe uses an external CUTLASS 3.9.2 include tree and hashes its contents, owned source,
+release does not zero this charge. This native slice has no production profile.
+The enclosing context/build owner must retain the reservation after a local
+binding is destroyed. Loading failures preserve the known charge and permanently
+poison that binding's admission, including warm retries. Observed growth
+accumulates across released plans and different kernels within the reserved
+envelope. A binding with a retained charge cannot change device or artifact.
+Fixed-family admission also bounds CUTLASS's signed-integer rounded dimensions
+before constructing its parameters.
+
+`tensor.cuda_cutlass.CutlassAotProvider` registers the same canonical request with
+explicit compiled-family/version/artifact and host/module qualification facts.
+The common registry charges module bytes as retained cache storage and enforces
+precision, resource, determinism and capture obligations. Missing facts retain
+unsupported evidence; unknown costs cannot promote a default. Registry offers
+are preparation eligibility, not a loader or region integration.
+The opt-in `test_native_cutlass_binding.py` probe uses
+an external CUTLASS 3.9.2 include tree and hashes its contents, owned source,
 toolchain and flags into the actual validation artifact.
 
 `tensor.matrix_view` and `src/tensor/native_matrix_view.hpp` prove the direct

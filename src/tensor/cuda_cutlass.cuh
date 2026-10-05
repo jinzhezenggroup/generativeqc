@@ -43,6 +43,7 @@ class CudaCutlassContraction {
         cutlass::epilogue::thread::LinearCombination<T, 1, T, T>,
         cutlass::gemm::threadblock::GemmBatchedIdentityThreadblockSwizzle, 2, 1, 1>;
     static_assert(sizeof(typename Gemm::GemmKernel::SharedStorage) < (48 << 10));
+    static_assert(Gemm::GemmKernel::kThreadCount == 128);
     typename Gemm::Arguments args;
     Gemm gemm;
 
@@ -82,6 +83,7 @@ class CudaCutlassContraction {
   };
 
  public:
+  static constexpr std::string_view kFamily = "simt-32x64x8-v1";
   struct Provenance {
     ContractionRequest request;
     std::array<char, 64> artifact_identity{};

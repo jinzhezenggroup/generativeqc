@@ -221,8 +221,8 @@ int main(int argc, char** argv) {
       check<double>(order, 2, 36, 66, 18, 0.5, true);
       count += 4;
     }
-    std::cout << "CUTLASS " << CUTLASS_VERSION << ": " << count
-              << " independent layout/precision/beta cases passed\n";
+    std::cout << "CUTLASS " << CUTLASS_VERSION << ' ' << CudaCutlassContraction::kFamily << ": "
+              << count << " independent layout/precision/beta cases passed\n";
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
     return 1;

@@ -89,7 +89,7 @@ template<class A, class LA, class B, class LB, class C, class LC, class Acc,
          class Op, class Sm, class Tile, class Warp, class Instruction, class Epilogue,
          class Swizzle, int Stages, int AlignA, int AlignB>
 struct GemmBatched {
-  struct GemmKernel { struct SharedStorage { char bytes[8192]; }; };
+  struct GemmKernel { static constexpr int kThreadCount = 128; struct SharedStorage { char bytes[8192]; }; };
   template<class T> struct Ref { T* pointer; int ld; void reset(T* value) { pointer = value; } };
   struct Shape { int m, n, k; };
   struct Arguments {
