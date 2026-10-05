@@ -147,7 +147,7 @@ namespace generativeqc::dft::cosx_derivative_lowering {
             checked_publication=publication if weighted else None,
             checked_right_symmetrization=("ao", "density_rc", "density_cr")
             if symmetric
-            else (),
+            else None,
         )
         pieces.append(
             emit_contraction_region_portfolio(

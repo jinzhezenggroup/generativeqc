@@ -247,7 +247,7 @@ def contraction_initializer(
     batch_scale: Node | None = None,
     checked_update: Program | None = None,
     checked_publication: Program | None = None,
-    checked_right_symmetrization: tuple[str, str, str] = (),
+    checked_right_symmetrization: tuple[str, str, str] | None = None,
     fixed_modes: tuple[int, ...] = (),
     operand_order: tuple[int, int] = (0, 1),
 ) -> str:
