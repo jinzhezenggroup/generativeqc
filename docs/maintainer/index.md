@@ -8,6 +8,7 @@ Use this guide to keep GenerativeQC scientifically trustworthy, reproducible, pe
 - [Large-domain stationary CUDA qualification](stationary_large_domain_qualification.md)
 - [Scientific evidence retention](evidence_retention.md)
 - [CUDA ownership](cuda_ownership.md)
+- [CUDA vendor boundaries](vendor_boundaries.md)
 - [Resource planning](resource_planning.md)
 - [CPU autotuning](cpu_autotuning.md)
 - [F-shell validation](f_shell_validation.md)
@@ -25,6 +26,7 @@ df_frozen_precision
 performance_engineering
 evidence_retention
 cuda_ownership
+vendor_boundaries
 resource_planning
 cpu_autotuning
 f_shell_validation

@@ -16,10 +16,12 @@ struct DFIterationPlan {
   std::size_t iteration{}, auxiliary{}, preparation{}, accumulation{};
   std::size_t preparation_terms{}, auxiliary_terms{}, core_terms{};
   bool matrix_gemm{};
+  std::size_t auxiliary_batch_size{1};
 };
 
 inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size_t q, bool cuda,
-                                         bool allow_hoisting, bool matrix_gemm = false) {
+                                         bool allow_hoisting, bool matrix_gemm = false,
+                                         std::size_t auxiliary_batch_size = 1) {
   using generated::df::checked_add;
   using generated::df::checked_mul;
   namespace fast = generated::dfhoist;
@@ -61,6 +63,12 @@ inline DFIterationPlan df_iteration_plan(std::size_t o, std::size_t v, std::size
     plan.preparation_terms = fast::prepare_packed_contraction_terms(o, v);
     plan.auxiliary_terms = fast::auxiliary_packed_contraction_terms(o, v);
     plan.core_terms = fast::iteration_packed_contraction_terms(o, v);
+    if (auxiliary_batch_size > 1) {
+      plan.auxiliary_batch_size = auxiliary_batch_size;
+      // Retain one-Q capacity for an uneven tail and independent replay.
+      plan.auxiliary = std::max(plan.auxiliary,
+                                fast::auxiliary_batched_arena_elements(o, v, auxiliary_batch_size));
+    }
   }
   return plan;
 }

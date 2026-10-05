@@ -1,0 +1,70 @@
+"""Audit every complete E/F sample and actual composed policy observations."""
+import hashlib
+import json
+from pathlib import Path
+import statistics
+import sys
+from benchmarks.readme_omol25 import check_record
+
+native_path, reference_path = map(Path, sys.argv[1:3])
+native, reference = (json.loads(p.read_text()) for p in (native_path, reference_path))
+def require(ok, message):
+ if not ok:
+  raise RuntimeError(message)
+require(native['status'] == reference['status'] == 'measured', 'incomplete endpoint')
+require(native['protocol'] == reference['protocol'], 'scientific protocol differs')
+repeats=native['protocol']['repeats']
+require(repeats == 1, 'cold-repeat diagnostic requires one replay per geometry')
+for run in (native, reference):
+ require(len(run['records']) == 2*(repeats+1), 'missing or extra samples')
+ for phase,count in [('cold',1),('warm',repeats),('moved',1),('moved-warm',repeats)]:
+  require(sum(r['phase']==phase for r in run['records'])==count, 'phase inventory drift')
+for row in reference['records']:
+ backend=row['reference_xc_backend']
+ require(backend['backend']=='cuda-libxc', 'reference XC is not CUDA LibXC')
+ require(all(c['on_gpu'] is True for c in backend['components']), 'reference component fallback')
+comparisons=[]
+for row in native['records']:
+ for oracle in reference['records']:
+  if row['geometry']==oracle['geometry']:
+   pair=check_record(row,oracle)
+   require(pair['gate'], 'independent all-sample E/F gate failed')
+   comparisons.append(pair)
+ scf=row['native_scf_ao_work']
+ require(scf['requested'] and scf['selected'] and scf['xc_evaluations']>0, 'SCF AO maps did not execute')
+ require(scf['cutoff']==1e-16, 'SCF cutoff changed')
+ require(0 < scf['point_ao_square_sum'] < scf['dense_point_ao_square_sum'], 'SCF local work missing')
+ force=row['native_force_components']
+ require(force['stationary_integral_derivative_route']=='prepared-native-complete', 'native force route missed')
+ require(force['wall_seconds']['stationary_integral_derivatives']>0, 'native force timer missing')
+ grid=force['grid_work_plan'];batches=(grid['grid_points']+grid['tile_points']-1)//grid['tile_points']
+ counts=force['work_counts']['observed']
+ require(counts['geometry_batches']==batches and counts['phased_becke_batches']==batches, 'phased work missing')
+ require(type(row['fock_builds']) is int and row['fock_builds']>0, 'actual public Fock count unavailable')
+ require(not row['warm_start_fallback'], 'unexpected warm-to-cold retry')
+ policy=force['force_active_ao_policy']
+ require(policy is not None and policy['requested_mode']=='auto', 'public policy receipt missing')
+ ao=force['resident_ao_selection'];work=ao['work']
+ if native['qualification_policy']['force_policy']=='default':
+  require(policy['profile_id']=='sm120-ordinary-rks-second-jet-v1', 'qualified profile did not select')
+  require(policy['actual_mode']=='selected', 'selected force work missing')
+  require(ao['mode']=='sampled-jet-cutoff' and ao['cutoff']==1e-16, 'force cutoff changed')
+  require(work['tile_count']==batches, 'force map coverage incomplete')
+  require(work['point_ao_square_sum'] < work['dense_point_ao_square_sum'], 'force local work missing')
+ else:
+  require(policy['profile_id'] is None and policy['actual_mode']=='dense', 'control selected maps')
+  require(ao['mode']=='disabled' and ao['cutoff'] is None and work is None, 'control force map observer differs')
+
+summary={'native_sha256':hashlib.sha256(native_path.read_bytes()).hexdigest(),
+ 'reference_sha256':hashlib.sha256(reference_path.read_bytes()).hexdigest(),
+ 'all_pairings':len(comparisons),'max_energy_error':max(p['energy_error'] for p in comparisons),
+ 'max_force_error':max(p['force_error'] for p in comparisons),'phases':{}}
+for phase in ('cold','warm','moved','moved-warm'):
+ n=[r for r in native['records'] if r['phase']==phase];r=[r for r in reference['records'] if r['phase']==phase]
+ nt=[x['complete_seconds'] for x in n];rt=[x['complete_seconds'] for x in r]
+ summary['phases'][phase]={'native_seconds':nt,'reference_seconds':rt,
+  'native_median':statistics.median(nt),'reference_median':statistics.median(rt),
+  'ratio':statistics.median(nt)/statistics.median(rt),
+  'native_iterations':[x['iterations'] for x in n],'reference_iterations':[x['iterations'] for x in r],
+  'native_fock_builds':[x['fock_builds'] for x in n]}
+print(json.dumps(summary,indent=2,allow_nan=False))

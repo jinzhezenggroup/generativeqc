@@ -470,7 +470,10 @@ def test_unsupported_native_plot_has_no_native_latency(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("failure", ["SCF did not converge", "stationary force failed"])
-def test_native_failure_is_journaled_without_a_force_work_record(failure: str) -> None:
+@pytest.mark.parametrize("has_diagnostic", [False, True])
+def test_native_failure_is_journaled_without_a_force_work_record(
+    failure: str, has_diagnostic: bool
+) -> None:
     """Execute the real row/retention code with a failed strict=False endpoint."""
     from types import CodeType, FunctionType
 
@@ -502,6 +505,9 @@ def test_native_failure_is_journaled_without_a_force_work_record(failure: str) -
     compiled = next(value for value in code.co_consts if isinstance(value, CodeType))
     record = {"records": [], "stage": "cold/0"}
     saved = []
+    # Preserve any available solver history even if the later force stage fails.
+    # Missing diagnostics remain null instead of synthesizing an empty history.
+    diagnostic = {"history": [{"iteration": 1, "energy_change": None}]}
     scope = {
         "Any": object,
         "record": record,
@@ -525,6 +531,10 @@ def test_native_failure_is_journaled_without_a_force_work_record(failure: str) -
             fock_builds=101,
             energy_change=0.1,
             density_rms=0.2,
+            physical_residual_rms=0.3,
+            ks_diagnostic=SimpleNamespace(to_payload=lambda: copy.deepcopy(diagnostic))
+            if has_diagnostic
+            else None,
             warm_start_used=False,
             warm_start_fallback=False,
         ),
@@ -537,4 +547,6 @@ def test_native_failure_is_journaled_without_a_force_work_record(failure: str) -
     assert failed["detail"] == failure and failed["status"] == 5
     assert failed["iterations"] == 100 and failed["seconds"] == 2.5
     assert failed["native_force_components"] is None
+    assert failed["physical_residual_rms"] == 0.3
+    assert failed["native_ks_diagnostic"] == (diagnostic if has_diagnostic else None)
     assert failed["gate"] is False
