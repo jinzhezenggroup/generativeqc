@@ -47,6 +47,7 @@ function(generativeqc_attach_cuda_implib target)
     cudaDeviceGetAttribute
     cudaDeviceGetLimit
     cudaDeviceSetLimit
+    cudaDeviceSynchronize
     cudaDriverGetVersion
     cudaEventCreate
     cudaEventCreateWithFlags
