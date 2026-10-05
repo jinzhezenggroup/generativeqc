@@ -4,6 +4,10 @@
  * Timed build includes AO/ESP generation, H2D, contractions, D2H and host energy.
  */
 namespace cosx_weighted_endpoint_test {
+// Scalar template bounds avoid CUDA front-end emission of local container
+// member calls in nested std::array arguments. The benchmark still has four
+// independent routes and six replays per geometry.
+constexpr std::size_t kRoutes = 4, kReplays = 6;
 using namespace generativeqc;
 using Clock = std::chrono::steady_clock;
 
@@ -126,8 +130,7 @@ void cosx_weighted_endpoint_benchmark(char** args) {
   require(radial && radial <= 1000 && polar && polar <= 1000 && azimuth && azimuth <= 1000 &&
               tile && tile <= 4096,
           "invalid COSX weighted benchmark grid/tile");
-  constexpr std::array<unsigned, 4> masks{0, 4, 3, 7};
-  constexpr std::size_t repeats = 6;
+  constexpr std::array<unsigned, kRoutes> masks{0, 4, 3, 7};
   constexpr auto convention = dft::CosxDensityConvention::rhf_spin_summed;
   for (unsigned geometry = 0; geometry < 2; ++geometry) {
     const auto geometry_begin = Clock::now();
@@ -148,22 +151,22 @@ void cosx_weighted_endpoint_benchmark(char** args) {
     }
     const auto oracle =
         dft::build_cosx_reference(system, oracle_xyz, oracle_weights, density, convention);
-    std::array<std::array<double, 3>, masks.size()> oracle_errors{};
+    std::array<std::array<double, 3>, kRoutes> oracle_errors{};
     for (std::size_t route = 0; route < masks.size(); ++route) {
       auto plan = prepare(system, oracle_xyz, oracle_weights, 2, masks[route]);
       oracle_errors[route] = errors(plan->build(density, convention), oracle);
     }
-    std::array<std::unique_ptr<dft::CudaCosxStagingPlan>, masks.size()> plans;
-    std::array<double, masks.size()> setup{};
+    std::array<std::unique_ptr<dft::CudaCosxStagingPlan>, kRoutes> plans;
+    std::array<double, kRoutes> setup{};
     for (std::size_t route = 0; route < masks.size(); ++route) {
       const auto begin = Clock::now();
       plans[route] = prepare(system, grid.points(), grid.weights(), tile, masks[route]);
       setup[route] = elapsed(begin);
     }
-    std::array<std::array<double, repeats>, masks.size()> samples{}, energies{};
-    std::array<std::array<std::array<double, 3>, repeats>, masks.size()> paired_errors{};
-    for (std::size_t sample = 0; sample < repeats; ++sample) {
-      std::array<dft::CosxReferenceResult, masks.size()> result;
+    std::array<std::array<double, kReplays>, kRoutes> samples{}, energies{};
+    std::array<std::array<std::array<double, 3>, kReplays>, kRoutes> paired_errors{};
+    for (std::size_t sample = 0; sample < kReplays; ++sample) {
+      std::array<dft::CosxReferenceResult, kRoutes> result;
       // Rotate first-replay and warm routes, including after geometry change.
       // CPU subset qualification has already initialized CUDA and the library.
       for (std::size_t order = 0; order < masks.size(); ++order) {
@@ -189,7 +192,7 @@ void cosx_weighted_endpoint_benchmark(char** args) {
         const auto count =
             full ? points / effective_tile : std::size_t(points % effective_tile != 0);
         const auto extent = full ? effective_tile : points % effective_tile;
-        const auto calls = repeats * count;
+        const auto calls = kReplays * count;
         require(site.candidate.provider == (library ? "cublas" : "generated.cuda") &&
                     site.calls == calls && site.summands == calls * extent * n * n &&
                     site.scaled_elements == (slot >= 4 ? calls * extent * n : 0) &&
@@ -213,7 +216,7 @@ void cosx_weighted_endpoint_benchmark(char** args) {
                 << info.compute_major << '.' << info.compute_minor << '"' << ",\"oracle_errors\":["
                 << oracle_errors[route][0] << ',' << oracle_errors[route][1] << ','
                 << oracle_errors[route][2] << "],\"samples\":[";
-      for (std::size_t sample = 0; sample < repeats; ++sample) {
+      for (std::size_t sample = 0; sample < kReplays; ++sample) {
         if (sample) std::cout << ',';
         const auto& e = paired_errors[route][sample];
         std::cout << "{\"seconds\":" << samples[route][sample]
