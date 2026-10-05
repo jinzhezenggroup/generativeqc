@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+cd /data/jzzeng/qc-dft-cosx-esp-crossover-1884
+export PATH=/data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin:/data/jzzeng/qc-provider-1886-tools/bin:$PATH
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+export CCACHE_DIR=/data/jzzeng/ccache
+art=$PWD/.artifacts/1884-cosx-esp-crossover
+atoms=$1
+tile=$2
+radial=$3
+polar=$4
+azimuth=$5
+out=$art/run-$atoms-$tile-$radial-$polar-$azimuth
+mkdir -p "$out"
+bin=build/cuda-release-sm120/generativeqc_cosx_cuda_tests
+sha256sum -c "$art/source-sha256.txt" > "$out/source-verified.txt"
+scontrol show job "$SLURM_JOB_ID" -o > "$out/job.txt"
+printf 'visibility=%s\n' "$CUDA_VISIBLE_DEVICES" > "$out/visibility.txt"
+nvidia-smi > "$out/device.txt"
+sha256sum "$bin" > "$out/binary-sha256.txt"
+ccache --version > "$out/cache-version.txt"
+ccache --show-stats > "$out/cache-before.txt"
+trap 'ccache --show-stats > "$out/cache-after.txt"' EXIT
+for geometry in 0 1; do
+  gzip -dc "$art/inputs/input-$atoms-$geometry.txt.gz" > "$out/input-$geometry.txt"
+done
+/usr/bin/time -v "$bin" --weighted-endpoint-benchmark "$out/input-0.txt" "$out/input-1.txt" "$radial" "$polar" "$azimuth" "$tile" > "$out/endpoint.jsonl" 2> "$out/timing.txt"
+printf 'success\n' > "$out/complete.txt"

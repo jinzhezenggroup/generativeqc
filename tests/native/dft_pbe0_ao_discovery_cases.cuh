@@ -1,7 +1,7 @@
 /** Compare scaled-PBE local panels with independent full-AO CPU integration.
  * These are XC component gates, not a complete PBE0 SCF/force qualification.
  */
-void pbe0_ao_discovery_cases() {
+void pbe0_ao_discovery_cases(bool indexed_provider = false) {
   for (bool spherical : {false, true}) {
     generativeqc::core::System molecule;
     molecule.atoms = {{1, {0, 0, 0}}, {1, {0.1, 0.2, 8.0}}};
@@ -65,6 +65,16 @@ void pbe0_ao_discovery_cases() {
         require(!selected.plan->layout().local_ao, "budget miss installed a partial map");
         require(selected.plan->select_local_ao(cutoff, bound.host_peak_bytes),
                 "scaled-PBE local AO admission failed");
+        if (indexed_provider) {
+          require(!selected.plan->density_provider_diagnostic(),
+                  "AO discovery retained a stale dense materialization");
+          selected.plan->prepare_density(generativeqc::runtime::strict_fp64_precision(), 10,
+                                         density_provider_qualification_budget);
+          const auto& binding =
+              selected.plan->density_binding(generativeqc::runtime::PrecisionPhase::StrictAudit);
+          require((binding.candidate.algorithm == "bounded-matrix-panel-gemm") == (cutoff < 1),
+                  "discovered indexed density admission");
+        }
         selected.submit(input);
         const auto scalar = selected.scalars();
         const auto potential = selected.potential();
