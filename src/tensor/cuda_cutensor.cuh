@@ -55,6 +55,19 @@ static __global__ void audit_affine_contraction(const T* output, AffineAuditView
  */
 class CudaCutensorContraction {
  public:
+  /** Stable preparation facts, excluding addresses and mutable replay counts.
+   * The request carries resolved modes/extents/strides, arithmetic and alpha/beta;
+   * version/architecture plus the fixed algorithm and kernel rank identify the
+   * provider choice. Identity strings remain borrowed from the compiler artifact,
+   * which must outlive this record. This description is not a cache key. */
+  struct Provenance {
+    ContractionRequest request;
+    std::size_t provider_version{}, workspace_bytes{};
+    int runtime_version{}, architecture{};
+    cutensorAlgo_t algorithm{};
+    std::int32_t kernel_rank{};
+  };
+
   CudaCutensorContraction() = default;
   CudaCutensorContraction(const CudaCutensorContraction&) = delete;
   CudaCutensorContraction& operator=(const CudaCutensorContraction&) = delete;
@@ -86,6 +99,12 @@ class CudaCutensorContraction {
       return false;
     }
     generativeqc_tensor::cuda_check(cudaRuntimeGetVersion(&runtime_version_));
+    int major{}, minor{};
+    generativeqc_tensor::cuda_check(
+        cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, device_));
+    generativeqc_tensor::cuda_check(
+        cudaDeviceGetAttribute(&minor, cudaDevAttrComputeCapabilityMinor, device_));
+    architecture_ = 10 * major + minor;
     std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
     try {
       std::size_t before{}, after{}, total{};
@@ -116,8 +135,14 @@ class CudaCutensorContraction {
           handle_, operation_, CUTENSOR_OPERATION_DESCRIPTOR_SCALAR_TYPE, &scalar_type,
           sizeof(scalar_type)));
       if (scalar_type != dtype) throw std::logic_error("cuTENSOR changed requested scalar dtype");
-      cutensor_check(cutensorCreatePlanPreference(handle_, &preference_, CUTENSOR_ALGO_DEFAULT,
+      // DEFAULT hides the chosen algorithm/kernel and 2.8 exposes no plan query
+      // for either. A fixed family and rank give reproducible provider provenance.
+      // Unsupported shapes reject preparation and retain the caller's fallback.
+      cutensor_check(cutensorCreatePlanPreference(handle_, &preference_, CUTENSOR_ALGO_GETT,
                                                   CUTENSOR_JIT_MODE_NONE));
+      const std::int32_t rank = 0;
+      cutensor_check(cutensorPlanPreferenceSetAttribute(
+          handle_, preference_, CUTENSOR_PLAN_PREFERENCE_KERNEL_RANK, &rank, sizeof(rank)));
       const auto autotune = CUTENSOR_AUTOTUNE_MODE_NONE;
       const auto cache = CUTENSOR_CACHE_MODE_NONE;
       cutensor_check(cutensorPlanPreferenceSetAttribute(handle_, preference_,
@@ -126,6 +151,13 @@ class CudaCutensorContraction {
       cutensor_check(cutensorPlanPreferenceSetAttribute(
           handle_, preference_, CUTENSOR_PLAN_PREFERENCE_CACHE_MODE, &cache, sizeof(cache)));
       cutensor_check(cutensorCreatePlan(handle_, &plan_, operation_, preference_, workspace_limit));
+      cutensor_check(cutensorPlanPreferenceGetAttribute(
+          handle_, preference_, CUTENSOR_PLAN_PREFERENCE_ALGO, &algorithm_, sizeof(algorithm_)));
+      cutensor_check(cutensorPlanPreferenceGetAttribute(handle_, preference_,
+                                                        CUTENSOR_PLAN_PREFERENCE_KERNEL_RANK,
+                                                        &kernel_rank_, sizeof(kernel_rank_)));
+      if (algorithm_ != CUTENSOR_ALGO_GETT || kernel_rank_ != rank)
+        throw std::logic_error("cuTENSOR changed the fixed algorithm/kernel contract");
       std::uint64_t workspace{};
       cutensor_check(cutensorPlanGetAttribute(handle_, plan_, CUTENSOR_PLAN_REQUIRED_WORKSPACE,
                                               &workspace, sizeof(workspace)));
@@ -241,6 +273,11 @@ class CudaCutensorContraction {
   std::size_t calls() const noexcept { return calls_; }
   double prepare_seconds() const noexcept { return prepare_seconds_; }
   std::string_view rejection() const noexcept { return rejection_; }
+  Provenance provenance() const {
+    if (!prepared_) throw std::logic_error("cuTENSOR plan provenance requires preparation");
+    return {request_,      version_,   workspace_bytes_, runtime_version_,
+            architecture_, algorithm_, kernel_rank_};
+  }
 
  private:
   static void require_uncaptured(cudaStream_t stream) {
@@ -286,7 +323,9 @@ class CudaCutensorContraction {
   ContractionRequest request_;
   AffineAuditView audit_;
   cudaStream_t stream_{};
-  int device_{}, runtime_version_{};
+  int device_{}, runtime_version_{}, architecture_{};
+  cutensorAlgo_t algorithm_{CUTENSOR_ALGO_GETT};
+  std::int32_t kernel_rank_{};
   cutensorHandle_t handle_{};
   std::array<cutensorTensorDescriptor_t, 3> tensors_{};
   cutensorOperationDescriptor_t operation_{};

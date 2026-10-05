@@ -60,10 +60,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
 #include <string>
 #include "cc/lambda_response.hpp"
 #include "hf/rhf_frame_response.hpp"
-struct generativeqc_method_descriptor { unsigned ccsd_diis_history = 6; };
 namespace generativeqc {
 namespace runtime { struct ExecutionContext {}; }
-namespace core { struct System {}; }
 namespace hf { struct RHFFrameResponseOptions; }
 namespace methods::detail {
 struct DFCCSDTResult {
@@ -222,7 +220,24 @@ int main() {
     try { (void)select(14,bad);return 23; }
     catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,15}) {
+  for(const char* inverse : {"0","1"}) for(const char* repeat : {"0","1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","5",
+                          "4","3","1e-7","1","2","0","7",inverse,repeat};
+    const auto result=select(17,selected);
+    if(result.derived_denominators || result.diis_history!=4 || result.ccsd_batch_limit!=3 ||
+       result.frame.gmres.true_residual_every!=7 ||
+       result.frame.df_preconditioning!=(inverse[0]=='1') ||
+       bool(result.frame.recycling)!=(repeat[0]=='1') ||
+       result.frame.orbital_screening_tolerance!=1e-7 || !result.frame.profile_jk ||
+       !result.frame.symmetric_polarization) return 24;
+  }
+  for(int index : {14,15,16}) for(const char* token : {"", "-1", "1junk", "1.0"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0"};
+    bad[index]=token;
+    try { (void)select(17,bad);return 25; } catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,18}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }
@@ -236,6 +251,7 @@ int main() {
             compiler,
             "-std=c++20",
             "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
             str(source),
             "-o",
             str(executable),
@@ -304,6 +320,7 @@ int probe() {
   runtime::ExecutionContext execution;
   core::System system, auxiliary;
   generativeqc_method_descriptor descriptor;
+  const std::size_t recycle_bytes=123;
   for(bool derived_denominators : {false,true})
   for(bool forces : {false,true})
   for(bool df_matrix_gemm : {false,true})

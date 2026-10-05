@@ -9,6 +9,7 @@
 
 #include "scf/cuda_density_fitting.hpp"
 #include "scf/cuda_density_fitting_final_state.hpp"
+#include "tensor/cuda_vector_contraction.hpp"
 
 namespace generativeqc::scf {
 
@@ -57,6 +58,9 @@ struct CudaDensityFittingJkPlan {
   std::size_t row_tile{};
   cudaStream_t stream{};
   cublasHandle_t blas{};
+  // Canonical resident Coulomb contractions borrow this plan's exclusive
+  // immutable handle/stream. Bindings are destroyed before either resource.
+  std::unique_ptr<tensor::CudaVectorContraction> charge_contraction, coulomb_contraction;
   cusolverDnHandle_t solver{};
   cusolverDnParams_t solver_parameters{};
   double* three_center{};

@@ -40,14 +40,20 @@ def test_cuda_uses_the_same_plan_as_host_admission(programs: Programs) -> None:
     cpu, cuda = programs
     assert {
         "iteration",
+        "iteration_prepared",
         "replay_strict",
         "replay_reassociated",
         "lambda_transpose",
         "hamiltonian_weights",
     } <= cuda.keys()
+    assert any(
+        codegen._packed_matrix_gemm(node) is not None
+        for node in cuda["iteration_prepared"].live_nodes
+    )
     for name, program in cuda.items():
-        assert program.logical_hash == cpu[name].logical_hash, name
-        assert codegen._arena_plan(program) == codegen._arena_plan(cpu[name]), name
+        cpu_name = "iteration" if name == "iteration_prepared" else name
+        assert program.logical_hash == cpu[cpu_name].logical_hash, name
+        assert codegen._arena_plan(program) == codegen._arena_plan(cpu[cpu_name]), name
 
 
 def test_every_slot_excludes_live_inputs_and_retains_all_outputs(

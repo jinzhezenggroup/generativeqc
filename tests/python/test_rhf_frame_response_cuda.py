@@ -258,6 +258,24 @@ def test_admission_reference_and_stationarity_fail_without_publication(
         assert all(np.all(a == 12345.0) for a in result[2])
 
 
+def test_same_operator_subspace_retains_exact_response_gates(
+    probe: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    metadata, _ = load_fixture("water")
+    arrays, mf = reference(metadata)
+    sources, _ = seeds(arrays, mf.mol.nelectron // 2, 0.03)
+    cold = run(probe, metadata, arrays, sources)
+    assert cold[0] == 0, cold[1]
+    monkeypatch.setenv("GENERATIVEQC_TEST_RHF_RECYCLE_REPEAT", "1")
+    warm = run(probe, metadata, arrays, sources)
+    assert warm[0] == 0, warm[1]
+    assert warm[3][1] < cold[3][1]  # actual exact J/K calls, not a FLOP estimate
+    assert warm[3][10] == 0  # the fresh physical residual accepts the projection
+    for actual, expected in zip(warm[2], cold[2], strict=True):
+        np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
+    assert max(warm[4]) < 1e-8
+
+
 @pytest.mark.parametrize("threshold", [1e-12, 1e-4, 0.5])
 def test_fixed_mask_response_is_qualified_against_exact_operator(
     probe: typing.Any, threshold: float

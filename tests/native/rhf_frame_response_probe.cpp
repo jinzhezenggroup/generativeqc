@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <vector>
 
@@ -44,8 +45,21 @@ extern "C" int rhf_frame_response_probe(void* opaque, std::size_t occupied,
     // reference copies; the auxiliary metadata belongs only to this probe.
     options.caller_bytes = (12 * n * n + n + 3 * raw.orbital().atoms.size()) * sizeof(double) +
                            posthf::source_capacity(raw.auxiliary());
+    hf::RHFFrameResponseRecycle recycle;
+    const auto* repeat = std::getenv("GENERATIVEQC_TEST_RHF_RECYCLE_REPEAT");
+    if (repeat && std::string(repeat) == "1") options.recycling = &recycle;
     auto result = hf::rhf_frame_response_cuda(raw.orbital(), ref, {inputs[6], n * n},
                                               {inputs[7], n * n}, 0, options);
+    if (options.recycling) {
+      if (!result.recycle_published)
+        throw std::runtime_error("first response did not publish subspace");
+      // Reuse exactly this owned frame/source, without retaining both result
+      // payloads. This is a lifecycle/action-count test, not a cold endpoint.
+      result = {};
+      result = hf::rhf_frame_response_cuda(raw.orbital(), ref, {inputs[6], n * n},
+                                           {inputs[7], n * n}, 0, options);
+      if (!result.recycled_guess) throw std::runtime_error("same-operator subspace was not reused");
+    }
     const std::array<const std::vector<double>*, 6> arrays{
         &result.gradient,        &result.hcore_weights, &result.overlap_weights,
         &result.fock_ao_weights, &result.stationarity,  &result.orbital_rhs};

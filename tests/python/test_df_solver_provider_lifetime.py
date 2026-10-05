@@ -1,4 +1,4 @@
-"""DF solver releases must not hide another owner's measured provider growth.
+"""CC solver releases must not hide another owner's measured provider growth.
 
 Compile the live cleanup and optional-arena fallback with host CUDA doubles.
 This tests resource ordering and fallback selection, not GPU execution.
@@ -53,7 +53,7 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("operation", ["cleanup", "fallback"])
+@pytest.mark.parametrize("operation", ["cleanup", "fallback", "conventional-fallback"])
 def test_provider_release_waits_for_other_owner_measurement(
     provider_lifetime_probe: Path, operation: str
 ) -> None:
@@ -124,16 +124,23 @@ struct Owner {
   std::size_t naux=1,combined=0;
   Plan df_iteration_plan(std::size_t,std::size_t,std::size_t,bool,bool,bool) { return {}; }
   std::size_t build_layout() { return layout.total; }
+  bool conventional_prepared=false;
   struct { std::size_t total=1024; } layout;
   int replans=0;
-  void scalar_plan() { plan.matrix_gemm=false; layout.total=512; ++replans; }
+  void scalar_plan() {
+    conventional_prepared=false; plan.matrix_gemm=false; layout.total=512; ++replans;
+  }
 """
 
 MAIN = r"""
 int main(int argc,char** argv) {
   if(argc!=2) return 99;
-  const bool fallback=std::string(argv[1])=="fallback";
+  const bool fallback=std::string(argv[1])!="cleanup";
   generativeqc::cc::Owner owner;
+  if (std::string(argv[1])=="conventional-fallback") {
+    owner.conventional_prepared=true;
+    owner.plan.matrix_gemm=false;
+  }
   auto release=released.get_future();
   std::promise<void> started;
   auto ready=started.get_future();
@@ -154,7 +161,8 @@ int main(int argc,char** argv) {
   }
   if(destroys!=1 || owner.contractions.handle) return 2;
   if(fallback) {
-    if(owner.plan.matrix_gemm || owner.replans!=1 || allocations!=2 || cleared!=1 ||
+    if(owner.conventional_prepared || owner.plan.matrix_gemm ||
+       owner.replans!=1 || allocations!=2 || cleared!=1 ||
        owner.layout.total!=512 || owner.base!=reinterpret_cast<unsigned char*>(4)) return 3;
     owner.cleanup();
   }

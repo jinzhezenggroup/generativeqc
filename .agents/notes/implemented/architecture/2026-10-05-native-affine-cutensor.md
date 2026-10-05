@@ -58,3 +58,7 @@ separately. Production binding, two independent method consumers, full cold/warm
 endpoint measurements, provider-absence/OOM fault injection and qualified capture
 remain #1887 work. Mixed precision beyond homogeneous FP32/FP64 remains explicitly
 unsupported rather than being changed silently.
+
+The default algorithm choice above is superseded by the
+[explicit plan-provenance decision](2026-10-05-cutensor-explicit-plan-provenance.md),
+which pins a queryable GETT family/rank while preserving these resource limits.

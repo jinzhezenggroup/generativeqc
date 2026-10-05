@@ -461,6 +461,13 @@ DFSourceResponseDiagnostic pullback_df_source_cuda(std::shared_ptr<DFSourceState
   // this retained owner and embedding arena, so remove only that exact overlap.
   const auto borrowed = bytes(checked_add(full, checked_add(nn, qq)));
   const auto inner_external = result.numeric_capacity_bytes - transform_owned - borrowed;
+  const auto numeric_without_binding = result.numeric_capacity_bytes;
+  // The response owns its neutral execution context independently of the
+  // retained physical source. Charge its complete reservation before allocating
+  // wrapper scratch; a tight budget can select the generated implementation.
+  result.numeric_capacity_bytes =
+      checked_add(numeric_without_binding,
+                  posthf::df_mo_source_response_binding_capacity(budget - numeric_without_binding));
   runtime::CudaDeviceScope scope(plan.device_id);
   const auto stream = plan.stream;
   int failed = 0;
@@ -488,7 +495,7 @@ DFSourceResponseDiagnostic pullback_df_source_cuda(std::shared_ptr<DFSourceState
   auto* bar_metric = scratch1 + qq;
   result.transform = posthf::pullback_df_mo_source_cuda(
       {n, q, source->coefficients.get(), plan.inverse_square_roots, embedded.bar_bmo},
-      plan.device_id, stream, plan.blas,
+      plan.device_id, stream,
       [&](std::size_t mu, double* row, cudaStream_t source_stream) {
         std::string detail;
         const auto status = scf::generate_cuda_density_fitting_raw_tile(
@@ -511,8 +518,11 @@ DFSourceResponseDiagnostic pullback_df_source_cuda(std::shared_ptr<DFSourceState
       cudaMemcpyAsync(&failed, error.get(), sizeof(int), cudaMemcpyDeviceToHost, stream));
   runtime::cuda_resource_check(cudaStreamSynchronize(stream));
   if (failed) throw std::runtime_error("nonfinite physical DF source/metric response arithmetic");
-  if (result.transform.numeric_capacity_bytes != result.numeric_capacity_bytes)
+  if (result.transform.numeric_capacity_bytes > result.numeric_capacity_bytes ||
+      result.transform.numeric_capacity_bytes !=
+          checked_add(numeric_without_binding, result.transform.binding_bytes))
     throw std::logic_error("DF source response ownership accounting mismatch");
+  result.numeric_capacity_bytes = result.transform.numeric_capacity_bytes;
   return result;
 }
 }  // namespace generativeqc::cc

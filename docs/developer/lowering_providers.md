@@ -99,7 +99,26 @@ projection retains scientific identity, parent semantic identity and operand
 order. Interior-axis slices are rejected. The caller traverses every fixed
 reduction row and accumulates its contribution. The native validator checks all
 eight matrix recipes against their projected axes. The CUDA response consumer
-still uses its original callback interface pending prepared execution migration.
+prepares all eight sites through the shared contraction table and runs its two
+row passes without plan search. Method interfaces accept device inputs and a
+stream; they do not accept a vendor handle or provider selector.
+
+The homogeneous contraction-region portfolio offers strict cuBLAS, generated
+CUDA and optional cuTENSOR execution. Unknown complete costs preserve a legal
+cuBLAS incumbent. A remaining budget that cannot hold the library reservation
+selects generated execution; optional preparation rejection releases provisional
+plans before the same-precision fallback. The region cannot implement casts,
+mixed arithmetic, refinement or precision audits and refuses such obligations.
+
+Source-response admission adds descriptor host storage and every simultaneous
+plan/provider/workspace reservation to its borrowed inputs and scratch. The
+physical source/metric wrapper removes only the exact borrowed overlap. The
+response currently owns a separate context, so cuBLAS adds the shared 96 MiB
+conservative reservation even when the retained physical source owns a handle.
+Diagnostics report binding bytes, selected compiler candidate identity, provider
+version, preparation time, queried optional workspace and observed provider
+device growth. cuTENSOR still has no qualified production resource profile;
+test-only ceilings and costs exercise execution without promoting it.
 
 `src/tensor/cuda_contraction.cuh` owns preparation, provider resources and typed
 execution. Each stage pre-binds its full and tail batch shapes outside iteration;
@@ -118,9 +137,18 @@ DF-CC and Lambda still request FP64. It does not yet execute the general
 `LoweringBinding` portfolio or perform joint native precision/provider selection.
 Mixed compute/accumulation, casts and refinement require a complete additional
 candidate; the current adapter rejects them. The RHF frame-response callback,
-conventional RCCSD migration from #1868, DFT, triples precision, other provider
+DFT, triples precision, other provider
 families and complete endpoint qualification remain in
 #1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
+
+Conventional RCCSD iteration also emits typed prepared contractions for directly
+representable unbatched and leading-batch layouts. Non-contraction nodes reuse
+the existing generated kernels and arena plan. The native owner prepares the
+table once and charges its descriptor storage plus shared provider reservation.
+Insufficient dimensions/resources retain the original scalar traversal. There
+is no conventional provider-selection option or CC-local vendor callback;
+execution diagnostics report preparation, work counts and resource capacity.
+The separately expanded independent replay remains the final numerical gate.
 
 The same native descriptor also supports `validate_affine()` independently of
 the optional matrix recipe. `affine_contraction_initializer` emits original
@@ -174,6 +202,16 @@ its resource assumptions or claiming a speedup. Validation/benchmark adapters us
 the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
 rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
+
+The native cuTENSOR executor fixes the GETT family and kernel rank zero at
+preparation, with JIT, cache and incremental autotuning disabled. Unsupported
+shapes reject preparation and retain the admitted fallback. cuTENSOR 2.8 does not
+expose the algorithm selected by `DEFAULT` through its plan-attribute API; this
+explicit policy permits truthful algorithm provenance. It is not a performance
+ranking or a globally unique binary kernel identifier. `provenance()` returns
+the resolved request, provider/runtime versions, architecture, queried workspace,
+algorithm and rank. The shared table exposes these records per variant/slot via
+`visit_optional_provenance`; released or stale bindings cannot report live plans.
 See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
 for validation and integration boundaries.
 

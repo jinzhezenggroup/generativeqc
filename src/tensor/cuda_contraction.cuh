@@ -389,6 +389,23 @@ class PreparedContractions {
     return result;
   }
 
+#if GENERATIVEQC_HAS_CUTENSOR
+  /** Inspect each prepared optional plan without search, allocation or replay.
+   * Logical variant dimensions and slot identify the owning compiler operation;
+   * the callback receives resolved shape/precision and actual fixed plan policy.
+   * No plan pointer or borrowed tensor address is exposed as an identity. */
+  template <class F>
+  void visit_optional_provenance(F&& consume) const {
+    if (!variants_.empty() &&
+        (!context_ || !context_->prepared() || generation_ != context_->generation()))
+      throw std::logic_error("stale native contraction context; prepare again");
+    for (const auto& variant : variants_)
+      for (std::size_t slot = 0; slot < variant.cutensor.size(); ++slot)
+        if (variant.cutensor[slot])
+          consume(variant.o, variant.v, variant.q, slot, variant.cutensor[slot]->provenance());
+  }
+#endif
+
   /** Drain and release a live table before re-admitting a fallback. */
   void release() {
 #if GENERATIVEQC_HAS_CUTENSOR
