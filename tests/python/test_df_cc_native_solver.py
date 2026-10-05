@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import typing
 from pathlib import Path
 
 import numpy as np
@@ -117,6 +118,11 @@ COLUMNS = (
     "accumulation_bytes",
     "denominator_identity",
     "derived_d2_iteration_evaluations",
+    "conventional_prepared",
+    "conventional_calls",
+    "conventional_summands",
+    "conventional_provider_capacity",
+    "conventional_binding_host",
 )
 
 
@@ -385,7 +391,7 @@ def test_canonical_capacity_admits_previously_rejected_problem(
 
 
 def _run(
-    probe: tuple[Path, bool], arrays: dict[str, np.ndarray], **kwargs: object
+    probe: tuple[Path, bool], arrays: dict[str, np.ndarray], **kwargs: typing.Any
 ) -> tuple[dict[str, float], np.ndarray, np.ndarray]:
     executable, cuda = probe
     process = subprocess.run(
@@ -441,11 +447,51 @@ def test_solver_matches_dense_and_independent_determinants(
     assert actual["q_operations"] > actual["q_calls"]
     assert dense["q_calls"] == dense["q_operations"] == dense["accumulations"] == 0
     if solver_probe[1]:
+        assert dense["conventional_prepared"] == 1
+        assert dense["conventional_calls"] > 0 and dense["conventional_summands"] > 0
+        assert dense["conventional_provider_capacity"] == 96 << 20
+        assert dense["conventional_binding_host"] > 0
         expected = sum(
             arrays[name].nbytes for name in FIELDS if name not in ("ovvv", "vvvv")
         )
         assert actual["h2d"] == expected
         assert actual["amplitude_d2h"] == t1.nbytes + t2.nbytes
+
+
+def test_conventional_prepared_binding_retains_exact_budget_fallback(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    """Resource pressure retains the original scientific iteration/replay."""
+    if not solver_probe[1]:
+        pytest.skip("prepared conventional binding is a native CUDA consumer")
+    _, _, arrays = _case()
+    bound, t1, t2 = _run(solver_probe, arrays, df=False)
+    exact, _, _ = _run(solver_probe, arrays, df=False, budget=int(bound["capacity"]))
+    assert exact["conventional_prepared"] == 1
+    scalar_capacity = int(
+        bound["capacity"]
+        - bound["conventional_provider_capacity"]
+        - bound["conventional_binding_host"]
+    )
+    for budget in (int(bound["capacity"]) - 1, scalar_capacity):
+        fallback, f1, f2 = _run(solver_probe, arrays, df=False, budget=budget)
+        assert fallback["status"] == bound["status"] == 0
+        assert fallback["conventional_prepared"] == fallback["conventional_calls"] == 0
+        assert fallback["capacity"] == scalar_capacity <= budget
+        assert fallback["replays_called"] == bound["replays_called"] == 1
+        np.testing.assert_allclose(
+            fallback["energy"], bound["energy"], atol=2e-12, rtol=0
+        )
+        np.testing.assert_allclose(f1, t1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(f2, t2, atol=2e-11, rtol=0)
+    refused = subprocess.run(
+        [str(solver_probe[0])],
+        input=_stream(arrays, True, df=False, budget=scalar_capacity - 1),
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    assert refused.returncode and b"budget" in refused.stderr
 
 
 def test_exact_memory_admission_and_symmetric_factor_gate(

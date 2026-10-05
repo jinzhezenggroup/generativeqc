@@ -1,10 +1,10 @@
 #pragma once
 
-#include <cublas_v2.h>
 #include <cuda_runtime_api.h>
 
 #include <cstddef>
 #include <functional>
+#include <string_view>
 
 namespace generativeqc::posthf {
 
@@ -26,7 +26,19 @@ struct CudaDFMOSourceResponseDiagnostic {
   std::size_t source_rows{}, source_values{}, output_rows{}, output_values{};
   std::size_t gemms{}, contraction_summands{}, owned_device_bytes{}, numeric_capacity_bytes{};
   std::size_t scalar_d2h_bytes{};
+  // Binding reservation is additional to numeric scratch and borrowed inputs.
+  // Candidate identity names the compiler offer; version and observed resources
+  // describe the actual prepared provider. No search occurs during row replay.
+  std::size_t binding_bytes{}, provider_version{}, prepared_contractions{}, preparation_ns{};
+  std::size_t optional_workspace_bytes{}, observed_provider_bytes{};
+  std::string_view provider, candidate_identity;
 };
+
+/** Admission-only binding reservation, with no device allocation. Nested
+ * owners call this before allocating their own scratch, using the same remaining
+ * complete budget as the inner response. Optional preparation failure can only
+ * reduce this reservation through a bounded generated fallback. */
+std::size_t df_mo_source_response_binding_capacity(std::size_t available_bytes);
 
 /** Execute the compiler-owned source VJP with bounded CUDA row callbacks.
  * Read(mu,row,stream) must supply the SAME raw [nu,P] row on both passes.
@@ -37,14 +49,15 @@ struct CudaDFMOSourceResponseDiagnostic {
  * Every callback enqueues on stream and may only borrow its row until the next
  * callback. Callback outputs remain provisional until this function succeeds;
  * exceptions and nonfinite arithmetic never certify partial derivatives.
- * The supplied BLAS handle must already use this stream and host scalar mode.
+ * Provider context and all eight contraction plans are prepared on this stream
+ * before reading the source. Shared execution audits every contraction result.
  * The call drains the stream on success and exceptions before freeing scratch.
- * Numeric admission includes these borrowed device inputs and all scratch;
+ * Admission includes borrowed device inputs, all scratch and binding resources;
  * caller_bytes additionally covers source/callback storage and other live owners.
  */
 CudaDFMOSourceResponseDiagnostic pullback_df_mo_source_cuda(
-    CudaDFMOSourceResponseView view, int device, cudaStream_t stream, cublasHandle_t blas,
-    const CudaDFSourceRead& read, const CudaDFSourceConsume& consume,
-    const CudaDFSourceFinish& finish, std::size_t maximum_bytes, std::size_t caller_bytes = 0);
+    CudaDFMOSourceResponseView view, int device, cudaStream_t stream, const CudaDFSourceRead& read,
+    const CudaDFSourceConsume& consume, const CudaDFSourceFinish& finish, std::size_t maximum_bytes,
+    std::size_t caller_bytes = 0);
 
 }  // namespace generativeqc::posthf

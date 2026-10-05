@@ -23,6 +23,90 @@ if typing.TYPE_CHECKING:
     from .types import Index
 
 
+def emit_contraction_region_portfolio(
+    request: LoweringRequest, source_identity: str, *, name: str
+) -> str:
+    """Offer homogeneous prepared implementations for one compiler region.
+
+    Native preparation resolves resource/version availability. This factory
+    neither invents precision variants nor implements casts/refinement; regions
+    requiring those obligations need a composite executor such as triples W.
+    """
+    from generativeqc_compiler.common.backend import TargetInfo
+    from generativeqc_compiler.common.lowering_contract import CandidateExecution
+    from generativeqc_compiler.common.lowering_provider import (
+        LoweringCandidate,
+        ProviderDescriptor,
+    )
+    from generativeqc_compiler.common.native_lowering import native_lowering_portfolio
+    from generativeqc_compiler.common.schedule import ScheduleTopology
+    from generativeqc_compiler.common.specialization import (
+        CompilationIdentity,
+        TargetCapabilities,
+    )
+
+    target = TargetCapabilities(
+        TargetInfo("cuda", "current-aot-module", 32, 1024, None)
+    )
+    providers = tuple(
+        ProviderDescriptor(provider, kind, "prepared-affine-region", version=version)
+        for provider, kind, version in (
+            ("cublas", "library", "runtime-bound-pedantic"),
+            ("generated.cuda", "generated", source_identity),
+            ("cutensor", "library", "runtime-bound-qualified-2.x"),
+        )
+    )
+    candidates = []
+    for precision in request.precisions:
+        d = precision.directive
+        if (
+            precision.casts
+            or precision.refinement
+            or precision.audit
+            or len(
+                {
+                    *precision.input_dtypes,
+                    precision.publication_dtype,
+                    d.storage_dtype,
+                    d.compute_dtype,
+                    d.accumulation_dtype,
+                }
+            )
+            != 1
+        ):
+            raise ValueError("contraction region requires homogeneous arithmetic")
+        for provider in providers:
+            candidates.append(
+                LoweringCandidate(
+                    request,
+                    "region-" + provider.name,
+                    (provider,),
+                    "ready",
+                    d.math_mode,
+                    execution=CandidateExecution(
+                        precision,
+                        "prepared-affine-region",
+                        request.operands,
+                        ScheduleTopology(
+                            materialization="compiler-owned-liveness",
+                            reduction="provider-reproducible",
+                        ),
+                        determinism="reproducible",
+                        capture_safe=False,
+                    ),
+                    target=target,
+                )
+            )
+    assert request.scientific_identity is not None
+    return native_lowering_portfolio(
+        request,
+        candidates,
+        target,
+        CompilationIdentity(request.scientific_identity, source_identity),
+        name=name,
+    )
+
+
 def projected_contraction_request(
     adapter: TensorLoweringAdapter,
     node: Node,

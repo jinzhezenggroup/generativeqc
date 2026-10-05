@@ -434,6 +434,21 @@ def _native_response_execution_header(
     path reverses that physical transpose, while descriptors retain original
     TensorIR labels and explicit compiler-owned leading-row projections.
     """
+    from generativeqc_compiler.common.lowering_contract import (
+        LoweringConstraints,
+        LoweringPrecision,
+        OperandLayout,
+    )
+    from generativeqc_compiler.common.lowering_provider import LoweringRequest
+    from generativeqc_compiler.common.precision import (
+        ExecutionPrecisionSchedule,
+        PrecisionDirective,
+    )
+    from generativeqc_compiler.common.provenance import canonical_hash
+    from generativeqc_compiler.tensor.native_lowering import (
+        emit_contraction_region_portfolio,
+    )
+
     adapter = TensorLoweringAdapter(program)
     descriptors = [
         contraction_initializer(
@@ -449,6 +464,59 @@ def _native_response_execution_header(
         )
         for slot, step in enumerate(steps)
     ]
+    inputs = sorted(
+        (node for node in program.live_nodes if node.op == "input"),
+        key=lambda node: node.attrs["name"],
+    )
+    modes, operands = {}, []
+    for name, node, access in [
+        *((node.attrs["name"], node, "read") for node in inputs),
+        *((name, node, "write") for name, node in sorted(program.outputs.items())),
+    ]:
+        stride, strides = 1, []
+        for n in reversed(node.spec.shape):
+            strides.append(stride)
+            stride *= n
+        operands.append(
+            OperandLayout(
+                name,
+                tuple(
+                    modes.setdefault((index.name, index.space.name), len(modes))
+                    for index in node.spec.indices
+                ),
+                node.spec.shape,
+                tuple(reversed(strides)),
+                access="read" if access == "read" else "write",
+            )
+        )
+    precision = LoweringPrecision(
+        ExecutionPrecisionSchedule(
+            (("operation", PrecisionDirective("float64", "float64", "float64")),)
+        ),
+        "operation",
+        ("float64",) * len(inputs),
+        "float64",
+    )
+    request = LoweringRequest(
+        "tensor",
+        "program-region",
+        "cuda",
+        "float64",
+        "float64",
+        program.outputs["bar_raw_three_center"].spec.shape,
+        scientific_identity=adapter.precision.source_equation,
+        operands=tuple(operands),
+        precisions=(precision,),
+        constraints=LoweringConstraints(maximum_candidates=3),
+        semantics=(
+            ("program_identity", program.logical_hash),
+            ("traversal", "two-pass-leading-source-rows"),
+        ),
+        effects=tuple((name, "fresh-adjoint") for name in sorted(program.outputs)),
+    )
+    identity = canonical_hash(
+        {"descriptors": descriptors, "schema": "prepared-df-source-response-v1"}
+    )
     call = lambda slot: (
         f"execute({slot},{steps[slot].b},{steps[slot].a},{steps[slot].output});"
     )
@@ -478,6 +546,61 @@ def _native_response_execution_header(
             "consume(mu,raw_cotangent_row);}",
             "}",
             "}",
+            "#ifdef __CUDACC__",
+            '#include "tensor/cuda_contraction_selection.cuh"',
+            "namespace generativeqc::posthf::generated {",
+            emit_contraction_region_portfolio(
+                request, identity, name="source_response_lowering"
+            ),
+            r"""
+class DFMOSourceResponseExecution {
+ public:
+  static tensor::ContractionRegionPlan plan(std::size_t available,bool library=true) {
+    return tensor::select_contraction_region(source_response_lowering_request,
+        source_response_lowering_candidates,source_response_lowering_target,
+        source_response_lowering_compilation,8,
+        sizeof(DFMOSourceResponseExecution)+tensor::PreparedContractions::storage_bytes(8),available,library);
+  }
+  DFMOSourceResponseExecution(tensor::ContractionRegionPlan plan,std::size_t n,std::size_t q,
+      cudaStream_t stream,std::size_t& calls,std::size_t& summands):plan_(plan),n_(n),q_(q) {
+    if(plan_.algorithm==tensor::ContractionAlgorithm::PedanticBlas) {
+      if(!context_.prepare(stream)) {
+        context_.prepare_generated(stream);
+        plan_=DFMOSourceResponseExecution::plan(plan_.binding_bytes,false);
+      }
+    } else context_.prepare_generated(stream);
+    const auto bind=[&] {table_.add(n,q,1,df_mo_response_descriptors(n,q),context_,calls,summands,
+        std::vector<tensor::ContractionAlgorithm>(8,plan_.algorithm),plan_.reservation);};
+    try {bind();}
+    catch(const tensor::ContractionPreparationUnavailable&) {
+      table_.release();
+      plan_=DFMOSourceResponseExecution::plan(plan_.binding_bytes,false);
+      bind();
+    }
+  }
+  void execute(std::size_t slot,cudaStream_t stream,const double* a,const double* b,double* c,int* error) {
+    table_.execute(slot,n_,q_,1,stream,a,b,c,error);
+  }
+  tensor::ContractionProviderReservation optional_resources() const {return table_.optional_resources();}
+  std::size_t retained_provider_bytes() const {
+    return tensor::ContractionProviderReservation::checked_add(context_.retained_bytes(),
+        table_.optional_resources().provider_bytes);
+  }
+  const tensor::ContractionRegionPlan& selected() const noexcept {return plan_;}
+  std::size_t provider_version() const noexcept {
+    return plan_.algorithm==tensor::ContractionAlgorithm::CutensorAffine
+        ? tensor::cutensor_provider_version() : std::size_t(context_.provider_version());
+  }
+ private:
+  tensor::ContractionRegionPlan plan_;
+  std::size_t n_,q_;
+  tensor::CudaContractionContext context_;
+  tensor::PreparedContractions table_;
+};
+}  // namespace generativeqc::posthf::generated
+#endif
+""",
+            "",
             "",
         ]
     )
