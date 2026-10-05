@@ -1,4 +1,4 @@
-"""DF solver releases must not hide another owner's measured provider growth.
+"""CC solver releases must not hide another owner's measured provider growth.
 
 Compile the live cleanup and optional-arena fallback with host CUDA doubles.
 This tests resource ordering and fallback selection, not GPU execution.
@@ -24,7 +24,7 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = (ROOT / "src/cc/cuda_solver.cu").read_text()
     begin = source.index("  void cleanup() noexcept {")
     cleanup = source[begin : source.index("\n  template <class Output>", begin)]
-    begin = source.index("      auto allocation = cudaMalloc(")
+    begin = source.index("      auto allocate_numeric = [&]() {")
     end = source.index("      cuda_check(allocation);", begin)
     fallback = source[begin : end + len("      cuda_check(allocation);")]
     directory = tmp_path_factory.mktemp("df-solver-provider-lifetime")
@@ -53,7 +53,16 @@ def provider_lifetime_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return executable
 
 
-@pytest.mark.parametrize("operation", ["cleanup", "fallback"])
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "cleanup",
+        "fallback",
+        "history-fallback",
+        "conventional-fallback",
+        "conventional-history-fallback",
+    ],
+)
 def test_provider_release_waits_for_other_owner_measurement(
     provider_lifetime_probe: Path, operation: str
 ) -> None:
@@ -69,6 +78,7 @@ def test_provider_release_waits_for_other_owner_measurement(
 
 PREFIX = r"""
 #include <chrono>
+#include <algorithm>
 #include <cstddef>
 #include <future>
 #include <iostream>
@@ -80,20 +90,24 @@ PREFIX = r"""
 using namespace std::chrono_literals;
 constexpr int cudaErrorMemoryAllocation=2;
 static std::promise<void> released;
+static std::promise<void> partial_freed;
+static bool fail_history=false;
 static int destroys=0, frees=0, allocations=0, cleared=0;
 int cudaStreamSynchronize(void*) { return 0; }
 int cublasDestroy(void*) { ++destroys; released.set_value(); return 0; }
 int cudaEventDestroy(void*) { return 0; }
-int cudaFree(void*) { ++frees; return 0; }
+int cudaFree(void*) { if(++frees==1) partial_freed.set_value(); return 0; }
 int cudaStreamDestroy(void*) { return 0; }
 int cudaGetLastError() { ++cleared; return 0; }
 int cudaMalloc(void** pointer,std::size_t) {
-  if (++allocations==1) return cudaErrorMemoryAllocation;
+  if (++allocations==(fail_history ? 2 : 1)) return cudaErrorMemoryAllocation;
   *pointer=reinterpret_cast<void*>(4); return 0;
 }
 void cuda_check(int code) { if(code) throw std::runtime_error("CUDA failure"); }
 void blas_check(int code) { if(code) throw std::runtime_error("BLAS failure"); }
 namespace generativeqc::cc {
+constexpr std::size_t kContractionProviderAllowance=96ULL<<20;
+std::size_t checked_add(std::size_t a,std::size_t b) { return a+b; }
 struct Contractions {
   void *handle=reinterpret_cast<void*>(2), *stream=reinterpret_cast<void*>(1);
   void release_locked() {
@@ -118,23 +132,40 @@ struct Owner {
   Contractions contractions;
   void *trial_begin{}, *trial_end{};
   unsigned char *base=reinterpret_cast<unsigned char*>(3);
+  // Histories are a second numeric owner; their release shares the lock.
+  unsigned char *history_base=reinterpret_cast<unsigned char*>(5);
   struct Plan { bool matrix_gemm=true; std::size_t auxiliary_batch_size=1; } plan;
   struct { std::size_t nocc=1,nvir=1; } p;
   struct { bool df_auxiliary_reduction=true; } options;
   std::size_t naux=1,combined=0;
   Plan df_iteration_plan(std::size_t,std::size_t,std::size_t,bool,bool,bool) { return {}; }
   std::size_t build_layout() { return layout.total; }
-  struct { std::size_t total=1024; } layout;
+  bool conventional_prepared=false;
+  struct { std::size_t total=1024,history_bytes=0; } layout;
+  struct { unsigned synchronizations=0; std::size_t owned_device_bytes=0,numeric_capacity_bytes=0; } diagnostic;
   int replans=0;
-  void scalar_plan() { plan.matrix_gemm=false; layout.total=512; ++replans; }
+  void scalar_plan() {
+    conventional_prepared=false; plan.matrix_gemm=false; layout.total=512; ++replans;
+  }
 """
 
 MAIN = r"""
 int main(int argc,char** argv) {
   if(argc!=2) return 99;
-  const bool fallback=std::string(argv[1])=="fallback";
+  const auto operation=std::string(argv[1]);
+  fail_history=operation=="history-fallback" || operation=="conventional-history-fallback";
+  const bool fallback=operation!="cleanup";
   generativeqc::cc::Owner owner;
+  if (operation=="conventional-fallback" || operation=="conventional-history-fallback") {
+    owner.conventional_prepared=true;
+    owner.plan.matrix_gemm=false;
+    owner.naux=0;
+  }
+  if(fail_history) {
+    owner.base=owner.history_base=nullptr;owner.layout.history_bytes=256;owner.combined=2048;
+  }
   auto release=released.get_future();
+  auto partial_release=partial_freed.get_future();
   std::promise<void> started;
   auto ready=started.get_future();
   std::unique_lock<std::mutex> measurement(
@@ -145,19 +176,21 @@ int main(int argc,char** argv) {
   });
   ready.wait();
   const bool released_during_measurement=release.wait_for(250ms)==std::future_status::ready;
+  const bool freed_during_measurement=partial_release.wait_for(0ms)==std::future_status::ready;
   measurement.unlock();
   worker.join();
-  if(released_during_measurement) {
+  if(released_during_measurement || freed_during_measurement) {
     std::cerr << "Provider released during another owner's allocation measurement: "
                  "a 96 MiB release can hide 160 MiB growth as 64 MiB.\n";
     return 1;
   }
   if(destroys!=1 || owner.contractions.handle) return 2;
   if(fallback) {
-    if(owner.plan.matrix_gemm || owner.replans!=1 || allocations!=2 || cleared!=1 ||
+    if(owner.conventional_prepared || owner.plan.matrix_gemm || owner.replans!=1 || allocations!=(fail_history ? 4 : 2) ||
+       cleared!=(fail_history ? 2 : 1) ||
        owner.layout.total!=512 || owner.base!=reinterpret_cast<unsigned char*>(4)) return 3;
     owner.cleanup();
   }
-  if(owner.base || owner.stream || frees!=1) return 4;
+  if(owner.base || owner.history_base || owner.stream || frees!=(fail_history ? 3 : 2)) return 4;
 }
 """
