@@ -109,6 +109,10 @@ def test_topological_order_cache_is_append_safe_for_existing_roots() -> None:
     assert combined is graph._topological_order_tuple((root, extra))
     assert combined != cached
 
+    for index in range(16):
+        graph._topological_order_tuple((root, graph.variable(f"cache_{index}")))
+    assert len(graph._topological_orders) == 8
+
 
 def test_ssa_analysis_records_shared_last_uses_and_peak_liveness() -> None:
     """Count a shared operand through its final consumer and root output."""
