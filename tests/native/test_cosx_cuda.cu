@@ -4,15 +4,20 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "dft/ao_grid.hpp"
 #include "dft/cosx_reference.hpp"
 #include "dft/cuda_cosx.hpp"
 #include "dft/grid.hpp"
+#include "generated_cosx_contractions.cuh"
 #include "molecule/basis.hpp"
+
+extern "C" void cosx_contraction_qualification_for_test(unsigned mask, bool unavailable);
 
 #if defined(GENERATIVEQC_COSX_TEST_INTERPOSE)
 // Linker interposition is test-only: the production CUDA translation unit and
@@ -20,6 +25,8 @@
 namespace fault_injection {
 bool fail_download = false, awaiting_download = false, injected = false;
 bool fail_get_device = false, get_device_injected = false;
+bool fail_after_upload = false, awaiting_input = false;
+unsigned input_fences = 0;
 unsigned downloads = 0, failure_fences = 0;
 }  // namespace fault_injection
 extern "C" cudaError_t __real_cudaMemcpyAsync(void*, const void*, std::size_t, cudaMemcpyKind,
@@ -29,6 +36,11 @@ extern "C" cudaError_t __real_cudaGetDevice(int*);
 extern "C" cudaError_t __wrap_cudaMemcpyAsync(void* out, const void* in, std::size_t bytes,
                                               cudaMemcpyKind kind, cudaStream_t stream) {
   using namespace fault_injection;
+  if (fail_after_upload && kind == cudaMemcpyHostToDevice && bytes == 4 * sizeof(double)) {
+    fail_after_upload = false;
+    awaiting_input = true;
+    fail_get_device = true;
+  }
   if (fail_download && kind == cudaMemcpyDeviceToHost && bytes == 4 * sizeof(double)) {
     if (++downloads == 2) {
       injected = true;
@@ -41,6 +53,10 @@ extern "C" cudaError_t __wrap_cudaMemcpyAsync(void* out, const void* in, std::si
 }
 extern "C" cudaError_t __wrap_cudaStreamSynchronize(cudaStream_t stream) {
   const auto status = __real_cudaStreamSynchronize(stream);
+  if (fault_injection::awaiting_input) {
+    fault_injection::awaiting_input = false;
+    ++fault_injection::input_fences;
+  }
   if (fault_injection::awaiting_download) {
     fault_injection::awaiting_download = false;
     if (fault_injection::injected) ++fault_injection::failure_fences;
@@ -116,12 +132,16 @@ std::vector<double> symmetric_density(std::size_t n) {
   return density;
 }
 
+// Reuse only fixture construction; arithmetic oracles are independent.
+#include "cosx_contraction_cases.cuh"
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
   try {
     int devices = 0;
     if (cudaGetDeviceCount(&devices) != cudaSuccess || devices == 0) return 77;
+    cosx_contraction_cases();
+    if (argc == 2 && std::string(argv[1]) == "--contractions") return 0;
     const int device = 0;
     const auto system = h2();
     const generativeqc::dft::MolecularGrid grid(
@@ -318,6 +338,24 @@ int main() {
           owner->build(density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
       require(max_error(retry.exchange, cpu.exchange) < 3.0e-12,
               "COSX transfer failure contaminated the next replay");
+      fail_after_upload = true;
+      get_device_injected = false;
+      caught = false;
+      try {
+        // This temporary host input must survive any already-enqueued copy.
+        (void)owner->build(std::vector<double>(density),
+                           generativeqc::dft::CosxDensityConvention::rhf_spin_summed);
+      } catch (const std::runtime_error&) {
+        caught = true;
+      }
+      require(caught && get_device_injected && !awaiting_input && input_fences == 1,
+              "COSX provider failure did not drain the borrowed host input");
+      require(
+          max_error(owner->build(density, generativeqc::dft::CosxDensityConvention::rhf_spin_summed)
+                        .exchange,
+                    cpu.exchange) < 3e-12,
+          "COSX provider failure contaminated the next replay");
+      get_device_injected = false;
       fail_get_device = true;
       owner.reset();
       require(get_device_injected, "COSX teardown device-query failure was not exercised");
