@@ -72,14 +72,6 @@
         "cublasDgemm": 2
       }
     },
-    "src/dft/cuda_grid.cu": {
-      "classification": "diagnostic",
-      "contract": "#1886",
-      "reason": "Read library versions for execution provenance only. This exception does not authorize tensor/solver submissions.",
-      "references": {
-        "cublasGetVersion": 1
-      }
-    },
     "src/posthf/cuda_low_rank.cu": {
       "classification": "migration",
       "contract": "#1890",
