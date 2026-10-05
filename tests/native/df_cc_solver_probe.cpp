@@ -23,6 +23,8 @@ int main() {
     options.diis_size = header[5];
     options.df_auxiliary_reduction = !(header[6] & 4);
     options.df_matrix_gemm = !(header[6] & 8);
+    // Probe-only high bits select a tile limit without changing the public API.
+    if (header[6] >> 8) options.df_auxiliary_batch_limit = header[6] >> 8;
     options.energy_tolerance = 1e-12;
     options.residual_tolerance = 1e-10;
     const auto o = p.nocc, v = p.nvir;
@@ -49,6 +51,14 @@ int main() {
       fields[i]->resize(sizes[i]);
       std::cin.read(reinterpret_cast<char*>(fields[i]->data()), sizes[i] * sizeof(double));
     }
+    if (header[6] & 16) {
+      // Probe-only canonical provenance follows the ordinary supplied tensors.
+      // Read actual orbital energies; never infer them from the Fock diagonal.
+      std::vector<double> eps(o + v);
+      std::cin.read(reinterpret_cast<char*>(eps.data()), eps.size() * sizeof(double));
+      std::cin.read(reinterpret_cast<char*>(&options.level_shift), sizeof(double));
+      generativeqc::cc::initialize_canonical_denominators(p, eps, options, true);
+    }
     if (!std::cin) throw std::invalid_argument("truncated solver probe input");
     // Mode 2 probes the default admission used by conventional response owners.
     if (header[6] == 2) {
@@ -68,9 +78,11 @@ int main() {
               << d.tensor_seconds << ' ' << d.df_hoisted_evaluations << ' '
               << d.df_preparation_calls << ' ' << d.df_contraction_terms << ' ' << d.df_matrix_gemm
               << ' ' << d.df_gemm_calls << ' ' << d.df_gemm_summands << ' ' << d.df_packing_bytes
-              << ' ' << d.df_provider_capacity_bytes << ' ' << d.conventional_prepared_contractions
-              << ' ' << d.conventional_contraction_calls << ' '
-              << d.conventional_contraction_summands << ' '
+              << ' ' << d.df_provider_capacity_bytes << ' ' << d.df_auxiliary_batch_size << ' '
+              << d.df_auxiliary_tiles << ' ' << d.df_accumulation_bytes << ' '
+              << d.denominator_identity << ' ' << d.derived_d2_iteration_evaluations << ' '
+              << d.conventional_prepared_contractions << ' ' << d.conventional_contraction_calls
+              << ' ' << d.conventional_contraction_summands << ' '
               << d.conventional_provider_capacity_bytes << ' ' << d.conventional_binding_host_bytes
               << '\n';
     for (double x : result.t1) std::cout << x << ' ';

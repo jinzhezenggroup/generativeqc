@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string>
 #include <vector>
@@ -23,6 +24,19 @@ struct RHFFrameResponseOptions {
   std::size_t maximum_bytes{512ULL << 20};
   std::size_t caller_bytes{};
   bool relax_orbitals{true};
+  // Fixed geometry-only mask for the provisional Z solve. Its result must pass
+  // the zero-screening physical residual; otherwise exact GMRES refines it.
+  // Zero retains the original exact solve. Never screens final nuclear sources.
+  double orbital_screening_tolerance{0.0};
+  // Optional synchronized J/K timing and canonical integral census. Phase wall
+  // times are always reported; J/K times are subsets, not additive phases.
+  bool profile_jk{false};
+  // Experimental canonical P:G'(D). Fewer passes can lose shell-level reuse,
+  // so this consumer requires an explicit opt-in and a measured crossover.
+  bool bilinear_derivative{false};
+  // Preserve the admitted shell consumer and contract the cross term as
+  // [E2'(D+P)-E2'(D-P)]/2. Both false retains legacy three-pass polarization.
+  bool symmetric_polarization{true};
   response::GmresOptions gmres{};
 };
 
@@ -38,13 +52,25 @@ struct RHFFrameResponseResult {
   bool global_stability_certified{false};
   std::size_t numeric_capacity_bytes{}, direct_device_bytes{}, owned_device_bytes{};
   std::size_t jk_actions{}, derivative_passes{}, orbital_actions{}, gemms{};
-  // Generated matrix-map work and its host boundary only. These transfer
-  // counters exclude integral-provider setup and nuclear derivative consumers.
+  std::size_t shell_derivative_passes{}, generic_derivative_passes{};
+  // Generated matrix-map work and owner-managed transfers (including derivative
+  // operand uploads). Provider-internal setup/execution traffic is excluded;
+  // this is not a complete endpoint transfer ledger.
   std::size_t contraction_terms{}, h2d_bytes{}, d2h_bytes{}, synchronizations{};
   std::size_t explicit_hessian_elements{};  // Always zero.
   // Execution diagnostics only; scientific controls contain no provider selector.
   bool prepared_contractions{};
   std::size_t contraction_binding_bytes{}, prepared_contraction_summands{};
+  double setup_seconds{}, reference_audit_seconds{}, weights_seconds{}, solve_seconds{},
+      independent_audit_seconds{}, one_electron_seconds{}, two_electron_seconds{};
+  double jk_seconds{}, screened_jk_seconds{}, screened_residual{};
+  double requested_screening{}, applied_screening{};
+  std::size_t screened_jk_actions{}, jk_census_actions{}, exact_refinements{};
+  std::size_t screened_iterations{}, screened_operator_actions{};
+  std::uint64_t jk_quartet_visits{}, jk_eri_evaluations{};
+  std::uint64_t derivative_quartet_visits{}, derivative_jet_evaluations{};
+  bool bilinear_derivative_used{}, symmetric_polarization_used{}, derivative_census_measured{};
+  bool jk_timing_measured{}, linear_screening_available{}, screened_converged{};
   std::string operator_hash;
 };
 

@@ -98,6 +98,7 @@ def test_host_inventory_preserves_current_model_and_solver_charge(
     )
     expected = (1 << 20) + 16 * 8 * n * n if backend == "cuda" and n > 16 else 0
     assert row["solver_host"] == expected
+    assert row["solver_binding_host"] == (16 * 1024 if backend == "cuda" else 0)
     retained_fields = (
         "metadata",
         "grid",
@@ -106,6 +107,7 @@ def test_host_inventory_preserves_current_model_and_solver_charge(
         "history",
         "provider",
         "solver_host",
+        "solver_binding_host",
         "xc_schedule_staging",
         "nonlocal_provider",
     )

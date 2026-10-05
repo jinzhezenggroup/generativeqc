@@ -1,0 +1,11 @@
+{
+  "reconstruction_base": "9d0f4fc0ddbe9c1dc4539cd4f6ad8a6e019ba990",
+  "control_head": "8f90f0ac33ee6bd8a755fb85d71291e1f66c5884",
+  "candidate_head": "e92cf75b0a9e1a8fa3a6c1ea2f8bfffc809fddee",
+  "control_source": "e9d3f9226346d0ee60e93a6c93be88629af7c45bb28a49635649b276b6cfcab6",
+  "candidate_source": "0afd36eba40e994a3c7d48c316e76801066f7c6756f7c2984c55ee70f3c26581",
+  "patch_order": [
+    "control-source.patch.gz",
+    "candidate-source.patch.gz"
+  ]
+}

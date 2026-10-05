@@ -148,10 +148,12 @@ bool fill_lambda_diagonal_preconditioner(const Problem& p,
     if (!safe(p.d1[i])) return false;
     diagonal[i] = -p.d1[i];
   }
+  const auto n2 = checked_mul(checked_mul(p.nocc, p.nocc), checked_mul(p.nvir, p.nvir));
   for (std::size_t k = 0; k < representatives.size(); ++k) {
-    if (representatives[k] >= p.d2.size() || partners[k] >= p.d2.size())
+    if (representatives[k] >= n2 || partners[k] >= n2)
       throw std::invalid_argument("RCCSD Lambda preconditioner pair index out of range");
-    const auto first = p.d2[representatives[k]], second = p.d2[partners[k]];
+    const auto first = doubles_denominator_at(p, representatives[k]),
+               second = doubles_denominator_at(p, partners[k]);
     if (!safe(first) || !safe(second) ||
         std::abs(first - second) > 1e-10 * (1.0 + std::max(std::abs(first), std::abs(second))))
       return false;

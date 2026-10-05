@@ -3,6 +3,10 @@
 Status: implemented
 Date: 2026-10-05
 
+Extended by [optional cuTENSOR triples execution](2026-10-05-triples-cutensor-execution.md),
+which adds a third provider and candidate-dependent resource admission while
+retaining the scientific precision gates described here.
+
 ## Problem
 
 The qualified W-FP32 work in #1864 coupled a CC-local precision enum directly

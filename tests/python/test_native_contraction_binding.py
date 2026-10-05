@@ -15,7 +15,7 @@ from _cc_owner_test_support import compile_owner
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 
-from tools.generate_df_ccsd_hoisted import packed_programs
+from tools.generate_df_ccsd_hoisted import batched_auxiliary_program, packed_programs
 from tools.generate_df_lambda import matrix_programs
 from tools.generate_rccsd_native import (
     REPRESENTATIVE,
@@ -44,6 +44,7 @@ def test_native_projection_validates_cc_and_rhf_recipes(tmp_path: Path) -> None:
     for program in (
         conventional,
         *packed_programs().values(),
+        batched_auxiliary_program(),
         *matrix_programs().values(),
         *rhf_frame_programs().values(),
     ):

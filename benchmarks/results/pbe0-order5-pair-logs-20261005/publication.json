@@ -1,0 +1,165 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "e92cf75b0a9e1a8fa3a6c1ea2f8bfffc809fddee",
+    "dirty": false
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 4693,
+      "sha256": "30379da067cee07e3ae5759963f40c9dbd842eb7dbc1ab9dcf901fd66f20ad16",
+      "role": "reproduction"
+    },
+    {
+      "path": "candidate-48.json.gz",
+      "bytes": 29902,
+      "sha256": "b996cbd32ef94ba95001feb721314a176635a4552af8ec3399f6e5da4a989a0d",
+      "role": "samples"
+    },
+    {
+      "path": "candidate-96.json.gz",
+      "bytes": 46576,
+      "sha256": "06519afe3c18bba0357ee35cad9ada9f9f11c2328c06778de99ac00636e55e03",
+      "role": "samples"
+    },
+    {
+      "path": "candidate-source.patch.gz",
+      "bytes": 5949,
+      "sha256": "5328b35cbc82850f113351aecdd2b765710a013418cdb59e0edf2cbdc2392fcc",
+      "role": "source-patch"
+    },
+    {
+      "path": "control-48.json.gz",
+      "bytes": 29988,
+      "sha256": "2f2c99c95634e2773e0d3956c7d070d905c9ea194f7ec956f9c138b0dfa2456d",
+      "role": "samples"
+    },
+    {
+      "path": "control-96.json.gz",
+      "bytes": 46734,
+      "sha256": "396d4e76e1097ba90a089f55d2de21f565c1019836d69b4d0d505d8086c69531",
+      "role": "samples"
+    },
+    {
+      "path": "control-source.patch.gz",
+      "bytes": 78376,
+      "sha256": "91bb4780789d4a994e6c9dc68e8bd0aa6b2e988d8123971c7bc9fa73abd76c19",
+      "role": "source-patch"
+    },
+    {
+      "path": "drivers/build-aot.sh.txt",
+      "bytes": 1248,
+      "sha256": "21fb81849d84fed42d1a9868aab75210ed9c2279acac6f29893374b90b00843e",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/build-local.sh.txt",
+      "bytes": 1932,
+      "sha256": "f263b9175ad1a0dd83dcd8dea7078649447656276c6fec75e4318d48e0cbb005",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/build-probes.sh.txt",
+      "bytes": 1211,
+      "sha256": "12509288ee8ea4c4da56fa459acdda410fd3cd8f5ee85774c7bd4ef65e3aef90",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/check-source.py.txt",
+      "bytes": 888,
+      "sha256": "f3ccdf1305d574f136b617cd5c6e4209c243000604ae24643695a7e2a8a70e49",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/gpu-env-n1.sh.txt",
+      "bytes": 1487,
+      "sha256": "5ee5bec1ce9821d552df7b4c7430398bd794c8e59f6ec69fe6756fc99d36d39d",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/paired-pair-logs-n1.sh.txt",
+      "bytes": 1952,
+      "sha256": "1c94a8356c5546138de2222d3cb968f565fe5816ffbd361484b0a70c19e36e14",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/public-default-endpoint.py.txt",
+      "bytes": 3045,
+      "sha256": "202f832b49d1bc39d1c3dd12349a964dd5df56f96573a3c014933e5de0e72f12",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/qualify-pair-logs-n1.sh.txt",
+      "bytes": 1349,
+      "sha256": "022481bd6fc06af0d3e8f477630f91f084393ebca35b90b493ed2e950fa006f8",
+      "role": "reproduction"
+    },
+    {
+      "path": "drivers/verify-public-default.py.txt",
+      "bytes": 4711,
+      "sha256": "95b857399c13a58fd6171155d899a399b5bf8fd20cb25669ed51c9adfe40a608",
+      "role": "reproduction"
+    },
+    {
+      "path": "receipts.json",
+      "bytes": 20630,
+      "sha256": "6c2c911f620979e66a0013ffd47366e9ab816039c2beaaf5347cfb218f8bc680",
+      "role": "reproduction"
+    },
+    {
+      "path": "reconstruction.json",
+      "bytes": 463,
+      "sha256": "c960e370e2f8c1d067e94577738b869b52d02ff9dbd402f0fecd66694a4b1e40",
+      "role": "reproduction"
+    },
+    {
+      "path": "reference-48.json.gz",
+      "bytes": 17779,
+      "sha256": "1a03d672718914e74cb9414608a09920c2e6aa090268c97de1df4614b59711eb",
+      "role": "samples"
+    },
+    {
+      "path": "reference-96.json.gz",
+      "bytes": 30512,
+      "sha256": "f83e8db26da8ccbcdbc07b4dcbe33cfb1e17595ed15e766e2d3d9ef708461e68",
+      "role": "samples"
+    },
+    {
+      "path": "source-equivalence.json",
+      "bytes": 361,
+      "sha256": "d27e935cf343ae5b21549c8e8c84a1ba49793205e349932133240dea920124d5",
+      "role": "reproduction"
+    },
+    {
+      "path": "summary.json",
+      "bytes": 14262,
+      "sha256": "829d9b6552afbeb30cf1eb0afc7d99fcb4e39865b42174777c1f1fff856d250b",
+      "role": "summary"
+    },
+    {
+      "path": "validation.json",
+      "bytes": 21499,
+      "sha256": "558d81b1cc3dc8c13db89e9d655761cf9c24323e4f33a05c80db28bfbb389095",
+      "role": "evidence"
+    },
+    {
+      "path": "verify.py",
+      "bytes": 7447,
+      "sha256": "4498ac97728a92621901c379bcb96db4294cc5733c3d698234aefb8da321824a",
+      "role": "reproduction"
+    }
+  ],
+  "decision": {
+    "scope": "numerical",
+    "status": "accepted",
+    "reason": "All 288 same-geometry reference pairings pass unchanged E/F gates. Complete endpoint improvements are reported separately; #1895 parity and automatic profile promotion are not established."
+  },
+  "archives": [],
+  "reproduction": {
+    "command": [
+      "python",
+      "benchmarks/results/pbe0-order5-pair-logs-20261005/verify.py"
+    ]
+  }
+}

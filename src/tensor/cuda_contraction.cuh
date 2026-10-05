@@ -1,11 +1,16 @@
 #pragma once
 
+#include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 #include "tensor/cuda_runtime.cuh"
 #include "tensor/native_contraction.hpp"
+
+#if GENERATIVEQC_HAS_CUTENSOR
+#include "tensor/cuda_cutensor.cuh"
+#endif
 
 namespace generativeqc::tensor {
 
@@ -151,7 +156,61 @@ static __global__ void audit_contraction(const T* values, std::size_t count, int
 
 /** Backend implementation identities, supplied only by compiler/provider
  * preparation. Scientific request metadata never includes this choice. */
-enum class ContractionAlgorithm : std::uint8_t { PedanticBlas, GeneratedOrdered };
+enum class ContractionAlgorithm : std::uint8_t { PedanticBlas, GeneratedOrdered, CutensorAffine };
+
+/** Optional-provider rejection is distinct from malformed science or execution
+ * failures. Only this exception authorizes preparation of an admitted fallback. */
+class ContractionPreparationUnavailable : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
+/** Per-plan ceilings, supplied by provider qualification and admitted by the
+ * enclosing owner before preparation. Zero defaults intentionally admit no
+ * opaque cuTENSOR host storage. There is no production reservation heuristic.
+ * host_bytes includes the native plan object and opaque provider host storage;
+ * descriptor/pointer tables are charged separately by storage_bytes(). */
+struct ContractionProviderReservation {
+  std::size_t workspace_bytes{}, provider_bytes{}, host_bytes{};
+
+  std::size_t total_bytes(std::size_t plans) const {
+    auto result = checked_add(workspace_bytes, provider_bytes);
+    return contraction_product(checked_add(result, host_bytes), plans);
+  }
+
+  static std::size_t checked_add(std::size_t a, std::size_t b) {
+    if (b > std::numeric_limits<std::size_t>::max() - a)
+      throw std::length_error("native contraction resource overflow");
+    return a + b;
+  }
+};
+
+#if defined(GENERATIVEQC_TEST_HOOKS)
+// Provider-layer qualification controls, absent from production builds and
+// method APIs. Negative means no injection; zero rejects the next preparation.
+inline thread_local ContractionProviderReservation cutensor_reservation_for_test;
+inline thread_local int cutensor_preparations_before_rejection_for_test = -1;
+#endif
+
+/** Resource evidence is independent of build availability. No production
+ * cuTENSOR resource profile is qualified yet, including lazy execution storage.
+ * Endpoint qualification may inject explicit test reservations without turning
+ * synthetic limits into production defaults. */
+inline ContractionProviderReservation qualified_cutensor_reservation() noexcept {
+#if GENERATIVEQC_HAS_CUTENSOR && defined(GENERATIVEQC_TEST_HOOKS)
+  return cutensor_reservation_for_test;
+#else
+  return {};
+#endif
+}
+
+inline std::size_t cutensor_provider_version() noexcept {
+#if GENERATIVEQC_HAS_CUTENSOR
+  return cutensorGetVersion();
+#else
+  return 0;
+#endif
+}
 
 template <class T>
 __device__ T contraction_multiply(T a, T b) {
@@ -196,8 +255,8 @@ static __global__ void generated_contraction(const T* a, const T* b, T* output, 
 /** Prepared projection of the canonical compiler requests for one AOT stage.
  * Each stage has at most a full batch and a tail batch. All descriptor storage,
  * validation and provider setup occur before execution; replay only selects an
- * already prepared shape and changes borrowed tensor addresses. Copying a table
- * does not extend its context's lifetime: the enclosing native owner owns both.
+ * already prepared shape and changes borrowed tensor addresses. The enclosing
+ * native owner keeps both the table and its borrowed context alive together.
  */
 class PreparedContractions {
  public:
@@ -208,22 +267,39 @@ class PreparedContractions {
   // descriptor copy live during construction. No cache grows during replay.
   static constexpr std::size_t storage_bytes(std::size_t requests, std::size_t variants = 1) {
     return sizeof(PreparedContractions) + 2 * sizeof(Variant) +
-           2 * variants * requests * (sizeof(ContractionRequest) + sizeof(ContractionAlgorithm));
+           2 * variants * requests *
+               (sizeof(ContractionRequest) + sizeof(ContractionAlgorithm)
+#if GENERATIVEQC_HAS_CUTENSOR
+                + sizeof(std::unique_ptr<CudaCutensorContraction>)
+#endif
+               );
   }
 
+  /** Bind one shape transactionally. Optional cuTENSOR plans are fully prepared
+   * before publishing the variant; rejection releases all provisional plans and
+   * leaves the table unchanged. The caller owns fallback selection and budgets
+   * reservation.total_bytes(number_of_cutensor_plans) in addition to the table.
+   * Pure affine requests need no matrix recipe when that provider is selected. */
   void add(std::size_t o, std::size_t v, std::size_t q, std::vector<ContractionRequest> requests,
            CudaContractionContext& context, std::size_t& calls, std::size_t& summands,
-           std::vector<ContractionAlgorithm> algorithms = {}) {
+           std::vector<ContractionAlgorithm> algorithms = {},
+           ContractionProviderReservation reservation = {}) {
     if (variants_.size() == 2) throw std::length_error("native contraction batch variant bound");
     if (!context.prepared()) throw std::logic_error("native contraction provider is not prepared");
     if (algorithms.empty()) algorithms.assign(requests.size(), ContractionAlgorithm::PedanticBlas);
     if (algorithms.size() != requests.size() || algorithms.capacity() > algorithms.size())
       throw std::invalid_argument("native contraction algorithm table bound");
-    for (auto algorithm : algorithms)
+    for (auto algorithm : algorithms) {
       if ((algorithm != ContractionAlgorithm::PedanticBlas &&
-           algorithm != ContractionAlgorithm::GeneratedOrdered) ||
+           algorithm != ContractionAlgorithm::GeneratedOrdered &&
+           algorithm != ContractionAlgorithm::CutensorAffine) ||
           (algorithm == ContractionAlgorithm::PedanticBlas && !context.handle()))
         throw std::invalid_argument("native contraction provider unavailable");
+#if !GENERATIVEQC_HAS_CUTENSOR
+      if (algorithm == ContractionAlgorithm::CutensorAffine)
+        throw ContractionPreparationUnavailable("cuTENSOR was not enabled in this build");
+#endif
+    }
     cudaStreamCaptureStatus capture{};
     generativeqc_tensor::cuda_check(cudaStreamIsCapturing(context.stream(), &capture));
     if (capture != cudaStreamCaptureStatusNone)
@@ -231,20 +307,99 @@ class PreparedContractions {
     for (const auto& variant : variants_)
       if (variant.o == o && variant.v == v && variant.q == q)
         throw std::invalid_argument("duplicate native contraction batch variant");
-    for (const auto& request : requests) request.validate();
+    for (std::size_t i = 0; i < requests.size(); ++i) {
+      if (algorithms[i] == ContractionAlgorithm::CutensorAffine)
+        requests[i].validate_affine();
+      else
+        requests[i].validate();
+    }
     if (variants_.empty()) variants_.reserve(2);
     if (variants_.capacity() > 2 || requests.capacity() > requests.size())
       throw std::length_error("native descriptor allocation exceeds admitted bound");
     if (context_ && (context_ != &context || generation_ != context.generation()))
       throw std::invalid_argument("native contraction table cannot mix contexts");
+    if (calls_ && (calls_ != &calls || summands_ != &summands))
+      throw std::invalid_argument("native contraction table cannot mix work counters");
+    int device{};
+    generativeqc_tensor::cuda_check(cudaGetDevice(&device));
+    if (device != context.device()) throw std::logic_error("native preparation device changed");
+    Variant variant{o, v, q, std::move(requests), std::move(algorithms)};
+#if GENERATIVEQC_HAS_CUTENSOR
+    const auto count = std::count(variant.algorithms.begin(), variant.algorithms.end(),
+                                  ContractionAlgorithm::CutensorAffine);
+    if (count) {
+      // Check aggregate arithmetic before allocating any provider storage.
+      (void)reservation.total_bytes(count);
+      if (reservation.host_bytes < sizeof(CudaCutensorContraction))
+        throw ContractionPreparationUnavailable("cuTENSOR host reservation is insufficient");
+      variant.cutensor.resize(variant.requests.size());
+      if (variant.cutensor.capacity() > variant.cutensor.size())
+        throw std::length_error("native provider pointer table exceeds admitted bound");
+      try {
+        for (std::size_t i = 0; i < variant.requests.size(); ++i) {
+          if (variant.algorithms[i] != ContractionAlgorithm::CutensorAffine) continue;
+#if defined(GENERATIVEQC_TEST_HOOKS)
+          if (cutensor_preparations_before_rejection_for_test == 0)
+            throw ContractionPreparationUnavailable("injected optional provider rejection");
+          if (cutensor_preparations_before_rejection_for_test > 0)
+            --cutensor_preparations_before_rejection_for_test;
+#endif
+          auto& plan = variant.cutensor[i];
+          plan = std::make_unique<CudaCutensorContraction>();
+          if (!plan->prepare(variant.requests[i], context.stream(), reservation.workspace_bytes,
+                             reservation.provider_bytes, reservation.host_bytes))
+            throw ContractionPreparationUnavailable(std::string(plan->rejection()));
+        }
+      } catch (...) {
+        // A live cleanup error propagates as a hard failure, never as optional
+        // rejection. Destructors still release remaining plans best effort.
+        for (auto& plan : variant.cutensor)
+          if (plan) plan->release();
+        throw;
+      }
+    }
+#else
+    (void)reservation;
+#endif
+    variants_.push_back(std::move(variant));
     context_ = &context;
     generation_ = context.generation();
     calls_ = &calls;
     summands_ = &summands;
-    variants_.push_back({o, v, q, std::move(requests), std::move(algorithms)});
   }
 
   explicit operator bool() const noexcept { return !variants_.empty(); }
+
+  /** Exact prepared workspace and observed provider device growth; host bytes
+   * remain the externally supplied reservation, excluding storage_bytes(). */
+  ContractionProviderReservation optional_resources() const {
+    ContractionProviderReservation result;
+#if GENERATIVEQC_HAS_CUTENSOR
+    for (const auto& variant : variants_)
+      for (const auto& plan : variant.cutensor) {
+        if (!plan) continue;
+        result.workspace_bytes = ContractionProviderReservation::checked_add(
+            result.workspace_bytes, plan->workspace_bytes());
+        result.provider_bytes = ContractionProviderReservation::checked_add(result.provider_bytes,
+                                                                            plan->provider_bytes());
+        result.host_bytes =
+            ContractionProviderReservation::checked_add(result.host_bytes, plan->host_bytes());
+      }
+#endif
+    return result;
+  }
+
+  /** Drain and release a live table before re-admitting a fallback. */
+  void release() {
+#if GENERATIVEQC_HAS_CUTENSOR
+    for (auto& variant : variants_)
+      for (auto& plan : variant.cutensor)
+        if (plan) plan->release();
+#endif
+    variants_.clear();
+    context_ = nullptr;
+    calls_ = summands_ = nullptr;
+  }
 
   template <class T>
   void execute(std::size_t slot, std::size_t o, std::size_t v, std::size_t q, cudaStream_t stream,
@@ -266,6 +421,19 @@ class PreparedContractions {
     if (!selected || slot >= selected->requests.size())
       throw std::logic_error("native contraction shape changed; prepare again");
     const auto& r = selected->requests[slot];
+    // Semantic work remains valid for both matrix and general affine layouts.
+    const auto work = r.affine_summands();
+    if (*calls_ == std::numeric_limits<std::size_t>::max() ||
+        work > std::numeric_limits<std::size_t>::max() - *summands_)
+      throw std::length_error("native contraction diagnostic counter overflow");
+#if GENERATIVEQC_HAS_CUTENSOR
+    if (selected->algorithms[slot] == ContractionAlgorithm::CutensorAffine) {
+      selected->cutensor[slot]->execute(stream, a, b, output, error);
+      ++*calls_;
+      *summands_ += work;
+      return;
+    }
+#endif
     constexpr auto dtype = std::is_same_v<T, double> ? PrecisionDtype::Fp64 : PrecisionDtype::Fp32;
     if (r.precision.storage_dtype != dtype || !a || !b || !output || !error)
       throw std::invalid_argument("native contraction buffer dtype/address mismatch");
@@ -320,11 +488,8 @@ class PreparedContractions {
                           256, 0, stream>>>(output, count, error, r.n, ldc);
       generativeqc_tensor::cuda_check(cudaGetLastError());
     }
-    if (*calls_ == std::numeric_limits<std::size_t>::max() ||
-        r.summands() > std::numeric_limits<std::size_t>::max() - *summands_)
-      throw std::length_error("native contraction diagnostic counter overflow");
     ++*calls_;
-    *summands_ += r.summands();
+    *summands_ += work;
   }
 
  private:
@@ -332,6 +497,9 @@ class PreparedContractions {
     std::size_t o, v, q;
     std::vector<ContractionRequest> requests;
     std::vector<ContractionAlgorithm> algorithms;
+#if GENERATIVEQC_HAS_CUTENSOR
+    std::vector<std::unique_ptr<CudaCutensorContraction>> cutensor;
+#endif
   };
   std::vector<Variant> variants_;
   CudaContractionContext* context_{};

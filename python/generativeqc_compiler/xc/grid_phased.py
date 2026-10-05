@@ -1,6 +1,6 @@
-"""Experimental bounded lifetime plan for the shared Becke reverse graph.
+"""Bounded lifetime plan for the shared Becke reverse graph.
 
-Not a production route. The owner must admit this entire scratch reservation in
+The owner must admit this entire scratch reservation in
 addition to its other live storage, or use the existing bounded strip schedule.
 All scalar mathematics comes from grid_native/grid_response. Only the storage,
 phase boundaries, and independent iteration domains differ here.
@@ -17,7 +17,7 @@ from generativeqc_compiler.dft.grid import checked_int
 class PhasedBeckePlan:
     """Scratch and semantic work for one tile, not endpoint FLOPs or peak usage.
 
-    Pair primal storage is overwritten by its four pullbacks only after every
+    Pair factors and logarithms are overwritten by four pullbacks only after every
     atom log-product and point normalization consumer has completed. Same-stream
     phase boundaries protect this alias. Point lanes are contiguous in all fields.
     Center preparation and deterministic output reduction belong to the owner.
@@ -125,19 +125,22 @@ GENERATIVEQC_PHASE_HD bool pair_primal_phase(Workspace work, size_t point,
     size_t first, size_t second, Geometry geometry, Log logarithm, Pair pair) {
   bool valid = true;
   const auto separation = geometry.separation(first, second, valid);
-  const auto state = point_pair<false>(work.field(0, point)[first] -
+  const auto state = point_pair(work.field(0, point)[first] -
       work.field(0, point)[second], first, second, separation[0], geometry, logarithm, pair);
   const size_t index = center_pair_index(first, second);
-  work.pair(0, index, point) = state.ratio[0];
-  work.pair(1, index, point) = state.ratio[1];
+  // Produce each logarithm in the parallel pair domain. The atom traversal
+  // below retains its ordered sum, but no longer serializes transcendental
+  // evaluation across all neighbors. Reuse the two old ratio words: those
+  // cheap partials can be rematerialized from the same canonical AD graph.
+  work.pair(0, index, point) = state.logarithm[0][0];
+  work.pair(1, index, point) = state.logarithm[1][0];
   work.pair(2, index, point) = state.factor[0];
   work.pair(3, index, point) = state.factor[1];
   return valid && std::isfinite(state.factor[0]);
 }
 
-template <class Log>
 GENERATIVEQC_PHASE_HD void atom_logs_phase(Workspace work, size_t point,
-    size_t atom, Log logarithm) {
+    size_t atom) {
   double sum = 0;
   size_t zeros = 0;
   // Lower neighbors followed by upper neighbors reproduce triangular order.
@@ -147,7 +150,7 @@ GENERATIVEQC_PHASE_HD void atom_logs_phase(Workspace work, size_t point,
     const size_t index = center_pair_index(std::max(atom, neighbor), std::min(atom, neighbor));
     const double factor = work.pair(2, index, point);
     const double value = upper ? 1 - factor : factor;
-    if (value > 0) sum += logarithm(value)[0];
+    if (value > 0) sum += work.pair(upper ? 1 : 0, index, point);
     else ++zeros;
   }
   work.field(4, point)[atom] = sum;
@@ -171,15 +174,17 @@ template <class Geometry, class Log>
 GENERATIVEQC_PHASE_HD bool pair_reverse_phase(Workspace work, size_t point,
     size_t first, size_t second, Geometry geometry, Log logarithm) {
   const size_t index = center_pair_index(first, second);
-  const PointPair state{{work.pair(0, index, point), work.pair(1, index, point)},
-                        {work.pair(2, index, point), work.pair(3, index, point)}, {}};
+  PointPair state{{}, {work.pair(2, index, point), work.pair(3, index, point)}, {}};
   std::array<double, 4> pullback{};
   bool valid = true;
   if (state.factor[1] != 0) {
+    const auto separation = geometry.separation(first, second, valid);
+    const auto coordinate = geometry.coordinate(work.field(0, point)[first] -
+        work.field(0, point)[second], first, second, separation[0]);
+    state.ratio = {coordinate[1], coordinate[2]};
     const double bar_mu = pair_adjoint<false>(state, first, second,
         work.field(4, point), work.field(5, point), work.field(6, point),
         work.zero_counts(point), work.maximum[point], logarithm);
-    const auto separation = geometry.separation(first, second, valid);
     pullback[0] = bar_mu * state.ratio[0];
     for (size_t axis = 0; axis < 3; ++axis)
       pullback[axis + 1] = bar_mu * state.ratio[1] * separation[axis + 1];

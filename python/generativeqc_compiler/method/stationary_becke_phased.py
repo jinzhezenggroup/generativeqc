@@ -49,7 +49,7 @@ __global__ void phased_becke_atom(PhasedBeckeInput input) {
   bool valid = true;
   if constexpr (Phase == 0)
     valid = distance_phase(input.work, point, atom, input.points, input.centers, local_norm);
-  if constexpr (Phase == 1) atom_logs_phase(input.work, point, atom, local_log);
+  if constexpr (Phase == 1) atom_logs_phase(input.work, point, atom);
   if constexpr (Phase == 2) atom_gather_phase(input.work, point, atom);
   if constexpr (Phase == 3) {
     valid = point_motion_phase(input.work, point, atom, input.owner(point));

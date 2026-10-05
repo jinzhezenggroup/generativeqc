@@ -15,6 +15,7 @@ from typing import Any
 from generativeqc_compiler.integral.cuda import CudaEmitter
 
 from .xc_bilinear import ao_pair_bilinear
+from .xc_density_lowering import emit_density_binding
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,27 +347,19 @@ inline bool tiled_xc_admitted(I n, I count, I spins, I work_jets) {
   const I tile_pairs = tiles*(tiles+1)/2;
   return tile_pairs <= 65535;
 }
-inline void scheduled_density_product(cudaStream_t stream, const double* density,
-    const double* ao, I n, I count, I spins, I work_jets, bool mixed,
-    double* work, int* error, const size_t* ao_ids = nullptr, I full_n = 0) {
-  if (!full_n) full_n = n;
+template <bool Mixed, bool Tiled>
+void launch_density_product(cudaStream_t stream, const double* density,
+    const double* ao, I n, I count, I spins, I work_jets,
+    double* work, int* error, const size_t* ao_ids, I full_n) {
   if (!n) return;
-  if (tiled_xc_admitted(n, count, spins, work_jets)) {
+  if constexpr (Tiled) {
     const dim3 grid((n+@TILE_MINUS_ONE@)/@TILE@, (count+@TILE_MINUS_ONE@)/@TILE@,
                     spins*work_jets), block(@TILE@,@TILE@);
-    if (mixed)
-      tiled_density_product<true><<<grid, block, 0, stream>>>(
-          density, ao, n, count, work_jets, work, error, ao_ids, full_n);
-    else
-      tiled_density_product<false><<<grid, block, 0, stream>>>(
-          density, ao, n, count, work_jets, work, error, ao_ids, full_n);
+    tiled_density_product<Mixed><<<grid, block, 0, stream>>>(
+        density, ao, n, count, work_jets, work, error, ao_ids, full_n);
   } else {
-    if (mixed)
-      density_product<true><<<generativeqc_tensor::blocks(spins*work_jets*count*n,128),128,0,stream>>>(
-          density,ao,n,count,spins,work_jets,work,error,ao_ids,full_n);
-    else
-      density_product<false><<<generativeqc_tensor::blocks(spins*work_jets*count*n,128),128,0,stream>>>(
-          density,ao,n,count,spins,work_jets,work,error,ao_ids,full_n);
+    density_product<Mixed><<<generativeqc_tensor::blocks(spins*work_jets*count*n,128),128,0,stream>>>(
+        density,ao,n,count,spins,work_jets,work,error,ao_ids,full_n);
   }
 }
 inline void scheduled_potential(cudaStream_t stream, const double* ao,
@@ -421,11 +414,15 @@ def _emit_tiled(schedule: XcMatrixSchedule) -> str:
 
 def emit_native_xc_matrix_schedule(
     schedule: XcMatrixSchedule = DEFAULT_XC_MATRIX_SCHEDULE,
+    *,
+    density_source: str = "",
 ) -> str:
     """Emit compact graph lowering for one explicitly qualified tile candidate."""
     return (
         "\nnamespace generativeqc::dft::cuda_xc_detail {\nnamespace {\n"
         + _emit_panels()
         + _emit_tiled(schedule)
-        + "\n} // namespace\n} // namespace generativeqc::dft::cuda_xc_detail\n"
+        + "\n} // namespace\n"
+        + emit_density_binding(schedule.tile, density_source + _emit_tiled(schedule))
+        + "\n} // namespace generativeqc::dft::cuda_xc_detail\n"
     )

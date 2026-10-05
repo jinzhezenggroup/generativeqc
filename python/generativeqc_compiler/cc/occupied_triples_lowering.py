@@ -123,7 +123,7 @@ def emit_w_portfolio(source_identity: str) -> str:
         scientific_identity=adapter.precision.source_equation,
         operands=tuple(operands),
         precisions=(strict, mixed),
-        constraints=LoweringConstraints(maximum_candidates=4),
+        constraints=LoweringConstraints(maximum_candidates=6),
         semantics=(
             ("root_node", adapter.hashes[source.outputs["w"]]),
             ("shape-kind", "aot-template"),
@@ -146,6 +146,12 @@ def emit_w_portfolio(source_identity: str) -> str:
             "two-affine-contractions",
             version=source_identity,
         ),
+        ProviderDescriptor(
+            "cutensor",
+            "library",
+            "two-affine-contractions",
+            version="runtime-bound-qualified-2.x",
+        ),
     )
     candidates = tuple(
         LoweringCandidate(
@@ -154,7 +160,9 @@ def emit_w_portfolio(source_identity: str) -> str:
             (provider,),
             "ready",
             precision.directive.math_mode,
-            provider_bytes=(96 << 20) if provider.kind == "library" else 0,
+            # Optional cuTENSOR resources are resolved by native preparation;
+            # availability alone supplies no production reservation defaults.
+            provider_bytes=(96 << 20) if provider.name == "cublas" else 0,
             execution=CandidateExecution(
                 precision,
                 "two-contractions-fp64-combine",

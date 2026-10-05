@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-1895-force-root-reuse-20261005
+source .artifacts/gpu-env-n1.sh
+output="$PWD/.artifacts/gpu-${SLURM_JOB_ID}"
+mkdir -p "$output"
+trap 'printf "%s\n" "$?" > "$output/job.exit"' EXIT
+scontrol show job "$SLURM_JOB_ID" -o > "$output/job.txt"
+sha256sum -c .artifacts/build/binaries.sha256 > "$output/binary-check.txt"
+"$python" .artifacts/check-source.py > "$output/source-check.txt"
+sha256sum .artifacts/qualify-roots-n1.sh .artifacts/gpu-env-n1.sh > "$output/driver.sha256"
+timeout 1200 build/cuda-release-sm120/generativeqc_cuda_fock_provider_tests --through-f-response > "$output/native-through-f.log" 2>&1
+for sanitizer in memcheck initcheck; do
+  timeout 1200 compute-sanitizer --tool "$sanitizer" --error-exitcode 99 build/cuda-release-sm120/generativeqc_cuda_fock_provider_tests --range-response-only > "$output/$sanitizer.log" 2>&1
+done

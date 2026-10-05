@@ -17,16 +17,17 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _compile_run(tmp_path: Path, code: str, sources: tuple[Path, ...] = ()) -> str:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
-    cache = shutil.which("ccache")
+    compiler, cache = shutil.which("c++"), shutil.which("ccache")
+    if compiler is None or cache is None:
+        pytest.skip("host C++ compiler and ccache required")
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
     source = tmp_path / "retirement.cpp"
     source.write_text(code, encoding="utf-8")
     objects = []
     for index, path in enumerate((source, *sources)):
         obj = tmp_path / f"retirement_{index}.o"
-        command = ([cache] if cache else []) + [
+        command = [
+            cache,
             compiler,
             "-std=c++20",
             "-O0",
@@ -400,15 +401,13 @@ def test_actual_cc_provider_and_solver_callbacks_preserve_retry_state(
         PLAN_STANDINS
         + CC_CALLBACK_STANDINS
         + r"""
-void provider_probe(int failure) {
+void provider_probe(int failure, bool resident) {
   reset_injection(failure);
   CorrelatedCudaReferencePlan owner;
   *owner.slot() = new scf::CudaRhfBucketPlan{30,10};
   auto* cuda_reference_plan = owner.slot();
   const auto retained_plan_bytes = [&] { return owner.retained_numeric_bytes(); };
-  auto optional_source = std::make_unique<scf::PreparedFockPlan>();
-  auto* cuda_source_cache = &optional_source;
-  auto* prepared_exact = optional_source.get();
+  scf::PreparedFockPlan* prepared_exact = nullptr;
   core::System system;
   auto reference = std::make_shared<hf::PhysicalReference>();
   cc::SolverOptions solver_options, correlation_options;
@@ -418,6 +417,15 @@ void provider_probe(int failure) {
   const scf::cuda_execution::CudaDfSourcePolicy* correlation_policy = nullptr;
   ProbeExecution execution;
   ProbeState state;
+  if (resident) {
+    state.reference_interaction_source=std::make_shared<ResidentSource>(
+        std::exchange(*owner.slot(),nullptr));
+    // A resident source owns the executable itself; only the compact route
+    // can retry a later raw-allocation failure by retiring a separate cache.
+    raw_constructions=1;
+  } else {
+    state.reference_interaction_source=std::make_shared<CompactSource>();
+  }
   bool rejected = false;
   const auto before = destroyed_plans;
   try {
@@ -426,8 +434,10 @@ void provider_probe(int failure) {
         + r"""
     assert(failure != 2);
     assert(state.problem.provider_peak_bytes == 40 && provider_phase_peak == 40);
-    assert((build_budgets == std::vector<std::size_t>{70,100}));
+    assert((build_budgets == (resident ? std::vector<std::size_t>{100,100}
+                                      : std::vector<std::size_t>{70,100})));
     assert(raw_constructions == 2 && destroyed_sources == 1);
+    assert(!state.reference_interaction_source);
     assert(provider_work.source_scans == 2 && provider_work.source_values == 6);
     assert(provider_metrics.input_ms == 2 && state.df_source.source_identity == 2);
     assert(destroyed_plans == before + 1 && !owner.get());
@@ -435,29 +445,36 @@ void provider_probe(int failure) {
   assert(rejected == (failure == 2));
   if (rejected) {
     assert(build_budgets.size() == 1 && state.problem.provider_peak_bytes == 99);
-    assert(raw_constructions == 0 && destroyed_sources == 0 && owner.get());
+    assert(raw_constructions == (resident ? 1 : 0) && destroyed_sources == 0);
+    assert(bool(owner.get()) == !resident && state.reference_interaction_source);
     assert(destroyed_plans == before && !state.df_source.response_state);
   }
   // The accepted detached DF output is allowed to survive the retry; the
   // failed attempt must already have released its output before retirement.
   state.df_source = {};
 }
-void solver_probe(int failure) {
+void solver_probe(int failure, bool resident) {
   reset_injection(failure);
   CorrelatedCudaReferencePlan owner;
   *owner.slot() = new scf::CudaRhfBucketPlan{30,10};
   auto* cuda_reference_plan = owner.slot();
   cc::SolverOptions solver_options, correlation_options;
   solver_options.max_bytes = 100;
-  bool source_live = true;
   const bool cuda = true;
-  const std::size_t exact_source_retained = 17;
+  const std::size_t exact_source_retained = resident ? 30 : 17;
   ProbeState state;
+  if (resident) {
+    state.reference_interaction_source=std::make_shared<ResidentSource>(
+        std::exchange(*owner.slot(),nullptr));
+    solve_failures=1;
+  } else {
+    state.reference_interaction_source=std::make_shared<CompactSource>();
+  }
   state.problem.reference_retained_bytes = 23 + exact_source_retained;
   const auto retire_optional_source = [&] {
     assert(live_phase_owners == 0);
-    if (!source_live) return false;
-    source_live = false;
+    if (!state.reference_interaction_source) return false;
+    state.reference_interaction_source.reset();
     return true;
   };
   ProbeExecution execution;
@@ -470,24 +487,31 @@ void solver_probe(int failure) {
     assert(failure != 2);
     if (failure == 3) {
       assert(state.solved.status == cc::SolveStatus::NumericalFailure);
-      assert(solve_budgets.size() == 1 && owner.get() && source_live);
+      assert(solve_budgets.size() == 1 && bool(owner.get()) == !resident &&
+             state.reference_interaction_source);
       assert(destroyed_plans == before);
     } else {
-      assert((solve_budgets == std::vector<std::size_t>{70,70,100}));
-      assert((solve_retained == std::vector<std::size_t>{40,23,23}));
-      assert(state.solved.converged() && !owner.get() && !source_live);
+      assert((solve_budgets == (resident ? std::vector<std::size_t>{100,100}
+                                        : std::vector<std::size_t>{70,70,100})));
+      assert((solve_retained == (resident ? std::vector<std::size_t>{53,23}
+                                         : std::vector<std::size_t>{40,23,23})));
+      assert(state.solved.converged() && !owner.get() && !state.reference_interaction_source);
+      assert(destroyed_sources == 1);
       assert(destroyed_plans == before + 1 && correlation_options.max_bytes == 100);
     }
   } catch (const std::invalid_argument&) { rejected = true; }
   assert(rejected == (failure == 2));
   if (rejected) {
     assert(solve_budgets.size() == 1 && state.solved.reason == "unpublished");
-    assert(owner.get() && source_live && destroyed_plans == before);
+    assert(bool(owner.get()) == !resident && state.reference_interaction_source &&
+           destroyed_plans == before && destroyed_sources == 0);
   }
 }
 int main() {
-  for (int failure : {0,1,2}) provider_probe(failure);
-  for (int failure : {0,1,2,3}) solver_probe(failure);
+  for (bool resident : {false,true}) {
+    for (int failure : {0,1,2}) provider_probe(failure,resident);
+    for (int failure : {0,1,2,3}) solver_probe(failure,resident);
+  }
   std::cout << "actual provider/solver callback rollback and cumulative work gates passed\n";
 }
 """
@@ -501,12 +525,13 @@ CC_CALLBACK_STANDINS = r"""
 #include "posthf/native_provider.hpp"
 using namespace generativeqc;
 int injected_failure = 0, raw_constructions = 0, destroyed_sources = 0;
-int live_source_views = 0;
+int live_source_views = 0, solve_failures = 2;
 std::vector<std::size_t> build_budgets, solve_budgets, solve_retained;
 void reset_injection(int failure) {
   assert(live_phase_owners == 0 && live_source_views == 0);
   injected_failure = failure;
   raw_constructions = destroyed_sources = 0;
+  solve_failures = 2;
   build_budgets.clear(); solve_budgets.clear(); solve_retained.clear();
 }
 void injected_exception() {
@@ -529,7 +554,7 @@ SolverResult solve_cuda(const Problem& problem, const SolverOptions& options, in
     result.status = SolveStatus::NumericalFailure;
     return result;
   }
-  if (solve_budgets.size() <= 2) injected_exception();
+  if (solve_budgets.size() <= static_cast<std::size_t>(solve_failures)) injected_exception();
   SolverResult result;
   result.status = SolveStatus::Converged;
   return result;
@@ -585,6 +610,26 @@ class PreparedFockInteractionSourceView : public integrals::ElectronInteractionS
   const PreparedFockPlan& plan;
 };
 }
+struct ExactSource : integrals::ElectronInteractionSource {
+  core::System system;
+  ~ExactSource() {
+    assert(live_phase_owners == 0 && live_source_views == 0);
+    ++destroyed_sources;
+  }
+  const core::System& orbital() const override { return system; }
+  std::size_t nbf() const override { return 2; }
+  std::size_t naux() const override { return 0; }
+  std::size_t retained_numeric_bytes() const override { return 17; }
+  bool supports(Operator) const noexcept override { return true; }
+  void read(Operator,const std::array<std::size_t,4>&,const std::array<std::size_t,4>&,
+            double*,std::size_t) const override { throw std::logic_error("no numerical work"); }
+};
+struct CompactSource final : ExactSource {};
+struct ResidentSource final : ExactSource {
+  std::unique_ptr<scf::CudaRhfBucketPlan,void(*)(scf::CudaRhfBucketPlan*)> plan;
+  explicit ResidentSource(scf::CudaRhfBucketPlan* p):plan(p,scf::destroy_rhf_cuda_bucket_plan) {}
+  std::size_t retained_numeric_bytes() const override { return plan->numeric_bytes; }
+};
 struct ProbeState {
   std::shared_ptr<const integrals::ElectronInteractionSource> reference_interaction_source;
   cc::Problem problem;
@@ -602,12 +647,12 @@ struct ProbeState {
     diagnostic.reference_execution_plan_reused = 1;
   }
 };
-cc::Problem build_problem(const integrals::ElectronInteractionSource& source,
+cc::Problem build_problem(const core::System&, const integrals::ElectronInteractionSource* source,
     const hf::PhysicalReference&, const cc::SolverOptions& options, bool, int,
     posthf::ProviderWork& work, generativeqc_tensor::Metrics& metrics, const core::System*,
     cc::DFSourceResult* retained, const scf::cuda_execution::CudaDfSourcePolicy*) {
   PhaseOwner partial_problem;
-  assert(source.nbf() == 2 && retained && !retained->response_state);
+  assert(source && source->nbf() == 2 && retained && !retained->response_state);
   build_budgets.push_back(options.max_bytes);
   ++work.source_scans; work.source_values += 3; ++metrics.input_ms;
   retained->response_state = std::make_shared<cc::DFSourceState>();
@@ -874,18 +919,6 @@ int main() {
 
 
 ENDPOINT_CALLBACK_STANDINS = r"""
-struct ResidentSource : integrals::ElectronInteractionSource {
-  core::System system;
-  std::unique_ptr<scf::CudaRhfBucketPlan,void(*)(scf::CudaRhfBucketPlan*)> plan;
-  explicit ResidentSource(scf::CudaRhfBucketPlan* p):plan(p,scf::destroy_rhf_cuda_bucket_plan) {}
-  const core::System& orbital() const override { return system; }
-  std::size_t nbf() const override { return 2; }
-  std::size_t naux() const override { return 0; }
-  std::size_t retained_numeric_bytes() const override { return plan->numeric_bytes; }
-  bool supports(Operator) const noexcept override { return true; }
-  void read(Operator,const std::array<std::size_t,4>&,const std::array<std::size_t,4>&,
-            double*,std::size_t) const override { throw std::logic_error("no numerical work"); }
-};
 #include <limits>
 #include <tuple>
 #include "response/native_gmres.hpp"

@@ -27,7 +27,7 @@ def test_every_emitted_tile_can_publish_all_totals(tile: int) -> None:
     assert schedule.threads <= 1024
     assert schedule.shared_bytes <= 48 * 1024
     source = _emit_tiled(schedule)
-    assert source.count("tiled_xc_admitted(n, count, spins, work_jets)") == 2
+    assert source.count("tiled_xc_admitted(n, count, spins, work_jets)") == 1
     assert "threadIdx.x < 3" in source
 
 
@@ -41,7 +41,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     for tile in (8, 16, 32):
         emitted = _emit_tiled(XcMatrixSchedule(tile))
         start = emitted.index("inline bool tiled_xc_admitted(")
-        end = emitted.index("inline void scheduled_density_product", start)
+        end = emitted.index("template <bool Mixed, bool Tiled>", start)
         source += emitted[start:end].replace("tiled_xc_admitted", f"admitted_{tile}")
     source += r"""
 int main() {

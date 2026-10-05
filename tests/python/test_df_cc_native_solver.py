@@ -18,6 +18,58 @@ from tools import generate_rccsd_native as conventional
 from tools.generativeqc_cc.oracle import DeterminantOracle, dense_feeds
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_generated_auxiliary_accumulation_preserves_order(tmp_path: Path) -> None:
+    """Execute the real generated consumer with cancellation and early overflow."""
+    if (
+        os.environ.get("GENERATIVEQC_DF_CC_CUDA_TEST") != "1"
+        or os.environ.get("GENERATIVEQC_DF_CC_USE_LIBRARY") != "1"
+    ):
+        pytest.skip("requires the complete CUDA library in a finite Slurm allocation")
+    library = Path(os.environ["GENERATIVEQC_LIBRARY"]).resolve()
+    cache, compiler = shutil.which("ccache"), shutil.which("nvcc")
+    assert cache and compiler
+    subprocess.run([cache, "--version"], check=True, capture_output=True)
+    obj, executable = tmp_path / "probe.o", tmp_path / "probe"
+    subprocess.run(
+        [
+            cache,
+            compiler,
+            "-std=c++20",
+            "-O2",
+            "-arch=sm_120",
+            "-I" + str(ROOT / "src"),
+            "-I" + str(ROOT / "include"),
+            "-I" + str(library.parent / "generated"),
+            "-c",
+            str(ROOT / "tests/native/test_df_auxiliary_accumulation.cu"),
+            "-o",
+            str(obj),
+        ],
+        check=True,
+        capture_output=True,
+        env={**os.environ, "CCACHE_BASEDIR": str(ROOT)},
+    )
+    subprocess.run(
+        [
+            compiler,
+            str(obj),
+            "-L" + str(library.parent),
+            "-lgenerativeqc",
+            "-lcublas",
+            "-arch=sm_120",
+            "-Xlinker",
+            "-rpath=" + str(library.parent),
+            "-o",
+            str(executable),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run([str(executable)], check=True, capture_output=True, timeout=30)
+
+
 FIELDS = (
     "foo",
     "fov",
@@ -61,6 +113,11 @@ COLUMNS = (
     "gemm_summands",
     "packing_bytes",
     "provider_capacity",
+    "batch_size",
+    "q_tiles",
+    "accumulation_bytes",
+    "denominator_identity",
+    "derived_d2_iteration_evaluations",
     "conventional_prepared",
     "conventional_calls",
     "conventional_summands",
@@ -214,6 +271,10 @@ def _stream(
     diis: int = 6,
     hoist: bool = True,
     matrix: bool = True,
+    batch_limit: int = 8,
+    canonical_eps: np.ndarray | None = None,
+    level_shift: float = 0.0,
+    max_iterations: int = 100,
 ) -> bytes:
     o, v = arrays["t1"].shape
     q = len(arrays["bov"]) if df else 0
@@ -223,18 +284,110 @@ def _stream(
             v,
             q,
             budget,
-            100,
+            max_iterations,
             diis,
-            int(cuda) | (0 if hoist else 4) | (0 if matrix else 8),
+            int(cuda)
+            | (0 if hoist else 4)
+            | (0 if matrix else 8)
+            | (16 if canonical_eps is not None else 0)
+            | (batch_limit << 8),
         ],
         dtype=np.uint64,
     )
     omitted = ("ovvv", "vvvv") if df else ("bov", "bvv")
-    return header.tobytes() + b"".join(
+    data = header.tobytes() + b"".join(
         np.asarray(arrays[name], dtype=np.float64).tobytes()
         for name in FIELDS
         if name not in omitted
     )
+    if canonical_eps is not None:
+        data += np.asarray(canonical_eps, dtype=np.float64).tobytes()
+        data += np.float64(level_shift).tobytes()
+    return data
+
+
+@pytest.mark.parametrize(
+    "df,hoist,matrix",
+    [
+        (False, False, False),
+        (True, False, False),
+        (True, True, False),
+        (True, True, True),
+    ],
+)
+def test_canonical_spectrum_preserves_solver_trajectory(
+    solver_probe: tuple[Path, bool], df: bool, hoist: bool, matrix: bool
+) -> None:
+    """Compare each early trajectory prefix and final independent residual replay."""
+    fock, g, arrays = _case(2, 3, 5)
+    eps = np.diag(fock).copy()
+    shift = 0.173
+    gaps = eps[:2, None] - eps[None, 2:]
+    # Independent ordered arithmetic, including a nonzero level shift.
+    arrays["d1"] = gaps - shift
+    arrays["d2"] = gaps[:, None, :, None] + gaps[None, :, None, :] - 2.0 * shift
+    schedule = {"df": df, "hoist": hoist, "matrix": matrix}
+    for limit in (1, 2, 3, 4, 100):
+        explicit, x1, x2 = _run(solver_probe, arrays, max_iterations=limit, **schedule)
+        derived, d1, d2 = _run(
+            solver_probe,
+            arrays,
+            max_iterations=limit,
+            canonical_eps=eps,
+            level_shift=shift,
+            **schedule,
+        )
+        assert explicit["status"] == derived["status"]
+        assert explicit["iterations"] == derived["iterations"]
+        assert explicit["denominator_identity"] != derived["denominator_identity"]
+        np.testing.assert_allclose(
+            explicit["energy"], derived["energy"], atol=2e-12, rtol=0
+        )
+        np.testing.assert_allclose(x1, d1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(x2, d2, atol=2e-11, rtol=0)
+        assert (
+            derived["derived_d2_iteration_evaluations"]
+            == arrays["d2"].size * derived["iterations_called"]
+        )
+        assert explicit["derived_d2_iteration_evaluations"] == 0
+    energy, r1, r2 = DeterminantOracle(fock, g, 2).evaluate_full(d1, d2)
+    np.testing.assert_allclose(derived["energy"], energy, atol=2e-12, rtol=0)
+    assert max(np.max(np.abs(r1)), np.max(np.abs(r2))) <= 1e-10
+
+
+def test_canonical_capacity_admits_previously_rejected_problem(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    """Force the bounded schedule, then test its actual byte boundary."""
+    fock, _, arrays = _case(2, 6, 1)
+    eps = np.diag(fock).copy()
+    schedule = {"hoist": False, "matrix": False}
+    explicit, _, _ = _run(solver_probe, arrays, **schedule)
+    derived, _, _ = _run(solver_probe, arrays, canonical_eps=eps, **schedule)
+    assert derived["capacity"] < explicit["capacity"]
+    assert (
+        explicit["capacity"] - derived["capacity"] >= arrays["d2"].nbytes - eps.nbytes
+    )
+    if solver_probe[1]:
+        assert explicit["h2d"] - derived["h2d"] == arrays["d2"].nbytes - eps.nbytes
+        assert derived["device_bytes"] < explicit["device_bytes"]
+    budget = int(derived["capacity"])
+    _run(solver_probe, arrays, budget=budget, canonical_eps=eps, **schedule)
+    for spectrum, amount in ((eps, budget - 1), (None, budget)):
+        rejected = subprocess.run(
+            [str(solver_probe[0])],
+            input=_stream(
+                arrays,
+                solver_probe[1],
+                budget=amount,
+                canonical_eps=spectrum,
+                **schedule,
+            ),
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        assert rejected.returncode and b"budget" in rejected.stderr
 
 
 def _run(
@@ -276,9 +429,19 @@ def test_solver_matches_dense_and_independent_determinants(
     )
     calls = actual["iterations_called"] + actual["replays_called"]
     assert actual["q_calls"] == q * calls
-    assert (
-        actual["accumulations"] == 2 * q * calls + 4 * q * actual["hoisted_evaluations"]
-    )
+    if solver_probe[1]:
+        tiled = actual["hoisted_evaluations"]
+        one_q = q * (calls - tiled)
+        assert actual["q_tiles"] == one_q + tiled * int(
+            np.ceil(q / actual["batch_size"])
+        )
+        assert actual["accumulations"] == one_q + actual["q_tiles"]
+        assert actual["accumulation_bytes"] > 0
+    else:
+        assert (
+            actual["accumulations"]
+            == 2 * q * calls + 4 * q * actual["hoisted_evaluations"]
+        )
     assert actual["preparation_calls"] == actual["hoisted_evaluations"]
     assert actual["hoisted_evaluations"] <= actual["iterations_called"]
     assert actual["q_operations"] > actual["q_calls"]
@@ -398,12 +561,46 @@ def test_matrix_schedule_matches_scalar_and_budget_fallback(
     np.testing.assert_allclose(t2, s2, atol=2e-11, rtol=0)
     admitted, _, _ = _run(solver_probe, arrays, budget=int(fast["capacity"]))
     assert admitted["matrix_gemm"] == 1
-    for budget in (int(fast["capacity"]) - 1, int(scalar["capacity"])):
+    one_q, _, _ = _run(solver_probe, arrays, batch_limit=1)
+    for budget in (int(one_q["capacity"]) - 1, int(scalar["capacity"])):
         bounded, b1, b2 = _run(solver_probe, arrays, budget=budget)
         assert bounded["matrix_gemm"] == 0 and bounded["hoisted_evaluations"] > 0
         assert bounded["capacity"] <= budget
         np.testing.assert_allclose(b1, s1, atol=2e-11, rtol=0)
         np.testing.assert_allclose(b2, s2, atol=2e-11, rtol=0)
+
+
+@pytest.mark.parametrize("batch", [1, 2, 4, 8])
+def test_auxiliary_tiles_preserve_tail_and_budget(
+    solver_probe: tuple[Path, bool], batch: int
+) -> None:
+    """Uneven tails and exact/short budgets retain independently replayed results."""
+    if not solver_probe[1]:
+        pytest.skip("Q tiles are a CUDA matrix execution option")
+    _, _, arrays = _case(2, 3, 5)
+    one, s1, s2 = _run(solver_probe, arrays, batch_limit=1)
+    tiled, t1, t2 = _run(solver_probe, arrays, batch_limit=batch)
+    assert tiled["batch_size"] == min(batch, 5)
+    assert tiled["status"] == one["status"] == 0
+    assert tiled["iterations"] == one["iterations"]
+    np.testing.assert_allclose(tiled["energy"], one["energy"], atol=2e-12, rtol=0)
+    np.testing.assert_allclose(t1, s1, atol=2e-11, rtol=0)
+    np.testing.assert_allclose(t2, s2, atol=2e-11, rtol=0)
+    exact, _, _ = _run(
+        solver_probe, arrays, batch_limit=batch, budget=int(tiled["capacity"])
+    )
+    assert exact["batch_size"] == tiled["batch_size"]
+    if batch > 1:
+        assert tiled["q_tiles"] < one["q_tiles"]
+        assert tiled["q_operations"] < one["q_operations"]
+        assert tiled["gemm_calls"] < one["gemm_calls"]
+        assert tiled["accumulation_bytes"] < one["accumulation_bytes"]
+        for budget in (int(tiled["capacity"]) - 1, int(one["capacity"])):
+            short, b1, b2 = _run(solver_probe, arrays, batch_limit=batch, budget=budget)
+            assert short["batch_size"] < tiled["batch_size"]
+            assert short["capacity"] <= budget
+            np.testing.assert_allclose(b1, s1, atol=2e-11, rtol=0)
+            np.testing.assert_allclose(b2, s2, atol=2e-11, rtol=0)
 
 
 @pytest.mark.parametrize("o,v,q", [(2, 3, 4), (4, 1, 1), (2, 6, 1)])
