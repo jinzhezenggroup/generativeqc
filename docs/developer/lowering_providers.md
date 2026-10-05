@@ -11,7 +11,26 @@ The shared compiler boundary has three separate identities:
 - **Execution binding identity** includes the complete request, target/toolkit
   facts, compilation identity, provider versions, algorithm, layouts, fusion,
   precision, resources, and admitted fallbacks. Changing those execution facts
-  invalidates reuse without changing the original scientific equation.
+invalidates reuse without changing the original scientific equation.
+
+COSX value assembly requests `AO * D` and `seed + AO^T * potential` through
+`dft.cosx_contraction`. The update includes an explicit donated seed in the
+canonical graph. Four fixed full/tail sites bind once in the shared
+`PreparedContractionSites` owner. Projection and accumulation have independent
+candidate diagnostics and work counters, while sharing one provider context on
+the existing grid stream. Execution performs no search or descriptor allocation.
+The owner admits strict FP64, audits outputs before downstream consumers, and
+rejects capture until physical replay accounting is available.
+
+`CudaCosxStagingDiagnostic` reports the resolved descriptors, all candidates and
+their rejections, actual device/architecture/runtime/provider versions, per-site
+calls and scalar summands, 128 KiB host binding reservation, preparation time,
+provider version and retained device growth. Optional library execution needs
+one additional 96 MiB device allowance for the whole owner. An insufficient
+budget or unavailable provider keeps generated execution. Test-only qualification
+can enable the two operations separately; production has no promoted library
+profile. The ESP application, derivative projections and composed endpoint
+qualification remain separate consumers under #1884.
 
 `common.lowering_provider.LoweringRequest` carries one bounded set of admitted
 `LoweringPrecision` variants. These refer directly to
