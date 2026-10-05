@@ -91,9 +91,14 @@ kernel loading during preparation. Module growth beyond that reservation is a
 hard failure: CUDA can retain loaded modules after local plan destruction, so
 release does not zero this charge. This native slice has no production profile.
 The reservation is charged before the first module-loading call and survives
-failed preparation as well as successful-plan release. An observed excess remains
-visible in the charge while the exception aborts admission. A retained owner
-cannot be re-prepared on another device.
+failed preparation as well as successful-plan release. The enclosing context/build
+owner must retain it after the local binding is destroyed. Loading failures
+preserve the known charge and permanently poison that binding's admission,
+including warm retries. Observed growth accumulates across released plans and
+different kernels within the reserved envelope; any known excess remains visible
+while admission fails hard. A binding with a retained charge cannot change device
+or artifact. Fixed-family admission bounds CUTLASS's signed-integer rounded
+dimensions before constructing its parameters.
 `tensor.cuda_cutlass.CutlassAotProvider` registers the same canonical request with
 explicit compiled-family/version/artifact and host/module qualification facts.
 The common registry charges module bytes as retained cache storage and enforces
@@ -105,8 +110,13 @@ when supplied with an actual artifact digest and per-plan host/module bounds.
 It exposes resolved AOT provenance and counts the canonical affine work on replay.
 Unpublished plans are drained on failure; their module charges transfer to the
 table before destruction. `optional_resources().cache_bytes` includes previous
-attempts and survives `release()`. The enclosing owner must preserve this charge
-across fallback and table destruction if it keeps using the CUDA context.
+attempts and survives `release()`. A hard failure after module loading begins
+quarantines the table: new admission, existing replay and provenance binding are
+unavailable, including after release. `retained_cache_quarantined()` distinguishes
+that state; its cache bytes are only the known charge floor, not a measured bound
+on all retained memory. There is no table-local reset. The enclosing owner must
+preserve both charge and quarantine across table destruction while it keeps using
+the CUDA context; replacing the table cannot requalify an unknown overrun.
 Homogeneous shared regions retain CUTLASS as explicit unavailable evidence.
 Their function-local owner cannot preserve an unsafe module load across failed
 construction and later calls on the same CUDA context. CUTLASS admission is
@@ -114,6 +124,7 @@ therefore closed even with test-only profiles, and forged admitted plans reject
 before loading. Re-enabling it requires explicit context/build-lifetime ownership
 of both retained charges and quarantine; a measured resource profile alone is
 insufficient. Standalone/shared-table CUTLASS retains its existing owner contract.
+No production profile is installed.
 Native CMake builds can enable the optional header dependency with
 `GENERATIVEQC_ENABLE_CUTLASS=ON` and
 `GENERATIVEQC_CUTLASS_ROOT=/path/to/cutlass-3.9.2`. The option defaults to OFF;

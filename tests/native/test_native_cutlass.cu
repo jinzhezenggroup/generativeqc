@@ -121,22 +121,30 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
         binding.module_bytes())
       throw std::runtime_error("unreserved CUTLASS preparation");
 #if defined(GENERATIVEQC_TEST_HOOKS)
+    // Keep separate reservations for the poisoned owner and ordinary replay.
+    // Both obligations remain charged until the enclosing CUDA context dies.
+    constexpr std::size_t simultaneous_module_ceiling = 512ULL << 20;
+    CudaCutlassContraction failed_binding;
     // Failure after loading must roll back descriptors while keeping the
     // context-retained reservation, including after an explicit release.
     cutlass_fail_after_module_load_for_test = true;
-    rejects([&] { binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20); });
+    rejects([&] { failed_binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20); });
     cutlass_fail_after_module_load_for_test = false;
-    binding.release();
-    if (binding.module_bytes() != (256ULL << 20) ||
-        binding.host_bytes() != sizeof(CudaCutlassContraction) || binding.preparations() ||
-        binding.calls() || binding.summands())
+    failed_binding.release();
+    if (failed_binding.module_bytes() != (256ULL << 20) ||
+        failed_binding.host_bytes() != sizeof(CudaCutlassContraction) ||
+        failed_binding.preparations() || failed_binding.calls() || failed_binding.summands())
       throw std::runtime_error("CUTLASS failed preparation lost retained module charge");
-    rejects([&] { (void)binding.provenance(); });
-    if (binding.prepare(request, stream, artifact, 1 << 20, (256ULL << 20) - 1))
-      throw std::runtime_error("CUTLASS failed preparation admitted a smaller reservation");
+    rejects([&] { (void)failed_binding.provenance(); });
+    for (const auto reservation : {(256ULL << 20) - 1, 256ULL << 20, 512ULL << 20})
+      rejects([&] { failed_binding.prepare(request, stream, artifact, 1 << 20, reservation); });
 #endif
     if (!binding.prepare(request, stream, artifact, 1 << 20, 256ULL << 20))
       throw std::runtime_error("CUTLASS preparation unavailable");
+#if defined(GENERATIVEQC_TEST_HOOKS)
+    if (binding.module_bytes() + failed_binding.module_bytes() != simultaneous_module_ceiling)
+      throw std::runtime_error("CUTLASS independent owners lost their combined reservations");
+#endif
     const auto host = binding.host_bytes();
     const auto provenance = binding.provenance();
     if (std::string_view(provenance.artifact_identity.data(), 64) != artifact ||
@@ -234,24 +242,10 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
       }
       cutlass_preparations_before_rejection_for_test = -1;
       if (!rejected || table || table.optional_resources().cache_bytes != reservation.cache_bytes ||
-          table.optional_resources().host_bytes || calls || summands)
+          table.optional_resources().host_bytes || table.retained_cache_quarantined() || calls ||
+          summands)
         throw std::runtime_error("CUTLASS shared partial preparation accounting");
       table.release();
-      // A loader exception stays a hard failure, with its charge transferred
-      // before the unpublished native plan is destroyed.
-      cutlass_fail_after_module_load_for_test = true;
-      bool hard_failure{};
-      try {
-        add(m, 1);
-      } catch (const ContractionPreparationUnavailable&) {
-        throw std::runtime_error("CUTLASS loader failure became a soft fallback");
-      } catch (const std::runtime_error&) {
-        hard_failure = true;
-      }
-      cutlass_fail_after_module_load_for_test = false;
-      if (!hard_failure || table ||
-          table.optional_resources().cache_bytes != 2 * reservation.cache_bytes)
-        throw std::runtime_error("CUTLASS shared failed loader accounting");
 #endif
       const auto prior_cache = table.optional_resources().cache_bytes;
       add(m, 1);
@@ -318,6 +312,48 @@ void check(unsigned transposes, std::size_t batches, std::size_t m, std::size_t 
           throw std::runtime_error("CUTLASS mixed table work/cache accounting");
         table.release();
       }
+#if defined(GENERATIVEQC_TEST_HOOKS)
+      // Failed loading leaves a known reservation floor, not a measured bound.
+      // Preserve quarantine when a provisional Plan dies, including when an
+      // older variant was executable. These test-owned tables keep all charges
+      // alive together; no replacement table is treated as context recovery.
+      std::array<PreparedContractions, 2> failed_tables;
+      for (const bool existing : {false, true}) {
+        auto& failed = failed_tables[existing];
+        const auto add_failed = [&](std::size_t key) {
+          failed.add(key, n, batches, {request}, context, calls, summands,
+                     {ContractionAlgorithm::CutlassAot}, reservation, artifact);
+        };
+        if (existing) add_failed(m);
+        cutlass_fail_after_module_load_for_test = true;
+        bool hard_failure{};
+        try {
+          add_failed(m + 1);
+        } catch (const ContractionPreparationUnavailable&) {
+          throw std::runtime_error("CUTLASS loader failure became a soft fallback");
+        } catch (const std::runtime_error&) {
+          hard_failure = true;
+        }
+        cutlass_fail_after_module_load_for_test = false;
+        const auto charge = (existing ? 2 : 1) * reservation.cache_bytes;
+        if (!hard_failure || !failed.retained_cache_quarantined() ||
+            failed.optional_resources().cache_bytes != charge)
+          throw std::runtime_error("CUTLASS shared loader failure lost quarantine/charge");
+        const auto prior_calls = calls, prior_summands = summands;
+        rejects([&] { add_failed(m + 1); });
+        rejects([&] { failed.execute(0, m, n, batches, stream, da, db, dc, error); });
+        rejects([&] { failed.visit_aot_provenance([](auto...) {}); });
+        failed.release();
+        if (!failed.retained_cache_quarantined() ||
+            failed.optional_resources().cache_bytes != charge ||
+            failed.optional_resources().host_bytes)
+          throw std::runtime_error("CUTLASS shared release cleared quarantine/charge");
+        rejects([&] { add_failed(m); });
+        rejects([&] { failed.execute(0, m, n, batches, stream, da, db, dc, error); });
+        if (calls != prior_calls || summands != prior_summands)
+          throw std::runtime_error("CUTLASS quarantined table replayed semantic work");
+      }
+#endif
     }
     cuda_check(cudaFree(error));
     cuda_check(cudaFree(ra));
