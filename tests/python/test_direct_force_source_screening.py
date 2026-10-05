@@ -141,7 +141,9 @@ def test_force_screening_honors_requested_sources(tmp_path: Path) -> None:
     assert result.stdout.strip() == "42 source-demand comparisons"
 
 
-def test_force_ao_density_refinement_honors_spin_and_orientation(tmp_path: Path) -> None:
+def test_force_ao_density_refinement_honors_spin_and_orientation(
+    tmp_path: Path,
+) -> None:
     """Exercise the AO-level second-stage predicate on the maintained header."""
     header = ROOT / "src/scf/cuda/direct_screening.cuh"
     text = header.read_text()
@@ -209,12 +211,22 @@ def test_force_ao_density_refinement_honors_spin_and_orientation(tmp_path: Path)
     probe = tmp_path / "ao-density-screening-probe"
     probe.with_suffix(".cpp").write_text(source)
     subprocess.run(
-        [cache, compiler, "-std=c++20", "-O2", str(probe.with_suffix(".cpp")), "-o", str(probe)],
+        [
+            cache,
+            compiler,
+            "-std=c++20",
+            "-O2",
+            str(probe.with_suffix(".cpp")),
+            "-o",
+            str(probe),
+        ],
         check=True,
         capture_output=True,
         text=True,
         timeout=60,
         env={**os.environ, "CCACHE_DIR": str(tmp_path / ".ccache")},
     )
-    completed = subprocess.run([str(probe)], check=True, capture_output=True, text=True, timeout=30)
+    completed = subprocess.run(
+        [str(probe)], check=True, capture_output=True, text=True, timeout=30
+    )
     assert "AO density-product comparisons" in completed.stdout

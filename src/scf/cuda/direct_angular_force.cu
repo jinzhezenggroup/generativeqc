@@ -229,8 +229,7 @@ __global__ void two_electron_force_quartet_persistent_kernel(
     const ActiveShellQuartetTile* active_shell_quartet_tiles, std::uint32_t* task_head,
     double screening_tolerance, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* forces, std::uint64_t generated_shell_class_mask,
-    double coulomb_coefficient, double exchange_coefficient,
-    bool force_density_product_screening) {
+    double coulomb_coefficient, double exchange_coefficient, bool force_density_product_screening) {
   static_assert(AngularOrder < detail::kDirectQuartetAngularOrderCount);
   const unsigned lane = threadIdx.x % warpSize;
   constexpr std::uint32_t subtiles_per_tile =
@@ -337,7 +336,8 @@ void launch_angular_force_quartets(
                0, stream>>>(batch, order_tile_count, order_tiles,
                             persistent_task_heads + AngularOrder, screening_tolerance,
                             schwarz_bounds, density, active, forces, generic_shell_class_mask,
-                            coulomb_coefficient, exchange_coefficient, force_density_product_screening);
+                            coulomb_coefficient, exchange_coefficient,
+                            force_density_product_screening);
       } else if constexpr (AngularOrder == 3U) {
         const unsigned capacity_workers =
             static_cast<unsigned>((capacities[AngularOrder] + detail::kDirectQuartetThreads - 1) /
@@ -356,7 +356,8 @@ void launch_angular_force_quartets(
                0, stream>>>(batch, order_tile_count, order_tiles,
                             persistent_task_heads + AngularOrder, screening_tolerance,
                             schwarz_bounds, density, active, forces, generated_shell_class_mask,
-                            coulomb_coefficient, exchange_coefficient, force_density_product_screening);
+                            coulomb_coefficient, exchange_coefficient,
+                            force_density_product_screening);
       } else {
         two_electron_force_quartet_kernel<Unrestricted, AngularOrder>
             <<<static_cast<unsigned>(capacities[AngularOrder] *
