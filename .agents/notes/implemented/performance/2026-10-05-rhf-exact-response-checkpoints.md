@@ -95,3 +95,23 @@ There is no matched stronger/diagonal ablation of that frame. Maximum force
 difference from the frozen reference is 3.615e-9 Eh/Bohr and the original gates,
 including limited independent large FD, pass. Retained evidence distinguishes
 each binary and GPU and makes no cross-version timing ratio.
+
+## Post-merge integration qualification
+
+Source `dc68eb0b2` composes master `12d709e46` through parent `33083727b`.
+Build 2367, host 2369 (104 cases), response/independent small FD 2370, shared
+Lambda/triples 2372, complete energy/force 2373 and report 2377 pass. Triples
+has 25 passing cases and three explicit test-hook skips, not 28 passing cases.
+The actual default diagonal/checkpoint force retains 17 exact J/K actions and
+12 Z iterations; neither stronger preconditioning nor recycling is enabled.
+Complete ethane force is 1221.661691 s, including RHF 234.671782 s and orbital
+response 441.628298 s. Energy is 282.120948 s on the same allocation, but its
+different RHF time prevents attributing their difference purely to force work.
+
+Maximum force difference from the frozen reference is 2.954e-9 Eh/Bohr; all
+original residual/stationarity and limited independent large FD gates pass.
+The separate `post-merge-summary.json` retains source, binary, GPU and work
+provenance. This verifies integration, not a new checkpoint timing ablation.
+The public DF registration is energy-only; these are internal complete force
+endpoints. Preserve the frozen selection evidence and unchanged acceptance
+gates rather than relabeling old timings as measurements of the latest source.

@@ -131,3 +131,22 @@ matched diagonal ablation of that frame it cannot establish stronger-inverse
 benefit either. Small water still hits (11 → 5 calls). Keep strict identity and
 both opt-in policies unchanged. Separate summaries and source manifests in the
 benchmark directory preserve the original and both integrated versions.
+
+### Post-merge default-path acceptance
+
+After master `12d709e46`, source `dc68eb0b2` passes build 2367, 104 host cases
+in 2369, response and both independent small-force modes in 2370, shared
+Lambda/triples 2372, complete default energy/force 2373 and report 2377.
+Three triples test-hook cases explicitly skip; the remaining 25 pass. The
+large endpoint deliberately disables both optional accelerators and retains
+17 exact J/K actions and 12 Z iterations. Maximum force difference is
+2.954e-9 Eh/Bohr; all unchanged gates and limited independent large FD pass.
+
+The final merge preserves the public result fields and restores the
+caller-owned cache allowance in public numeric-capacity diagnostics at
+publication. Optional cache capacity must remain charged even though this
+default-path endpoint has no cache. This qualification does not supersede the
+frozen stronger/recycling comparison or justify enabling either by default.
+See `post-merge-summary.json` in the benchmark directory for the separately
+identified source/GPU evidence. Public DF forces still fail closed; only the
+internal complete force endpoint is exercised here.

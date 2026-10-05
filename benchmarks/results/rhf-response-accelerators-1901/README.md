@@ -128,7 +128,7 @@ frozen reference are 2.403e-9 / 1.914e-9 Eh/Bohr. Existing independent large
 two-coordinate/two-step FD re-audits pass. No timing ratio is taken against the
 old binary: provider changes and RHF variation are part of these endpoints.
 
-The latest branch also composes parent `c7486bf2e` and retained RHF ownership.
+The subsequent integration composes parent `c7486bf2e` and retained RHF ownership.
 That version has its own source manifest and qualification rather than inheriting
 these results. Both branches pass the expanded 77-case admission/lifetime suite
 in job 2351; its separate full-device and complete-endpoint results follow.
@@ -182,3 +182,45 @@ pathspecs and deterministic reconstruction recipe. They can be rebuilt from
 existing Git history without retaining another copy of the repository-wide
 hash list in the PR. Binary/probe/input hashes and all numerical observations
 remain in the tracked summaries.
+
+## Post-merge integration
+
+Production `dc68eb0b2b496de18fd765bda577d836487b2883` composes parent
+`33083727b` and master `12d709e46`, including public DF energy registration and
+the current triples provider. This is integration acceptance, not another
+five-way acceleration comparison. The public `df-rccsd(t)` method remains
+energy-only and fails closed for forces; these records exercise the internal
+complete force endpoint.
+
+Build 2367 and 104 host admission/lifetime cases in 2369 pass. Response 2370
+passes four native suites, 15 GPU/IR cases, both independent small-water
+all-coordinate force modes, and architecture/promotion/manifest/ownership
+checks. Shared 2372 passes the native Lambda denominator oracle/fallback/budget
+suite, 18 Lambda/factor cases and 25 triples cases. Three generated-provider
+test-hook cases are explicitly skipped because this Release library lacks test
+hooks; those cases are not counted as passing.
+
+Complete job 2373 selects the actual default diagonal/checkpoint response:
+stronger preconditioning and recycling are both disabled. Its ethane energy
+call takes 282.120948 s: RHF 125.599469 s, source 3.633399 s, CCSD 147.640675 s
+and triples 5.247287 s. The force call and source-specific acceptance gates
+are retained with this same allocation, separately from earlier timings.
+
+The complete ethane force call takes 1221.661691 s, including RHF 234.671782 s,
+CCSD 148.688783 s, triples energy/pullback/Fock response 111.936021 s, Lambda
+277.252422 s and orbital/nuclear response 441.628298 s. It retains 17 exact J/K
+actions and 12 Z iterations with neither optional accelerator enabled. The
+energy and force calls have different RHF timings, so their difference is not
+a pure force-overhead measurement. There is no matched every-action ablation
+on this source; the frozen comparison remains the evidence for acceleration.
+
+Report 2377 passes all original energy/force, replay, residual, stationarity,
+translation and existing independent large two-coordinate/two-step FD gates.
+The maximum large force difference from the frozen reference is 2.954e-9
+Eh/Bohr, energy difference 4.690e-13 Eh and translation residual 2.077e-12.
+This does not extend the independent large audit to all coordinates.
+`post-merge-summary.json` preserves every observation, validation-log outcomes
+and hashes, the GPU and binary identity, and the reconstructable
+`v3-sources.sha256` receipt verified after the complete endpoints. Missing total
+FLOPs and unrequested response work remain null. Stronger preconditioning and
+recycling remain opt-in under the previously measured selection policy.
