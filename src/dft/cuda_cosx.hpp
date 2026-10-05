@@ -16,9 +16,9 @@ struct CudaCosxStagingDiagnostic {
   std::size_t grid_device_bytes{}, cosx_device_bytes{}, device_bytes{}, device_budget_bytes{};
   std::size_t esp_tile_elements{}, ao_tile_elements{};
   bool ao_on_device{}, esp_on_device{}, assembly_on_device{};
-  // Full projection/update followed by tail projection/update. A single owner
-  // reserves provider storage for all four sites; no numeric packing is added.
-  std::array<tensor::ContractionSiteDiagnostic, 4> contractions{};
+  // Full/tail projection and update, followed by full/tail weighted ESP. One
+  // provider owner serves every site without extra numeric packing or caching.
+  std::array<tensor::ContractionSiteDiagnostic, 6> contractions{};
   std::size_t contraction_host_bytes{}, provider_allowance{}, retained_provider_bytes{};
   int provider_version{};
   int contraction_device{-1}, compute_major{}, compute_minor{}, runtime_version{};

@@ -13,6 +13,9 @@ struct ContractionSite {
   const std::array<runtime::NativeLoweringCandidate, Offers>& candidates;
   std::string_view target, compilation;
   ContractionRequest resolved;
+  // Optional compiler-owned input: one scalar per leading batch. It is part of
+  // the canonical region, not a method-selected implementation epilogue.
+  ContractionOperand batch_scale{};
 };
 
 /** Per-operation execution provenance; host/device reservations belong to the
@@ -26,6 +29,8 @@ struct ContractionSiteDiagnostic {
   std::array<runtime::NativeLoweringCandidate, 5> offers{};
   std::size_t offer_count{}, selected{};
   bool retained_incumbent{};
+  ContractionOperand batch_scale{};
+  std::size_t scaled_elements{}, publication_passes{};
 };
 
 }  // namespace generativeqc::tensor

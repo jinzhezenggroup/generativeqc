@@ -93,6 +93,125 @@ void scalar_cases() {
   }
 }
 
+/** Independent asymmetric point-batched arithmetic and publication failures.
+ * Generated execution must retain the incumbent fused FMA chain; both routes
+ * also meet the independent long-double gate, including zero/signed weights. */
+void weighted_cases() {
+  using namespace generativeqc::dft;
+  constexpr std::size_t columns = 17, points = 13, tail = 5;
+  for (unsigned mask : {0U, 4U}) {
+    Stream stream;
+    Buffer<double> esp(points * columns * columns), projected(points * columns), weight(points),
+        output(points * columns);
+    Buffer<int> error(1);
+    cosx_contraction_qualification_for_test(mask, false);
+    auto binding = cosx_lowering::prepare(columns, points, tail, stream.value, 96ULL << 20);
+    cosx_contraction_qualification_for_test(0, false);
+    std::vector<double> left(points * columns * columns), right(points * columns), scales(points);
+    for (std::size_t index = 0; index < left.size(); ++index)
+      left[index] = std::sin(0.13 * (index + 1));
+    for (std::size_t index = 0; index < right.size(); ++index)
+      right[index] = std::cos(0.27 * (index + 1));
+    for (std::size_t point = 0; point < points; ++point)
+      scales[point] = point % 3 == 0 ? 0 : (point % 2 ? -0.3 : 0.7);
+    check(cudaMemcpyAsync(esp.data, left.data(), left.size() * 8, cudaMemcpyHostToDevice,
+                          stream.value));
+    check(cudaMemcpyAsync(projected.data, right.data(), right.size() * 8, cudaMemcpyHostToDevice,
+                          stream.value));
+    check(cudaMemcpyAsync(weight.data, scales.data(), scales.size() * 8, cudaMemcpyHostToDevice,
+                          stream.value));
+    for (unsigned slot : {4U, 5U}) {
+      const auto extent = slot == 4 ? points : tail;
+      std::vector<double> actual(extent * columns, std::numeric_limits<double>::quiet_NaN());
+      check(cudaMemcpyAsync(output.data, actual.data(), actual.size() * 8, cudaMemcpyHostToDevice,
+                            stream.value));
+      check(cudaMemsetAsync(error.data, 0, sizeof(int), stream.value));
+      binding->execute(slot, stream.value, esp.data, projected.data, output.data, error.data,
+                       weight.data);
+      int failure{};
+      check(cudaMemcpyAsync(actual.data(), output.data, actual.size() * 8, cudaMemcpyDeviceToHost,
+                            stream.value));
+      check(
+          cudaMemcpyAsync(&failure, error.data, sizeof(int), cudaMemcpyDeviceToHost, stream.value));
+      check(cudaStreamSynchronize(stream.value));
+      require(!failure, "finite weighted contraction flagged an error");
+      for (std::size_t point = 0; point < extent; ++point)
+        for (std::size_t row = 0; row < columns; ++row) {
+          long double oracle = 0;
+          double fused = 0;
+          for (std::size_t column = 0; column < columns; ++column) {
+            const auto matrix = left[(point * columns + row) * columns + column];
+            const auto vector = right[point * columns + column];
+            oracle += static_cast<long double>(matrix) * vector;
+            fused = std::fma(matrix, vector, fused);
+          }
+          const auto value = actual[point * columns + row];
+          require(std::isfinite(value) && std::abs(value - oracle * scales[point]) < 3e-12,
+                  "weighted contraction differs from independent long-double oracle");
+          require(mask || value == scales[point] * fused,
+                  "generated route changed the fused FMA chain");
+        }
+    }
+    bool rejected{};
+    try {
+      binding->execute(4, stream.value, esp.data, projected.data, output.data, error.data);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "weighted contraction accepted a missing scale input");
+    rejected = false;
+    try {
+      binding->execute(0, stream.value, esp.data, projected.data, output.data, error.data,
+                       weight.data);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "ordinary contraction accepted an undeclared scale input");
+    rejected = false;
+    try {
+      binding->execute(4, stream.value, esp.data, projected.data, output.data, error.data,
+                       output.data);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "weighted contraction accepted scale/output aliasing");
+    auto malformed = cosx_lowering::esp_application(points, columns);
+    malformed.batch_scale.modes[0] = 99;
+    rejected = false;
+    try {
+      generativeqc::tensor::PreparedContractionSites<1> invalid(std::array{malformed}, stream.value,
+                                                                96ULL << 20);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "weighted contraction accepted a different semantic batch axis");
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    for (bool bad_weight : {false, true}) {
+      check(cudaMemcpyAsync(esp.data, &left[0], sizeof(double), cudaMemcpyHostToDevice,
+                            stream.value));
+      check(cudaMemcpyAsync(weight.data, &scales[0], sizeof(double), cudaMemcpyHostToDevice,
+                            stream.value));
+      check(cudaMemcpyAsync(bad_weight ? weight.data : esp.data, &nan, sizeof(double),
+                            cudaMemcpyHostToDevice, stream.value));
+      for (int prior : {0, 9}) {
+        check(
+            cudaMemcpyAsync(error.data, &prior, sizeof(int), cudaMemcpyHostToDevice, stream.value));
+        binding->execute(5, stream.value, esp.data, projected.data, output.data, error.data,
+                         weight.data);
+        int failure{};
+        double published{};
+        check(cudaMemcpyAsync(&failure, error.data, sizeof(int), cudaMemcpyDeviceToHost,
+                              stream.value));
+        check(cudaMemcpyAsync(&published, output.data, sizeof(double), cudaMemcpyDeviceToHost,
+                              stream.value));
+        check(cudaStreamSynchronize(stream.value));
+        require(failure == (prior ? prior : 1) && published == 0,
+                "weighted publication lost nonfinite/sticky-error semantics");
+      }
+    }
+  }
+}
+
 void endpoint_cases() {
   using namespace generativeqc::dft;
   const auto molecule = spherical_sdf();
@@ -105,12 +224,12 @@ void endpoint_cases() {
     weights[p] = p % 3 == 0 ? -0.02 : 0.01 * (p + 1);
   }
   for (std::size_t tile : {1U, 7U, 17U})
-    for (unsigned route = 0; route < 6; ++route) {
-      const unsigned mask = route < 4 ? route : 3;
+    for (unsigned route = 0; route < 10; ++route) {
+      const unsigned mask = route < 8 ? route : 7;
       const auto base = cuda_cosx_staging_diagnostic(molecule, weights.size(), tile).device_bytes;
-      cosx_contraction_qualification_for_test(mask, route == 4);
+      cosx_contraction_qualification_for_test(mask, route == 8);
       CudaCosxStagingPlan plan(molecule, xyz, weights, tile, 0,
-                               base + (route == 5 ? 0 : 96ULL << 20));
+                               base + (route == 9 ? 0 : 96ULL << 20));
       cosx_contraction_qualification_for_test(0, false);
       for (unsigned changed = 0; changed < 2; ++changed) {
         auto density = symmetric_density(n);
@@ -125,25 +244,37 @@ void endpoint_cases() {
                     std::abs(gpu.exchange_energy - cpu.exchange_energy) < 3e-11,
                 "COSX prepared endpoint differs from independent CPU E/K oracle");
         const auto& info = plan.diagnostic();
-        require(info.provider_allowance == ((mask && route < 4) ? 96ULL << 20 : 0) &&
+        require(info.provider_allowance == ((mask && route < 8) ? 96ULL << 20 : 0) &&
                     info.device_bytes == base + info.provider_allowance &&
                     info.contraction_host_bytes,
                 "COSX shared provider reservation was omitted or charged per site");
-        for (unsigned slot = 0; slot < 4; ++slot) {
+        for (unsigned slot = 0; slot < 6; ++slot) {
           const auto& site = info.contractions[slot];
-          const bool library = route < 4 && (mask & (1U << (slot % 2)));
+          const bool library = route < 8 && (mask & (1U << (slot < 4 ? slot % 2 : 2)));
           require(site.candidate.provider == (library ? "cublas" : "generated.cuda"),
                   "COSX did not independently bind projection/accumulation");
-          require(site.offer_count == 3 && !site.offers[2].rejection.empty() &&
+          std::size_t optional_offers{};
+          for (std::size_t offer = 0; offer < site.offer_count; ++offer)
+            if (site.offers[offer].provider != "cublas" &&
+                site.offers[offer].provider != "generated.cuda") {
+              ++optional_offers;
+              require(!site.offers[offer].rejection.empty(),
+                      "COSX optional offer lost its rejection");
+            }
+          require(site.offer_count >= 3 && optional_offers &&
                       site.offers[site.selected].identity == site.candidate.identity &&
                       info.contraction_device == 0 && info.compute_major > 0 &&
                       info.runtime_version > 0,
                   "COSX discarded negative candidates or runtime provenance");
-          const auto calls = slot < 2 ? 17 / tile : std::size_t(17 % tile != 0);
-          const auto points = slot < 2 ? tile : 17 % tile;
+          const bool full = slot < 2 || slot == 4;
+          const auto calls = full ? 17 / tile : std::size_t(17 % tile != 0);
+          const auto points = full ? tile : 17 % tile;
           require(site.calls == (changed + 1) * calls &&
                       site.summands == (changed + 1) * calls * points * n * n,
                   "COSX full/tail semantic work accounting changed");
+          require(site.scaled_elements == (slot >= 4 ? (changed + 1) * calls * points * n : 0) &&
+                      site.publication_passes == (slot >= 4 && library ? (changed + 1) * calls : 0),
+                  "weighted COSX omitted publication work");
         }
       }
     }
@@ -152,6 +283,7 @@ void endpoint_cases() {
 
 void cosx_contraction_cases() {
   cosx_contraction_test::scalar_cases();
+  cosx_contraction_test::weighted_cases();
   cosx_contraction_test::endpoint_cases();
   std::cout
       << "COSX prepared full/tail scalar, CPU E/K, independent-site and resource gates passed\n";
