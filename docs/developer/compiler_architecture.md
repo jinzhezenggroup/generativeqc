@@ -16,7 +16,7 @@ NumPy remains the existing dependency for recurrence/reference arithmetic.
 | `array_api` | Bounded symbolic array frontend that lowers ordinary array expressions directly to TensorIR; no method/runtime policy | `tensor` |
 | `dft` | Discrete grids, AO jets, density ingredients, prepared tile execution and TensorIR panel contractions | `common`, `tensor`; designated scalar clients also use the existing IntegralIR scalar algebra/emission |
 | `xc` | Audited functional expressions, derivatives, point coefficients and XC execution | `common`, `integral`, `dft` |
-| `method` | Canonical MethodIR, stationary-gradient source plans and implicit-solve derivative rules; no solver/runtime policy | `common`, `xc`, `tensor` |
+| `method` | Canonical MethodIR, stationary-gradient source plans, indexed-grid composition and implicit-solve derivative rules; no solver/runtime policy | `common`, `geometry`, `dft`, `xc`, `tensor` |
 | `common` | Backend/target contracts, finite compiler processes, artifacts, hashes, resources and evidence | none of the scientific or user-runtime packages |
 
 The compiler owns mathematical IR and lowering. The compiler-internal
@@ -28,7 +28,41 @@ rather than replacing them with shape-only array semantics. The architectural
 rationale is recorded in the
 [Array API frontend note](../../.agents/notes/implemented/architecture/2026-09-20-array-api-tensorir-frontend.md).
 
-`method` is the composition front end above XC/TensorIR; representability
+`dft.indexed_layout.AoGridBlockLayout` describes a local AO/grid domain without
+owning an index array, allocation, or tensor equation. It distinguishes evaluated
+AO jet order from the derivative capability of its map producer. The existing
+resident map cache can publish this descriptor with its map, point interval, and
+validated basis/geometry epochs. A native grid lease exposes the same descriptor;
+typed admission rejects incompatible or stale domains before CUDA enqueue.
+Host-point tasks, detached feature publication, spatial XC tasks, and resident
+nonlocal force composition use the same admission contract. Spatial certificates
+cover only complete through-order derivative domains; their point offsets address
+the task's existing point permutation, not contiguous rows of the original grid.
+Neither certification nor publication creates a second sparse map representation.
+
+Ordinary native KS CSR maps carry their producer's explicit derivative
+capability. `dft.indexed_layout_native` emits an immutable-owner specialization
+of this domain: semilocal and nonlocal enqueue bind each existing CSR span to
+its point interval, active extent, derivative capability, and prepared-owner
+token. Unknown or insufficient map capability is rejected during layout
+admission. Native plans cannot rebind their frozen basis/quadrature; this owner
+binding replaces the Python adapters' mutable epochs. A validated full,
+sorted physical AO map uses the identity route without map dereferences.
+Descriptors are stack metadata, not another map inventory or scientific cache.
+This specialization does not execute a generic TensorIR provider or reduce the
+conservatively charged dense arena; alternate providers still need qualification.
+
+`method.indexed_grid.AoGridBlockProgram` composes that descriptor with
+`tensor.indexed_layout.IndexedTensorLayout`. Its density gather, local projection,
+and potential scatter are explicit TensorIR programs. Cartesian selections
+preserve independent local axes: both axes of `D[I,I]` share one runtime int64
+map rather than expanding an AO-square index table or materializing a
+local-by-global intermediate. Map values and execution epochs are not compiled
+equation identities. Exact scatter adjoints retain repeated-index multiplicity.
+This representation does not select a faster provider, change screening, or
+retire the native dense/tiny-domain fallback.
+
+`method` is the composition front end above DFT/XC/TensorIR; representability
 there does not imply runtime support.
 The [implicit-response primitive](implicit_response.md) emits ordinary TensorIR
 JVP/VJP/RHS/source programs without importing the runtime solver.

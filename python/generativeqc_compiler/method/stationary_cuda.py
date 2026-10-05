@@ -525,7 +525,7 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
                                 size_t external_stride, size_t external_offset,
                                 size_t geometry_lanes, double* partial, double* scratch,
                                 const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-                                double* phase_seeds = nullptr) {
+                                double* phase_seeds = nullptr, unsigned ao_schedule = 0) {
   // Lanes remain point workers. A whole block cooperates on one worker's panel.
   const size_t lane = blockIdx.x;
   if (lane >= geometry_lanes) return;
@@ -547,6 +547,17 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       <= pair_capacity * sizeof(generativeqc_grid_adjoint::PointPair);
   auto* point_value = reinterpret_cast<StationaryPointValue*>(geometry_pair_storage);
   double* ao_gradient = geometry_pair_storage + point_words;
+  // Optional integer scheduling metadata lives in the same, already charged
+  // alias. Failure to fit keeps the cooperative scan, not the scalar route.
+  const size_t ao_bytes = (point_words + 3 * view.nactive) * sizeof(double);
+  const bool grouped_ao = cooperative_ao && (ao_schedule & 1) &&
+      view.nactive <= size_t{2147483647} &&
+      ao_bytes + (2 * na + view.nactive) * sizeof(int32_t)
+          <= pair_capacity * sizeof(generativeqc_grid_adjoint::PointPair);
+  auto* atom_heads = grouped_ao
+      ? reinterpret_cast<int32_t*>(ao_gradient + 3 * view.nactive) : nullptr;
+  auto* atom_tails = grouped_ao ? atom_heads + na : nullptr;
+  auto* ao_next = grouped_ao ? atom_tails + na : nullptr;
   __shared__ GeometryBlockControl control;
   double* grad = partial + lane * 9 * na;
   double* ws = scratch + lane * 9 * na;
@@ -575,6 +586,23 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       return;
     }
     if (cooperative_ao) {
+      if (grouped_ao && threadIdx.x == 0) {
+        for (size_t atom = 0; atom < na; ++atom) atom_heads[atom] = atom_tails[atom] = -1;
+        // Append local positions, never physical indices. This retains each
+        // atom's original sum order even for interleaved labels and maps.
+        for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
+          const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
+          if (global_ao >= view.nao || ao_atoms[global_ao] < 0 || ao_atoms[global_ao] >= int64_t(na)) {
+            atomicExch(&control.collective_valid, 0);
+            continue;
+          }
+          const size_t atom = ao_atoms[global_ao];
+          ao_next[ao_index] = -1;
+          if (atom_tails[atom] < 0) atom_heads[atom] = int32_t(ao_index);
+          else ao_next[atom_tails[atom]] = int32_t(ao_index);
+          atom_tails[atom] = int32_t(ao_index);
+        }
+      }
       for (size_t ao_index = threadIdx.x; ao_index < view.nactive; ao_index += blockDim.x) {
         const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
         if (global_ao >= view.nao || ao_atoms[global_ao] < 0 || ao_atoms[global_ao] >= int64_t(na)) {
@@ -591,17 +619,31 @@ __global__ void geometry_cooperative_kernel(generativeqc::dft::GridTaskView view
       }
       // Each atom has one writer. Both reductions retain the original AO
       // order, including arbitrary active-AO maps and noncontiguous atoms.
-      for (size_t atom = threadIdx.x; atom < na; atom += blockDim.x)
-        for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
-          const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
-          if (ao_atoms[global_ao] == int64_t(atom))
+      for (size_t atom = threadIdx.x; atom < na; atom += blockDim.x) {
+        if (grouped_ao) {
+          for (int32_t ao_index = atom_heads[atom]; ao_index >= 0; ao_index = ao_next[ao_index])
             for (size_t axis = 0; axis < 3; ++axis)
               grad[3 * atom + axis] -= ao_gradient[3 * ao_index + axis];
+        } else {
+          for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index) {
+            const size_t global_ao = view.ao_ids ? view.ao_ids[ao_index] : ao_index;
+            if (ao_atoms[global_ao] == int64_t(atom))
+              for (size_t axis = 0; axis < 3; ++axis)
+                grad[3 * atom + axis] -= ao_gradient[3 * ao_index + axis];
+          }
         }
-      if (threadIdx.x == 0)
+      }
+      // Independent coordinate writers preserve AO order within each sum;
+      // there is no reassociation, floating atomic, or cross-writer sum.
+      if (ao_schedule & 2) {
+        for (size_t axis = threadIdx.x; axis < 3; axis += blockDim.x)
+          for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index)
+            grad[3 * na + 3 * owner + axis] += ao_gradient[3 * ao_index + axis];
+      } else if (threadIdx.x == 0) {
         for (size_t ao_index = 0; ao_index < view.nactive; ++ao_index)
           for (size_t axis = 0; axis < 3; ++axis)
             grad[3 * na + 3 * owner + axis] += ao_gradient[3 * ao_index + axis];
+      }
       // Every reader must finish before Becke overwrites the aliased panel.
       __syncthreads();
     }

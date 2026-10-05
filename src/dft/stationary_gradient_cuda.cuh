@@ -22,6 +22,7 @@ struct Owner {
       becke_shared_bytes{}, byte_budget{}, phased_bytes{};
   bool failed = true, topology_ready = false;
   bool profile = false, geometry_pending = false;
+  unsigned geometry_ao_schedule{};
   cudaStream_t geometry_stream{};
   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
   double synchronization_wait_ms{}, setup_transfer_ms{}, setup_validation_ms{};
@@ -182,7 +183,7 @@ __global__ void geometry_cooperative_kernel(
     size_t na, const double* weights, const double* raw, const double* external,
     size_t external_stride, size_t external_offset, size_t geometry_lanes, double* partial,
     double* scratch, const generativeqc_grid_adjoint::CenterPair* center_pairs, int* error,
-    double* phase_seeds);
+    double* phase_seeds, unsigned ao_schedule);
 __global__ void geometry_reduce(const double* partial, size_t na, size_t geometry_lanes,
                                 double* output, int* error);
 __global__ void source_reduce(const double* input, size_t na, double* output, int* error);
@@ -210,10 +211,10 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
   if (owner.becke_threads_per_point > 1)
     geometry_cooperative_kernel<<<geometry_lanes, owner.becke_threads_per_point,
                                   owner.becke_shared_bytes - stationary_becke_control_bytes,
-                                  stream>>>(view, work, ao_atoms, owners, owner_offset,
-                                            points_per_atom, centers, na, weights, raw, external,
-                                            external_stride, external_offset, geometry_lanes,
-                                            partial, scratch, center_pairs, error, phased.seeds);
+                                  stream>>>(
+        view, work, ao_atoms, owners, owner_offset, points_per_atom, centers, na, weights, raw,
+        external, external_stride, external_offset, geometry_lanes, partial, scratch, center_pairs,
+        error, phased.seeds, owner.geometry_ao_schedule);
   else
     geometry_kernel<<<blocks(geometry_lanes, owner.geometry_threads), owner.geometry_threads, 0,
                       stream>>>(view, work, ao_atoms, owners, owner_offset, points_per_atom,
@@ -354,6 +355,21 @@ int stationary_configure_becke(void* pointer, size_t threads, size_t shared_byte
       return;
     p->becke_threads_per_point = threads;
     p->becke_shared_bytes = shared_bytes;
+  });
+}
+// Explicit experimental scheduling only: 0 is the retained production scan,
+// bit 0 requests bounded stable grouping, bit 1 independent coordinate writers.
+// This changes neither topology/arena admission nor any scientific policy.
+int stationary_configure_geometry_ao_v1(void* pointer, unsigned schedule, char* error,
+                                        size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  return guarded(owner, error, size, [&] {
+    if (!owner || owner->topology_ready || schedule > 3)
+      throw std::invalid_argument(
+          "geometry AO schedule must be 0..3 and configured before topology");
+    owner->context.check_device();
+    owner->geometry_ao_schedule = schedule;
   });
 }
 int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* error, size_t size) {

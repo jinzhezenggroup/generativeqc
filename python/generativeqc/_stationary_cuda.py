@@ -2157,6 +2157,11 @@ def _grid_metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
         "kernel_ms",
     ):
         result[name] = after[name] - before[name]
+    if "ao_grid_work" in after and "ao_grid_work" in before:
+        result["ao_grid_work"] = {
+            name: value - before["ao_grid_work"][name]
+            for name, value in after["ao_grid_work"].items()
+        }
     return result
 
 
@@ -2828,6 +2833,8 @@ def _complete_rks_cuda_gradient_diagnostic(
             sources.timeline = timeline
             with timeline.phase("metrics_collection"):
                 source_before, grid_before = sources.metrics(), ao.metrics()
+        if profile_device:
+            ao.profile_stages()
         native_integral_components = None
         native_integral_resources: typing.Mapping[str, int] = MappingProxyType({})
         fitted_integral_provider = getattr(
@@ -3065,17 +3072,23 @@ def _complete_rks_cuda_gradient_diagnostic(
                     end = min(begin + tile_points, chunk_end)
                     if resident_grid is not None:
                         point_pointer = resident_grid.points + 3 * begin * 8
-                        selected_ao_ids = (
-                            None
+                        selected_ao_ids, block_layout = (
+                            (None, None)
                             if ao_maps is None
-                            else ao_maps.select(ao, ao_maps.domain, begin, end - begin)
+                            else ao_maps.select_block(
+                                ao, ao_maps.domain, begin, end - begin
+                            )
                         )
                         with ao.feature_task_device_points(
                             point_pointer,
                             end - begin,
                             selected_ao_ids,
                             ingredients,
+                            block_layout=block_layout,
                         ) as task:
+                            task.layout.require_derivative_order(
+                                2 if needs_first else 1
+                            )
                             sources.geometry_molecular_resident_weights(
                                 task,
                                 begin,

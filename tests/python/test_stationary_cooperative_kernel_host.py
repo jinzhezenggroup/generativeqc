@@ -17,7 +17,19 @@ from test_stationary_geometry_kernel_host import PREFIX
 
 @pytest.mark.parametrize(
     ("atoms", "aos"),
-    [(12, 2), (33, 2), (96, 2), (128, 2), (12, 96), (12, 1024), (96, 768), (128, 1024)],
+    [
+        (12, 0),
+        (12, 2),
+        (33, 2),
+        (96, 2),
+        (128, 2),
+        (12, 96),
+        (12, 152),
+        (12, 1024),
+        (96, 768),
+        (96, 900),
+        (128, 1024),
+    ],
 )
 def test_emitted_cooperative_kernel_routes_tails_and_sticky_failure(
     tmp_path: Path,
@@ -89,6 +101,7 @@ int main() {
     ao_atoms[ao_index]=(ao_index*7)%na;
     active_ids[ao_index]=n-1-ao_index;
   }
+  for(unsigned ao_schedule:{0u,1u,2u,3u})
   for(bool cached:{false,true}) for(bool implicit:{false,true}) for(bool external:{false,true})
   for(size_t capacity:{size_t(1),size_t(7)}) for(size_t points:{size_t(0),size_t(1),np}) {
     const size_t lanes=std::min(capacity,points);
@@ -115,7 +128,7 @@ int main() {
       if(cooperative)
         geometry_cooperative_kernel(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),
              4,3,centers,na,weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
-             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr);
+             lanes,partial.data()+1,scratch.data()+1,center_pairs,&error,nullptr,ao_schedule);
       else
         geometry_kernel(view,work.data(),ao_atoms.data(),implicit?nullptr:owners.data(),4,3,centers,na,
              weights.data(),raw.data(),external?seeds.data():nullptr,np+7,2,
@@ -161,9 +174,9 @@ int main() {
       if(invalid==0) std::copy(centers,centers+3,xyz.end()-3);
       if(invalid==1) raw.back()=std::numeric_limits<double>::quiet_NaN();
       if(invalid==2) producer_error=1;
-      if(invalid==3) view.nao=1;
+      if(invalid==3) { if(n<=1) continue; view.nao=1; }
       if(invalid==4) { if(!external) continue; seeds[5*(np+7)+points+1]=std::numeric_limits<double>::infinity(); }
-      if(invalid==5) ao_atoms.back()=-1;
+      if(invalid==5) { if(!n) continue; ao_atoms.back()=-1; }
       error=0; execute();
       const auto failed=reduce();
       if(!error) return 5;
@@ -197,7 +210,7 @@ int main() {
     )
     assert process.returncode == 0, process.stdout + process.stderr
     result = subprocess.run(
-        [str(binary)], capture_output=True, text=True, timeout=60, check=False
+        [str(binary)], capture_output=True, text=True, timeout=180, check=False
     )
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
 

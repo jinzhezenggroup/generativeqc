@@ -38,7 +38,7 @@ def test_single_pass_host_intervals_do_not_double_count_enqueues(
     @contextmanager
     def feature_task(*args: Any, **kwargs: Any) -> Iterator[SimpleNamespace]:
         assert args == (8192, 1, None, ("rho", "gradient", "tau"))
-        assert not kwargs
+        assert kwargs == {"block_layout": None}
         calls.append("borrow")
         yield SimpleNamespace(view=SimpleNamespace(stream=31))
         calls.append("release")

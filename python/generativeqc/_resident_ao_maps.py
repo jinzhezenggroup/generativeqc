@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from time import perf_counter
 
 import numpy as np
+from generativeqc_compiler.dft.indexed_layout import AoGridBlockLayout
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ class ResidentAoMapCache:
         self._basis_generation = grid.basis_generation
         self._validate_binding(grid, domain)
         self._maps: dict[int, typing.Any] = {}
+        self._block_layouts: dict[int, AoGridBlockLayout] = {}
         self._retained_bytes = 0
         self._transient_bytes = 20 * grid.plan.nao
         self._capability_missing = False
@@ -164,6 +166,38 @@ class ResidentAoMapCache:
                 else 0
             ),
         )
+
+    def select_block(
+        self, grid: typing.Any, domain: ResidentAoMapDomain, begin: int, count: int
+    ) -> tuple[np.ndarray | None, AoGridBlockLayout]:
+        """Publish the existing map with its validated local-domain capability.
+
+        No second coordinate array or sparse cache is created. Epochs remain
+        execution bindings, not generated equation/source identity. Holding
+        the same grid lock prevents center rebinding during certification.
+        Retained maps also retain their immutable descriptor. Dense budget or
+        capability fallbacks do not grow a second inventory of cached blocks.
+        """
+        with grid._lock:
+            selected = self.select(grid, domain, begin, count)
+            layout = self._block_layouts.get(begin)
+            if layout is not None:
+                return selected, layout
+            layout = AoGridBlockLayout(
+                grid.plan.nao,
+                grid.plan.nao if selected is None else selected.size,
+                count,
+                domain.derivative_order,
+                domain.basis_identity,
+                selected is not None,
+                domain.derivative_order,
+                begin,
+                self._basis_generation,
+                self._geometry_generation,
+            )
+            if begin in self._maps:
+                self._block_layouts[begin] = layout
+            return selected, layout
 
     def select(
         self, grid: typing.Any, domain: ResidentAoMapDomain, begin: int, count: int

@@ -98,10 +98,9 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
     cuda_check(cudaGetLastError());
   }
   for (std::size_t begin = 0; begin < l.npoint; begin += l.tile_points) {
-    const I count = std::min(l.tile_points, l.npoint - begin);
-    const auto tile = begin / l.tile_points;
-    const I active = l.local_ao ? ao_offsets[tile + 1] - ao_offsets[tile] : l.nao;
-    const auto* ids = l.local_ao && active ? ao_ids + ao_offsets[tile] : nullptr;
+    const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
+    const I count = block.npoint, active = block.nactive;
+    const auto* ids = block.ao_ids;
     // Route B changes only AO arithmetic. The AO panel and all downstream
     // density/XC reductions stay FP64 so this is a clean precision ablation.
     if (active)
@@ -167,10 +166,9 @@ void enqueue_nonlocal_potential(const CudaXcLayout& l, cudaStream_t stream, cons
   if (l.feature_terms < 4 || l.ao_precision != CudaXcAoPrecision::Fp64)
     throw std::invalid_argument("CUDA nonlocal AO assembly requires strict-FP64 GGA ingredients");
   for (std::size_t begin = 0; begin < l.npoint; begin += l.tile_points) {
-    const I count = std::min(l.tile_points, l.npoint - begin);
-    const auto tile = begin / l.tile_points;
-    const I active = l.local_ao ? ao_offsets[tile + 1] - ao_offsets[tile] : l.nao;
-    const auto* ids = l.local_ao && active ? ao_ids + ao_offsets[tile] : nullptr;
+    const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
+    const I count = block.npoint, active = block.nactive;
+    const auto* ids = block.ao_ids;
     if (active)
       scheduled_ao(stream, basis, l.natom, l.nprimitive, active, points + 3 * begin, count, l.jets,
                    ao, error, ids);

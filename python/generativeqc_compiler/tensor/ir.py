@@ -144,6 +144,8 @@ PRIMITIVES["runtime_indexed_scatter_add"] = PrimitiveContract(
     "all real operands (source only); int64 runtime index maps are non-differentiable",
     "runtime indexed accumulation; VJP gathers the selected target coordinates",
 )
+PRIMITIVES["runtime_cartesian_select"] = PRIMITIVES["runtime_indexed_select"]
+PRIMITIVES["runtime_cartesian_scatter_add"] = PRIMITIVES["runtime_indexed_scatter_add"]
 
 
 def _common(inputs: tuple[Node, ...]) -> TensorSpec:
@@ -327,6 +329,44 @@ def _infer(
             role="intermediate",
             differentiable=source.spec.differentiable,
         )
+    if op in ("runtime_cartesian_select", "runtime_cartesian_scatter_add"):
+        if len(inputs) < 2:
+            raise ValueError(f"{op} requires a source and runtime maps")
+        source, maps = inputs[0], inputs[1:]
+        axes = tuple(a["axes"])
+        rank = len(source.spec.indices)
+        if source.spec.dtype not in ("float32", "float64"):
+            raise ValueError(f"{op} source must be floating point")
+        if (
+            len(declared.indices) != rank
+            or len(axes) != len(maps)
+            or any(type(axis) is not int or not 0 <= axis < rank for axis in axes)
+            or tuple(sorted(set(axes))) != axes
+        ):
+            raise ValueError(f"{op} requires unique sorted axes and preserved rank")
+        local = declared if op == "runtime_cartesian_select" else source.spec
+        for axis, mapping in zip(axes, maps, strict=True):
+            if (
+                mapping.spec.dtype != "int64"
+                or len(mapping.spec.indices) != 1
+                or mapping.spec.indices[0].domain != local.indices[axis].domain
+            ):
+                raise ValueError(
+                    f"{op} maps must be rank-one int64 controls on each local axis"
+                )
+        if any(
+            source.spec.indices[axis].domain != declared.indices[axis].domain
+            for axis in range(rank)
+            if axis not in axes
+        ):
+            raise ValueError(f"{op} must preserve unselected axes")
+        return TensorSpec(
+            declared.indices,
+            dtype=source.spec.dtype,
+            representation=source.spec.representation,
+            role="intermediate",
+            differentiable=source.spec.differentiable,
+        )
     base = _common(inputs)
     if op in TRANSCENDENTALS:
         if len(inputs) != 1:
@@ -499,6 +539,8 @@ _ATTRS = {
     "segment_sum": {"axis", "offsets"},
     "runtime_indexed_select": {"axes"},
     "runtime_indexed_scatter_add": {"axes"},
+    "runtime_cartesian_select": {"axes"},
+    "runtime_cartesian_scatter_add": {"axes"},
     "reduce": {"axes"},
     "broadcast": {"axes"},
     "cast": {"dtype"},
@@ -801,6 +843,48 @@ def runtime_indexed_scatter_add(
         spec,
         (("axes", axes),),
     )
+
+
+def runtime_cartesian_select(
+    value: Node, selections: typing.Iterable[tuple[int, Node, Index]]
+) -> Node:
+    """Select independent axes without expanding their Cartesian index maps.
+
+    Unlike runtime_indexed_select's zipped coordinate domain, each selected
+    axis retains its own local dimension. D[I,I] therefore shares one O(|I|)
+    int64 control vector and materializes only the |I| by |I| result. Repeated
+    coordinates are legal and the exact adjoint accumulates their multiplicity.
+    """
+    selections = tuple(selections)
+    if not selections:
+        raise ValueError("runtime_cartesian_select requires at least one axis")
+    indices = list(value.spec.indices)
+    for axis, _, index in selections:
+        selected_axis = _axes((axis,), len(indices))[0]
+        if not isinstance(index, Index):
+            raise TypeError("Cartesian selection requires explicit local Index axes")
+        indices[selected_axis] = index
+    axes = tuple(axis for axis, _, _ in selections)
+    operands = (value, *(mapping for _, mapping, _ in selections))
+    declared = value.spec.result(indices=indices, symmetries=())
+    spec = _infer("runtime_cartesian_select", operands, {"axes": axes}, declared)
+    return Node("runtime_cartesian_select", operands, spec, (("axes", axes),))
+
+
+def runtime_cartesian_scatter_add(
+    value: Node,
+    selections: typing.Iterable[tuple[int, Node]],
+    indices: tuple[Index, ...],
+) -> Node:
+    """Transpose independent-axis selection into an explicit target domain."""
+    selections = tuple(selections)
+    if not selections:
+        raise ValueError("runtime_cartesian_scatter_add requires at least one axis")
+    axes = tuple(axis for axis, _ in selections)
+    operands = (value, *(mapping for _, mapping in selections))
+    declared = value.spec.result(indices=tuple(indices), symmetries=())
+    spec = _infer("runtime_cartesian_scatter_add", operands, {"axes": axes}, declared)
+    return Node("runtime_cartesian_scatter_add", operands, spec, (("axes", axes),))
 
 
 def reduce_sum(value: Node, axes: typing.Any) -> Node:

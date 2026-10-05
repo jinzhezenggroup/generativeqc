@@ -1036,6 +1036,9 @@ def emit_grid_source(
         + '#include "cuda_grid.cu"\n'
     )
     if native_ks:
+        from .indexed_layout_native import emit_native_ao_grid_binding
+
+        source += emit_native_ao_grid_binding()
         source += emit_native_xc_contraction_kernels(xc_matrix_schedule)
         source += '#include "cuda_xc_kernels.cuh"\n'
     return (

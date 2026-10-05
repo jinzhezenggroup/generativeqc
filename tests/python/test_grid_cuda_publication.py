@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
+#include "dft/ao_grid_work.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -105,6 +109,8 @@ struct Projection {
 };
 struct GridPlan {
   Context context;
+  generativeqc::dft::AoGridWork work_metrics;
+  bool profile_stages = false;
   Projection projection_value;
   Projection* projection = &projection_value;
   bool view_ready=true,features_ready=true,density_jets_ready=true;
@@ -130,8 +136,8 @@ template<class... A> void gather_factor(A&&...) {}
 template<class... A> void orbital_feature_kernel(A&&...) {}
 template<class... A> void finish_orbital_sigma(A&&...) {}
 void gather_density(const double* density, const std::size_t* ids, I nao, I active,
-                    double* output) {
-  for (I spin = 0; spin < 2; ++spin)
+                    I spins, double* output) {
+  for (I spin = 0; spin < spins; ++spin)
     for (I row = 0; row < active; ++row)
       for (I column = 0; column < active; ++column)
         output[(spin*active+row)*active+column] = density[(spin*nao+ids[row])*nao+ids[column]];
@@ -292,10 +298,10 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def publication_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    """Keep publication probes on the production work ABI with cached compilation."""
     source = (ROOT / "src/dft/cuda_grid.cu").read_text()
 
     def host_body(signature: str) -> str:
@@ -324,14 +330,13 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     directory = tmp_path_factory.mktemp("grid-publication")
     path, executable = directory / "probe.cpp", directory / "probe"
     path.write_text(f"{PREFIX}\n{setters}\n{body}\n{getter}\n{SPIN_MAIN}\n{MAIN}")
-    compiled = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+    native_cxx.build_executable(
+        (path,),
+        executable,
+        compile_args=("-std=c++20", "-O0", f"-I{ROOT / 'src'}"),
+        compile_timeout=30,
+        link_timeout=30,
     )
-    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
     return executable
 
 

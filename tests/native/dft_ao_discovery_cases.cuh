@@ -16,6 +16,7 @@ void ao_discovery_cases() {
     for (std::size_t tile : {129U, 257U})
       for (double cutoff : {1e-16, 1e-2, 1e8}) {
         CudaXcAoTiles expected;
+        expected.derivative_order = 1;
         expected.offsets.push_back(0);
         std::uint64_t point_square = 0;
         std::size_t empty = 0;

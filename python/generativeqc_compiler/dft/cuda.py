@@ -27,7 +27,50 @@ from .ao_cuda import emit_grid_source
 from .density_source import DensitySource
 from .features import requested_ingredients, spin_densities
 from .grid import checked_int
+from .indexed_layout import AoGridBlockLayout
 from .plan import plan_tiles
+
+
+class _AoGridWork(ct.Structure):
+    """ABI mirror of native schedule counters; timing is opt-in and intrusive."""
+
+    _fields_ = [
+        (name, ct.c_uint64)
+        for name in (
+            "evaluation_passes",
+            "deriv0_passes",
+            "deriv1_passes",
+            "deriv2_passes",
+            "deriv3_passes",
+            "deriv0_point_ao",
+            "deriv1_point_ao",
+            "deriv2_point_ao",
+            "deriv3_point_ao",
+            "evaluation_tiles",
+            "evaluation_points",
+            "active_point_ao",
+            "dense_point_ao",
+            "ao_jet_values",
+            "discovery_passes",
+            "discovery_point_ao",
+            "discovery_ao_jet_values",
+            "density_gather_passes",
+            "density_gather_elements",
+            "projection_passes",
+            "projection_matrices",
+            "projection_fma_pairs",
+            "projection_output_values",
+            "identical_spin_copy_bytes",
+            "feature_passes",
+            "ao_map_h2d_bytes",
+            "scatter_passes",
+            "scatter_elements",
+            "orbital_feature_tiles",
+        )
+    ] + [
+        (name, ct.c_double)
+        for name in ("ao_stage_ms", "density_gather_ms", "projection_ms", "feature_ms")
+    ]
 
 
 class GridTaskView(ct.Structure):
@@ -59,14 +102,43 @@ class DeviceGridTask:
     the view's local potential and call scatter without host arrays.
     """
 
-    def __init__(self, owner: typing.Any, view: typing.Any) -> None:
+    def __init__(
+        self,
+        owner: typing.Any,
+        view: typing.Any,
+        *,
+        layout: AoGridBlockLayout | None = None,
+    ) -> None:
         self._owner, self._view, self._active = owner, view, True
+        self._layout = layout
 
     @property
     def view(self) -> typing.Any:
         if not self._active:
             raise RuntimeError("expired device grid task lease")
         return self._view
+
+    @property
+    def layout(self) -> AoGridBlockLayout:
+        """Expose the current local TensorIR domain without downloading its map.
+
+        An arbitrary caller-supplied sparse map has unknown derivative
+        provenance. Only its producer can qualify higher-order map reuse;
+        evaluated jet shape alone is not that qualification.
+        """
+        view = self.view
+        if self._layout is None:
+            self._layout = AoGridBlockLayout(
+                view.nao,
+                view.nactive,
+                view.npoint,
+                self._owner.plan.order,
+                self._owner.basis_identity,
+                bool(view.ao_ids),
+                basis_generation=getattr(self._owner, "basis_generation", None),
+                geometry_generation=getattr(self._owner, "geometry_generation", None),
+            )
+        return self._layout
 
     def scatter(
         self,
@@ -457,6 +529,20 @@ class CudaGrid:
             ct.c_char_p,
             ct.c_size_t,
         ]
+        if hasattr(lib, "grid_cuda_work_metrics_v1"):
+            lib.grid_cuda_work_metrics_v1.argtypes = [
+                ct.c_void_p,
+                ct.POINTER(_AoGridWork),
+                ct.c_char_p,
+                ct.c_size_t,
+            ]
+        if hasattr(lib, "grid_cuda_profile_stages_v1"):
+            lib.grid_cuda_profile_stages_v1.argtypes = [
+                ct.c_void_p,
+                ct.c_int,
+                ct.c_char_p,
+                ct.c_size_t,
+            ]
         architecture = artifact.metadata["identity"]["target"]["architecture"]
         number = int(architecture.removeprefix("sm_"))
         with _PREPARATION_LOCK:
@@ -728,6 +814,7 @@ class CudaGrid:
         ao_ids: typing.Any = None,
         download_features: typing.Any = True,
         stamp: typing.Any = None,
+        block_layout: AoGridBlockLayout | None = None,
         _defer_error_to_consumer: typing.Any = False,
     ) -> typing.Any:
         """Return one detached result tile; no downstream CPU arithmetic fallback."""
@@ -765,6 +852,9 @@ class CudaGrid:
                 raise ValueError("stale or missing current CUDA density source stamp")
             points = immutable(raw)
             active, selected = self._selected_ao_map(ao_ids)
+            self._admit_block_layout(
+                block_layout, active, len(points), indexed=selected is not None
+            )
             values = (
                 np.empty((13, len(points))) if features and download_features else None
             )
@@ -809,12 +899,16 @@ class CudaGrid:
             return result
 
     @contextmanager
-    def _borrow_current_task(self) -> typing.Any:
+    def _borrow_current_task(
+        self, block_layout: AoGridBlockLayout | None = None
+    ) -> typing.Any:
         """Lend the buffers from the immediately preceding evaluated tile."""
         view = GridTaskView()
         self._call("grid_cuda_view_v1", self._handle, ct.byref(view))
+        if block_layout is not None and block_layout.indexed != bool(view.ao_ids):
+            raise RuntimeError("native task map differs from admitted indexed layout")
         self._borrowed = True
-        lease = DeviceGridTask(self, view)
+        lease = DeviceGridTask(self, view, layout=block_layout)
         try:
             yield lease
         finally:
@@ -829,6 +923,7 @@ class CudaGrid:
         *,
         stamp: typing.Any = None,
         defer_error_to_consumer: typing.Any = False,
+        block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Evaluate local features and lend their current private device view.
 
@@ -842,14 +937,20 @@ class CudaGrid:
             ao_ids=ao_ids,
             download_features=False,
             stamp=stamp,
+            block_layout=block_layout,
             _defer_error_to_consumer=defer_error_to_consumer,
         )
-        with self._borrow_current_task() as lease:
+        with self._borrow_current_task(block_layout) as lease:
             yield lease
 
     @contextmanager
     def task(
-        self, points: typing.Any, ao_ids: typing.Any, *, stamp: typing.Any = None
+        self,
+        points: typing.Any,
+        ao_ids: typing.Any,
+        *,
+        stamp: typing.Any = None,
+        block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Evaluate full features and lend device buffers with no array D2H.
 
@@ -863,7 +964,9 @@ class CudaGrid:
                 raise ValueError("device task views require a local CUDA plan")
             if set(self.ingredients) != {"rho", "gradient", "sigma", "tau"}:
                 raise ValueError("device task ABI v1 requires the full feature layout")
-            with self._task(points, ao_ids, stamp=stamp) as lease:
+            with self._task(
+                points, ao_ids, stamp=stamp, block_layout=block_layout
+            ) as lease:
                 yield lease
 
     @contextmanager
@@ -874,6 +977,7 @@ class CudaGrid:
         functional: typing.Any,
         *,
         stamp: typing.Any = None,
+        block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Lend the minimal prepared feature layout required by native CUDA XC."""
         if functional not in ("LDA_XC_PW", "PBE", "R2SCAN", "WB97M-V"):
@@ -889,7 +993,9 @@ class CudaGrid:
         )
         # Legacy names describe only the input feature layout of this lease;
         # scientific XC evaluation belongs to its downstream consumer.
-        with self.feature_task(points, ao_ids, tuple(required), stamp=stamp) as lease:
+        with self.feature_task(
+            points, ao_ids, tuple(required), stamp=stamp, block_layout=block_layout
+        ) as lease:
             yield lease
 
     @staticmethod
@@ -915,6 +1021,38 @@ class CudaGrid:
             required.add("gradient")
         return published, required
 
+    def _admit_block_layout(
+        self,
+        layout: AoGridBlockLayout | None,
+        active: int,
+        count: int,
+        *,
+        indexed: bool | None = None,
+    ) -> None:
+        """Validate typed producer provenance before enqueuing any CUDA work."""
+        if layout is None:
+            return
+        if not isinstance(layout, AoGridBlockLayout):
+            raise TypeError("grid block layout must be an AoGridBlockLayout")
+        if (
+            layout.nao != self.plan.nao
+            or layout.nactive != active
+            or layout.npoint != count
+            or layout.derivative_order != self.plan.order
+            or layout.basis_identity != self.basis_identity
+            or (indexed is not None and layout.indexed != indexed)
+            or (
+                layout.basis_generation is not None
+                and layout.basis_generation != self.basis_generation
+            )
+            or (
+                layout.geometry_generation is not None
+                and layout.geometry_generation != self.geometry_generation
+            )
+        ):
+            raise ValueError("indexed grid block layout differs from its current owner")
+        layout.require_derivative_order(self.plan.order)
+
     @contextmanager
     def feature_task_device_points(
         self,
@@ -924,6 +1062,7 @@ class CudaGrid:
         ingredients: typing.Iterable[str],
         *,
         stamp: typing.Any = None,
+        block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Lend AO/features from immutable resident CUDA point coordinates.
 
@@ -942,6 +1081,9 @@ class CudaGrid:
             point_count = checked_int(point_count, "resident grid point count", low=1)
             if point_count > self.plan.tile_points:
                 raise ValueError("resident grid points exceed the prepared tile shape")
+            self._admit_block_layout(
+                block_layout, active, point_count, indexed=selected is not None
+            )
             if type(device_points) is not int or device_points <= 0:
                 raise ValueError("invalid resident CUDA point binding")
             if not self._density_ready:
@@ -959,7 +1101,7 @@ class CudaGrid:
                 None,
                 None,
             )
-            with self._borrow_current_task() as lease:
+            with self._borrow_current_task(block_layout) as lease:
                 yield lease
 
     def select_ao_device_points(
@@ -1019,6 +1161,7 @@ class CudaGrid:
         *,
         stamp: typing.Any = None,
         defer_error_to_consumer: typing.Any = False,
+        block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Lend AO/features for a composed consumer without a functional alias.
 
@@ -1039,6 +1182,7 @@ class CudaGrid:
                 ao_ids,
                 stamp=stamp,
                 defer_error_to_consumer=defer_error_to_consumer,
+                block_layout=block_layout,
             ) as lease:
                 yield lease
 
@@ -1050,6 +1194,7 @@ class CudaGrid:
         ingredients: typing.Iterable[str],
         *,
         stamp: typing.Any = None,
+        block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Evaluate one tile once, publish requested features, and lend its device view.
 
@@ -1069,11 +1214,13 @@ class CudaGrid:
                 raise ValueError(
                     "prepared CUDA features do not cover requested publication"
                 )
-            evaluated = self.evaluate(points, ao_ids=ao_ids, stamp=stamp)
+            evaluated = self.evaluate(
+                points, ao_ids=ao_ids, stamp=stamp, block_layout=block_layout
+            )
             features = {
                 name: evaluated[name] for name in self.ingredients if name in published
             }
-            with self._borrow_current_task() as lease:
+            with self._borrow_current_task(block_layout) as lease:
                 yield features, lease
 
     @contextmanager
@@ -1102,6 +1249,24 @@ class CudaGrid:
         ) as borrowed:
             yield borrowed
 
+    def profile_stages(self, enabled: bool = True) -> None:
+        """Enable intrusive, per-stage CUDA event timing for mechanism audits.
+
+        This adds stream fences to resident leases. Do not compare these calls
+        with clean endpoint timings. Counters remain available without timing.
+        """
+        if type(enabled) is not bool:
+            raise TypeError("AO/grid stage profiling requires a Boolean")
+        with self._lock:
+            self._check_open()
+            if self._borrowed:
+                raise RuntimeError(
+                    "cannot change profiling while a grid task is leased"
+                )
+            if not hasattr(self._library, "grid_cuda_profile_stages_v1"):
+                raise NotImplementedError("loaded CUDA grid lacks stage profiling")
+            self._call("grid_cuda_profile_stages_v1", self._handle, int(enabled))
+
     def metrics(self) -> typing.Any:
         """Synchronized cumulative timings, owned allocations and loaded versions."""
         with self._lock:
@@ -1117,7 +1282,7 @@ class CudaGrid:
             self._call(
                 "grid_cuda_lowering_v1", self._handle, labels, work, ct.byref(prepare)
             )
-            return {
+            result = {
                 **{name: getattr(metrics, name) for name, _ in metrics._fields_},
                 "lowering": {
                     **dict(
@@ -1151,6 +1316,13 @@ class CudaGrid:
                 "driver_version": versions[1],
                 "cublas_version": versions[2],
             }
+            if hasattr(self._library, "grid_cuda_work_metrics_v1"):
+                work = _AoGridWork()
+                self._call("grid_cuda_work_metrics_v1", self._handle, ct.byref(work))
+                result["ao_grid_work"] = {
+                    name: getattr(work, name) for name, _ in work._fields_
+                }
+            return result
 
     def close(self) -> None:
         with self._lock, _PREPARATION_LOCK:

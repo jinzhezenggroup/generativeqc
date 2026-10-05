@@ -41,8 +41,12 @@ def native() -> SimpleNamespace:
     path = os.environ.get("GENERATIVEQC_PHASED_OWNER_PROBE")
     if not path:
         pytest.skip("shared-owner qualification artifact not configured")
-    if not os.environ.get("SLURM_JOB_ID"):
-        pytest.fail("real-GPU tests require a finite Slurm allocation")
+    if not os.environ.get("SLURM_STEP_ID") or not os.environ.get(
+        "CUDA_VISIBLE_DEVICES"
+    ):
+        pytest.fail(
+            "real-GPU tests require srun and scheduler-assigned device visibility"
+        )
     cupy = pytest.importorskip("cupy")
     library = ct.CDLL(str(Path(path).resolve()))
     tail = [ct.c_char_p, ct.c_size_t]
@@ -50,6 +54,7 @@ def native() -> SimpleNamespace:
     signatures = {
         "stationary_create": [ct.c_int] * 3 + [size] * 10 + [ct.POINTER(pointer)],
         "stationary_configure_becke": [pointer, size, size],
+        "stationary_configure_geometry_ao_v1": [pointer, ct.c_uint],
         "stationary_configure_phased_becke_v1": [pointer, size],
         "stationary_topology": [pointer] * 5,
         "stationary_geometry_reset": [pointer, pointer, ct.c_double],
@@ -104,12 +109,19 @@ def native() -> SimpleNamespace:
     return SimpleNamespace(cupy=cupy, library=library, call=call)
 
 
-@pytest.mark.parametrize("atoms", [48, 96])
+@pytest.mark.parametrize(
+    "atoms,aos", [(48, 4), (96, 4), (48, 384), (96, 768), (96, 900)]
+)
 @pytest.mark.parametrize("implicit", [False, True])
 @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
 @pytest.mark.parametrize("external", [False, True])
 def test_shared_owner_phases_preserve_sources_and_work(
-    native: SimpleNamespace, atoms: int, implicit: bool, selection: str, external: bool
+    native: SimpleNamespace,
+    atoms: int,
+    aos: int,
+    implicit: bool,
+    selection: str,
+    external: bool,
 ) -> None:
     """Replay identical AO/XC inputs through the actual bounded/phased owner.
 
@@ -127,22 +139,27 @@ def test_shared_owner_phases_preserve_sources_and_work(
     )
     offsets = rng.normal(size=(257, 3)) * 0.3
     selected = (
-        np.arange(4, dtype=np.uintp)
+        np.arange(aos, dtype=np.uintp)
         if selection == "full"
-        else np.array([3, 1], dtype=np.uintp)
+        else rng.permutation(aos).astype(np.uintp)[: max(1, aos // 2)]
         if selection == "subset"
         else np.empty(0, dtype=np.uintp)
     )
-    host_primitives = np.array([[1.0, 1.0]] * 4)
-    host_ranges = np.column_stack((np.arange(4), np.ones(4))).astype(np.int64)
-    host_norms = np.ones(4)
-    host_atoms = np.array([0, 1, atoms - 2, atoms - 1], dtype=np.int64)
-    baseline = []
-    for phased in (False, True):
+    host_primitives = np.array([[1.0, 1.0]] * aos)
+    host_ranges = np.column_stack((np.arange(aos), np.ones(aos))).astype(np.int64)
+    host_norms = np.ones(aos)
+    host_atoms = (np.arange(aos, dtype=np.int64) * 7) % atoms
+    # Freeze the same cancellation-sensitive FP64 inputs across all schedules.
+    ao_values = rng.normal(scale=0.1, size=(10, 257, len(selected)))
+    work_values = rng.normal(scale=0.03, size=(8, 257, len(selected)))
+    baseline = {}
+    for ao_schedule, phased in (
+        (schedule, phase) for schedule in range(4) for phase in (False, True)
+    ):
         plan = plan_stationary_cuda_resources(
             atoms=atoms,
-            aos=4,
-            primitives=4,
+            aos=aos,
+            primitives=aos,
             points=256,
             tasks=1,
             spins=1,
@@ -158,8 +175,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
             12,
             0,
             atoms,
-            4,
-            4,
+            aos,
+            aos,
             256,
             1,
             1,
@@ -177,6 +194,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 plan.becke_threads_per_point,
                 plan.becke_shared_bytes,
             )
+            native.call("stationary_configure_geometry_ao_v1", handle, ao_schedule)
             if phased:
                 assert plan.phased_becke_bytes > 0
                 native.call(
@@ -213,8 +231,20 @@ def test_shared_owner_phases_preserve_sources_and_work(
                                 centers[owners[begin:end]] + offsets[begin:end]
                             ),
                             "features": cupy.asarray(features),
-                            "ao": cupy.full(max(1, 10 * count * active), 0.1),
-                            "work": cupy.full(max(1, 8 * count * active), 0.03),
+                            "ao": cupy.asarray(
+                                np.ascontiguousarray(ao_values[:, begin:end]).reshape(
+                                    -1
+                                )
+                                if active
+                                else np.zeros(1)
+                            ),
+                            "work": cupy.asarray(
+                                np.ascontiguousarray(work_values[:, begin:end]).reshape(
+                                    -1
+                                )
+                                if active
+                                else np.zeros(1)
+                            ),
                             "ids": cupy.asarray(selected),
                             "weights": cupy.full(count, 0.4),
                             "raw": cupy.full(count, 0.7),
@@ -228,7 +258,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
                             1,
                             geometry + 1,
                             count,
-                            4,
+                            aos,
                             active,
                             10,
                             None if selection == "full" else device["ids"].data.ptr,
@@ -280,10 +310,15 @@ def test_shared_owner_phases_preserve_sources_and_work(
                 )
                 if phased:
                     np.testing.assert_allclose(
-                        result, baseline[geometry], rtol=5e-12, atol=2e-11
+                        result, baseline[False, geometry], rtol=5e-12, atol=2e-11
                     )
+                if ao_schedule == 0:
+                    baseline[phased, geometry] = result.copy()
                 else:
-                    baseline.append(result)
+                    np.testing.assert_array_equal(
+                        result.view(np.uint64),
+                        baseline[phased, geometry].view(np.uint64),
+                    )
             metrics = (ct.c_uint64 * 24)()
             phase_metrics = (ct.c_uint64 * 2)()
             assert native.library.stationary_metrics(handle, metrics, 24) == 0
@@ -326,3 +361,61 @@ def test_shared_owner_phases_preserve_sources_and_work(
                         np.testing.assert_array_equal(result, valid_tail)
         finally:
             native.library.stationary_destroy(handle)
+
+
+@pytest.mark.parametrize(
+    "schedule,topology", [(4, False), (2**32 - 1, False), (1, True)]
+)
+def test_geometry_ao_schedule_rejects_unknown_and_topology_mutation(
+    native: SimpleNamespace, schedule: int, topology: bool
+) -> None:
+    """A diagnostic schedule is bounded and cannot change a live owner's contract."""
+    plan = plan_stationary_cuda_resources(
+        atoms=48,
+        aos=4,
+        primitives=4,
+        points=256,
+        tasks=1,
+        spins=1,
+        sources=8,
+        target=cuda_target_info("sm_120"),
+        budget_bytes=256 << 20,
+    )
+    handle = ct.c_void_p()
+    native.call(
+        "stationary_create",
+        0,
+        12,
+        0,
+        48,
+        4,
+        4,
+        256,
+        1,
+        1,
+        1,
+        plan.allocation_bytes,
+        plan.geometry_lanes,
+        plan.geometry_threads,
+        ct.byref(handle),
+    )
+    try:
+        if topology:
+            primitives = np.ones((4, 2))
+            ranges = np.column_stack((np.arange(4), np.ones(4))).astype(np.int64)
+            norms = np.ones(4)
+            atoms = np.arange(4, dtype=np.int64)
+            native.call(
+                "stationary_topology",
+                handle,
+                primitives.ctypes.data,
+                ranges.ctypes.data,
+                norms.ctypes.data,
+                atoms.ctypes.data,
+            )
+        with pytest.raises(
+            RuntimeError, match="schedule must be 0..3.*before topology"
+        ):
+            native.call("stationary_configure_geometry_ao_v1", handle, schedule)
+    finally:
+        native.library.stationary_destroy(handle)

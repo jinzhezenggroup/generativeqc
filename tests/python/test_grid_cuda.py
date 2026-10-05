@@ -41,6 +41,160 @@ def check(actual: typing.Any, expected: typing.Any) -> None:
     assert result["passed"], result
 
 
+@pytest.mark.parametrize("order", range(4))
+@pytest.mark.parametrize("map_kind", ("identity", "subset", "empty"))
+def test_executed_ao_grid_work_census(
+    artifact: typing.Any, order: int, map_kind: str
+) -> None:
+    """Count launched panels, not admitted capacity or duplicated jet orders."""
+    meta, arrays = load_fixture("water")
+    with NativeAO(**basis_arguments(meta)) as basis:
+        points = arrays["points"][:7]
+        ids = {
+            "identity": None,
+            "subset": np.arange(0, basis.nao, 2, dtype=np.uintp),
+            "empty": np.empty(0, dtype=np.uintp),
+        }[map_kind]
+        active = basis.nao if ids is None else len(ids)
+        ingredients = ("rho",) if order == 0 else ("rho", "gradient", "tau")
+        jets = (1, 4, 10, 20)[order]
+        projected_jets = 1 if order == 0 else 4
+        with CudaGrid(
+            basis,
+            artifact,
+            order=order,
+            tile_points=7,
+            active_ao_capacity=basis.nao,
+            ingredients=ingredients,
+        ) as cuda:
+            cuda.set_density(arrays["density"])
+            first = cuda.evaluate(points, ao_ids=ids, download_jets=True)
+            work = cuda.metrics()["ao_grid_work"]
+            assert work["evaluation_passes"] == int(active > 0)
+            assert work[f"deriv{order}_passes"] == int(active > 0)
+            assert sum(work[f"deriv{degree}_passes"] for degree in range(4)) == int(
+                active > 0
+            )
+            assert work["active_point_ao"] == len(points) * active
+            assert work[f"deriv{order}_point_ao"] == len(points) * active
+            assert work["dense_point_ao"] == len(points) * basis.nao
+            assert work["evaluation_tiles"] == 1
+            assert work["evaluation_points"] == len(points)
+            assert work["ao_jet_values"] == len(points) * active * jets
+            assert work["discovery_passes"] == 0
+            assert work["density_gather_elements"] == (
+                2 * active**2 if ids is not None else 0
+            )
+            assert work["projection_matrices"] == (2 * projected_jets if active else 0)
+            assert (
+                work["projection_fma_pairs"]
+                == 2 * projected_jets * len(points) * active**2
+            )
+            assert work["orbital_feature_tiles"] == 0
+            for stage in (
+                "ao_stage_ms",
+                "density_gather_ms",
+                "projection_ms",
+                "feature_ms",
+            ):
+                assert work[stage] == 0
+            cuda.profile_stages()
+            second = cuda.evaluate(points, ao_ids=ids, download_jets=True)
+            for name in ("ao_jets", *ingredients):
+                np.testing.assert_array_equal(first[name], second[name])
+            work = cuda.metrics()["ao_grid_work"]
+            assert work["evaluation_passes"] == 2 * int(active > 0)
+            assert work["feature_ms"] > 0
+            assert (work["ao_stage_ms"] > 0) == (active > 0)
+            cuda.profile_stages(False)
+            with cuda.feature_task(points, ids, ingredients) as task:
+                with pytest.raises(RuntimeError, match="leased"):
+                    cuda.profile_stages()
+                assert task.view.nactive == active
+
+
+@pytest.mark.parametrize("order", [1, 2])
+@pytest.mark.parametrize("translation", [0.0, 100.0])
+def test_certified_host_and_resident_point_leases_share_the_existing_map(
+    artifact: typing.Any, order: int, translation: float
+) -> None:
+    """Qualify the real map producer, typed admission, scatter and expired lease."""
+    import cupy as cp
+    from generativeqc._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
+
+    meta, arrays = load_fixture("water")
+    points = np.ascontiguousarray(arrays["points"][:7] + translation)
+    with (
+        NativeAO(**basis_arguments(meta)) as basis,
+        CudaGrid(
+            basis,
+            artifact,
+            order=order,
+            tile_points=7,
+            active_ao_capacity=basis.nao,
+            ingredients=("rho", "gradient"),
+        ) as cuda,
+    ):
+        cuda.set_density(arrays["density"])
+        device_points = cp.asarray(points)
+        cp.cuda.get_current_stream().synchronize()
+        domain = ResidentAoMapDomain(
+            basis.identity,
+            "fixture-geometry",
+            "fixture-point-order",
+            cuda.device_id,
+            device_points.data.ptr,
+            len(points),
+            7,
+            order,
+        )
+        maps = ResidentAoMapCache(cuda, domain, cutoff=1e-16, budget_bytes=8192)
+        selected, layout = maps.select_block(cuda, domain, 0, len(points))
+        original = cuda.evaluate(points, ao_ids=selected)
+        with cuda.feature_task_with_features(
+            points, selected, ("rho", "gradient"), block_layout=layout
+        ) as (features, lease):
+            assert lease.layout is layout
+            for name, expected in original.items():
+                np.testing.assert_array_equal(features[name], expected)
+        with pytest.raises(RuntimeError, match="expired"):
+            _ = lease.layout
+        tiles_before = cuda.metrics()["ao_grid_work"]["evaluation_tiles"]
+        with (
+            pytest.raises(ValueError, match="current owner"),
+            cuda.feature_task_device_points(
+                device_points.data.ptr,
+                len(points),
+                selected,
+                ("rho", "gradient"),
+                block_layout=replace(
+                    layout, geometry_generation=cuda.geometry_generation + 1
+                ),
+            ),
+        ):
+            pass
+        assert cuda.metrics()["ao_grid_work"]["evaluation_tiles"] == tiles_before
+        with cuda.feature_task_device_points(
+            device_points.data.ptr,
+            len(points),
+            selected,
+            ("rho", "gradient"),
+            block_layout=layout,
+        ) as lease:
+            assert lease.layout is layout
+            layout.require_derivative_order(order)
+            local = np.ones((2, layout.nactive, layout.nactive))
+            expected = np.zeros((2, basis.nao, basis.nao))
+            ids = np.arange(basis.nao) if selected is None else selected
+            expected[:, ids[:, None], ids[None, :]] = local
+            np.testing.assert_array_equal(
+                lease.scatter(local, reset=True, download=True), expected
+            )
+        repeated, replay = maps.select_block(cuda, domain, 0, len(points))
+        assert repeated is selected and replay is layout
+        assert maps.work["discoveries"] == maps.work["cache_hits"] == 1
+
+
 @pytest.mark.parametrize("name", NAMES)
 @pytest.mark.parametrize("tile_points", [7, 31])
 def test_all_jets_features_partial_tiles_and_resident_density(
@@ -218,6 +372,7 @@ def test_resident_restricted_products_match_general_spin_path_bitwise(
         )
         with producer:
             device_total.fill(123.0)
+        gather_before = cuda.metrics()["ao_grid_work"]["density_gather_elements"]
         for count, reference in zip((0, 1, 7), expected, strict=True):
             actual = cuda.evaluate(
                 arrays["points"][:count], ao_ids=ids, download_jets=True
@@ -226,6 +381,10 @@ def test_resident_restricted_products_match_general_spin_path_bitwise(
                 np.testing.assert_array_equal(
                     actual[name].view(np.uint64), reference[name].view(np.uint64)
                 )
+        gather_after = cuda.metrics()["ao_grid_work"]["density_gather_elements"]
+        assert gather_after - gather_before == (
+            2 * len(ids) ** 2 if ids is not None else 0
+        )
         unrestricted = restricted.copy()
         unrestricted[0] *= 0.7
         unrestricted[1] *= 1.3

@@ -25,7 +25,9 @@ from .ir import TRANSCENDENTALS, Node, cast
 from .program import Program, _hash
 from .types import checked_size
 
-REDUCTION_OPS = frozenset(("reduce", "einsum", "scatter_add", "segment_sum"))
+REDUCTION_OPS = frozenset(
+    ("reduce", "einsum", "scatter_add", "segment_sum", "runtime_cartesian_scatter_add")
+)
 MIXED_ACCUMULATION_OPS = frozenset(("reduce", "einsum"))
 MIXED_ACCUMULATION_SCHEMA = "generativeqc.tensor.precision-execution.v1"
 SENSITIVE_OPS = frozenset(("divide", "scaled_bilinear")) | TRANSCENDENTALS
@@ -482,7 +484,11 @@ def lower_precision(
         storage_dtype = (
             node.spec.dtype if directive is None else directive.storage_dtype
         )
-        if node.op == "runtime_indexed_select":
+        if node.op in (
+            "runtime_indexed_select",
+            "runtime_cartesian_select",
+            "runtime_cartesian_scatter_add",
+        ):
             inputs = (
                 ensure_dtype(mapping[node.inputs[0]], compute_dtype),
                 *(mapping[child] for child in node.inputs[1:]),
