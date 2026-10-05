@@ -40,12 +40,10 @@ struct DFCCSDTResult {
  * All phase bounds charge simultaneously live owners; no CPU integral/CC
  * reference fallback or four-index full MO Hamiltonian is used.
  */
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System& orbital,
-                                  const core::System& auxiliary,
-                                  const generativeqc_method_descriptor&, bool forces = true,
-                                  bool with_triples = true, bool df_auxiliary_reduction = true,
-                                  bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
-                                  std::size_t lambda_batch_limit = 8,
-                                  std::size_t ccsd_batch_limit = 8,
-                                  bool derived_denominators = true);
+DFCCSDTResult run_df_ccsdt_native(
+    runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
+    const generativeqc_method_descriptor&, bool forces = true, bool with_triples = true,
+    bool df_auxiliary_reduction = true, bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
+    std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
+    const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true);
 }  // namespace generativeqc::methods::detail
