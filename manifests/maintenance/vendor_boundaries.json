@@ -422,7 +422,7 @@
     },
     "src/tensor/cuda_cublaslt.cuh": {
       "classification": "provider",
-      "contract": "src/tensor/native_cublaslt.hpp",
+      "contract": "src/tensor/native_matrix_view.hpp",
       "reason": "Shared cuBLASLt prepared-contraction provider owns vendor submission, admission, provenance and lifetime; scientific consumers use canonical lowering bindings.",
       "references": {
         "cublasLtCreate": 1,
@@ -467,6 +467,19 @@
         "cutensorPlanGetAttribute": 1,
         "cutensorPlanPreferenceGetAttribute": 2,
         "cutensorPlanPreferenceSetAttribute": 3
+      }
+    },
+    "src/tensor/cuda_cutlass.cuh": {
+      "classification": "provider",
+      "contract": "src/tensor/native_matrix_view.hpp",
+      "reason": "Shared CUTLASS AOT contraction owner submits fixed scalar-aligned kernels with guarded admission, retained-module accounting and lifetime; consumers use canonical matrix views.",
+      "references": {
+        "cutlass::Kernel": 1,
+        "cutlass::Status": 2,
+        "cutlass::arch": 2,
+        "cutlass::epilogue": 1,
+        "cutlass::gemm": 5,
+        "cutlass::layout": 2
       }
     },
     "src/tensor/cuda_panel_product.cuh": {

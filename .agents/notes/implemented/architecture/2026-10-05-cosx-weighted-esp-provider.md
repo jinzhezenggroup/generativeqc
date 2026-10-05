@@ -70,3 +70,21 @@ The previous projection/update endpoint receipt supplies no such ESP promotion.
 #1884, #1886, #1966 and #1967. Source/binary manifests, compiler/cache records,
 finite Slurm assignments and qualification logs are retained under the ignored
 `.artifacts/1884-cosx-esp/` directory.
+
+## Composition with the projection/update endpoint receipts
+
+The endpoint harness introduced by #1967 also consumes the diagnostic site table.
+Its four-site schema described projection/update only, so extending the native
+arithmetic gates alone would silently omit weighted ESP work from new receipts.
+Current endpoint output therefore uses a separate six-site schema, including the
+ESP full/tail batch dimensions, scalar summands, weighted elements and split
+publication passes, and independently exercises all three qualification bits.
+The native gate preserves exact generated-catalog identities and rejections for
+all six sites, including optional offers that are not admitted.
+
+Historical four-site data, summaries, provenance and source attribution remain
+unchanged. The verifier distinguishes historical and current schemas instead of
+relabeling old measurements as weighted-ESP qualification. Host regressions use
+the actual generated descriptors and endpoint harness serialization to cover
+both contracts. These compatibility checks provide no new device timing,
+sanitizer result or production endpoint promotion.

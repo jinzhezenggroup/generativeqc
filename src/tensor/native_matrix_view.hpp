@@ -4,10 +4,10 @@
 
 namespace generativeqc::tensor {
 
-/** Physical cuBLASLt recipe for an existing affine contraction. This record is
- * provider metadata, not a second operation: resolved modes and precision in
+/** Physical matrix recipe for an existing affine contraction. This record is
+ * execution metadata, not a second operation: resolved modes and precision in
  * ContractionRequest remain authoritative. No packing or symmetry is inferred. */
-struct CublasLtMatrixRecipe {
+struct MatrixContractionRecipe {
   struct Layout {
     std::size_t rows{}, columns{}, ld{}, batch_stride{};
     bool row_major{};
@@ -15,7 +15,7 @@ struct CublasLtMatrixRecipe {
   std::array<Layout, 3> layouts;
   std::size_t batches{1};
 
-  static CublasLtMatrixRecipe from(const ContractionRequest& request) {
+  static MatrixContractionRecipe from(const ContractionRequest& request) {
     request.validate_affine();
     // Derive ordered M/N/K/batch groups from the original modes. Flattening
     // is legal only when each operand proves the same group address order;
@@ -42,25 +42,26 @@ struct CublasLtMatrixRecipe {
     for (std::size_t axis = 0; axis < left.rank; ++axis)
       if (!contains(2, left.modes[axis])) reduction.add(left.modes[axis]);
     if (!rows.size || !columns.size || !reduction.size)
-      throw std::invalid_argument("cuBLASLt requires nonempty M/N/K groups");
+      throw std::invalid_argument("affine matrix requires nonempty M/N/K groups");
     const auto collapse = [](const ContractionOperand& view, const Group& group) {
       std::size_t extent = 1, stride = 0;
       for (auto index = group.size; index != 0; --index) {
         const auto axis =
             std::find(view.modes.begin(), view.modes.begin() + view.rank, group.modes[index - 1]) -
             view.modes.begin();
-        if (axis == view.rank) throw std::invalid_argument("cuBLASLt mode group is incomplete");
+        if (axis == view.rank)
+          throw std::invalid_argument("affine matrix mode group is incomplete");
         const auto size = view.shape[axis], physical = view.strides[axis];
         if (size != 1) {
           if (!stride) stride = physical;
           if (physical != contraction_product(extent, stride))
-            throw std::invalid_argument("cuBLASLt mode group is not physically contiguous");
+            throw std::invalid_argument("affine matrix mode group is not physically contiguous");
         }
         extent = contraction_product(extent, size);
       }
       return std::pair{extent, stride ? stride : 1};
     };
-    CublasLtMatrixRecipe result;
+    MatrixContractionRecipe result;
     const std::array<const Group*, 3> row_groups{&rows, &reduction, &rows},
         column_groups{&reduction, &columns, &columns};
     for (std::size_t operand = 0; operand < 3; ++operand) {
@@ -79,15 +80,15 @@ struct CublasLtMatrixRecipe {
       } else if ((out.rows == 1 || rs == 1) && (out.columns == 1 || cs >= out.rows)) {
         out.ld = out.columns > 1 ? cs : out.rows;
       } else {
-        throw std::invalid_argument("cuBLASLt requires native row/column matrix strides");
+        throw std::invalid_argument("affine matrix requires native row/column matrix strides");
       }
       // validate_affine already proved these products/sums fit the address space.
       const auto span = (out.rows - 1) * rs + (out.columns - 1) * cs + 1;
       if (result.batches > 1 && out.batch_stride < span)
-        throw std::invalid_argument("cuBLASLt matrix batches overlap");
+        throw std::invalid_argument("affine matrix matrix batches overlap");
       if (std::max({out.rows, out.columns, out.ld, result.batches}) >
           std::size_t(std::numeric_limits<int>::max()))
-        throw std::invalid_argument("cuBLASLt matrix dimensions exceed native bound");
+        throw std::invalid_argument("affine matrix matrix dimensions exceed native bound");
     }
     return result;
   }

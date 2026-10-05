@@ -25,7 +25,6 @@ from generativeqc_compiler.tensor import (
     input_tensor,
 )
 from generativeqc_compiler.tensor.cuda_cublaslt import (
-    CublasLtMatmul,
     CublasLtMatmulProvider,
     cublaslt_matmul,
     cublaslt_provider_candidates,
@@ -37,6 +36,7 @@ from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 
 if TYPE_CHECKING:
     from generativeqc_compiler.common.lowering_provider import LoweringRequest
+    from generativeqc_compiler.tensor.matrix_view import MatrixContraction
 
 TARGET = cuda_target_info("sm_120")
 CAPABILITIES = TargetCapabilities(
@@ -110,7 +110,7 @@ def test_layouts_against_independent_einsum(
             batch: int,
             row: int,
             column: int,
-            bound_recipe: CublasLtMatmul = recipe,
+            bound_recipe: MatrixContraction = recipe,
         ) -> int:
             layout = bound_recipe.layouts[which]
             matrix = (
