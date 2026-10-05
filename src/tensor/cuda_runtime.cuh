@@ -179,22 +179,67 @@ static __global__ void check_scale(float* values, I count, float scale, int* err
   }
 }
 
+static __global__ void convert_fp64_to_fp32_kernel(const double* source, float* target, I count,
+                                                   int* error, int node) {
+  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < count; i += I(blockDim.x) * gridDim.x) {
+    const double input = finite(source[i], error, node);
+    target[i] = finite(__double2float_rn(input), error, node);
+  }
+}
+
+/** Explicit TensorIR FP64->FP32 cast boundary for native compiler-owned consumers. */
+inline void convert_fp64_to_fp32(Context& context, const double* source, float* target, I count,
+                                 int node) {
+  if (count <= 0) return;
+  convert_fp64_to_fp32_kernel<<<blocks(count, 256), 256, 0, context.stream>>>(source, target, count,
+                                                                              context.error, node);
+  cuda_check(cudaGetLastError());
+}
+
+static __global__ void accumulate_fp32_into_fp64_kernel(const float* source, double* target,
+                                                        I count, double alpha, double beta,
+                                                        int* error, int node) {
+  for (I i = I(blockIdx.x) * blockDim.x + threadIdx.x; i < count; i += I(blockDim.x) * gridDim.x) {
+    const double converted = static_cast<double>(finite(source[i], error, node));
+    double value = __dmul_rn(alpha, converted);
+    if (beta != 0.0) value = __dadd_rn(value, __dmul_rn(beta, target[i]));
+    target[i] = finite(value, error, node);
+  }
+}
+
+/** Explicit TensorIR FP32->FP64 cast followed by one FP64 affine combine. */
+inline void accumulate_fp32_into_fp64(Context& context, const float* source, double* target,
+                                      I count, double alpha, double beta, int node) {
+  if (count <= 0) return;
+  accumulate_fp32_into_fp64_kernel<<<blocks(count, 256), 256, 0, context.stream>>>(
+      source, target, count, alpha, beta, context.error, node);
+  cuda_check(cudaGetLastError());
+}
+
 // Row-major C = op(A) op(B) is column-major C^T = op(B)^T op(A)^T.
 // Arguments expose every transpose, leading dimension, stride and beta.
-inline void gemm(Context& context, char a_trans, char b_trans, int m, int n, int k, const double* a,
-                 const double* b, double* c, I a_stride, I b_stride, I c_stride, int batches,
-                 double beta) {
-  const double alpha = 1.0;
+// Borrow an already admitted provider handle. Ownership, workspace and stream
+// lifetime stay with the caller; all ordinary/batched row-major dispatch shares
+// this tensor adapter. No provider discovery or implicit allocation occurs here.
+inline void gemm(cublasHandle_t handle, char a_trans, char b_trans, int m, int n, int k,
+                 const double* a, const double* b, double* c, I a_stride, I b_stride, I c_stride,
+                 int batches, double alpha, double beta) {
   const auto ta = a_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
   const auto tb = b_trans == 'N' ? CUBLAS_OP_N : CUBLAS_OP_T;
   const int lda = a_trans == 'N' ? k : m;
   const int ldb = b_trans == 'N' ? n : k;
   if (batches == 1) {
-    blas_check(cublasDgemm(context.handle, tb, ta, n, m, k, &alpha, b, ldb, a, lda, &beta, c, n));
+    blas_check(cublasDgemm(handle, tb, ta, n, m, k, &alpha, b, ldb, a, lda, &beta, c, n));
   } else {
-    blas_check(cublasDgemmStridedBatched(context.handle, tb, ta, n, m, k, &alpha, b, ldb, b_stride,
-                                         a, lda, a_stride, &beta, c, n, c_stride, batches));
+    blas_check(cublasDgemmStridedBatched(handle, tb, ta, n, m, k, &alpha, b, ldb, b_stride, a, lda,
+                                         a_stride, &beta, c, n, c_stride, batches));
   }
+}
+inline void gemm(Context& context, char a_trans, char b_trans, int m, int n, int k, const double* a,
+                 const double* b, double* c, I a_stride, I b_stride, I c_stride, int batches,
+                 double beta) {
+  gemm(context.handle, a_trans, b_trans, m, n, k, a, b, c, a_stride, b_stride, c_stride, batches,
+       1.0, beta);
 }
 // FP32 callers select CUBLAS_PEDANTIC_MATH when preparing the plan.
 inline void gemm(Context& context, char a_trans, char b_trans, int m, int n, int k, const float* a,

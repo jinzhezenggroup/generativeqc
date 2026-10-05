@@ -25,6 +25,7 @@ EXPECTED_ABI_IDS = {
     "rccsd": 12,
     "gfn2-xtb": 15,
     "pbe-d4-rks": 18,
+    "df-rccsd(t)": 19,
 }
 
 
@@ -50,6 +51,7 @@ def test_native_provider_ids_are_explicit() -> None:
         **EXPECTED_ABI_IDS,
         "ccsd(t)": 4,
         "gfn2": 15,
+        "df-ccsd(t)": 19,
     }
 
 

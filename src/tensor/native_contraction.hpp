@@ -4,10 +4,12 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <limits>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
 
 #include "runtime/execution_precision.hpp"
 
@@ -122,16 +124,27 @@ struct ContractionRequest {
   }
   std::size_t summands() const { return contraction_product(output_elements(), k); }
 
-  /** Fail before resource preparation; unsupported arithmetic is never widened
-   * or narrowed. FP32 compute with FP64 accumulation needs another candidate.
-   */
-  void validate() const {
+  /** Logical work counts do not require a matrix factorization or packing.
+   * Call validate_affine before using an externally supplied descriptor. */
+  std::size_t affine_output_elements() const { return operands[2].elements(); }
+  std::size_t affine_summands() const {
+    auto count = affine_output_elements();
+    for (std::size_t axis = 0; axis < operands[0].rank; ++axis)
+      if (!mode_extent(2, operands[0].modes[axis]))
+        count = contraction_product(count, operands[0].shape[axis]);
+    return count;
+  }
+
+  /** Validate the original binary einsum on arbitrary nonoverlapping affine
+   * views. This does not require that a matrix recipe implements the layout;
+   * general providers consume these same axes without inserting pack nodes.
+   * Diagonals, broadcast strides and one-sided reductions remain unsupported. */
+  void validate_affine() const {
     for (const auto identity :
-         {scientific_identity, semantic_template_identity, precision_identity}) {
+         {scientific_identity, semantic_template_identity, precision_identity})
       if (identity.size() != 64 ||
           identity.find_first_not_of("0123456789abcdef") != std::string_view::npos)
         throw std::invalid_argument("native contraction requires compiler identities");
-    }
     if ((precision.storage_dtype != PrecisionDtype::Fp64 &&
          precision.storage_dtype != PrecisionDtype::Fp32) ||
         precision.math_mode != runtime::kStrictPrecisionMathMode ||
@@ -139,7 +152,55 @@ struct ContractionRequest {
         precision.compute_dtype != precision.accumulation_dtype ||
         publication_dtype != precision.storage_dtype)
       throw std::invalid_argument(
-          "native matrix candidate does not implement requested arithmetic");
+          "native affine candidate does not implement requested arithmetic");
+    if (!std::isfinite(coefficient) || !std::isfinite(beta))
+      throw std::invalid_argument("native affine coefficient is not finite");
+    for (const auto& view : operands) {
+      if (view.rank > ContractionOperand::kMaximumRank || view.dtype != precision.storage_dtype)
+        throw std::invalid_argument("native affine operand rank or dtype is invalid");
+      std::array<std::pair<std::size_t, std::size_t>, ContractionOperand::kMaximumRank> axes{};
+      for (std::size_t axis = 0; axis < view.rank; ++axis) {
+        if (!view.shape[axis] || view.modes[axis] < 0)
+          throw std::invalid_argument("native affine requires positive extents and modes");
+        if (!view.strides[axis] ||
+            view.strides[axis] > std::size_t(std::numeric_limits<std::int64_t>::max()) ||
+            view.shape[axis] > std::size_t(std::numeric_limits<std::int64_t>::max()))
+          throw std::invalid_argument(
+              "native affine requires positive signed-64-bit strides/extents");
+        axes[axis] = {view.strides[axis], view.shape[axis]};
+      }
+      std::sort(axes.begin(), axes.begin() + view.rank);
+      std::size_t span = 1;
+      for (std::size_t axis = 0; axis < view.rank; ++axis) {
+        const auto [stride, extent] = axes[axis];
+        if (extent == 1) continue;
+        if (stride < span) throw std::invalid_argument("native affine view overlaps itself");
+        const auto offset = contraction_product(extent - 1, stride);
+        if (offset > std::numeric_limits<std::size_t>::max() - span)
+          throw std::length_error("native affine address overflow");
+        span += offset;
+      }
+      const auto bytes =
+          contraction_product(span, publication_dtype == PrecisionDtype::Fp64 ? 8 : 4);
+      if (bytes > std::size_t(std::numeric_limits<std::ptrdiff_t>::max()))
+        throw std::length_error("native affine address range overflow");
+    }
+    for (const auto& view : operands)
+      for (std::size_t axis = 0; axis < view.rank; ++axis) {
+        const auto mode = view.modes[axis];
+        const auto a = mode_extent(0, mode), b = mode_extent(1, mode), c = mode_extent(2, mode);
+        if ((a && b && a != b) || (a && c && a != c) || (b && c && b != c) || (c && !a && !b) ||
+            (!c && (!a || !b)))
+          throw std::invalid_argument("native affine has incompatible semantic modes");
+      }
+    (void)affine_summands();
+  }
+
+  /** Fail before resource preparation; unsupported arithmetic is never widened
+   * or narrowed. FP32 compute with FP64 accumulation needs another candidate.
+   */
+  void validate() const {
+    validate_affine();
     if (std::max({batches, m, n, k}) > std::size_t(std::numeric_limits<int>::max()) || !batches ||
         !m || !n || !k || !std::isfinite(coefficient) || !std::isfinite(beta) ||
         (a_trans != 'N' && a_trans != 'T') || (b_trans != 'N' && b_trans != 'T'))
@@ -185,6 +246,17 @@ struct ContractionRequest {
   }
 
  private:
+  std::size_t mode_extent(std::size_t operand, int mode) const {
+    std::size_t found = 0;
+    const auto& view = operands[operand];
+    for (std::size_t axis = 0; axis < view.rank; ++axis) {
+      if (view.modes[axis] != mode) continue;
+      if (found) throw std::invalid_argument("native contraction cannot implement diagonal modes");
+      found = view.shape[axis];
+    }
+    return found;
+  }
+
   // Check the physical recipe against the original semantic labels, including
   // collapsed axes. Equal element counts alone cannot detect a swapped axis or
   // a batch mistaken for a reduction. All scans are bounded by three ranks.
@@ -197,26 +269,7 @@ struct ContractionRequest {
         extent = contraction_product(extent, n);
       }
     } batch, rows, columns, reduction;
-    const auto extent = [&](std::size_t operand, int mode) {
-      std::size_t found = 0;
-      const auto& view = operands[operand];
-      for (std::size_t i = 0; i != view.rank; ++i) {
-        if (view.modes[i] != mode) continue;
-        if (found)
-          throw std::invalid_argument("native matrix candidate cannot implement diagonal modes");
-        found = view.shape[i];
-      }
-      return found;
-    };
-    for (const auto& view : operands) {
-      for (std::size_t i = 0; i != view.rank; ++i) {
-        const auto a = extent(0, view.modes[i]), b = extent(1, view.modes[i]),
-                   c = extent(2, view.modes[i]);
-        if (view.modes[i] < 0 || (a && b && a != b) || (a && c && a != c) || (b && c && b != c) ||
-            (c && !a && !b) || (!c && (!a || !b)))
-          throw std::invalid_argument("native matrix recipe has incompatible semantic modes");
-      }
-    }
+    const auto extent = [&](std::size_t operand, int mode) { return mode_extent(operand, mode); };
     const auto& output = operands[2];
     for (std::size_t i = 0; i != output.rank; ++i) {
       const auto mode = output.modes[i];

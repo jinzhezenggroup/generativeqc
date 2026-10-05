@@ -588,8 +588,11 @@ void mixed_density_rejection(const AoBasis& basis, const MolecularGrid& grid, bo
     test.plan->prepare_density(generativeqc::runtime::fp32_compute_fp64_accumulation(
         "dft.cuda.auto/density-contraction-v1"));
   } catch (const std::invalid_argument& error) {
+    // Physical support and formal qualification independently gate preparation.
+    const std::string detail = error.what();
     domain_rejected =
-        std::string(error.what()).find("not qualified for this domain") != std::string::npos;
+        detail == "mixed density contraction is not qualified for this domain" ||
+        detail == "mixed CUDA XC density precision is not qualified for this point program";
   }
   require(domain_rejected, "unqualified density binding admitted during preparation");
   const auto d = density(basis.nao, uks ? 2 : 1);
@@ -875,6 +878,47 @@ int main(int argc, char** argv) {
     const AoBasis basis(molecule);
     resident_grid_borrow_case(molecule, basis);
     const MolecularGrid grid(molecule, {1, 2, 2, 4, 3, 1e-12});
+    {
+      const auto lda = cuda_xc_fast_path_capabilities(0U);
+      const auto pbe = cuda_xc_fast_path_capabilities(1U);
+      const auto r2scan = cuda_xc_fast_path_capabilities(2U);
+      const auto b3lyp = cuda_xc_fast_path_capabilities(3U);
+      const auto wb97mv = cuda_xc_fast_path_capabilities(4U);
+      require(cuda_xc_capability_qualified(lda.mixed_ao_precision) &&
+                  cuda_xc_capability_qualified(lda.mixed_density_precision) &&
+                  cuda_xc_capability_qualified(lda.response) &&
+                  cuda_xc_capability_qualified(lda.graph_replay),
+              "LDA fast-path capability census regressed");
+      require(cuda_xc_capability_qualified(pbe.component_scaling) &&
+                  cuda_xc_capability_qualified(pbe.mixed_ao_precision) &&
+                  cuda_xc_capability_qualified(pbe.mixed_density_precision) &&
+                  cuda_xc_capability_qualified(pbe.response) &&
+                  cuda_xc_capability_qualified(pbe.graph_replay),
+              "PBE fast-path capability census regressed");
+      require(r2scan.mixed_ao_precision == CudaXcCapability::QualificationRequired &&
+                  cuda_xc_capability_qualified(r2scan.mixed_density_precision) &&
+                  r2scan.response == CudaXcCapability::Unavailable &&
+                  r2scan.graph_replay == CudaXcCapability::QualificationRequired,
+              "r2SCAN fast-path capability census regressed");
+      for (const auto caps : {b3lyp, wb97mv}) {
+        require(caps.component_scaling == CudaXcCapability::Unavailable &&
+                    caps.mixed_ao_precision == CudaXcCapability::QualificationRequired &&
+                    caps.mixed_density_precision == CudaXcCapability::QualificationRequired &&
+                    caps.response == CudaXcCapability::Unavailable &&
+                    caps.graph_replay == CudaXcCapability::QualificationRequired,
+                "hybrid fast-path capability census regressed");
+      }
+      for (const auto functional :
+           {generated::kM062XFunctionalCode, generated::kMN15FunctionalCode}) {
+        const auto caps = cuda_xc_fast_path_capabilities(functional);
+        require(caps.component_scaling == CudaXcCapability::Unavailable &&
+                    caps.mixed_ao_precision == CudaXcCapability::QualificationRequired &&
+                    caps.mixed_density_precision == CudaXcCapability::QualificationRequired &&
+                    caps.response == CudaXcCapability::Unavailable &&
+                    caps.graph_replay == CudaXcCapability::QualificationRequired,
+                "generated split-hybrid fast-path capability census regressed");
+      }
+    }
     for (bool unrestricted : {false, true}) density_feature_capture_case(basis, grid, unrestricted);
     for (bool unrestricted : {false, true}) nonlocal_potential_case(basis, grid, unrestricted);
     for (const auto functional :

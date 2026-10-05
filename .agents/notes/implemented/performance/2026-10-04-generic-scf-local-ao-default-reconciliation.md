@@ -81,3 +81,19 @@ qualify every new default domain, or claim combined speedups.
 
 - [PR #1847 review](https://github.com/jinzhezenggroup/generativeqc/pull/1847#pullrequestreview-5407832167)
 - [Merged capability owner #1865](https://github.com/jinzhezenggroup/generativeqc/pull/1865)
+
+## Formal capability and native census follow-up
+
+The standalone n1 Slurm5829 audit at `a44b75070` failed the native XC negative
+control: the old density enqueue guard accepted an unqualified mixed-density
+program. Compose #1872's formal point-program capability owner instead of
+weakening that independent rejection check. The host capsule now includes the
+actual program traits and checks both formal qualification and physical layout.
+
+Separately, automatic local AO intentionally keeps density contraction FP64
+while AUTO may lower J. The native KS census now exercises unset, explicit local
+and explicit dense selectors for RKS/UKS; it verifies the selected layout and
+requires zero mixed density products only on the local route. The explicit dense
+route still requires its observed mixed density counts. Earlier measurements
+remain pinned to their original source identities. Slurm5829 failure receipts
+are retained in the fix checkout's `.artifacts/gpu-5829/`.

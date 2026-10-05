@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
 #include "tensor/cuda_error.hpp"
@@ -35,6 +36,24 @@ using generativeqc::runtime::PrecisionPhase;
 using generativeqc::runtime::size_add;
 using generativeqc::runtime::size_mul;
 using generativeqc::runtime::strict_fp64_precision;
+
+struct CudaXcProgramTraits {
+  bool supported{};
+  bool requires_gradient{};
+  bool requires_tau{};
+  CudaXcFastPathCapabilities fast_paths{};
+};
+
+CudaXcProgramTraits cuda_xc_program_traits(std::uint32_t functional) noexcept {
+  if (const auto* metadata = semilocal_family_metadata_from_code(functional))
+    return {metadata->cuda_ks, metadata->requires_gradient, metadata->requires_tau,
+            metadata->cuda_fast_paths};
+  if (generated::split_hybrid_registered(functional))
+    return {true, true, generated::split_hybrid_is_mgga(functional),
+            generated::split_hybrid_fast_path_capabilities(functional)};
+  return {};
+}
+
 void check(cudaError_t status) {
   if (status == cudaErrorMemoryAllocation) throw std::bad_alloc();
   if (status != cudaSuccess)
@@ -64,6 +83,10 @@ std::vector<CudaXcDensityLauncher> local_density_launchers(
 }
 }  // namespace
 
+CudaXcFastPathCapabilities cuda_xc_fast_path_capabilities(std::uint32_t functional) noexcept {
+  return cuda_xc_program_traits(functional).fast_paths;
+}
+
 CudaXcLayout cuda_xc_layout(const AoBasis& basis, const MolecularGrid& grid,
                             std::uint32_t functional, bool unrestricted, std::size_t tile_points,
                             CudaXcAoPrecision ao_precision, double exchange_scale,
@@ -85,36 +108,35 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
                                   std::size_t tile_points, bool response,
                                   CudaXcAoPrecision ao_precision, double exchange_scale,
                                   double correlation_scale, bool borrow_resident_grid) {
-  const bool generated_split_hybrid = generated::split_hybrid_registered(functional);
-  const bool supported_functional = functional <= 4U || generated_split_hybrid;
+  const auto program = cuda_xc_program_traits(functional);
   if (!atoms || !primitives || !nao || !points || !tile_points || tile_points > INT_MAX ||
-      atoms > INT_MAX || primitives > INT_MAX || nao > INT_MAX || !supported_functional)
+      atoms > INT_MAX || primitives > INT_MAX || nao > INT_MAX || !program.supported)
     throw std::invalid_argument("invalid CUDA XC resource shape");
   if (!std::isfinite(exchange_scale) || !std::isfinite(correlation_scale) || exchange_scale < 0.0 ||
       correlation_scale < 0.0)
     throw std::invalid_argument("invalid CUDA XC component scale");
-  if (functional != 1U && (exchange_scale != 1.0 || correlation_scale != 1.0))
-    throw std::invalid_argument("scaled CUDA XC is currently qualified for PBE only");
-  if (response && (exchange_scale != 1.0 || correlation_scale != 1.0))
-    throw std::invalid_argument("scaled CUDA XC response is not qualified");
-  if (response && functional > 1U)
-    throw std::invalid_argument("CUDA XC response supports LDA/PBE only");
+  const bool scaled = exchange_scale != 1.0 || correlation_scale != 1.0;
+  if (scaled && !cuda_xc_capability_qualified(program.fast_paths.component_scaling))
+    throw std::invalid_argument("scaled CUDA XC point program is not qualified");
+  if (response && scaled) throw std::invalid_argument("scaled CUDA XC response is not qualified");
+  if (response && !cuda_xc_capability_qualified(program.fast_paths.response))
+    throw std::invalid_argument("CUDA XC response is not qualified for this point program");
   if (ao_precision != CudaXcAoPrecision::Fp64 &&
       ao_precision != CudaXcAoPrecision::Fp32ComputeFp64Storage)
     throw std::invalid_argument("unknown CUDA XC AO precision");
-  if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage && functional > 1U)
-    throw std::invalid_argument("non-LDA/PBE CUDA XC currently requires strict FP64 AO evaluation");
+  if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage &&
+      !cuda_xc_capability_qualified(program.fast_paths.mixed_ao_precision))
+    throw std::invalid_argument(
+        "mixed CUDA XC AO precision is not qualified for this point program");
   if (ao_precision == CudaXcAoPrecision::Fp32ComputeFp64Storage && response)
     throw std::invalid_argument("CUDA XC response currently requires strict FP64 AO evaluation");
   constexpr auto overflow = "CUDA XC storage overflow";
   const auto packed =
       size_add(size_add(size_mul(3, atoms, overflow), size_mul(2, primitives, overflow), overflow),
                size_mul(16, nao, overflow), overflow);
-  const bool meta_gga = functional == 2U || functional == 4U ||
-                        (generated_split_hybrid && generated::split_hybrid_is_mgga(functional));
-  const auto ao_jets = functional == 0U ? 1U : 4U;
-  const auto work_jets = meta_gga ? 4U : 1U;
-  const auto feature_terms = functional == 0U ? 1U : (meta_gga ? 5U : 4U);
+  const auto ao_jets = program.requires_gradient ? 4U : 1U;
+  const auto work_jets = program.requires_tau ? 4U : 1U;
+  const auto feature_terms = program.requires_gradient ? (program.requires_tau ? 5U : 4U) : 1U;
   CudaXcLayout out{atoms,
                    primitives,
                    nao,
@@ -132,6 +154,7 @@ CudaXcLayout cuda_xc_layout_shape(std::size_t atoms, std::size_t primitives, std
                    response,
                    ao_precision};
   out.borrowed_grid = borrow_resident_grid;
+  out.fast_paths = program.fast_paths;
   std::size_t elements = out.packed_elements;
   if (!out.borrowed_grid)
     elements = size_add(elements, size_mul(4, out.npoint, overflow), overflow);
@@ -344,6 +367,10 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
   if (!admitted.is_strict_fp64() &&
       !cuda_xc_execution_capabilities(layout_).mixed_density_contraction)
     throw std::invalid_argument("mixed density contraction is not qualified for this domain");
+  if (!admitted.is_strict_fp64() &&
+      !cuda_xc_capability_qualified(layout_.fast_paths.mixed_density_precision))
+    throw std::invalid_argument(
+        "mixed CUDA XC density precision is not qualified for this point program");
   // Prepare into temporaries so malformed admission/allocation cannot expose
   // a partially changed table. Only the final grid tile has a distinct shape.
   std::array<CudaXcDensityBinding, 2> strict, selected;

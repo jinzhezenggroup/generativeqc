@@ -10,6 +10,7 @@
 #include "dft/ao_grid.hpp"
 #include "dft/ao_selection_work.hpp"
 #include "dft/grid.hpp"
+#include "dft/xc_capabilities.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "runtime/lowering_binding.hpp"
 
@@ -55,7 +56,7 @@ struct CudaXcPointCapabilities {
 struct CudaXcLayout {
   std::size_t natom{}, nprimitive{}, nao{}, npoint{}, tile_points{}, spins{}, jets{};
   std::size_t work_jets{}, feature_terms{}, packed_elements{}, device_bytes{};
-  /** 0=LDA, 1=PBE, 2=r2SCAN, 4=omegaB97M-V semilocal. */
+  /** Stable point-program transport code; capabilities are resolved separately. */
   std::uint32_t functional{};
   /** Independent semilocal X/C weights resolved by MethodIR. Exact exchange is
    * owned by the prepared Fock provider and is never folded into these scales. */
@@ -70,12 +71,15 @@ struct CudaXcLayout {
    * by nao, never by the mean selected column count. */
   bool local_ao{};
   std::size_t ao_map_entries{}, host_ao_map_bytes{};
+  /** Immutable admission facts resolved from the point program, never its display name. */
+  CudaXcFastPathCapabilities fast_paths{};
 };
 
 /** Layout-owned execution facts consumed by higher-level schedulers. These
  * facts deliberately exclude method names and unrelated Fock-provider policy:
  * local-AO legality belongs to the physical XC layout, while density precision
- * is a separate arithmetic capability. */
+ * is a separate arithmetic capability. These execution facts do not replace
+ * the fast-path qualification census. */
 struct CudaXcExecutionCapabilities {
   bool local_ao_selection{}, mixed_density_contraction{};
 };
@@ -102,6 +106,8 @@ CudaXcAoSelectionResources cuda_xc_ao_selection_resources(const CudaXcLayout& de
  * Only physical FP64 execution is admitted; response retains its dense route.
  * No discovery, screening threshold, CUDA allocation or GPU work occurs here. */
 CudaXcLayout cuda_xc_local_ao_layout(CudaXcLayout dense, const CudaXcAoTiles& maps);
+
+CudaXcFastPathCapabilities cuda_xc_fast_path_capabilities(std::uint32_t functional) noexcept;
 
 CudaXcLayout cuda_xc_layout(const AoBasis& basis, const MolecularGrid& grid,
                             std::uint32_t functional, bool unrestricted,
@@ -174,7 +180,9 @@ class CudaXcPlan {
   const CudaXcLayout& layout() const noexcept { return layout_; }
   const CudaXcTransfers& transfers() const noexcept { return transfers_; }
   /** Setup-only binding of scientifically admitted arithmetic. Full/tail
-   * entries and strict audit entries are immutable after the first evaluation. */
+   * entries and strict audit entries are immutable after the first evaluation.
+   * Mixed admission requires executable physical-layout support and a Qualified
+   * entry in the resolved point-program census; local maps remain strict FP64. */
   void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
                        std::uint64_t expected_replays = 1);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;

@@ -107,7 +107,8 @@ void validate_problem(const Problem& p, bool allow_df_virtual) {
 }
 
 void validate_options(const SolverOptions& o) {
-  if (!o.max_iterations || o.diis_size == 1 || o.diis_size > 20 || !o.max_bytes)
+  if (!o.max_iterations || o.diis_size == 1 || o.diis_size > 20 || !o.max_bytes ||
+      !o.df_auxiliary_batch_limit)
     throw std::invalid_argument("invalid RCCSD iteration/history/budget option");
   if (!(o.energy_tolerance > 0.0 && o.energy_tolerance <= 1e-8) ||
       !(o.residual_tolerance > 0.0 && o.residual_tolerance <= 1e-9) ||

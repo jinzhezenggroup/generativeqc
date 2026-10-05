@@ -63,9 +63,11 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     declarations += "\nstruct CUstream_st; using cudaStream_t = CUstream_st*;\n"
     declarations += header[launcher_start:launcher_end]
     xc_source = (ROOT / "src/dft/cuda_xc.cpp").read_text()
+    declarations += "\n" + _definition(xc_source, "struct CudaXcProgramTraits") + ";"
     definitions = "\n".join(
         _definition(xc_source, signature)
         for signature in (
+            "CudaXcProgramTraits cuda_xc_program_traits(",
             "CudaXcLayout cuda_xc_layout_shape(",
             "CudaXcExecutionCapabilities cuda_xc_execution_capabilities(",
             "CudaXcLayout cuda_xc_local_ao_layout(",
@@ -87,6 +89,7 @@ def admission_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
 #include <string>
 #include <vector>
 #include "dft/cuda_ks_precision.hpp"
+#include "dft/semilocal_family.hpp"
 #include "runtime/bounded_workspace.hpp"
 #include "generated_split_hybrid_registry.cuh"
 using namespace generativeqc;
@@ -141,7 +144,7 @@ int main(int argc, char** argv) {
     }
     const auto schedule = resolve_cuda_ks_precision_schedule(
         automatic ? GENERATIVEQC_PRECISION_AUTO : GENERATIVEQC_PRECISION_FP64,
-        functional, false, nonlocal);
+        xc_layout.fast_paths, false, nonlocal);
     const auto iteration = resolve_cuda_ks_iteration_precision(
         schedule, false, cuda_xc_execution_capabilities(xc_layout).mixed_density_contraction);
     std::cout << (admit_ao ? "local" : "dense") << ":"

@@ -102,8 +102,9 @@ Execution failures propagate without replaying partial work. This native table
 currently rejects graph capture explicitly: graph replay work accounting is not
 yet attached, so counting only capture enqueues would give incorrect diagnostics.
 
-This native slice executes the existing admitted homogeneous arithmetic through
-cuBLAS. The shared dispatcher supports FP32 and FP64 storage/compute/accumulation;
+The shared matrix executor supports cuBLAS and an ordered generated CUDA
+implementation, including padded views and affine output updates. Both support
+FP32 and FP64 storage/compute/accumulation;
 DF-CC and Lambda still request FP64. It does not yet execute the general
 `LoweringBinding` portfolio or perform joint native precision/provider selection.
 Mixed compute/accumulation, casts and refinement require a complete additional
@@ -111,6 +112,44 @@ candidate; the current adapter rejects them. The RHF frame-response callback,
 conventional RCCSD migration from #1868, DFT, triples precision, other provider
 families and complete endpoint qualification remain in
 #1886/#1887/#1888/#1889/#1890. No new scientific precision domain is enabled.
+
+The same native descriptor also supports `validate_affine()` independently of
+the optional matrix recipe. `affine_contraction_initializer` emits original
+TensorIR modes with zero matrix dimensions to prevent accidental matrix dispatch.
+The optional `src/tensor/cuda_cutensor.cuh` provider consumes these affine fields
+and prepares a reusable homogeneous FP32/FP64 plan with explicit strides. It
+disables JIT, global plan caching and incremental autotuning; capture is rejected.
+Workspace is queried exactly and observed retained device storage is checked
+against a reservation. Opaque host allocations have no cuTENSOR query, so host
+bytes are an externally qualified reservation, not an exact measured footprint.
+`PreparedContractions` can bind `CutensorAffine` alongside the existing matrix
+algorithms. Each plan requires an explicit `ContractionProviderReservation`;
+the enclosing owner admits its workspace/provider ceilings and qualified host
+reservation before calling `add`. Charge `reservation.total_bytes(plan_count)`
+in addition to `storage_bytes`, including all simultaneously live shape variants.
+`optional_resources()` reports queried workspace, observed retained device growth
+and reserved host bytes. These observations do not qualify lazy allocation during
+first execution. Zero host reservation rejects preparation. No reservation values
+are production defaults.
+
+Preparation publishes a shape only after all its plans succeed. A
+`ContractionPreparationUnavailable` permits the caller to prepare another
+scientifically admitted candidate; malformed requests, execution failures and
+checked cleanup failures propagate. `release()` drains a live table before a
+fallback is admitted. Call it outside the global allocation measurement lock and
+before destroying the borrowed context/stream. Destruction uses best-effort cleanup.
+
+Native builds opt in with `GENERATIVEQC_ENABLE_CUTENSOR=ON` and
+`GENERATIVEQC_CUTENSOR_ROOT=/path/to/cutensor`, using an external cuTENSOR 2.8+
+installation within major version 2. The default is OFF; CPU and ordinary CUDA
+builds do not probe or link it. Enabling it requires NVIDIA CUDA and an available
+header/library; wheel packaging is not implemented. The native CMake test target
+`generativeqc_native_cutensor_tests` qualifies the shared and standalone paths.
+Build capability alone does not admit a provider for any scientific method.
+This provider is not selected by a production method by default.
+Production resource qualification and complete endpoint selection remain open.
+See the [native provider decision](../../.agents/notes/implemented/architecture/2026-10-05-native-affine-cutensor.md)
+for validation and integration boundaries.
 
 The [decision note](../../.agents/notes/implemented/architecture/2026-10-04-joint-lowering-contract.md)
 records the compatibility and identity rationale.
