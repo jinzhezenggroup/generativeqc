@@ -22,6 +22,7 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         "bounded_pair_order",
         "shell_pair_block_bounds",
         "force_cursor",
+        "bounded_block_domain",
         "bounded_value_capability",
         "bounded_value_overflow",
         "execute_generated_full_range_energy_derivatives",
@@ -41,6 +42,32 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     assert "direct_bounded_fallback.hpp" not in source
     assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer
     assert "DirectScreeningPurpose::Force" in consumer
+    normalized_rsh = " ".join(rsh_body.split())
+    assert (
+        "DirectCoulombRange::Long, omega, 0.0, 1.0, p.bounded_block_domain);"
+        in normalized_rsh
+    )
+    assert (
+        "DirectCoulombRange::Long, omega, 1.0, p.bounded_block_domain);"
+        in normalized_rsh
+    )
+    range_begin = consumer.index("void launch_bounded_shell_range_exchange_derivative(")
+    range_end = consumer.index(
+        "void launch_bounded_shell_rsh_derivatives(", range_begin
+    )
+    range_body = " ".join(consumer[range_begin:range_end].split())
+    assert "detail::BoundedDirectBlockDomain block_domain" in range_body
+    assert "radial_operator, omega, exchange_coefficient, block_domain);" in range_body
+    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
+    bounded_begin = bounded.index(
+        "void launch_bounded_direct_range_exchange_force_kernel("
+    )
+    bounded_end = bounded.index(
+        "void launch_bounded_direct_range_exchange_fock_kernel(", bounded_begin
+    )
+    bounded_body = " ".join(bounded[bounded_begin:bounded_end].split())
+    assert "detail::BoundedDirectBlockDomain block_domain" in bounded_body
+    assert bounded_body.count("false, true, block_domain);") == 2
 
 
 def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:

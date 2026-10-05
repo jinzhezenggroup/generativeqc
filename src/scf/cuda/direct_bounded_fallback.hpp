@@ -59,7 +59,7 @@ void launch_bounded_direct_range_exchange_force_kernel(
     const std::uint32_t* bounded_generated_overflow, const double* schwarz_bounds,
     const double* density, const std::uint8_t* active, double* output,
     unsigned long long* global_cursor, DirectRangeOperator radial_operator, double omega,
-    double exchange_coefficient);
+    double exchange_coefficient, detail::BoundedDirectBlockDomain block_domain = {});
 
 /** Range-separated positive K through the same bounded shell scheduler.
  * Full-range Schwarz and density bounds remain conservative for SR/LR values. */

@@ -1026,7 +1026,8 @@ void launch_bounded_shell_range_exchange_derivative(
     const double* shell_pair_block_bounds, const double* system_density_bounds,
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
-    DirectCoulombRange range, double omega, double exchange_coefficient) {
+    DirectCoulombRange range, double omega, double exchange_coefficient,
+    detail::BoundedDirectBlockDomain block_domain) {
   const DirectRangeOperator radial_operator =
       range == DirectCoulombRange::Long
           ? DirectRangeOperator::Long
@@ -1036,7 +1037,7 @@ void launch_bounded_shell_range_exchange_derivative(
       unrestricted, worker_blocks, kBoundedDirectThreads, 0, stream, batch, screening,
       shell_pair_bounds, shell_pair_density_bounds, pair_order, shell_pair_block_bounds,
       system_density_bounds, class_state, schwarz_bounds, density, active, output, cursor,
-      radial_operator, omega, exchange_coefficient);
+      radial_operator, omega, exchange_coefficient, block_domain);
 }
 
 void launch_bounded_shell_rsh_derivatives(

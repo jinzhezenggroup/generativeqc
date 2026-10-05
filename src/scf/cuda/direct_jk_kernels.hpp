@@ -175,7 +175,8 @@ void launch_bounded_shell_range_exchange_derivative(
     const double* shell_pair_block_bounds, const double* system_density_bounds,
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
-    DirectCoulombRange range, double omega, double exchange_coefficient);
+    DirectCoulombRange range, double omega, double exchange_coefficient,
+    detail::BoundedDirectBlockDomain block_domain = {});
 
 /** Fill one raw SR/LR positive-K source through the bounded shell dispatcher. */
 void launch_bounded_shell_range_exchange_source(
