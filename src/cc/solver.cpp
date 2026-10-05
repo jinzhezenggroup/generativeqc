@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <chrono>
 #include <cmath>
 #include <limits>
@@ -38,7 +39,9 @@ generated::Inputs inputs(const Problem& p, const double* t1, const double* t2) {
           p.d1.data(),
           p.d2.data(),
           t1,
-          t2};
+          t2,
+          p.canonical_eps.empty() ? nullptr : p.canonical_eps.data(),
+          p.canonical_level_shift};
 }
 
 double max_abs(const double* p, std::size_t n) {
@@ -51,6 +54,112 @@ double max_abs(const double* p, std::size_t n) {
 }
 
 }  // namespace
+
+namespace {
+
+double validate_canonical_spectrum(const Problem& p, bool check_singles) {
+  const auto o = p.nocc, v = p.nvir;
+  if (!o || !v || p.canonical_eps.size() != checked_add(o, v) ||
+      !std::isfinite(p.canonical_level_shift) || p.canonical_level_shift < 0.0 ||
+      !std::isfinite(p.canonical_denominator_threshold) ||
+      !(p.canonical_denominator_threshold > 0.0) ||
+      !std::all_of(
+          p.canonical_eps.begin(), p.canonical_eps.end(),
+          [](double x) { return std::isfinite(x); }))
+    throw std::invalid_argument("invalid canonical RCCSD denominator provenance");
+  if (check_singles && p.d1.size() != checked_mul(o, v))
+    throw std::invalid_argument("invalid canonical RCCSD singles denominator shape");
+  double minimum = std::numeric_limits<double>::infinity();
+  double most_negative = 0.0;
+  std::size_t far_i = 0, far_a = 0;
+  for (std::size_t i = 0; i < o; ++i)
+    for (std::size_t a = 0; a < v; ++a) {
+      double physical, shifted;
+      generated::canonical_single(p.canonical_eps[i], p.canonical_eps[o + a],
+                                  p.canonical_level_shift, physical, shifted);
+      if (!std::isfinite(physical) || physical >= 0.0 ||
+          std::abs(physical) <= p.canonical_denominator_threshold || !std::isfinite(shifted))
+        throw std::invalid_argument("near-zero, nonnegative or nonfinite RCCSD denominator");
+      if (check_singles && p.d1[i * v + a] != shifted)
+        throw std::invalid_argument("canonical RCCSD singles denominator disagrees with spectrum");
+      minimum = std::min(minimum, std::abs(physical));
+      if (physical < most_negative) {
+        most_negative = physical;
+        far_i = i;
+        far_a = a;
+      }
+    }
+  // IEEE round-to-nearest addition/subtraction is monotone. Every physical
+  // doubles value is a sum of two admitted negative single gaps, so it cannot
+  // approach zero more closely than either gap. Its most negative member uses
+  // the most negative gap twice; checking that member also bounds all shifted
+  // values for a nonnegative shift. Thus no full doubles validation pass is
+  // needed. Keep the original (ei-ea)+(ej-eb)-2*shift grouping in this check.
+  double physical, shifted;
+  generated::canonical_double(p.canonical_eps[far_i], p.canonical_eps[o + far_a],
+                              p.canonical_eps[far_i], p.canonical_eps[o + far_a],
+                              p.canonical_level_shift, physical, shifted);
+  if (!std::isfinite(physical) || !std::isfinite(shifted))
+    throw std::invalid_argument("nonfinite canonical RCCSD doubles denominator");
+  return minimum;
+}
+
+}  // namespace
+
+void initialize_canonical_denominators(Problem& p, std::span<const double> energies,
+                                       const SolverOptions& options, bool derived) {
+  p.canonical_eps.assign(energies.begin(), energies.end());
+  p.canonical_level_shift = options.level_shift;
+  p.canonical_denominator_threshold = options.denominator_threshold;
+  p.minimum_absolute_denominator = validate_canonical_spectrum(p, false);
+  p.d1.resize(checked_mul(p.nocc, p.nvir));
+  for (std::size_t i = 0; i < p.nocc; ++i)
+    for (std::size_t a = 0; a < p.nvir; ++a) {
+      double physical;
+      generated::canonical_single(energies[i], energies[p.nocc + a], options.level_shift, physical,
+                                  p.d1[i * p.nvir + a]);
+    }
+  if (derived) {
+    p.denominator_representation = DenominatorRepresentation::CanonicalSpectrum;
+    std::vector<double>().swap(p.d2);
+  } else {
+    p.denominator_representation = DenominatorRepresentation::Explicit;
+    p.d2.resize(checked_mul(p.d1.size(), p.d1.size()));
+    for (std::size_t flat = 0; flat < p.d2.size(); ++flat)
+      p.d2[flat] = generated::canonical_d2_at(flat, p.nocc, p.nvir, p.canonical_eps.data(),
+                                              p.canonical_level_shift);
+    std::vector<double>().swap(p.canonical_eps);
+    p.canonical_level_shift = p.canonical_denominator_threshold = 0.0;
+  }
+}
+
+double doubles_denominator_at(const Problem& p, std::size_t flat) {
+  return p.denominator_representation == DenominatorRepresentation::CanonicalSpectrum
+             ? generated::canonical_d2_at(flat, p.nocc, p.nvir, p.canonical_eps.data(),
+                                          p.canonical_level_shift)
+             : p.d2[flat];
+}
+
+std::uint64_t denominator_identity(const Problem& p) {
+  std::uint64_t hash = 14695981039346656037ULL;
+  const auto word = [&](std::uint64_t value) {
+    for (unsigned byte = 0; byte < 8; ++byte) {
+      hash ^= (value >> (8 * byte)) & 255;
+      hash *= 1099511628211ULL;
+    }
+  };
+  word(1);  // Provenance schema, including ordered-pair FP64 grouping.
+  word(static_cast<std::uint64_t>(p.denominator_representation));
+  word(p.nocc);
+  word(p.nvir);
+  for (const auto* values : {&p.d1, &p.d2, &p.canonical_eps}) {
+    word(values->size());
+    for (double value : *values) word(std::bit_cast<std::uint64_t>(value));
+  }
+  word(std::bit_cast<std::uint64_t>(p.canonical_level_shift));
+  word(std::bit_cast<std::uint64_t>(p.canonical_denominator_threshold));
+  return hash;
+}
 
 void validate_problem(const Problem& p, bool allow_df_virtual) {
   if (p.naux && !allow_df_virtual)
@@ -99,7 +208,17 @@ void validate_problem(const Problem& p, bool allow_df_virtual) {
   expect(p.ovoo, checked_mul(ov, oo), "ovoo");
   expect(p.oooo, checked_mul(oo, oo), "oooo");
   expect(p.d1, ov, "d1");
-  expect(p.d2, oovv, "d2");
+  if (p.denominator_representation == DenominatorRepresentation::CanonicalSpectrum) {
+    expect(p.d2, 0, "canonical d2 must be absent");
+    validate_canonical_spectrum(p, true);
+  } else if (p.denominator_representation == DenominatorRepresentation::Explicit) {
+    expect(p.d2, oovv, "d2");
+    expect(p.canonical_eps, 0, "explicit d2 must not carry a canonical spectrum");
+    if (p.canonical_level_shift != 0.0 || p.canonical_denominator_threshold != 0.0)
+      throw std::invalid_argument("explicit RCCSD denominators carry canonical metadata");
+  } else {
+    throw std::invalid_argument("unknown RCCSD denominator representation");
+  }
   expect(p.initial_t1, ov, "initial_t1");
   expect(p.initial_t2, oovv, "initial_t2");
   if (!std::isfinite(p.reference_energy))
@@ -107,7 +226,8 @@ void validate_problem(const Problem& p, bool allow_df_virtual) {
 }
 
 void validate_options(const SolverOptions& o) {
-  if (!o.max_iterations || o.diis_size == 1 || o.diis_size > 20 || !o.max_bytes)
+  if (!o.max_iterations || o.diis_size == 1 || o.diis_size > 20 || !o.max_bytes ||
+      !o.df_auxiliary_batch_limit)
     throw std::invalid_argument("invalid RCCSD iteration/history/budget option");
   if (!(o.energy_tolerance > 0.0 && o.energy_tolerance <= 1e-8) ||
       !(o.residual_tolerance > 0.0 && o.residual_tolerance <= 1e-9) ||
@@ -125,6 +245,7 @@ std::size_t problem_host_bytes(const Problem& p) {
       &p.oooo, &p.vvvv, &p.d1,  &p.d2,   &p.initial_t1, &p.initial_t2, &p.df_bov, &p.df_bvv};
   for (const auto* value : values) result = checked_add(result, bytes(value->capacity()));
   result = checked_add(result, bytes(p.df_boo.capacity()));
+  result = checked_add(result, bytes(p.canonical_eps.capacity()));
   return result;
 }
 
@@ -178,6 +299,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
   generativeqc::solver::Diis diis(options.diis_size, elements);
   double previous = std::numeric_limits<double>::quiet_NaN();
   SolverResult result;
+  result.diagnostic.denominator_identity = denominator_identity(p);
   result.diagnostic.numeric_capacity_bytes = std::max(p.provider_peak_bytes, capacity);
   result.reason = "maximum RCCSD iterations reached";
   const auto solve_started = std::chrono::steady_clock::now();
@@ -216,7 +338,9 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
                                      in.t1,
                                      in.t2,
                                      virtual_sum.data(),
-                                     virtual_sum.data() + n1};
+                                     virtual_sum.data() + n1,
+                                     in.canonical_eps,
+                                     in.canonical_level_shift};
   };
   auto run_iteration = [&](const generated::Inputs& in) -> generated::IterationOutputs {
     if (!p.naux)
@@ -239,7 +363,9 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
                                                        in.t1,
                                                        in.t2,
                                                        virtual_sum.data(),
-                                                       virtual_sum.data() + n1};
+                                                       virtual_sum.data() + n1,
+                                                       in.canonical_eps,
+                                                       in.canonical_level_shift};
       fast.df_singles_residual = virtual_sum.data();
       fast.df_D05_vv_ladder = virtual_sum.data() + n1;
       fast.df_Lvv = virtual_sum.data() + elements;
@@ -312,6 +438,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
           std::chrono::duration<double>(std::chrono::steady_clock::now() - iteration_started)
               .count();
       ++result.diagnostic.iteration_graph_calls;
+      if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
       const double r1 = max_abs(out.r1, n1), r2 = max_abs(out.r2, n2);
       const double delta = std::isfinite(previous) ? std::abs(out.energy - previous)
                                                    : std::numeric_limits<double>::infinity();
@@ -356,6 +483,7 @@ SolverResult solve_cpu(const Problem& p, const SolverOptions& options) {
       result.diagnostic.iteration_seconds +=
           std::chrono::duration<double>(std::chrono::steady_clock::now() - trial_started).count();
       ++result.diagnostic.iteration_graph_calls;
+      if (!p.canonical_eps.empty()) result.diagnostic.derived_d2_iteration_evaluations += n2;
       std::vector<double> error;
       error.reserve(elements);
       error.insert(error.end(), trial_out.r1, trial_out.r1 + n1);

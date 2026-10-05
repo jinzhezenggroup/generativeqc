@@ -1,0 +1,135 @@
+{
+  "method": {
+    "reference": "conventional exact FP64 RHF",
+    "correlation": "correlation-only DF-RCCSD(T)",
+    "orbital_basis": "aug-cc-pVTZ",
+    "auxiliary_basis": "aug-cc-pVTZ-RI",
+    "public_aos": 230,
+    "cartesian_aos": 260,
+    "occupied": 9,
+    "virtual": 221,
+    "auxiliary": 488,
+    "atoms": 8,
+    "numeric_budget_bytes": 68719476736,
+    "source_factors": "native, no oracle imports",
+    "metric": "symmetric inverse square root, relative cutoff 1e-10"
+  },
+  "hardware": {
+    "node": "n2",
+    "gpu_uuid": "GPU-54595246-dbdc-a633-dc38-7bd8eea3831a",
+    "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+    "driver": "595.91.07",
+    "cuda_toolkit": "12.9.1",
+    "cuda_architecture": "sm_120"
+  },
+  "input": {
+    "path": "../df-lambda-gemm-20261004/ethane230.input",
+    "sha256": "9428f2b1d1db38ffa374387705099e8d57fde98e0e068faed2861b04604a1c6e"
+  },
+  "stages": {
+    "stage2": {
+      "source_commit": "211d9fce26fc68c443296c39f5426b2aa7f13309",
+      "slurm_job": 2226,
+      "order": [
+        "legacy",
+        "canonical",
+        "energy"
+      ],
+      "library_sha256": "29c87fd930a4dbe2bbafdedda47623cdc577d41606dc9c041bdf96678f6f7f63",
+      "endpoint_sha256": "b2e6aa3cbfc6e40ade0089951e2707930d4e3547c6baf6675d9b4ef8cfa2a91b",
+      "source_archive_sha256": "95e31baa252f74880d520ed63e8f28ed52b8e0ba63f8ac1917d8108acd8cf015"
+    },
+    "stage3": {
+      "source_commit": "8a8375983780bd03fcba2d25c02636f0cb6692d0",
+      "slurm_job": 2238,
+      "order": [
+        "symmetric",
+        "screened-1e-12"
+      ],
+      "library_sha256": "c42b66d96fb38f24456628fd0fecd8c26f7b55466e396ffe01bacb598773ac40",
+      "endpoint_sha256": "132b881a79fc6a2bc0dbde6b31ed7e434050f3a241e7d33636e62d6c547ad6c9",
+      "source_archive_sha256": "f9caae0de36edcfb0daea60c1b78dc52b3a7e54584955e52e8a7a024989d0fc8",
+      "archive_note": "git archive of source commit, excluding historical benchmarks/results; every archived file compared byte-for-byte to n2 build checkout before freezing.",
+      "job_state": "COMPLETED",
+      "exit_code": "0:0",
+      "start_time_node_local": "2026-10-04T15:20:43",
+      "end_time_node_local": "2026-10-04T16:05:01"
+    }
+  },
+  "protocol": {
+    "repeats_per_configuration": 1,
+    "cold_native_reference_each_call": true,
+    "profile_jk": true,
+    "lambda_matrix": true,
+    "lambda_q_batch_limit": 8,
+    "screening_default": 0,
+    "no_node3_jobs": true,
+    "legacy_vs_symmetric_same_binary": false,
+    "stage3_two_calls_same_binary": true,
+    "gpu_visibility": "Slurm-assigned CUDA_VISIBLE_DEVICES preserved"
+  },
+  "build": {
+    "type": "Release",
+    "cxx": "/usr/bin/c++",
+    "nvcc": "/group/software/cuda-12.9.1/bin/nvcc",
+    "cxx_launcher": "ccache",
+    "cuda_launcher": "ccache",
+    "ccache_version": "4.5.1",
+    "ccache_basedir": "checkout root",
+    "aot_shells": false,
+    "stationary_force_aot": false,
+    "stationary_cpu_force_aot": false,
+    "cxx_pch": false,
+    "build_tests": false,
+    "build_cli": false,
+    "native_probe_defines": [
+      "GENERATIVEQC_HAS_CUDA=1"
+    ],
+    "note": "Native probes/endpoint linked separately against the frozen CUDA library."
+  },
+  "validation_jobs": {
+    "compiler_matrix": {
+      "job": 2236,
+      "passed": 28
+    },
+    "host_rsh_weights": {
+      "job": 2222,
+      "passed": 18
+    },
+    "cuda_two_pass_force_response": {
+      "job": 2237,
+      "passed": 38
+    },
+    "memcheck_signed_derivative": {
+      "job": 2237,
+      "cases": 8,
+      "errors": 0
+    },
+    "canonical_rsh_fd": {
+      "job": 2233,
+      "passed": true,
+      "scope": "Canonical-only adapted native regression; unavailable optional shell lease checks excluded.",
+      "source_adaptation": "canonical-rsh-validation.patch",
+      "adapted_source_sha256": "013af0075135f33a4121488ef7e87945441e9fcc6c6f753596b365430a874273",
+      "adaptation_note": "Skips unavailable shell-only gates, makes diagnostic require evaluation ordered, adds progress labels. Canonical and CPU/FD thresholds unchanged."
+    },
+    "full_native_rsh": {
+      "job": 2231,
+      "passed": false,
+      "limitation": "Both baseline and candidate stop at unavailable optional shell derivative lease in this build."
+    },
+    "lambda_lifetime_double": {
+      "job": 2240,
+      "passed": 47,
+      "scope": "Host test adapter-only fix after stage3 source freeze; production binary unchanged."
+    }
+  },
+  "retained_local_log_sha256": {
+    "build-symmetric.log": "598d252b52c007ec458b7287b08ca6842a8ad7d2162b6b96da46cb22ed6f7d8a",
+    "test-symmetric.log": "38a029b3a54309646de8f2822f5f8ef435460dc275295940507dd38d4346bfba",
+    "test-lambda-host-fixed.log": "432cac3fb52b5e14284aefc6aef1ce698ecef93aed3323d8181c01ecc3270b03",
+    "stage3/pair.log": "545cfc8dcb45434d54072f07ad293adaa1d72db3d62336139c097d381cd645c6",
+    "stage3/symmetric.progress.jsonl": "34125e0fb417bb3900f073a23c27d8f518c8a2bb2649ee7b7203316a168ea2cb",
+    "stage3/screened-1e-12.progress.jsonl": "8b3e44867a440f5427c2e102b11461db166a3868f34ff51fb481eb21869e511e"
+  }
+}
