@@ -38,6 +38,15 @@ weight/finite publication pass, without a separate numeric buffer. The canonical
 request binds the existing two-node TensorIR region and all three external inputs.
 Production SCF/force endpoint qualification remains under #1884.
 
+The enclosing `PreparedCosxFockPlan` passes the remaining admitted device
+envelope to the shared exchange owner after charging Coulomb residency and
+the larger of the sequential J/K response reservations. The Coulomb diagnostic
+reports its additional response capacity and peak even before response buffers
+are allocated. Exchange preparation can therefore use spare capacity without
+overlapping future derivative work; a tight budget retains generated execution.
+The Fock diagnostic includes the value/response host binding peak and refreshes
+exchange site work only after a complete successful build, including both spins.
+
 COSX derivative value projection, three spatial AO-jet projections and weighted
 value ESP also bind shared prepared sites. `tensor.checked_contraction` retains
 the existing scalar update/publication program hashes and declares exact-order

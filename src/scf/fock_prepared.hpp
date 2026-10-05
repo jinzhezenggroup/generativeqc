@@ -30,6 +30,10 @@ struct FockExecutionVariant {
 struct FockPreparationDiagnostic {
   ResolvedFockBuild strategy;
   std::size_t nbf{}, ncoord{}, device_bytes{}, device_budget_bytes{};
+  /** Additional bounded DF response capacity, separate from retained values.
+   * The response owner consumes this reservation synchronously; enclosing
+   * compositions must retain it even when no response buffer is live yet. */
+  std::size_t response_device_bytes{}, peak_device_bytes{};
   CudaDirectJkDiagnostic direct;
   FockExecutionVariant variant;
   CudaDensityFittingSourceDiagnostic fitted_source;

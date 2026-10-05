@@ -373,6 +373,16 @@ macro(generativeqc_add_native_tests)
     generativeqc_native_test(generativeqc_cosx_fock_provider_tests
                        tests/native/test_cosx_fock_provider.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
+    # Exercise qualification through the real enclosing Fock consumer without
+    # enabling provider qualification hooks in the production shared library.
+    target_sources(generativeqc_cosx_fock_provider_tests PRIVATE
+      src/dft/cosx_fock_provider.cpp src/dft/cuda_cosx.cu
+      "${GENERATIVEQC_COSX_CONTRACTION_HEADER}")
+    target_include_directories(generativeqc_cosx_fock_provider_tests PRIVATE
+      "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    target_compile_definitions(generativeqc_cosx_fock_provider_tests PRIVATE GENERATIVEQC_TEST_HOOKS=1)
+    target_link_libraries(generativeqc_cosx_fock_provider_tests PRIVATE CUDA::cublas)
+    set_target_properties(generativeqc_cosx_fock_provider_tests PROPERTIES CUDA_STANDARD 20)
     generativeqc_native_test(generativeqc_cosx_scf_tests
                        tests/native/test_cosx_scf.cpp
                        LIBRARIES CUDA::cudart SKIP_77)
