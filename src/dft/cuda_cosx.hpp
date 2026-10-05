@@ -31,9 +31,9 @@ struct CudaCosxMolecularDerivativeDiagnostic {
   std::size_t esp_tile_elements{}, ao_jet_elements{}, coordinate_elements{};
   bool bounded_tiling{}, atomic_coordinate_reduction{};
   // Estimates leave execution sites empty. A successful derivative call can
-  // publish ordinary/symmetric full/tail projection provenance here.
+  // publish ordinary/symmetric and paired ESP full/tail provenance here.
   std::size_t contraction_host_bytes{}, provider_allowance{};
-  std::array<tensor::ContractionSiteDiagnostic, 4> contractions{};
+  std::array<tensor::ContractionSiteDiagnostic, 8> contractions{};
 };
 
 struct CudaCosxPointDerivativeDiagnostic {

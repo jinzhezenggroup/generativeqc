@@ -392,6 +392,37 @@ static __global__ void generated_checked_contraction(
   }
 }
 
+/** Traverse two original matrix/vector contractions in one checked region.
+ * Both reductions advance together. The compiler helper owns every input and
+ * update check, so either failure zeroes both publications without exposing a
+ * successful partial output. The square matrix is one borrowed allocation. */
+template <class Step>
+static __global__ void generated_checked_transpose_pair(const double* matrix,
+                                                        const double* first_vector,
+                                                        const double* second_vector,
+                                                        double* first_output, double* second_output,
+                                                        std::size_t count, std::size_t columns,
+                                                        int* error) {
+  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < count;
+       index += std::size_t(blockDim.x) * gridDim.x) {
+    const auto batch = index / columns, row = index % columns;
+    double first = 0, second = 0;
+    bool valid = true;
+    for (std::size_t k = 0; k < columns; ++k) {
+      if (!Step::update(matrix[(batch * columns + row) * columns + k],
+                        matrix[(batch * columns + k) * columns + row],
+                        first_vector[batch * columns + k], second_vector[batch * columns + k],
+                        first, second)) {
+        valid = false;
+        break;
+      }
+    }
+    if (!valid) atomicCAS(error, 0, 1);
+    first_output[index] = valid ? first : 0;
+    second_output[index] = valid ? second : 0;
+  }
+}
+
 /** Prepared projection of the canonical compiler requests for one AOT stage.
  * Each stage has at most a full batch and a tail batch. All descriptor storage,
  * validation and provider setup occur before execution; replay only selects an
@@ -729,23 +760,12 @@ class PreparedContractions {
                const T* a, const T* b, T* output, int* error,
                const T* batch_scale = nullptr) const {
     static_assert(std::is_same_v<T, double> || std::is_same_v<T, float>);
-    require_safe_retained_cache();
-    if (!context_ || !context_->prepared() || generation_ != context_->generation() ||
-        stream != context_->stream())
-      throw std::logic_error("stale native contraction context; prepare again");
-    cudaStreamCaptureStatus capture{};
-    generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
-    if (capture != cudaStreamCaptureStatusNone)
-      throw std::logic_error("native contraction capture requires replay work accounting");
-    int device{};
-    generativeqc_tensor::cuda_check(cudaGetDevice(&device));
-    if (device != context_->device()) throw std::logic_error("native contraction device changed");
-    const Variant* selected = nullptr;
-    for (const auto& variant : variants_)
-      if (variant.o == o && variant.v == v && variant.q == q) selected = &variant;
-    if (!selected || slot >= selected->requests.size())
+    const auto* selected = &bound_variant(o, v, q, stream);
+    if (slot >= selected->requests.size())
       throw std::logic_error("native contraction shape changed; prepare again");
     const auto& r = selected->requests[slot];
+    if (r.checked_transpose_pair_role)
+      throw std::invalid_argument("coupled checked contractions require joint execution");
     if constexpr (std::is_void_v<CheckedStep>) {
       if (!r.checked_update_identity.empty())
         throw std::invalid_argument("checked contraction requires its compiler scalar helper");
@@ -868,6 +888,62 @@ class PreparedContractions {
     *summands_ += work;
   }
 
+  /** Execute a compiler-proven forward/transpose pair atomically with respect
+   * to checked publication. All binding, pointer and counter checks occur
+   * before enqueue; failure never falls back to separate partial contractions. */
+  template <class Step>
+  void execute_checked_transpose_pair(std::size_t first_slot, std::size_t second_slot,
+                                      std::size_t o, std::size_t v, std::size_t q,
+                                      cudaStream_t stream, const double* matrix,
+                                      const double* first_vector, const double* second_vector,
+                                      double* first_output, double* second_output,
+                                      int* error) const {
+    const auto& selected = bound_variant(o, v, q, stream);
+    if (first_slot >= selected.requests.size() || second_slot >= selected.requests.size())
+      throw std::out_of_range("unknown coupled contraction sites");
+    const auto& first = selected.requests[first_slot];
+    const auto& second = selected.requests[second_slot];
+    if (first.checked_transpose_pair_role != 1 || second.checked_transpose_pair_role != 2 ||
+        first.checked_update_identity != Step::update_identity ||
+        second.checked_update_identity != Step::update_identity ||
+        first.scientific_identity != second.scientific_identity ||
+        first.batches != second.batches || first.m != second.m ||
+        selected.batch_scales[first_slot].rank || selected.batch_scales[second_slot].rank ||
+        selected.algorithms[first_slot] != ContractionAlgorithm::GeneratedOrdered ||
+        selected.algorithms[second_slot] != ContractionAlgorithm::GeneratedOrdered)
+      throw std::invalid_argument("scalar helper differs from the coupled contraction binding");
+    if (!matrix || !first_vector || !second_vector || !first_output || !second_output || !error)
+      throw std::invalid_argument("coupled contraction buffer address mismatch");
+    const auto overlaps = [](const void* a, std::size_t a_bytes, const void* b,
+                             std::size_t b_bytes) {
+      const auto left = reinterpret_cast<std::uintptr_t>(a);
+      const auto right = reinterpret_cast<std::uintptr_t>(b);
+      return left <= right ? right - left < a_bytes : left - right < b_bytes;
+    };
+    const auto vector_bytes = contraction_product(first.output_elements(), sizeof(double));
+    const auto matrix_bytes =
+        contraction_product(first.operands[0].storage_elements(), sizeof(double));
+    for (const auto* output : {first_output, second_output})
+      if (overlaps(output, vector_bytes, matrix, matrix_bytes) ||
+          overlaps(output, vector_bytes, first_vector, vector_bytes) ||
+          overlaps(output, vector_bytes, second_vector, vector_bytes))
+        throw std::invalid_argument("coupled contraction output aliases a readonly input");
+    if (overlaps(first_output, vector_bytes, second_output, vector_bytes))
+      throw std::invalid_argument("coupled contraction outputs overlap");
+    const auto work = contraction_product(first.summands(), 2);
+    if (*calls_ > std::numeric_limits<std::size_t>::max() - 2 ||
+        work > std::numeric_limits<std::size_t>::max() - *summands_)
+      throw std::length_error("native contraction diagnostic counter overflow");
+    const auto count = first.output_elements();
+    generated_checked_transpose_pair<Step>
+        <<<generativeqc_tensor::blocks(count, 256), 256, 0, stream>>>(
+            matrix, first_vector, second_vector, first_output, second_output, count, first.m,
+            error);
+    generativeqc_tensor::cuda_check(cudaGetLastError());
+    *calls_ += 2;
+    *summands_ += work;
+  }
+
  private:
   void require_safe_retained_cache() const {
     if (retained_cache_quarantined_)
@@ -888,6 +964,25 @@ class PreparedContractions {
     std::vector<std::unique_ptr<CudaCutlassContraction>> cutlass;
 #endif
   };
+  const Variant& bound_variant(std::size_t o, std::size_t v, std::size_t q,
+                               cudaStream_t stream) const {
+    // Every execution entry, including joint checked publication, must honor
+    // context-retained module quarantine before looking up an older binding.
+    require_safe_retained_cache();
+    if (!context_ || !context_->prepared() || generation_ != context_->generation() ||
+        stream != context_->stream())
+      throw std::logic_error("stale native contraction context; prepare again");
+    cudaStreamCaptureStatus capture{};
+    generativeqc_tensor::cuda_check(cudaStreamIsCapturing(stream, &capture));
+    if (capture != cudaStreamCaptureStatusNone)
+      throw std::logic_error("native contraction capture requires replay work accounting");
+    int device{};
+    generativeqc_tensor::cuda_check(cudaGetDevice(&device));
+    if (device != context_->device()) throw std::logic_error("native contraction device changed");
+    for (const auto& variant : variants_)
+      if (variant.o == o && variant.v == v && variant.q == q) return variant;
+    throw std::logic_error("native contraction shape changed; prepare again");
+  }
   static void release_variant(Variant& variant) {
 #if GENERATIVEQC_HAS_CUTENSOR
     for (auto& plan : variant.cutensor)

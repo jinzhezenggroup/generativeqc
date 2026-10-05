@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cosx_checked_pair_cases.cuh"
 #include "cosx_contraction_cases.cuh"
 
 namespace cosx_checked_test {
@@ -148,6 +149,7 @@ void symmetric_cases() {
 }
 
 void cases() {
+  cosx_checked_pair_test::cases();
   symmetric_cases();
   constexpr std::size_t n = 17, full = 13, tail = 5;
   for (unsigned qualification : {0U, 63U}) {

@@ -150,6 +150,29 @@ class PreparedContractionSites {
     execute_bound<Step>(slot, stream, a, b, output, error, batch_scale);
   }
   const auto& diagnostics() const noexcept { return diagnostics_; }
+  /** Preserve the shared scalar program's coupled publication while retaining
+   * exact per-contraction work counters for both members of a prepared pair. */
+  template <class Step>
+  void execute_checked_transpose_pair(std::size_t first, std::size_t second, cudaStream_t stream,
+                                      const double* matrix, const double* first_vector,
+                                      const double* second_vector, double* first_output,
+                                      double* second_output, int* error) {
+    if (first >= Sites || second >= Sites || first == second)
+      throw std::out_of_range("unknown coupled contraction sites");
+    const auto first_calls = runtime::lowering_add(diagnostics_[first].calls, 1);
+    const auto second_calls = runtime::lowering_add(diagnostics_[second].calls, 1);
+    const auto first_work = runtime::lowering_add(diagnostics_[first].summands,
+                                                  diagnostics_[first].resolved.summands());
+    const auto second_work = runtime::lowering_add(diagnostics_[second].summands,
+                                                   diagnostics_[second].resolved.summands());
+    table_.template execute_checked_transpose_pair<Step>(first, second, 1, 1, 1, stream, matrix,
+                                                         first_vector, second_vector, first_output,
+                                                         second_output, error);
+    diagnostics_[first].calls = first_calls;
+    diagnostics_[second].calls = second_calls;
+    diagnostics_[first].summands = first_work;
+    diagnostics_[second].summands = second_work;
+  }
   std::size_t provider_bytes() const noexcept { return provider_bytes_; }
   std::size_t retained_provider_bytes() const noexcept { return context_.retained_bytes(); }
   int provider_version() const noexcept { return context_.provider_version(); }

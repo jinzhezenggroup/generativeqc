@@ -119,6 +119,10 @@ struct ContractionRequest {
   // A compiler-recognized virtual symmetric RHS borrows one square matrix and
   // its transpose. The original scalar helper owns the half-factor rounding.
   bool checked_right_symmetrization{};
+  // Two checked square matrix/vector contractions may share a scalar program
+  // whose outputs fail together. Roles 1/2 bind the forward/transpose views;
+  // neither member can be executed or published independently.
+  unsigned checked_transpose_pair_role{};
 
   std::size_t leading_dimension(std::size_t operand) const {
     if (leading_dimensions[operand]) return leading_dimensions[operand];
@@ -190,6 +194,13 @@ struct ContractionRequest {
          (checked_update_identity.empty() || !checked_publication_identity.empty() ||
           batches != 1 || k != n || a_trans != 'N' || b_trans != 'N' || operands[1].rank != 2)))
       throw std::invalid_argument("invalid checked scalar contraction contract");
+    if (checked_transpose_pair_role &&
+        (checked_transpose_pair_role > 2 || checked_update_identity.empty() ||
+         !checked_publication_identity.empty() || checked_right_symmetrization || n != 1 ||
+         m != k || a_trans != (checked_transpose_pair_role == 1 ? 'N' : 'T') || b_trans != 'N' ||
+         operands[0].rank != 3 || operands[1].rank != 2 || operands[2].rank != 2 ||
+         leading_dimensions != std::array<std::size_t, 3>{}))
+      throw std::invalid_argument("invalid coupled transpose contraction contract");
     for (const auto& view : operands) {
       if (view.rank > ContractionOperand::kMaximumRank || view.dtype != precision.storage_dtype)
         throw std::invalid_argument("native affine operand rank or dtype is invalid");

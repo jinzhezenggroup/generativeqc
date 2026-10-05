@@ -110,8 +110,13 @@ def test_asymmetric_jet_projection_against_independent_long_double() -> None:
 def test_derivative_emission_keeps_checked_scalar_owner_and_axis_schedule() -> None:
     update, scale = build_cosx_projection_update_program(), build_cosx_scale_program()
     symmetric = build_cosx_symmetric_projection_update_program()
-    source = emit_cosx_derivative_contractions(update, scale, symmetric)
-    assert source == emit_cosx_derivative_contractions(update, scale, symmetric)
+    from generativeqc_compiler.method.cosx_derivative_runtime import (
+        build_cosx_bidirectional_update_program,
+    )
+
+    paired = build_cosx_bidirectional_update_program()
+    source = emit_cosx_derivative_contractions(update, scale, symmetric, paired)
+    assert source == emit_cosx_derivative_contractions(update, scale, symmetric, paired)
     assert update.logical_hash in source and scale.logical_hash in source
     assert "ordered-checked-scalar" in source
     assert "generated_cosx_derivative::accumulate_projection" in source

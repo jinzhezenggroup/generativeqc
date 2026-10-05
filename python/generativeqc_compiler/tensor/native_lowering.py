@@ -18,6 +18,7 @@ if typing.TYPE_CHECKING:
 
     from generativeqc_compiler.common.lowering_provider import LoweringRequest
 
+    from .checked_contraction_pair import CheckedTransposePair
     from .ir import Node
     from .lowering import TensorLoweringAdapter
     from .program import Program
@@ -248,6 +249,7 @@ def contraction_initializer(
     checked_update: Program | None = None,
     checked_publication: Program | None = None,
     checked_right_symmetrization: tuple[str, str, str] | None = None,
+    checked_pair: CheckedTransposePair | None = None,
     fixed_modes: tuple[int, ...] = (),
     operand_order: tuple[int, int] = (0, 1),
 ) -> str:
@@ -296,7 +298,31 @@ def contraction_initializer(
         if node not in accumulation.inputs or beta != "1.0":
             raise ValueError("native update must preserve its unit seed contribution")
         request = contraction_update_request(adapter, accumulation, backend="cuda")
-    if checked_right_symmetrization:
+    pair_role = 0
+    if checked_pair is not None:
+        from .checked_contraction_pair import checked_transpose_pair_request
+
+        pair_role = checked_pair.role(node)
+        if (
+            checked_update is None
+            or checked_publication is not None
+            or checked_right_symmetrization is not None
+            or accumulation is not None
+            or batch_scale is not None
+            or fixed_modes
+            or operand_order != (0, 1)
+            or beta != "0.0"
+            or coefficient != "1.0"
+            or transpose != (("N" if pair_role == 1 else "T"), "N")
+            or row_axes is not None
+        ):
+            raise ValueError(
+                "checked pair requires its complete fresh transpose recipe"
+            )
+        request = checked_transpose_pair_request(
+            adapter, checked_pair, checked_update, role=pair_role, backend="cuda"
+        )
+    elif checked_right_symmetrization:
         from .checked_contraction import checked_symmetric_right_request
 
         if (
@@ -423,5 +449,6 @@ def contraction_initializer(
             else ""
         )
         + (",true" if checked_right_symmetrization else "")
+        + (f",false,{pair_role}" if pair_role else "")
         + "}"
     )
