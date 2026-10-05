@@ -25,13 +25,29 @@ def test_inactive_recycle_is_charged_or_released(tmp_path: Path) -> None:
     if compiler is None:
         pytest.skip("host C++ compiler required")
     native = (ROOT / "src/hf/rhf_frame_response.cu").read_text()
-    start = native.index("RHFFrameResponseResult rhf_frame_response_cuda(")
+    start = native.index("RHFFrameResponseResult rhf_frame_response_cuda_attempt(")
     end = native.index("\n  result.operator_hash = maps::orbital_action_hash;", start)
     admission = native[start:end]
+    # Execute the real per-attempt admission under the public test signature;
+    # no resident publication occurs before this extracted admission boundary.
+    admission = (
+        admission.replace(
+            "rhf_frame_response_cuda_attempt(", "rhf_frame_response_cuda(", 1
+        )
+        .replace(
+            ", bool& resident_values_prepared,\n    std::size_t& attempted_capacity",
+            "",
+            1,
+        )
+        .replace("  attempted_capacity = result.numeric_capacity_bytes;", "", 1)
+    )
     setup_end = '            if (!inverse) result.preconditioner_reason = "unsafe DF diagonal or Cholesky";'
     assert admission.count(setup_end) == 1
     admission = admission.replace(setup_end, INVERSE_OBSERVATION + setup_end)
-    assert "result.numeric_capacity_bytes = total;" in admission
+    assert (
+        "result.numeric_capacity_bytes = checked_add(total, resident_budget);"
+        in admission
+    )
     (tmp_path / "generated_rhf_frame_response_cpu.hpp").write_text(cpu_header())
     source = tmp_path / "inactive_recycle.cpp"
     policy_start = native.index(

@@ -112,7 +112,17 @@ void launch_canonical_jk_kernel(cudaStream_t stream, DeviceBatch batch, bool car
                                 bool same_bucket, bool want_j, bool want_k, bool unrestricted,
                                 DirectCoulombRange exchange_range, double exchange_omega,
                                 double screening, const double* bounds, const double* density,
-                                double* coulomb, double* exchange, std::uint64_t* work_count);
+                                double* coulomb, double* exchange, std::uint64_t* work_count,
+                                double* source_values = nullptr);
+
+/** Reuse the canonical orbit scatter with an immutable full-range value source.
+ * No integral recurrence is instantiated in this replay kernel. */
+void launch_resident_canonical_jk_kernel(
+    cudaStream_t stream, DeviceBatch batch, std::int32_t system, const std::int32_t* pairs,
+    CanonicalPairRows rows, std::size_t first_begin, std::size_t first_count,
+    std::size_t second_begin, std::size_t second_count, bool same_bucket, bool want_j, bool want_k,
+    bool unrestricted, const double* source_values, const double* density, double* coulomb,
+    double* exchange, std::uint64_t* work_count);
 
 /** Preserve the exact public-AO consumer launch and borrowed allocations. */
 void launch_independent_jk_derivative_kernel(

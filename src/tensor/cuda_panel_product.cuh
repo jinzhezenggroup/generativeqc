@@ -11,6 +11,7 @@
 namespace generativeqc::tensor {
 #if defined(GENERATIVEQC_TEST_HOOKS)
 inline thread_local bool panel_product_library_for_test = false;
+inline thread_local bool panel_product_bounded_library_for_test = false;
 inline thread_local bool panel_product_unavailable_for_test = false;
 #endif
 
@@ -37,7 +38,7 @@ class CudaPanelProduct final : public PreparedPanelProduct {
                    std::array<runtime::NativeLoweringCandidate, N> offers, std::string_view target,
                    std::string_view compilation, std::size_t columns, std::size_t rows,
                    std::size_t batches, cudaStream_t stream, std::size_t budget,
-                   std::size_t incumbent, std::size_t alternative, bool dense_physical)
+                   std::size_t incumbent, std::size_t alternative, bool physical)
       : columns_(columns), rows_(rows), batches_(batches) {
     static_assert(sizeof(CudaPanelProduct) + 3 * sizeof(offers) + 4096 <= host_reservation);
     if (!columns || !rows || !batches || incumbent >= N || alternative >= N)
@@ -52,8 +53,10 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     if (capture != cudaStreamCaptureStatusNone)
       throw std::invalid_argument("panel product preparation cannot capture");
     auto& offer = offers[alternative];
-    if (offer.algorithm != "matrix-panel-gemm" || offer.precision >= request.precisions.size() ||
-        request.inputs != 2 || request.input_dtypes[0] != runtime::PrecisionDtype::Fp64 ||
+    bounded_columns_ = offer.algorithm == "bounded-matrix-panel-gemm";
+    if ((!bounded_columns_ && offer.algorithm != "matrix-panel-gemm") ||
+        offer.precision >= request.precisions.size() || request.inputs != 2 ||
+        request.input_dtypes[0] != runtime::PrecisionDtype::Fp64 ||
         request.input_dtypes[1] != runtime::PrecisionDtype::Fp64 ||
         !runtime::strict_requested_precision(request, request.precisions[offer.precision]) ||
         !request.precisions[offer.precision].arithmetic.is_strict_fp64() ||
@@ -69,16 +72,20 @@ class CudaPanelProduct final : public PreparedPanelProduct {
       candidate.host_bytes = host_reservation;
       if (!request.precisions[candidate.precision].arithmetic.is_strict_fp64())
         candidate.rejection = "panel provider does not implement mixed arithmetic";
+      if (&candidate != &offer && (candidate.algorithm == "matrix-panel-gemm" ||
+                                   candidate.algorithm == "bounded-matrix-panel-gemm"))
+        candidate.rejection = "materialization does not match the prepared panel domain";
     }
     offer.provider_bytes = CudaContractionContext::kProviderAllowance;
     offer.cache_bytes = matrix_bytes;
     bool qualified = false, available = true;
 #if defined(GENERATIVEQC_TEST_HOOKS)
-    qualified = panel_product_library_for_test;
+    qualified =
+        bounded_columns_ ? panel_product_bounded_library_for_test : panel_product_library_for_test;
     available = !panel_product_unavailable_for_test;
 #endif
-    if (!dense_physical)
-      offer.rejection = "indexed and response domains retain generated execution";
+    if (!physical)
+      offer.rejection = "response domains retain generated execution";
     else if (!qualified)
       offer.rejection = "matrix-panel endpoint profile is not qualified";
     else if (columns > INT_MAX || rows > INT_MAX)
@@ -97,7 +104,12 @@ class CudaPanelProduct final : public PreparedPanelProduct {
       // host registry metadata cannot be reinterpreted as a smaller GPU budget.
       if (status == cudaErrorMemoryAllocation && !host_oom) {
         (void)cudaGetLastError();
-        context_.reset();
+        // This is a live fallback: failed drain/destruction must propagate.
+        // Preparation remains on the context's device and shares its measurement lock.
+        {
+          std::lock_guard<std::mutex> lock(runtime::allocation_measurement_mutex);
+          context_.release_locked();
+        }
         offer.rejection = "matrix-panel cache allocation unavailable";
       } else {
         generativeqc_tensor::cuda_check(status);
@@ -130,15 +142,16 @@ class CudaPanelProduct final : public PreparedPanelProduct {
   bool enabled() const noexcept override { return enabled_; }
   double* materialized_matrices() const noexcept override { return matrix_; }
   const PanelProductDiagnostic& diagnostic() const noexcept override { return diagnostic_; }
-  void execute(cudaStream_t stream, std::size_t rows, const double* panel, double* output,
-               int* error) const override {
-    if (!enabled_ || stream != context_.stream() || !rows || rows > rows_ || !panel || !output ||
+  void execute(cudaStream_t stream, std::size_t columns, std::size_t rows, const double* panel,
+               double* output, int* error) const override {
+    if (!enabled_ || stream != context_.stream() || !columns || columns > columns_ ||
+        (!bounded_columns_ && columns != columns_) || !rows || rows > rows_ || !panel || !output ||
         !error)
       throw std::invalid_argument("panel product invocation exceeds its prepared domain");
     int device{};
     generativeqc_tensor::cuda_check(cudaGetDevice(&device));
     if (device != context_.device()) throw std::invalid_argument("panel product device changed");
-    const auto input_bytes = rows * columns_ * sizeof(double);
+    const auto input_bytes = rows * columns * sizeof(double);
     const auto output_bytes = batches_ * input_bytes;
     if (runtime::ranges_overlap(output, output_bytes, panel, input_bytes) ||
         runtime::ranges_overlap(output, output_bytes, matrix_, diagnostic_.matrix_bytes) ||
@@ -147,12 +160,12 @@ class CudaPanelProduct final : public PreparedPanelProduct {
     const double alpha = 1.0, beta = 0.0;
     for (std::size_t batch = 0; batch != batches_; ++batch)
       generativeqc_tensor::blas_check(
-          cublasDgemm(context_.handle(), CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(columns_),
-                      static_cast<int>(rows), static_cast<int>(columns_), &alpha,
-                      matrix_ + batch * columns_ * columns_, static_cast<int>(columns_), panel,
-                      static_cast<int>(columns_), &beta, output + batch * rows * columns_,
-                      static_cast<int>(columns_)));
-    const auto count = batches_ * rows * columns_;
+          cublasDgemm(context_.handle(), CUBLAS_OP_N, CUBLAS_OP_N, static_cast<int>(columns),
+                      static_cast<int>(rows), static_cast<int>(columns), &alpha,
+                      matrix_ + batch * columns * columns, static_cast<int>(columns), panel,
+                      static_cast<int>(columns), &beta, output + batch * rows * columns,
+                      static_cast<int>(columns)));
+    const auto count = batches_ * rows * columns;
     panel_product_detail::
         publish<<<std::min<std::size_t>(65535, (count + 127) / 128), 128, 0, stream>>>(
             output, count, error);
@@ -173,7 +186,7 @@ class CudaPanelProduct final : public PreparedPanelProduct {
   CudaContractionContext context_;
   std::size_t columns_{}, rows_{}, batches_{};
   double* matrix_{};
-  bool enabled_{};
+  bool enabled_{}, bounded_columns_{};
   std::array<char, 32> version_{};
   PanelProductDiagnostic diagnostic_{};
 };

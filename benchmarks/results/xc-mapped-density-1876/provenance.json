@@ -1,0 +1,36 @@
+{
+  "source_commit": "9642076a5090408f3f609f528f8aa81a33167c11",
+  "binary_sha256": "723f545b15c1458e2754f600955bbf39fcc3f8db922965602ed4262b6de7243b",
+  "source_manifest_verified": true,
+  "source_sha256": {
+    "tests/native/dft_mapped_density_benchmark.cuh": "95696a0ebbddd5d11583d246b35a06d6ef7d515b789e7c7b357e5e447a3783b0",
+    "tests/native/test_dft_cuda.cu": "0a77fc549a716a801595f65809b40b3e3ccd614d12d0ca4297e0256c1948c5e9",
+    "src/dft/cuda_xc.cpp": "7911997d8ec49907d9d084c88ccc3da45cfa91f9635d0ae454f624dd889e4317",
+    "src/dft/cuda_xc_kernels.cuh": "ca9645d7ad14aa51b08764ac82bd6d22e53d46bc0ce1bc5ab7f37f6d6f13ac74",
+    "src/tensor/cuda_panel_product.cuh": "73553dbe9e061e2bfbc3ab440de81b241e341d4327a9f266ba66032f8442978c",
+    "python/generativeqc_compiler/dft/xc_contraction_cuda.py": "9f1b7b1728c727838f9487fe27f57c42163e9c7e7d62d0d67cba02a4eaee2b18",
+    "python/generativeqc_compiler/dft/xc_density_lowering.py": "1c6d47badf41b7825bf2a620e91645ba4a4f25e7db5c08cbe67de7b0b11eb8c1",
+    "python/generativeqc_compiler/dft/xc_density_provider.py": "c1c1af57bbe07b03d6c8f31be2623aea6ab32ddce9989c0d886a17a5654a6573"
+  },
+  "target": "n1/node1 NVIDIA GeForce RTX 5090 sm_120",
+  "toolkit": "CUDA 12.9.86",
+  "cublas_version": 120901,
+  "slurm_job": 5962,
+  "time_limit": "00:20:00",
+  "native_gate": "Indexed density scalar, capture, local-map and discovered scaled-PBE gates passed",
+  "prior_independent_qualification": {
+    "source_commit": "b3eb09afb508d99e208ce92e6ef8701695dd8c95",
+    "binary_sha256": "1b842fb5a998160cf619502255dcbc21850c60ff95f69641dc98812ab597fe79",
+    "host_checks": 18,
+    "memcheck_errors": 0,
+    "initcheck_errors": 0
+  },
+  "compiler_commands": [
+    "ccache /data/jzzeng/qc-provider-1886-tools/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  -I/data/jzzeng/qc-dft-indexed-density-1876/include -I/data/jzzeng/qc-dft-indexed-density-1876/src -I/data/jzzeng/qc-dft-indexed-density-1876/src/dft -I/data/jzzeng/qc-dft-indexed-density-1876/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIE -MD -MT CMakeFiles/generativeqc_dft_cuda_tests.dir/tests/native/test_dft_cuda.cu.o -MF CMakeFiles/generativeqc_dft_cuda_tests.dir/tests/native/test_dft_cuda.cu.o.d -x cu -c /data/jzzeng/qc-dft-indexed-density-1876/tests/native/test_dft_cuda.cu -o CMakeFiles/generativeqc_dft_cuda_tests.dir/tests/native/test_dft_cuda.cu.o",
+    "ccache /usr/bin/c++ -DGENERATIVEQC_TEST_HOOKS=1 -I/data/jzzeng/qc-dft-indexed-density-1876/include -I/data/jzzeng/qc-dft-indexed-density-1876/src -I/data/jzzeng/qc-dft-indexed-density-1876/src/dft -I/data/jzzeng/qc-dft-indexed-density-1876/build/cuda-release-sm120/generated -isystem /data/jzzeng/qc-provider-1886-tools/cuda-12.9/targets/x86_64-linux/include -O3 -DNDEBUG -std=c++20 -fPIE -MD -MT CMakeFiles/generativeqc_dft_cuda_tests.dir/src/dft/cuda_xc.cpp.o -MF CMakeFiles/generativeqc_dft_cuda_tests.dir/src/dft/cuda_xc.cpp.o.d -o CMakeFiles/generativeqc_dft_cuda_tests.dir/src/dft/cuda_xc.cpp.o -c /data/jzzeng/qc-dft-indexed-density-1876/src/dft/cuda_xc.cpp"
+  ],
+  "data_sha256": {
+    "endpoint-48.json.gz": "acd6121144c4572349dc63a2601ad43f0b32f13657846e3a8419f1650565db4b",
+    "endpoint-96.json.gz": "c638a5365e93634d7b7e70d1e9a15e788ee69dcc3cceaeed055906abccbaacc9"
+  }
+}

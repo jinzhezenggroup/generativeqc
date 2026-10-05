@@ -1820,6 +1820,27 @@ def test_prepared_aot_route_fails_closed_when_selection_moves(
         qualify_capacity._prepared_aot_route_contract(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "field,replacement",
+    [("resident_ao_cutoff", "None"), ("resident_ao_cache_bytes", "0")],
+)
+def test_prepared_request_cannot_drop_the_resident_ao_policy(
+    tmp_path: Path, field: str, replacement: str
+) -> None:
+    relative = "python/generativeqc/_stationary_cuda.py"
+    copy_contract_files(tmp_path, (relative,))
+    qualify_capacity._prepared_aot_route_contract(tmp_path)
+    target = tmp_path / relative
+    source = target.read_text(encoding="utf-8")
+    old = f'"{field}": {field},'
+    assert old in source
+    target.write_text(
+        source.replace(old, f'"{field}": {replacement},', 1), encoding="utf-8"
+    )
+    with pytest.raises(RuntimeError, match="AO request contract changed"):
+        qualify_capacity._prepared_aot_route_contract(tmp_path)
+
+
 def test_grid_count_fails_closed_when_native_cuda_shape_moves(
     tmp_path: Path,
 ) -> None:

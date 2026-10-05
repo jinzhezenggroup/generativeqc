@@ -1,0 +1,298 @@
+[
+  {
+    "nao": 384,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 64,
+    "geometry": 0,
+    "points": 2592,
+    "warm_median_s_masks_0_1_2_3": [
+      1.671964445,
+      1.673475108,
+      1.672047124,
+      1.673777467
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      0.09035257923801776,
+      0.0049450214235857715,
+      0.10843663604342968
+    ],
+    "projection_summands_per_evaluation": 382205952,
+    "accumulation_summands_per_evaluation": 382205952,
+    "esp_symmetric_integrals_per_evaluation": 191600640,
+    "esp_materialized_elements_per_evaluation": 382205952,
+    "max_paired_errors": [
+      2.220446049250313e-16,
+      2.220446049250313e-16,
+      4.440892098500626e-16
+    ],
+    "max_oracle_errors": [
+      2.0816681711721685e-17,
+      2.0816681711721685e-17,
+      6.505213034913027e-19
+    ]
+  },
+  {
+    "nao": 384,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 64,
+    "geometry": 1,
+    "points": 2592,
+    "warm_median_s_masks_0_1_2_3": [
+      1.679716197,
+      1.680875347,
+      1.679716395,
+      1.68125985
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      0.06900868147072803,
+      1.1787705589405562e-05,
+      0.09189963178046767
+    ],
+    "projection_summands_per_evaluation": 382205952,
+    "accumulation_summands_per_evaluation": 382205952,
+    "esp_symmetric_integrals_per_evaluation": 191600640,
+    "esp_materialized_elements_per_evaluation": 382205952,
+    "max_paired_errors": [
+      2.220446049250313e-16,
+      2.220446049250313e-16,
+      0
+    ],
+    "max_oracle_errors": [
+      2.0816681711721685e-17,
+      2.0816681711721685e-17,
+      6.505213034913027e-19
+    ]
+  },
+  {
+    "nao": 384,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 256,
+    "geometry": 0,
+    "points": 2592,
+    "warm_median_s_masks_0_1_2_3": [
+      1.654141898,
+      1.653823851,
+      1.65334637,
+      1.654023604
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      -0.019227310570180123,
+      -0.048093092917955715,
+      -0.007151381640413401
+    ],
+    "projection_summands_per_evaluation": 382205952,
+    "accumulation_summands_per_evaluation": 382205952,
+    "esp_symmetric_integrals_per_evaluation": 191600640,
+    "esp_materialized_elements_per_evaluation": 382205952,
+    "max_paired_errors": [
+      2.220446049250313e-16,
+      2.220446049250313e-16,
+      4.440892098500626e-16
+    ],
+    "max_oracle_errors": [
+      2.0816681711721685e-17,
+      2.0816681711721685e-17,
+      6.505213034913027e-19
+    ]
+  },
+  {
+    "nao": 384,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 256,
+    "geometry": 1,
+    "points": 2592,
+    "warm_median_s_masks_0_1_2_3": [
+      1.653383607,
+      1.653499634,
+      1.652555761,
+      1.653566805
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      0.007017548710952504,
+      -0.050069808149499906,
+      0.0110801872732047
+    ],
+    "projection_summands_per_evaluation": 382205952,
+    "accumulation_summands_per_evaluation": 382205952,
+    "esp_symmetric_integrals_per_evaluation": 191600640,
+    "esp_materialized_elements_per_evaluation": 382205952,
+    "max_paired_errors": [
+      2.220446049250313e-16,
+      2.220446049250313e-16,
+      4.440892098500626e-16
+    ],
+    "max_oracle_errors": [
+      2.0816681711721685e-17,
+      2.0816681711721685e-17,
+      6.505213034913027e-19
+    ]
+  },
+  {
+    "nao": 768,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 64,
+    "geometry": 0,
+    "points": 5184,
+    "warm_median_s_masks_0_1_2_3": [
+      11.54242223,
+      11.541575752,
+      11.539760584,
+      11.54047491
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      -0.007333625326921833,
+      -0.023059683201342995,
+      -0.016870982201100393
+    ],
+    "projection_summands_per_evaluation": 3057647616,
+    "accumulation_summands_per_evaluation": 3057647616,
+    "esp_symmetric_integrals_per_evaluation": 1530814464,
+    "esp_materialized_elements_per_evaluation": 3057647616,
+    "max_paired_errors": [
+      2.220446049250313e-16,
+      2.220446049250313e-16,
+      0
+    ],
+    "max_oracle_errors": [
+      2.7755575615628914e-17,
+      2.7755575615628914e-17,
+      8.673617379884035e-19
+    ]
+  },
+  {
+    "nao": 768,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 64,
+    "geometry": 1,
+    "points": 5184,
+    "warm_median_s_masks_0_1_2_3": [
+      11.537369306,
+      11.537422141,
+      11.5358953,
+      11.53456079
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      0.00045794668264154126,
+      -0.012775928037889184,
+      -0.024342776290775525
+    ],
+    "projection_summands_per_evaluation": 3057647616,
+    "accumulation_summands_per_evaluation": 3057647616,
+    "esp_symmetric_integrals_per_evaluation": 1530814464,
+    "esp_materialized_elements_per_evaluation": 3057647616,
+    "max_paired_errors": [
+      3.3306690738754696e-16,
+      3.3306690738754696e-16,
+      0
+    ],
+    "max_oracle_errors": [
+      2.7755575615628914e-17,
+      2.7755575615628914e-17,
+      8.673617379884035e-19
+    ]
+  },
+  {
+    "nao": 768,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 256,
+    "geometry": 0,
+    "points": 5184,
+    "warm_median_s_masks_0_1_2_3": [
+      12.083851412,
+      12.080718981,
+      12.081068466,
+      12.077388255
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      -0.025922455458926574,
+      -0.02303028980674693,
+      -0.05348590262853614
+    ],
+    "projection_summands_per_evaluation": 3057647616,
+    "accumulation_summands_per_evaluation": 3057647616,
+    "esp_symmetric_integrals_per_evaluation": 1530814464,
+    "esp_materialized_elements_per_evaluation": 3057647616,
+    "max_paired_errors": [
+      2.220446049250313e-16,
+      2.220446049250313e-16,
+      8.881784197001252e-16
+    ],
+    "max_oracle_errors": [
+      2.7755575615628914e-17,
+      2.7755575615628914e-17,
+      8.673617379884035e-19
+    ]
+  },
+  {
+    "nao": 768,
+    "grid": [
+      3,
+      3,
+      6
+    ],
+    "tile": 256,
+    "geometry": 1,
+    "points": 5184,
+    "warm_median_s_masks_0_1_2_3": [
+      12.082667841,
+      12.081245566,
+      12.077437685,
+      12.076132538
+    ],
+    "time_change_percent_masks_0_1_2_3": [
+      0.0,
+      -0.011771200025656459,
+      -0.043286433665357116,
+      -0.054088245129302326
+    ],
+    "projection_summands_per_evaluation": 3057647616,
+    "accumulation_summands_per_evaluation": 3057647616,
+    "esp_symmetric_integrals_per_evaluation": 1530814464,
+    "esp_materialized_elements_per_evaluation": 3057647616,
+    "max_paired_errors": [
+      3.3306690738754696e-16,
+      3.3306690738754696e-16,
+      8.881784197001252e-16
+    ],
+    "max_oracle_errors": [
+      2.7755575615628914e-17,
+      2.7755575615628914e-17,
+      8.673617379884035e-19
+    ]
+  }
+]

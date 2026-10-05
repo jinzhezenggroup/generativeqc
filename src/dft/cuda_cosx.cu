@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -12,6 +13,7 @@
 #include "dft/ao_grid.hpp"
 #include "dft/cuda_cosx.hpp"
 #include "dft/grid_task_view.cuh"
+#include "generated_cosx_contractions.cuh"
 #include "generated_one_electron_values.cuh"
 #include "generativeqc/generativeqc.h"
 #include "molecule/basis.hpp"
@@ -29,6 +31,14 @@ int grid_cuda_view_v1(void* pointer, generativeqc::dft::GridTaskView* output, ch
 int grid_cuda_basis_v1(void* pointer, generativeqc::dft::GridBasisView* output, char* error,
                        size_t size);
 }
+
+#if defined(GENERATIVEQC_TEST_HOOKS)
+extern "C" void cosx_contraction_qualification_for_test(unsigned mask, bool unavailable) {
+  generativeqc::tensor::contraction_sites_qualification_for_test =
+      (mask & 1U ? 5U : 0U) | (mask & 2U ? 10U : 0U) | (mask & 4U ? 48U : 0U);
+  generativeqc::tensor::contraction_sites_unavailable_for_test = unavailable;
+}
+#endif
 
 namespace generativeqc::dft {
 namespace {
@@ -89,6 +99,7 @@ CudaCosxStagingDiagnostic staging_diagnostic(const AoBasis& basis, std::size_t n
                                 true,
                                 true};
   out.device_bytes = add(out.grid_device_bytes, out.cosx_device_bytes);
+  out.contraction_host_bytes = cosx_lowering::Prepared::host_reservation;
   return out;
 }
 
@@ -102,6 +113,18 @@ class DeviceGuard {
 
  private:
   int previous_{};
+};
+
+/** Input spans and output vectors may be temporary caller storage. A provider
+ * failure after an upload must drain that borrow before unwinding, even when
+ * the prepared plan itself survives for a later retry. Declare after DeviceGuard
+ * so the fence runs on the owning device, and preserve the original failure. */
+struct FailureDrain {
+  cudaStream_t stream;
+  int exceptions = std::uncaught_exceptions();
+  ~FailureDrain() {
+    if (std::uncaught_exceptions() > exceptions) (void)cudaStreamSynchronize(stream);
+  }
 };
 
 template <class T>
@@ -205,48 +228,6 @@ __global__ void esp_integrals_kernel(const double* basis, std::size_t natom, std
   }
 }
 
-__global__ void project_density_kernel(const double* ao, const double* density, std::size_t npoint,
-                                       std::size_t nbf, double* projected, int* error) {
-  const std::size_t total = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf, column = index % nbf;
-    double value = 0.0;
-    for (std::size_t row = 0; row < nbf; ++row)
-      value += ao[point * nbf + row] * density[row * nbf + column];
-    projected[index] = finite_or_flag(value, error);
-  }
-}
-
-__global__ void apply_esp_kernel(const double* esp, const double* projected, const double* weights,
-                                 std::size_t npoint, std::size_t nbf, double* potential,
-                                 int* error) {
-  const std::size_t total = npoint * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t point = index / nbf, row = index % nbf;
-    const double* matrix = esp + point * nbf * nbf;
-    double value = 0.0;
-    for (std::size_t column = 0; column < nbf; ++column)
-      value += matrix[row * nbf + column] * projected[point * nbf + column];
-    potential[index] = finite_or_flag(weights[point] * value, error);
-  }
-}
-
-__global__ void accumulate_exchange_kernel(const double* ao, const double* potential,
-                                           std::size_t npoint, std::size_t nbf, double* raw,
-                                           int* error) {
-  const std::size_t total = nbf * nbf;
-  for (std::size_t index = std::size_t(blockIdx.x) * blockDim.x + threadIdx.x; index < total;
-       index += std::size_t(blockDim.x) * gridDim.x) {
-    const std::size_t row = index / nbf, column = index % nbf;
-    double value = raw[index];
-    for (std::size_t point = 0; point < npoint; ++point)
-      value += ao[point * nbf + row] * potential[point * nbf + column];
-    raw[index] = finite_or_flag(value, error);
-  }
-}
-
 __global__ void symmetrize_exchange_kernel(const double* raw, std::size_t nbf, double* output,
                                            int* error) {
   const std::size_t total = nbf * nbf;
@@ -273,6 +254,7 @@ struct CudaCosxStagingPlan::Impl {
   void* grid{};
   CudaCosxStagingDiagnostic diagnostic;
   GridBasisView device_basis{};
+  std::unique_ptr<cosx_lowering::Prepared> contractions;
 
   DeviceBuffer<double> density;
   DeviceBuffer<double> esp;
@@ -336,8 +318,23 @@ struct CudaCosxStagingPlan::Impl {
       raw.reset(matrix, device);
       exchange.reset(matrix, device);
       error.reset(1, device);
-
+      // All full/tail sites borrow the already established grid stream. The
+      // shared tensor owner selects and retains optional provider resources.
+      contractions = cosx_lowering::prepare(
+          basis.nao, tile_points, weights.size() % tile_points, device_basis.stream,
+          diagnostic.device_budget_bytes - diagnostic.device_bytes);
+      diagnostic.contraction_host_bytes = cosx_lowering::Prepared::host_reservation;
+      diagnostic.provider_allowance = contractions->provider_bytes();
+      diagnostic.retained_provider_bytes = contractions->retained_provider_bytes();
+      diagnostic.provider_version = contractions->provider_version();
+      diagnostic.contraction_device = device;
+      diagnostic.compute_major = properties.major;
+      diagnostic.compute_minor = properties.minor;
+      diagnostic.runtime_version = contractions->runtime_version();
+      diagnostic.contraction_prepare_seconds = contractions->prepare_seconds();
+      diagnostic.device_bytes = add(diagnostic.device_bytes, diagnostic.provider_allowance);
     } catch (...) {
+      contractions.reset();
       grid_cuda_destroy_v1(grid);
       grid = nullptr;
       throw;
@@ -347,6 +344,7 @@ struct CudaCosxStagingPlan::Impl {
   ~Impl() {
     // Grid Context and each DeviceBuffer already select their owning device
     // during nonthrowing teardown; never construct a throwing guard here.
+    contractions.reset();  // The provider drains its borrowed stream before grid destruction.
     if (grid) grid_cuda_destroy_v1(grid);
   }
 
@@ -363,6 +361,7 @@ struct CudaCosxStagingPlan::Impl {
 
     DeviceGuard guard(device);
     bool initialized = false;
+    FailureDrain failure_drain{device_basis.stream};
     char message[512]{};
     for (std::size_t begin = 0; begin < weights.size(); begin += tile_points) {
       const std::size_t count = std::min(tile_points, weights.size() - begin);
@@ -391,15 +390,13 @@ struct CudaCosxStagingPlan::Impl {
       check(cudaMemcpyAsync(device_weights.get(), weights.data() + begin, count * sizeof(double),
                             cudaMemcpyHostToDevice, view.stream));
 
-      project_density_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          view.ao, density.get(), count, n, projected.get(), error.get());
-      check(cudaGetLastError());
-      apply_esp_kernel<<<blocks(count * n), 128, 0, view.stream>>>(
-          esp.get(), projected.get(), device_weights.get(), count, n, potential.get(), error.get());
-      check(cudaGetLastError());
-      accumulate_exchange_kernel<<<blocks(matrix), 128, 0, view.stream>>>(
-          view.ao, potential.get(), count, n, raw.get(), error.get());
-      check(cudaGetLastError());
+      const std::size_t site = count == tile_points ? 0 : 2;
+      contractions->execute(site, view.stream, view.ao, density.get(), projected.get(),
+                            error.get());
+      contractions->execute(count == tile_points ? 4 : 5, view.stream, esp.get(), projected.get(),
+                            potential.get(), error.get(), device_weights.get());
+      contractions->execute(site + 1, view.stream, view.ao, potential.get(), raw.get(),
+                            error.get());
     }
 
     GridTaskView final_view{};
@@ -417,20 +414,16 @@ struct CudaCosxStagingPlan::Impl {
     result.raw_exchange.resize(matrix);
     result.exchange.resize(matrix);
     int failure = 0;
-    try {
-      check(cudaMemcpyAsync(result.raw_exchange.data(), raw.get(), matrix * sizeof(double),
-                            cudaMemcpyDeviceToHost, final_view.stream));
-      check(cudaMemcpyAsync(result.exchange.data(), exchange.get(), matrix * sizeof(double),
-                            cudaMemcpyDeviceToHost, final_view.stream));
-      check(cudaMemcpyAsync(&failure, error.get(), sizeof(int), cudaMemcpyDeviceToHost,
-                            final_view.stream));
-      check(cudaStreamSynchronize(final_view.stream));
-    } catch (...) {
-      // A later enqueue may fail while an earlier download still targets these
-      // local buffers. Drain before unwinding their lifetime; retain the cause.
-      (void)cudaStreamSynchronize(final_view.stream);
-      throw;
-    }
+    // This guard is younger than the result vectors and error scalar, so it
+    // drains their D2H borrows before those local targets are destroyed.
+    FailureDrain output_failure_drain{final_view.stream};
+    check(cudaMemcpyAsync(result.raw_exchange.data(), raw.get(), matrix * sizeof(double),
+                          cudaMemcpyDeviceToHost, final_view.stream));
+    check(cudaMemcpyAsync(result.exchange.data(), exchange.get(), matrix * sizeof(double),
+                          cudaMemcpyDeviceToHost, final_view.stream));
+    check(cudaMemcpyAsync(&failure, error.get(), sizeof(int), cudaMemcpyDeviceToHost,
+                          final_view.stream));
+    check(cudaStreamSynchronize(final_view.stream));
     if (failure) throw std::runtime_error("nonfinite CUDA COSX staging result");
 
     double contraction = 0.0;
@@ -464,6 +457,7 @@ CosxReferenceResult CudaCosxStagingPlan::build(std::span<const double> density,
 }
 
 const CudaCosxStagingDiagnostic& CudaCosxStagingPlan::diagnostic() const noexcept {
+  impl_->diagnostic.contractions = impl_->contractions->diagnostics();
   return impl_->diagnostic;
 }
 

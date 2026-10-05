@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_contraction_sites.cuh",
+  "reason": "Shared canonical contraction-site preparation owns independent candidate selection, one provider lifetime, bounded full/tail descriptors, explicit resource fallback and physical work diagnostics.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}
