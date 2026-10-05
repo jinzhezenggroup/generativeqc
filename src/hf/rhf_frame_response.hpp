@@ -1,8 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -87,6 +89,20 @@ struct RHFFrameResponseOptions {
   // Optional synchronized J/K timing and canonical integral census. Phase wall
   // times are always reported; J/K times are subsets, not additive phases.
   bool profile_jk{false};
+  /** An unset ceiling selects conservative reuse for relaxed, unscreened
+   * frames with at least 64 public AOs, capped at 8 GiB. Explicit zero disables
+   * reuse; a positive value requests it independently of that crossover.
+   * Complete-endpoint and Direct inventory/device admission still apply.
+   * Final scalar residuals always independently recompute the exact source. */
+  std::optional<std::size_t> resident_jk_maximum_bytes;
+
+  /** Pure resource policy, not a scientific operator or a CUDA initializer.
+   * The Direct owner may refuse this allowance without changing exact work. */
+  std::size_t resident_jk_allowance(std::size_t nbf, std::size_t remaining_bytes) const noexcept {
+    const bool automatic = relax_orbitals && orbital_screening_tolerance == 0.0 && nbf >= 64;
+    const auto ceiling = resident_jk_maximum_bytes.value_or(automatic ? 8ULL << 30 : 0);
+    return std::min(ceiling, remaining_bytes);
+  }
   // Experimental canonical P:G'(D). Fewer passes can lose shell-level reuse,
   // so this consumer requires an explicit opt-in and a measured crossover.
   bool bilinear_derivative{false};
@@ -120,6 +136,10 @@ struct RHFFrameResponseResult {
   bool global_stability_certified{false};
   std::size_t numeric_capacity_bytes{}, direct_device_bytes{}, owned_device_bytes{};
   std::size_t jk_actions{}, derivative_passes{}, orbital_actions{}, gemms{};
+  std::size_t resident_jk_bytes{}, resident_jk_values{}, resident_jk_actions{};
+  std::uint64_t resident_jk_value_reads{};
+  double resident_jk_setup_seconds{}, resident_jk_seconds{}, resident_jk_device_seconds{};
+  std::string resident_jk_reason;
   std::size_t shell_derivative_passes{}, generic_derivative_passes{};
   // Generated matrix-map work and owner-managed transfers (including derivative
   // operand uploads). Provider-internal setup/execution traffic is excluded;
@@ -131,7 +151,9 @@ struct RHFFrameResponseResult {
   std::size_t contraction_binding_bytes{}, prepared_contraction_summands{};
   double setup_seconds{}, reference_audit_seconds{}, weights_seconds{}, solve_seconds{},
       independent_audit_seconds{}, one_electron_seconds{}, two_electron_seconds{};
-  double jk_seconds{}, screened_jk_seconds{}, screened_residual{};
+  // Device events bracket the same J/K composition as the synchronized wall
+  // timer. Resident timings are subsets; neither is an additive parent phase.
+  double jk_seconds{}, jk_device_seconds{}, screened_jk_seconds{}, screened_residual{};
   double requested_screening{}, applied_screening{};
   std::size_t screened_jk_actions{}, jk_census_actions{}, exact_refinements{};
   std::size_t screened_iterations{}, screened_operator_actions{};

@@ -103,6 +103,11 @@ struct CudaDirectJkPlan {
   /** Borrowed test/profiler census: candidate quartets and radial evaluations.
    * Null in production. The observer owns storage and stream-ordered lifetime. */
   std::uint64_t* canonical_work_count{};
+  /** Optional immutable, full-range symmetry-unique AO source values. Their
+   * order is exactly the geometry-bound canonical bucket traversal. This
+   * lease never changes range, screening or derivative fallback semantics. */
+  double* resident_values{};
+  std::size_t resident_value_count{};
   ~CudaDirectJkPlan();
 };
 
