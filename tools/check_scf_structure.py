@@ -97,6 +97,7 @@ CUDA_ALLOWED: dict[str, tuple[str, ...]] = {
         "scf/cuda_batch.hpp",
         "scf/eigensolver_workspace.hpp",
         "runtime/resource_cuda.cuh",
+        "runtime/lowering_binding.hpp",
         "generativeqc/generativeqc.hpp",
     ),
 }
@@ -393,6 +394,8 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_scatter",
     "direct_force_low_order",
     "direct_force_low_order_sources",
+    "direct_force_order4_sources",
+    "direct_force_order5_sources",
     "direct_force_order2",
     "direct_force_order3",
     "direct_force_quartet",

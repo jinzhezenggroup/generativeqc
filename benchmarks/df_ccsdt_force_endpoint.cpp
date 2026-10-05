@@ -35,12 +35,13 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
 
 int main(int argc, char** argv) {
   try {
-    if (argc < 4 || argc > 13)
+    if (argc < 4 || argc > 14)
       throw std::invalid_argument(
           "usage: df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 "
           "[FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT "
           "[ORBITAL_SCHWARZ "
-          "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC]]]]]]]]]");
+          "[PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC "
+          "[DERIVED_DENOMINATORS_0_OR_1]]]]]]]]]]");
     const bool reduction = std::string(argv[3]) == "1";
     if (!reduction && std::string(argv[3]) != "0")
       throw std::invalid_argument("invalid schedule selector");
@@ -79,6 +80,7 @@ int main(int argc, char** argv) {
     const auto nuclear_schedule = nuclear_selector[0] - '0';
     frame_options.bilinear_derivative = nuclear_schedule == 1;
     frame_options.symmetric_polarization = nuclear_schedule == 2;
+    const bool derived_denominators = selector(13);
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -115,7 +117,7 @@ int main(int argc, char** argv) {
               << " Q=" << generativeqc::molecule::ao_count(auxiliary) << std::endl;
     const auto result = generativeqc::methods::detail::run_df_ccsdt_native(
         execution, orbital, auxiliary, descriptor, forces, true, reduction, matrix, lambda_matrix,
-        batch_limit, ccsd_batch_limit, frame_options);
+        batch_limit, ccsd_batch_limit, frame_options, derived_denominators);
     std::ofstream output(argv[2]);
     if (!output) throw std::runtime_error("cannot open completed force output");
     output << std::setprecision(17) << "{\n";
@@ -154,6 +156,10 @@ int main(int argc, char** argv) {
     field("ccsd_contraction_terms", result.solver.df_contraction_terms);
     field("ccsd_evaluations", result.solver.iteration_graph_calls);
     field("ccsd_capacity", result.solver.numeric_capacity_bytes);
+    field("ccsd_device_bytes", result.solver.owned_device_bytes);
+    field("ccsd_setup_h2d_bytes", result.solver.setup_h2d_bytes);
+    field("denominator_identity", result.solver.denominator_identity);
+    field("derived_d2_iteration_evaluations", result.solver.derived_d2_iteration_evaluations);
     field("ccsd_iterations", result.solver.iterations);
     field("ccsd_replay_r1_max", result.solver.replay_r1_max);
     field("ccsd_replay_r2_max", result.solver.replay_r2_max);

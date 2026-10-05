@@ -115,6 +115,8 @@ COLUMNS = (
     "batch_size",
     "q_tiles",
     "accumulation_bytes",
+    "denominator_identity",
+    "derived_d2_iteration_evaluations",
 )
 
 
@@ -264,6 +266,9 @@ def _stream(
     hoist: bool = True,
     matrix: bool = True,
     batch_limit: int = 8,
+    canonical_eps: np.ndarray | None = None,
+    level_shift: float = 0.0,
+    max_iterations: int = 100,
 ) -> bytes:
     o, v = arrays["t1"].shape
     q = len(arrays["bov"]) if df else 0
@@ -273,18 +278,110 @@ def _stream(
             v,
             q,
             budget,
-            100,
+            max_iterations,
             diis,
-            int(cuda) | (0 if hoist else 4) | (0 if matrix else 8) | (batch_limit << 8),
+            int(cuda)
+            | (0 if hoist else 4)
+            | (0 if matrix else 8)
+            | (16 if canonical_eps is not None else 0)
+            | (batch_limit << 8),
         ],
         dtype=np.uint64,
     )
     omitted = ("ovvv", "vvvv") if df else ("bov", "bvv")
-    return header.tobytes() + b"".join(
+    data = header.tobytes() + b"".join(
         np.asarray(arrays[name], dtype=np.float64).tobytes()
         for name in FIELDS
         if name not in omitted
     )
+    if canonical_eps is not None:
+        data += np.asarray(canonical_eps, dtype=np.float64).tobytes()
+        data += np.float64(level_shift).tobytes()
+    return data
+
+
+@pytest.mark.parametrize(
+    "df,hoist,matrix",
+    [
+        (False, False, False),
+        (True, False, False),
+        (True, True, False),
+        (True, True, True),
+    ],
+)
+def test_canonical_spectrum_preserves_solver_trajectory(
+    solver_probe: tuple[Path, bool], df: bool, hoist: bool, matrix: bool
+) -> None:
+    """Compare each early trajectory prefix and final independent residual replay."""
+    fock, g, arrays = _case(2, 3, 5)
+    eps = np.diag(fock).copy()
+    shift = 0.173
+    gaps = eps[:2, None] - eps[None, 2:]
+    # Independent ordered arithmetic, including a nonzero level shift.
+    arrays["d1"] = gaps - shift
+    arrays["d2"] = gaps[:, None, :, None] + gaps[None, :, None, :] - 2.0 * shift
+    schedule = {"df": df, "hoist": hoist, "matrix": matrix}
+    for limit in (1, 2, 3, 4, 100):
+        explicit, x1, x2 = _run(solver_probe, arrays, max_iterations=limit, **schedule)
+        derived, d1, d2 = _run(
+            solver_probe,
+            arrays,
+            max_iterations=limit,
+            canonical_eps=eps,
+            level_shift=shift,
+            **schedule,
+        )
+        assert explicit["status"] == derived["status"]
+        assert explicit["iterations"] == derived["iterations"]
+        assert explicit["denominator_identity"] != derived["denominator_identity"]
+        np.testing.assert_allclose(
+            explicit["energy"], derived["energy"], atol=2e-12, rtol=0
+        )
+        np.testing.assert_allclose(x1, d1, atol=2e-11, rtol=0)
+        np.testing.assert_allclose(x2, d2, atol=2e-11, rtol=0)
+        assert (
+            derived["derived_d2_iteration_evaluations"]
+            == arrays["d2"].size * derived["iterations_called"]
+        )
+        assert explicit["derived_d2_iteration_evaluations"] == 0
+    energy, r1, r2 = DeterminantOracle(fock, g, 2).evaluate_full(d1, d2)
+    np.testing.assert_allclose(derived["energy"], energy, atol=2e-12, rtol=0)
+    assert max(np.max(np.abs(r1)), np.max(np.abs(r2))) <= 1e-10
+
+
+def test_canonical_capacity_admits_previously_rejected_problem(
+    solver_probe: tuple[Path, bool],
+) -> None:
+    """Force the bounded schedule, then test its actual byte boundary."""
+    fock, _, arrays = _case(2, 6, 1)
+    eps = np.diag(fock).copy()
+    schedule = {"hoist": False, "matrix": False}
+    explicit, _, _ = _run(solver_probe, arrays, **schedule)
+    derived, _, _ = _run(solver_probe, arrays, canonical_eps=eps, **schedule)
+    assert derived["capacity"] < explicit["capacity"]
+    assert (
+        explicit["capacity"] - derived["capacity"] >= arrays["d2"].nbytes - eps.nbytes
+    )
+    if solver_probe[1]:
+        assert explicit["h2d"] - derived["h2d"] == arrays["d2"].nbytes - eps.nbytes
+        assert derived["device_bytes"] < explicit["device_bytes"]
+    budget = int(derived["capacity"])
+    _run(solver_probe, arrays, budget=budget, canonical_eps=eps, **schedule)
+    for spectrum, amount in ((eps, budget - 1), (None, budget)):
+        rejected = subprocess.run(
+            [str(solver_probe[0])],
+            input=_stream(
+                arrays,
+                solver_probe[1],
+                budget=amount,
+                canonical_eps=spectrum,
+                **schedule,
+            ),
+            capture_output=True,
+            timeout=30,
+            check=False,
+        )
+        assert rejected.returncode and b"budget" in rejected.stderr
 
 
 def _run(

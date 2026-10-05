@@ -810,7 +810,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       eigensolver = std::make_unique<OrdinaryStreamEigensolver>(stream, n, tmp2, eigenvalues);
       resource.state_device_bytes = sum(resource.state_device_bytes, eigensolver->device_bytes());
       resource.retained_host_numeric_bytes =
-          sum(resource.retained_host_numeric_bytes, eigensolver->host_bytes());
+          sum(resource.retained_host_numeric_bytes,
+              sum(eigensolver->host_bytes(), eigensolver->metadata_bytes()));
       if (resource.xc_device_bytes) {
         bool host_oom = false;
         auto status = runtime::resource_cuda_malloc(&xc_arena, resource.xc_device_bytes, &host_oom);

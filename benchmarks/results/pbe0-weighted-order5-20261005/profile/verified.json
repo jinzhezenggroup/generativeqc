@@ -1,0 +1,129 @@
+{
+  "native_sha256": "b0801ac87c211dfce85e4732a3dcf42f99e4bd54094811a9e025fa0c06f912de",
+  "reference_sha256": "812401e8f1d5e6324e83b4a96c0b335bc2f76198a323442248372484c309397c",
+  "all_pairings": 72,
+  "max_energy_error": 1.014086592476815e-10,
+  "max_force_error": 2.568741053199375e-11,
+  "phases": {
+    "cold": {
+      "native_seconds": [
+        246.0953601785004
+      ],
+      "reference_seconds": [
+        78.14337036386132
+      ],
+      "native_median": 246.0953601785004,
+      "reference_median": 78.14337036386132,
+      "ratio": 3.149280086494852,
+      "native_iterations": [
+        25
+      ],
+      "reference_iterations": [
+        37
+      ],
+      "native_fock_builds": [
+        25
+      ]
+    },
+    "warm": {
+      "native_seconds": [
+        32.76405920088291,
+        25.99075399339199,
+        26.304547119885683,
+        31.000064834952354,
+        26.555205151438713
+      ],
+      "reference_seconds": [
+        18.90713006258011,
+        13.629941865801811,
+        18.982324477285147,
+        13.604255806654692,
+        13.624901816248894
+      ],
+      "native_median": 26.555205151438713,
+      "reference_median": 13.629941865801811,
+      "ratio": 1.9482992233493686,
+      "native_iterations": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "reference_iterations": [
+        6,
+        3,
+        6,
+        3,
+        3
+      ],
+      "native_fock_builds": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    },
+    "moved": {
+      "native_seconds": [
+        150.07516913861036
+      ],
+      "reference_seconds": [
+        92.67584819346666
+      ],
+      "native_median": 150.07516913861036,
+      "reference_median": 92.67584819346666,
+      "ratio": 1.6193557659738813,
+      "native_iterations": [
+        15
+      ],
+      "reference_iterations": [
+        47
+      ],
+      "native_fock_builds": [
+        15
+      ]
+    },
+    "moved-warm": {
+      "native_seconds": [
+        26.337691944092512,
+        31.24884318932891,
+        28.75897826999426,
+        26.37741504982114,
+        31.387704204767942
+      ],
+      "reference_seconds": [
+        10.083820339292288,
+        15.407870173454285,
+        10.06106897816062,
+        10.08649018779397,
+        10.100359447300434
+      ],
+      "native_median": 28.75897826999426,
+      "reference_median": 10.08649018779397,
+      "ratio": 2.8512374210006715,
+      "native_iterations": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "reference_iterations": [
+        1,
+        4,
+        1,
+        1,
+        1
+      ],
+      "native_fock_builds": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ]
+    }
+  }
+}

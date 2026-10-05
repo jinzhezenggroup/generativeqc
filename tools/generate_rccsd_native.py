@@ -346,6 +346,65 @@ def _scaled_bilinear_cpp() -> str:
 }"""
 
 
+def canonical_denominators_cpp() -> str:
+    """One scalar IR serves host admission and fused CPU/CUDA consumers.
+
+    Both generated core headers can be used independently. The guard publishes
+    this common definition once, outside their potentially different namespaces.
+    No full denominator tensor or separate reconstruction kernel is emitted.
+    """
+    from generativeqc_compiler.method.cc_denominators import (
+        canonical_denominator_program,
+    )
+    from generativeqc_compiler.tensor.scalar_cpp import emit_scalar_cpp
+
+    functions = []
+    for doubles in (False, True):
+        name = "canonical_double" if doubles else "canonical_single"
+        order = ("ei", "ea", "ej", "eb", "shift") if doubles else ("ei", "ea", "shift")
+        code = emit_scalar_cpp(
+            canonical_denominator_program(doubles=doubles),
+            function_name=name,
+            input_order=order,
+            output_order=("physical", "shifted"),
+            caller_owned_checks=True,
+            ordered_native_sums=True,
+            output_dependency_order=True,
+        )
+        functions.append(code.replace("inline bool", "GENERATIVEQC_CC_HD inline bool"))
+    return "\n".join(
+        [
+            "#ifndef GENERATIVEQC_CANONICAL_DENOMINATORS_DEFINED",
+            "#define GENERATIVEQC_CANONICAL_DENOMINATORS_DEFINED",
+            "#if defined(__CUDACC__)",
+            "#define GENERATIVEQC_CC_HD __host__ __device__",
+            "#else",
+            "#define GENERATIVEQC_CC_HD",
+            "#endif",
+            "namespace generativeqc::cc::generated {",
+            *functions,
+            "GENERATIVEQC_CC_HD inline double canonical_d2_at(std::size_t flat,std::size_t o,std::size_t v,const double* eps,double shift){",
+            "  const auto b=flat%v; flat/=v; const auto a=flat%v; flat/=v;",
+            "  const auto j=flat%o,i=flat/o; double physical,shifted;",
+            "  canonical_double(eps[i],eps[o+a],eps[j],eps[o+b],shift,physical,shifted);",
+            "  return shifted;",
+            "}",
+            "}  // namespace generativeqc::cc::generated",
+            "#undef GENERATIVEQC_CC_HD",
+            "#endif",
+        ]
+    )
+
+
+def _canonical_d2_consumer(node: typing.Any) -> bool:
+    """Only the declared Jacobi d2 input admits the canonical input view."""
+    return (
+        node.op == "divide"
+        and node.inputs[1].op == "input"
+        and node.inputs[1].attrs["name"] == "d2"
+    )
+
+
 @dataclass(frozen=True)
 class ArenaPlan:
     """Shape-symbolic storage shared by admission and CPU/CUDA emission.
@@ -433,10 +492,17 @@ def _cpu_node(
         ]
     elif node.op == "divide":
         a, b = (names[x._emit_index] for x in node.inputs)
+        denominator = f"{b}[i]"
+        if _canonical_d2_consumer(node):
+            denominator = (
+                "(inputs.canonical_eps ? ::generativeqc::cc::generated::canonical_d2_at("
+                f"i,o,v,inputs.canonical_eps,inputs.canonical_level_shift) : {denominator})"
+            )
         lines += [
             f"  for(std::size_t i=0;i<{size};++i){{",
-            f'    if({b}[i]==0.0) throw std::runtime_error("zero RCCSD denominator");',
-            f"    const double value={a}[i]/{b}[i];",
+            f"    const double denominator={denominator};",
+            '    if(denominator==0.0) throw std::runtime_error("zero RCCSD denominator");',
+            f"    const double value={a}[i]/denominator;",
             '    if(!std::isfinite(value)) throw std::runtime_error("nonfinite RCCSD divide");',
             f"    {out}[i]=value;",
             "  }",
@@ -985,12 +1051,14 @@ def cpu_header() -> str:
             "#include <initializer_list>",
             "#include <limits>",
             "#include <stdexcept>",
+            canonical_denominators_cpp(),
             "namespace generativeqc::cc::generated {",
             _scaled_bilinear_cpp(),
             'inline std::size_t checked_add(std::size_t a,std::size_t b){if(b>std::numeric_limits<std::size_t>::max()-a)throw std::length_error("RCCSD size overflow");return a+b;}',
             'inline std::size_t checked_product(std::initializer_list<std::size_t> values){std::size_t x=1;for(auto v:values){if(v&&x>std::numeric_limits<std::size_t>::max()/v)throw std::length_error("RCCSD size overflow");x*=v;}return x;}',
             "struct Inputs {",
             *[f"  const double* {name}{{}};" for name in INPUT_NAMES],
+            "  const double* canonical_eps{}; double canonical_level_shift{};",
             "};",
             "struct IterationOutputs { double energy{}; const double* r1{}; const double* r2{}; const double* next_t1{}; const double* next_t2{}; };",
             "struct ReplayOutputs { double energy{}; const double* r1{}; const double* r2{}; };",
@@ -1211,6 +1279,8 @@ def _cuda_kernel(
         for i, source in enumerate(node.inputs)
     ]
     arguments += ["double* out", "std::size_t o", "std::size_t v"]
+    if _canonical_d2_consumer(node):
+        arguments += ["const double* canonical_eps", "double canonical_level_shift"]
     if batch_dim:
         arguments.append("std::size_t q")
     arguments.append("int* error")
@@ -1235,8 +1305,14 @@ def _cuda_kernel(
             f"    out[flat]=generativeqc_tensor::finite(value,error,{number});",
         ]
     elif node.op == "divide":
+        denominator = "a1[flat]"
+        if _canonical_d2_consumer(node):
+            denominator = (
+                "(canonical_eps ? ::generativeqc::cc::generated::canonical_d2_at("
+                "flat,o,v,canonical_eps,canonical_level_shift) : a1[flat])"
+            )
         lines += [
-            f"    out[flat]=generativeqc_tensor::quotient(a0[flat],a1[flat],error,{number});"
+            f"    out[flat]=generativeqc_tensor::quotient(a0[flat],{denominator},error,{number});"
         ]
     elif node.op == "multiply":
         lines.append(
@@ -1661,6 +1737,11 @@ def _cuda_program(
                 names[number],
                 "s.o",
                 "s.v",
+                *(
+                    ["s.canonical_eps", "s.canonical_level_shift"]
+                    if _canonical_d2_consumer(node)
+                    else []
+                ),
                 *(["s.q"] if batch_dim else []),
                 "s.error",
             ]

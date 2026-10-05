@@ -10,6 +10,7 @@ from generativeqc_compiler.tensor.interpreter import execute
 from generativeqc_compiler.tensor.ir import add, einsum, input_tensor
 from generativeqc_compiler.tensor.lowering import TensorLoweringAdapter
 from generativeqc_compiler.tensor.metric_lowering import OPERATIONS, metric_request
+from generativeqc_compiler.tensor.native_lowering import contraction_initializer
 from generativeqc_compiler.tensor.program import Program
 from generativeqc_compiler.tensor.types import Index, IndexSpace, TensorSpec
 from generativeqc_compiler.tensor.vector_lowering import vector_portfolio
@@ -105,4 +106,24 @@ def test_seed_cannot_alias_a_product_input() -> None:
     with pytest.raises(ValueError, match="exclusive last use"):
         contraction_update_request(
             TensorLoweringAdapter(Program({"result": root})), root, backend="cuda"
+        )
+
+
+@pytest.mark.parametrize("fixed_modes,operand_order", [((0,), (0, 1)), ((), (1, 0))])
+def test_donated_update_rejects_unimplemented_row_projection(
+    fixed_modes: tuple[int, ...], operand_order: tuple[int, int]
+) -> None:
+    adapter, root, product, _ = metric_request("metric_charge", backend="cuda")
+    with pytest.raises(ValueError, match="cannot project or reorder donated"):
+        contraction_initializer(
+            adapter,
+            product,
+            lambda index: str(index.extent),
+            transpose=("T", "N"),
+            extents=("1", "5", "1", "3"),
+            coefficient="1.0",
+            beta="1.0",
+            accumulation=root,
+            fixed_modes=fixed_modes,
+            operand_order=operand_order,
         )
