@@ -1,7 +1,10 @@
 #include "scf/cuda/eigensolver.hpp"
 
+#include <chrono>
+#include <cstdio>
 #include <stdexcept>
 
+#include "generated_solver_lowering.hpp"
 #include "generativeqc/generativeqc.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "scf/cuda/eigensolver_kernels.hpp"
@@ -36,6 +39,7 @@ OrdinaryStreamEigensolver::OrdinaryStreamEigensolver(cudaStream_t stream, int n,
                                                      const double* matrix,
                                                      const double* eigenvalues)
     : n_(n) {
+  const auto started = std::chrono::steady_clock::now();
   if (n <= 0 || !stream || !matrix || !eigenvalues)
     throw std::invalid_argument("invalid ordinary eigensolver owner");
   const auto checked = [](generativeqc_status status) {
@@ -44,33 +48,86 @@ OrdinaryStreamEigensolver::OrdinaryStreamEigensolver(cudaStream_t stream, int n,
       throw generativeqc::Error(status, "ordinary CUDA eigensolver preparation failed");
   };
   checked(cuda_status(cudaGetDevice(&device_)));
+  cudaStreamCaptureStatus capture{};
+  checked(cuda_status(cudaStreamIsCapturing(stream, &capture)));
+  if (capture != cudaStreamCaptureStatusNone)
+    // Reject before taking stream cleanup responsibility: synchronizing a
+    // borrowed capturing stream would invalidate its owner's graph.
+    throw std::invalid_argument("ordinary eigensolver preparation cannot capture");
   resources_.stream_ = stream;
-  if (n <= kSmallEigensolverLimit) return;
   try {
-    cudaStreamCaptureStatus capture{};
-    checked(cuda_status(cudaStreamIsCapturing(stream, &capture)));
-    if (capture != cudaStreamCaptureStatusNone)
-      throw std::invalid_argument("ordinary eigensolver preparation cannot capture");
-    checked(solver_status(cusolverDnCreate(&resources_.solver_)));
-    checked(solver_status(cusolverDnSetStream(resources_.solver_, stream)));
-    checked(solver_status(cusolverDnCreateParams(&resources_.solver_parameters_)));
-    checked(solver_status(cusolverDnXsyevd_bufferSize(
-        resources_.solver_, resources_.solver_parameters_, CUSOLVER_EIG_MODE_VECTOR,
-        CUBLAS_FILL_MODE_LOWER, n, CUDA_R_64F, matrix, n, CUDA_R_64F, eigenvalues, CUDA_R_64F,
-        &resources_.solver_workspace_bytes_, &resources_.solver_host_workspace_bytes_)));
+    diagnostic_.request = ordinary_eigh_request;
+    diagnostic_.candidates = ordinary_eigh_candidates;
+    diagnostic_.dimension = n;
+    diagnostic_.device = device_;
+    cudaDeviceProp properties{};
+    checked(cuda_status(cudaGetDeviceProperties(&properties, device_)));
+    diagnostic_.compute_major = properties.major;
+    diagnostic_.compute_minor = properties.minor;
+    checked(cuda_status(cudaRuntimeGetVersion(&diagnostic_.runtime_version)));
+    checked(cuda_status(cudaDriverGetVersion(&diagnostic_.driver_version)));
     const auto allowance = ordinary_eigensolver_workspace_allowance(n);
-    if (resources_.solver_workspace_bytes_ > allowance ||
-        resources_.solver_host_workspace_bytes_ > allowance)
-      throw std::bad_alloc();
+    diagnostic_.request.constraints.workspace_bytes = allowance;
+    diagnostic_.request.constraints.host_bytes = allowance + metadata_bytes();
+    for (auto& offer : diagnostic_.candidates) offer.host_bytes = metadata_bytes();
+    const bool small = n <= kSmallEigensolverLimit;
+    diagnostic_.opaque_provider_bytes_known = small;
+    diagnostic_.candidates[small ? 1 : 0].rejection =
+        small ? "retained small-native size domain" : "outside qualified small-native size domain";
+    if (!small) {
+      int major{}, minor{}, patch{};
+      checked(solver_status(cusolverGetProperty(MAJOR_VERSION, &major)));
+      checked(solver_status(cusolverGetProperty(MINOR_VERSION, &minor)));
+      checked(solver_status(cusolverGetProperty(PATCH_LEVEL, &patch)));
+      const int written = std::snprintf(provider_version_.data(), provider_version_.size(),
+                                        "%d.%d.%d", major, minor, patch);
+      if (written <= 0 || std::size_t(written) >= provider_version_.size())
+        throw std::runtime_error("cuSOLVER runtime version is unavailable");
+      diagnostic_.candidates[1].provider_version = provider_version_.data();
+      checked(solver_status(cusolverDnCreate(&resources_.solver_)));
+      checked(solver_status(cusolverDnSetStream(resources_.solver_, stream)));
+      checked(solver_status(cusolverDnCreateParams(&resources_.solver_parameters_)));
+      checked(solver_status(cusolverDnXsyevd_bufferSize(
+          resources_.solver_, resources_.solver_parameters_, CUSOLVER_EIG_MODE_VECTOR,
+          CUBLAS_FILL_MODE_LOWER, n, CUDA_R_64F, matrix, n, CUDA_R_64F, eigenvalues, CUDA_R_64F,
+          &resources_.solver_workspace_bytes_, &resources_.solver_host_workspace_bytes_)));
+      if (resources_.solver_workspace_bytes_ > allowance ||
+          resources_.solver_host_workspace_bytes_ > allowance)
+        throw std::bad_alloc();
+      diagnostic_.candidates[1].workspace_bytes = resources_.solver_workspace_bytes_;
+      diagnostic_.candidates[1].host_bytes += resources_.solver_host_workspace_bytes_;
+    }
+    // Both offers consume the same canonical request. Unknown endpoint costs
+    // retain the previously qualified size-domain incumbent; no performance
+    // promotion, precision relaxation or maximum-pivot fallback is permitted.
+    const auto decision = runtime::select_native_lowering(
+        diagnostic_.request, diagnostic_.candidates, ordinary_eigh_target,
+        ordinary_eigh_compilation, 1, small ? 0 : 1);
+    diagnostic_.selected = decision.selected;
+    diagnostic_.retained_incumbent = decision.retained_incumbent;
+    for (const auto& rejection : decision.rejections)
+      diagnostic_.rejections[rejection.candidate] = rejection.reason;
+    family_ = decision.selected == 0 ? CudaEigensolverFamily::small_native
+                                     : CudaEigensolverFamily::xsyevd;
     if (resources_.solver_workspace_bytes_)
       checked(cuda_status(runtime::resource_cuda_malloc(&resources_.solver_workspace_,
                                                         resources_.solver_workspace_bytes_)));
     host_workspace_.resize(resources_.solver_host_workspace_bytes_);
+    if (host_workspace_.capacity() > allowance) throw std::bad_alloc();
+    diagnostic_.candidates[decision.selected].host_bytes = host_bytes() + metadata_bytes();
     resources_.solver_host_workspace_ = host_workspace_.data();
+    diagnostic_.prepare_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::steady_clock::now() - started)
+                                 .count();
   } catch (...) {
     cleanup();
     throw;
   }
+}
+
+std::size_t OrdinaryStreamEigensolver::metadata_bytes() const noexcept {
+  static_assert(sizeof(OrdinaryStreamEigensolver) <= kOrdinaryEigensolverBindingHostBytes);
+  return kOrdinaryEigensolverBindingHostBytes;
 }
 
 void OrdinaryStreamEigensolver::cleanup() noexcept {
@@ -96,14 +153,13 @@ generativeqc_status OrdinaryStreamEigensolver::launch(int batch, double* matrice
   auto error = cudaGetDevice(&device);
   if (error != cudaSuccess) return cuda_status(error);
   if (device != device_) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  const auto family = n_ <= kSmallEigensolverLimit ? CudaEigensolverFamily::small_native
-                                                   : CudaEigensolverFamily::xsyevd;
   cudaStreamCaptureStatus capture{};
   error = cudaStreamIsCapturing(resources_.stream_, &capture);
   if (error != cudaSuccess) return cuda_status(error);
-  if (capture != cudaStreamCaptureStatusNone && family != CudaEigensolverFamily::small_native)
+  if (capture != cudaStreamCaptureStatusNone &&
+      !diagnostic_.candidates[diagnostic_.selected].capture_safe)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
-  return launch_solver(resources_, family, n_, batch, matrices, native_workspace, eigenvalues, 0,
+  return launch_solver(resources_, family_, n_, batch, matrices, native_workspace, eigenvalues, 0,
                        info, active);
 }
 

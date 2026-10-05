@@ -1,0 +1,13 @@
+{
+  "reconstruction_base": "9d0f4fc0ddbe9c1dc4539cd4f6ad8a6e019ba990",
+  "control_head": "b3acd80f706354276ffb18154e70ae5dd8998383",
+  "candidate_head": "8f90f0ac33ee6bd8a755fb85d71291e1f66c5884",
+  "control_source": "fdde4fb47a289075bd7d4ebd02779b886d090963924f0db5f077d20f0de884f9",
+  "candidate_source": "e9d3f9226346d0ee60e93a6c93be88629af7c45bb28a49635649b276b6cfcab6",
+  "patch_order": [
+    "control-source.patch.gz",
+    "candidate-source.patch.gz"
+  ],
+  "control_reconstruction_matched": true,
+  "candidate_reconstruction_matched": true
+}

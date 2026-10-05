@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd /data/jzzeng/qc-1892-composed-work-census-20261005
+source .artifacts/gpu-env-n1.sh
+output="$PWD/.artifacts/census-${SLURM_JOB_ID}"
+mkdir -p "$output"
+trap 'printf "%s\n" "$?" > "$output/job.exit"' EXIT
+scontrol show job "$SLURM_JOB_ID" -o > "$output/job.txt"
+sha256sum -c .artifacts/build/binaries.sha256 > "$output/binary-check.txt"
+sha256sum -c .artifacts/probe.sha256 > "$output/probe-check.txt"
+"$python" .artifacts/check-source.py > "$output/source-check.txt"
+export EXPECTED_SOURCE_IDENTITY="$(cat .artifacts/build/source-identity.txt)"
+export GENERATIVEQC_CUDA_KS_ACTIVE_AO=1 GENERATIVEQC_BOUNDED_SCHWARZ_SCHEDULE=indexed
+export GENERATIVEQC_CUDA_KS_CHUNK=1 GENERATIVEQC_CUDA_KS_REPLAY=0
+for atoms in 48 96; do
+ timeout 1800 .artifacts/ks-work-probe .artifacts/input-"$atoms"-0.txt .artifacts/input-"$atoms"-1.txt > "$output/work-$atoms.jsonl" 2> "$output/work-$atoms.log"
+done

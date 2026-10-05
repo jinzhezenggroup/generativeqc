@@ -1,0 +1,26 @@
+{
+  "orders-48.nsys-rep": {
+    "sha256": "57b7aa483d8216da8fd1914ff803b285e8a4254f2a4bbafce8fd45d000f8f57f",
+    "bytes": 249183,
+    "local_path": "/data/jzzeng/qc-1895-current-defaults-20261005/.artifacts/derivative-orders-5859/orders-48.nsys-rep",
+    "retention": "Ignored local diagnostic artifacts; not published or required by the CPU verifier."
+  },
+  "orders-48.sqlite": {
+    "sha256": "9ee03738616890b583e4c03d1e18d144de858451df97c1081c848abf05a0436f",
+    "bytes": 761856,
+    "local_path": "/data/jzzeng/qc-1895-current-defaults-20261005/.artifacts/derivative-orders-5859/orders-48.sqlite",
+    "retention": "Ignored local diagnostic artifacts; not published or required by the CPU verifier."
+  },
+  "orders-96.nsys-rep": {
+    "sha256": "60f646c6a60a6c26d1ae6aa2bb24a873cb0e6ab7f6d9ee1d8714cb648f6f1d55",
+    "bytes": 246223,
+    "local_path": "/data/jzzeng/qc-1895-current-defaults-20261005/.artifacts/derivative-orders-5859/orders-96.nsys-rep",
+    "retention": "Ignored local diagnostic artifacts; not published or required by the CPU verifier."
+  },
+  "orders-96.sqlite": {
+    "sha256": "b4619c024e71eb3aa7cabab9627c06cb4b53da86e422c7a04abebf7fba3952df",
+    "bytes": 753664,
+    "local_path": "/data/jzzeng/qc-1895-current-defaults-20261005/.artifacts/derivative-orders-5859/orders-96.sqlite",
+    "retention": "Ignored local diagnostic artifacts; not published or required by the CPU verifier."
+  }
+}

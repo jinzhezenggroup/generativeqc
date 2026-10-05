@@ -91,6 +91,7 @@ function(generativeqc_add_posthf_cc_sources target)
     src/methods/mp2_method.cpp
     src/methods/rccsd_method.cpp
     src/methods/rccsdt_method.cpp
+    src/methods/df_rccsdt_method.cpp
     src/posthf/bridge.cpp
     src/posthf/cuda_derivative.cpp
     src/posthf/mp2_derivative_common.cpp
@@ -193,6 +194,7 @@ function(generativeqc_add_integrals_scf_sources target)
       src/scf/cuda_eigensolver_probe.cu
       src/scf/cuda_rhf.cpp
       src/scf/cuda/rhf_bucket.cpp
+      src/scf/cuda/rhf_source_handoff.cpp
       src/scf/cuda/rhf_graph.cpp
       src/scf/cuda/one_electron_reference.cu
       src/scf/cuda/nuclear_kernels.cu
