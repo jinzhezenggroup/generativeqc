@@ -213,10 +213,15 @@ int main() {
       if (good.plan.matrix_gemm) {
         const auto batch=good.plan.auxiliary_batch_size,tail=naux%batch;
         const auto variants=batch>1 ? 1+(tail>1) : 0;
-        expected_capacity+=generativeqc::cc::kDFBlasProviderAllowance+
+        expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
           generativeqc::cc::generated::dfhoist::contraction_host_bytes(variants);
         if(generativeqc::cc::generated::dfhoist::prepared_batch!=batch ||
            generativeqc::cc::generated::dfhoist::prepared_tail!=tail) return 17;
+      }
+      if (good.conventional_prepared) {
+        expected_capacity+=generativeqc::cc::kContractionProviderAllowance+
+          generativeqc::tensor::PreparedContractions::storage_bytes(
+            generativeqc::cc::generated::iteration_prepared_contractions);
       }
       if(good.diagnostic.numeric_capacity_bytes!=expected_capacity) return 18;
       if (events != (history ? 2 : 0)) return 9;
