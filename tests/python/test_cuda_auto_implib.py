@@ -58,7 +58,9 @@ ld.lld: error: undefined symbol: cublasDgemm_v2
     assert provider_for_symbol("ordinary_missing_symbol") is None
 
 
-def test_linker_driven_implib_retries_without_provider_dependency(tmp_path: Path) -> None:
+def test_linker_driven_implib_retries_without_provider_dependency(
+    tmp_path: Path,
+) -> None:
     target = _implib_target()
     cc, cxx, readelf = (shutil.which(name) for name in ("cc", "c++", "readelf"))
     if cc is None or cxx is None or readelf is None:

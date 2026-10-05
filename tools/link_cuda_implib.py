@@ -134,9 +134,7 @@ def _with_trampoline_objects(command: list[str], objects: list[str]) -> list[str
     return [*command[:insert_at], *objects, *command[insert_at:]]
 
 
-def _merge(
-    destination: dict[str, set[str]], discovered: dict[str, set[str]]
-) -> bool:
+def _merge(destination: dict[str, set[str]], discovered: dict[str, set[str]]) -> bool:
     changed = False
     for provider, symbols in discovered.items():
         before = len(destination.setdefault(provider, set()))
