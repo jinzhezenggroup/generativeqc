@@ -39,6 +39,22 @@ also rejects the second plan after a successful first load and injects a hard
 failure after loading, checking persistent charges after cleanup and retry.
 Existing non-CUTLASS native probes protect optional-off compilation.
 
+## Failure-quarantine refinement
+
+Copying only the charge is insufficient when a hard loader failure prevents the
+post-load measurement: that charge is a known floor, not proof that CUDA stayed
+inside its reservation. Destroying the failed plan also destroys its sticky
+failure state. A fresh warm plan can then appear inexpensive, and older variants
+can still execute while the context retains an unmeasured overrun.
+
+The table now preserves quarantine alongside its charge, before provisional
+owners disappear. Quarantine blocks admission, replay and provenance binding,
+survives release, and has no local reset. The enclosing context/build owner must
+carry both obligations through table destruction. Soft pre-load/partial-plan
+rejection remains recoverable when no unsafe load occurred. Native regression
+coverage separates these recoverable rejections from hard retained-load errors;
+host failure injection also checks cold loads and an existing executable variant.
+
 ## References
 
 - #1886, #1888, #1943

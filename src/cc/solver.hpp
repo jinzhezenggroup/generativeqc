@@ -69,6 +69,10 @@ struct SolverDiagnostic {
   std::size_t diis_gram_calls{};
   std::size_t diis_coefficient_calls{};
   std::size_t diis_combine_calls{};
+  // History insertion counts destination bytes; chronological retirement moves
+  // no tensor bytes. Dot/combine terms are scalar summands, not hardware FLOPs.
+  std::size_t diis_history_insert_bytes{}, diis_history_shift_bytes{};
+  std::size_t diis_residual_dot_terms{}, diis_gram_updates{}, diis_combine_terms{};
   // Complete auxiliary work, including trial evaluations and independent replay.
   std::size_t df_auxiliary_slices{};
   std::size_t df_virtual_operations{};

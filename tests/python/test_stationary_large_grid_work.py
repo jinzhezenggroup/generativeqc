@@ -10,6 +10,7 @@ from types import CodeType, FunctionType, SimpleNamespace
 
 import numpy as np
 import pytest
+from generativeqc_compiler.dft.plan import plan_tiles
 from generativeqc_compiler.method.stationary_resources import (
     plan_stationary_cuda_grid_work,
     stationary_cuda_requires_native_integrals,
@@ -322,7 +323,15 @@ def _resource_preflight(basis: typing.Any, host_budget: int = 256 << 20) -> dict
 
 
 @pytest.mark.parametrize(
-    ("atoms", "aos", "primitives", "basis_bytes", "host", "source", "reserve"),
+    (
+        "atoms",
+        "aos",
+        "primitives",
+        "basis_bytes",
+        "host_without_binding",
+        "source",
+        "reserve",
+    ),
     [
         (24, 192, 176, 62592, 24714848, 2229248, 328064),
         (48, 384, 352, 125184, 65054240, 4938496, 1245888),
@@ -334,7 +343,7 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
     aos: int,
     primitives: int,
     basis_bytes: int,
-    host: int,
+    host_without_binding: int,
     source: int,
     reserve: int,
 ) -> None:
@@ -346,6 +355,19 @@ def test_actual_resource_admission_keeps_24_48_96_inside_unchanged_byte_caps(
         packed=SimpleNamespace(size=3 * atoms + 2 * primitives + 16 * aos),
     )
     plan = _resource_preflight(basis)
+    grid = plan["grid"]
+    cpu_grid = plan_tiles(
+        basis,
+        backend="cpu",
+        order=grid.order,
+        tile_points=grid.tile_points,
+        active_ao_capacity=grid.active_ao_capacity,
+    )
+    # Only CUDA grid lowering adds this descriptor/selection host reservation.
+    # Attribute it independently of the stationary source and paired reserves.
+    grid_binding_host_bytes = 32 << 10
+    assert grid.host_bytes - cpu_grid.host_bytes == grid_binding_host_bytes
+    host = host_without_binding + grid_binding_host_bytes
     assert plan["host"] == host < 256 << 20
     assert plan["source"].allocation_bytes == source
     assert plan["reserve"] == reserve
