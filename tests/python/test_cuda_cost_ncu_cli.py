@@ -51,6 +51,11 @@ def _force_evidence() -> dict[str, object]:
     return {
         "schema": "generativeqc.compiler.ncu-execution-evidence.v1",
         "evidence": {
+            "architecture": "sm_120",
+            "source_revision": "c5ab37ec9e7b3d38d2e06729319f9eef66510e5c",
+            "kernel_identity": "force_kernel",
+            "report_sha256": "0" * 64,
+            "device": "retained-test-device",
             "theoretical_occupancy_fraction": 1 / 6,
             "achieved_occupancy_fraction": 1 / 6,
             "executed_threads_per_warp_instruction": 17.91,
