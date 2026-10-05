@@ -267,14 +267,17 @@ def test_preliminary_initial_guess_default_is_audited(tmp_path: Path) -> None:
     assert any("initial-guess default drifted" in error for error in errors)
 
 
-def test_new_cc_default_off_option_must_be_registered(tmp_path: Path) -> None:
+@pytest.mark.parametrize("initializer", ["{}", "{false}", " = false"])
+def test_new_cc_default_off_option_must_be_registered(
+    tmp_path: Path, initializer: str
+) -> None:
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "src/cc/solver.hpp"
     original = source.read_text()
     changed = original.replace(
         "struct SolverOptions {",
-        "struct SolverOptions {\n  bool new_default_off_path{false};",
+        f"struct SolverOptions {{\n  bool new_default_off_path{initializer};",
         1,
     )
     assert changed != original
@@ -286,14 +289,17 @@ def test_new_cc_default_off_option_must_be_registered(tmp_path: Path) -> None:
     )
 
 
-def test_new_response_default_off_option_must_be_registered(tmp_path: Path) -> None:
+@pytest.mark.parametrize("initializer", ["{}", "{false}", " = false"])
+def test_new_response_default_off_option_must_be_registered(
+    tmp_path: Path, initializer: str
+) -> None:
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "src/hf/rhf_frame_response.hpp"
     original = source.read_text()
     changed = original.replace(
         "struct RHFFrameResponseOptions {",
-        "struct RHFFrameResponseOptions {\n  bool new_default_off_path{false};",
+        f"struct RHFFrameResponseOptions {{\n  bool new_default_off_path{initializer};",
         1,
     )
     assert changed != original
