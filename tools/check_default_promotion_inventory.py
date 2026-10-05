@@ -220,7 +220,8 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
     if "SeminumericalCosx" not in fock:
         raise ValueError("missing audited seminumerical COSX approximation")
     if not re.search(
-        r"FockApproximation\s+approximation\s*\{\s*FockApproximation::Exact\s*\}",
+        r"FockApproximation\s+approximation\s*"
+        r"(?:\{\s*FockApproximation::Exact\s*\}|=\s*FockApproximation::Exact)\s*;",
         fock,
     ):
         raise ValueError("Fock approximation default drifted from Exact")
@@ -239,7 +240,10 @@ def _discover_cc_options(root: Path) -> dict[str, str]:
     if match is None:
         raise ValueError("missing audited cc::SolverOptions")
     body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
-    names = re.findall(r"\bbool\s+([A-Za-z0-9_]+)\s*\{\s*false\s*\}\s*;", body)
+    names = re.findall(
+        r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
+        body,
+    )
     return {f"cc-option:{name}": relative.as_posix() for name in names}
 
 
@@ -254,10 +258,17 @@ def _discover_response_options(root: Path) -> dict[str, str]:
     if match is None:
         raise ValueError("missing audited RHFFrameResponseOptions")
     body = re.sub(r"//[^\n]*|/\*.*?\*/", " ", match.group("body"), flags=re.DOTALL)
-    names = re.findall(r"\bbool\s+([A-Za-z0-9_]+)\s*\{\s*false\s*\}\s*;", body)
+    names = re.findall(
+        r"\bbool\s+([A-Za-z0-9_]+)\s*(?:\{\s*(?:false)?\s*\}|=\s*false)\s*;",
+        body,
+    )
     result = {f"response-option:{name}": relative.as_posix() for name in names}
 
-    if not re.search(r"\bdouble\s+orbital_screening_tolerance\s*\{\s*0\.0\s*\}\s*;", body):
+    if not re.search(
+        r"\bdouble\s+orbital_screening_tolerance\s*"
+        r"(?:\{\s*(?:0(?:\.0)?)?\s*\}|=\s*0(?:\.0)?)\s*;",
+        body,
+    ):
         raise ValueError("RHF response orbital screening default drifted from zero")
     result["response-option:orbital_screening_tolerance"] = relative.as_posix()
 
@@ -305,9 +316,14 @@ def validate_inventory(
     if payload.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
     classifications = payload.get("classifications")
-    if (
-        not isinstance(classifications, list)
-        or len(classifications) != len(set(classifications))
+    if not isinstance(classifications, list) or any(
+        not isinstance(value, str) for value in classifications
+    ):
+        errors.append(
+            "classifications must declare exactly the supported policy taxonomy"
+        )
+    elif (
+        len(classifications) != len(set(classifications))
         or set(classifications) != CLASSIFICATIONS
     ):
         errors.append(
