@@ -456,7 +456,9 @@ def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
     import textwrap
 
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
-    cuda = workflow.split("\n  cuda-compile:\n", 1)[1].split("\n  python:\n", 1)[0]
+    cuda = workflow.split("\n  cuda-compile:\n", 1)[1].split(
+        "\n  cuda-resources:\n", 1
+    )[0]
     marker = "      - name: Compile opted-in AO radial kernels with release resources\n"
     step = cuda.split(marker, 1)[1].split("      - name: ", 1)[0]
     assert "python3-pytest" in cuda
@@ -473,12 +475,12 @@ def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
     assert cuda.index(marker) < cuda.index(
         "      - name: Save CUDA ccache immediately after build"
     )
-    artifact = cuda.split("      - name: Preserve generated XC resource reports\n", 1)[
-        1
-    ].split("      - name: ", 1)[0]
+    artifact = cuda.split(
+        "      - name: Preserve opted-in AO radial resource reports\n", 1
+    )[1].split("      - name: ", 1)[0]
     assert "if: always()" in artifact
     assert "build/ao-radial-compile" in artifact
-    assert "build/native-xc-resource" in artifact
+    assert "name: ao-radial-release-compile" in artifact
     script = textwrap.dedent(step.split("        run: |\n", 1)[1])
     subprocess.run(["bash", "-n"], input=script, text=True, check=True, timeout=10)
 
