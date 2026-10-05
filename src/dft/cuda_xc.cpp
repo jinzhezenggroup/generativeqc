@@ -393,6 +393,10 @@ void CudaXcPlan::prepare_density(generativeqc::runtime::PrecisionDirective admit
       !cuda_xc_capability_qualified(layout_.fast_paths.mixed_density_precision))
     throw std::invalid_argument(
         "mixed CUDA XC density precision is not qualified for this point program");
+  // Replacing a live optional owner would transiently charge two provider
+  // reservations. A zero-budget replacement can release it transactionally.
+  if (provider_budget && density_provider_ && density_provider_->enabled())
+    throw std::logic_error("XC density provider is already prepared");
   // Prepare into temporaries so malformed admission/allocation cannot expose
   // a partially changed table. Only the final grid tile has a distinct shape.
   std::array<CudaXcDensityBinding, 2> strict, selected;

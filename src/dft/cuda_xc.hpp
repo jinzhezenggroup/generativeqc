@@ -203,7 +203,11 @@ class CudaXcPlan {
    * Mixed admission requires executable physical-layout support and a Qualified
    * entry in the resolved point-program census; local maps remain strict FP64.
    * A nonzero provider_budget also requires the caller to reserve the separate
-   * PreparedPanelProduct::host_reservation; diagnostics report actual charges. */
+   * PreparedPanelProduct::host_reservation; diagnostics report actual charges.
+   * Before evaluation, generated/disabled bindings may be replaced. With an
+   * enabled provider, another nonzero-budget preparation is rejected before
+   * binding/provider setup; use zero budget to release it transactionally first.
+   * A failed preparation preserves the previous tables and provider. */
   void prepare_density(generativeqc::runtime::PrecisionDirective admitted,
                        std::uint64_t expected_replays = 1, std::size_t provider_budget = 0);
   const CudaXcDensityBinding& density_binding(generativeqc::runtime::PrecisionPhase phase) const;
