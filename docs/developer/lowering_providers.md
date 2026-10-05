@@ -107,12 +107,13 @@ Unpublished plans are drained on failure; their module charges transfer to the
 table before destruction. `optional_resources().cache_bytes` includes previous
 attempts and survives `release()`. The enclosing owner must preserve this charge
 across fallback and table destruction if it keeps using the CUDA context.
-Homogeneous shared regions offer CUTLASS only with matching compiled version,
-actual artifact digest and qualified host/module bounds. The region owns the
-digest and subtracts charges left by partial preparation before admitting the
-complete generated fallback. Its complete binding bound retains the preparation
-ceiling when modules were loaded; retained-provider diagnostics include those
-cache bytes. No production profile is installed.
+Homogeneous shared regions retain CUTLASS as explicit unavailable evidence.
+Their function-local owner cannot preserve an unsafe module load across failed
+construction and later calls on the same CUDA context. CUTLASS admission is
+therefore closed even with test-only profiles, and forged admitted plans reject
+before loading. Re-enabling it requires explicit context/build-lifetime ownership
+of both retained charges and quarantine; a measured resource profile alone is
+insufficient. Standalone/shared-table CUTLASS retains its existing owner contract.
 Native CMake builds can enable the optional header dependency with
 `GENERATIVEQC_ENABLE_CUTLASS=ON` and
 `GENERATIVEQC_CUTLASS_ROOT=/path/to/cutlass-3.9.2`. The option defaults to OFF;
@@ -289,17 +290,17 @@ the versioned `df_triples_probe_v2` ABI with an explicit diagnostic capacity;
 rebuild older adapters before running current benchmark scripts.
 Production resource qualification and complete endpoint selection remain open.
 
-Streamed DF MO source response offers cuBLASLt and CUTLASS alongside cuBLAS,
-cuTENSOR and generated execution for the same compiler region. `PreparedContractionRegion`
+Streamed DF MO source response offers cuBLASLt alongside cuBLAS, cuTENSOR and
+generated execution for the same compiler region. CUTLASS remains unavailable
+until the region has a context-lifetime retention owner. `PreparedContractionRegion`
 reserves all eight simultaneous plans before source callbacks and reuses their
 cached algorithms for every row. Reservations are provider-specific; a partial
 optional preparation failure drains provisional plans before selecting the
 same-precision generated fallback. Diagnostics report the actual provider,
-version, preparation time, work and resource counts, including modules retained
-after partial CUTLASS preparation. No production cuBLASLt or CUTLASS resource
-profile is installed, so ordinary selection retains the incumbent. The test
-adapter's `df_mo_response_probe_v3` ABI accepts the actual artifact digest;
-rebuild validation adapters before using current provider qualification controls.
+version, preparation time, work and resource counts. No production cuBLASLt
+resource profile is installed, so ordinary selection retains the incumbent. The
+test adapter's `df_mo_response_probe_v3` ABI still accepts an artifact digest;
+CUTLASS qualification controls cannot bypass the lifetime restriction.
 
 The native cuTENSOR executor fixes the GETT family and kernel rank zero at
 preparation, with JIT, cache and incremental autotuning disabled. Unsupported

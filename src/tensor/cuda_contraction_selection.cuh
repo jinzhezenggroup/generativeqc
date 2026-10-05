@@ -21,12 +21,15 @@ inline thread_local bool contraction_libraries_unavailable_for_test = false;
 inline thread_local CutlassRegionQualification cutlass_region_qualification_for_test;
 #endif
 
+inline constexpr std::string_view kCutlassRegionUnavailable =
+    "CUTLASS region requires a context-lifetime retention owner";
+
 inline CutlassRegionQualification qualified_cutlass_region() noexcept {
-#if GENERATIVEQC_HAS_CUTLASS && defined(GENERATIVEQC_TEST_HOOKS)
-  return cutlass_region_qualification_for_test;
-#else
+  // This region and its provider context are call-local. A failed constructor
+  // destroys the table while CUDA can retain unmeasured modules. Neither a
+  // resource profile nor test hooks establish an owner across subsequent calls.
+  // Keep this capability closed until that context/build lifetime is explicit.
   return {};
-#endif
 }
 
 inline std::size_t cutlass_provider_version() noexcept {
@@ -106,7 +109,7 @@ ContractionRegionPlan select_contraction_region(
       if (!reservation.host_bytes || !reservation.cache_bytes || reservation.workspace_bytes ||
           reservation.provider_bytes || !runtime::lowering_digest(cutlass.artifact) ||
           !cutlass.version || cutlass.version != cutlass_provider_version())
-        offer.rejection = "qualified CUTLASS artifact/resource profile unavailable";
+        offer.rejection = kCutlassRegionUnavailable;
     } else {
       offer.rejection = "contraction region has no prepared implementation";
     }
@@ -178,6 +181,9 @@ class PreparedContractionRegion {
                             cudaStream_t stream, std::size_t& calls, std::size_t& summands,
                             MakeRequests&& make_requests)
       : plan_(admitted), shape_(shape) {
+    // Reject forged/stale admission too, before context setup or module loading.
+    if (plan_.algorithm == ContractionAlgorithm::CutlassAot)
+      throw std::invalid_argument(std::string(kCutlassRegionUnavailable));
     auto minimum = storage_bytes(requests);
     if (!requests || std::any_of(shape.begin(), shape.end(), [](auto n) { return n == 0; }))
       throw std::invalid_argument("empty prepared contraction region");

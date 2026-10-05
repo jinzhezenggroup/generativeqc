@@ -652,20 +652,19 @@ def test_cuda_source_response_optional_providers(
         cuda_source_response_probe, arrays, budget=8 << 30, provider_test=provider_test
     )
     assert status == 0, error
-    assert counts[11] == 8 and counts[12] == {2: 2, 4: 3, 6: 4}.get(provider_test, 1)
+    assert counts[11] == 8 and counts[12] == {2: 2, 4: 3, 6: 0, 7: 0}.get(
+        provider_test, 1
+    )
     if provider_test == 2:
         assert counts[10] >= 20800 and counts[10] // 10000 == 2
     elif provider_test == 4:
         assert counts[10] > 0 and counts[13] > 0
-    elif provider_test == 6:
-        assert counts[10] == 392 and counts[15] == 8 * (256 << 20)
+    elif provider_test in (6, 7):
+        # A test profile cannot supply ownership beyond a failed region's lifetime.
+        # Both complete and partial CUTLASS qualification retain legal cuBLAS.
+        assert counts[10] > 0 and counts[15] < 256 << 20
     else:
         assert counts[10] == 0
-    if provider_test == 7:
-        # Two loaded plans precede the injected rejection. Their modules remain
-        # part of both the fallback binding and complete numeric capacity.
-        assert counts[15] == 2 * (256 << 20)
-        assert counts[9] > counts[15] and counts[7] > counts[9]
     assert counts[4] == 3 * n + 5 and counts[5] == 6 * n**3 * q + 2 * n * n * q * q
     expected = _direct_source_response(*arrays)
     for actual, name in zip(
@@ -676,9 +675,7 @@ def test_cuda_source_response_optional_providers(
         np.testing.assert_allclose(actual, expected[name], atol=3e-11, rtol=3e-13)
 
 
-@pytest.mark.parametrize(
-    "provider_test,capability", [(2, "CUTENSOR"), (4, "CUBLASLT"), (6, "CUTLASS")]
-)
+@pytest.mark.parametrize("provider_test,capability", [(2, "CUTENSOR"), (4, "CUBLASLT")])
 def test_cuda_source_optional_budget_boundary(
     cuda_source_response_probe: typing.Any,
     provider_test: int,
@@ -696,7 +693,7 @@ def test_cuda_source_optional_budget_boundary(
     )
     assert status == 0, error
     for budget, selected in (
-        (int(counts[7]), {2: 2, 4: 3, 6: 4}[provider_test]),
+        (int(counts[7]), {2: 2, 4: 3}[provider_test]),
         (int(counts[7]) - 1, 1),
     ):
         status, actual, bounded, error = _run_cuda_source(

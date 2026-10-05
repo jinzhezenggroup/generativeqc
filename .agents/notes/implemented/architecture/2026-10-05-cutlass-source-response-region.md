@@ -76,3 +76,10 @@ Raw samples, build identity and comparison script are retained locally under
 
 - #1886, #1888, #1944
 - [Shared table ownership](2026-10-05-cutlass-shared-table.md)
+
+## Superseding lifetime restriction
+
+Region admission is now closed, including test profiles, because failed
+construction cannot preserve context-retained module quarantine across calls.
+See [the lifetime gate](2026-10-05-cutlass-region-lifetime-gate.md). The measurements
+above remain historical evidence and do not establish that missing owner.
