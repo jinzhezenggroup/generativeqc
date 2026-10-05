@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "dft/xc_capabilities.hpp"
+
 namespace generativeqc::dft {
 
 /** Native curated semilocal execution identity shared by CPU and CUDA KS.
@@ -31,6 +33,7 @@ struct SemilocalFamilyMetadata {
   bool requires_gradient;
   bool requires_tau;
   bool stationary_ecp_gradient;
+  CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
   std::uint32_t component_count;
@@ -38,6 +41,7 @@ struct SemilocalFamilyMetadata {
   bool component_coefficients_are_native_scales;
 };
 
+// clang-format off
 inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata{{
     {SemilocalFamily::Lda,
      "LDA",
@@ -47,6 +51,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      true,
+     {CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"LDA_X", "LDA_C_PW", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
      2U,
@@ -60,6 +65,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      false,
      true,
+     {CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"GGA_X_PBE", "GGA_C_PBE", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
      2U,
@@ -73,6 +79,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      true,
      false,
+     {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
      2U,
@@ -86,6 +93,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      false,
      true,
+     {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"LDA_X", "GGA_X_B88", "LDA_C_VWN_RPA", "GGA_C_LYP"},
      {0.08, 0.72, 0.19, 0.81},
      4U,
@@ -99,12 +107,14 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      true,
      true,
+     {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_WB97M_V", "MGGA_C_WB97M_V", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
      2U,
      0.3,
      false},
 }};
+// clang-format on
 
 constexpr std::uint32_t semilocal_family_code(SemilocalFamily family) noexcept {
   return static_cast<std::uint32_t>(family);

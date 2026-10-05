@@ -2251,6 +2251,7 @@ void bounded_schwarz_schedule_budget() {
     const auto full_budget = original.device_bytes;
     check(cudaMemcpy(plan->density, density.data(), density.size() * sizeof(double),
                      cudaMemcpyHostToDevice));
+    std::vector<double> indexed_range;
     for (const auto budget : {full_budget, full_budget - 1U, full_budget - prefix_bytes}) {
       auto owner = prepare_generated_exchange(host, original.shared->batch, plan->stream, 0,
                                               screening, budget, true, false);
@@ -2259,6 +2260,9 @@ void bounded_schwarz_schedule_budget() {
       require(indexed == (budget == full_budget), "incorrect prefix budget edge");
       require(owner->device_bytes == full_budget - (indexed ? 0 : prefix_bytes),
               "device inventory did not charge optional prefix exactly");
+      const auto charged_bytes = owner->device_bytes;
+      const auto owner_allocations = owner->allocations.size();
+      const auto shared_allocations = owner->shared->allocations.size();
       std::vector<double> actual;
       check(execute_generated_full_range_energy_derivatives(*owner, false, plan->density, nullptr,
                                                             1.0, -0.25, actual));
@@ -2276,15 +2280,40 @@ void bounded_schwarz_schedule_budget() {
       const auto pages =
           indexed ? generativeqc::scf::detail::kBoundedDirectIndexedCandidatePages : 1U;
       require(cursor == products * pages + owner->shared->worker_blocks,
-              "scheduler domain mismatch");
+              "full-range scheduler domain mismatch");
+      std::vector<double> range_actual;
+      check(execute_generated_rsh_energy_derivatives(*owner, false, plan->density, nullptr, 0.0,
+                                                     0.0, -0.25, 0.3, range_actual));
+      require(range_actual.size() == 6U * coordinates, "batch LR source shape changed");
+      check(cudaMemcpy(&cursor, owner->force_cursor, sizeof(cursor), cudaMemcpyDeviceToHost));
+      require(cursor == products * pages + owner->shared->worker_blocks,
+              "LR scheduler did not consume the retained indexed domain");
+      require(owner->device_bytes == charged_bytes &&
+                  owner->allocations.size() == owner_allocations &&
+                  owner->shared->allocations.size() == shared_allocations,
+              "LR scheduling allocated a second retained block domain");
+      double range_delta = 0.0;
+      if (indexed) {
+        indexed_range = range_actual;
+      } else {
+        require(indexed_range.size() == range_actual.size(),
+                "triangular LR route changed indexed source shape");
+        for (std::size_t index = 0; index < range_actual.size(); ++index) {
+          require(std::isfinite(range_actual[index]) && std::isfinite(indexed_range[index]),
+                  "nonfinite indexed/triangular LR derivative");
+          range_delta = std::max(range_delta, std::abs(range_actual[index] - indexed_range[index]));
+        }
+        require(range_delta < 3e-8, "indexed/triangular LR schedules disagree");
+      }
       if (indexed && screening > 0)
         require(products < owner->shared->batch.total_shell_pair_block_quartets,
                 "test fixture did not prune any rows");
       std::cout << "screening=" << screening << " budget=" << budget << " indexed=" << indexed
-                << " products=" << products << " max_error=" << error << '\n';
+                << " products=" << products << " max_error=" << error
+                << " max_lr_schedule_delta=" << range_delta << '\n';
     }
   }
-  std::cout << "CUDA indexed Schwarz batch and prefix-budget gates PASS\n";
+  std::cout << "CUDA indexed Schwarz full/LR batch and prefix-budget gates PASS\n";
 }
 
 void direct_providers(bool through_f_response, bool eri_tiles_only = false) {

@@ -1,0 +1,17 @@
+"""Require source, loaded library and frozen checkout receipts to agree."""
+import ctypes
+from pathlib import Path
+import subprocess
+from generativeqc.autotune import source_identity
+root=Path.cwd()
+actual=source_identity(root)
+library=ctypes.CDLL(str(root/'build/cuda-release-sm120/libgenerativeqc.so'))
+library.generativeqc_get_source_identity.restype=ctypes.c_char_p
+embedded=library.generativeqc_get_source_identity().decode()
+expected=(root/'.artifacts/build/source-identity.txt').read_text().strip()
+head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+if actual != expected or embedded != actual:
+ raise RuntimeError(f'source identity mismatch: {actual=} {expected=} {embedded=}')
+if head != (root/'.artifacts/build/source-head.txt').read_text().strip():
+ raise RuntimeError('frozen build/checkout head mismatch')
+print('SOURCE_MATCH',head,actual,flush=True)
