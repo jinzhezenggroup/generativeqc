@@ -23,6 +23,7 @@ int main() {
     options.diis_size = header[5];
     options.df_auxiliary_reduction = !(header[6] & 4);
     options.df_matrix_gemm = !(header[6] & 8);
+    options.packed_diis = header[6] & 32;
     // Probe-only high bits select a tile limit without changing the public API.
     if (header[6] >> 8) options.df_auxiliary_batch_limit = header[6] >> 8;
     options.energy_tolerance = 1e-12;
@@ -80,7 +81,14 @@ int main() {
               << ' ' << d.df_gemm_calls << ' ' << d.df_gemm_summands << ' ' << d.df_packing_bytes
               << ' ' << d.df_provider_capacity_bytes << ' ' << d.df_auxiliary_batch_size << ' '
               << d.df_auxiliary_tiles << ' ' << d.df_accumulation_bytes << ' '
-              << d.denominator_identity << ' ' << d.derived_d2_iteration_evaluations << '\n';
+              << d.denominator_identity << ' ' << d.derived_d2_iteration_evaluations << ' '
+              << d.conventional_prepared_contractions << ' ' << d.conventional_contraction_calls
+              << ' ' << d.conventional_contraction_summands << ' '
+              << d.conventional_provider_capacity_bytes << ' ' << d.conventional_binding_host_bytes
+              << ' ' << d.packed_diis << ' ' << d.packed_diis_refused << ' '
+              << d.diis_disabled_after_packing_refusal << ' ' << d.diis_history_capacity_bytes
+              << ' ' << d.diis_conversion_bytes << ' ' << d.diis_metric_weight_terms << ' '
+              << d.diis_pack_calls << ' ' << d.diis_maximum_pair_asymmetry << '\n';
     for (double x : result.t1) std::cout << x << ' ';
     for (double x : result.t2) std::cout << x << ' ';
     std::cout << '\n' << result.reason << '\n';

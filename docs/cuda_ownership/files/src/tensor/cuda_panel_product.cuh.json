@@ -1,0 +1,7 @@
+{
+  "path": "src/tensor/cuda_panel_product.cuh",
+  "reason": "Shared strict-FP64 matrix-panel provider consumes canonical candidates and owns GEMM, cache lifetime, bounded resource fallback and finite publication. Scientific factor algebra stays compiler-owned.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "runtime"
+}

@@ -43,7 +43,12 @@ WATER = [
 
 
 def pyscf_energy(
-    calc: Calculator, raw_atoms: Any, multiplicity: int, functional: str
+    calc: Calculator,
+    raw_atoms: Any,
+    multiplicity: int,
+    functional: str,
+    *,
+    max_grid_points: int = 200_000,
 ) -> float:
     """Copy orbital/auxiliary primitives and quadrature; only the solvers differ."""
     pyscf = pytest.importorskip("pyscf")
@@ -77,7 +82,7 @@ def pyscf_energy(
     )
     grid = MolecularGrid(
         atoms, spec=calc.ks_options.grid, multiplicity=multiplicity
-    ).explicit()
+    ).explicit(max_points=max_grid_points)
     mf.xc = functional
     mf.grids.coords = np.asarray(grid.points)
     mf.grids.weights = np.asarray(grid.weights)
