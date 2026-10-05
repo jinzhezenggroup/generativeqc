@@ -46,10 +46,13 @@ class StationaryOwnerKernelTests(unittest.TestCase):
             self.assertIsNotNone(match)
             assert match is not None
             signatures.append(
-                [" ".join(item.split()) for item in match.group(1).split(",")]
+                [
+                    " ".join(item.split("=", 1)[0].split())
+                    for item in match.group(1).split(",")
+                ]
             )
         self.assertEqual(signatures[0], signatures[1])
-        self.assertEqual(len(signatures[0]), 18)
+        self.assertEqual(len(signatures[0]), 19)
 
     def test_emitted_explicit_and_implicit_owner_expression(self) -> None:
         compiler = shutil.which("c++")

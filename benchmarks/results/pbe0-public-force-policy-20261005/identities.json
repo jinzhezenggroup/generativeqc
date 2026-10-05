@@ -1,0 +1,17 @@
+{
+  "base": "9d0f4fc0ddbe9c1dc4539cd4f6ad8a6e019ba990",
+  "cohorts": {
+    "narrow": {
+      "revision": "0397d9a3d3f24c56dc381a3d95981fa9f93e3181",
+      "source": "747dd1460eb4184f6fa98161f3ca523ade6ed335e91427ad920c88d8e23cbba5",
+      "library": "e17dc5da43cd272ff8598e3643a837ae2007722001dfa306e42309a74e7b409b",
+      "job": 5817
+    },
+    "current": {
+      "revision": "9ba032c783addfeede96890c894b7cc9447cde95",
+      "source": "1c0b0ea35a9d34f179ab9b48c64685d70e1369a7bfc9455906fc83f8ccb657fc",
+      "library": "429a609e109352a47c01b4e421cbc1c17b4c744d9ea2ffac2f58ebcf785df46a",
+      "job": 5823
+    }
+  }
+}

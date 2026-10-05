@@ -11,6 +11,9 @@ import typing
 from dataclasses import asdict, dataclass
 
 from generativeqc_compiler.common.evidence import canonical_hash
+from generativeqc_compiler.common.library import (
+    LibraryRequest,  # noqa: TC001 -- compatibility export
+)
 
 
 class UnsupportedBackendFeature(NotImplementedError):
@@ -183,44 +186,6 @@ class CompiledArtifactIdentity:
             raise ValueError(
                 "compiled artifact identity is incompatible with this execution"
             )
-
-
-@dataclass(frozen=True)
-class LibraryRequest:
-    """Explicit FP64 library call convention, including workspace and residual gates.
-
-    GEMM uses A(m,k), B(k,n), C(m,n); symmetric eigensolve and Cholesky use
-    square A(m,m). Layout applies to every operand. Providers must report errors
-    and required workspace before enqueueing, and eigensolves/factorizations
-    must expose a residual rather than assuming success from a status code.
-    """
-
-    operation: str
-    shape: tuple[int, ...]
-    layout: str = "row_major"
-    dtype: str = "fp64"
-    workspace_limit_bytes: int = 0
-    residual_tolerance: float = 1e-11
-
-    def __post_init__(self) -> None:
-        import math
-
-        rank = 3 if self.operation == "gemm" else 1
-        if self.operation not in ("gemm", "symmetric_eigh", "cholesky"):
-            raise ValueError("unknown library operation")
-        if len(self.shape) != rank or any(
-            type(n) is not int or n < 1 for n in self.shape
-        ):
-            raise ValueError("invalid library operation dimensions")
-        if self.layout not in ("row_major", "column_major") or self.dtype != "fp64":
-            raise ValueError("explicit supported layout and FP64 dtype required")
-        if (
-            type(self.workspace_limit_bytes) is not int
-            or self.workspace_limit_bytes < 0
-        ):
-            raise ValueError("workspace limit must be nonnegative")
-        if not math.isfinite(self.residual_tolerance) or self.residual_tolerance <= 0:
-            raise ValueError("positive finite residual tolerance required")
 
 
 @dataclass(frozen=True)

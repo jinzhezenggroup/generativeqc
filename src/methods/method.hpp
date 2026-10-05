@@ -43,7 +43,8 @@ struct Result {
   std::vector<double> forces;
   Convergence convergence;
   generativeqc_backend executed_backend{GENERATIVEQC_BACKEND_CPU_REFERENCE};
-  /** Existing CPU physical Fock evaluation counter; zero means unavailable. */
+  /** Owner-observed physical Fock evaluations; zero means unavailable. CUDA
+   * batch publication additionally requires a complete KS operator census. */
   std::size_t fock_builds{};
   /** How the requested precision policy resolved in the executed backend. */
   scf::PrecisionProvenance precision{};

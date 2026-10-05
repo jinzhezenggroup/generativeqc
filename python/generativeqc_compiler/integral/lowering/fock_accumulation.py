@@ -216,6 +216,30 @@ def emit_generated_shell_fock_accumulation() -> str:
     ).rstrip("\n")
 
 
+def emit_direct_bilinear_density_coefficient() -> str:
+    """Emit P:G'(D) from the same ordered RHF J - K/2 scatter.
+
+    Each canonical integral contributes through its distinct eightfold orbit.
+    This contracts the cross term directly, without subtracting three large
+    quadratic energies. The native consumer owns finite audits and traversal.
+    """
+    return """/** Coefficient of one canonical derivative ERI in P:(J'(D)-K'(D)/2). */
+__device__ __forceinline__ double direct_bilinear_density_coefficient(
+    std::size_t n, std::size_t offset, const double* density, const double* seed,
+    std::size_t i, std::size_t j, std::size_t k, std::size_t l) {
+  double coefficient = 0.0;
+  for (unsigned permutation = 0; permutation < 8U; ++permutation) {
+    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) continue;
+    std::size_t a = 0, b = 0, c = 0, d = 0;
+    eri_symmetry_permutation(permutation, i, j, k, l, a, b, c, d);
+    coefficient += seed[offset + a*n+b] * density[offset + c*n+d]
+                 - 0.5 * seed[offset + a*n+c] * density[offset + b*n+d];
+  }
+  return coefficient;
+}
+"""
+
+
 def emit_direct_fock_accumulation_header() -> str:
     """Emit the native fallback adapter from the same compiler-owned equations."""
 
@@ -264,5 +288,6 @@ namespace generativeqc::scf::cuda_execution {{
 {function}
 {emit_direct_force_density_coefficient()}
 {emit_direct_force_component_weight()}
+{emit_direct_bilinear_density_coefficient()}
 }}  // namespace generativeqc::scf::cuda_execution
 """

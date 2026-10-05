@@ -22,6 +22,7 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
         "bounded_pair_order",
         "shell_pair_block_bounds",
         "force_cursor",
+        "bounded_block_domain",
         "bounded_value_capability",
         "bounded_value_overflow",
         "execute_generated_full_range_energy_derivatives",
@@ -41,6 +42,32 @@ def test_generated_exchange_owner_retains_bounded_force_state() -> None:
     assert "direct_bounded_fallback.hpp" not in source
     assert "launch_bounded_direct_shell_quartet_kernel_scaled(" in consumer
     assert "DirectScreeningPurpose::Force" in consumer
+    normalized_rsh = " ".join(rsh_body.split())
+    assert (
+        "DirectCoulombRange::Long, omega, 0.0, 1.0, p.bounded_block_domain);"
+        in normalized_rsh
+    )
+    assert (
+        "DirectCoulombRange::Long, omega, 1.0, p.bounded_block_domain);"
+        in normalized_rsh
+    )
+    range_begin = consumer.index("void launch_bounded_shell_range_exchange_derivative(")
+    range_end = consumer.index(
+        "void launch_bounded_shell_rsh_derivatives(", range_begin
+    )
+    range_body = " ".join(consumer[range_begin:range_end].split())
+    assert "detail::BoundedDirectBlockDomain block_domain" in range_body
+    assert "radial_operator, omega, exchange_coefficient, block_domain);" in range_body
+    bounded = _source("src/scf/cuda/direct_bounded_fallback.cu")
+    bounded_begin = bounded.index(
+        "void launch_bounded_direct_range_exchange_force_kernel("
+    )
+    bounded_end = bounded.index(
+        "void launch_bounded_direct_range_exchange_fock_kernel(", bounded_begin
+    )
+    bounded_body = " ".join(bounded[bounded_begin:bounded_end].split())
+    assert "detail::BoundedDirectBlockDomain block_domain" in bounded_body
+    assert bounded_body.count("false, true, block_domain);") == 2
 
 
 def test_fused_rsh_scratch_budget_matches_owner_allocation() -> None:
@@ -375,10 +402,27 @@ def test_channel_dispatch_is_independent(tmp_path: Path) -> None:
     header = _source("src/scf/cuda/direct_jk_plan.hpp")
     start = header.index("struct DirectJkValueDispatch")
     end = header.index("/** Own one exact public-AO provider", start)
+    source = _source("src/scf/cuda/direct_jk.cpp")
+    device_start = source.index("enqueue_cuda_direct_jk_device_impl(")
+    dispatch_start = source.index("const auto dispatch =", device_start)
+    dispatch_end = source.index(";", dispatch_start) + 1
+    device_dispatch = source[dispatch_start:dispatch_end]
     harness = (
         "#include <cassert>\n"
         + header[start:end]
         + r"""
+DirectJkValueDispatch device_dispatch(bool generated_coulomb_available,
+    bool generated_exchange_available, bool want_j, bool want_k, bool mixed_j,
+    bool canonical, bool fixed) {
+  struct Channel { bool present; };
+  struct { Channel coulomb, exchange; } spec{{want_j},{want_k}};
+  struct Plan { const void* canonical_pairs; } storage{canonical ? &spec : nullptr};
+  auto* plan = &storage;
+"""
+        + device_dispatch
+        + r"""
+  return dispatch;
+}
 int main() {
   for (unsigned mask = 0; mask < 64; ++mask) {
     const bool generated_j = mask & 1U, generated_k = mask & 2U;
@@ -398,6 +442,22 @@ int main() {
     assert(int(both.generated_exchange) + int(both.canonical_exchange) +
            int(both.generic_exchange) == int(k));
     if (mixed) assert(!both.generated_coulomb && !both.canonical_coulomb);
+    const auto ordinary = device_dispatch(generated_j, generated_k, j, k, mixed,
+                                           canonical, false);
+    assert(ordinary.generated_coulomb == both.generated_coulomb);
+    assert(ordinary.generated_exchange == both.generated_exchange);
+    assert(ordinary.canonical_coulomb == both.canonical_coulomb);
+    assert(ordinary.canonical_exchange == both.canonical_exchange);
+    assert(ordinary.generic_coulomb == both.generic_coulomb);
+    assert(ordinary.generic_exchange == both.generic_exchange);
+    // Fixed-mask RHF response has canonical pairs and strict J precision.
+    // Its geometry-only screen/census must not be bypassed by shell providers.
+    if (canonical && !mixed) {
+      const auto fixed = device_dispatch(generated_j, generated_k, j, k, false, true, true);
+      assert(fixed.canonical_coulomb == j && fixed.canonical_exchange == k);
+      assert(!fixed.generated_coulomb && !fixed.generated_exchange);
+      assert(!fixed.generic_coulomb && !fixed.generic_exchange);
+    }
   }
 }
 """

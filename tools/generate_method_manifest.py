@@ -24,6 +24,7 @@ PROVIDERS = {
     "mp2": ("Mp2", True, True),
     "rccsd": ("Rccsd", True, True),
     "rccsdt": ("Rccsdt", True, True),
+    "df_rccsdt": ("DfRccsdt", True, False),
     "dft": ("Dft", True, True),
     "xtb": ("Xtb", True, False),
 }
@@ -122,7 +123,7 @@ def load_manifest() -> list[dict]:
         if method["provider"] == "mp2" and method["family"] != "perturbation":
             raise ValueError(f"{name}: MP2 provider requires perturbation family")
         if (
-            method["provider"] in {"rccsd", "rccsdt"}
+            method["provider"] in {"rccsd", "rccsdt", "df_rccsdt"}
             and method["family"] != "coupled_cluster"
         ):
             raise ValueError(f"{name}: CC provider requires coupled-cluster family")
@@ -251,7 +252,7 @@ def emit_cpp(methods: list[dict]) -> str:
         "// clang-format off",
         "namespace generativeqc::methods::generated {",
         "",
-        "enum class PublicProvider : std::uint8_t { Reserved, Hf, Mp2, Rccsd, Rccsdt, Dft, Xtb };",
+        "enum class PublicProvider : std::uint8_t { Reserved, Hf, Mp2, Rccsd, Rccsdt, DfRccsdt, Dft, Xtb };",
         "",
         "struct MethodManifestEntry {",
         "  std::string_view name;",

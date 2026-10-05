@@ -1,0 +1,708 @@
+{
+  "attachments": [
+    {
+      "kind": "complete-endpoint",
+      "path": "candidate-48.json.gz",
+      "sha256": "a79d3c335d5f832fbf1ebae1785815d1501fe2d9bd05fb7106e31832a96df792"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "candidate-96.json.gz",
+      "sha256": "fe53ebee4e686a35fb3437656807f1b6097a4501f026832ee68cdb14d382e653"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "control-48.json.gz",
+      "sha256": "380ff4d2a41083525e659a56576e364849f89c60f032f3b03d7eeb9a0f91f50f"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "control-96.json.gz",
+      "sha256": "598a4ba982a206f905257d15dcd5d772f57d688e754bfad5a9c63cda8da75259"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "reference-48.json.gz",
+      "sha256": "c6820209dac0582c4041a28a5b366bfb36875d449bcd45f43f54688540680281"
+    },
+    {
+      "kind": "complete-endpoint",
+      "path": "reference-96.json.gz",
+      "sha256": "915c7961750ff913119414adc66802b5a8aebd58c13c819db50efa29fb85faeb"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {
+    "candidate-48-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 8.185452315956354e-12,
+      "max_scaled_error": 0.0008185452315956354,
+      "passed": true,
+      "rms_error": 6.180703544899716e-12,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "candidate-48-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 2.7183907902461613e-11,
+      "max_scaled_error": 0.0002718390790246161,
+      "passed": true,
+      "rms_error": 6.787577461022647e-12,
+      "rtol": 0,
+      "shape": [
+        3456,
+        3
+      ]
+    },
+    "candidate-96-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.0913936421275139e-10,
+      "max_scaled_error": 0.010913936421275139,
+      "passed": true,
+      "rms_error": 9.75158896911008e-11,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "candidate-96-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 3.3270261545759183e-11,
+      "max_scaled_error": 0.00033270261545759183,
+      "passed": true,
+      "rms_error": 8.125145664763209e-12,
+      "rtol": 0,
+      "shape": [
+        6912,
+        3
+      ]
+    },
+    "control-48-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 8.412825991399586e-12,
+      "max_scaled_error": 0.0008412825991399586,
+      "passed": true,
+      "rms_error": 6.37694325034862e-12,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "control-48-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 2.676954491409589e-11,
+      "max_scaled_error": 0.0002676954491409589,
+      "passed": true,
+      "rms_error": 7.329756633306213e-12,
+      "rtol": 0,
+      "shape": [
+        3456,
+        3
+      ]
+    },
+    "control-96-energy": {
+      "atol": 1e-08,
+      "max_absolute_error": 1.0595613275654614e-10,
+      "max_scaled_error": 0.010595613275654614,
+      "passed": true,
+      "rms_error": 9.549459773846894e-11,
+      "rtol": 0,
+      "shape": [
+        72
+      ]
+    },
+    "control-96-force": {
+      "atol": 1e-07,
+      "max_absolute_error": 3.5213429394609363e-11,
+      "max_scaled_error": 0.00035213429394609363,
+      "passed": true,
+      "rms_error": 9.117863092555202e-12,
+      "rtol": 0,
+      "shape": [
+        6912,
+        3
+      ]
+    }
+  },
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "device": {
+      "driver_version": 13000,
+      "fast_compile": 0,
+      "major": 12,
+      "maximum_blocks_per_sm": 24,
+      "maximum_registers_per_thread": 255,
+      "maximum_threads_per_block": 1024,
+      "maximum_threads_per_sm": 1536,
+      "minor": 0,
+      "name": "NVIDIA GeForce RTX 5090",
+      "official_profile": "sm_120",
+      "portable": 0,
+      "registers_per_sm": 65536,
+      "release_build": 1,
+      "runtime_version": 12090,
+      "shared_memory_per_block": 49152,
+      "shared_memory_per_block_optin": 101376,
+      "shared_memory_per_sm": 102400,
+      "sm_count": 170,
+      "toolkit_version": 12090,
+      "warp_size": 32
+    },
+    "host": {
+      "libc": [
+        "glibc",
+        "2.39"
+      ],
+      "machine": "x86_64",
+      "system": "Linux"
+    },
+    "native_abi": 0,
+    "policy": {
+      "consumers": [
+        "fock",
+        "force"
+      ],
+      "precision": "fp64",
+      "spin": [
+        "rhf",
+        "uhf"
+      ]
+    },
+    "schema": 1,
+    "source_identity": "fdde4fb47a289075bd7d4ebd02779b886d090963924f0db5f077d20f0de884f9"
+  },
+  "endpoint_observations": {
+    "all_regimes_lower_median": true,
+    "reason": null,
+    "status": "pass",
+    "summary": "summary.json"
+  },
+  "hardware": {
+    "host": "node1",
+    "reason": null,
+    "slurm_jobs": [
+      5880,
+      5884
+    ],
+    "status": "pass"
+  },
+  "hash_reasons": {
+    "equation": "Canonical WeightedIntegralIR is reused; no standalone equation digest was captured.",
+    "ir": "Exact compiler source and candidate patch are retained; standalone IR digest was not captured."
+  },
+  "hashes": {
+    "equation": null,
+    "ir": null,
+    "schedule": "b07feeedea5c6b62339fc4748657de87aef98d2a2dc9ab1b23c484f10010b608",
+    "source": "fdde4fb47a289075bd7d4ebd02779b886d090963924f0db5f077d20f0de884f9"
+  },
+  "inputs_hash": "74e6d4bb13014d374e07d50fdb2493d426371a89f3151a4896f583f7db91b347",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "Complete cold/five-warm/moved/five-moved-warm rows improve, but a strict interleaved automatic-provider promotion assay with isolated compilation/allocator peaks was not performed. This does not qualify a provider/profile registry or meet #1895 parity.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "b3acd80f706354276ffb18154e70ae5dd8998383",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "comparison_kind": "solver",
+    "default_profile_promoted": false,
+    "device": "cuda",
+    "fast_compile": false,
+    "per_iteration_normalization": false
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Full native SCF histories and actual Fock counts are retained in every native JSON attachment.",
+  "stages": {
+    "compilation": {
+      "library_sha256": "cf2345e5b4f2556fc21d3e79a149f9b48bdffaeb97940ce036d9bb327551c16c",
+      "reason": null,
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": null,
+      "status": "pass"
+    },
+    "numerical": {
+      "reason": null,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "source": {
+      "reason": null,
+      "status": "pass"
+    }
+  },
+  "subject": "Weighted order-four complete exact-direct PBE0 E+F",
+  "tier": "endpoint",
+  "timings": [
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 25,
+      "phase": "cold",
+      "seconds": 125.00900715589523,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.752368908375502,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.780317440629005,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.917954184114933,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.784328129142523,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.770431250333786,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 12,
+      "phase": "moved",
+      "seconds": 55.39070872589946,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.793557558208704,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.774582892656326,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.749999489635229,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.777877315878868,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.83260689303279,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 24,
+      "phase": "cold",
+      "seconds": 120.93873970210552,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.851642560213804,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 12.398904014378786,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.11837387830019,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.130371160805225,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 10.080870304256678,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 12,
+      "phase": "moved",
+      "seconds": 54.33673808723688,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.029039312154055,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.188071336597204,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.111429862678051,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.21219027787447,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 48,
+      "inputs_hash": "9a22e25e1e094e133a5f2fe382a8e3c99b9bc154e028a74ca461708c21cf4a58",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 10.102863404899836,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 30,
+      "phase": "cold",
+      "seconds": 288.64814138039947,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 32.426549799740314,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 32.501124031841755,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 32.50918346270919,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 32.516948737204075,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 32.53375940397382,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 12,
+      "phase": "moved",
+      "seconds": 129.89551178738475,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 32.50217106938362,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 32.51855215802789,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 32.56318428367376,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 32.55432375892997,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 32.59245462715626,
+      "selection": "baseline",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 27,
+      "phase": "cold",
+      "seconds": 271.0329188890755,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 29.01262004673481,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 28.830880794674158,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 28.853892993181944,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 29.158933591097593,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "warm",
+      "seconds": 29.21485973149538,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 12,
+      "phase": "moved",
+      "seconds": 126.08490595966578,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.81054252758622,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.810563035309315,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.85115585848689,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.784815728664398,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    },
+    {
+      "atoms": 96,
+      "inputs_hash": "7290ac4084dd876c97df2244d93534c767d5da1ee16897ba9f5ba1dd4e473e2e",
+      "iterations": 1,
+      "phase": "moved-warm",
+      "seconds": 28.736275013536215,
+      "selection": "candidate",
+      "workload": "energy-plus-force"
+    }
+  ],
+  "toolchain": {
+    "cuobjdump": {
+      "path": "/group/software/cuda-12.9.1/bin/cuobjdump",
+      "version": "cuobjdump: NVIDIA (R) fat binary listing tool\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Mon_May_19_08:50:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.82\nBuild cuda_12.9.r12.9/compiler.36001619_0"
+    },
+    "host_cxx": {
+      "path": "/data/jzzeng/qc-1895-order4-weighted-forces-20261005/.artifacts/bin/c++",
+      "version": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "nvcc": {
+      "path": "/group/software/cuda-12.9.1/bin/nvcc",
+      "version": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:21:03_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    },
+    "ptxas": {
+      "path": "/group/software/cuda-12.9.1/bin/ptxas",
+      "version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Tue_May_27_02:18:05_PDT_2025\nCuda compilation tools, release 12.9, V12.9.86\nBuild cuda_12.9.r12.9/compiler.36037853_0"
+    }
+  }
+}

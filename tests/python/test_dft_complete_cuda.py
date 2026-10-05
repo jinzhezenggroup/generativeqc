@@ -881,6 +881,166 @@ def test_public_cuda_prepared_force_replay_retains_execution(
             assert not owner._lease.failed
 
 
+@pytest.mark.parametrize(
+    ("method", "charge", "multiplicity", "order"),
+    [
+        ("lda-rks", 0, 1, 1),
+        ("pbe-rks", 0, 1, 2),
+        ("pbe-uks", 1, 2, 2),
+        ("pbe0-rks", 0, 1, 2),
+    ],
+)
+def test_public_cuda_force_active_ao_profile_replay(
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    charge: int,
+    multiplicity: int,
+    order: int,
+) -> None:
+    """Exercise profile routing, map lifetime and dense fallback on real CUDA.
+
+    A test-only profile admits both AO jet orders and spin domains. It is never
+    a production qualification: each geometry is checked against independent
+    PySCF algebra, and a zero cache budget must still complete on the dense path.
+    """
+    from generativeqc import _force_active_ao as policy
+    from generativeqc._dft_gradient import StationaryKsState
+    from generativeqc_compiler.dft import NativeAO
+    from test_dft_complete_cpu import (
+        ATOMS,
+        independent_global_hybrid_gradient,
+        independent_gradient,
+        independent_uks_gradient,
+    )
+
+    assert policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES == ()
+    assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    xyz = np.asarray([position for _, position in ATOMS])
+    moved = xyz.copy()
+    moved[1, 0] += 2e-3
+    geometries = [ATOMS, [(symbol, point) for (symbol, _), point in zip(ATOMS, moved)]]
+    calc = _calculator(method)
+    dense_results = []
+    references = []
+
+    with calc.prepare_batch(
+        [ATOMS], charges=[charge], multiplicities=[multiplicity], warm_start=True
+    ) as batch:
+        for geometry, atoms in enumerate(geometries):
+            coordinates = None if geometry == 0 else (moved,)
+            with no_cpu_derivatives():
+                result = batch.execute(
+                    coordinates=coordinates,
+                    strict=True,
+                    properties=("energy", "forces"),
+                ).items[0]
+            dense_results.append(result)
+            assert batch._stationary_cuda_execution._resident_ao_maps is None
+            with NativeAO(atoms, charge=charge, multiplicity=multiplicity) as basis:
+                state = StationaryKsState.from_native(batch, basis)
+                try:
+                    if method == "pbe0-rks":
+                        energy, gradient = independent_global_hybrid_gradient(
+                            basis, state, method
+                        )
+                    elif multiplicity == 2:
+                        energy, gradient = independent_uks_gradient(
+                            basis, state, method
+                        )
+                    else:
+                        energy, gradient, _ = independent_gradient(basis, state, method)
+                finally:
+                    state._source.close()
+            references.append((energy, -gradient))
+            assert result.energy == pytest.approx(energy, abs=2e-9)
+            np.testing.assert_allclose(result.forces, -gradient, atol=1e-7, rtol=0)
+
+    profile = policy.QualifiedForceActiveAoProfile(
+        profile_id="test-only-force-map-routing",
+        evidence=("test-only-independent-analytic-gradient",),
+        architectures=("sm_120",),
+        compositions=("ordinary",),
+        derivative_orders=(1, 2),
+        spin_blocks=(1, 2),
+        density_fitted=False,
+        min_atoms=1,
+        max_atoms=96,
+        min_aos=1,
+        max_aos=1024,
+        min_grid_points=1,
+        max_grid_points=4_000_000,
+        tile_policy="fixed",
+        tile_points=256,
+        min_device_bytes=512 << 20,
+        min_host_bytes=256 << 20,
+        cutoff=1e-16,
+        cache_bytes=16 << 20,
+    )
+    monkeypatch.setattr(policy, "QUALIFIED_FORCE_ACTIVE_AO_PROFILES", (profile,))
+    with calc.prepare_batch(
+        [ATOMS], charges=[charge], multiplicities=[multiplicity], warm_start=True
+    ) as batch:
+        work_records = []
+        original_force = batch._public_dft_cuda_force
+
+        def record_force(index: int, atoms: typing.Any) -> typing.Any:
+            forces, work = original_force(index, atoms)
+            work_records.append(work)
+            return forces, work
+
+        monkeypatch.setattr(batch, "_public_dft_cuda_force", record_force)
+        previous_cache = None
+        for geometry in (0, 0, 1, 1):
+            with no_cpu_derivatives():
+                result = batch.execute(
+                    coordinates=None if geometry == 0 else (moved,),
+                    strict=True,
+                    properties=("energy", "forces"),
+                ).items[0]
+            energy, forces = references[geometry]
+            assert result.executed_backend == "cuda"
+            assert result.energy == pytest.approx(energy, abs=2e-9)
+            np.testing.assert_allclose(result.forces, forces, atol=1e-7, rtol=0)
+            np.testing.assert_allclose(
+                result.forces, dense_results[geometry].forces, atol=1e-9, rtol=0
+            )
+            owner = batch._stationary_cuda_execution
+            cache = owner._resident_ao_maps
+            assert cache is not None and cache.domain.derivative_order == order
+            record = work_records[-1]["force_active_ao_policy"]
+            assert record["decision"] == "selected"
+            assert record["actual_mode"] in ("selected", "dense-identity")
+            work = cache.work
+            assert 0 < work["point_ao_square_sum"] <= work["dense_point_ao_square_sum"]
+            assert work["dense_budget_tiles"] == work["dense_capability_tiles"] == 0
+            if len(work_records) in (2, 4):
+                assert cache is previous_cache
+                assert work["discoveries"] == 0
+                assert work["cache_hits"] == work["tile_count"] > 0
+            else:
+                assert cache is not previous_cache and work["discoveries"] > 0
+            previous_cache = cache
+
+        monkeypatch.setattr(
+            policy,
+            "QUALIFIED_FORCE_ACTIVE_AO_PROFILES",
+            (replace(profile, cache_bytes=0),),
+        )
+        with no_cpu_derivatives():
+            result = batch.execute(
+                coordinates=(moved,), strict=True, properties=("energy", "forces")
+            ).items[0]
+        np.testing.assert_allclose(result.forces, references[1][1], atol=1e-7, rtol=0)
+        fallback = batch._stationary_cuda_execution._resident_ao_maps
+        assert fallback is not previous_cache
+        assert fallback.work["dense_budget_tiles"] == fallback.work["tile_count"] > 0
+        assert fallback.work["discoveries"] == 0
+        assert (
+            work_records[-1]["force_active_ao_policy"]["actual_mode"]
+            == "dense-identity"
+        )
+
+
 def test_public_cuda_grid_xc_schedules_preserve_complete_endpoint() -> None:
     """DFT09: both executable XC schedules preserve the public E+F endpoint."""
     from generativeqc import Calculator, KsOptions
