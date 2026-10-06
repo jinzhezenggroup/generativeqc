@@ -75,7 +75,7 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
     ):
         decision = resolve_force_active_ao_policy(workload)
         assert decision.selected
-        assert decision.profile_id == "sm120-ordinary-direct-active-ao-v2"
+        assert decision.profile_id == "ordinary-direct-active-ao-cost-v3"
         assert decision.cutoff == 1e-16
         assert decision.cache_bytes == 16 << 20
 
@@ -160,7 +160,6 @@ def test_capability_miss_is_dense(updates: dict[str, object], reason: str) -> No
 @pytest.mark.parametrize(
     "updates",
     [
-        {"architecture": "sm_90"},
         {"density_fitted": True},
         {"aos": 64},
         {"grid_points": 50_000},
@@ -178,6 +177,17 @@ def test_adjacent_unqualified_workloads_fall_back_dense(
     )
     assert not decision.selected
     assert decision.reason == "no-qualified-profile"
+
+
+@pytest.mark.parametrize("architecture", ("sm_89", "sm_90", "sm_120"))
+def test_custom_profile_admission_is_architecture_independent(
+    architecture: str,
+) -> None:
+    decision = resolve_force_active_ao_policy(
+        _workload(architecture=architecture), profiles=(_profile(),)
+    )
+    assert decision.selected
+    assert decision.profile_id == "test-qualified-domain"
 
 
 def test_overlapping_profiles_fail_closed() -> None:
