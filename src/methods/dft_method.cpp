@@ -441,11 +441,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                       "native KS range exchange has no lowerer for this semilocal graph");
   if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE) {
-    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO || execution_plan.range_exchange ||
-        execution_plan.nonlocal_correlation)
-      throw MethodError(
-          GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "DFT density fitting requires FP64 full-range local/semilocal or global-hybrid KS");
+    if (options.precision_mode == GENERATIVEQC_PRECISION_AUTO)
+      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                        "DFT density fitting currently requires strict FP64");
     fock.coulomb.approximation = scf::FockApproximation::DensityFitted;
     if (fock.exchange.present) fock.exchange.approximation = scf::FockApproximation::DensityFitted;
   }
@@ -458,11 +456,14 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                         "WB97M-V requires complete B97M + SR/LR + VV10 primitives");
     const auto correction_backend =
         backend == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
-    const auto correction =
-        scf::resolve_fock_build(scf::make_rsh_correction_fock_spec(
-                                    fock.spin, execution_plan.short_range_exchange,
-                                    execution_plan.long_range_exchange, execution_plan.range_omega),
-                                correction_backend, options.screening_tolerance);
+    auto correction_spec = scf::make_rsh_correction_fock_spec(
+        fock.spin, execution_plan.short_range_exchange, execution_plan.long_range_exchange,
+        execution_plan.range_omega);
+    if (options.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE)
+      correction_spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+    const auto correction = scf::resolve_fock_build(
+        correction_spec, correction_backend, options.screening_tolerance,
+        options.density_fitting_relative_threshold);
     scf::require_wb97mv_composition(*options.resolved_fock_build, correction,
                                     execution_plan.nonlocal_parameters);
   }
@@ -559,15 +560,19 @@ unsigned ks_direct_derivative_order(const scf::ResolvedFockBuild& strategy,
   return 0;
 }
 
-/** Retain the existing generated DF response only for the semilocal CUDA J
- * domain. Hybrid/RSH/nonlocal promotion remains a separate provider contract. */
+/** Retain first-order fitted response whenever every active primary Fock term
+ * is owned by the DF provider. Range correction, when present, owns its own
+ * separately prepared fitted response source. */
 unsigned ks_fitted_derivative_order(const scf::ResolvedFockBuild& strategy,
                                     generativeqc_backend backend) noexcept {
 #if GENERATIVEQC_HAS_CUDA
+  const auto fitted_or_absent = [](const scf::FockTermSpec& term) {
+    return !term.present || term.approximation == scf::FockApproximation::DensityFitted;
+  };
   if (backend == GENERATIVEQC_BACKEND_CUDA && strategy.backend == scf::FockBackend::Cuda &&
       strategy.spec.coulomb.present &&
       strategy.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
-      !strategy.spec.exchange.present)
+      fitted_or_absent(strategy.spec.exchange))
     return 1;
 #else
   (void)strategy;
@@ -681,7 +686,7 @@ scf::FockOccupiedProjectionReservation ks_fitted_projection_reservation(
   // This method owns an integer restricted determinant. Fixed-density Fock
   // callers do not acquire this promise from the same dimensions or system.
   const auto& spec = strategy.spec;
-  if (execution_plan.spin_channels != 1 || execution_plan.range_exchange ||
+  if (execution_plan.spin_channels != 1 ||
       strategy.backend != scf::FockBackend::Cuda || spec.spin != scf::FockSpin::Restricted ||
       spec.derivative_order != 0 || !spec.coulomb.present || !spec.exchange.present ||
       spec.coulomb.approximation != scf::FockApproximation::DensityFitted ||
@@ -752,13 +757,14 @@ class KsPreparedCalculation final : public PreparedCalculation {
             system_, grid, backend_, device,
             options_.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused)) {
     options_.retain_ks_state = backend_ != GENERATIVEQC_BACKEND_CUDA;
-    if (execution_plan_.range_exchange) prepare_range_exchange(device);
+    if (execution_plan_.range_exchange) prepare_range_exchange(device, auxiliary);
 #if GENERATIVEQC_HAS_CUDA
     if (backend_ == GENERATIVEQC_BACKEND_CUDA && execution_plan_.range_exchange &&
-        (!range_strategy_ || !cuda_rsh_provider_compatible(fock_, *range_strategy_)))
+        (!range_strategy_ ||
+         !cuda_rsh_provider_compatible(fock_, *range_strategy_, range_correction_.get())))
       throw MethodError(
           GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-          "CUDA range-separated KS requires a compatible prepared Direct SR/LR exchange provider");
+          "CUDA range-separated KS requires compatible prepared primary/range Fock providers");
 #endif
     if (execution_plan_.nonlocal_correlation) prepare_nonlocal(device);
 #if GENERATIVEQC_HAS_CUDA
@@ -774,7 +780,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                               : dft::nlc::Vv10DensityDomain::StrictPositive;
       cuda_ = std::make_unique<dft::CudaKsPlan>(
           fock_, basis_, grid_, options_, xc_functional_code(execution_plan_),
-          options_.xc_tile_points, range, nonlocal_.get(), domain);
+          options_.xc_tile_points, range, range_correction_.get(), nonlocal_.get(), domain);
     }
 #endif
     if (execution_plan_.d4_correction) prepare_d4(device);
@@ -1569,19 +1575,26 @@ class KsPreparedCalculation final : public PreparedCalculation {
   }
 
  private:
-  void prepare_range_exchange(int device) {
+  void prepare_range_exchange(int device, const std::optional<core::System>& auxiliary) {
     const auto spin =
         unrestricted(execution_plan_) ? scf::FockSpin::Unrestricted : scf::FockSpin::Restricted;
     const auto fock_backend =
         backend_ == GENERATIVEQC_BACKEND_CUDA ? scf::FockBackend::Cuda : scf::FockBackend::Cpu;
-    range_strategy_ = scf::resolve_fock_build(
+    auto correction_spec =
         scf::make_rsh_correction_fock_spec(spin, execution_plan_.short_range_exchange,
                                            execution_plan_.long_range_exchange,
-                                           execution_plan_.range_omega),
-        fock_backend, options_.screening_tolerance);
-    if (fock_backend == scf::FockBackend::Cpu)
-      range_correction_ =
-          std::make_unique<scf::PreparedFockPlan>(system_, nullptr, *range_strategy_, device);
+                                           execution_plan_.range_omega);
+    const bool fitted =
+        options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
+    if (fitted)
+      correction_spec.exchange.approximation = scf::FockApproximation::DensityFitted;
+    range_strategy_ = scf::resolve_fock_build(
+        correction_spec, fock_backend, options_.screening_tolerance,
+        options_.density_fitting_relative_threshold);
+    if (fock_backend == scf::FockBackend::Cpu || fitted)
+      range_correction_ = std::make_unique<scf::PreparedFockPlan>(
+          system_, fitted && auxiliary ? &*auxiliary : nullptr, *range_strategy_, device,
+          fitted ? options_.density_fitting_memory_budget_bytes : 0U, 0U, fitted ? 1U : 0U);
   }
 
   void prepare_nonlocal(int device) {
