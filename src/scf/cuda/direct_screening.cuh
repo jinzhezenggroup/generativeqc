@@ -47,8 +47,8 @@ __device__ __forceinline__ bool direct_ao_force_survives_density_products(
       const double alpha_reverse = density[spin_offset + reverse];
       const double beta_forward = density[spin_offset + matrix_size + forward];
       const double beta_reverse = density[spin_offset + matrix_size + reverse];
-      if (!std::isfinite(alpha_forward) || !std::isfinite(alpha_reverse) || !std::isfinite(beta_forward) ||
-          !std::isfinite(beta_reverse))
+      if (!std::isfinite(alpha_forward) || !std::isfinite(alpha_reverse) ||
+          !std::isfinite(beta_forward) || !std::isfinite(beta_reverse))
         return true;
       const double total_forward = alpha_forward + beta_forward;
       const double total_reverse = alpha_reverse + beta_reverse;
