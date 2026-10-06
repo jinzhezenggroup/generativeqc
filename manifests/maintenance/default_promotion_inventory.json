@@ -529,8 +529,8 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces use one method-name-free active-AO policy keyed by derivative order, execution composition, spin, provider/resource identity and workload bounds. The measured sm_120 ordinary RKS second-jet 48–96 atom / 384–768 AO envelope now has a positive production profile: retained complete endpoints show about 18.4% and 30.7% warm wins at 48/96 atoms, while every profile miss remains dense. Historical cold/moved negative observations remain retained rather than generalized away.",
-      "revisit_condition": "Broaden beyond the current sm_120 ordinary RKS second-jet 48–96 atom evidence envelope only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence, independent numerical gates, actual selected/dense AO-work counters and adjacent losing-domain controls. Keep matching structural/workload/resource based and dense on every miss.",
+      "rationale": "Public CUDA DFT forces use one method-name-free active-AO policy keyed by derivative order, execution composition, spin, provider/resource identity and a continuous dense-work cost proxy. On sm_120 ordinary all-electron Direct RKS second-jet force execution, auto admits map discovery once predicted dense point×AO² work reaches the retained 48-atom positive crossover; every capability/resource/profitability miss remains dense. Retained 48/96-atom endpoints show about 18.4% and 30.7% warm wins, while historical cold/moved negative observations remain retained rather than generalized away.",
+      "revisit_condition": "Broaden to other architectures, spin layouts, derivative orders, compositions or providers only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence. Refine the cost crossover with additional shapes rather than adding molecule-, atom-count-, AO-count- or grid-count windows; keep every miss dense.",
       "evidence": [
         "issue:#1853",
         "issue:#1598",
