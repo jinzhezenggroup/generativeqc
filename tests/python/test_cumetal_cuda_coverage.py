@@ -17,8 +17,14 @@ def _runner() -> dict[str, object]:
 def test_routine_cumetal_gate_spans_scientific_cuda_owners() -> None:
     namespace = _runner()
     gate = tuple(namespace["GATE_NODEIDS"])
-    assert "tests/python/test_cuda_runtime.py::test_cuda_minimal_rhf_matches_cpu_reference" in gate
-    assert "tests/python/test_cuda_runtime.py::test_cuda_minimal_uhf_matches_cpu_reference" in gate
+    assert (
+        "tests/python/test_cuda_runtime.py::test_cuda_minimal_rhf_matches_cpu_reference"
+        in gate
+    )
+    assert (
+        "tests/python/test_cuda_runtime.py::test_cuda_minimal_uhf_matches_cpu_reference"
+        in gate
+    )
     assert (
         "tests/python/test_calculator.py::test_cuda_energy_only_output_selection_omits_forces"
         in gate
@@ -34,7 +40,10 @@ def test_cumetal_qualification_excludes_known_nvidia_only_response_gate() -> Non
     qualification = tuple(namespace["QUALIFICATION_NODEIDS"])
     assert set(namespace["GATE_NODEIDS"]).issubset(qualification)
     assert len(qualification) > len(namespace["GATE_NODEIDS"])
-    assert not any("resident_rhf_response_matches_host_operator" in item for item in qualification)
+    assert not any(
+        "resident_rhf_response_matches_host_operator" in item
+        for item in qualification
+    )
 
 
 def test_cumetal_runner_requires_per_group_gpu_provenance_and_time_budget() -> None:
@@ -49,10 +58,10 @@ def test_cumetal_runner_requires_per_group_gpu_provenance_and_time_budget() -> N
 def test_cumetal_workflow_keeps_routine_and_qualification_budgets_separate() -> None:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     assert "Run bounded CuMetal QC endpoint gate" in workflow
-    assert 'CUMETAL_CUDA_TEST_MODE: gate' in workflow
+    assert "CUMETAL_CUDA_TEST_MODE: gate" in workflow
     assert 'CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"' in workflow
     assert "Run bounded CuMetal QC qualification on the Apple GPU" in workflow
-    assert 'CUMETAL_CUDA_TEST_MODE: full' in workflow
+    assert "CUMETAL_CUDA_TEST_MODE: full" in workflow
     assert 'CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "2400"' in workflow
     assert 'GENERATIVEQC_DFT_CUDA_TEST: "1"' in workflow
     assert "Report NVIDIA-only resident-response test coverage" not in workflow
