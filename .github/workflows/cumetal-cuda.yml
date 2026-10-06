@@ -1,8 +1,6 @@
 name: CuMetal CUDA
 
 on:
-  push:
-    branches: [master]
   pull_request:
   merge_group:
     types: [checks_requested]
