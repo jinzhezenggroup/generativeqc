@@ -144,10 +144,13 @@ cudaError_t enqueue_generated_rsh_values(GeneratedExchangePlan& plan, bool unres
 /** Execute separate full-range J' and K' fixed-density energy derivatives
  * through the retained shell topology. Output is source-major [J,K], each
  * containing 3*atom_count energy-gradient values. The public AO density stays
- * resident; this routine transforms it to the owner's Cartesian basis once. */
+ * resident; this routine transforms it to the owner's Cartesian basis once.
+ * separate_sources=false publishes one J+K block after precontracting the
+ * cotangents, using the same scientific weights and screened shell domain. */
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& plan, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives);
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
+    bool separate_sources = true);
 
 /** Stationary RSH sources [J(full), K(short), K(long)] through one retained
  * shell owner, one public-to-Cartesian density transform and one bounded shell

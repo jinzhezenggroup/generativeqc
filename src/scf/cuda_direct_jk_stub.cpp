@@ -61,7 +61,7 @@ generativeqc_status execute_cuda_direct_energy_derivative_item(
 }
 generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan*, FockSpin, double, double, const double*, const double*, std::size_t,
-    std::vector<double>&, std::string& detail) {
+    std::vector<double>&, std::string& detail, bool) {
   return unavailable(detail);
 }
 generativeqc_status execute_cuda_direct_shell_rsh_energy_derivatives_device(

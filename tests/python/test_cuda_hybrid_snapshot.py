@@ -179,6 +179,22 @@ def test_separate_full_range_derivatives_match_libcint(
                     )
                 )
             np.testing.assert_allclose(actual, expected, atol=1e-8, rtol=0)
+            # Total-force realization precontracts J/K together; raw exports
+            # retain independent sources from the same final D/W frame.
+            combined = state._source.cuda_integral_derivatives(
+                len(atoms),
+                512 * 1024 * 1024,
+                range_exchange=False,
+                combined_two_electron=True,
+            )
+            assert combined is not None
+            values, _ = combined
+            assert values.shape == (3, len(atoms), 3)
+            np.testing.assert_allclose(
+                values[2], expected.sum(axis=0), atol=1e-8, rtol=0
+            )
+            separate = state._source.cuda_full_range_derivatives(len(atoms))
+            np.testing.assert_allclose(separate, expected, atol=1e-8, rtol=0)
             np.testing.assert_allclose(actual.sum(axis=1), 0, atol=2e-10, rtol=0)
             if not exchange_coefficient:
                 np.testing.assert_array_equal(actual[1], 0)

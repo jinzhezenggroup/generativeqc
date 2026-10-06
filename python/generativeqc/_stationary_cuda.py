@@ -3030,6 +3030,14 @@ def _complete_rks_cuda_gradient_diagnostic(
             state._source, "cuda_integral_derivatives", None
         )
         use_fitted_integrals = bool(getattr(state._source, "density_fitted", False))
+        # Total forces can combine the canonical J/K cotangents before the
+        # derivative program. Explicit source exports keep their separate ABI.
+        native_combined_integrals = False
+        combined_requested = (
+            not use_fitted_integrals
+            and os.environ.get("GENERATIVEQC_DIRECT_FORCE_REDUCTION", "combined")
+            == "combined"
+        )
         integral_provider = (
             fitted_integral_provider
             if use_fitted_integrals
@@ -3045,18 +3053,33 @@ def _complete_rks_cuda_gradient_diagnostic(
                         na,
                         native_integral_budget,
                         range_exchange=False,
+                        **(
+                            {"combined_two_electron": True}
+                            if combined_requested
+                            else {}
+                        ),
                     )
                 )
+                if combined_requested and native_integral is None:
+                    # An older native library may expose only v1. Preserve its
+                    # complete bounded owner before considering an AO fallback;
+                    # errors or malformed combined outputs still fail closed.
+                    native_integral = integral_provider(
+                        na, native_integral_budget, range_exchange=False
+                    )
+                    combined_requested = False
             if native_integral is not None:
                 native_integral_components, native_integral_resources = native_integral
                 native_integral_components = np.asarray(native_integral_components)
                 if (
-                    native_integral_components.shape != (4, na, 3)
+                    native_integral_components.shape
+                    != (3 if combined_requested else 4, na, 3)
                     or not np.isfinite(native_integral_components).all()
                 ):
                     raise RuntimeError(
                         "prepared stationary integral source returned invalid output"
                     )
+                native_combined_integrals = combined_requested
         if use_fitted_integrals and native_integral_components is None:
             raise NotImplementedError(
                 "density-fitted stationary derivative provider is unavailable; "
@@ -3319,12 +3342,23 @@ def _complete_rks_cuda_gradient_diagnostic(
             components["overlap_pulay"] = np.ascontiguousarray(
                 native_integral_components[1]
             )
-            components["coulomb"] = np.ascontiguousarray(native_integral_components[2])
-            if has_exchange:
+            if native_combined_integrals:
+                components.pop("coulomb", None)
+                components.pop("exact_exchange", None)
+                components["two_electron"] = np.ascontiguousarray(
+                    native_integral_components[2]
+                )
+            else:
+                components["coulomb"] = np.ascontiguousarray(
+                    native_integral_components[2]
+                )
+            if has_exchange and not native_combined_integrals:
                 components["exact_exchange"] = np.ascontiguousarray(
                     native_integral_components[3]
                 )
-            elif np.any(native_integral_components[3] != 0):
+            elif not native_combined_integrals and np.any(
+                native_integral_components[3] != 0
+            ):
                 raise RuntimeError(
                     "semilocal prepared stationary source published unexpected K"
                 )
@@ -3363,7 +3397,11 @@ def _complete_rks_cuda_gradient_diagnostic(
         # Validate actual coverage before the complete reduction. All-electron
         # plan-owned work reduces inside the stationary owner; ECP retains the
         # generated TensorIR sum because its two extra sources are separate owners.
-        plan.reduction_program(atoms=na, sources=components)
+        plan.reduction_program(
+            atoms=na,
+            sources=components,
+            combined_two_electron=native_combined_integrals,
+        )
         if ecp:
             tp = tensor_plans["reduction"]
             if prepared is None:
@@ -3383,9 +3421,11 @@ def _complete_rks_cuda_gradient_diagnostic(
                         gradient
                         + components["one_electron"]
                         + components["overlap_pulay"]
-                        + components["coulomb"]
+                        + components[
+                            "two_electron" if native_combined_integrals else "coulomb"
+                        ]
                     )
-                    if has_exchange:
+                    if has_exchange and not native_combined_integrals:
                         gradient = gradient + components["exact_exchange"]
                 elif native_shell_full_range:
                     gradient = gradient + components["coulomb"]
@@ -3537,8 +3577,12 @@ def _complete_rks_cuda_gradient_diagnostic(
             (
                 "one_electron",
                 "overlap_pulay",
-                "coulomb",
-                *(("exact_exchange",) if has_exchange else ()),
+                "two_electron" if native_combined_integrals else "coulomb",
+                *(
+                    ("exact_exchange",)
+                    if has_exchange and not native_combined_integrals
+                    else ()
+                ),
             )
             if native_complete_integrals
             else ()

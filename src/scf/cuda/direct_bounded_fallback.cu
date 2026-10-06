@@ -236,26 +236,42 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                   : batch.shell_angular[first_shell] + batch.shell_angular[second_shell] +
                         batch.shell_angular[third_shell] + batch.shell_angular[fourth_shell];
           if constexpr (Force) {
-            if (radial_operator == DirectRangeOperator::FullSources && angular_order == 5U) {
+            if ((radial_operator == DirectRangeOperator::FullSources ||
+                 radial_operator == DirectRangeOperator::Full) &&
+                angular_order == 5U) {
               const unsigned shell_class = direct_quartet_shell_class_device(
                   batch.shell_angular[first_shell], batch.shell_angular[second_shell],
                   batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
               if (weighted_order5_source_class(shell_class)) {
-                contract_two_electron_force_order5_sources<Unrestricted>(
-                    shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    output, coulomb_coefficient, exchange_coefficient);
+                if (radial_operator == DirectRangeOperator::FullSources)
+                  contract_two_electron_force_order5_sources<Unrestricted>(
+                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                      active, output, coulomb_coefficient, exchange_coefficient);
+                else
+                  contract_two_electron_force_order5_sources<Unrestricted,
+                                                             DirectForceOutputMode::Combined>(
+                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                      active, output, coulomb_coefficient, exchange_coefficient);
               }
               // f-containing order-five classes still belong to the warp fallback.
               continue;
             }
-            if (radial_operator == DirectRangeOperator::FullSources && angular_order == 4U) {
+            if ((radial_operator == DirectRangeOperator::FullSources ||
+                 radial_operator == DirectRangeOperator::Full) &&
+                angular_order == 4U) {
               const unsigned shell_class = direct_quartet_shell_class_device(
                   batch.shell_angular[first_shell], batch.shell_angular[second_shell],
                   batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
               if (weighted_order4_source_class(shell_class)) {
-                contract_two_electron_force_order4_sources<Unrestricted>(
-                    shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    output, coulomb_coefficient, exchange_coefficient);
+                if (radial_operator == DirectRangeOperator::FullSources)
+                  contract_two_electron_force_order4_sources<Unrestricted>(
+                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                      active, output, coulomb_coefficient, exchange_coefficient);
+                else
+                  contract_two_electron_force_order4_sources<Unrestricted,
+                                                             DirectForceOutputMode::Combined>(
+                      shell_class, batch, task, screening_tolerance, schwarz_bounds, density,
+                      active, output, coulomb_coefficient, exchange_coefficient);
               }
               // Uncovered order-four classes are consumed by the warp fallback.
               continue;
@@ -325,7 +341,8 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                   materialized_pair_derivative_task(batch, base))
                 continue;
             }
-            if (radial_operator == DirectRangeOperator::FullSources &&
+            if ((radial_operator == DirectRangeOperator::FullSources ||
+                 radial_operator == DirectRangeOperator::Full) &&
                 (weighted_order4_source_class(shell_class) ||
                  weighted_order5_source_class(shell_class)))
               continue;
@@ -486,15 +503,17 @@ cudaError_t launch_angular_force_passes(
     return cudaGetLastError();
   };
   cudaError_t error = cudaSuccess;
-  if constexpr (Order == 1U && Range == DirectRangeOperator::FullSources) {
+  if constexpr (Order == 1U &&
+                (Range == DirectRangeOperator::FullSources || Range == DirectRangeOperator::Full)) {
     // The resident lease owns the complete psss class. Replace this pass,
     // rather than adding a second traversal or masking individual channels.
     error = direct_force_resident_bra_schedule_available(resident)
-                ? launch_direct_force_resident_bra(DirectForceOutputMode::Separate, Unrestricted,
-                                                   stream, batch, resident, screening_tolerance,
-                                                   shell_pair_bounds, shell_pair_density_bounds,
-                                                   true, schwarz, density, active, output, 0U,
-                                                   coulomb_coefficient, exchange_coefficient)
+                ? launch_direct_force_resident_bra(
+                      Range == DirectRangeOperator::FullSources ? DirectForceOutputMode::Separate
+                                                                : DirectForceOutputMode::Combined,
+                      Unrestricted, stream, batch, resident, screening_tolerance, shell_pair_bounds,
+                      shell_pair_density_bounds, true, schwarz, density, active, output, 0U,
+                      coulomb_coefficient, exchange_coefficient)
                 : launch_bounded();
   } else {
     error = launch_bounded();
@@ -518,7 +537,8 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
     unsigned long long* cursor, DirectRangeOperator range, double omega, double coulomb_coefficient,
     double exchange_coefficient, detail::BoundedDirectBlockDomain domain,
     DirectForceResidentBraSchedule resident) {
-  if (range != DirectRangeOperator::FullSources && range != DirectRangeOperator::Long)
+  if (range != DirectRangeOperator::FullSources && range != DirectRangeOperator::Full &&
+      range != DirectRangeOperator::Long)
     return cudaErrorInvalidValue;
 #define GENERATIVEQC_ANGULAR_FORCE(U, R)                                                           \
   launch_angular_force_passes<U, R>(                                                               \
@@ -529,6 +549,9 @@ cudaError_t launch_bounded_direct_angular_force_kernel(
   if (range == DirectRangeOperator::Long)
     return unrestricted ? GENERATIVEQC_ANGULAR_FORCE(true, DirectRangeOperator::Long)
                         : GENERATIVEQC_ANGULAR_FORCE(false, DirectRangeOperator::Long);
+  if (range == DirectRangeOperator::Full)
+    return unrestricted ? GENERATIVEQC_ANGULAR_FORCE(true, DirectRangeOperator::Full)
+                        : GENERATIVEQC_ANGULAR_FORCE(false, DirectRangeOperator::Full);
   return unrestricted ? GENERATIVEQC_ANGULAR_FORCE(true, DirectRangeOperator::FullSources)
                       : GENERATIVEQC_ANGULAR_FORCE(false, DirectRangeOperator::FullSources);
 #undef GENERATIVEQC_ANGULAR_FORCE

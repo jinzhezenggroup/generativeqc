@@ -143,10 +143,13 @@ generativeqc_status execute_prepared_cuda_direct_rsh_energy_derivatives_device(
 
 /** Execute the prepared primary model's full-range J'/K' through the retained
  * shell derivative lease. Output is source-major [J,K]. Absent exchange
- * produces an all-zero K block while preserving the two-source shape. */
+ * produces an all-zero K block while preserving the two-source shape.
+ * Total-force consumers may request separate_sources=false, which returns
+ * one combined J+K block and does not claim independent-source coverage. */
 generativeqc_status execute_prepared_cuda_direct_shell_full_range_derivatives_device(
     const PreparedFockPlan& plan, const double* density, const double* beta,
-    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail);
+    std::size_t matrix_elements, std::vector<double>& derivatives, std::string& detail,
+    bool separate_sources = true);
 
 /** Enqueue the prepared plan's complete raw J/K request on caller-owned device
  * buffers. Output pointers follow FockBuildSpec presence/spin semantics.

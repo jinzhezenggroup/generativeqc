@@ -162,7 +162,7 @@ void launch_bounded_shell_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain = {});
+    detail::BoundedDirectBlockDomain block_domain = {}, bool separate_sources = true);
 
 /** Qualification-only angular partition behind the provider launch boundary.
  * Full publishes separate J/K channels; Long publishes one K channel. Short
@@ -176,7 +176,7 @@ cudaError_t launch_bounded_shell_angular_energy_derivative(
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DirectCoulombRange range, double omega, double coulomb_coefficient, double exchange_coefficient,
     detail::BoundedDirectBlockDomain block_domain = {},
-    DirectForceResidentBraSchedule resident = {});
+    DirectForceResidentBraSchedule resident = {}, bool separate_sources = true);
 
 /** SR/LR exchange derivative through the same bounded shell scheduler.
  * The full-range Schwarz/density bounds remain conservative for both ranges. */

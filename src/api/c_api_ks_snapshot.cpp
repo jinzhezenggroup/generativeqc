@@ -648,20 +648,34 @@ generativeqc_status generativeqc_ks_snapshot_cuda_fixed_density_profile_v1(
 generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v1(
     generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, double* values,
     std::size_t count, std::size_t maximum_bytes, std::uint64_t* work, std::size_t work_count) {
+  return generativeqc_ks_snapshot_cuda_integral_gradient_v2(batch, snapshot, 0, values, count,
+                                                            maximum_bytes, work, work_count);
+}
+
+generativeqc_status generativeqc_ks_snapshot_cuda_integral_gradient_v2(
+    generativeqc_batch* batch, const generativeqc_ks_snapshot* snapshot, int combined,
+    double* values, std::size_t count, std::size_t maximum_bytes, std::uint64_t* work,
+    std::size_t work_count) {
   if (!batch || !snapshot || !values || !work || work_count != 9 || !maximum_bytes)
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (combined != 0 && combined != 1) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
+  if (combined && snapshot->token.identity.model.range_correction)
+    return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
   std::lock_guard<std::recursive_mutex> lock(batch->context->mutex);
   try {
     auto status = check_current(*batch, *snapshot);
     if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
-    const auto source_count = snapshot->token.identity.model.range_correction ? 5U : 4U;
+    const auto source_count = combined                                          ? 3U
+                              : snapshot->token.identity.model.range_correction ? 5U
+                                                                                : 4U;
     if (count != source_count * 3 * snapshot->atoms) return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
     std::vector<double> candidate;
     std::array<std::uint64_t, 9> usage{};
     std::string detail;
     status = generativeqc::methods::detail::dft_cuda_integral_gradient_cached(
         *batch->plan, snapshot->index, snapshot->token, snapshot->stationary_density,
-        snapshot->stationary_weighted_density, candidate, maximum_bytes, usage, detail);
+        snapshot->stationary_weighted_density, candidate, maximum_bytes, usage, detail,
+        combined != 0);
     if (status != GENERATIVEQC_STATUS_SUCCESS) {
       batch->context->last_detail = detail;
       return status;
