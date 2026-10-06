@@ -915,7 +915,7 @@ def test_public_cuda_force_active_ao_profile_replay(
 
     assert tuple(
         profile.profile_id for profile in policy.QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-    ) == ("sm120-ordinary-direct-active-ao-v2",)
+    ) == ("ordinary-direct-active-ao-cost-v3",)
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
     xyz = np.asarray([position for _, position in ATOMS])
     moved = xyz.copy()
@@ -960,7 +960,6 @@ def test_public_cuda_force_active_ao_profile_replay(
     profile = policy.QualifiedForceActiveAoProfile(
         profile_id="test-only-force-map-routing",
         evidence=("test-only-independent-analytic-gradient",),
-        architectures=("sm_120",),
         compositions=("ordinary",),
         derivative_orders=(1, 2),
         spin_blocks=(1, 2),
