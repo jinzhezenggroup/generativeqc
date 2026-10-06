@@ -529,8 +529,8 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces use one method-name-free active-AO policy keyed by derivative order, execution composition, spin, provider/resource identity and a continuous dense-work cost proxy. On sm_120 ordinary all-electron Direct RKS second-jet force execution, auto admits map discovery once predicted dense point×AO² work reaches the retained 48-atom positive crossover; every capability/resource/profitability miss remains dense. Retained 48/96-atom endpoints show about 18.4% and 30.7% warm wins, while historical cold/moved negative observations remain retained rather than generalized away.",
-      "revisit_condition": "Broaden to other architectures, spin layouts, derivative orders, compositions or providers only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence. Refine the cost crossover with additional shapes rather than adding molecule-, atom-count-, AO-count- or grid-count windows; keep every miss dense.",
+      "rationale": "Public CUDA DFT forces use one method-name-free active-AO policy keyed by derivative order, execution composition, spin, provider/resource identity and a continuous dense-work cost proxy. On sm_120 ordinary all-electron Direct force execution, supported RKS/UKS AO-jet orders 1/2 admit map discovery once predicted dense point×AO² work reaches the retained positive crossover; every capability/resource/profitability miss remains dense. Retained 48/96-atom PBE0 RKS endpoints anchor the crossover, while independent CUDA correctness coverage spans LDA/PBE/PBE0 RKS/UKS and both supported jet orders.",
+      "revisit_condition": "Broaden to other architectures, composite execution, DF or ECP only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence. Refine the continuous cost crossover with additional shapes rather than adding molecule-, atom-count-, AO-count- or grid-count windows; keep every miss dense.",
       "evidence": [
         "issue:#1853",
         "issue:#1598",
