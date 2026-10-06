@@ -68,7 +68,18 @@ def test_blacklist_is_negative_only_empty_and_immutable() -> None:
         LIBXC_SEMILOCAL_BLACKLIST["GGA_X_APBE"] = "do not allow"  # type: ignore[index]
 
 
-def test_bulk_ks_rejects_non_cpu_backend_before_lookup(
+def test_bulk_ks_cpu_and_cuda_share_methodir_and_plan_identity() -> None:
+    cpu = bulk_ks.resolve_bulk_ks("GGA_X_APBE", backend="cpu")
+    cuda = bulk_ks.resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+
+    assert cpu.backend == "cpu"
+    assert cuda.backend == "cuda"
+    assert cpu.method.identity == cuda.method.identity
+    assert cpu.plan.identity == cuda.plan.identity
+    assert cpu.capability.identity == cuda.capability.identity
+
+
+def test_bulk_ks_rejects_unknown_backend_before_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -77,8 +88,8 @@ def test_bulk_ks_rejects_non_cpu_backend_before_lookup(
         lambda *args, **kwargs: pytest.fail("capability lookup must stay inactive"),
     )
 
-    with pytest.raises(UnsupportedMethod, match="supports CPU only"):
-        bulk_ks.resolve_bulk_ks("GGA_X_APBE", backend="cuda")
+    with pytest.raises(UnsupportedMethod, match="backend='cpu' or 'cuda'"):
+        bulk_ks.resolve_bulk_ks("GGA_X_APBE", backend="opencl")
 
 
 def test_bulk_ks_rejects_unsupported_ingredient_structurally(
