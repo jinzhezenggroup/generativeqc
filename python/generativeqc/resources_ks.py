@@ -38,6 +38,7 @@ from .resources_hf import _basis_record, _cuda_library_identity, _ecp_workspace
 
 _CPU_AO_GRID_CACHE_CAP = 64 << 20
 
+
 def _item_host_inventory(
     item: typing.Any,
     *,
@@ -95,7 +96,12 @@ def _item_host_inventory(
     matrix_work += byte_product(16, diis_history + 1, diis_history + 1)
     host_unfused = backend == "cuda" and model.xc_schedule == "host_unfused"
     xc_tile = (
-        byte_product(8, min(points, model.tile_points), n, 4 if requires_first_ao_derivatives else 1)
+        byte_product(
+            8,
+            min(points, model.tile_points),
+            n,
+            4 if requires_first_ao_derivatives else 1,
+        )
         + byte_product(8, spins, n2)
         if backend == "cpu" or host_unfused
         else 0
