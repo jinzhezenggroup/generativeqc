@@ -101,10 +101,10 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
   }
 }
 
-extern "C" int df_gap_same_primal_probe(void* opaque, std::size_t budget, double* force_output,
-                                        double* values, std::uint64_t* common_counts,
-                                        std::size_t* case_counts, char* error,
-                                        std::size_t error_size) noexcept {
+static int run_df_gap_probe(void* opaque, std::size_t budget, double* force_output, double* values,
+                            std::uint64_t* common_counts, std::size_t* case_counts,
+                            std::uint64_t* fingerprints, char* error,
+                            std::size_t error_size) noexcept {
   using namespace generativeqc;
   try {
     const auto& raw = *static_cast<posthf::RawSource*>(opaque);
@@ -150,10 +150,38 @@ extern "C" int df_gap_same_primal_probe(void* opaque, std::size_t budget, double
       force_offset += snapshot.forces.size();
       std::copy(std::begin(scalars), std::end(scalars), values + index * std::size(scalars));
       std::copy(std::begin(counts), std::end(counts), case_counts + index * std::size(counts));
+      if (fingerprints)
+        for (std::size_t stage = 0; stage < snapshot.fingerprints.identities.size(); ++stage) {
+          const auto offset = (index * snapshot.fingerprints.identities.size() + stage) * 2;
+          fingerprints[offset] = snapshot.fingerprints.identities[stage];
+          fingerprints[offset + 1] = snapshot.fingerprints.elements[stage];
+        }
     }
     return 0;
   } catch (const std::exception& failure) {
     if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
     return 1;
   }
+}
+
+extern "C" int df_gap_same_primal_probe(void* opaque, std::size_t budget, double* force_output,
+                                        double* values, std::uint64_t* common_counts,
+                                        std::size_t* case_counts, char* error,
+                                        std::size_t error_size) noexcept {
+  return run_df_gap_probe(opaque, budget, force_output, values, common_counts, case_counts, nullptr,
+                          error, error_size);
+}
+
+extern "C" std::size_t df_gap_same_primal_fingerprint_count() noexcept {
+  return generativeqc::methods::detail::df_gap_fingerprint_names.size();
+}
+
+extern "C" int df_gap_same_primal_fingerprints_probe(void* opaque, std::size_t budget,
+                                                     double* force_output, double* values,
+                                                     std::uint64_t* common_counts,
+                                                     std::size_t* case_counts,
+                                                     std::uint64_t* fingerprints, char* error,
+                                                     std::size_t error_size) noexcept {
+  return run_df_gap_probe(opaque, budget, force_output, values, common_counts, case_counts,
+                          fingerprints, error, error_size);
 }

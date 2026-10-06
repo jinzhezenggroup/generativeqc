@@ -277,3 +277,15 @@ response composition. These are diagnostic timings, **not independent cold
 endpoint timings**, and cannot replace cold acceptance or qualify an endpoint
 speedup. Independent force finite differences, unchanged residual/stationarity
 gates and the strict paired force gate still apply.
+
+Each comparison also records ordered bit-pattern identities and element counts
+for 35 existing host payload boundaries: seven requested triples cotangents,
+full-Fock response, corrected Lambda, composed parameter/factor sources, DF
+nuclear gradient and coefficient source, orbital response/weights, and final
+forces. This fixed scalar metadata adds no retained numeric intermediate or
+GPU transfer; empty payloads have explicit zero element counts. Ordinary cold
+calls do not collect these fingerprints. Fingerprinting time is reported
+separately, along with logical host value reads, and remains included in
+diagnostic response/total times. Identity
+differences localize the first observed divergence but are not numerical
+acceptance gates, proof of causation, or a replacement for force tolerances.

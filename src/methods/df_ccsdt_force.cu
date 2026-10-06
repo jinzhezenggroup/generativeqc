@@ -2,6 +2,7 @@
 #include <bit>
 #include <chrono>
 #include <cmath>
+#include <span>
 #include <stdexcept>
 #include <utility>
 
@@ -41,17 +42,32 @@ std::size_t primal_host_bytes(const RccsdNativeState& state) {
   return checked_add(cc::problem_host_bytes(state.problem),
                      capacity({&state.solved.t1, &state.solved.t2, &state.eps_o, &state.eps_v}));
 }
-std::uint64_t primal_identity(const RccsdNativeState& state) {
+std::uint64_t numeric_identity(std::initializer_list<std::span<const double>> blocks) {
   // A diagnostic bit-pattern census, not a cache key or a second scientific map.
   auto identity = std::uint64_t{14695981039346656037ULL};
-  for (const auto* values :
-       {&state.problem.df_bov, &state.problem.df_bvv, &state.problem.ovoo, &state.problem.ovov,
-        &state.problem.fov, &state.solved.t1, &state.solved.t2, &state.eps_o, &state.eps_v}) {
-    identity = (identity ^ values->size()) * 1099511628211ULL;
-    for (const double value : *values)
+  for (const auto values : blocks) {
+    identity = (identity ^ values.size()) * 1099511628211ULL;
+    for (const double value : values)
       identity = (identity ^ std::bit_cast<std::uint64_t>(value)) * 1099511628211ULL;
   }
   return identity;
+}
+std::uint64_t primal_identity(const RccsdNativeState& state) {
+  return numeric_identity({state.problem.df_bov, state.problem.df_bvv, state.problem.ovoo,
+                           state.problem.ovov, state.problem.fov, state.solved.t1, state.solved.t2,
+                           state.eps_o, state.eps_v});
+}
+void record_fingerprints(DFGapResponseFingerprints& diagnostic, std::size_t first,
+                         std::initializer_list<std::span<const double>> blocks) {
+  // Read only completed host boundaries; never add a transfer or retain arrays.
+  const auto started = Clock::now();
+  auto index = first;
+  for (const auto values : blocks) {
+    diagnostic.identities.at(index) = numeric_identity({values});
+    diagnostic.elements.at(index++) = values.size();
+    diagnostic.value_reads = checked_add(diagnostic.value_reads, values.size());
+  }
+  diagnostic.seconds += elapsed(started);
 }
 
 void publish_force_diagnostic(DFCCSDTResult& result) {
@@ -88,7 +104,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     const hf::RHFFrameResponseOptions& frame_options, bool derived_denominators, bool packed_diis,
     bool parallel_gap_reduction, bool request_triples_gap_cotangents,
     RccsdNativeState* replay_state = nullptr, std::size_t retained_host_bytes = 0,
-    std::size_t retained_df_source_bytes = 0) {
+    std::size_t retained_df_source_bytes = 0, DFGapResponseFingerprints* fingerprints = nullptr) {
   const auto started = Clock::now();
   runtime::df_progress::Scope trace(replay_state ? "df_ccsdt_response_replay" : "df_ccsdt_native");
   using Trace = runtime::df_progress::Scope;
@@ -164,6 +180,10 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
       result.numeric_capacity_bytes =
           std::max(result.numeric_capacity_bytes, result.triples_fock.numeric_capacity_bytes);
       fbytes = capacity({&result.triples_fock.foo, &result.triples_fock.fvv});
+      if (fingerprints)
+        record_fingerprints(*fingerprints, 0,
+                            {t.bov, t.bvv, t.ovoo, t.ovov, t.fov, t.t1, t.t2,
+                             result.triples_fock.foo, result.triples_fock.fvv});
     } else {
       result.triples = cc::triples::evaluate_df_cuda(
           o, v, q, p.df_bov.data(), p.df_bvv.data(), p.ovoo.data(), p.ovov.data(), p.fov.data(),
@@ -217,6 +237,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes,
                checked_add(lambda_external, result.lambda.numeric_capacity_bytes));
+  if (fingerprints)
+    record_fingerprints(*fingerprints, 9, {parameters.lambda.lambda1, parameters.lambda.lambda2});
   if (with_triples) {
     add(parameters.foo, result.triples_fock.foo);
     add(parameters.fvv, result.triples_fock.fvv);
@@ -230,6 +252,11 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     std::vector<double>().swap(result.triples_fock.foo);
     std::vector<double>().swap(result.triples_fock.fvv);
   }
+  if (fingerprints)
+    record_fingerprints(
+        *fingerprints, 11,
+        {parameters.foo, parameters.fov, parameters.fvv, parameters.ovov, parameters.ovvo,
+         parameters.oovv, parameters.ovoo, parameters.oooo, parameters.df_bov, parameters.df_bvv});
   // Lambda vectors are no longer needed once their parameter VJPs are detached.
   parameters.lambda = {};
   result.lambda_seconds = elapsed(phase);
@@ -270,6 +297,8 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
       cc::pullback_df_factors_cuda(o, v, q, view, budget, device, difference(live, factor_inputs));
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes, factors.numeric_capacity_bytes);
+  if (fingerprints)
+    record_fingerprints(*fingerprints, 21, {factors.boo, factors.bov, factors.bvv, bar_f});
   parameters = {};
   std::vector<double> correlation_gradient;
   {
@@ -301,6 +330,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   if (result.source_weight_values != checked_mul(nn, q) ||
       result.metric_weight_values != checked_mul(q, q))
     throw std::logic_error("DF force physical source traversal was incomplete");
+  if (fingerprints) record_fingerprints(*fingerprints, 25, {bar_c, correlation_gradient});
   factors = {};
   result.source_response_seconds = elapsed(phase);
   phase = Clock::now();
@@ -352,6 +382,12 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
   result.numeric_capacity_bytes =
       std::max(result.numeric_capacity_bytes, result.orbital.numeric_capacity_bytes);
   result.orbital_seconds = elapsed(phase);
+  if (fingerprints)
+    record_fingerprints(
+        *fingerprints, 27,
+        {result.orbital.orbital_rhs, result.orbital.orbital_response.solution,
+         result.orbital.hcore_weights, result.orbital.overlap_weights,
+         result.orbital.fock_ao_weights, result.orbital.gradient, result.orbital.stationarity});
   result.forces = std::move(correlation_gradient);
   add(result.forces, result.orbital.gradient);
   molecule::add_nuclear_repulsion_gradient(system, result.forces);
@@ -359,6 +395,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     value = -value;
     if (!std::isfinite(value)) throw std::runtime_error("nonfinite complete DF CCSD(T) force");
   }
+  if (fingerprints) record_fingerprints(*fingerprints, 34, {result.forces});
   result.method_result.forces = result.forces;
   publish_force_diagnostic(result);
   result.total_seconds = elapsed(started);
@@ -451,7 +488,7 @@ DFGapForceComparison diagnose_df_ccsdt_gap_schedules(
           execution, system, auxiliary, descriptor, true, true, true, true, true,
           lambda_batch_limit, ccsd_batch_limit, frame_options, derived_denominators, packed_diis,
           index == 1 || index == 2, index != 2, &state, comparison.retained_primal_host_bytes,
-          comparison.retained_df_source_bytes);
+          comparison.retained_df_source_bytes, &snapshot.fingerprints);
       if (result.forces.size() != coords || primal_identity(original) != comparison.primal_identity)
         throw std::logic_error("DF gap comparison changed its immutable primal or force shape");
       std::copy(result.forces.begin(), result.forces.end(), snapshot.forces.begin());

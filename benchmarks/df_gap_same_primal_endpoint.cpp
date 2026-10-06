@@ -118,6 +118,8 @@ int main(int argc, char** argv) {
       field("lambda_seconds", snapshot.lambda_seconds);
       field("source_response_seconds", snapshot.source_response_seconds);
       field("orbital_seconds", snapshot.orbital_seconds);
+      field("fingerprint_seconds", snapshot.fingerprints.seconds);
+      field("fingerprint_value_reads", snapshot.fingerprints.value_reads);
       field("numeric_capacity_bytes", snapshot.numeric_capacity_bytes);
       field("source_weight_values", snapshot.source_weight_values);
       field("metric_weight_values", snapshot.metric_weight_values);
@@ -134,6 +136,14 @@ int main(int argc, char** argv) {
       field("triples_gap_value_reads", snapshot.gap.value_reads);
       field("triples_gap_value_writes", snapshot.gap.value_writes);
       field("triples_gap_reduction_summands", snapshot.gap.reduction_summands);
+      output << "  \"response_fingerprints\": {";
+      for (std::size_t stage = 0; stage < snapshot.fingerprints.identities.size(); ++stage) {
+        if (stage) output << ',';
+        output << std::quoted(generativeqc::methods::detail::df_gap_fingerprint_names[stage])
+               << ": {\"identity\": " << snapshot.fingerprints.identities[stage]
+               << ", \"elements\": " << snapshot.fingerprints.elements[stage] << '}';
+      }
+      output << "},\n";
       output << "  \"forces\": [";
       for (std::size_t coordinate = 0; coordinate < snapshot.forces.size(); ++coordinate) {
         if (coordinate) output << ',';

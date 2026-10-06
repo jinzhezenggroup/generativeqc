@@ -498,6 +498,97 @@ evidence in this note. No compiled input changes after qualification. The
 merge conflict is resolved and the checked CI snapshot has no failing or
 pending checks; this does not supersede the real-device numerical rejection.
 
+### Response-boundary fingerprint instrumentation
+
+The next diagnostic records 35 ordered, length-prefixed FP64 bit-pattern
+identities at existing host boundaries: the seven retained triples cotangents,
+full-Fock response, corrected Lambda, composed parameter/factor sources,
+coefficient source and DF nuclear gradient, orbital solution/weights/gradient,
+stationarity and final forces. Element counts distinguish actual empty
+payloads. The native comparison retains only fixed scalar metadata, not copies
+of these intermediates, and performs no new GPU transfer or synchronization.
+Ordinary cold calls leave the private fingerprint pointer null and do not scan
+numeric payloads. The existing aggregate nine-input primal census is unchanged.
+
+Fingerprinting wall time and logical host value reads are explicit benchmark
+fields; its cost remains included in diagnostic response/total timings. Hash
+differences locate the first observed payload divergence, not its numerical
+magnitude or cause. Equal hashes are a diagnostic census, not a cryptographic
+proof or a scientific acceptance gate. The original tolerance gates remain
+unchanged; fingerprints are deliberately not required to match bitwise across
+schedules. This also avoids imposing a stronger numerical contract than the
+qualified FP64 tolerance. The old native probe ABI is preserved beside a new
+counted fingerprint-export seam.
+
+The augmented physical water fixture independently recomputes every final-force
+fingerprint from the published force bits and verifies consistent payload
+lengths. All new fingerprint outputs retain their sentinels on budget-zero/one
+refusal. Job 2487 passes 15 force-owner tests, one real public H2 force/energy
+finite-difference test and three diagnostic memcheck cases with zero errors.
+Job 2488 separately passes 45 native response, 48 independent complete-force
+and 82 memcheck cases with zero errors. Local validation is 73 passes and
+112 expected skips; ten integrated executable CLI tests, compiler/SCF/vendor/
+default/boundary, 330-file CUDA ownership and configured formatting checks pass.
+
+The instrumented source tree is `5dd52c7022d5b393dae456b8f66be673c99108df`.
+All 8,262 manifest entries match both before and after the isolated rebuild;
+this evidence append is the only later source-manifest difference. The build
+records 461 ccache hits and six misses with verified explicit CXX/CUDA
+launchers, checkout-root normalization and unchanged compiler/CUDA toolchains.
+Library SHA256:
+`c820a288fd68053a9d0025fc6f0bfb24639c585eef79466cbf31faf8d756d107`.
+Comparison executable SHA256:
+`deb2d44928e254bf89dd278409275fc4d6c3660052e883e32ac684a613fde9f5`.
+Force-probe SHA256:
+`12448964938511fde47200eb1d2091efe312c25c7d5c509168c17a2c98db4b6c`.
+Receipts are `build-fingerprints/`, `fingerprints-unit-2487/` and
+`fingerprints-qualification-2488/`. Job 2489 is the corresponding large
+localization run and remains live at this checkpoint. Earlier completed
+rejections are retained and are not superseded by this instrumentation.
+
+### Completed response-boundary localization
+
+Job 2489 completed normally with exit zero. Its 230-AO / 488-auxiliary
+comparison uses one 24-iteration native RHF primal, identity
+`466485849682549592`, and denominator identity `13715128149290587143`.
+Common primal time is 306.843238 seconds and complete diagnostic time is
+2213.638747 seconds. Receipts are retained in `fingerprints-large-2489/`.
+
+| Composition | Response-only seconds | Maximum force difference against both serial references |
+|---|---:|---:|
+| Serial/all | 509.579518 | 2.199136429e-10 |
+| Parallel/all | 443.526300 | 3.131614967e-10 |
+| Omitted | 442.983783 | 2.335962535e-10 |
+| Serial/all repeat | 509.621444 | 2.199136429e-10 |
+
+All four compositions pass the unchanged `5e-10` gate in this sample.
+Fingerprinting reads 98,947,403 existing host values per composition and costs
+approximately 0.1083 seconds, included in the response times. Payloads 0–25
+have equal identities and element counts across all four compositions:
+the seven triples cotangents, full-Fock sources, corrected Lambda, all composed
+parameter/factor sources, `bar_f`, and `bar_c`. The first observed differing
+payload is `df_gradient` (26); every returned orbital payload (27–34) also
+differs. This redirects localization toward the physical response branches,
+not a presumption that gap scheduling changed their inputs.
+
+The DF nuclear gradient is not an input to the orbital solve: that branch
+independently consumes the physical reference, `bar_f`, and `bar_c`. Thus the
+late orbital differences cannot simply be attributed to propagation of the
+observed DF gradient difference. The returned `orbital_rhs` census is after
+the second weight-map call, not necessarily the initial pre-GMRES RHS. Metric
+cotangents and streamed three-center weights remain device-only and are not
+fingerprinted. Equal factor and coefficient-source hashes do not establish
+equality of those weights. Atomic/reduction variability and polarization
+cancellation are hypotheses to investigate, not established causes.
+
+This independently obtained cold primal and observer-instrumented sample
+does not fix or supersede job 2486's same-primal omission rejection, nor the
+original `3.822e-9` / `4.468e-9` cold-force failures. The gate report retains
+`cold_gate_superseded: false`; no default or tolerance changes are authorized
+by this passing localization sample. The next diagnostic should replay only
+the two physical branches on identical captured seeds with explicit admission,
+avoiding repeated Lambda solves without adding a second scientific map.
+
 ### Remaining gates
 
 The same-primal diagnostic adds a private native-state replay input to the existing

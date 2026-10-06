@@ -64,6 +64,38 @@ DFCCSDTResult run_df_ccsdt_native(
     bool packed_diis = false, bool parallel_gap_reduction = false,
     bool request_triples_gap_cotangents = true);
 
+/** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
+ * Empty payloads remain distinguishable through their explicit element counts.
+ * These identities are not numerical acceptance tests or cache keys. */
+inline constexpr std::array<const char*, 35> df_gap_fingerprint_names{
+    "triples_bov",      "triples_bvv",
+    "triples_ovoo",     "triples_ovov",
+    "triples_fov",      "triples_t1",
+    "triples_t2",       "triples_foo",
+    "triples_fvv",      "lambda1",
+    "lambda2",          "parameter_foo",
+    "parameter_fov",    "parameter_fvv",
+    "parameter_ovov",   "parameter_ovvo",
+    "parameter_oovv",   "parameter_ovoo",
+    "parameter_oooo",   "parameter_bov",
+    "parameter_bvv",    "factor_boo",
+    "factor_bov",       "factor_bvv",
+    "fock_source",      "coefficient_source",
+    "df_gradient",      "orbital_rhs",
+    "orbital_solution", "hcore_weights",
+    "overlap_weights",  "fock_ao_weights",
+    "orbital_gradient", "stationarity",
+    "complete_forces"};
+
+/** Fixed scalar metadata only: no numeric owner, extra download or retained
+ * intermediate. Fingerprinting time is included in diagnostic response times. */
+struct DFGapResponseFingerprints {
+  std::array<std::uint64_t, df_gap_fingerprint_names.size()> identities{};
+  std::array<std::size_t, df_gap_fingerprint_names.size()> elements{};
+  std::size_t value_reads{};
+  double seconds{};
+};
+
 /** One complete response composition on a shared native primal. Timings exclude
  * the common cold solve, so they must not be presented as cold endpoint times. */
 struct DFGapForceSnapshot {
@@ -76,6 +108,7 @@ struct DFGapForceSnapshot {
   cc::LambdaDiagnostic lambda;
   cc::triples::DFCudaResult triples;
   cc::triples::DFGapReductionDiagnostic gap;
+  DFGapResponseFingerprints fingerprints;
 };
 
 /** Diagnostic-only serial/all, parallel/all, omitted and repeated serial compositions.

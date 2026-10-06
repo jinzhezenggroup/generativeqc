@@ -27,7 +27,10 @@ def replay_probe() -> typing.Any:
     library = ct.CDLL(
         str(Path(os.environ["GENERATIVEQC_DF_COMPLETE_FORCE_PROBE"]).resolve())
     )
-    call = library.df_gap_same_primal_probe
+    count = library.df_gap_same_primal_fingerprint_count
+    count.restype = ct.c_size_t
+    assert count() == 35
+    call = library.df_gap_same_primal_fingerprints_probe
     call.argtypes = [
         ct.c_void_p,
         ct.c_size_t,
@@ -35,6 +38,7 @@ def replay_probe() -> typing.Any:
         ct.POINTER(ct.c_double),
         ct.POINTER(ct.c_uint64),
         ct.POINTER(ct.c_size_t),
+        ct.POINTER(ct.c_uint64),
         ct.c_void_p,
         ct.c_size_t,
     ]
@@ -48,6 +52,7 @@ def run_replay(probe: typing.Any, metadata: dict, budget: int = 1 << 30) -> tupl
     values = np.full((4, 7), 12345.0)
     shared = np.full(12, 12345, dtype=np.uint64)
     counts = np.full((4, 10), 12345, dtype=np.uintp)
+    fingerprints = np.full((4, 35, 2), 12345, dtype=np.uint64)
     error = ct.create_string_buffer(2048)
     with NativeSource(**source_arguments(metadata)) as source:
         status = probe(
@@ -57,10 +62,19 @@ def run_replay(probe: typing.Any, metadata: dict, budget: int = 1 << 30) -> tupl
             values.ctypes.data_as(ct.POINTER(ct.c_double)),
             shared.ctypes.data_as(ct.POINTER(ct.c_uint64)),
             counts.ctypes.data_as(ct.POINTER(ct.c_size_t)),
+            fingerprints.ctypes.data_as(ct.POINTER(ct.c_uint64)),
             error,
             len(error),
         )
-    return status, error.value.decode(), forces, values, shared, counts
+    return status, error.value.decode(), forces, values, shared, counts, fingerprints
+
+
+def numeric_identity(values: np.ndarray) -> int:
+    """Independently check the native length-prefixed, FP64-bit-pattern census."""
+    identity = (14695981039346656037 ^ values.size) * 1099511628211 & ((1 << 64) - 1)
+    for bits in np.asarray(values, dtype=np.float64).ravel().view(np.uint64):
+        identity = (identity ^ int(bits)) * 1099511628211 & ((1 << 64) - 1)
+    return identity
 
 
 def test_same_primal_complete_force_and_copy_admission(
@@ -76,7 +90,9 @@ def test_same_primal_complete_force_and_copy_admission(
     metadata["inputs"]["shells"].insert(
         oxygen_end, {"atom_index": 0, "angular_momentum": 1, "primitives": [[0.4, 1.0]]}
     )
-    status, error, forces, values, shared, counts = run_replay(replay_probe, metadata)
+    status, error, forces, values, shared, counts, fingerprints = run_replay(
+        replay_probe, metadata
+    )
     assert status == 0, error
     assert shared[9] >= 4
     assert shared[0] > 0 and shared[1] > 0
@@ -92,6 +108,14 @@ def test_same_primal_complete_force_and_copy_admission(
     assert np.all(np.isfinite(values)) and np.all(np.isfinite(forces))
     assert np.max(values[:, 2:4]) <= 1e-9
     assert np.max(values[:, 4]) <= 1e-8
+    assert np.all(fingerprints[:, :, 0] != 0)
+    assert np.all(fingerprints[:, :, 1] != 0)
+    np.testing.assert_array_equal(
+        fingerprints[:, :, 1], np.broadcast_to(fingerprints[0, :, 1], (4, 35))
+    )
+    for index, force in enumerate(forces):
+        assert fingerprints[index, 34, 0] == numeric_identity(force)
+        assert fingerprints[index, 34, 1] == force.size
     for serial in (0, 3):
         np.testing.assert_allclose(values[:, 0], values[serial, 0], atol=5e-11, rtol=0)
         np.testing.assert_allclose(
@@ -120,9 +144,10 @@ def test_same_primal_refusal_does_not_publish(
     replay_probe: typing.Any, budget: int
 ) -> None:
     metadata, _ = load_fixture("water")
-    status, error, forces, values, shared, counts = run_replay(
+    status, error, forces, values, shared, counts, fingerprints = run_replay(
         replay_probe, metadata, budget
     )
     assert status != 0 and error
     assert np.all(forces == 12345) and np.all(values == 12345)
     assert np.all(shared == 12345) and np.all(counts == 12345)
+    assert np.all(fingerprints == 12345)
