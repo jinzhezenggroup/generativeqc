@@ -339,7 +339,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
         ),
         "endpoint_owner_sha256": (
-            "1b742026ef1ee6b2853fa1e6e60f39a9b251413850565bbd37ac053e008b95a8"
+            "9cd2aabf912ae2b93336cb856b8a51d906373a49172d8769f19d61b4898f9973"
         ),
         "ao_map_reserve_sha256": (
             "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -2610,7 +2610,11 @@ def test_native_required_domain_never_admits_ao_descriptor_fallback_work(
     assert qualify_capacity._case_failures(shape, requirements, memory, limits) == []
 
 
-def test_paired_host_reserve_is_charged_before_inclusive_host_admission() -> None:
+@pytest.mark.parametrize("reduction", ["combined", "separate"])
+def test_paired_host_reserve_is_charged_before_inclusive_host_admission(
+    monkeypatch: pytest.MonkeyPatch, reduction: str
+) -> None:
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION", reduction)
     result = report()
     row = next(
         row
@@ -2619,7 +2623,9 @@ def test_paired_host_reserve_is_charged_before_inclusive_host_admission() -> Non
     )
     memory = row["resource_requirements"]
     assert memory["stationary_native_integral_host_reserve_bytes"] == 4_851_008
-    # Keep the paired-provider reserve and add the separate grid binding once.
+    # Combined publishes three channels and Separate four, but neither may
+    # discount the conservative paired-provider reserve or its v1 fallback.
+    # Keep that reserve and add the separate grid binding once.
     assert memory["additional_host_numeric_bound"] == 197_047_712 + (32 << 10)
     assert memory["additional_device_peak_bound"] == (
         memory["stationary_grid_device_peak_bound"]
@@ -2751,6 +2757,73 @@ def test_current_endpoint_windows_native_requirement_and_reserve_fail_closed(
     assert old in source
     stationary_contract_tree(tmp_path, source.replace(old, new, 1))
     with pytest.raises(RuntimeError, match=message):
+        qualify_capacity._source_limits(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "old,new",
+    [
+        (
+            "(3 if combined_requested else 4, na, 3)",
+            "(2 if combined_requested else 4, na, 3)",
+        ),
+        (
+            "(3 if combined_requested else 4, na, 3)",
+            "(3 if combined_requested else 3, na, 3)",
+        ),
+        (
+            "or not np.isfinite(native_integral_components).all()",
+            "or False",
+        ),
+        (
+            "            not use_fitted_integrals\n",
+            "            True\n",
+        ),
+        (
+            '{"combined_two_electron": True}',
+            '{"combined_two_electron": False}',
+        ),
+        (
+            "if combined_requested and native_integral is None:",
+            "if combined_requested:",
+        ),
+        (
+            "                    combined_requested = False\n",
+            "                    combined_requested = True\n",
+        ),
+        (
+            '                components.pop("coulomb", None)\n',
+            "",
+        ),
+        (
+            "combined_two_electron=native_combined_integrals,",
+            "combined_two_electron=False,",
+        ),
+        (
+            '"two_electron" if native_combined_integrals else "coulomb"',
+            '"coulomb"',
+        ),
+        (
+            "native_integral_budget = max_device_bytes - peak",
+            "native_integral_budget = max_device_bytes",
+        ),
+        (
+            'int(native_integral_resources.get("one_electron_host_peak_bytes", 0))',
+            'int(native_integral_resources.get("one_electron_host_peak_bytes", 0)) // 2',
+        ),
+        (
+            'int(native_integral_resources.get("one_electron_device_peak_bytes", 0))',
+            'int(native_integral_resources.get("one_electron_device_peak_bytes", 0)) // 2',
+        ),
+    ],
+)
+def test_combined_and_separate_native_endpoint_contracts_fail_closed(
+    tmp_path: Path, old: str, new: str
+) -> None:
+    source = (ROOT / "python/generativeqc/_stationary_cuda.py").read_text()
+    assert old in source
+    stationary_contract_tree(tmp_path, source.replace(old, new, 1))
+    with pytest.raises(RuntimeError, match="endpoint owner contract changed"):
         qualify_capacity._source_limits(tmp_path)
 
 
