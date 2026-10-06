@@ -27,8 +27,8 @@ __global__ void two_electron_force_quartet_kernel(
     const double* schwarz_bounds, const double* density, const std::uint8_t* active, double* forces,
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
     double exchange_coefficient) {
-  contract_two_electron_force_quartet_subtile_scaled<
-      Unrestricted, AngularOrder, Mode == DirectForceOutputMode::Separate>(
+  contract_two_electron_force_quartet_subtile_scaled<Unrestricted, AngularOrder,
+                                                     Mode == DirectForceOutputMode::Separate>(
       batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
       schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
       exchange_coefficient, static_cast<std::size_t>(blockIdx.x), threadIdx.x);
@@ -242,8 +242,8 @@ __global__ void two_electron_force_quartet_persistent_kernel(
     if (lane == 0) active_subtile = atomicAdd(task_head, 1U);
     active_subtile = __shfl_sync(0xffffffffU, active_subtile, 0);
     if (active_subtile >= work_count) return;
-    contract_two_electron_force_quartet_subtile_scaled<
-      Unrestricted, AngularOrder, Mode == DirectForceOutputMode::Separate>(
+    contract_two_electron_force_quartet_subtile_scaled<Unrestricted, AngularOrder,
+                                                       Mode == DirectForceOutputMode::Separate>(
         batch, active_shell_quartet_tile_count, active_shell_quartet_tiles, screening_tolerance,
         schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
         exchange_coefficient, active_subtile, threadIdx.x);
@@ -393,17 +393,19 @@ void launch_two_electron_force_psss_resident_bra_kernel_scaled(
     double exchange_coefficient, DirectForceOutputMode output_mode) {
   auto launch = [&]<DirectForceOutputMode Mode>() {
     if (unrestricted == true) {
-      two_electron_force_psss_resident_bra_kernel<true, Mode><<<grid, block, shared_bytes, stream>>>(
-          batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
-          shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-          schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
-          exchange_coefficient);
+      two_electron_force_psss_resident_bra_kernel<true, Mode>
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
+              shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
+              schwarz_bounds, density, active, forces, generated_shell_class_mask,
+              coulomb_coefficient, exchange_coefficient);
     } else {
-      two_electron_force_psss_resident_bra_kernel<false, Mode><<<grid, block, shared_bytes, stream>>>(
-          batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
-          shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
-          schwarz_bounds, density, active, forces, generated_shell_class_mask, coulomb_coefficient,
-          exchange_coefficient);
+      two_electron_force_psss_resident_bra_kernel<false, Mode>
+          <<<grid, block, shared_bytes, stream>>>(
+              batch, resident_tasks, resident_ket_pairs, resident_task_count, screening_tolerance,
+              shell_pair_bounds, shell_pair_density_bounds, force_density_product_screening,
+              schwarz_bounds, density, active, forces, generated_shell_class_mask,
+              coulomb_coefficient, exchange_coefficient);
     }
   };
   if (output_mode == DirectForceOutputMode::Separate)

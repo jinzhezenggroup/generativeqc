@@ -8,7 +8,7 @@ namespace generativeqc::scf::cuda_execution {
  * Generated consumers own masked classes; task.tile remains the bounded AO
  * tiling identity and is checked by the precontracted task itself. */
 __device__ inline unsigned direct_force_task_shell_class(const DeviceBatch& batch,
-                                                       ActiveShellQuartetTile task) {
+                                                         ActiveShellQuartetTile task) {
   return direct_quartet_shell_class_device(
       batch.shell_angular[batch.shell_pair_first[task.first_pair]],
       batch.shell_angular[batch.shell_pair_second[task.first_pair]],
@@ -47,8 +47,7 @@ __device__ inline void contract_direct_force_precontracted_task(
     std::uint64_t generated_shell_class_mask, double coulomb_coefficient,
     double exchange_coefficient) {
   const unsigned shell_class = direct_force_task_shell_class(batch, task);
-  if (shell_class < 64U &&
-      (generated_shell_class_mask & (std::uint64_t{1} << shell_class)) != 0U)
+  if (shell_class < 64U && (generated_shell_class_mask & (std::uint64_t{1} << shell_class)) != 0U)
     return;
   contract_two_electron_force_low_order_sources<Unrestricted, false, Mode>(
       shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active, forces,

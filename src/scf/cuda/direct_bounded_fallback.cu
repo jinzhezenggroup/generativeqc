@@ -13,8 +13,8 @@
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_fock_order2.cuh"
 #include "scf/cuda/direct_fock_quartet.cuh"
-#include "scf/cuda/direct_force_low_order.cuh"
 #include "scf/cuda/direct_force_execution.cuh"
+#include "scf/cuda/direct_force_low_order.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_order3.cuh"
 #include "scf/cuda/direct_force_order4_sources.cuh"
@@ -241,13 +241,15 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             }
             if (angular_order <= 3U) {
               if (radial_operator == DirectRangeOperator::FullSources)
-                contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Separate>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active, output,
-                    0U, coulomb_coefficient, exchange_coefficient);
+                contract_direct_force_precontracted_task<Unrestricted,
+                                                         DirectForceOutputMode::Separate>(
+                    batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U,
+                    coulomb_coefficient, exchange_coefficient);
               else
-                contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active, output,
-                    0U, coulomb_coefficient, exchange_coefficient);
+                contract_direct_force_precontracted_task<Unrestricted,
+                                                         DirectForceOutputMode::Combined>(
+                    batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U,
+                    coulomb_coefficient, exchange_coefficient);
             }
           } else {
             // The scalar low-order Fock shortcuts are full-range identities.
