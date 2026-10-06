@@ -47,7 +47,8 @@ def test_qualification_case_rejects_unqualified_shapes(
 def test_cub_candidate_requires_complete_endpoint_evidence() -> None:
     incomplete = {
         "status": "rejected",
-        "plan": {"schedule": {"reduction_provider": "cub"}},
+        "plan": {"schedule": {"stream_reductions": True}},
+        "reduction_lowering": {"provider": "cub"},
         "reason": "compile failed",
     }
     with pytest.raises(RuntimeError, match="did not complete"):
@@ -147,7 +148,8 @@ def test_validation_wrapper_is_a_publishable_nonpromotion_record() -> None:
         "artifact": artifact,
         "gates": [{"passed": False}],
         "max_absolute_error": 0.0,
-        "plan": {"schedule": {"reduction_provider": "cub"}},
+        "plan": {"schedule": {"stream_reductions": True}},
+        "reduction_lowering": {"provider": "cub"},
         "plan_identity": "b" * 64,
         "profiles": [
             {
