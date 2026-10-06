@@ -120,8 +120,27 @@ def test_symbol_discovery_stops_when_link_failure_makes_no_progress() -> None:
     assert compile_trampolines.call_count == 1
 
 
+@pytest.mark.parametrize(
+    ("signature", "arguments", "provider_body"),
+    [
+        ("cudaDeviceSynchronize()", "", "return 73;"),
+        (
+            "cudaStreamWaitEvent(void* stream, void* event, unsigned int flags)",
+            (
+                "reinterpret_cast<void*>(0x123456789abcULL), "
+                "reinterpret_cast<void*>(0x23456789abcdULL), 0xa5a51234U"
+            ),
+            (
+                "return stream == reinterpret_cast<void*>(0x123456789abcULL) && "
+                "event == reinterpret_cast<void*>(0x23456789abcdULL) && "
+                "flags == 0xa5a51234U ? 73 : -1;"
+            ),
+        ),
+    ],
+    ids=("device-synchronize", "stream-wait-event"),
+)
 def test_linker_driven_implib_retries_without_provider_dependency(
-    tmp_path: Path,
+    tmp_path: Path, signature: str, arguments: str, provider_body: str
 ) -> None:
     target = _implib_target()
     cc, cxx, readelf = (shutil.which(name) for name in ("cc", "c++", "readelf"))
@@ -129,9 +148,12 @@ def test_linker_driven_implib_retries_without_provider_dependency(
         pytest.skip("C/C++ compiler and ELF inspector required")
 
     consumer = tmp_path / "consumer.cpp"
+    symbol = signature.split("(", 1)[0]
+    # Non-dereferenced pointer and flags sentinels verify every host ABI argument
+    # of cudaStreamWaitEvent; this is a mock provider, not a real CUDA operation.
     consumer.write_text(
-        'extern "C" int cudaDeviceSynchronize();\n'
-        'extern "C" int probe() { return cudaDeviceSynchronize(); }\n'
+        f'extern "C" int {signature};\n'
+        f'extern "C" int probe() {{ return {symbol}({arguments}); }}\n'
     )
     consumer_object = tmp_path / "consumer.o"
     library = tmp_path / "consumer.so"
@@ -157,9 +179,7 @@ def test_linker_driven_implib_retries_without_provider_dependency(
     assert "Shared library: [libcudart" not in dynamic
 
     provider_source = tmp_path / "provider.cpp"
-    provider_source.write_text(
-        'extern "C" int cudaDeviceSynchronize() { return 73; }\n'
-    )
+    provider_source.write_text(f'extern "C" int {signature} {{ {provider_body} }}\n')
     available = tmp_path / "available-provider.so"
     provider = tmp_path / "libcudart.so.12"
     _run(cxx, "-shared", "-fPIC", str(provider_source), "-o", str(available))

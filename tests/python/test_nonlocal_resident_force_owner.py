@@ -12,6 +12,8 @@ import numpy as np
 from generativeqc.nonlocal_runtime import _ResidentNonlocalForceOwner
 from generativeqc_compiler.method import original_nonlocal_correlation
 
+from tools.link_cuda_implib import provider_for_symbol, unresolved_provider_symbols
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -236,8 +238,16 @@ def test_resident_force_helpers_are_all_device_only() -> None:
 
 
 def test_resident_feature_handoff_imports_cuda_stream_wait_event() -> None:
-    cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
-    assert "cudaStreamWaitEvent" in cmake
+    symbol = "cudaStreamWaitEvent"
+    provider = provider_for_symbol(symbol)
+    assert provider is not None
+    assert provider.name == "cudart"
+    assert provider.load_name == "libcudart.so.12"
+    for diagnostic in (
+        f"/usr/bin/ld: handoff.o: undefined reference to `{symbol}'",
+        f"ld.lld: error: undefined symbol: {symbol}",
+    ):
+        assert unresolved_provider_symbols(diagnostic) == {"cudart": {symbol}}
 
 
 def test_resident_feature_handoff_failure_cleanup_is_not_on_success_path() -> None:
