@@ -8,11 +8,12 @@ from __future__ import annotations
 
 
 def emit_direct_pair_materialized_support() -> str:
-    """Prepare once per primitive-pair product and consume all live packet AOs.
+    """Prepare once per primitive-pair product for admitted adjacent packets.
 
-    A packet is the existing exact 256-AO-quartet domain. Multiple packets of a
-    larger shell quartet remain independently screened and counted; coalescing
-    their recurrence is a separate prepared scheduling step, not assumed here.
+    Each packet is the exact 256-AO-quartet domain with independent component
+    screening. Explicit register slots can coalesce a complete shell quartet
+    only when its caller proves common shell admission and precision/source
+    routing. A single-slot caller preserves the original packet contract.
     """
     return r"""
 #if defined(__CUDACC__)
@@ -62,7 +63,7 @@ __device__ inline void prepare_materialized_direct_pair(
  * still participate in publication/retirement but never read an invalid AO.
  * All selected components consume one Coulomb recurrence per pair product.
  * J and K reuse each contracted ERI through the existing symmetry scatter. */
-template <bool Unrestricted, unsigned AngularOrder>
+template <bool Unrestricted, unsigned AngularOrder, unsigned ComponentSlots = 1>
 __device__ inline void contract_materialized_direct_pair_fock(
     DeviceBatch batch, const ActiveShellQuartetTile& task, double screening_tolerance,
     const double* schwarz_bounds, const double* density, const std::uint8_t* active,
@@ -88,14 +89,27 @@ __device__ inline void contract_materialized_direct_pair_fock(
   const auto second_count = shell_ao_pair_count(batch, second_pair);
   const auto count = first_pair == second_pair ? first_count * (first_count + 1) / 2
                                                : first_count * second_count;
-  const std::size_t ordinal = std::size_t(task.tile) * detail::kDirectQuartetTileSize + threadIdx.x;
-  std::size_t i{}, j{}, k{}, l{};
-  const bool admitted = ordinal < count &&
-      decode_direct_tile_ao_ordinal(batch, task, ordinal, first_count, second_count,
-                                    ao_begin, n, i, j, k, l) &&
-      direct_ao_quartet_survives_schwarz(schwarz_bounds, physical, n, i, j, k, l,
-                                        screening_tolerance);
-  if (!__syncthreads_or(admitted)) return;
+  // Each register slot owns one independently screened packet lane. Callers
+  // may coalesce adjacent packets only after admitting the complete shell
+  // quartet on the same precision/source route. The dddd stream supplies all
+  // six possible packets; the incumbent packet queue supplies one.
+  static_assert(ComponentSlots > 0);
+  std::size_t i[ComponentSlots]{}, j[ComponentSlots]{}, k[ComponentSlots]{}, l[ComponentSlots]{};
+  bool admitted[ComponentSlots]{};
+  double value[ComponentSlots]{};
+  bool any_admitted = false;
+  for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
+    const std::size_t ordinal = (std::size_t(task.tile) + slot) * detail::kDirectQuartetTileSize +
+                                threadIdx.x;
+    admitted[slot] = ordinal < count &&
+        decode_direct_tile_ao_ordinal(batch, task, ordinal, first_count, second_count,
+                                      ao_begin, n, i[slot], j[slot], k[slot], l[slot]) &&
+        direct_ao_quartet_survives_schwarz(schwarz_bounds, physical, n,
+                                          i[slot], j[slot], k[slot], l[slot],
+                                          screening_tolerance);
+    any_admitted |= admitted[slot];
+  }
+  if (!__syncthreads_or(any_admitted)) return;
   const auto first = atom_position<double>(batch, batch.shell_atoms[si], -1);
   const auto second = atom_position<double>(batch, batch.shell_atoms[sj], -1);
   const auto third = atom_position<double>(batch, batch.shell_atoms[sk], -1);
@@ -104,7 +118,6 @@ __device__ inline void contract_materialized_direct_pair_fock(
   const auto ket_begin = batch.shell_pair_primitive_offsets[second_pair];
   const auto nb = batch.shell_primitive_offsets[sj + 1] - batch.shell_primitive_offsets[sj];
   const auto nd = batch.shell_primitive_offsets[sl + 1] - batch.shell_primitive_offsets[sl];
-  double value = 0.0;
   for (auto bra = bra_begin; bra < batch.shell_pair_primitive_offsets[first_pair + 1]; ++bra) {
     if (threadIdx.x == 0) {
       shared.first = batch.shell_primitive_pairs[bra];
@@ -133,16 +146,18 @@ __device__ inline void contract_materialized_direct_pair_fock(
         }
       }
       __syncthreads();
-      if (admitted) {
-        const double coefficient = batch.direct_ao_coefficients[ao_begin + i] *
-            batch.direct_ao_coefficients[ao_begin + j] * batch.direct_ao_coefficients[ao_begin + k] *
-            batch.direct_ao_coefficients[ao_begin + l];
+      for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
+        if (!admitted[slot]) continue;
+        const double coefficient = batch.direct_ao_coefficients[ao_begin + i[slot]] *
+            batch.direct_ao_coefficients[ao_begin + j[slot]] *
+            batch.direct_ao_coefficients[ao_begin + k[slot]] *
+            batch.direct_ao_coefficients[ao_begin + l[slot]];
         const double weight = coefficient * shared.coefficients[0] * shared.coefficients[1] *
                              shared.coefficients[2] * shared.coefficients[3];
-        value += weight * consume_cartesian_coulomb<AngularOrder>(
+        value[slot] += weight * consume_cartesian_coulomb<AngularOrder>(
             shared.first.exponent_sum, shared.second.exponent_sum,
-            direct_ao_angular(batch, ao_begin + i), direct_ao_angular(batch, ao_begin + j),
-            direct_ao_angular(batch, ao_begin + k), direct_ao_angular(batch, ao_begin + l),
+            direct_ao_angular(batch, ao_begin + i[slot]), direct_ao_angular(batch, ao_begin + j[slot]),
+            direct_ao_angular(batch, ao_begin + k[slot]), direct_ao_angular(batch, ao_begin + l[slot]),
             shared.bra, shared.ket, shared.coulomb);
         if (work) atomicAdd(&work->component_contractions, 1ULL);
       }
@@ -150,13 +165,16 @@ __device__ inline void contract_materialized_direct_pair_fock(
       __syncthreads();
     }
   }
-  if (admitted) {
+  for (unsigned slot = 0; slot < ComponentSlots; ++slot) {
+    if (!admitted[slot]) continue;
+    const std::size_t ordinal = (std::size_t(task.tile) + slot) * detail::kDirectQuartetTileSize +
+                                threadIdx.x;
     // Qualification may inspect each final component without affecting the
     // production storage contract, where this borrowed address is null.
-    if (checked_components) checked_components[ordinal] = value;
-    if (value != 0.0)
+    if (checked_components) checked_components[ordinal] = value[slot];
+    if (value[slot] != 0.0)
       accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density, fock,
-                                                    i, j, k, l, value, coulomb_only, exchange_only);
+          i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only);
     if (work) atomicAdd(&work->published_components, 1ULL);
   }
 }

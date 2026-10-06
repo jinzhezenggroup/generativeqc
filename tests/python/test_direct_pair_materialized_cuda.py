@@ -54,6 +54,9 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
         (tmp_path / name).write_text(text)
     executable = tmp_path / "pair_materialized"
     object_file = tmp_path / "pair_materialized.o"
+    stream_object = os.environ.get("GENERATIVEQC_PAIR_MATERIALIZED_DFT_STREAM_OBJECT")
+    if stream_object:
+        assert Path(stream_object).is_file()
     command = [
         cache,
         compiler,
@@ -68,6 +71,11 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
         "-o",
         str(object_file),
     ]
+    if stream_object:
+        command[2:2] = [
+            "-rdc=true",
+            "-DGENERATIVEQC_PAIR_MATERIALIZED_DFT_STREAM_TEST=1",
+        ]
     (tmp_path / "compile-command.json").write_text(json.dumps(command, indent=2))
     environment = {**os.environ, "CCACHE_BASEDIR": str(ROOT)}
     for stage in ("before", "after"):
@@ -85,6 +93,8 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
             # Compile separately so ccache can reuse the object; CUDA linking
             # is intentionally outside the cacheable compilation invocation.
             link = [compiler, "-arch=sm_120", str(object_file), "-o", str(executable)]
+            if stream_object:
+                link[1:1] = ["-rdc=true", stream_object]
             (tmp_path / "link-command.json").write_text(json.dumps(link, indent=2))
             subprocess.run(link, env=environment, check=True, timeout=120)
         stats = subprocess.check_output([cache, "--show-stats"], env=environment)
@@ -95,3 +105,9 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
     (tmp_path / "gpu.log").write_text(result.stdout + result.stderr)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "order5..12, RHF/UHF J/K and exact work PASS" in result.stdout
+    assert "whole-shell admission and exact work PASS" in result.stdout
+    if stream_object:
+        assert (
+            "DFT native dddd stream, RHF/UHF J/K and bounded fallbacks PASS"
+            in result.stdout
+        )
