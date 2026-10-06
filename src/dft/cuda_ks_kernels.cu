@@ -49,6 +49,16 @@ __device__ void accumulate_diagnostic_trace(double value, double& sum, double& c
   sum = next;
 }
 
+// One fixed block owns the complete reduction. This uses bounded shared storage,
+// needs no arena allocation, and has no arrival-order-dependent floating atomics.
+// Both words of each compensated trace survive the ordered lane merge.
+constexpr unsigned kDiagnosticThreads = 256;
+struct DiagnosticPartial {
+  double energy[3], correction[3];
+  double error2[2], change2[2], electrons[2];
+  double maximum_residual;
+};
+
 __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const double* density,
                                   const double* proposal, const double* residual,
                                   const double* hcore, const double* overlap, const double* coulomb,
@@ -58,7 +68,58 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
                                   const int* range_jk_error, const int* nonlocal_domain_error,
                                   const int* nonlocal_pair_error, const int* solver_info,
                                   const std::uint8_t* enabled, Scalars* output) {
+  // The mask is immutable for this launch, so inactive blocks exit collectively.
   if (enabled != nullptr && *enabled == 0) return;
+  __shared__ DiagnosticPartial partials[kDiagnosticThreads];
+  DiagnosticPartial lane{};
+  // Balanced contiguous partitions retain matrix source order within each spin.
+  // Quotient/remainder bounds avoid overflowing matrix * lane for large inputs.
+  const std::size_t quotient = matrix / blockDim.x;
+  const std::size_t remainder = matrix % blockDim.x;
+  const std::size_t begin =
+      quotient * threadIdx.x + (threadIdx.x < remainder ? threadIdx.x : remainder);
+  const std::size_t end = begin + quotient + (threadIdx.x < remainder ? 1 : 0);
+  for (unsigned spin = 0; spin < spins; ++spin) {
+    const auto offset = spin * matrix;
+    for (std::size_t index = begin; index < end; ++index) {
+      const double density_value = density[offset + index];
+      const double change = proposal[offset + index] - density_value;
+      accumulate_diagnostic_trace(density_value * hcore[index], lane.energy[0], lane.correction[0]);
+      accumulate_diagnostic_trace(0.5 * density_value * coulomb[index], lane.energy[1],
+                                  lane.correction[1]);
+      if (exchange != nullptr)
+        accumulate_diagnostic_trace(
+            0.5 * density_value * exchange_coefficient * exchange[offset + index], lane.energy[2],
+            lane.correction[2]);
+      if (range_exchange != nullptr)
+        accumulate_diagnostic_trace(
+            0.5 * density_value * range_exchange_coefficient * range_exchange[offset + index],
+            lane.energy[2], lane.correction[2]);
+      lane.electrons[spin] += density_value * overlap[index];
+      lane.error2[spin] += residual[offset + index] * residual[offset + index];
+      lane.maximum_residual = fmax(lane.maximum_residual, fabs(residual[offset + index]));
+      lane.change2[spin] += change * change;
+    }
+  }
+  partials[threadIdx.x] = lane;
+  __syncthreads();
+  if (threadIdx.x != 0) return;
+
+  DiagnosticPartial total{};
+  for (unsigned index = 0; index < blockDim.x; ++index) {
+    const auto& part = partials[index];
+    for (unsigned term = 0; term < 3; ++term) {
+      accumulate_diagnostic_trace(part.energy[term], total.energy[term], total.correction[term]);
+      accumulate_diagnostic_trace(part.correction[term], total.energy[term],
+                                  total.correction[term]);
+    }
+    for (unsigned spin = 0; spin < spins; ++spin) {
+      total.electrons[spin] += part.electrons[spin];
+      total.error2[spin] += part.error2[spin];
+      total.change2[spin] += part.change2[spin];
+    }
+    total.maximum_residual = fmax(total.maximum_residual, part.maximum_residual);
+  }
   Scalars result{};
   result.failure = (*xc_error != 0 ? 1 : 0) | (*jk_error != 0 ? 2 : 0) |
                    (range_jk_error != nullptr && *range_jk_error != 0 ? 16 : 0) |
@@ -67,31 +128,14 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
   result.xc = xc_totals[0];
   result.grid_electrons[0] = xc_totals[1];
   result.grid_electrons[1] = xc_totals[2];
-  // Long AO traces can lose more than the strict SCF energy threshold to
-  // rounding alone. Compensate signed energy sums without changing the gates.
-  // Explicit rounded addition prevents FMA from invalidating the correction.
-  double one_correction = 0.0, hartree_correction = 0.0, exchange_correction = 0.0;
+  result.one_electron = total.energy[0] + total.correction[0];
+  result.hartree = total.energy[1] + total.correction[1];
+  result.exact_exchange = total.energy[2] + total.correction[2];
+  result.maximum_residual = total.maximum_residual;
   for (unsigned spin = 0; spin < spins; ++spin) {
-    const auto offset = spin * matrix;
-    double error2 = 0.0, change2 = 0.0, electrons = 0.0;
+    const double error2 = total.error2[spin], change2 = total.change2[spin];
+    const double electrons = total.electrons[spin];
     if (solver_info[spin] != 0) result.failure |= 4;
-    for (std::size_t i = 0; i < matrix; ++i) {
-      const double d = density[offset + i];
-      const double change = proposal[offset + i] - d;
-      accumulate_diagnostic_trace(d * hcore[i], result.one_electron, one_correction);
-      accumulate_diagnostic_trace(0.5 * d * coulomb[i], result.hartree, hartree_correction);
-      if (exchange != nullptr)
-        accumulate_diagnostic_trace(0.5 * d * exchange_coefficient * exchange[offset + i],
-                                    result.exact_exchange, exchange_correction);
-      if (range_exchange != nullptr)
-        accumulate_diagnostic_trace(
-            0.5 * d * range_exchange_coefficient * range_exchange[offset + i],
-            result.exact_exchange, exchange_correction);
-      electrons += d * overlap[i];
-      error2 += residual[offset + i] * residual[offset + i];
-      result.maximum_residual = fmax(result.maximum_residual, fabs(residual[offset + i]));
-      change2 += change * change;
-    }
     if (!isfinite(error2) || !isfinite(change2) || !isfinite(electrons)) result.failure |= 8;
     result.residual = fmax(result.residual, sqrt(error2 / matrix));
     result.density_change = fmax(result.density_change, sqrt(change2 / matrix));
@@ -104,9 +148,6 @@ __global__ void diagnostic_kernel(std::size_t matrix, unsigned spins, const doub
   }
   result.residual_rms = sqrt(result.residual_rms);
   result.density_rms = sqrt(result.density_rms);
-  result.one_electron += one_correction;
-  result.hartree += hartree_correction;
-  result.exact_exchange += exchange_correction;
   if (!isfinite(result.one_electron) || !isfinite(result.hartree) ||
       !isfinite(result.exact_exchange) || !isfinite(result.xc))
     result.failure |= 8;
@@ -201,11 +242,11 @@ void diagnostics(cudaStream_t stream, std::size_t n, unsigned spins, const doubl
                  const int* jk_error, const int* range_jk_error, const int* nonlocal_domain_error,
                  const int* nonlocal_pair_error, const int* solver_info,
                  const std::uint8_t* enabled, Scalars* output) {
-  diagnostic_kernel<<<1, 1, 0, stream>>>(n * n, spins, density, proposal, residual, hcore, overlap,
-                                         coulomb, exchange, exchange_coefficient, range_exchange,
-                                         range_exchange_coefficient, xc_totals, xc_error, jk_error,
-                                         range_jk_error, nonlocal_domain_error, nonlocal_pair_error,
-                                         solver_info, enabled, output);
+  diagnostic_kernel<<<1, kDiagnosticThreads, 0, stream>>>(
+      n * n, spins, density, proposal, residual, hcore, overlap, coulomb, exchange,
+      exchange_coefficient, range_exchange, range_exchange_coefficient, xc_totals, xc_error,
+      jk_error, range_jk_error, nonlocal_domain_error, nonlocal_pair_error, solver_info, enabled,
+      output);
 }
 
 void advance(cudaStream_t stream, std::size_t n, unsigned spins, double nuclear_repulsion,
