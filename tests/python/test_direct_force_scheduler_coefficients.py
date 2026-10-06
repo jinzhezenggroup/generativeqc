@@ -128,3 +128,19 @@ def test_bounded_shell_force_exposes_explicit_range_operator() -> None:
         "short_exchange_coefficient != 0.0 || long_exchange_coefficient != 0.0" in fused
     )
     assert "CoulombRange::Long, omega" in fused
+
+
+def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
+    """Keep bounded streaming disjoint from the retired order-three AO formula."""
+
+    bounded = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text(
+        encoding="utf-8"
+    )
+    assert (
+        "contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>"
+        in " ".join(bounded.split())
+    )
+    dispatcher = (ROOT / "src/scf/cuda/direct_bounded_contraction.cuh").read_text(
+        encoding="utf-8"
+    )
+    assert "GENERATIVEQC_BOUNDED_FORCE_CASE(3)" not in dispatcher
