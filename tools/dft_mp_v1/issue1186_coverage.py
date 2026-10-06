@@ -116,6 +116,15 @@ def main() -> None:
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.receipt is not None and args.output is not None:
+        same_path = args.receipt.resolve() == args.output.resolve()
+        same_file = (
+            args.receipt.is_file()
+            and args.output.is_file()
+            and args.receipt.samefile(args.output)
+        )
+        if same_path or same_file:
+            parser.error("--output must not overwrite the input --receipt")
     try:
         result = build_coverage(args.receipt)
     except (InvalidEvidence, KeyError, TypeError, ValueError) as error:

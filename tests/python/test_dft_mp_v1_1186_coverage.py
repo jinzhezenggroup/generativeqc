@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -138,3 +140,59 @@ def test_live_receipt_change_is_rejected(
     monkeypatch.setattr(coverage, "audit", update_during_audit)
     with pytest.raises(InvalidEvidence, match="receipt changed during validation"):
         coverage.build_coverage(receipt_path)
+
+
+@pytest.mark.parametrize("alias", ["same", "relative", "symlink", "hardlink"])
+def test_cli_cannot_overwrite_receipt_alias(tmp_path: Path, alias: str) -> None:
+    receipt = tmp_path / "receipt.json"
+    original = b'{"retained_raw_receipt": true}\n'
+    receipt.write_bytes(original)
+    output = receipt
+    if alias == "relative":
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        output = nested / ".." / receipt.name
+    elif alias == "symlink":
+        output = tmp_path / "symlink.json"
+        output.symlink_to(receipt)
+    elif alias == "hardlink":
+        output = tmp_path / "hardlink.json"
+        output.hardlink_to(receipt)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.dft_mp_v1.issue1186_coverage",
+            "--receipt",
+            str(receipt),
+            "--output",
+            str(output),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        check=False,
+        timeout=60,
+    )
+    assert result.returncode == 2
+    assert b"must not overwrite the input --receipt" in result.stderr
+    assert receipt.read_bytes() == original
+
+
+def test_cli_writes_separate_coverage_output(tmp_path: Path) -> None:
+    output = tmp_path / "coverage.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "tools.dft_mp_v1.issue1186_coverage",
+            "--output",
+            str(output),
+        ],
+        cwd=REPO,
+        capture_output=True,
+        check=False,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stderr.decode()
+    assert json.loads(output.read_text(encoding="utf-8")) == coverage.build_coverage()

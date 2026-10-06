@@ -19,6 +19,7 @@ Pass `--receipt PATH` to map a captured DFT-MP-v1 campaign. The tool delegates
 campaign and per-row evidence checks to the existing validator before crediting
 any PASS. A partial receipt leaves every other row visible as blocked or not-run.
 Receipts changed by a live writer during validation are rejected.
+The output must differ from the input receipt, including symlink/hardlink aliases.
 This row-level report does not establish #1190 overall acceptance or scientific
 review. The shared final gate still requires one exact merged source and an
 independently reviewed raw receipt.
