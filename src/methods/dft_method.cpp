@@ -64,7 +64,7 @@ struct NativeKsExecutionPlan {
   double range_omega{};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
-  const dft::SemilocalPointProgram* automatic_program{};
+  bool automatic_libxc{};
 };
 
 std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(generativeqc_method method) noexcept {
@@ -91,7 +91,10 @@ std::optional<NativeKsExecutionPlan> legacy_ks_execution_plan(generativeqc_metho
 bool unrestricted(const NativeKsExecutionPlan& plan) noexcept { return plan.spin_channels == 2; }
 
 std::uint32_t scf_domain_version(const NativeKsExecutionPlan& plan) noexcept {
-  if (plan.automatic_program) return plan.automatic_program->domain_version;
+  if (plan.automatic_libxc) {
+    const auto entry = dft::generated::automatic_libxc_entry(plan.functional);
+    return entry ? entry.program->domain_version : 0U;
+  }
   return plan.generated_split_hybrid ? 4U
                                      : dft::semilocal_family_domain_version(plan.semilocal_family);
 }
@@ -101,7 +104,10 @@ std::uint32_t xc_functional_code(const NativeKsExecutionPlan& plan) noexcept {
 }
 
 const char* semilocal_family_name(const NativeKsExecutionPlan& plan) noexcept {
-  if (plan.automatic_program) return plan.automatic_program->identifier;
+  if (plan.automatic_libxc) {
+    const auto entry = dft::generated::automatic_libxc_entry(plan.functional);
+    return entry ? entry.program->identifier : "automatic Libxc";
+  }
   return plan.generated_split_hybrid ? "generated split global hybrid"
                                      : dft::semilocal_family_name(plan.semilocal_family);
 }
@@ -129,7 +135,7 @@ struct SemilocalAdmission {
   double correlation_scale{1.0};
   std::uint32_t functional{};
   bool generated_split_hybrid{};
-  const dft::SemilocalPointProgram* automatic_program{};
+  bool automatic_libxc{};
 };
 
 std::optional<SemilocalAdmission> admit_curated_semilocal(const generativeqc_ks_options& input) {
@@ -179,8 +185,8 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
       const auto automatic =
           dft::generated::automatic_libxc_entry(std::string_view(component.component_id));
       if (automatic)
-        return {dft::SemilocalFamily::Lda, 1.0,   1.0,
-                automatic.functional_code, false, automatic.program};
+        return {dft::SemilocalFamily::Lda, 1.0, 1.0,
+                automatic.functional_code, false, true};
     }
   }
 
@@ -202,7 +208,7 @@ SemilocalAdmission admit_semilocal(const generativeqc_ks_options& input) {
 }
 
 std::string_view expected_scf_domain(const NativeKsExecutionPlan& plan) noexcept {
-  if (plan.automatic_program) return dft::generated::kAutomaticLibxcScfDomain;
+  if (plan.automatic_libxc) return dft::generated::kAutomaticLibxcScfDomain;
   if (plan.generated_split_hybrid) return "libxc-7.0/split-global-hybrid-v1";
   return dft::semilocal_family_scf_domain(plan.semilocal_family);
 }
@@ -239,12 +245,11 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
                       descriptor.method == GENERATIVEQC_METHOD_PBE_D4_RKS};
     execution_plan.functional = semilocal.functional;
     execution_plan.generated_split_hybrid = semilocal.generated_split_hybrid;
-    execution_plan.automatic_program = semilocal.automatic_program;
-    if (execution_plan.automatic_program &&
-        (backend != GENERATIVEQC_BACKEND_CPU_REFERENCE || ks_input->exchange_term_count != 0 ||
-         ks_input->has_nonlocal_correlation != 0))
+    execution_plan.automatic_libxc = semilocal.automatic_libxc;
+    if (execution_plan.automatic_libxc &&
+        (ks_input->exchange_term_count != 0 || ks_input->has_nonlocal_correlation != 0))
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "automatic Libxc semilocal KS currently requires pure CPU execution");
+                        "automatic Libxc semilocal KS requires a pure semilocal composition");
     if (execution_plan.generated_split_hybrid && backend != GENERATIVEQC_BACKEND_CUDA)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid KS currently requires CUDA");
@@ -1395,7 +1400,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     const char* method_name = semilocal_family_name(execution_plan_);
     if (compute_forces) {
       const char* issue =
-          execution_plan_.automatic_program
+          execution_plan_.automatic_libxc
               ? "#1122"
               : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
                                                                                   : "#163");
@@ -1457,12 +1462,15 @@ class KsPreparedCalculation final : public PreparedCalculation {
     auto execution_options = options_;
     if (!allow_preliminary) execution_options.preliminary_guess.reset();
     scf::ScfResult native;
-    if (execution_plan_.automatic_program) {
+    if (execution_plan_.automatic_libxc) {
+      const auto automatic = dft::generated::automatic_libxc_entry(execution_plan_.functional);
+      if (!automatic)
+        throw std::runtime_error("automatic Libxc CPU execution binding is missing");
       native = unrestricted(execution_plan_)
                    ? scf::run_semilocal_uks(fock_, basis_, grid_, execution_options,
-                                            *execution_plan_.automatic_program, seed)
+                                            *automatic.program, seed)
                    : scf::run_semilocal_rks(fock_, basis_, grid_, execution_options,
-                                            *execution_plan_.automatic_program, seed);
+                                            *automatic.program, seed);
     } else if (execution_plan_.generated_split_hybrid)
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         "generated split-global-hybrid CPU KS is unavailable");
