@@ -1,7 +1,8 @@
 # Proposal: demand-aware and bounded parallel gap-response reduction
 
 Status: proposed — explicit schedules are implemented and primitive gates pass;
-the strict 230-AO cold-force gate fails, so defaults remain unpromoted.
+the strict 230-AO cold-force gate and latest same-primal omission gate fail,
+so defaults remain unpromoted.
 Date: 2026-10-06
 
 ## Problem and source ownership
@@ -448,6 +449,55 @@ resolve the helper conflict. Job 2486 is running on the isolated combined
 source; its large comparison is still pending. No live candidate source or
 library is overlaid when adding these historical receipts.
 
+### Integrated large same-primal rejection
+
+Job 2486 returns all four complete responses on the `e2d12f28...` library,
+then exits one because the unchanged force acceptance check rejects omitted
+outputs. The completed JSON, trace, timings, allocation, source manifest/patch,
+memory samples and gate report are retained in `main-integrated-same-large-2486/`.
+`endpoint-status.txt` is `endpoint-complete`; there is no successful overall
+status. This is a completed numerical rejection, not an interrupted solve.
+
+| Composition | Response-only seconds | Maximum force difference against both serial references |
+|---|---:|---:|
+| Serial/all | 509.569973 | 4.149791621e-10 |
+| Parallel/all | 443.295707 | 3.887175026e-10 |
+| Omitted | 442.881308 | **5.520250923e-10 — fails** |
+| Serial/all repeat | 509.462872 | 4.149791621e-10 |
+
+Omitted differs from the initial serial by `5.520250923041203e-10`, from
+parallel by `5.25763432790427e-10`, and from serial-repeat by
+`1.3704593015972932e-10`. The serial-repeat difference is itself
+`4.14979162144391e-10`. All energy differences are zero; Lambda residual is
+`6.116e-13`, maximum Z residual is `1.365e-13`, and maximum stationarity is
+`2.514e-11`. All physical-source, full-Fock and Lambda semantic-work counts
+are unchanged, and numeric admission remains within the 64-GiB budget.
+The whole-diagnostic device peak remains 29,977 MiB over 10,996 samples.
+
+Within this run the original source/frame, denominator identity
+`16930483910286437394`, and nine-input bit-pattern census
+`5974276677275782043` are shared and guarded throughout. Common primal time is
+294.425535 seconds and total comparison time is 2200.735155 seconds. These
+response-only timings still do not qualify independent cold performance.
+The report explicitly retains `cold_gate_superseded: false`.
+
+Thus cold-reference variability alone cannot explain every observed large
+rejection. Nor do these results prove that omitted cotangents caused the
+failure: the serial-repeat variability is material, and no intermediate
+seven-cotangent/Lambda/physical-source bit-pattern comparison has yet been
+recorded. The next investigation must localize that variability across
+response phases before changing scientific implementation or policy. Do not
+retry merely to select a passing sample, relax `5e-10` or the strict large-factor
+gates, promote a default, or erase the earlier positive and negative receipts.
+The original cold gate remains unresolved and the PR remains draft.
+
+Ten compiled CLI tests also pass on the integrated ordinary endpoint binary.
+Commit `6eb4ecd15f81e85be874cb8307afbdad000d7ce5` preserves both merge parents;
+all 8,262 build-manifest entries match its source except appended historical
+evidence in this note. No compiled input changes after qualification. The
+merge conflict is resolved and the checked CI snapshot has no failing or
+pending checks; this does not supersede the real-device numerical rejection.
+
 ### Remaining gates
 
 The same-primal diagnostic adds a private native-state replay input to the existing
@@ -463,8 +513,9 @@ exact-reference source is also explicitly charged beside that phase's new
 orbital provider. The ordinary cold owner retains its scientific equations and
 defaults, with this live-source allowance corrected rather than ignored.
 Comparison timings include common-owner retirement and must not be called cold
-endpoint speedups. The new path and large shared-primal force comparison pass
-the gates above; original cold failures remain unsuperseded.
+endpoint speedups. Small diagnostic gates and the earlier large comparison
+pass, but the integrated large omission comparison above fails. Neither that
+rejection nor the original cold failures is superseded.
 
 - Actual complete native cotangents with parallel enabled, including a
   multi-CTA scalar case, and original independent energy/derivative gates.
