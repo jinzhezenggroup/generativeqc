@@ -20,7 +20,23 @@ class CompileResult:
     stderr: str
 
 
-def run_compiler(command: list[str], timeout: float, *, label: str) -> CompileResult:
+def kill_compiler_group(process: subprocess.Popen[str]) -> None:
+    """Stop only a process group created by this invocation, then reap its leader."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    process.wait()
+
+
+def run_compiler(
+    command: list[str],
+    timeout: float,
+    *,
+    label: str,
+    environment: dict[str, str] | None = None,
+    pass_fds: tuple[int, ...] = (),
+) -> CompileResult:
     """Capture diagnostics and terminate all compiler children on timeout."""
     started = time.monotonic()
     process = subprocess.Popen(
@@ -29,24 +45,24 @@ def run_compiler(command: list[str], timeout: float, *, label: str) -> CompileRe
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
+        env=environment,
+        pass_fds=pass_fds,
     )
     timed_out = False
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
+        stdout, stderr = process.communicate(
+            timeout=max(0.0, timeout - (time.monotonic() - started))
+        )
     except subprocess.TimeoutExpired:
         timed_out = True
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            stdout, stderr = process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            stdout, stderr = process.communicate()
+        # The deadline is already exhausted. A fresh five-second grace period
+        # would extend the caller's finite budget and leave compilers running.
+        kill_compiler_group(process)
+        stdout, stderr = process.communicate()
+    finally:
+        # A launcher can exit while a compiler child keeps running with closed
+        # output pipes. Reclaim our group on success and failure as well.
+        kill_compiler_group(process)
     duration = time.monotonic() - started
     if timed_out:
         stderr += f"{label} compilation timed out after {timeout:g} seconds\n"

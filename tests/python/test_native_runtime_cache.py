@@ -110,3 +110,23 @@ def test_finite_compiler_process_reports_timeout_and_failure() -> None:
 def test_missing_requested_cpu_compiler_does_not_select_another_backend() -> None:
     with pytest.raises(ValueError, match=r"requested C\+\+ compiler"):
         CppCompilerAdapter(Path("generativeqc-no-such-cxx"))
+
+
+def test_native_artifact_hit_does_not_resolve_a_compiler_cache(
+    tmp_path: typing.Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if shutil.which("c++") is None:
+        pytest.skip("native C++ compiler unavailable")
+    from generativeqc_compiler.common import compiler_cache
+
+    compiler = CppCompilerAdapter(Path("c++"))
+    source = tmp_path / "probe.cpp"
+    source.write_text('extern "C" int answer() { return 42; }\n')
+    artifact = compile_runtime(compiler, tmp_path / "cache", source)
+
+    def unavailable(*args: typing.Any, **kwargs: typing.Any) -> typing.NoReturn:
+        raise RuntimeError("compiler cache must not be resolved on an artifact hit")
+
+    monkeypatch.setattr(compiler_cache, "resolve_compiler_cache", unavailable)
+    replay = compile_runtime(compiler, tmp_path / "cache", source)
+    assert replay == artifact

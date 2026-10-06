@@ -883,6 +883,17 @@ jobs:
           PY_INNER
           )"
           echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
+      - name: Qualify owned sccache compiler lifetimes
+        if: matrix.shard == 'compiler-heavy'
+        env:
+          GENERATIVEQC_REQUIRE_SCCACHE_TEST: "1"
+        run: |
+          uv pip install --python .venv/bin/python sccache==0.16.0
+          PATH="$PWD/.venv/bin:$PATH" PYTHONPATH="$PWD/python:$PWD" \
+            .venv/bin/python -m pytest -q \
+              tests/python/test_compiler_cache.py \
+              tests/python/test_compiler_cache_lifecycle.py \
+              tests/python/test_sccache_lifecycle_integration.py
       - name: Build the CPU native library
         run: |
           cmake -S . -B build -G Ninja \

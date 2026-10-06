@@ -16,6 +16,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from generativeqc_compiler.common.compiler_process import run_compiler
 from generativeqc_compiler.integral import (
     DPDS_SPEC,
     DPPP_SPEC,
@@ -83,6 +84,11 @@ wait "$child_pid"
     )
     fake_nvcc.chmod(0o755)
     monkeypatch.setenv("GENERATIVEQC_TEST_CHILD_PID_FILE", str(child_pid_file))
+    # This fake NVCC tests process-tree cancellation, not compiler discovery.
+    monkeypatch.setattr(
+        "generativeqc_compiler.common.cuda_adapter.run_cached_compiler",
+        run_compiler,
+    )
 
     row = _compile_trial(
         fake_nvcc,
