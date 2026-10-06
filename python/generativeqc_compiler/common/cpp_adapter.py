@@ -78,14 +78,14 @@ class CppCompilerAdapter:
             cached_compiler_command(
                 [
                     str(self.cxx),
-                "-std=c++17",
-                "-O3",
-                "-shared",
-                "-fPIC",
-                *(f"-I{path}" for path in includes),
-                *options,
-                *(str(source) for source in sources),
-                *(f"-l{name}" for name in libraries),
+                    "-std=c++17",
+                    "-O3",
+                    "-shared",
+                    "-fPIC",
+                    *(f"-I{path}" for path in includes),
+                    *options,
+                    *(str(source) for source in sources),
+                    *(f"-l{name}" for name in libraries),
                     "-o",
                     str(output),
                 ]

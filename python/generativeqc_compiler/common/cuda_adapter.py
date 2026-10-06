@@ -142,13 +142,13 @@ class CudaCompilerAdapter:
             cached_compiler_command(
                 [
                     str(self.nvcc),
-                f"-std={standard}",
-                f"-arch={self.target.architecture}",
-                "-O3",
-                *(f"-I{path}" for path in includes),
-                str(driver),
-                *(str(item) for item in objects),
-                *options,
+                    f"-std={standard}",
+                    f"-arch={self.target.architecture}",
+                    "-O3",
+                    *(f"-I{path}" for path in includes),
+                    str(driver),
+                    *(str(item) for item in objects),
+                    *options,
                     "-o",
                     str(executable),
                 ]

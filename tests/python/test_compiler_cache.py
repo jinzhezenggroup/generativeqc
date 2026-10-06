@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -13,6 +12,7 @@ from generativeqc_compiler.common import compiler_cache, cpp_adapter, cuda_adapt
 from generativeqc_compiler.common.compiler_process import CompileResult
 from generativeqc_compiler.common.cpp_adapter import CppCompilerAdapter
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+from generativeqc_compiler.common.cuda_target import cuda_target_info
 
 
 @pytest.fixture(autouse=True)
@@ -55,23 +55,29 @@ def test_compiler_cache_prefers_verified_sccache(
 def test_compiler_cache_falls_back_to_verified_ccache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    probes: list[list[str]] = []
+
     def which(name: str, *, path: str) -> str | None:
         assert path == "/test/bin"
-        return None if name == "sccache" else "/test/bin/ccache"
+        return f"/test/bin/{name}"
+
+    def run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        probes.append(command)
+        if command[0].endswith("/sccache"):
+            return subprocess.CompletedProcess(command, 1, "", "broken sccache")
+        return subprocess.CompletedProcess(command, 0, "ccache version 4.12\n", "")
 
     monkeypatch.setenv("PATH", "/test/bin")
     monkeypatch.setattr(compiler_cache.shutil, "which", which)
-    monkeypatch.setattr(
-        compiler_cache.subprocess,
-        "run",
-        lambda command, **_: subprocess.CompletedProcess(
-            command, 0, "ccache version 4.12\n", ""
-        ),
-    )
+    monkeypatch.setattr(compiler_cache.subprocess, "run", run)
 
     launcher = compiler_cache.resolve_compiler_cache()
     assert launcher.name == "ccache"
     assert launcher.path == Path("/test/bin/ccache")
+    assert probes == [
+        ["/test/bin/sccache", "--version"],
+        ["/test/bin/ccache", "--version"],
+    ]
 
 
 def test_compiler_cache_rejects_uncached_compilation(
@@ -112,7 +118,7 @@ def test_cpu_and_cuda_adapters_wrap_cache_miss_commands(
     monkeypatch.setattr(cuda_adapter, "cached_compiler_command", wrap)
     monkeypatch.setattr(cuda_adapter, "run_compiler", compile_run)
     cuda = CudaCompilerAdapter(
-        Path("/opt/cuda/bin/nvcc"), SimpleNamespace(architecture="sm_120")
+        Path("/opt/cuda/bin/nvcc"), cuda_target_info("sm_120")
     )
     cuda.compile(tmp_path / "x.cu", tmp_path / "x.o")
     assert launched[-1][0] == "verified-cache"
