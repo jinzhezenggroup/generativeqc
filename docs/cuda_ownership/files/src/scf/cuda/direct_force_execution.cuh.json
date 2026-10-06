@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_force_execution.cuh",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Shared shell-class dispatch and generated-mask ownership routing for compact, resident and bounded force consumers. Delegates density weighting, primitive reductions and mathematical roots to the separately classified scientific low-order source consumer.",
+  "regions": []
+}

@@ -2349,7 +2349,7 @@ def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
     )
     assert (
         "contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>"
-        in bounded
+        in " ".join(bounded.split())
     )
     dispatcher = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_contraction.cuh"
