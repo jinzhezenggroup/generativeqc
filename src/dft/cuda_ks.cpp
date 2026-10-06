@@ -200,6 +200,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
   const MolecularGrid& grid;
   scf::ScfOptions options;
   scf::PreparedCudaFockBinding fock_binding{};
+  scf::PreparedCudaFockBinding range_fock_binding{};
   scf::PreparedCudaOccupiedFockBinding occupied_fock_binding{};
   cudaStream_t stream{};
   int device{};
@@ -241,6 +242,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
       mixed_precision_executed{}, device_nonlocal{};
   double exchange_coefficient{}, range_exchange_coefficient{};
   std::optional<scf::ResolvedFockBuild> range_correction;
+  const scf::PreparedFockPlan* range_provider{};
+  cudaEvent_t range_ready{};
   nlc::Vv10Plan* nonlocal_correlation{};
   nlc::Vv10DensityDomain nonlocal_domain{nlc::Vv10DensityDomain::StrictPositive};
   unsigned final_corrections{}, refinement_iterations{};
@@ -617,6 +620,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         grid_spec(grid.spec()),
         functional(functional),
         range_correction(range ? std::optional<scf::ResolvedFockBuild>(*range) : std::nullopt),
+        range_provider(range_provider_input),
         nonlocal_correlation(nonlocal),
         nonlocal_domain(domain) {
     if (!curated_cuda_ks_functional(functional) && !generated::split_hybrid_registered(functional))
@@ -649,13 +653,33 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (has_range_correction) {
       const auto& correction = *range_correction;
       const auto& spec = correction.spec;
-      if (fitted_coulomb || !fock_binding || correction.backend != scf::FockBackend::Cuda ||
-          spec.spin != strategy.spec.spin || spec.derivative_order != 0 || spec.coulomb.present ||
-          !spec.exchange.present || spec.exchange.approximation != scf::FockApproximation::Exact ||
-          spec.exchange.op != scf::FockOperator::LongRange || spec.exchange.omega <= 0.0 ||
-          correction.screening_tolerance != strategy.screening_tolerance)
+      const bool common = fock_binding && correction.backend == scf::FockBackend::Cuda &&
+                          spec.spin == strategy.spec.spin && spec.derivative_order == 0 &&
+                          !spec.coulomb.present && spec.exchange.present &&
+                          spec.exchange.op == scf::FockOperator::LongRange &&
+                          spec.exchange.omega > 0.0 &&
+                          correction.screening_tolerance == strategy.screening_tolerance;
+      if (!common)
+        throw std::invalid_argument("CUDA KS range correction has incompatible RSH identity");
+      if (fitted_coulomb) {
+        range_fock_binding =
+            range_provider ? scf::prepared_cuda_fock_binding(*range_provider)
+                           : scf::PreparedCudaFockBinding{};
+        if (!range_provider || range_provider->strategy() != correction ||
+            !range_provider->matches_system(provider.system()) || !range_fock_binding ||
+            range_fock_binding.device_id != fock_binding.device_id ||
+            range_fock_binding.nbf != fock_binding.nbf ||
+            spec.exchange.approximation != scf::FockApproximation::DensityFitted ||
+            correction.metric_relative_threshold != strategy.metric_relative_threshold)
+          throw std::invalid_argument(
+              "CUDA KS fitted range correction lacks a compatible prepared DF owner");
+      } else if (range_provider ||
+                 spec.exchange.approximation != scf::FockApproximation::Exact) {
         throw std::invalid_argument(
-            "CUDA KS range correction must be one compatible exact long-range exchange term");
+            "CUDA KS exact range correction requires the primary Direct owner");
+      }
+    } else if (range_provider) {
+      throw std::invalid_argument("CUDA KS received a range provider without a correction");
     }
     if (options.compute_forces || options.hooks || options.export_physical_reference ||
         options.xc_density_route != XcDensityRoute::DensityMatrix ||
@@ -717,6 +741,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
          nonlocal_correlation->resources().point_count != grid.point_count()))
       throw std::invalid_argument("CUDA KS nonlocal owner is incompatible with the grid or device");
     current_device();
+    if (range_fock_binding && range_fock_binding.stream != stream)
+      check(cudaEventCreateWithFlags(&range_ready, cudaEventDisableTiming));
     const auto resident_grid = grid.cuda_view();
     if (resident_grid && resident_grid.device != device)
       throw std::invalid_argument("CUDA KS resident grid belongs to a different device");
@@ -906,6 +932,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
     cudaGetDevice(&previous);
     cudaSetDevice(device);
     if (stream) cudaStreamSynchronize(stream);
+    if (range_ready) cudaEventDestroy(range_ready);
+    range_ready = nullptr;
     xc.reset();
     eigensolver.reset();
     if (nonlocal_arena) runtime::resource_cuda_free(nonlocal_arena);
@@ -1128,6 +1156,25 @@ struct CudaKsPlan::Impl : KsStateStorage {
     return std::max(1U, width);
   }
 
+  generativeqc_status enqueue_range_fock(const double* alpha, const double* beta,
+                                              double* alpha_exchange, double* beta_exchange,
+                                              std::string& detail) {
+    if (!has_range_correction) return GENERATIVEQC_STATUS_SUCCESS;
+    if (!range_provider)
+      return scf::enqueue_prepared_cuda_exchange_correction(
+          provider, *range_correction, alpha, beta, matrix, alpha_exchange, beta_exchange,
+          range_jk_error, detail);
+    auto status = scf::enqueue_prepared_cuda_fock(
+        *range_provider, alpha, beta, matrix, nullptr, alpha_exchange, beta_exchange,
+        range_jk_error, false, detail);
+    if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
+    if (range_ready) {
+      check(cudaEventRecord(range_ready, range_fock_binding.stream));
+      check(cudaStreamWaitEvent(stream, range_ready, 0));
+    }
+    return status;
+  }
+
   void enqueue_one(unsigned slot) {
     if (slot >= kCudaKsChunkCapacity) throw std::logic_error("CUDA KS chunk slot overflow");
     std::string detail;
@@ -1139,9 +1186,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         status = scf::enqueue_prepared_cuda_fock(provider, density, nullptr, matrix, j, exchange,
                                                  nullptr, jk_error, false, detail);
         if (status == GENERATIVEQC_STATUS_SUCCESS)
-          status = scf::enqueue_prepared_cuda_exchange_correction(
-              provider, *range_correction, density, nullptr, matrix, range_exchange, nullptr,
-              range_jk_error, detail);
+          status = enqueue_range_fock(density, nullptr, range_exchange, nullptr, detail);
       }
       check(status, detail);
     } else {
@@ -1557,10 +1602,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
           ++movement.fitted_dense_exchange_builds;
       }
       if (has_range_correction && !fused_rsh_values)
-        check(scf::enqueue_prepared_cuda_exchange_correction(
-                  provider, *range_correction, density, spins == 2 ? density + matrix : nullptr,
-                  matrix, range_exchange, spins == 2 ? range_exchange + matrix : nullptr,
-                  range_jk_error, detail),
+        check(enqueue_range_fock(density, spins == 2 ? density + matrix : nullptr, range_exchange,
+                                 spins == 2 ? range_exchange + matrix : nullptr, detail),
               detail);
       mixed_precision_executed =
           mixed_precision_executed || pending_mixed_coulomb || pending_mixed_density;
@@ -2351,11 +2394,9 @@ generativeqc_status CudaKsPlan::profile_fixed_density_components(
 
     if (impl_->has_range_correction) {
       profile.milliseconds[2] = timed([&] {
-        check(scf::enqueue_prepared_cuda_exchange_correction(
-                  impl_->provider, *impl_->range_correction, impl_->density, beta, impl_->matrix,
-                  impl_->range_exchange,
-                  impl_->spins == 2 ? impl_->range_exchange + impl_->matrix : nullptr,
-                  impl_->range_jk_error, detail),
+        check(impl_->enqueue_range_fock(
+                  impl_->density, beta, impl_->range_exchange,
+                  impl_->spins == 2 ? impl_->range_exchange + impl_->matrix : nullptr, detail),
               detail);
       });
       read_error(impl_->range_jk_error, "fixed-density range K");
