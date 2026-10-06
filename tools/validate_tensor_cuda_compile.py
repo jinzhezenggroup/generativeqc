@@ -22,6 +22,7 @@ from generativeqc_compiler.tensor import (
 )
 from generativeqc_compiler.tensor.cuda_execute import compile_cuda
 from generativeqc_compiler.tensor.cuda_plan import TensorSchedule, plan_cuda
+from generativeqc_compiler.tensor.cuda_reduction import ReductionLoweringBinding
 from generativeqc_compiler.tensor.cuda_resident import compile_resident
 
 
@@ -144,10 +145,7 @@ def main() -> None:
     cub_reduction_plan = plan_cuda(
         reduction,
         compiler.target,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
+        schedule=TensorSchedule(stream_reductions=True),
     )
     generated_reduction = compile_cuda(
         generated_reduction_plan,
@@ -158,6 +156,7 @@ def main() -> None:
         cub_reduction_plan,
         compiler,
         args.cache / "reduction-cub",
+        reduction_lowering=ReductionLoweringBinding("cub"),
     )
 
     streamed_einsum_plan = plan_cuda(
