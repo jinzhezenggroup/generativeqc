@@ -752,8 +752,12 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (host_unfused &&
         (options.semilocal_exchange_scale != 1.0 || options.semilocal_correlation_scale != 1.0))
       throw std::invalid_argument("scaled CUDA XC requires device-fused execution");
-    if (host_unfused && (is_semilocal_family(functional, SemilocalFamily::B3lyp) ||
-                         generated::split_hybrid_registered(functional)))
+    const auto* host_family = semilocal_family_metadata_from_code(functional);
+    const bool curated_requires_fused_hybrid =
+        host_family && has_exchange && host_family->cuda_global_hybrid_exact_exchange > 0.0 &&
+        !host_family->component_coefficients_are_native_scales;
+    if (host_unfused &&
+        (curated_requires_fused_hybrid || generated::split_hybrid_registered(functional)))
       throw std::invalid_argument(
           "generated/global-hybrid CUDA XC requires device-fused execution");
     if (host_unfused) {
