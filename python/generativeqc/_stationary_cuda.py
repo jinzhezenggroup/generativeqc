@@ -2836,7 +2836,10 @@ def _complete_rks_cuda_gradient_diagnostic(
 
     requested_tile_points = tile_points
     layout, grid_work = plan_stationary_cuda_grid_schedule(
-        grid_points=len(state.grid.points), tile_points=tile_points, admit=admit_tile
+        grid_points=len(state.grid.points),
+        tile_points=tile_points,
+        admit=admit_tile,
+        preferred_tile_points=512,
     )
     grid_plan = layout.grid_plan
     tensor_plans = layout.tensor_plans

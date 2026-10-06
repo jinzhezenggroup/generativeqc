@@ -277,7 +277,7 @@ PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
 )
 PUBLIC_CUDA_FORCE_METHOD_CONTRACT_SHA256 = (
-    "7b2c2a388288b187bcc9736116ff527f816ebb162b2cb891684ef26ea00b414b"
+    "d068e39e206535717219cdc458d0398b65ca4a49f339ce38cacf786b02f91437"
 )
 PUBLIC_CUDA_HYBRID_FORCE_CONTRACT_SHA256 = (
     "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -348,7 +348,7 @@ STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
 # four. The bounded v1 fallback, strict shape/finite checks, host reserve and
 # complete reduction remain bound by the exact whole-owner source span.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "9cd2aabf912ae2b93336cb856b8a51d906373a49172d8769f19d61b4898f9973"
+    "a4584a1183c7e70cdd971294b8774b535856331a720be61e019b377d7afedcc3"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"
@@ -496,7 +496,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56"
+    "f97d9a81fd764f0d8c83e7f05d1a5258a3fdb6d21034103d17e627cfacb5c811"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -1355,7 +1355,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
     ]
     if len(selections) != 1 or ast.unparse(selections[0].value) != (
         "plan_stationary_cuda_grid_schedule(grid_points=len(state.grid.points), "
-        "tile_points=tile_points, admit=admit_tile)"
+        "tile_points=tile_points, admit=admit_tile, preferred_tile_points=512)"
     ):
         raise RuntimeError("stationary CUDA tile schedule binding changed")
     if (

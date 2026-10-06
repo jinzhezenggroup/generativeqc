@@ -8,6 +8,7 @@ from generativeqc_compiler.method.stationary_becke_phased import (
     emit_stationary_phased_becke_cuda,
 )
 from generativeqc_compiler.method.stationary_resources import (
+    GEOMETRY_MAX_LANES,
     plan_stationary_cuda_resources,
 )
 from generativeqc_compiler.xc.becke_partition import (
@@ -17,8 +18,11 @@ from generativeqc_compiler.xc.grid_partition_ir import grid_partition_domain_pro
 from generativeqc_compiler.xc.grid_phased import PhasedBeckePlan
 
 
-@pytest.mark.parametrize("atoms", [33, 48, 96, 128])
-@pytest.mark.parametrize("points", [1, 17, 256, 257])
+@pytest.mark.parametrize(
+    "atoms,points",
+    [(atoms, points) for atoms in (33, 48, 96, 128) for points in (1, 17, 256, 257)]
+    + [(96, 1024)],
+)
 def test_optional_phases_reserve_scratch_seeds_and_indices(
     atoms: int, points: int
 ) -> None:
@@ -66,13 +70,15 @@ def test_phases_keep_small_uncached_unqualified_and_multi_point_lanes_bounded() 
     }
     for changes in (
         {"atoms": 24},
-        {"points": 1024},
+        {"points": GEOMETRY_MAX_LANES + 1},
         {"cooperative_becke": False},
         {"target": cuda_target_info("sm_80")},
         {"target": replace(target, maximum_threads_per_block=64)},
     ):
         arguments = {**shape, **changes}
         baseline = plan_stationary_cuda_resources(**arguments, budget_bytes=1 << 30)
+        if "points" in changes:
+            assert baseline.geometry_lanes < arguments["points"]
         planned = plan_stationary_cuda_resources(
             **arguments, budget_bytes=1 << 30, phased_becke=True
         )
