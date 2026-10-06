@@ -148,6 +148,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      true,
      false,
+     false,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_WB97M_V", "MGGA_C_WB97M_V", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
