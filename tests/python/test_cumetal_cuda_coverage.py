@@ -26,7 +26,7 @@ def test_routine_cumetal_gate_spans_scientific_cuda_owners() -> None:
         in gate
     )
     assert (
-        "tests/python/test_calculator.py::test_cuda_energy_only_output_selection_omits_forces"
+        "tests/python/test_cuda_runtime.py::test_cuda_minimal_density_fitting_matches_cpu_reference"
         in gate
     )
     assert (
