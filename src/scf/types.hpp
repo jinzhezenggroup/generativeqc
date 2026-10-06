@@ -213,17 +213,16 @@ inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
       capabilities.density_weighted_screening && options.screening_tolerance != 0.0
           ? 1U
           : options.incremental_direct_jk_rebuild_interval;
-  policy.active =
-      policy.requested && capabilities.provider_eligible && !capabilities.conflicting_precision_policy;
+  policy.active = policy.requested && capabilities.provider_eligible &&
+                  !capabilities.conflicting_precision_policy;
   return policy;
 }
 
 inline bool incremental_direct_jk_requires_full_build(
     bool anchored, unsigned delta_updates_since_full,
     const IncrementalDirectJkPolicy& policy) noexcept {
-  return !anchored ||
-         (policy.effective_rebuild_interval != 0U &&
-          delta_updates_since_full >= policy.effective_rebuild_interval);
+  return !anchored || (policy.effective_rebuild_interval != 0U &&
+                       delta_updates_since_full >= policy.effective_rebuild_interval);
 }
 
 /** Internal mean-field result, including state retained for warm starts. */

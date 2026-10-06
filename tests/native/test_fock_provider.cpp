@@ -230,22 +230,19 @@ void incremental_direct_jk_policy_resolution() {
   options.incremental_direct_jk = true;
   options.incremental_direct_jk_rebuild_interval = 8;
 
-  const auto exact_linear =
-      resolve_incremental_direct_jk_policy(options, {true, false, false});
+  const auto exact_linear = resolve_incremental_direct_jk_policy(options, {true, false, false});
   require(exact_linear.requested && exact_linear.active,
           "shared incremental policy rejected an eligible exact lower");
-  require(exact_linear.requested_rebuild_interval == 8 &&
-              exact_linear.effective_rebuild_interval == 8,
-          "exact-linear lower did not preserve requested incremental refresh cadence");
+  require(
+      exact_linear.requested_rebuild_interval == 8 && exact_linear.effective_rebuild_interval == 8,
+      "exact-linear lower did not preserve requested incremental refresh cadence");
 
-  const auto density_screened =
-      resolve_incremental_direct_jk_policy(options, {true, true, false});
+  const auto density_screened = resolve_incremental_direct_jk_policy(options, {true, true, false});
   require(density_screened.active && density_screened.effective_rebuild_interval == 1,
           "density-screened lower did not bound the delta anchor chain");
 
   options.screening_tolerance = 0.0;
-  const auto unscreened =
-      resolve_incremental_direct_jk_policy(options, {true, true, false});
+  const auto unscreened = resolve_incremental_direct_jk_policy(options, {true, true, false});
   require(unscreened.active && unscreened.effective_rebuild_interval == 8,
           "disabled screening did not restore exact-linear refresh cadence");
 
@@ -254,18 +251,15 @@ void incremental_direct_jk_policy_resolution() {
   require(precision_conflict.requested && !precision_conflict.active,
           "conflicting precision policy did not fail closed");
 
-  const auto unavailable =
-      resolve_incremental_direct_jk_policy(options, {false, false, false});
+  const auto unavailable = resolve_incremental_direct_jk_policy(options, {false, false, false});
   require(unavailable.requested && !unavailable.active,
           "ineligible lower activated incremental Direct-J/K");
 
   auto exact_spec = make_hf_fock_spec(FockSpin::Restricted);
-  require(incremental_direct_jk_exact_eligible(
-              resolve_fock_build(exact_spec, FockBackend::Cpu)),
+  require(incremental_direct_jk_exact_eligible(resolve_fock_build(exact_spec, FockBackend::Cpu)),
           "exact Direct-J/K strategy was not recognized by shared eligibility");
   exact_spec.coulomb.approximation = FockApproximation::DensityFitted;
-  require(!incremental_direct_jk_exact_eligible(
-              resolve_fock_build(exact_spec, FockBackend::Cpu)),
+  require(!incremental_direct_jk_exact_eligible(resolve_fock_build(exact_spec, FockBackend::Cpu)),
           "approximate J strategy passed exact incremental eligibility");
 }
 
