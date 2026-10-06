@@ -63,7 +63,7 @@ jobs:
     # Keep the 40-minute qualification budget inside a separate finite job budget.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
     env:
-      CUMETAL_COMMIT: 8a1434ffc1a4f7a17d2f8a41e157afbac22af171
+      CUMETAL_COMMIT: e87f368060cf09a45b148b4f8892470c74093ebd
       CUMETAL_SOURCE: /tmp/cuda-metal
       CUMETAL_PREFIX: /tmp/cumetal-install
       CUMETAL_CCACHE_DIR: /tmp/cumetal-ccache
@@ -170,6 +170,32 @@ jobs:
 
       - name: Verify CuMetal
         run: CUMETAL_ROOT="$CUMETAL_PREFIX" "$CUMETAL_PREFIX/bin/cumetal" doctor
+
+      - name: Compare exact retained CuMetal PTX
+        id: retained_ptx
+        # A compiler result cannot replace the real QC endpoint gate below.
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1997 &&
+          github.event.action == 'synchronize' &&
+          github.event.before == '48e7afd1cb8e52f0abb85af08727e7684b969631' &&
+          github.run_attempt == 1
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          CUMETAL_COMPARISON_OUTPUT: ${{ runner.temp }}/cumetal-retained-ptx
+        run: .venv/bin/python .github/scripts/compare_cumetal_ptx.py
+
+      - name: Preserve exact-input CuMetal compiler comparison
+        if: always() && steps.retained_ptx.outcome != 'skipped' && steps.retained_ptx.outcome != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cumetal-retained-ptx-comparison
+          path: ${{ runner.temp }}/cumetal-retained-ptx
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Generate a CMake CUDA toolkit backed by CuMetal
         run: |
