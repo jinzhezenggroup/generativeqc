@@ -10,7 +10,8 @@ namespace generativeqc::scf::solver {
 bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<double>* overlap,
                           const std::vector<double>& values,
                           const std::vector<double>& coefficients, std::size_t n,
-                          EigenFrameDiagnostic& diagnostic, std::string& detail) {
+                          EigenFrameDiagnostic& diagnostic, std::string& detail,
+                          bool require_eigen_residual) {
   const auto finite = [](const auto& values) {
     return std::all_of(values.begin(), values.end(),
                        [](double value) { return std::isfinite(value); });
@@ -60,17 +61,22 @@ bool validate_eigen_frame(const std::vector<double>& matrix, const std::vector<d
     detail = "DF eigenframe validation norm overflow";
     return false;
   }
-  return accept_eigen_frame(diagnostic, detail);
+  return accept_eigen_frame(diagnostic, detail, require_eigen_residual);
 }
 
-bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& detail) {
+bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& detail,
+                        bool require_eigen_residual) {
   if (diagnostic.solver_info != 0 || !std::isfinite(diagnostic.maximum_eigen_residual) ||
       !std::isfinite(diagnostic.maximum_metric_error) ||
       !std::isfinite(diagnostic.scaled_eigen_residual) || diagnostic.maximum_eigen_residual < 0 ||
       diagnostic.maximum_metric_error < 0 || diagnostic.scaled_eigen_residual < 0 ||
-      diagnostic.maximum_eigen_residual > 1e-8 || diagnostic.maximum_metric_error > 1e-8 ||
-      diagnostic.scaled_eigen_residual > 1e-12) {
-    detail = "DF eigensystem failed physical eigen residual or metric orthogonality checks";
+      diagnostic.maximum_metric_error > 1e-8 ||
+      (require_eigen_residual &&
+       (diagnostic.maximum_eigen_residual > 1e-8 ||
+        diagnostic.scaled_eigen_residual > 1e-12))) {
+    detail = require_eigen_residual
+                 ? "DF eigensystem failed physical eigen residual or metric orthogonality checks"
+                 : "DF determinant frame failed metric orthogonality checks";
     return false;
   }
   return true;
