@@ -876,10 +876,10 @@ jobs:
             --no-deps --no-build-isolation -Cbuild-dir=build
       # Core and compiler-heavy reference tests need the external oracle inputs.
       # Builds and installed production paths above remain completely offline.
-      - name: Cache pinned GFN1 and D3 reference inputs
+      - name: Restore pinned GFN1 and D3 reference inputs
         if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy'
         id: gfn1_reference_sources
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .cache/generativeqc-sources/xtbloom-gfn1-parameters
@@ -890,6 +890,14 @@ jobs:
         run: |
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-parameters
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-d3
+      - name: Save pinned GFN1 and D3 reference inputs
+        if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.gfn1_reference_sources.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .cache/generativeqc-sources/xtbloom-gfn1-parameters
+            .cache/generativeqc-sources/xtbloom-gfn1-d3
+          key: ${{ steps.gfn1_reference_sources.outputs.cache-primary-key }}
       - name: Show ccache statistics
         run: ccache --show-stats
       # Probe caches are useful only for shards that compile native probes.
