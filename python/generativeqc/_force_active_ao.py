@@ -73,12 +73,6 @@ class QualifiedForceActiveAoProfile:
     derivative_orders: tuple[int, ...]
     spin_blocks: tuple[int, ...]
     density_fitted: bool | None
-    min_atoms: int
-    max_atoms: int
-    min_aos: int
-    max_aos: int
-    min_grid_points: int
-    max_grid_points: int
     min_dense_point_ao_square_work: int
     tile_policy: str
     tile_points: int | None
@@ -103,13 +97,6 @@ class QualifiedForceActiveAoProfile:
             raise ValueError("profile composition scope is invalid")
         if self.density_fitted is not None and type(self.density_fitted) is not bool:
             raise TypeError("profile density-fitting scope must be bool or None")
-        for low, high, name in (
-            (self.min_atoms, self.max_atoms, "atoms"),
-            (self.min_aos, self.max_aos, "AOs"),
-            (self.min_grid_points, self.max_grid_points, "grid points"),
-        ):
-            if type(low) is not int or type(high) is not int or low <= 0 or high < low:
-                raise ValueError(f"invalid qualified {name} range")
         if (
             type(self.min_dense_point_ao_square_work) is not int
             or self.min_dense_point_ao_square_work <= 0
@@ -147,9 +134,6 @@ class QualifiedForceActiveAoProfile:
                 self.density_fitted is None
                 or workload.density_fitted is self.density_fitted
             )
-            and self.min_atoms <= workload.atoms <= self.max_atoms
-            and self.min_aos <= workload.aos <= self.max_aos
-            and self.min_grid_points <= workload.grid_points <= self.max_grid_points
             and workload.grid_points * workload.aos * workload.aos
             >= self.min_dense_point_ao_square_work
             and workload.tile_policy == self.tile_policy
@@ -176,9 +160,8 @@ class ForceActiveAoDecision:
 # not molecule-size-window driven. The retained 48-atom positive endpoint is the
 # measured crossover anchor: above its dense point×AO² work, map discovery can be
 # amortized by the shared ordinary all-electron Direct force consumer. The broad
-# numeric bounds
-# below are implementation-capacity guards; profitability is controlled by the
-# dense-work crossover and every unsupported capability still falls back dense.
+# only remaining gates are true execution capabilities/resources plus the
+# dense-work crossover; unsupported capability or insufficient work falls back dense.
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
     QualifiedForceActiveAoProfile(
         profile_id="sm120-ordinary-direct-active-ao-v2",
@@ -191,12 +174,6 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
         derivative_orders=(1, 2),
         spin_blocks=(1, 2),
         density_fitted=False,
-        min_atoms=1,
-        max_atoms=(1 << 31) - 1,
-        min_aos=1,
-        max_aos=2048,
-        min_grid_points=1,
-        max_grid_points=(1 << 63) - 1,
         min_dense_point_ao_square_work=173_946_175_488,
         tile_policy="fixed",
         tile_points=256,
