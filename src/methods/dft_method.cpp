@@ -780,7 +780,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                               : dft::nlc::Vv10DensityDomain::StrictPositive;
       cuda_ = std::make_unique<dft::CudaKsPlan>(
           fock_, basis_, grid_, options_, xc_functional_code(execution_plan_),
-          options_.xc_tile_points, range, range_correction_.get(), nonlocal_.get(), domain);
+          options_.xc_tile_points, range, nonlocal_.get(), domain, {}, range_correction_.get());
     }
 #endif
     if (execution_plan_.d4_correction) prepare_d4(device);
