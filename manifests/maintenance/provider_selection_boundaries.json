@@ -1,0 +1,168 @@
+{
+  "schema": 1,
+  "files": {
+    "python/generativeqc_compiler/tensor/cuda_plan.py": {
+      "classification": "migration",
+      "contract": "#1889",
+      "reason": "TensorSchedule still carries a named reduction-provider selector. Provider choice must move below semantic schedule planning into the shared lowering binding.",
+      "selectors": {
+        "reduction_provider": 4
+      }
+    },
+    "python/generativeqc_compiler/tensor/cuda_providers.py": {
+      "classification": "provider",
+      "contract": "#1886",
+      "reason": "Shared lowering diagnostics currently name the legacy plan-level reduction selector while migration to provider-owned selection is incomplete.",
+      "selectors": {
+        "reduction_provider": 3
+      }
+    },
+    "python/generativeqc_compiler/tensor/cuda_reduction.py": {
+      "classification": "migration",
+      "contract": "#1889",
+      "reason": "Cooperative reduction codegen still reads provider choice from TensorSchedule instead of a prepared shared lowering binding.",
+      "selectors": {
+        "reduction_provider": 1
+      }
+    },
+    "python/generativeqc_compiler/tensor/cuda_search.py": {
+      "classification": "migration",
+      "contract": "#1889",
+      "reason": "Tensor schedule search still exposes provider identity as a search axis and serialized schedule field; retain only until provider-neutral candidate selection owns the comparison.",
+      "selectors": {
+        "reduction_provider": 3
+      }
+    },
+    "src/cc/cuda_solver.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "CC solver plumbing still carries matrix-implementation selectors that must be replaced by semantic contraction requests or prepared bindings.",
+      "selectors": {
+        "df_matrix_gemm": 2,
+        "matrix_gemm": 12
+      }
+    },
+    "src/cc/df_lambda_cuda.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF Lambda execution still branches on a method-local GEMM implementation selector.",
+      "selectors": {
+        "df_matrix_gemm": 8
+      }
+    },
+    "src/cc/df_plan.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "CC DF plan state still stores a matrix-GEMM implementation selector instead of a provider-neutral prepared contraction binding.",
+      "selectors": {
+        "matrix_gemm": 4
+      }
+    },
+    "src/cc/lambda_response.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Lambda response API still exposes the DF matrix-GEMM implementation choice.",
+      "selectors": {
+        "df_matrix_gemm": 2
+      }
+    },
+    "src/cc/lambda_response_cuda.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Lambda CUDA execution still consumes the DF matrix-GEMM implementation selector.",
+      "selectors": {
+        "df_matrix_gemm": 2
+      }
+    },
+    "src/cc/solver.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "CC solver API still exposes the DF matrix-GEMM implementation choice.",
+      "selectors": {
+        "df_matrix_gemm": 2
+      }
+    },
+    "src/methods/df_ccsdt_force.cu": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF-CCSD(T) force execution still threads DF/Lambda GEMM implementation selectors through method ownership.",
+      "selectors": {
+        "df_matrix_gemm": 5,
+        "lambda_matrix_gemm": 4
+      }
+    },
+    "src/methods/df_ccsdt_force.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "DF-CCSD(T) force method surface still carries DF/Lambda GEMM implementation selectors.",
+      "selectors": {
+        "df_matrix_gemm": 2,
+        "lambda_matrix_gemm": 1
+      }
+    },
+    "src/methods/rccsd_method.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "RCCSD method plumbing still forwards the DF GEMM implementation selector.",
+      "selectors": {
+        "df_matrix_gemm": 3
+      }
+    },
+    "src/methods/rccsd_method.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "RCCSD method API still exposes the DF GEMM implementation selector.",
+      "selectors": {
+        "df_matrix_gemm": 1
+      }
+    },
+    "src/scf/cuda/matrix_library.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Reusable SCF matrix adapter still accepts an upstream use_cublas implementation switch; canonical binding must own provider choice.",
+      "selectors": {
+        "use_cublas": 4
+      }
+    },
+    "src/scf/cuda/matrix_library.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "Reusable SCF matrix adapter interface still exposes an upstream use_cublas implementation switch.",
+      "selectors": {
+        "use_cublas": 2
+      }
+    },
+    "src/scf/cuda/rhf_bucket.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "RHF bucket execution still consumes a named cuBLAS selection switch.",
+      "selectors": {
+        "use_cublas": 2
+      }
+    },
+    "src/scf/cuda/rhf_policy.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "RHF policy still produces a named cuBLAS implementation decision rather than a provider-neutral binding.",
+      "selectors": {
+        "use_cublas": 2
+      }
+    },
+    "src/scf/cuda/rhf_policy.hpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "RHF policy contract still exposes a named cuBLAS implementation decision.",
+      "selectors": {
+        "use_cublas": 1
+      }
+    },
+    "src/scf/cuda_rhf.cpp": {
+      "classification": "migration",
+      "contract": "#1890",
+      "reason": "RHF prepared execution still branches on a named cuBLAS selector; migrate selection below scientific/runtime policy.",
+      "selectors": {
+        "use_cublas": 12
+      }
+    }
+  }
+}
