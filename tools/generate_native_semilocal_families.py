@@ -336,7 +336,9 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         alias_text = (
             "()"
             if not item["aliases"]
-            else "(" + "".join(f"{json.dumps(alias)}," for alias in item["aliases"]) + ")"
+            else "("
+            + "".join(f"{json.dumps(alias)}," for alias in item["aliases"])
+            + ")"
         )
         fields = [
             f'        "symbol": {json.dumps(item["symbol"])},',

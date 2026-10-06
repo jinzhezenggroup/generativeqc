@@ -60,7 +60,9 @@ def test_native_semilocal_execution_traits_are_manifest_owned() -> None:
     assert by_name["PBE"]["cuda_nonlocal_correlation"] is False
     assert by_name["WB97M-V"]["molecular_nonlocal_domain"] is True
     assert by_name["LDA"]["aliases"] == ("LDA_XC_PW",)
-    assert all(not record["aliases"] for name, record in by_name.items() if name != "LDA")
+    assert all(
+        not record["aliases"] for name, record in by_name.items() if name != "LDA"
+    )
 
 
 CUDA_FAST_PATH_CENSUS = {
