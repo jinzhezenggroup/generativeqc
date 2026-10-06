@@ -189,7 +189,7 @@ struct IncrementalDirectJkPolicy {
   unsigned effective_rebuild_interval{};
 };
 
-inline bool incremental_direct_jk_exact_eligible(const ResolvedFockBuild& strategy) noexcept {
+inline bool direct_jk_incremental_exact_eligible(const ResolvedFockBuild& strategy) noexcept {
   const auto exact = [](const FockTermSpec& term) {
     return !term.present || term.approximation == FockApproximation::Exact;
   };
@@ -218,7 +218,7 @@ inline IncrementalDirectJkPolicy resolve_incremental_direct_jk_policy(
   return policy;
 }
 
-inline bool incremental_direct_jk_requires_full_build(
+inline bool direct_jk_incremental_requires_full_build(
     bool anchored, unsigned delta_updates_since_full,
     const IncrementalDirectJkPolicy& policy) noexcept {
   return !anchored || (policy.effective_rebuild_interval != 0U &&
