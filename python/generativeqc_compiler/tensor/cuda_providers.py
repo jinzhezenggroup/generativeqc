@@ -20,7 +20,12 @@ from generativeqc_compiler.common.specialization import TargetCapabilities
 
 from .cuda_gemm import gemm_contract
 from .cuda_plan import TensorPlan
-from .cuda_reduction import cooperative_reduction_provider
+from .cuda_reduction import (
+    DEFAULT_REDUCTION_LOWERING,
+    ReductionLoweringBinding,
+    cooperative_reduction_eligible,
+    cooperative_reduction_provider,
+)
 from .lowering import TensorLoweringAdapter, plan_lowering_request
 
 GENERATED_CUDA_PROVIDER = ProviderDescriptor(
@@ -169,8 +174,11 @@ def _numerical_mode(plan: TensorPlan, index: int) -> str:
     return f"{value.compute_dtype}->{value.accumulation_dtype}"
 
 
-def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, ...]:
-    """Describe the providers already selected by one TensorPlan.
+def resolved_lowering_candidates(
+    plan: TensorPlan,
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> tuple[LoweringCandidate, ...]:
+    """Describe the providers selected below one provider-neutral TensorPlan.
 
     GEMM is a composite lowering: cuBLAS owns the contraction, while generated
     CUDA owns packing/scatter and/or the checked coefficient epilogue.  Empty-K
@@ -187,7 +195,9 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
         if step.virtual or node.op in ("input", "constant") or not node.spec.size:
             continue
         contract = gemm_contract(node)
-        reduction_provider = cooperative_reduction_provider(plan, index)
+        reduction_impl = cooperative_reduction_provider(
+            plan, index, reduction_lowering
+        )
         is_gemm = step.gemm != "none" and contract is not None
         uses_cublas = is_gemm and contract.k > 0
         request = plan_lowering_request(plan, index, adapter)
@@ -197,10 +207,10 @@ def resolved_lowering_candidates(plan: TensorPlan) -> tuple[LoweringCandidate, .
         elif is_gemm:
             providers = (CUDA_RUNTIME_PROVIDER,)
             implementation = "tensor-gemm-zero-fill"
-        elif reduction_provider == "cub":
+        elif reduction_impl == "cub":
             providers = (CUB_REDUCTION_PROVIDER, GENERATED_CUDA_PROVIDER)
             implementation = "tensor-reduce-cub-block-reduce"
-        elif reduction_provider == "generated":
+        elif reduction_impl == "generated":
             providers = (GENERATED_CUDA_PROVIDER,)
             implementation = "tensor-reduce-generated-cooperative"
         else:
@@ -250,7 +260,7 @@ def reduction_provider_candidates(
 
     if not isinstance(plan, TensorPlan):
         raise TypeError("reduction provider candidates require a TensorPlan")
-    if cooperative_reduction_provider(plan, index) is None:
+    if not cooperative_reduction_eligible(plan, index):
         raise ValueError("step is not an eligible cooperative reduction")
     request = plan_lowering_request(plan, index, TensorLoweringAdapter(plan.program))
     target = TargetCapabilities(
@@ -272,7 +282,12 @@ def reduction_provider_candidates(
     )
 
 
-def tensor_lowering_diagnostics(plan: TensorPlan) -> dict[str, object]:
+def tensor_lowering_diagnostics(
+    plan: TensorPlan,
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> dict[str, object]:
     """Return deterministic provider provenance for a resolved Tensor CUDA plan."""
 
-    return lowering_diagnostics(resolved_lowering_candidates(plan))
+    return lowering_diagnostics(
+        resolved_lowering_candidates(plan, reduction_lowering)
+    )
