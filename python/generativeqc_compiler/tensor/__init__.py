@@ -33,6 +33,7 @@ from .complexity import (
     node_complexity,
     reassociate_einsums,
 )
+from .indexed_layout import IndexedTensorLayout
 from .ir import (
     PRIMITIVES,
     Node,
@@ -51,6 +52,8 @@ from .ir import (
     power,
     reduce_sum,
     reshape,
+    runtime_cartesian_scatter_add,
+    runtime_cartesian_select,
     runtime_indexed_scatter_add,
     runtime_indexed_select,
     scaled_bilinear,
@@ -149,6 +152,7 @@ __all__ = [
     "Execution",
     "Index",
     "IndexSpace",
+    "IndexedTensorLayout",
     "JVPProgram",
     "JVPResult",
     "Node",
@@ -199,6 +203,8 @@ __all__ = [
     "reduce_sum",
     "reshape",
     "rewrite",
+    "runtime_cartesian_scatter_add",
+    "runtime_cartesian_select",
     "runtime_indexed_scatter_add",
     "runtime_indexed_select",
     "scaled_bilinear",

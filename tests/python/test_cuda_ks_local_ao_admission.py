@@ -144,6 +144,7 @@ int main(int argc, char** argv) {
     // Empty maps are legal; this tests the arithmetic contract, not the cutoff.
     if (admit_ao) {
       CudaXcAoTiles maps;
+      maps.derivative_order = 1;
       maps.offsets.resize(ao_selection_bound.tiles + 1);
       xc_layout = cuda_xc_local_ao_layout(xc_layout, maps);
     }

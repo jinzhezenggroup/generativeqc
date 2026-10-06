@@ -26,7 +26,7 @@ ALLOWED = {
     "periodic": {"periodic", "common"},
     "dft": {"dft", "tensor", "common"},
     "xc": {"xc", "integral", "dft", "common"},
-    "method": {"method", "geometry", "xc", "tensor", "common"},
+    "method": {"method", "geometry", "xc", "dft", "tensor", "common"},
 }
 
 # These existing adapters consume the public molecular/native ABI only when

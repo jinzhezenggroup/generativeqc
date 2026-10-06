@@ -176,6 +176,27 @@ def _evaluate(
             )
             result[target] += value[domain_coordinate]
         return result
+    if op in ("runtime_cartesian_select", "runtime_cartesian_scatter_add"):
+        value, maps = operands[0], operands[1:]
+        selected = dict(zip(a["axes"], maps, strict=True))
+        target_shape = (
+            value.shape if op == "runtime_cartesian_select" else node.spec.shape
+        )
+        for axis, mapping in selected.items():
+            if np.any(mapping < 0) or np.any(mapping >= target_shape[axis]):
+                raise ValueError(f"{op} coordinate is outside its target axis")
+        if op == "runtime_cartesian_select":
+            for axis, mapping in selected.items():
+                value = np.take(value, mapping, axis=axis)
+            return value
+        result = np.zeros(node.spec.shape, dtype=node.spec.dtype)
+        for coordinate in np.ndindex(value.shape):
+            target = tuple(
+                int(selected[axis][position]) if axis in selected else position
+                for axis, position in enumerate(coordinate)
+            )
+            result[target] += value[coordinate]
+        return result
     value = operands[0]
     if op == "transpose":
         return value.transpose(a["axes"])

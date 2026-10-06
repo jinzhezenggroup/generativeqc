@@ -76,6 +76,43 @@ def test_retained_maps_work_and_density_independent_reuse() -> None:
             setattr(cache, name, value)
 
 
+@pytest.mark.parametrize("ids", [[], [1, 4, 8], list(range(10))])
+def test_selected_block_reuses_map_storage_and_carries_derivative_capability(
+    ids: list[int],
+) -> None:
+    grid = Grid()
+    grid.answer = immutable(ids)
+    cache = ResidentAoMapCache(grid, domain(), cutoff=1e-16, budget_bytes=512)
+    selected, layout = cache.select_block(grid, domain(), 4, 4)
+    layout.require_derivative_order(2)
+    assert layout.point_start == 4 and layout.npoint == 4
+    assert layout.nactive == len(ids)
+    assert layout.indexed == (len(ids) != 10)
+    assert layout.basis_generation == layout.geometry_generation == 0
+    assert cache.work["lookups"] == 1 and cache.work["discoveries"] == 1
+    repeated, repeated_layout = cache.select_block(grid, domain(), 4, 4)
+    assert repeated is selected
+    assert repeated_layout is layout
+    assert cache.work["cache_hits"] == 1
+    assert cache.work["retained_map_bytes"] == (0 if len(ids) == 10 else len(ids) * 8)
+    grid.geometry_generation += 1
+    with pytest.raises(ValueError, match="binding mismatch"):
+        cache.select_block(grid, domain(), 4, 4)
+
+
+@pytest.mark.parametrize("budget", [0, 199])
+def test_uncached_dense_fallback_does_not_retain_layout_inventory(budget: int) -> None:
+    grid = Grid()
+    cache = ResidentAoMapCache(grid, domain(), cutoff=1e-16, budget_bytes=budget)
+    for begin, count in ((0, 4), (4, 4), (8, 2), (0, 4)):
+        selected, layout = cache.select_block(grid, domain(), begin, count)
+        assert selected is None and not layout.indexed
+        layout.require_derivative_order(2)
+    assert not cache._block_layouts
+    assert cache.work["retained_map_bytes"] == 0
+    assert not grid.calls
+
+
 @pytest.mark.parametrize("variant", ["empty", "full"])
 def test_empty_and_identity_maps_have_no_retained_numeric_cost(variant: str) -> None:
     grid = Grid()

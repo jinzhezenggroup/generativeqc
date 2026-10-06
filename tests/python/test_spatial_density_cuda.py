@@ -330,6 +330,10 @@ def test_spatial_source_lifetime_fallback_and_device_leases(
             expected = np.zeros_like(source.density)
             with spatial.device_tasks(source, stamp=source.stamp, route=route) as tasks:
                 for task, ids, lease in tasks:
+                    assert lease.layout.indexed
+                    assert lease.layout.nactive == len(task.ao_ids)
+                    assert lease.layout.npoint == len(ids)
+                    lease.layout.require_derivative_order(spatial.tile_plan.order)
                     local = np.ones((2, len(task.ao_ids), len(task.ao_ids))) * len(ids)
                     expected[:, task.ao_ids[:, None], task.ao_ids[None, :]] += local
                     check(lease.scatter(local, download=True), expected)

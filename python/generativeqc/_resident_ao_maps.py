@@ -10,10 +10,14 @@ from __future__ import annotations
 
 import math
 import typing
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
 from time import perf_counter
 
 import numpy as np
+from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.dft.cuda import CudaAoMapAllocationError
+from generativeqc_compiler.dft.indexed_layout import AoGridBlockLayout
 
 
 @dataclass(frozen=True)
@@ -58,7 +62,14 @@ class ResidentAoMapCache:
         *,
         cutoff: float,
         budget_bytes: int,
+        producer: str = "sampled-jets",
     ) -> None:
+        if type(producer) is not str or producer not in {
+            "sampled-jets",
+            "pre-ao-envelope",
+        }:
+            raise ValueError("unsupported resident AO domain producer")
+        self._producer = producer
         if type(domain) is not ResidentAoMapDomain:
             raise TypeError("resident AO cache requires an explicit domain")
         if any(
@@ -96,6 +107,7 @@ class ResidentAoMapCache:
         self._basis_generation = grid.basis_generation
         self._validate_binding(grid, domain)
         self._maps: dict[int, typing.Any] = {}
+        self._block_layouts: dict[int, AoGridBlockLayout] = {}
         self._retained_bytes = 0
         self._transient_bytes = 20 * grid.plan.nao
         self._capability_missing = False
@@ -108,6 +120,11 @@ class ResidentAoMapCache:
     @property
     def cutoff(self) -> float:
         return self._cutoff
+
+    @property
+    def producer(self) -> str:
+        """Immutable omission mechanism; not interchangeable on a warm cache."""
+        return self._producer
 
     @property
     def budget_bytes(self) -> int:
@@ -137,6 +154,7 @@ class ResidentAoMapCache:
             "discoveries": 0,
             "discovery_seconds": 0.0,
             "discovery_ao_jet_values": 0,
+            "discovery_region_bounds": 0,
             "discovery_density_contractions": 0,
             "dense_budget_tiles": 0,
             "dense_capability_tiles": 0,
@@ -155,6 +173,7 @@ class ResidentAoMapCache:
         """Detached per-endpoint work and current numeric capacity accounting."""
         return dict(
             self._work,
+            discovery_producer=self.producer,
             retained_map_bytes=self._retained_bytes,
             transient_reserve_bytes=self._transient_bytes,
             budget_bytes=self.budget_bytes,
@@ -164,6 +183,61 @@ class ResidentAoMapCache:
                 else 0
             ),
         )
+
+    def select_block(
+        self, grid: typing.Any, domain: ResidentAoMapDomain, begin: int, count: int
+    ) -> tuple[np.ndarray | None, AoGridBlockLayout]:
+        """Publish the existing map with its validated local-domain capability.
+
+        No second coordinate array or sparse cache is created. Epochs remain
+        execution bindings, not generated equation/source identity. Holding
+        the same grid lock prevents center rebinding during certification.
+        Retained maps also retain their immutable descriptor. Dense budget or
+        capability fallbacks do not grow a second inventory of cached blocks.
+        """
+        with grid._lock:
+            selected = self.select(grid, domain, begin, count)
+            layout = self._block_layouts.get(begin)
+            if layout is not None:
+                return selected, layout
+            layout = AoGridBlockLayout(
+                grid.plan.nao,
+                grid.plan.nao if selected is None else selected.size,
+                count,
+                domain.derivative_order,
+                domain.basis_identity,
+                selected is not None,
+                domain.derivative_order,
+                begin,
+                self._basis_generation,
+                self._geometry_generation,
+            )
+            if begin in self._maps:
+                self._block_layouts[begin] = layout
+            return selected, layout
+
+    @contextmanager
+    def feature_task(
+        self,
+        grid: typing.Any,
+        domain: ResidentAoMapDomain,
+        begin: int,
+        count: int,
+        ingredients: typing.Iterable[str],
+        *,
+        stamp: typing.Any = None,
+    ) -> typing.Any:
+        """Keep the diagnostic sampled-jet route behind the same lease API."""
+        selected, layout = self.select_block(grid, domain, begin, count)
+        with grid.feature_task_device_points(
+            domain.point_pointer + 24 * begin,
+            count,
+            selected,
+            ingredients,
+            stamp=stamp,
+            block_layout=layout,
+        ) as task:
+            yield task
 
     def select(
         self, grid: typing.Any, domain: ResidentAoMapDomain, begin: int, count: int
@@ -207,8 +281,11 @@ class ResidentAoMapCache:
             else:
                 started = perf_counter()
                 try:
+                    options = {"cutoff": self.cutoff}
+                    if self.producer != "sampled-jets":
+                        options["producer"] = self.producer
                     selected = grid.select_ao_device_points(
-                        domain.point_pointer + begin * 3 * 8, count, cutoff=self.cutoff
+                        domain.point_pointer + begin * 3 * 8, count, **options
                     )
                 except NotImplementedError:
                     self._capability_missing = True
@@ -227,9 +304,12 @@ class ResidentAoMapCache:
                     self._work["discoveries"] += 1
                     order = domain.derivative_order
                     jets = (order + 1) * (order + 2) * (order + 3) // 6
-                    self._work["discovery_ao_jet_values"] += (
-                        count * grid.plan.nao * jets
-                    )
+                    if self.producer == "sampled-jets":
+                        self._work["discovery_ao_jet_values"] += (
+                            count * grid.plan.nao * jets
+                        )
+                    else:
+                        self._work["discovery_region_bounds"] += grid.plan.nao * jets
                     # A full identity map needs no retained numerical array.
                     if selected.size == grid.plan.nao:
                         selected = _DENSE
@@ -251,3 +331,229 @@ class ResidentAoMapCache:
             self._work["point_ao_square_sum"] += count * active**2
             self._work["dense_point_ao_square_sum"] += count * grid.plan.nao**2
             return None if selected is _DENSE else selected
+
+
+class ResidentDeviceAoMapOwner:
+    """Native CSR lifetime adapter, with no Python AO-label inventory.
+
+    Domain identities bind immutable quadrature storage, not just its address.
+    Only the native owner resolves tile spans; all downstream leases keep the
+    existing AoGridBlockLayout contract. Budget/capability and optional
+    high-occupancy misses stay dense; even a declined CSR is ledger-accounted.
+    Derivative maps remain exact-capability here until cross-order reuse is
+    separately qualified. The caller supplies policy; this adapter owns storage.
+    """
+
+    def __init__(
+        self,
+        grid: typing.Any,
+        domain: ResidentAoMapDomain,
+        *,
+        cutoff: float,
+        budget_bytes: int,
+        max_active_fraction: float = 1.0,
+    ) -> None:
+        if type(max_active_fraction) not in (int, float) or not (
+            0 < max_active_fraction <= 1
+        ):
+            raise ValueError("resident AO occupancy limit must be in (0,1]")
+        # Reuse admission, not discovery or storage, from the host adapter.
+        # This short-lived validator has no selected maps or numerical arrays.
+        admission = ResidentAoMapCache(
+            grid,
+            domain,
+            cutoff=cutoff,
+            budget_bytes=budget_bytes,
+            producer="pre-ao-envelope",
+        )
+        self._grid = grid
+        self._domain = domain
+        self._cutoff = admission.cutoff
+        self._budget_bytes = budget_bytes
+        self._max_active_fraction = float(max_active_fraction)
+        self._basis_generation = grid.basis_generation
+        self._geometry_generation = grid.geometry_generation
+        self._identity = canonical_hash(
+            {
+                "schema": "generativeqc.resident-ao-domain.v1",
+                "domain": asdict(domain),
+                "basis_generation": self._basis_generation,
+                "geometry_generation": self._geometry_generation,
+                "cutoff": self.cutoff,
+                "producer": "pre-ao-envelope",
+                "max_active_fraction": self._max_active_fraction,
+            }
+        )
+        self._info: dict[str, int] = {}
+        self._ready = False
+        self._occupancy_declined = False
+        self._allocation_declined = False
+        self._fresh_discovery = True
+        started = perf_counter()
+        with grid._lock:
+            grid._check_open()
+            try:
+                self._info = grid.prepare_ao_map_device_points(
+                    domain.point_pointer,
+                    domain.point_count,
+                    cutoff=self.cutoff,
+                    budget_bytes=budget_bytes,
+                    identity=self.identity,
+                )
+            except NotImplementedError:
+                self._capability_missing = True
+            except CudaAoMapAllocationError:
+                self._capability_missing = False
+                self._allocation_declined = True
+            else:
+                self._capability_missing = False
+                self._ready = bool(self._info["ready"])
+                if self._ready:
+                    # Occupancy is a scheduling guard, never an extra AO cutoff.
+                    # Declining the entire inventory evaluates all AOs instead.
+                    capacity = self._info["map_tiles"] * grid.plan.nao
+                    self._occupancy_declined = (
+                        self._info["map_entries"] / capacity > self._max_active_fraction
+                    )
+                    self._ready = not self._occupancy_declined
+        self._discovery_seconds = perf_counter() - started
+        self.reset_work()
+
+    @property
+    def domain(self) -> ResidentAoMapDomain:
+        return self._domain
+
+    @property
+    def cutoff(self) -> float:
+        return self._cutoff
+
+    @property
+    def budget_bytes(self) -> int:
+        return self._budget_bytes
+
+    @property
+    def identity(self) -> str:
+        return self._identity
+
+    def reset_work(self) -> None:
+        """Report discovery on the creating endpoint only, never on replay."""
+        fresh = self._fresh_discovery
+        self._discovery_in_endpoint = fresh
+        self._work: dict[str, typing.Any] = {
+            "discovery_producer": "pre-ao-envelope-native-csr",
+            "discoveries": int(
+                fresh and bool(self._info.get("discovery_region_bounds", 0))
+            ),
+            "discovery_seconds": self._discovery_seconds if fresh else 0.0,
+            "discovery_ao_jet_values": 0,
+            "discovery_region_bounds": self._info.get("discovery_region_bounds", 0)
+            if fresh
+            else 0,
+            "discovery_d2h_bytes": self._info.get("discovery_d2h_bytes", 0)
+            if fresh
+            else 0,
+            "discovery_offsets_h2d_bytes": self._info.get(
+                "discovery_offsets_h2d_bytes", 0
+            )
+            if fresh
+            else 0,
+            "ao_map_h2d_bytes": 0,
+            "host_ao_label_lookups": 0,
+            "tile_count": 0,
+            "cache_hits": 0,
+            "dense_budget_tiles": 0,
+            "dense_capability_tiles": 0,
+            "dense_occupancy_tiles": 0,
+            "dense_allocation_tiles": 0,
+            "point_ao_visits": 0,
+            "point_ao_square_sum": 0,
+            "dense_point_ao_square_sum": 0,
+            "active_aos_min": None,
+            "active_aos_max": 0,
+            "active_aos_sum": 0,
+            "empty_tile_count": 0,
+        }
+
+    @property
+    def work(self) -> dict[str, typing.Any]:
+        """Detach truthful traffic and resident numeric-capacity diagnostics."""
+        return dict(
+            self._work,
+            retained_map_bytes=self._info.get("retained_map_bytes", 0),
+            numeric_peak_bound_bytes=self._info.get("numeric_peak_bound_bytes", 0),
+            budget_bytes=self.budget_bytes,
+            map_entries=self._info.get("map_entries", 0),
+            map_tiles=self._info.get("map_tiles", 0),
+            native_csr_ready=self._ready,
+            max_active_fraction=self._max_active_fraction,
+            occupancy_declined=self._occupancy_declined,
+        )
+
+    @contextmanager
+    def feature_task(
+        self,
+        grid: typing.Any,
+        domain: ResidentAoMapDomain,
+        begin: int,
+        count: int,
+        ingredients: typing.Iterable[str],
+        *,
+        stamp: typing.Any = None,
+    ) -> typing.Any:
+        """Borrow one native span; stale identity never falls back silently."""
+        with grid._lock:
+            ResidentAoMapCache._validate_binding(self, grid, domain)
+            if (
+                type(begin) is not int
+                or type(count) is not int
+                or begin < 0
+                or begin >= domain.point_count
+                or begin % domain.tile_points
+                or count != min(domain.tile_points, domain.point_count - begin)
+            ):
+                raise ValueError(
+                    "resident AO lookup differs from its point tile domain"
+                )
+            point_pointer = domain.point_pointer + 24 * begin
+            if self._ready:
+                lease = grid.feature_task_resident_ao_map(
+                    point_pointer,
+                    count,
+                    begin,
+                    ingredients,
+                    identity=self.identity,
+                    stamp=stamp,
+                )
+                self._work["cache_hits"] += int(not self._discovery_in_endpoint)
+            else:
+                lease = grid.feature_task_device_points(
+                    point_pointer,
+                    count,
+                    None,
+                    ingredients,
+                    stamp=stamp,
+                )
+                self._work[
+                    "dense_occupancy_tiles"
+                    if self._occupancy_declined
+                    else "dense_allocation_tiles"
+                    if self._allocation_declined
+                    else "dense_capability_tiles"
+                    if self._capability_missing
+                    else "dense_budget_tiles"
+                ] += 1
+            self._work["tile_count"] += 1
+            with lease as task:
+                active = task.layout.nactive
+                self._work["point_ao_visits"] += count * active
+                self._work["point_ao_square_sum"] += count * active**2
+                self._work["dense_point_ao_square_sum"] += count * grid.plan.nao**2
+                self._work["active_aos_sum"] += active
+                prior = self._work["active_aos_min"]
+                self._work["active_aos_min"] = (
+                    active if prior is None else min(prior, active)
+                )
+                self._work["active_aos_max"] = max(self._work["active_aos_max"], active)
+                self._work["empty_tile_count"] += int(not active)
+                yield task
+            self._fresh_discovery = False

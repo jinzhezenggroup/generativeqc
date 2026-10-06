@@ -58,7 +58,11 @@ from generativeqc_compiler.method.stationary_resources import (
 
 from . import _native
 from ._dft_gradient import StationaryDerivativeContract, native_ao_geometry_identity
-from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
+from ._resident_ao_maps import (
+    ResidentAoMapCache,
+    ResidentAoMapDomain,
+    ResidentDeviceAoMapOwner,
+)
 from ._stationary_cuda import _DOUBLE, _CudaSources, _native_grid_artifact, _ptr
 from ._stationary_nonlocal_cuda import resident_nonlocal_geometry
 from .nonlocal_runtime import _ResidentNonlocalForceOwner
@@ -162,6 +166,8 @@ class PreparedCompositeStationaryCudaGradient:
         max_host_bytes: int = 2 << 30,
         active_ao_cutoff: float | None = None,
         active_ao_cache_bytes: int = 64 << 20,
+        active_ao_producer: str = "sampled-jets",
+        active_ao_max_active_fraction: float = 1.0,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
         """Publish only a complete result; failed executions discard retained scratch."""
         try:
@@ -176,6 +182,8 @@ class PreparedCompositeStationaryCudaGradient:
                 max_host_bytes=max_host_bytes,
                 active_ao_cutoff=active_ao_cutoff,
                 active_ao_cache_bytes=active_ao_cache_bytes,
+                active_ao_producer=active_ao_producer,
+                active_ao_max_active_fraction=active_ao_max_active_fraction,
             )
         except BaseException:
             self.close()
@@ -194,9 +202,17 @@ class PreparedCompositeStationaryCudaGradient:
         max_host_bytes: int,
         active_ao_cutoff: float | None,
         active_ao_cache_bytes: int,
+        active_ao_producer: str,
+        active_ao_max_active_fraction: float,
     ) -> tuple[np.ndarray, dict[str, typing.Any]]:
         """Contract all twelve gradients under the live SCF token and publish forces."""
         started = perf_counter()
+        if type(active_ao_producer) is not str or active_ao_producer not in {
+            "sampled-jets",
+            "pre-ao-envelope",
+            "pre-ao-envelope-native-csr",
+        }:
+            raise ValueError("unsupported resident AO domain producer")
         if active_ao_cutoff is not None and (
             type(active_ao_cutoff) not in (int, float)
             or not np.isfinite(active_ao_cutoff)
@@ -308,6 +324,13 @@ class PreparedCompositeStationaryCudaGradient:
             if active_ao_cutoff is not None
             else 0
         )
+        if active_ao_producer == "pre-ao-envelope-native-csr":
+            # Native CSR/staging must coexist with every complete force owner.
+            # Reserve only dense-path headroom, retaining its bounded fallback.
+            ao_cache_allowance = min(
+                ao_cache_allowance, max(0, max_device_bytes - device_bound)
+            )
+            device_bound += ao_cache_allowance
         host_bound += ao_cache_allowance
         cache = Path(cache)
         identity = (
@@ -325,6 +348,8 @@ class PreparedCompositeStationaryCudaGradient:
             nlc_budget,
             active_ao_cutoff,
             ao_cache_allowance,
+            active_ao_producer,
+            active_ao_max_active_fraction,
         )
         reused = identity == self._identity
         if not reused:
@@ -486,11 +511,22 @@ class PreparedCompositeStationaryCudaGradient:
                 self.grid.plan.order,
             )
             if self._ao_maps is None or self._ao_maps.domain != ao_domain:
-                self._ao_maps = ResidentAoMapCache(
-                    self.grid,
-                    ao_domain,
-                    cutoff=active_ao_cutoff,
-                    budget_bytes=ao_cache_allowance,
+                self._ao_maps = (
+                    ResidentDeviceAoMapOwner(
+                        self.grid,
+                        ao_domain,
+                        cutoff=active_ao_cutoff,
+                        budget_bytes=ao_cache_allowance,
+                        max_active_fraction=active_ao_max_active_fraction,
+                    )
+                    if active_ao_producer == "pre-ao-envelope-native-csr"
+                    else ResidentAoMapCache(
+                        self.grid,
+                        ao_domain,
+                        cutoff=active_ao_cutoff,
+                        budget_bytes=ao_cache_allowance,
+                        producer=active_ao_producer,
+                    )
                 )
         resident_parts, resident_seconds, resident_work = resident_nonlocal_geometry(
             grid=self.grid,
@@ -558,6 +594,8 @@ class PreparedCompositeStationaryCudaGradient:
             "additional_host_numeric_bound": host_bound,
             "active_ao_cache_allowance_bytes": ao_cache_allowance,
             "active_ao_cutoff": active_ao_cutoff,
+            "active_ao_producer": active_ao_producer,
+            "active_ao_max_active_fraction": active_ao_max_active_fraction,
             "native_integral_resources": dict(
                 zip(
                     (

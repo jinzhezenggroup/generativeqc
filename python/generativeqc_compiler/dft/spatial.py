@@ -27,9 +27,10 @@ from generativeqc_compiler.common.resources import (
     plan_resources,
 )
 
-from .ao import NativeAO
+from .ao import NativeAO, jet_indices
 from .envelopes import ao_region_envelopes, derivative_domain
 from .grid import ExplicitGrid, checked_int
+from .indexed_layout import AoGridBlockLayout
 
 
 def _indices(values: typing.Any) -> typing.Any:
@@ -163,6 +164,54 @@ class SpatialTask:
                 }
             ),
         )
+
+    def block_layout(
+        self,
+        nao: int,
+        basis_identity: str,
+        *,
+        order: int,
+        point_start: int = 0,
+        npoint: int | None = None,
+        basis_generation: int | None = None,
+        geometry_generation: int | None = None,
+    ) -> AoGridBlockLayout:
+        """Describe a slice of this validated task without copying its AO map.
+
+        ``point_start`` addresses this task's ordered ``point_ids``, not a
+        contiguous interval in the original grid. The inventory validates the
+        screening certificate before preparation. Sparse capability covers
+        only complete through-order jet domains; an isolated Hessian entry
+        does not qualify a second-jet force consumer.
+        """
+        checked_int(point_start, "spatial point start", low=0, high=len(self.point_ids))
+        npoint = len(self.point_ids) - point_start if npoint is None else npoint
+        checked_int(npoint, "spatial block point count", low=0)
+        if point_start + npoint > len(self.point_ids):
+            raise ValueError("spatial block exceeds its ordered point domain")
+        complete = [
+            degree
+            for degree in range(4)
+            if set(jet_indices(degree)).issubset(self.derivatives)
+        ]
+        if not complete:
+            raise ValueError("spatial map lacks a complete value jet domain")
+        layout = AoGridBlockLayout(
+            nao,
+            len(self.ao_ids),
+            npoint,
+            order,
+            basis_identity,
+            True,
+            max(complete),
+            point_start,
+            basis_generation,
+            geometry_generation,
+        )
+        if np.any(self.ao_ids >= nao):
+            raise ValueError("spatial AO map exceeds its global basis")
+        layout.require_derivative_order(order)
+        return layout
 
     @property
     def numeric_bytes(self) -> typing.Any:

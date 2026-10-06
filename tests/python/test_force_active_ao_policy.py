@@ -59,10 +59,92 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
 
 
 def test_production_auto_policy_has_no_unqualified_positive_profile() -> None:
-    assert QUALIFIED_FORCE_ACTIVE_AO_PROFILES == ()
-    decision = resolve_force_active_ao_policy(_workload())
+    assert QUALIFIED_FORCE_ACTIVE_AO_PROFILES
+    decision = resolve_force_active_ao_policy(_workload(composition="composite"))
     assert decision.cutoff is None
     assert decision.reason == "no-qualified-profile"
+
+
+def test_qualified_default_selects_native_csr() -> None:
+    workload = _workload(device_name="NVIDIA GeForce RTX 5090", grid_points=1_179_648)
+    decision = resolve_force_active_ao_policy(workload)
+    assert decision.selected
+    assert decision.producer == "pre-ao-envelope-native-csr"
+    assert decision.cache_bytes == 64 << 20
+    assert decision.max_active_fraction == 0.8
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"composition": "composite"},
+        {"architecture": "cpu"},
+        {"density_fitted": True},
+        {"resident_grid": False},
+        {"tile_points": 128},
+        {"max_device_bytes": (512 << 20) - 1},
+        {"max_host_bytes": (256 << 20) - 1},
+    ],
+)
+def test_default_native_profile_misses_remain_dense(updates: dict) -> None:
+    workload = _workload(device_name="NVIDIA GeForce RTX 5090", grid_points=1_179_648)
+    decision = resolve_force_active_ao_policy(replace(workload, **updates))
+    assert not decision.selected
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        (3, 7, 9216),
+        (24, 192, 589_824),
+        (48, 384, 1_179_648),
+        (96, 768, 2_359_296),
+        (128, 1024, 3_145_728),
+    ],
+)
+@pytest.mark.parametrize("order", [1, 2])
+@pytest.mark.parametrize("spins", [1, 2])
+def test_default_profile_does_not_whitelist_benchmark_shapes(
+    shape: tuple[int, int, int],
+    order: int,
+    spins: int,
+) -> None:
+    atoms, aos, points = shape
+    decision = resolve_force_active_ao_policy(
+        _workload(
+            device_name="NVIDIA GeForce RTX 5090",
+            atoms=atoms,
+            aos=aos,
+            grid_points=points,
+            derivative_order=order,
+            spin_blocks=spins,
+        )
+    )
+    assert decision.selected and decision.producer == "pre-ao-envelope-native-csr"
+
+
+@pytest.mark.parametrize(
+    "architecture,name",
+    [
+        ("sm_80", "NVIDIA A100"),
+        ("sm_86", "NVIDIA GeForce RTX 3090"),
+        ("sm_90", "NVIDIA H100"),
+        ("sm_120", "NVIDIA RTX PRO 6000 Blackwell"),
+        ("sm_120", "NVIDIA GeForce RTX 5090"),
+        ("sm_120", None),
+    ],
+)
+def test_default_selection_has_no_gpu_product_whitelist(
+    architecture: str,
+    name: str | None,
+) -> None:
+    decision = resolve_force_active_ao_policy(
+        _workload(
+            architecture=architecture,
+            device_name=name,
+        )
+    )
+    assert decision.selected and decision.producer == "pre-ao-envelope-native-csr"
 
 
 @pytest.mark.parametrize("spin_blocks", [1, 2])
@@ -177,7 +259,7 @@ def test_policy_record_preserves_selected_and_dense_ao_work() -> None:
 
 
 def test_missing_map_work_never_invents_sparse_execution() -> None:
-    dense = resolve_force_active_ao_policy(_workload())
+    dense = resolve_force_active_ao_policy(_workload(), profiles=())
     assert force_active_ao_policy_record(dense, None)["actual_mode"] == "dense"
     selected = resolve_force_active_ao_policy(
         _workload(),

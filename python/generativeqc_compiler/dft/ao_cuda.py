@@ -938,9 +938,14 @@ def emit_grid_scientific_kernels(*, ao_radial_reuse: bool = False) -> str:
     """Emit AO/feature kernels; radial reuse requires explicit qualification opt-in."""
     if type(ao_radial_reuse) is not bool:
         raise TypeError("AO radial-reuse selector must be boolean")
-    return _GRID_SCIENTIFIC_KERNELS.replace(
-        "@AO_RADIAL_KERNELS@", _emit_ao_radial_kernels() if ao_radial_reuse else ""
-    ).replace("@AO_SCHEDULE@", _emit_ao_schedule(ao_radial_reuse=ao_radial_reuse))
+    from .envelope_cuda import emit_ao_region_screen_cuda
+
+    return (
+        _GRID_SCIENTIFIC_KERNELS.replace(
+            "@AO_RADIAL_KERNELS@", _emit_ao_radial_kernels() if ao_radial_reuse else ""
+        ).replace("@AO_SCHEDULE@", _emit_ao_schedule(ao_radial_reuse=ao_radial_reuse))
+        + emit_ao_region_screen_cuda()
+    )
 
 
 def axis_expression(power: typing.Any, derivative: typing.Any) -> typing.Any:
@@ -1029,10 +1034,13 @@ def emit_grid_source(
     if not native_ks and xc_matrix_schedule != DEFAULT_XC_MATRIX_SCHEDULE:
         raise ValueError("non-default XC matrix schedules require native KS emission")
     policy = emit_grid_policy()
+    from .indexed_layout_native import emit_native_ao_grid_binding
+
     source = (
         policy
         + emit_grid_scientific_kernels(ao_radial_reuse=ao_radial_reuse)
         + emit_grid_contraction()
+        + emit_native_ao_grid_binding()
         + '#include "cuda_grid.cu"\n'
     )
     if native_ks:

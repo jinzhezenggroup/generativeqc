@@ -144,7 +144,7 @@ def node_complexity(node: Node) -> NodeComplexity:
     if node.op == "einsum":
         work, concrete = _einsum_work(node)
         return NodeComplexity(storage, work, concrete)
-    if node.op == "reduce":
+    if node.op in ("reduce", "runtime_cartesian_scatter_add"):
         source = node.inputs[0]
         return NodeComplexity(storage, _monomial(source.spec.indices), source.spec.size)
     return NodeComplexity(storage, storage, node.spec.size)

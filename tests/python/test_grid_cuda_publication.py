@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import re
-import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from generativeqc_compiler.dft.indexed_layout_native import emit_native_ao_grid_binding
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
 PREFIX = r"""
+#include "dft/ao_grid_work.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -19,6 +25,7 @@ PREFIX = r"""
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 using I = std::int64_t;
@@ -103,8 +110,24 @@ struct Projection {
       }
   }
 };
+struct ResidentAoMap {
+  struct Indices {
+    const std::size_t* get() const { return nullptr; }
+  } indices;
+  std::vector<std::size_t> offsets;
+  std::string identity;
+  const double* points{};
+  std::size_t geometry_epoch{}, nao{}, npoint{}, tile_points{}, ao_map_entries{};
+  unsigned jets{};
+  int map_derivative_order{};
+  bool local_ao = true;
+};
 struct GridPlan {
   Context context;
+  std::unique_ptr<ResidentAoMap> resident_map;
+  std::size_t geometry_epoch{};
+  generativeqc::dft::AoGridWork work_metrics;
+  bool profile_stages = false;
   Projection projection_value;
   Projection* projection = &projection_value;
   bool view_ready=true,features_ready=true,density_jets_ready=true;
@@ -120,6 +143,7 @@ struct GridPlan {
   double potential[8]{};
   const double* current_points{};
   std::size_t ao_ids[2]{};
+  const std::size_t* current_ao_ids{};
 };
 void scheduled_ao(int, const double*, std::size_t, std::size_t, std::size_t, const double* points,
                std::size_t,std::size_t,double*,int* error,const std::size_t*) {
@@ -130,8 +154,8 @@ template<class... A> void gather_factor(A&&...) {}
 template<class... A> void orbital_feature_kernel(A&&...) {}
 template<class... A> void finish_orbital_sigma(A&&...) {}
 void gather_density(const double* density, const std::size_t* ids, I nao, I active,
-                    double* output) {
-  for (I spin = 0; spin < 2; ++spin)
+                    I spins, double* output) {
+  for (I spin = 0; spin < spins; ++spin)
     for (I row = 0; row < active; ++row)
       for (I column = 0; column < active; ++column)
         output[(spin*active+row)*active+column] = density[(spin*nao+ids[row])*nao+ids[column]];
@@ -292,10 +316,10 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def publication_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
+    """Keep publication probes on the production work ABI with cached compilation."""
     source = (ROOT / "src/dft/cuda_grid.cu").read_text()
 
     def host_body(signature: str) -> str:
@@ -323,15 +347,17 @@ def publication_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     getter = source[getter_begin:getter_end]
     directory = tmp_path_factory.mktemp("grid-publication")
     path, executable = directory / "probe.cpp", directory / "probe"
-    path.write_text(f"{PREFIX}\n{setters}\n{body}\n{getter}\n{SPIN_MAIN}\n{MAIN}")
-    compiled = subprocess.run(
-        [compiler, "-std=c++20", "-O0", str(path), "-o", str(executable)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
+    path.write_text(
+        emit_native_ao_grid_binding()
+        + f"{PREFIX}\n{setters}\n{body}\n{getter}\n{SPIN_MAIN}\n{MAIN}"
     )
-    assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+    native_cxx.build_executable(
+        (path,),
+        executable,
+        compile_args=("-std=c++20", "-O0", f"-I{ROOT / 'src'}"),
+        compile_timeout=30,
+        link_timeout=30,
+    )
     return executable
 
 

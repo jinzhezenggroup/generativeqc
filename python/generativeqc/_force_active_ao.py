@@ -29,10 +29,15 @@ class ForceActiveAoWorkload:
     max_device_bytes: int
     max_host_bytes: int
     resident_grid: bool
+    device_name: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.architecture:
+        if type(self.architecture) is not str or not self.architecture:
             raise ValueError("force active-AO architecture must be nonempty")
+        if self.device_name is not None and (
+            type(self.device_name) is not str or not self.device_name
+        ):
+            raise ValueError("force active-AO device name must be nonempty or absent")
         if type(self.derivative_order) is not int or self.derivative_order <= 0:
             raise ValueError("force active-AO derivative order must be positive")
         if self.spin_blocks not in (1, 2):
@@ -85,12 +90,23 @@ class QualifiedForceActiveAoProfile:
     min_host_bytes: int
     cutoff: float
     cache_bytes: int
+    producer: str = "sampled-jets"
+    max_active_fraction: float = 1.0
 
     def __post_init__(self) -> None:
         if not self.profile_id or not self.evidence:
             raise ValueError("qualified force active-AO profile needs evidence")
         if not self.architectures or not self.compositions:
             raise ValueError("qualified force active-AO profile needs a device/domain")
+        if type(self.producer) is not str or self.producer not in (
+            "sampled-jets",
+            "pre-ao-envelope-native-csr",
+        ):
+            raise ValueError("qualified force active-AO producer is unsupported")
+        if type(self.max_active_fraction) not in (int, float) or not (
+            0 < self.max_active_fraction <= 1
+        ):
+            raise ValueError("qualified AO occupancy limit must be in (0,1]")
         if any(
             value not in _SUPPORTED_DERIVATIVE_ORDERS
             for value in self.derivative_orders
@@ -133,7 +149,10 @@ class QualifiedForceActiveAoProfile:
 
     def matches(self, workload: ForceActiveAoWorkload) -> bool:
         return (
-            workload.architecture in self.architectures
+            (
+                ("*" in self.architectures and workload.architecture.startswith("sm_"))
+                or workload.architecture in self.architectures
+            )
             and workload.composition in self.compositions
             and workload.derivative_order in self.derivative_orders
             and workload.spin_blocks in self.spin_blocks
@@ -158,16 +177,44 @@ class ForceActiveAoDecision:
     reason: str
     cutoff: float | None
     cache_bytes: int
+    producer: str = "sampled-jets"
+    max_active_fraction: float = 1.0
 
     @property
     def selected(self) -> bool:
         return self.cutoff is not None
 
 
-# #1598 promotion registry. Current complete force evidence does not cross the
-# repository's 5% endpoint threshold, so automatic production selection is
-# intentionally dense until an evidence-bound profile is added.
-QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = ()
+# #1893 qualifies steady-geometry E+F; cold remains measured but its apparent
+# gain is below the robust-noise floor. Sizes are validation workloads, not
+# molecule-shape dispatch keys; admission and measured occupancy guard replay.
+QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
+    QualifiedForceActiveAoProfile(
+        profile_id="cuda-resident-preao-native-csr-v1",
+        evidence=(
+            ".agents/notes/implemented/performance/2026-10-06-pre-ao-native-csr.md",
+        ),
+        architectures=("*",),
+        compositions=("ordinary",),
+        derivative_orders=(1, 2),
+        spin_blocks=(1, 2),
+        density_fitted=False,
+        min_atoms=1,
+        max_atoms=(1 << 63) - 1,
+        min_aos=1,
+        max_aos=(1 << 63) - 1,
+        min_grid_points=1,
+        max_grid_points=(1 << 63) - 1,
+        tile_policy="fixed",
+        tile_points=256,
+        min_device_bytes=512 << 20,
+        min_host_bytes=256 << 20,
+        cutoff=1e-16,
+        cache_bytes=64 << 20,
+        producer="pre-ao-envelope-native-csr",
+        max_active_fraction=0.8,
+    ),
+)
 
 
 def resolve_force_active_ao_policy(
@@ -202,6 +249,8 @@ def resolve_force_active_ao_policy(
         "qualified-workload-profile",
         float(profile.cutoff),
         profile.cache_bytes,
+        profile.producer,
+        float(profile.max_active_fraction),
     )
 
 
@@ -234,6 +283,8 @@ def force_active_ao_policy_record(
         "reason": decision.reason,
         "cutoff": decision.cutoff,
         "cache_bytes": decision.cache_bytes,
+        "producer": decision.producer if decision.selected else None,
+        "max_active_fraction": decision.max_active_fraction,
         "workload": decision.workload.record(),
         "actual_mode": actual,
         "selected_point_ao_square_sum": selected_work,

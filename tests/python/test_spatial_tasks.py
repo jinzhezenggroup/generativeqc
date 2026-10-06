@@ -38,6 +38,68 @@ def fixture() -> typing.Any:
         yield basis, grid
 
 
+def test_spatial_map_publishes_complete_jet_capability_without_new_storage(
+    fixture: typing.Any,
+) -> None:
+    """Spatial point offsets belong to the existing permutation, not global rows."""
+    basis, grid = fixture
+    tasks = build_spatial_tasks(
+        basis,
+        grid,
+        policy=SpatialPolicy(
+            region_points=5,
+            derivatives=jet_indices(2),
+            screening="absolute_ao_jet",
+            cutoff=1e-8,
+        ),
+    )
+    tasks.validate(basis, grid)
+    for task in tasks.tasks:
+        original_ids, original_bytes = task.ao_ids, task.numeric_bytes
+        for begin in range(0, len(task.point_ids), 2):
+            count = min(2, len(task.point_ids) - begin)
+            layout = task.block_layout(
+                basis.nao,
+                basis.identity,
+                order=1,
+                point_start=begin,
+                npoint=count,
+                basis_generation=7,
+                geometry_generation=11,
+            )
+            assert layout.npoint == count and layout.point_start == begin
+            assert layout.nactive == len(task.ao_ids)
+            assert layout.basis_identity == basis.identity
+            assert layout.map_derivative_order == 2
+            assert layout.basis_generation == 7
+            assert layout.geometry_generation == 11
+            layout.require_derivative_order(1)
+        assert task.ao_ids is original_ids and task.numeric_bytes == original_bytes
+        with pytest.raises(ValueError, match="capability"):
+            task.block_layout(basis.nao, basis.identity, order=3)
+        with pytest.raises(ValueError, match="point domain"):
+            task.block_layout(
+                basis.nao, basis.identity, order=1, npoint=len(task.point_ids) + 1
+            )
+
+
+def test_isolated_hessian_does_not_certify_a_complete_force_map(
+    fixture: typing.Any,
+) -> None:
+    basis, grid = fixture
+    tasks = build_spatial_tasks(
+        basis,
+        grid,
+        policy=SpatialPolicy(derivatives=(*jet_indices(1), (2, 0, 0))),
+    )
+    task = tasks.tasks[0]
+    assert (
+        task.block_layout(basis.nao, basis.identity, order=1).map_derivative_order == 1
+    )
+    with pytest.raises(ValueError, match="capability"):
+        task.block_layout(basis.nao, basis.identity, order=2)
+
+
 def test_screening_off_partition_is_only_an_equivalent_reordering(
     fixture: typing.Any,
 ) -> None:
