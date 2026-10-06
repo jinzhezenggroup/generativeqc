@@ -83,6 +83,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: provider-selection-boundaries
+        name: Check provider-selection ownership
+        entry: python3 tools/check_provider_selection_boundaries.py
+        language: system
+        pass_filenames: false
+        always_run: true
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.10
     hooks:
