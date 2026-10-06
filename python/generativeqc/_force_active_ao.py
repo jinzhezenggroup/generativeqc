@@ -175,20 +175,21 @@ class ForceActiveAoDecision:
 # #1598 / #1853 promotion registry. Admission is capability- and cost-driven,
 # not molecule-size-window driven. The retained 48-atom positive endpoint is the
 # measured crossover anchor: above its dense point×AO² work, map discovery can be
-# amortized by the ordinary RKS second-jet force consumer. The broad numeric bounds
+# amortized by the shared ordinary all-electron Direct force consumer. The broad
+# numeric bounds
 # below are implementation-capacity guards; profitability is controlled by the
 # dense-work crossover and every unsupported capability still falls back dense.
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
     QualifiedForceActiveAoProfile(
-        profile_id="sm120-ordinary-rks-second-jet-v2",
+        profile_id="sm120-ordinary-direct-active-ao-v2",
         evidence=(
             "benchmarks/results/pbe0-public-force-policy-20261005/README.md",
             "benchmarks/results/pbe0-force-followups-20261005/README.md",
         ),
         architectures=("sm_120",),
         compositions=("ordinary",),
-        derivative_orders=(2,),
-        spin_blocks=(1,),
+        derivative_orders=(1, 2),
+        spin_blocks=(1, 2),
         density_fitted=False,
         min_atoms=1,
         max_atoms=(1 << 31) - 1,
