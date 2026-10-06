@@ -11,7 +11,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
-PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/dft/_generated_native_semilocal.py"
+PYTHON_COMPAT_OUTPUT = ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
 SCHEMA = "generativeqc.native-semilocal-families.v3"
 FAST_PATH_FIELDS = (
     "component_scaling",
@@ -53,6 +54,11 @@ def load_manifest(path: Path = MANIFEST) -> tuple[dict[str, Any], ...]:
         for field in FAST_PATH_FIELDS:
             if fast_paths[field] not in FAST_PATH_STATUS_CPP:
                 raise ValueError(f"unsupported CUDA fast-path status for {field}")
+        aliases = item.get("aliases")
+        if not isinstance(aliases, list) or any(
+            not isinstance(alias, str) or not alias for alias in aliases
+        ):
+            raise ValueError("native semilocal aliases must be nonempty strings")
         components = item.get("components")
         if not isinstance(components, list) or not 1 <= len(components) <= 4:
             raise ValueError("native semilocal family requires 1-4 components")
@@ -349,6 +355,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
             f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
+            f'        "aliases": {tuple(item["aliases"])!r},',
             '        "cuda_fast_paths": {',
             *(
                 f'            "{field}": {json.dumps(item["cuda_fast_paths"][field])},'
@@ -404,6 +411,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    molecular_nonlocal_domain: bool\n"
         "    incremental_xc: bool\n"
         "    stationary_second_order: bool\n"
+        "    aliases: tuple[str, ...]\n"
         "    cuda_fast_paths: dict[str, str]\n"
         "    components: tuple[tuple[str, str], ...]\n"
         "    range_omega: str\n"
@@ -421,6 +429,27 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
     )
 
 
+def emit_python_compat() -> str:
+    return '''"""Compatibility re-export for native semilocal execution metadata."""
+
+from generativeqc_compiler.dft._generated_native_semilocal import (
+    SCF_DOMAIN_BY_VERSION,
+    SEMILOCAL_FAMILIES,
+    SEMILOCAL_FAMILY_BY_CODE,
+    SEMILOCAL_FAMILY_CODES,
+    _SemilocalFamilyFields,
+    _SemilocalFamilyRecord,
+)
+
+__all__ = [
+    "SCF_DOMAIN_BY_VERSION",
+    "SEMILOCAL_FAMILIES",
+    "SEMILOCAL_FAMILY_BY_CODE",
+    "SEMILOCAL_FAMILY_CODES",
+]
+'''
+
+
 def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
@@ -431,12 +460,15 @@ def main() -> int:
     args = parser.parse_args()
     cpp = emit_cpp()
     python = emit_python()
+    python_compat = emit_python_compat()
     if args.check:
         stale = []
         if CPP_OUTPUT.read_text(encoding="utf-8") != cpp:
             stale.append(str(CPP_OUTPUT.relative_to(ROOT)))
         if PYTHON_OUTPUT.read_text(encoding="utf-8") != python:
             stale.append(str(PYTHON_OUTPUT.relative_to(ROOT)))
+        if PYTHON_COMPAT_OUTPUT.read_text(encoding="utf-8") != python_compat:
+            stale.append(str(PYTHON_COMPAT_OUTPUT.relative_to(ROOT)))
         if stale:
             raise SystemExit(
                 "stale generated native semilocal metadata: " + ", ".join(stale)
@@ -444,6 +476,7 @@ def main() -> int:
         return 0
     _write(CPP_OUTPUT, cpp)
     _write(PYTHON_OUTPUT, python)
+    _write(PYTHON_COMPAT_OUTPUT, python_compat)
     return 0
 
 
