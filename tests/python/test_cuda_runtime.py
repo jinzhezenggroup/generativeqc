@@ -15,6 +15,11 @@ def _cuda_tolerances() -> tuple[float, float]:
     return 2.0e-10, 2.0e-9
 
 
+def _diagnostic_phase(phase: str) -> None:
+    if os.environ.get("CUMETAL_DIAGNOSTIC_PHASES") == "1":
+        print(f"CUMETAL_QC_PHASE {phase}", flush=True)
+
+
 def test_cuda_minimal_rhf_matches_cpu_reference() -> None:
     """Exercise one real RHF CUDA calculation without batch/replay overhead."""
 
@@ -28,9 +33,13 @@ def test_cuda_minimal_rhf_matches_cpu_reference() -> None:
         "energy_tolerance": 1.0e-10,
         "density_tolerance": 1.0e-8,
     }
+    _diagnostic_phase("rhf_cpu_reference_start")
     reference = Calculator(device="cpu", **options).singlepoint(atoms)
+    _diagnostic_phase("rhf_cpu_reference_finished")
     try:
+        _diagnostic_phase("rhf_cuda_endpoint_start")
         result = Calculator(device="cuda", **options).singlepoint(atoms)
+        _diagnostic_phase("rhf_cuda_endpoint_finished")
     except RuntimeError as error:
         pytest.skip(f"CUDA device unavailable: {error}")
 
@@ -38,6 +47,7 @@ def test_cuda_minimal_rhf_matches_cpu_reference() -> None:
     assert result.executed_backend == "cuda"
     assert result.energy == pytest.approx(reference.energy, abs=energy_atol)
     assert np.allclose(result.forces, reference.forces, atol=force_atol, rtol=0.0)
+    _diagnostic_phase("rhf_numerical_assertions_passed")
 
 
 def test_cuda_minimal_uhf_matches_cpu_reference() -> None:

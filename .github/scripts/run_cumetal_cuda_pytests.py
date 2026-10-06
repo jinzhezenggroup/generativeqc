@@ -175,6 +175,14 @@ def main() -> None:
         cases, skipped, missing_provenance = junit_status(junit)
         failure: str | None = None
         if timed_out:
+            # Only a real timeout may trigger the separate one-shot diagnostic.
+            if (
+                MODE == "gate"
+                and nodeid == GATE_NODEIDS[0]
+                and (github_output := os.environ.get("GITHUB_OUTPUT"))
+            ):
+                with open(github_output, "a", encoding="utf-8") as output:
+                    output.write("rhf_timed_out=true\n")
             failure = f"TIMEOUT: {nodeid}"
         elif return_code != 0:
             failure = f"FAILED: {nodeid} (exit {return_code})"

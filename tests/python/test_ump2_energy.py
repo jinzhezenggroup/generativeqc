@@ -436,3 +436,71 @@ def test_pyscf_open_shell_ump2_total_energy() -> None:
         reference, source, occupied_tile=1, virtual_tile=2, axis_tile=2
     ).execute()
     assert abs(result.energy - independent.e_tot) <= 1e-9
+
+
+def test_pyscf_broken_symmetry_h2_ump2_total_energy() -> None:
+    """A stretched singlet retains distinct alpha/beta UHF orbitals."""
+
+    pyscf = pytest.importorskip("pyscf")
+    assert pyscf.__version__ == "2.14.0"
+    from pyscf import gto, mp, scf
+
+    mol = gto.M(
+        atom=[("H", (0.0, 0.0, -2.0)), ("H", (0.0, 0.0, 2.0))],
+        basis="sto-3g",
+        spin=0,
+        unit="Bohr",
+        cart=True,
+        verbose=0,
+    )
+    mf = scf.UHF(mol)
+    mf.conv_tol = 1e-13
+    mf.conv_tol_grad = 1e-11
+    mf.max_cycle = 200
+
+    # Seed opposite localized spins on the two one-function STO-3G centers.
+    # At this stretched geometry UHF should retain the broken-symmetry branch
+    # instead of collapsing back to the restricted solution.
+    dm0 = np.zeros((2, mol.nao_nr(), mol.nao_nr()))
+    dm0[0, 0, 0] = 1.0
+    dm0[1, 1, 1] = 1.0
+    mf.kernel(dm0=dm0)
+    assert mf.converged
+
+    density = np.asarray(mf.make_rdm1())
+    assert np.linalg.norm(density[0] - density[1]) > 0.1
+    coefficients = np.asarray(mf.mo_coeff)
+    assert np.linalg.norm(coefficients[0] - coefficients[1]) > 0.1
+
+    independent = mp.UMP2(mf).run()
+
+    fock = mf.get_fock(dm=density)
+    energies = np.asarray(mf.mo_energy)
+    occupations = np.asarray(mf.mo_occ)
+    reference = UHFReferenceSnapshot(
+        overlap=mf.get_ovlp(),
+        hcore=mf.get_hcore(),
+        fock_alpha=fock[0],
+        fock_beta=fock[1],
+        coefficients_alpha=coefficients[0],
+        coefficients_beta=coefficients[1],
+        orbital_energies_alpha=energies[0],
+        orbital_energies_beta=energies[1],
+        occupations_alpha=occupations[0],
+        occupations_beta=occupations[1],
+        reference_energy=mf.e_tot,
+        scf_residual=1e-12,
+        geometry_hash="pyscf-h2-broken-symmetry-geometry",
+        basis_hash="pyscf-sto3g",
+        generation_id="pyscf-ump2-broken-symmetry",
+        validation_tolerance=1e-7,
+    )
+    source = DenseSource(
+        mol.intor("int2e", aosym="s1").reshape((mol.nao_nr(),) * 4),
+        reference,
+    )
+    result = PreparedUMP2Energy(
+        reference, source, occupied_tile=1, virtual_tile=1, axis_tile=1
+    ).execute()
+    assert abs(result.energy - independent.e_tot) <= 1e-9
+    assert abs(result.alpha_beta) > 1e-8

@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import py_compile
@@ -173,7 +174,7 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
         "semilocal_force_predicate_sha256": (
-            "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
+            "083183902052ec67c806a67e6bbdf2422b21e609e1a10ec0f1a8b9035a6370d5"
         ),
         "global_hybrid_force_predicate_sha256": (
             "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
@@ -1759,20 +1760,47 @@ def test_spherical_ao_count_fails_closed_when_native_count_moves(
         qualify_capacity._spd_expansion_contract(tmp_path)
 
 
+@pytest.mark.parametrize(
+    "guard,occurrence",
+    [
+        ("self._automatic_libxc_name is None", 0),
+        ("self._ks_options is not None", 0),
+        ("self._ks_options.coefficients == (1.0, 1.0, 0.0)", 0),
+        ('self._device_name == "cuda"', 0),
+        ('self._device_name == "cuda"', 1),
+        ("self._ks_options.execution_plan.nonlocal_correlation is not None", 0),
+        ('self._method_name == "pbe-d4-rks" and basis_has_ecp', 0),
+        ('self._device_name == "cpu"', 0),
+        ("qualified_basis(self._basis) or cpu_direct_semilocal_force", 0),
+    ],
+)
 def test_public_capability_fails_closed_when_complete_predicate_moves(
     tmp_path: Path,
+    guard: str,
+    occurrence: int,
 ) -> None:
     copy_contract_files(tmp_path, PUBLIC_ROUTE_FILES)
+    # Prove the current route is admitted before mutating one guard. Otherwise
+    # an unrelated stale source fingerprint could conceal lost guard coverage.
+    qualify_capacity._source_public_route(tmp_path)
     target = tmp_path / "python/generativeqc/calculator.py"
     source = target.read_text(encoding="utf-8")
-    old = "self._ks_options.coefficients == (1.0, 1.0, 0.0)"
-    first = source.index(old)
-    semilocal = source.index(old, first + len(old))
-    target.write_text(
-        source[:semilocal] + "False" + source[semilocal + len(old) :],
-        encoding="utf-8",
+    assignment = next(
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(name, ast.Name) and name.id == "semilocal_force"
+            for name in node.targets
+        )
     )
-
+    segment = ast.get_source_segment(source, assignment)
+    assert segment is not None
+    offset = -1
+    for _ in range(occurrence + 1):
+        offset = segment.index(guard, offset + 1)
+    mutated = segment[:offset] + "False" + segment[offset + len(guard) :]
+    target.write_text(source.replace(segment, mutated, 1), encoding="utf-8")
     with pytest.raises(RuntimeError, match="semilocal force predicate changed"):
         qualify_capacity._source_public_route(tmp_path)
 

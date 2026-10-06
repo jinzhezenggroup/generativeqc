@@ -47,3 +47,7 @@ def test_cpu_rccsd_evidence_does_not_inflate_cuda_or_derivatives() -> None:
     assert levels["compiled-cuda"]["evidence"] == []
     assert levels["device-executed"]["evidence"] == []
     assert levels["derivative"]["evidence"] == []
+    assert levels["derivative"]["reason"] == (
+        "This row inventories the RCCSD energy product only; public analytic forces "
+        "are delivered separately and are not assessed by this energy-row derivative level."
+    )

@@ -1,8 +1,10 @@
 import os
 import typing
+from fractions import Fraction
 
 import pytest
-from generativeqc import Calculator
+from generativeqc import Calculator, KsOptions
+from generativeqc_compiler.method import MethodSpec, resolve_method
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_DFT_CUDA_TEST") != "1",
@@ -46,8 +48,22 @@ def test_native_cuda_dft_matches_independently_converged_cpu_endpoint(
     assert cuda.forces is None
 
 
-def test_cuda_dft_force_request_remains_outside_issue_162() -> None:
-    calculator = Calculator(method="lda-rks", basis="sto-3g", device="cuda")
+def test_cuda_scaled_dft_force_request_remains_unqualified() -> None:
+    # Ordinary LDA/PBE CUDA forces are public. Keep rejection coverage for a
+    # genuinely unqualified scaled composition on the same backend.
+    graph = resolve_method(
+        MethodSpec(
+            "half-exchange-PBE",
+            (("GGA_X_PBE", Fraction(1, 2)), ("GGA_C_PBE", Fraction(1))),
+        )
+    )
+    calculator = Calculator(
+        method="pbe-rks",
+        basis="sto-3g",
+        device="cuda",
+        ks_options=KsOptions(composition=graph),
+    )
+    assert calculator.capabilities.supported_properties == frozenset({"energy"})
     with pytest.raises(ValueError, match=r"does not support properties.*forces"):
         calculator.singlepoint(
             [("He", (0.0, 0.0, 0.0))], properties=("energy", "forces")
@@ -60,12 +76,16 @@ def test_native_cuda_dft_ragged_batch_replay_and_failure_isolation() -> None:
         [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))],
     ]
     cpu = Calculator(method="lda-rks", basis="sto-3g", device="cpu")
-    expected = [cpu.singlepoint(system).energy for system in systems]
+    expected = [
+        cpu.singlepoint(system, properties=("energy",)).energy for system in systems
+    ]
     cuda = Calculator(method="lda-rks", basis="sto-3g", device="cuda")
     with cuda.prepare_batch(systems, warm_start=True) as prepared:
-        cold = prepared.execute(strict=True)
-        warm = prepared.execute(strict=True)
-        isolated = prepared.execute(coordinates=[None, [0.0]], strict=False)
+        cold = prepared.execute(strict=True, properties=("energy",))
+        warm = prepared.execute(strict=True, properties=("energy",))
+        isolated = prepared.execute(
+            coordinates=[None, [0.0]], strict=False, properties=("energy",)
+        )
 
     assert [item.bucket_id for item in cold.items] == [0, 1]
     assert cold.energies == pytest.approx(expected, abs=2.0e-9)

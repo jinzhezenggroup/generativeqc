@@ -22,7 +22,7 @@ void validate_descriptor(const generativeqc_method_descriptor& descriptor,
                          const runtime::ExecutionContext& execution) {
   if (!execution.cuda_requested())
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "public DF-RCCSD(T) energy currently requires CUDA");
+                      "public DF-RCCSD(T) currently requires CUDA");
   if (descriptor.density_fitting_auxiliary_basis == nullptr)
     throw MethodError(GENERATIVEQC_STATUS_INVALID_ARGUMENT,
                       "DF-RCCSD(T) requires an explicit auxiliary basis");
@@ -99,18 +99,15 @@ class DfRccsdtPrepared final : public PreparedCalculation {
     std::lock_guard<std::mutex> lock(mutex_);
     last_correlation_.reset();
     last_performance_.reset();
-    if (compute_forces)
-      throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                        "public DF-RCCSD(T) forces remain unqualified; request energy only (#158)");
 #if GENERATIVEQC_HAS_CUDA
-    auto native = run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, false);
+    auto native = run_df_ccsdt_native(execution_, system_, auxiliary_, descriptor_, compute_forces);
     native.primal.triples_seconds = native.triples_seconds;
     last_correlation_ = native.correlation;
     last_performance_ = native.primal;
     return std::move(native.method_result);
 #else
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "public DF-RCCSD(T) energy requires a CUDA-enabled build");
+                      "public DF-RCCSD(T) requires a CUDA-enabled build");
 #endif
   }
 

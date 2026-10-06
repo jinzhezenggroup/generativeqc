@@ -131,7 +131,7 @@ def df_rccsd_t_energy(
 
     if compute_forces:
         raise NotImplementedError(
-            "DF-RCCSD(T) C2a is energy-only; DF analytic forces remain #158"
+            "DF-RCCSD(T) C2a is energy-only; use the public native DfRccsdt Calculator for forces"
         )
     if not isinstance(source, NativeSource):
         raise TypeError("DF-RCCSD(T) requires a live NativeSource")

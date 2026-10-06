@@ -43,7 +43,7 @@ def test_reference_setup_is_after_build_and_before_reference_tests() -> None:
         ".venv/bin/python tools/source_registry.py sync xtbloom-gfn1-d3",
     ]
     cache = python_job.split(
-        "      - name: Cache pinned GFN1 and D3 reference inputs\n", 1
+        "      - name: Restore pinned GFN1 and D3 reference inputs\n", 1
     )[1].split("      - name:", 1)[0]
     assert (
         "if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy'"
@@ -53,6 +53,21 @@ def test_reference_setup_is_after_build_and_before_reference_tests() -> None:
     assert ".cache/generativeqc-sources/xtbloom-gfn1-parameters" in cache
     assert ".cache/generativeqc-sources/xtbloom-gfn1-d3" in cache
     assert "restore-keys:" not in cache
+    assert "uses: actions/cache/restore@" in cache
+    save = python_job.split(
+        "      - name: Save pinned GFN1 and D3 reference inputs\n", 1
+    )[1].split("      - name:", 1)[0]
+    assert "uses: actions/cache/save@" in save
+    assert "key: ${{ steps.gfn1_reference_sources.outputs.cache-primary-key }}" in save
+    assert ".cache/generativeqc-sources/xtbloom-gfn1-parameters" in save
+    assert ".cache/generativeqc-sources/xtbloom-gfn1-d3" in save
+    assert "always()" not in save and "failure()" not in save
+    assert (
+        names.index("Restore pinned GFN1 and D3 reference inputs")
+        < names.index("Prepare pinned GFN1 and D3 reference inputs")
+        < names.index("Save pinned GFN1 and D3 reference inputs")
+        < names.index("Run Python tests with coverage")
+    )
     other_jobs = workflow.replace(python_job, "")
     assert "source_registry.py sync" not in other_jobs
 
@@ -99,18 +114,23 @@ def test_sync_commands_propagate_failure_before_testing(
     ["core-a", "core-b", "compiler-heavy", "posthf", "runtime-heavy", "ecp-forces"],
 )
 @pytest.mark.parametrize("cache_hit", ["true", "false", ""])
+@pytest.mark.parametrize("event", ["pull_request", "merge_group", "schedule"])
 def test_reference_guards_cover_both_consumers_and_cache_states(
-    shard: str, cache_hit: str
+    shard: str, cache_hit: str, event: str
 ) -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     for name, expected in (
         (
-            "Cache pinned GFN1 and D3 reference inputs",
+            "Restore pinned GFN1 and D3 reference inputs",
             shard in {"core-a", "core-b", "compiler-heavy"},
         ),
         (
             "Prepare pinned GFN1 and D3 reference inputs",
             shard in {"core-a", "core-b", "compiler-heavy"} and cache_hit != "true",
+        ),
+        (
+            "Save pinned GFN1 and D3 reference inputs",
+            shard == "core-a" and event != "merge_group" and cache_hit != "true",
         ),
     ):
         step = workflow.split(f"      - name: {name}\n", 1)[1].split(
@@ -119,8 +139,10 @@ def test_reference_guards_cover_both_consumers_and_cache_states(
         expression = step.split("        if: ", 1)[1].splitlines()[0]
         # These guards use the shared ==/!=/&&/|| boolean subset of Actions
         # and Bash. Evaluate the actual checked-in expressions, not a copy.
-        expression = expression.replace("matrix.shard", '"$SHARD"').replace(
-            "steps.gfn1_reference_sources.outputs.cache-hit", '"$CACHE_HIT"'
+        expression = (
+            expression.replace("matrix.shard", '"$SHARD"')
+            .replace("steps.gfn1_reference_sources.outputs.cache-hit", '"$CACHE_HIT"')
+            .replace("github.event_name", '"$EVENT"')
         )
         completed = subprocess.run(
             [
@@ -128,7 +150,7 @@ def test_reference_guards_cover_both_consumers_and_cache_states(
                 "-c",
                 f"if [[ {expression} ]]; then printf run; else printf skip; fi",
             ],
-            env={**os.environ, "SHARD": shard, "CACHE_HIT": cache_hit},
+            env={**os.environ, "SHARD": shard, "CACHE_HIT": cache_hit, "EVENT": event},
             check=True,
             capture_output=True,
             text=True,
