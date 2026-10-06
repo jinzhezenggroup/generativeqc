@@ -82,11 +82,11 @@ auto d = stationary_becke_threads;
     }
 
 
-def test_incumbent_is_byte_identical(sources):
+def test_incumbent_is_byte_identical(sources: dict[str, str]) -> None:
     assert render_trial(sources, CudaScheduleTrial()) == {}
 
 
-def test_geometry_constants_remain_coupled(sources):
+def test_geometry_constants_remain_coupled(sources: dict[str, str]) -> None:
     changed = render_trial(
         sources,
         CudaScheduleTrial(
@@ -98,7 +98,7 @@ def test_geometry_constants_remain_coupled(sources):
     )
     assert set(changed) == {RESOURCE_PATH}
     namespace = {}
-    exec(changed[RESOURCE_PATH], namespace)
+    exec(changed[RESOURCE_PATH], namespace)  # noqa: S102 - controlled fixture code
     assert namespace["GEOMETRY_THREADS"] == 64
     assert namespace["BECKE_COOPERATIVE_THREADS"] == 128
     assert namespace["BECKE_PAIR_TILE_ROWS"] == 2
@@ -125,21 +125,25 @@ def test_geometry_constants_remain_coupled(sources):
         ),
     ],
 )
-def test_source_drift_is_rejected(sources, path, old, new):
+def test_source_drift_is_rejected(
+    sources: dict[str, str], path: str, old: str, new: str
+) -> None:
     sources[path] = sources[path].replace(old, new)
     with pytest.raises(ValueError):
         render_trial(sources, CudaScheduleTrial(becke_threads=128))
 
 
-def test_grid_binds_policy_and_execution_preserving_composite(sources):
+def test_grid_binds_policy_and_execution_preserving_composite(
+    sources: dict[str, str],
+) -> None:
     trial = CudaScheduleTrial(
         grid_tile_points=1024, host_budget_mib=1024, device_budget_mib=1024
     )
     changed = render_trial(sources, trial)
     assert set(changed) == {BATCH_PATH}
     original, modified = {}, {}
-    exec(sources[BATCH_PATH], original)
-    exec(changed[BATCH_PATH], modified)
+    exec(sources[BATCH_PATH], original)  # noqa: S102 - controlled fixture code
+    exec(changed[BATCH_PATH], modified)  # noqa: S102 - controlled fixture code
     before = original["PreparedBatch"]()
     after = modified["PreparedBatch"]()
     assert before._public_dft_cuda_force(1, None) == after._public_dft_cuda_force(
@@ -153,30 +157,34 @@ def test_grid_binds_policy_and_execution_preserving_composite(sources):
     assert after.untouched() == before.untouched()
 
 
-def test_existing_tile_binding_is_updated_without_duplicate(sources):
+def test_existing_tile_binding_is_updated_without_duplicate(
+    sources: dict[str, str],
+) -> None:
     sources[BATCH_PATH] = sources[BATCH_PATH].replace(
         "kwargs = {", 'kwargs = {"tile_points": 256,'
     )
     text = render_trial(sources, CudaScheduleTrial(grid_tile_points=512))[BATCH_PATH]
     assert text.count('"tile_points"') == 1
     namespace = {}
-    exec(text, namespace)
+    exec(text, namespace)  # noqa: S102 - controlled fixture code
     assert (
         namespace["PreparedBatch"]()._public_dft_cuda_force(0, None)[1]["tile_points"]
         == 512
     )
 
 
-def test_budget_only_trial_does_not_change_tile_policy(sources):
+def test_budget_only_trial_does_not_change_tile_policy(sources: dict[str, str]) -> None:
     text = render_trial(sources, CudaScheduleTrial(device_budget_mib=1024))[BATCH_PATH]
     namespace = {}
-    exec(text, namespace)
+    exec(text, namespace)  # noqa: S102 - controlled fixture code
     workload, kwargs = namespace["PreparedBatch"]()._public_dft_cuda_force(0, None)
     assert workload == ("fixed", 256, 1 << 30, 256 << 20)
     assert "tile_points" not in kwargs
 
 
-def test_foreign_grid_structure_rejects_before_partial_changes(sources):
+def test_foreign_grid_structure_rejects_before_partial_changes(
+    sources: dict[str, str],
+) -> None:
     original = dict(sources)
     sources[BATCH_PATH] = sources[BATCH_PATH].replace(
         "kwargs = {", "kwargs = {**other,"
@@ -189,21 +197,23 @@ def test_foreign_grid_structure_rejects_before_partial_changes(sources):
 
 
 @pytest.mark.parametrize("width", [32, 64, 128])
-def test_point_width_is_scoped_to_physical_pbe(sources, width):
+def test_point_width_is_scoped_to_physical_pbe(
+    sources: dict[str, str], width: int
+) -> None:
     changed = render_trial(sources, CudaScheduleTrial(pbe_point_threads=width))
     text = changed.get(POINT_PATH, sources[POINT_PATH])
     assert f"!response ? {width} : 128;" in text
     assert ast.parse(text)
 
 
-def test_ambiguous_point_expression_rejected(sources):
+def test_ambiguous_point_expression_rejected(sources: dict[str, str]) -> None:
     sources[POINT_PATH] += "# " + POINT_ANCHOR + "\n"
     with pytest.raises(ValueError):
         render_trial(sources, CudaScheduleTrial(pbe_point_threads=64))
 
 
 @pytest.mark.parametrize("tile", [8, 16, 32])
-def test_matrix_tile_only_edits_constructor(sources, tile):
+def test_matrix_tile_only_edits_constructor(sources: dict[str, str], tile: int) -> None:
     changed = render_trial(sources, CudaScheduleTrial(xc_matrix_tile=tile))
     text = changed.get(MATRIX_PATH, sources[MATRIX_PATH])
     assert (
@@ -214,7 +224,7 @@ def test_matrix_tile_only_edits_constructor(sources, tile):
 
 @pytest.mark.parametrize("field", list(CudaScheduleTrial.__dataclass_fields__))
 @pytest.mark.parametrize("bad", [True, -1, "128", 1.5])
-def test_invalid_parameters_rejected(field, bad):
+def test_invalid_parameters_rejected(field: str, bad: object) -> None:
     with pytest.raises(ValueError):
         CudaScheduleTrial.from_payload({field: bad})
 
@@ -223,12 +233,12 @@ def test_invalid_parameters_rejected(field, bad):
     "payload",
     [[], None, {"tuning_maximum_shared_bytes": 101376}, {"direct_warp_width": 128}],
 )
-def test_unsafe_or_unknown_axes_rejected(payload):
+def test_unsafe_or_unknown_axes_rejected(payload: object) -> None:
     with pytest.raises(ValueError):
         CudaScheduleTrial.from_payload(payload)
 
 
-def test_every_finite_candidate_is_renderable(sources):
+def test_every_finite_candidate_is_renderable(sources: dict[str, str]) -> None:
     table = candidates()
     assert 1 < len(table) < 64
     for payload in table.values():
@@ -236,7 +246,7 @@ def test_every_finite_candidate_is_renderable(sources):
     assert table["incumbent"] == asdict(CudaScheduleTrial())
 
 
-def test_crlf_and_unicode_are_preserved(sources):
+def test_crlf_and_unicode_are_preserved(sources: dict[str, str]) -> None:
     sources[RESOURCE_PATH] = sources[RESOURCE_PATH].replace("\n", "\r\n")
     text = render_trial(sources, CudaScheduleTrial(becke_threads=64))[RESOURCE_PATH]
     assert text == sources[RESOURCE_PATH].replace(
@@ -248,13 +258,12 @@ def git(root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(root), *args],
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
     ).stdout.decode()
 
 
 @pytest.fixture
-def repository(tmp_path, sources):
+def repository(tmp_path: Path, sources: dict[str, str]) -> Path:
     root = tmp_path / "repository"
     root.mkdir()
     git(root, "init", "-q")
@@ -270,7 +279,9 @@ def repository(tmp_path, sources):
     return root
 
 
-def test_real_detached_worktree_preserves_invoking_checkout(repository, tmp_path):
+def test_real_detached_worktree_preserves_invoking_checkout(
+    repository: Path, tmp_path: Path
+) -> None:
     original = git(repository, "rev-parse", "HEAD").strip()
     target = tmp_path / "detached"
     result = prepare_trial(
@@ -291,7 +302,9 @@ def test_real_detached_worktree_preserves_invoking_checkout(repository, tmp_path
         prepare_trial(repository, target, CudaScheduleTrial())
 
 
-def test_dirty_checkout_rejected_before_creation(repository, tmp_path):
+def test_dirty_checkout_rejected_before_creation(
+    repository: Path, tmp_path: Path
+) -> None:
     (repository / RESOURCE_PATH).write_text("changed\n")
     target = tmp_path / "not-created"
     with pytest.raises(ValueError, match="committed"):
@@ -299,13 +312,13 @@ def test_dirty_checkout_rejected_before_creation(repository, tmp_path):
     assert not target.exists()
 
 
-def test_non_artifact_and_publication_outputs_rejected(repository):
+def test_non_artifact_and_publication_outputs_rejected(repository: Path) -> None:
     for path in ("new-trial", "benchmarks/results/new-trial"):
         with pytest.raises(ValueError):
             prepare_trial(repository, repository / path, CudaScheduleTrial())
 
 
-def test_in_repository_ignored_worktree_is_supported(repository):
+def test_in_repository_ignored_worktree_is_supported(repository: Path) -> None:
     result = prepare_trial(
         repository, repository / ".artifacts" / "trial", CudaScheduleTrial()
     )
@@ -313,7 +326,7 @@ def test_in_repository_ignored_worktree_is_supported(repository):
     assert git(repository, "status", "--porcelain").strip() == ""
 
 
-def test_actual_repository_source_contracts():
+def test_actual_repository_source_contracts() -> None:
     from tools.cuda_schedule_trials import required_paths
 
     root = Path(__file__).resolve().parents[2]

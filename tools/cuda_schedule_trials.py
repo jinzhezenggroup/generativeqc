@@ -18,7 +18,7 @@ import hashlib
 import json
 import subprocess
 from dataclasses import asdict, dataclass
-from itertools import product
+from itertools import pairwise, product
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +73,8 @@ class CudaScheduleTrial:
     @classmethod
     def from_payload(cls, payload: Any) -> CudaScheduleTrial:
         if not isinstance(payload, dict):
-            raise ValueError("trial must be a JSON object")
+            # All invalid decoded JSON values use the same CLI validation error.
+            raise ValueError("trial must be a JSON object")  # noqa: TRY004
         unknown = set(payload) - set(cls.__dataclass_fields__)
         if unknown:
             raise ValueError(f"unsupported trial fields: {sorted(unknown)}")
@@ -101,7 +102,7 @@ def _span(source: str, node: ast.expr) -> tuple[int, int]:
 
 def _rewrite(source: str, edits: list[tuple[ast.expr, str]]) -> str:
     spans = sorted((*_span(source, node), value) for node, value in edits)
-    if any(left[1] > right[0] for left, right in zip(spans, spans[1:])):
+    if any(left[1] > right[0] for left, right in pairwise(spans)):
         raise ValueError("overlapping schedule edits")
     result = source.encode("utf-8")
     for begin, end, value in reversed(spans):
@@ -388,8 +389,7 @@ def _git(root: Path, *args: str) -> str:
     return subprocess.run(
         ["git", "-C", str(root), *args],
         check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         timeout=120,
     ).stdout.decode("utf-8")
 
