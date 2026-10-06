@@ -384,11 +384,10 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
   }
 
   const auto& semilocal_metadata = dft::semilocal_family_metadata(execution_plan.semilocal_family);
-  const bool complete_cuda_nonlocal =
-      semilocal_metadata.cuda_nonlocal_correlation && execution_plan.range_exchange &&
-      execution_plan.nonlocal_correlation;
-  const bool cuda_nonlocal =
-      backend == GENERATIVEQC_BACKEND_CUDA && complete_cuda_nonlocal;
+  const bool complete_cuda_nonlocal = semilocal_metadata.cuda_nonlocal_correlation &&
+                                      execution_plan.range_exchange &&
+                                      execution_plan.nonlocal_correlation;
+  const bool cuda_nonlocal = backend == GENERATIVEQC_BACKEND_CUDA && complete_cuda_nonlocal;
   const bool scaled_or_hybrid = options.semilocal_exchange_scale != 1.0 ||
                                 options.semilocal_correlation_scale != 1.0 || fock.exchange.present;
   // AUTO is admitted per component by CudaKsPlan: Direct Coulomb J may use
@@ -400,11 +399,9 @@ scf::ScfOptions dft_options(const generativeqc_method_descriptor& descriptor,
       (options.density_fitting_mode == GENERATIVEQC_DENSITY_FITTING_NONE ||
        options.precision_mode != GENERATIVEQC_PRECISION_AUTO) &&
       fock.exchange.present;
-  const double qualified_exact_exchange =
-      semilocal_metadata.cuda_global_hybrid_exact_exchange;
+  const double qualified_exact_exchange = semilocal_metadata.cuda_global_hybrid_exact_exchange;
   const double expected_semilocal_exchange =
-      semilocal_metadata.component_coefficients_are_native_scales &&
-              qualified_exact_exchange > 0.0
+      semilocal_metadata.component_coefficients_are_native_scales && qualified_exact_exchange > 0.0
           ? 1.0 - qualified_exact_exchange
           : 1.0;
   const double spin_divisor = fock.spin == scf::FockSpin::Restricted ? 2.0 : 1.0;
@@ -769,9 +766,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const auto& metadata = dft::semilocal_family_metadata(execution_plan_.semilocal_family);
       if (execution_plan_.nonlocal_correlation && metadata.cuda_nonlocal_correlation &&
           options_.xc_execution_schedule != scf::ScfOptions::XcExecutionSchedule::DeviceFused)
-        throw MethodError(
-            GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-            "public CUDA nonlocal KS requires device-fused XC/nonlocal execution");
+        throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
+                          "public CUDA nonlocal KS requires device-fused XC/nonlocal execution");
       const auto* range = range_strategy_ ? &*range_strategy_ : nullptr;
       const auto domain = metadata.molecular_nonlocal_domain
                               ? dft::nlc::Vv10DensityDomain::MolecularV1

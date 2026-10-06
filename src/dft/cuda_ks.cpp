@@ -665,8 +665,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
     if (nonlocal_correlation) {
       const auto* family = semilocal_family_metadata_from_code(functional);
       if (!family || !family->native_nonlocal_correlation)
-        throw std::invalid_argument(
-            "CUDA KS nonlocal composition has no native family capability");
+        throw std::invalid_argument("CUDA KS nonlocal composition has no native family capability");
       device_nonlocal =
           options.xc_execution_schedule == scf::ScfOptions::XcExecutionSchedule::DeviceFused;
       const auto expected_domain = family->molecular_nonlocal_domain
@@ -1028,8 +1027,7 @@ struct CudaKsPlan::Impl : KsStateStorage {
         !fitted_coulomb && (!nonlocal_correlation || resident_nonlocal_chunk) &&
         !precision_schedule.any_lower_precision() && spins == 1 &&
         (pure_semilocal_chunk || curated_global_hybrid_chunk || rsh_chunk) &&
-        provider.system().ecp_terms.empty() &&
-        configured_chunk_width() == kCudaKsChunkCapacity;
+        provider.system().ecp_terms.empty() && configured_chunk_width() == kCudaKsChunkCapacity;
     if (device_chunk_mode) {
       const auto binding = device_chunk_binding();
       if (!device_chunk_region.matches(binding))
@@ -1452,8 +1450,8 @@ struct CudaKsPlan::Impl : KsStateStorage {
               integrate_b3lyp_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
           break;
         case SemilocalFamily::Wb97mv:
-          value = integrate_wb97mv_uks(basis, grid, host_xc_alpha, host_xc_beta,
-                                       xc_layout.tile_points);
+          value =
+              integrate_wb97mv_uks(basis, grid, host_xc_alpha, host_xc_beta, xc_layout.tile_points);
           break;
       }
       if (value.potential[0].size() != matrix || value.potential[1].size() != matrix)

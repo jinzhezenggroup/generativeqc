@@ -214,8 +214,7 @@ constexpr bool semilocal_family_supports_cuda_nonlocal_correlation(
   return semilocal_family_metadata(family).cuda_nonlocal_correlation;
 }
 
-constexpr bool semilocal_family_uses_molecular_nonlocal_domain(
-    SemilocalFamily family) noexcept {
+constexpr bool semilocal_family_uses_molecular_nonlocal_domain(SemilocalFamily family) noexcept {
   return semilocal_family_metadata(family).molecular_nonlocal_domain;
 }
 

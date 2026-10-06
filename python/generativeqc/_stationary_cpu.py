@@ -40,7 +40,6 @@ from generativeqc_compiler.method.nonlocal_correlation import (
 )
 from generativeqc_compiler.method.spec import RangeSeparatedExchangePrimitive
 from generativeqc_compiler.method.stationary_gradient import (
-    SCF_POINT_MODEL,
     StationaryGradientPlan,
     StationaryMeanField,
 )

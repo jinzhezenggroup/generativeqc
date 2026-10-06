@@ -514,8 +514,8 @@ ScfResult run_pbe0_cosx_uks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
     throw std::invalid_argument(
         "PBE0 COSX UKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
   return run_uks_impl(plan, nullptr, basis, grid, options,
-                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe),
-                      "PBE0-COSX", initial_density, nullptr);
+                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe), "PBE0-COSX",
+                      initial_density, nullptr);
 }
 
 #endif
@@ -535,8 +535,8 @@ ScfResult run_pbe_rsh_uks(const PreparedFockPlan& primary,
                           const std::vector<double>* initial_density,
                           dft::nlc::Vv10Plan* nonlocal_correlation) {
   return run_uks_impl(primary, &long_range_correction, basis, grid, options,
-                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe),
-                      "PBE-RSH", initial_density, nonlocal_correlation);
+                      SpinXcEvaluator(evaluate_pbe_xc_uks, dft::SemilocalFamily::Pbe), "PBE-RSH",
+                      initial_density, nonlocal_correlation);
 }
 ScfResult run_r2scan_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                          const dft::MolecularGrid& grid, const ScfOptions& options,
@@ -559,8 +559,8 @@ ScfResult run_b3lyp_uks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
   if (plan.strategy() != expected)
     throw std::invalid_argument("B3LYP plan does not match the generated MethodIR composition");
   return run_uks_impl(plan, nullptr, basis, grid, options,
-                      SpinXcEvaluator(evaluate_b3lyp_xc_uks, dft::SemilocalFamily::B3lyp),
-                      "B3LYP", initial_density, nullptr);
+                      SpinXcEvaluator(evaluate_b3lyp_xc_uks, dft::SemilocalFamily::B3lyp), "B3LYP",
+                      initial_density, nullptr);
 }
 
 ScfResult run_wb97mv_uks(const PreparedFockPlan& primary, const PreparedFockPlan& correction,
@@ -571,10 +571,10 @@ ScfResult run_wb97mv_uks(const PreparedFockPlan& primary, const PreparedFockPlan
   if (nonlocal.backend() != GENERATIVEQC_BACKEND_CPU_REFERENCE ||
       nonlocal.resources().point_count != grid.point_count())
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
-  return run_uks_impl(
-      primary, &correction, basis, grid, options,
-      SpinXcEvaluator(evaluate_wb97mv_xc_uks, dft::SemilocalFamily::Wb97mv), "WB97M-V",
-      initial_density, &nonlocal, dft::nlc::Vv10DensityDomain::MolecularV1);
+  return run_uks_impl(primary, &correction, basis, grid, options,
+                      SpinXcEvaluator(evaluate_wb97mv_xc_uks, dft::SemilocalFamily::Wb97mv),
+                      "WB97M-V", initial_density, &nonlocal,
+                      dft::nlc::Vv10DensityDomain::MolecularV1);
 }
 
 ScfResult run_cam_b3lyp_uks(const PreparedFockPlan& primary,

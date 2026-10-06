@@ -1021,10 +1021,10 @@ ScfResult run_lda_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
 ScfResult run_pbe_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                       const dft::MolecularGrid& grid, const ScfOptions& options,
                       const std::vector<double>* initial_density) {
-  return run_rks(plan, nullptr, basis, grid, options, initial_density,
-                 RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe,
-                                evaluate_pbe_xc_rks_cached),
-                 "PBE", nullptr);
+  return run_rks(
+      plan, nullptr, basis, grid, options, initial_density,
+      RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe, evaluate_pbe_xc_rks_cached),
+      "PBE", nullptr);
 }
 
 #if GENERATIVEQC_HAS_CUDA
@@ -1043,10 +1043,10 @@ ScfResult run_pbe0_cosx_rks(dft::PreparedCosxFockPlan& plan, const dft::AoBasis&
       options.semilocal_correlation_scale != 1.0)
     throw std::invalid_argument(
         "PBE0 COSX RKS requires 75% PBE exchange, full PBE correlation and 25% COSX exchange");
-  return run_rks(plan, nullptr, basis, grid, options, initial_density,
-                 RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe,
-                                evaluate_pbe_xc_rks_cached),
-                 "PBE0-COSX", nullptr);
+  return run_rks(
+      plan, nullptr, basis, grid, options, initial_density,
+      RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe, evaluate_pbe_xc_rks_cached),
+      "PBE0-COSX", nullptr);
 }
 
 #endif
@@ -1055,10 +1055,10 @@ ScfResult run_pbe_rks_nonlocal(const PreparedFockPlan& plan, const dft::AoBasis&
                                const dft::MolecularGrid& grid, const ScfOptions& options,
                                const std::vector<double>* initial_density,
                                dft::nlc::Vv10Plan& nonlocal_correlation) {
-  return run_rks(plan, nullptr, basis, grid, options, initial_density,
-                 RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe,
-                                evaluate_pbe_xc_rks_cached),
-                 "PBE", &nonlocal_correlation);
+  return run_rks(
+      plan, nullptr, basis, grid, options, initial_density,
+      RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe, evaluate_pbe_xc_rks_cached),
+      "PBE", &nonlocal_correlation);
 }
 
 ScfResult run_pbe_rsh_rks(const PreparedFockPlan& primary,
@@ -1066,18 +1066,18 @@ ScfResult run_pbe_rsh_rks(const PreparedFockPlan& primary,
                           const dft::MolecularGrid& grid, const ScfOptions& options,
                           const std::vector<double>* initial_density,
                           dft::nlc::Vv10Plan* nonlocal_correlation) {
-  return run_rks(primary, &long_range_correction, basis, grid, options, initial_density,
-                 RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe,
-                                evaluate_pbe_xc_rks_cached),
-                 "PBE-RSH", nonlocal_correlation);
+  return run_rks(
+      primary, &long_range_correction, basis, grid, options, initial_density,
+      RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe, evaluate_pbe_xc_rks_cached),
+      "PBE-RSH", nonlocal_correlation);
 }
 
 ScfResult run_r2scan_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
                          const dft::MolecularGrid& grid, const ScfOptions& options,
                          const std::vector<double>* initial_density) {
   return run_rks(plan, nullptr, basis, grid, options, initial_density,
-                 RksXcEvaluator(evaluate_r2scan_xc_rks, dft::SemilocalFamily::R2scan),
-                 "R2SCAN", nullptr);
+                 RksXcEvaluator(evaluate_r2scan_xc_rks, dft::SemilocalFamily::R2scan), "R2SCAN",
+                 nullptr);
 }
 
 ScfResult run_semilocal_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
@@ -1125,8 +1125,8 @@ ScfResult run_b3lyp_rks(const PreparedFockPlan& plan, const dft::AoBasis& basis,
   if (plan.strategy() != expected)
     throw std::invalid_argument("B3LYP plan does not match the generated MethodIR composition");
   return run_rks(plan, nullptr, basis, grid, options, initial_density,
-                 RksXcEvaluator(evaluate_b3lyp_xc_rks, dft::SemilocalFamily::B3lyp),
-                 "B3LYP", nullptr);
+                 RksXcEvaluator(evaluate_b3lyp_xc_rks, dft::SemilocalFamily::B3lyp), "B3LYP",
+                 nullptr);
 }
 
 ScfResult run_wb97mv_rks(const PreparedFockPlan& primary, const PreparedFockPlan& correction,
@@ -1138,8 +1138,8 @@ ScfResult run_wb97mv_rks(const PreparedFockPlan& primary, const PreparedFockPlan
       nonlocal.resources().point_count != grid.point_count())
     throw std::invalid_argument("WB97M-V nonlocal owner is incompatible with the KS grid/backend");
   return run_rks(primary, &correction, basis, grid, options, initial_density,
-                 RksXcEvaluator(evaluate_wb97mv_xc_rks, dft::SemilocalFamily::Wb97mv),
-                 "WB97M-V", &nonlocal, dft::nlc::Vv10DensityDomain::MolecularV1);
+                 RksXcEvaluator(evaluate_wb97mv_xc_rks, dft::SemilocalFamily::Wb97mv), "WB97M-V",
+                 &nonlocal, dft::nlc::Vv10DensityDomain::MolecularV1);
 }
 
 ScfResult run_cam_b3lyp_rks(const PreparedFockPlan& primary,

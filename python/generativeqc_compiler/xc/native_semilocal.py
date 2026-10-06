@@ -16,7 +16,9 @@ def native_semilocal_spec(
     if isinstance(value, FunctionalSpec):
         return value
     if not isinstance(value, str) or spin not in ("polarized", "unpolarized"):
-        raise UnsupportedXC("native semilocal selector requires a name and supported spin")
+        raise UnsupportedXC(
+            "native semilocal selector requires a name and supported spin"
+        )
     try:
         return functional(value, spin=spin)
     except UnsupportedXC:
@@ -26,7 +28,9 @@ def native_semilocal_spec(
         raise UnsupportedXC(f"unknown native semilocal family {value!r}")
     return FunctionalSpec(
         record["name"],
-        tuple((name, Fraction(coefficient)) for name, coefficient in record["components"]),
+        tuple(
+            (name, Fraction(coefficient)) for name, coefficient in record["components"]
+        ),
         spin,
         range_omega=Fraction(record["range_omega"]),
     )

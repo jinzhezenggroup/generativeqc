@@ -8,7 +8,7 @@ snapshots. Export is explicit and may transfer the final CUDA matrices.
 import ctypes as ct
 import threading
 import typing
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from hashlib import sha256
 from types import MappingProxyType
 

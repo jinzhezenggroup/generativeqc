@@ -475,11 +475,9 @@ def cpu_stationary_all_electron_force_eligible(
         and plan.exchange[0].coefficient > 0
         and plan.exchange[0].omega == 0
     )
-    nonlocal_range = (
-        plan.nonlocal_correlation is not None
-        and {term.operator for term in plan.exchange}
-        == {"short-range", "long-range"}
-    )
+    nonlocal_range = plan.nonlocal_correlation is not None and {
+        term.operator for term in plan.exchange
+    } == {"short-range", "long-range"}
     return bool(record["stationary_ecp_gradient"]) and (
         has_dispersion or full_range or nonlocal_range
     )

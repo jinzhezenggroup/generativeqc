@@ -25,6 +25,8 @@ GRID_XC_COMPILED_SCOPES = (
     "xc_points",
     "vxc_contraction",
 )
+
+
 def _point_feature_terms(functional: str) -> int:
     """Derive the legacy compiled grid-XC shape from functional ingredients."""
     legacy_grid_xc_selector(functional)

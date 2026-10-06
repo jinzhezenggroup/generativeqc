@@ -880,15 +880,15 @@ generativeqc_status generativeqc_xc_point_batch_v3(std::uint32_t functional, dou
       };
       switch (family->family) {
         case generativeqc::dft::SemilocalFamily::Lda: {
-          const auto xc = generativeqc::dft::point::evaluate(
-              false, local_rho, local_gradient, exchange_scale, correlation_scale);
+          const auto xc = generativeqc::dft::point::evaluate(false, local_rho, local_gradient,
+                                                             exchange_scale, correlation_scale);
           if (!xc.valid) throw std::runtime_error("invalid LDA point result");
           publish_gga(xc);
           break;
         }
         case generativeqc::dft::SemilocalFamily::Pbe: {
-          const auto xc = generativeqc::dft::point::evaluate(
-              true, local_rho, local_gradient, exchange_scale, correlation_scale);
+          const auto xc = generativeqc::dft::point::evaluate(true, local_rho, local_gradient,
+                                                             exchange_scale, correlation_scale);
           if (!xc.valid) throw std::runtime_error("invalid GGA point result");
           publish_gga(xc);
           break;

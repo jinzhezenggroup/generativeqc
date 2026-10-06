@@ -55,8 +55,8 @@ from generativeqc_compiler.dft.xc_schedule import (
 from .contractions import GeometryPartials
 from .integration import _tiles
 from .native import NativeContractionProgram
-from .program_ir import fixed_density_tile_program
 from .native_semilocal import legacy_grid_xc_selector
+from .program_ir import fixed_density_tile_program
 from .spec import UnsupportedXC
 
 
