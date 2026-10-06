@@ -111,3 +111,13 @@ def test_materialized_pair_recurrence_and_jk(tmp_path: Path) -> None:
             "DFT native dddd stream, RHF/UHF J/K and bounded fallbacks PASS"
             in result.stdout
         )
+    derivative = subprocess.run(
+        [str(executable), "--derivatives"],
+        capture_output=True,
+        text=True,
+        timeout=360,
+        check=False,
+    )
+    (tmp_path / "derivative-gpu.log").write_text(derivative.stdout + derivative.stderr)
+    assert derivative.returncode == 0, derivative.stdout + derivative.stderr
+    assert "RHF/UHF J'/K' and exact work PASS" in derivative.stdout

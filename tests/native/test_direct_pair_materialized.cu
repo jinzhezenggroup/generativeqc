@@ -172,6 +172,48 @@ __global__ void shared_components(DeviceBatch batch, const ActiveShellQuartetTil
       channel == 1, channel == 2, values);
 }
 
+/** Independent retained Dual3 component traversal, without shared preparation. */
+__global__ void retained_derivatives(DeviceBatch batch, ActiveShellQuartetTile task,
+                                     const double* schwarz, double threshold, double* values) {
+  const auto first_count = shell_ao_pair_count(batch, task.first_pair);
+  const auto second_count = shell_ao_pair_count(batch, task.second_pair);
+  const auto count = task.first_pair == task.second_pair ? first_count * (first_count + 1) / 2
+                                                         : first_count * second_count;
+  const auto ordinal = std::size_t(blockIdx.x) * 256 + threadIdx.x;
+  std::size_t i{}, j{}, k{}, l{};
+  if (ordinal >= count ||
+      !decode_direct_tile_ao_ordinal(batch, task, ordinal, first_count, second_count, 0,
+                                     batch.direct_nbf, i, j, k, l) ||
+      !direct_ao_quartet_survives_schwarz(schwarz, 0, batch.direct_nbf, i, j, k, l, threshold))
+    return;
+  const auto si = batch.shell_pair_first[task.first_pair],
+             sj = batch.shell_pair_second[task.first_pair];
+  const auto sk = batch.shell_pair_first[task.second_pair],
+             sl = batch.shell_pair_second[task.second_pair];
+  const std::int32_t atoms[4] = {batch.shell_atoms[si], batch.shell_atoms[sj],
+                                 batch.shell_atoms[sk], batch.shell_atoms[sl]};
+  std::int32_t unique[4];
+  const auto centers = direct_force_unique_center_atoms(atoms, unique);
+  for (unsigned center = 0; center < centers; ++center) {
+    const auto value = contracted_eri_cartesian_source_shell_class<2, 2, 2, 2, Dual3>(
+        batch, i, j, k, l, si, sj, sk, sl, std::int64_t(unique[center]) * 3);
+    values[(ordinal * 4 + center) * 3] = value.derivative_x;
+    values[(ordinal * 4 + center) * 3 + 1] = value.derivative_y;
+    values[(ordinal * 4 + center) * 3 + 2] = value.derivative_z;
+  }
+}
+
+template <bool Unrestricted>
+__global__ void shared_derivatives(DeviceBatch batch, ActiveShellQuartetTile task,
+                                   const double* schwarz, double threshold, const double* density,
+                                   const std::uint8_t* active, double* forces, unsigned channel,
+                                   MaterializedDirectPairWork* work, double* values) {
+  __shared__ MaterializedDirectPairDerivativeRecurrence shared;
+  contract_materialized_direct_pair_full_source_force<Unrestricted>(
+      batch, task, threshold, schwarz, density, active, forces, channel == 2 ? 0.0 : 0.73,
+      channel == 1 ? 0.0 : 0.29, shared, work, values);
+}
+
 std::size_t triangle_row(std::size_t ordinal) {
   std::size_t row = 0;
   while ((row + 1) * (row + 2) / 2 <= ordinal) ++row;
@@ -407,8 +449,137 @@ void qualify_dft_stream() {
 }
 #endif
 
+/** Signed primitive contractions, independent host J'/K' orbits and exact work.
+ * Repeated atoms test chain-rule seeding and translation recovery together. */
+template <bool Unrestricted>
+void qualify_derivatives(unsigned atom_layout, bool same_pair, double threshold) {
+  Fixture fixture({2, 2, 2, 2}, Unrestricted, atom_layout == 2);
+  const std::vector<std::int32_t> atoms = atom_layout == 0 ? std::vector<std::int32_t>{0, 1, 2, 3}
+                                          : atom_layout == 1
+                                              ? std::vector<std::int32_t>{0, 0, 1, 1}
+                                              : std::vector<std::int32_t>{0, 0, 0, 0};
+  fixture.batch.shell_atoms = fixture.upload(atoms);
+  build_shell_primitive_pair_cache_kernel<<<10, 32>>>(
+      fixture.batch, const_cast<PrimitivePairData*>(fixture.batch.shell_primitive_pairs));
+  const ActiveShellQuartetTile task{8U, same_pair ? 8U : 1U, 0U};
+  constexpr std::size_t first_count = 36, second_count = 36;
+  const auto count = same_pair ? first_count * (first_count + 1) / 2 : first_count * second_count;
+  const auto n = std::size_t(fixture.batch.direct_nbf), matrix = n * n;
+  const std::array<std::int32_t, 4> centers{atoms[3], atoms[2],
+                                            atoms[fixture.first_shells[task.second_pair]],
+                                            atoms[fixture.second_shells[task.second_pair]]};
+  std::vector<std::int32_t> unique;
+  for (const auto a : centers)
+    if (std::find(unique.begin(), unique.end(), a) == unique.end()) unique.push_back(a);
+  Device<double> density(fixture.host_density), schwarz(fixture.host_schwarz);
+  Device<std::uint8_t> active(std::vector<std::uint8_t>{1});
+  Device<double> expected_values(count * 12), values(count * 12), forces(24);
+  Device<MaterializedDirectPairWork> work(1);
+  retained_derivatives<<<(count + 255) / 256, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                                     expected_values.data);
+  check(cudaGetLastError());
+  check(cudaDeviceSynchronize());
+  const auto raw = expected_values.read();
+  for (unsigned channel = 0; channel < 3; ++channel) {
+    values.clear();
+    forces.clear();
+    work.clear();
+    shared_derivatives<Unrestricted><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                                 density.data, active.data, forces.data, channel,
+                                                 work.data, values.data);
+    check(cudaGetLastError());
+    check(cudaDeviceSynchronize());
+    const auto actual = values.read(), actual_forces = forces.read();
+    std::vector<double> expected_forces(24);
+    std::size_t admitted_count = 0;
+    for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+      const auto p = same_pair ? triangle_row(ordinal) : ordinal / second_count;
+      const auto q = same_pair ? ordinal - p * (p + 1) / 2 : ordinal % second_count;
+      const auto ij = host_pair(fixture, task.first_pair, p),
+                 kl = host_pair(fixture, task.second_pair, q);
+      const auto i = ij[0], j = ij[1], k = kl[0], l = kl[1];
+      const bool admitted =
+          unique.size() > 1 &&
+          fixture.host_schwarz[i + n * j] * fixture.host_schwarz[k + n * l] >= threshold;
+      if (admitted) ++admitted_count;
+      const std::set<std::array<std::size_t, 4>> orbit{{i, j, k, l}, {j, i, k, l}, {i, j, l, k},
+                                                       {j, i, l, k}, {k, l, i, j}, {l, k, i, j},
+                                                       {k, l, j, i}, {l, k, j, i}};
+      double weights[2]{};
+      for (const auto& abcd : orbit) {
+        const auto a = abcd[0], b = abcd[1], c = abcd[2], d = abcd[3];
+        const auto total = [&](std::size_t x, std::size_t y) {
+          return fixture.host_density[x + n * y] +
+                 (Unrestricted ? fixture.host_density[matrix + x + n * y] : 0.0);
+        };
+        if (channel != 2) weights[0] += 0.5 * 0.73 * total(a, b) * total(c, d);
+        if (channel != 1)
+          for (unsigned spin = 0; spin < (Unrestricted ? 2U : 1U); ++spin)
+            weights[1] += 0.5 * 0.29 * fixture.host_density[spin * matrix + a + n * c] *
+                          fixture.host_density[spin * matrix + b + n * d];
+      }
+      for (unsigned center = 0; center < unique.size(); ++center)
+        for (unsigned axis = 0; axis < 3; ++axis) {
+          const auto index = (ordinal * 4 + center) * 3 + axis;
+          close(actual[index], admitted ? raw[index] : 0.0,
+                "shared derivative differs from raw AD");
+          if (admitted)
+            for (unsigned source = 0; source < 2; ++source)
+              expected_forces[source * 12 + unique[center] * 3 + axis] -=
+                  weights[source] * raw[index];
+        }
+    }
+    for (std::size_t index = 0; index < actual_forces.size(); ++index)
+      close(actual_forces[index], expected_forces[index],
+            "shared force differs from independent orbit");
+    const auto counters = work.read()[0];
+    const auto independent = unique.size() - 1;
+    const auto live = std::size_t(admitted_count != 0);
+    if (counters.bra_preparations != 4 * independent * live ||
+        counters.coulomb_preparations != 16 * independent * live ||
+        counters.ket_preparations != counters.coulomb_preparations ||
+        counters.component_contractions != 16 * independent * admitted_count ||
+        counters.published_components != admitted_count)
+      throw std::runtime_error("materialized derivative preparation/work mismatch");
+  }
+  // An inactive claim must not publish or prepare even when cache data exists.
+  const std::uint8_t disabled = 0;
+  check(cudaMemcpy(active.data, &disabled, 1, cudaMemcpyHostToDevice));
+  forces.clear();
+  work.clear();
+  shared_derivatives<Unrestricted><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                               density.data, active.data, forces.data, 0, work.data,
+                                               nullptr);
+  check(cudaGetLastError());
+  check(cudaDeviceSynchronize());
+  if (work.read()[0].coulomb_preparations != 0)
+    throw std::runtime_error("inactive materialized derivative prepared recurrence");
+  const std::uint8_t enabled = 1;
+  check(cudaMemcpy(active.data, &enabled, 1, cudaMemcpyHostToDevice));
+  density.clear();
+  work.clear();
+  shared_derivatives<Unrestricted><<<1, 256>>>(fixture.batch, task, schwarz.data, threshold,
+                                               density.data, active.data, forces.data, 0, work.data,
+                                               nullptr);
+  check(cudaGetLastError());
+  check(cudaDeviceSynchronize());
+  if (work.read()[0].coulomb_preparations != 0)
+    throw std::runtime_error("zero-density materialized derivative prepared recurrence");
+}
+
 int main(int argc, char** argv) {
   try {
+    if (argc == 2 && std::strcmp(argv[1], "--derivatives") == 0) {
+      qualify_derivatives<false>(0, false, 0.0);
+      qualify_derivatives<true>(1, false, 0.8);
+      qualify_derivatives<false>(0, true, 0.0);
+      qualify_derivatives<true>(2, false, 0.0);
+      qualify_derivatives<false>(0, false, 2.0);
+      std::cout << "dddd derivative workspace bytes "
+                << sizeof(MaterializedDirectPairDerivativeRecurrence) << '\n';
+      std::cout << "materialized dddd derivatives, RHF/UHF J'/K' and exact work PASS\n";
+      return 0;
+    }
     if (argc == 2 && std::strcmp(argv[1], "--lifetime") == 0) {
       // Full-order numerical/memcheck/initcheck gates run independently.
       // Racecheck targets shared publication, retirement, multiple packets,

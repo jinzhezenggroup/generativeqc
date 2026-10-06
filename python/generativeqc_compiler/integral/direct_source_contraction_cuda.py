@@ -9,6 +9,9 @@ scientific source owner.
 from __future__ import annotations
 
 from .direct_pair_materialized_cuda import emit_direct_pair_materialized_support
+from .direct_pair_materialized_gradient_cuda import (
+    emit_direct_pair_materialized_gradient_support,
+)
 
 _SOURCE = r"""#pragma once
 
@@ -394,4 +397,8 @@ __device__ inline Scalar contracted_eri_cartesian_source(const DeviceBatch& batc
 def emit_direct_source_contraction_header() -> str:
     """Emit retained component lowering and shared pair-materialized support."""
 
-    return _SOURCE + emit_direct_pair_materialized_support()
+    return (
+        _SOURCE
+        + emit_direct_pair_materialized_support()
+        + emit_direct_pair_materialized_gradient_support()
+    )
