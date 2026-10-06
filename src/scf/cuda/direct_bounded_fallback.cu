@@ -13,8 +13,8 @@
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_fock_order2.cuh"
 #include "scf/cuda/direct_fock_quartet.cuh"
+#include "scf/cuda/direct_force_execution.cuh"
 #include "scf/cuda/direct_force_low_order.cuh"
-#include "scf/cuda/direct_force_low_order_sources.cuh"
 #include "scf/cuda/direct_force_order2.cuh"
 #include "scf/cuda/direct_force_order3.cuh"
 #include "scf/cuda/direct_force_order4_sources.cuh"
@@ -239,46 +239,17 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
                 radial_operator != DirectRangeOperator::FullSources) {
               continue;
             }
-            if (radial_operator == DirectRangeOperator::FullSources && angular_order <= 3U) {
-              const unsigned shell_class = direct_quartet_shell_class_device(
-                  batch.shell_angular[first_shell], batch.shell_angular[second_shell],
-                  batch.shell_angular[third_shell], batch.shell_angular[fourth_shell]);
-              contract_two_electron_force_low_order_sources<Unrestricted>(
-                  shell_class, batch, task, screening_tolerance, schwarz_bounds, density, active,
-                  output, coulomb_coefficient, exchange_coefficient);
-              continue;
-            }
-            // The combined force owner retains its qualified single-channel path.
-            const bool separate = radial_operator == DirectRangeOperator::FullSources;
-            for (unsigned source = 0; source < (separate ? 2U : 1U); ++source) {
-              const double coulomb = source == 0 ? coulomb_coefficient : 0.0;
-              const double exchange = !separate || source == 1 ? exchange_coefficient : 0.0;
-              if (coulomb == 0.0 && exchange == 0.0) continue;
-              double* source_output =
-                  output + source * static_cast<std::size_t>(batch.total_atoms) * 3U;
-              if (angular_order == 0U) {
-                contract_two_electron_force_ssss_task_scaled<Unrestricted>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    source_output, coulomb, exchange);
-              } else if (angular_order == 1U) {
-                contract_two_electron_force_psss_task_scaled<Unrestricted>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    source_output, 0U, coulomb, exchange);
-              } else if (angular_order == 2U) {
-                contract_two_electron_force_psps_task_scaled<Unrestricted>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    source_output, 0U, coulomb, exchange);
-                contract_two_electron_force_pair_order2_task_scaled<Unrestricted, kPpssShellClass>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    source_output, 0U, coulomb, exchange);
-                contract_two_electron_force_pair_order2_task_scaled<Unrestricted, kDsssShellClass>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    source_output, 0U, coulomb, exchange);
-              } else if (angular_order == 3U) {
-                contract_two_electron_force_order3_task_scaled<Unrestricted>(
-                    batch, task, screening_tolerance, schwarz_bounds, density, active,
-                    source_output, 0U, coulomb, exchange);
-              }
+            if (angular_order <= 3U) {
+              if (radial_operator == DirectRangeOperator::FullSources)
+                contract_direct_force_precontracted_task<Unrestricted,
+                                                         DirectForceOutputMode::Separate>(
+                    batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U,
+                    coulomb_coefficient, exchange_coefficient);
+              else
+                contract_direct_force_precontracted_task<Unrestricted,
+                                                         DirectForceOutputMode::Combined>(
+                    batch, task, screening_tolerance, schwarz_bounds, density, active, output, 0U,
+                    coulomb_coefficient, exchange_coefficient);
             }
           } else {
             // The scalar low-order Fock shortcuts are full-range identities.

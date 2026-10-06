@@ -1130,19 +1130,6 @@ def test_order3_force_retires_handwritten_gradient_bodies() -> None:
     assert "direct_native_order3_gradient.cuh" not in generic
 
 
-def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
-    """Keep bounded streaming disjoint from the retired order-three AO formula."""
-
-    bounded = (REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text(
-        encoding="utf-8"
-    )
-    assert "contract_two_electron_force_order3_task_scaled<Unrestricted>(" in bounded
-    dispatcher = (
-        REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_contraction.cuh"
-    ).read_text(encoding="utf-8")
-    assert "GENERATIVEQC_BOUNDED_FORCE_CASE(3)" not in dispatcher
-
-
 def test_bounded_psss_resident_path_is_allocated_and_disjoint_from_page_fallback() -> (
     None
 ):
