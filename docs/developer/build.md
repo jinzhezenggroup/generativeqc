@@ -121,11 +121,10 @@ generic CUDA path is an intentional build choice.
 
 Builds automatically prefer `sccache` and fall back to `ccache` when either
 is on `PATH`. Runtime JIT compilation uses the same precedence on artifact
-cache misses and refuses to start an uncached compiler process. The easiest
-Python/JIT setup is `python -m pip install 'generativeqc[compiler-cache]'`
-(or `python -m pip install sccache` in an existing environment). An already
-valid JIT artifact can replay without either launcher because no compilation is
-performed.
+cache misses and refuses to start an uncached compiler process. `sccache` is a base Python dependency so a normal `pip install generativeqc`
+provides the preferred launcher on supported wheel platforms; a system `ccache`
+remains the fallback. An already valid JIT artifact can replay without either
+launcher because no compilation is performed.
 
 Override native CMake builds with `-DGENERATIVEQC_COMPILER_CACHE=off` or an
 explicit executable. That CMake-only escape hatch does not weaken the runtime
