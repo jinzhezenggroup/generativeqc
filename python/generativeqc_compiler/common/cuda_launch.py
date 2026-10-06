@@ -42,14 +42,16 @@ class CudaLaunchLimits:
         if self.sm_count is not None:
             _count(self.sm_count, "sm_count", positive=True)
         if not (
-            self.warp_size <= self.maximum_threads_per_block
+            self.warp_size
+            <= self.maximum_threads_per_block
             <= self.maximum_threads_per_sm
         ):
             raise ValueError("inconsistent CUDA thread limits")
         if self.maximum_threads_per_sm % self.warp_size:
             raise ValueError("CUDA SM thread limit must contain complete warps")
         if not (
-            self.shared_memory_per_block <= self.shared_memory_per_block_optin
+            self.shared_memory_per_block
+            <= self.shared_memory_per_block_optin
             <= self.shared_memory_per_sm
         ):
             raise ValueError("inconsistent CUDA shared-memory limits")
@@ -167,7 +169,8 @@ def assess_cuda_launch(
     if grid_blocks is not None and limits.sm_count is not None:
         resident_total = min(grid_blocks, resident * limits.sm_count)
         device = (
-            resident_total * allocated_threads
+            resident_total
+            * allocated_threads
             / (limits.sm_count * limits.maximum_threads_per_sm)
         )
     return CudaLaunchAssessment(

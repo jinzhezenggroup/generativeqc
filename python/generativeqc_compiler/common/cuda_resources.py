@@ -115,7 +115,8 @@ def compiled_gpu_profitability(
         occupancy = assessment.whole_device_warp_occupancy_upper_bound
         occupancies.append(
             assessment.per_sm_warp_occupancy_upper_bound
-            if occupancy is None else occupancy
+            if occupancy is None
+            else occupancy
         )
 
     local_values = tuple(resource.local_bytes for resource in materialized)
