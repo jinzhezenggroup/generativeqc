@@ -279,7 +279,6 @@ def _access_indices(
     return result
 
 
-
 def _call_dependencies(
     expression: str,
     loop_variables: tuple[str, ...],
@@ -299,6 +298,7 @@ def _call_dependencies(
         if dependencies:
             result.append(dependencies)
     return result
+
 
 def _pure_product(
     expression: str,
