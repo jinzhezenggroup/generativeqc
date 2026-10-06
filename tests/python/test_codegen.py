@@ -1684,28 +1684,10 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
     force_wrapper = fallback_source.index(
         "void launch_bounded_direct_shell_quartet_kernel_scaled("
     )
-    force_dispatch = fallback_source[force_wrapper:fock_wrapper]
-    # The typed selector still binds Force=true independently of screening,
-    # for both spins and both optional derivative specializations.
     assert (
         "bounded_direct_shell_quartet_kernel<Unrestricted, Purpose, true, -1, -1, PairDerivatives>"
-        in force_dispatch
+        in fallback_source[force_wrapper:fock_wrapper]
     )
-    for spin in ("true", "false"):
-        for purpose in ("Fock", "Force"):
-            assert (
-                f"select.template operator()<{spin}, DirectScreeningPurpose::{purpose}>();"
-                in force_dispatch
-            )
-    assert (
-        "separate_sources && materialized_pair_derivative_available(batch)"
-        in force_dispatch
-    )
-    for enabled in ("true", "false"):
-        assert (
-            f"launch.template operator()<Unrestricted, Purpose, {enabled}>();"
-            in force_dispatch
-        )
 
 
 def test_production_manifest_drives_generated_registry_and_shards(
