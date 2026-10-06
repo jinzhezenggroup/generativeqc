@@ -456,7 +456,7 @@ def cuda_global_hybrid_force_eligible(method_ir: MethodIR) -> bool:
 
 
 def cpu_stationary_all_electron_force_eligible(
-    method_ir: MethodIR, *, has_dispersion: bool = False
+    method_ir: MethodIR, *, dispersion_method_ir: MethodIR | None = None
 ) -> bool:
     """Admit compiled CPU stationary force sources from graph capabilities.
 
@@ -464,6 +464,10 @@ def cpu_stationary_all_electron_force_eligible(
     Full-range hybrids, canonical range+nonlocal graphs and separately composed
     dispersion corrections reuse that owner without a method-name whitelist.
     """
+    correction_graph = dispersion_method_ir or method_ir
+    has_dispersion = _d4_electronic_projection(correction_graph) is not None
+    if dispersion_method_ir is not None and not has_dispersion:
+        return False
     try:
         record = _native_semilocal_record(method_ir)
         plan = compile_ks_execution_plan(method_ir)
@@ -497,6 +501,8 @@ def stationary_second_order_eligible(method_ir: MethodIR) -> bool:
         return False
     return (
         bool(record["stationary_second_order"])
+        and method_ir.spin == "unpolarized"
+        and ks_coefficients(method_ir) == (1.0, 1.0, 0.0)
         and not plan.exchange
         and plan.nonlocal_correlation is None
         and not plan.post_scf

@@ -793,7 +793,7 @@ class PreparedBatch:
             and calculator._ks_options is not None
             and cpu_stationary_all_electron_force_eligible(
                 calculator._ks_options.method_ir,
-                has_dispersion=calculator._dispersion_method_ir is not None,
+                dispersion_method_ir=calculator._dispersion_method_ir,
             )
         )
         direct_all_electron = (

@@ -288,8 +288,7 @@ constexpr bool semilocal_family_supports_cuda_nonlocal_correlation(
   return semilocal_family_metadata(family).cuda_nonlocal_correlation;
 }}
 
-constexpr bool semilocal_family_uses_molecular_nonlocal_domain(
-    SemilocalFamily family) noexcept {{
+constexpr bool semilocal_family_uses_molecular_nonlocal_domain(SemilocalFamily family) noexcept {{
   return semilocal_family_metadata(family).molecular_nonlocal_domain;
 }}
 
@@ -297,8 +296,7 @@ constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) 
   return semilocal_family_metadata(family).incremental_xc;
 }}
 
-constexpr bool semilocal_family_supports_stationary_second_order(
-    SemilocalFamily family) noexcept {{
+constexpr bool semilocal_family_supports_stationary_second_order(SemilocalFamily family) noexcept {{
   return semilocal_family_metadata(family).stationary_second_order;
 }}
 
@@ -338,13 +336,25 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
             f'        "requires_tau": {bool(item["requires_tau"])!r},',
             f'        "stationary_kernel": {json.dumps(item["stationary_kernel"])},',
             f'        "stationary_ecp_gradient": {bool(item["stationary_ecp_gradient"])!r},',
-            f'        "cuda_global_hybrid_exact_exchange": {item["cuda_global_hybrid_exact_exchange"]!r},',
+            '        "cuda_global_hybrid_exact_exchange": '
+            + (
+                "None"
+                if item["cuda_global_hybrid_exact_exchange"] is None
+                else json.dumps(item["cuda_global_hybrid_exact_exchange"])
+            )
+            + ",",
             f'        "native_range_exchange": {bool(item["native_range_exchange"])!r},',
             f'        "native_nonlocal_correlation": {bool(item["native_nonlocal_correlation"])!r},',
             f'        "cuda_nonlocal_correlation": {bool(item["cuda_nonlocal_correlation"])!r},',
             f'        "molecular_nonlocal_domain": {bool(item["molecular_nonlocal_domain"])!r},',
             f'        "incremental_xc": {bool(item["incremental_xc"])!r},',
             f'        "stationary_second_order": {bool(item["stationary_second_order"])!r},',
+            '        "cuda_fast_paths": {',
+            *(
+                f'            "{field}": {json.dumps(item["cuda_fast_paths"][field])},'
+                for field in FAST_PATH_FIELDS
+            ),
+            "        },",
             f'        "components": {component_text},',
             f'        "range_omega": {json.dumps(item["range_omega"])},',
             f'        "coefficient_policy": {json.dumps(item["coefficient_policy"])},',
@@ -394,6 +404,7 @@ def emit_python(families: tuple[dict[str, Any], ...] | None = None) -> str:
         "    molecular_nonlocal_domain: bool\n"
         "    incremental_xc: bool\n"
         "    stationary_second_order: bool\n"
+        "    cuda_fast_paths: dict[str, str]\n"
         "    components: tuple[tuple[str, str], ...]\n"
         "    range_omega: str\n"
         "    coefficient_policy: str\n"

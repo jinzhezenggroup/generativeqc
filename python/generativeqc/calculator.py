@@ -871,7 +871,7 @@ class Calculator:
             and self._ks_options is not None
             and cpu_stationary_all_electron_force_eligible(
                 self._ks_options.method_ir,
-                has_dispersion=self._dispersion_method_ir is not None,
+                dispersion_method_ir=self._dispersion_method_ir,
             )
         )
         if (

@@ -26,6 +26,7 @@ class _SemilocalFamilyFields(TypedDict):
     molecular_nonlocal_domain: bool
     incremental_xc: bool
     stationary_second_order: bool
+    cuda_fast_paths: dict[str, str]
     components: tuple[tuple[str, str], ...]
     range_omega: str
     coefficient_policy: str
@@ -57,6 +58,13 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": True,
+        "cuda_fast_paths": {
+            "component_scaling": "qualification-required",
+            "mixed_ao_precision": "qualified",
+            "mixed_density_precision": "qualified",
+            "response": "qualified",
+            "graph_replay": "qualified",
+        },
         "components": (
             ("LDA_X", "1"),
             ("LDA_C_PW", "1"),
@@ -83,6 +91,13 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": True,
         "stationary_second_order": True,
+        "cuda_fast_paths": {
+            "component_scaling": "qualified",
+            "mixed_ao_precision": "qualified",
+            "mixed_density_precision": "qualified",
+            "response": "qualified",
+            "graph_replay": "qualified",
+        },
         "components": (
             ("GGA_X_PBE", "1"),
             ("GGA_C_PBE", "1"),
@@ -109,6 +124,13 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": False,
+        "cuda_fast_paths": {
+            "component_scaling": "unavailable",
+            "mixed_ao_precision": "qualification-required",
+            "mixed_density_precision": "qualified",
+            "response": "unavailable",
+            "graph_replay": "qualification-required",
+        },
         "components": (
             ("MGGA_X_R2SCAN", "1"),
             ("MGGA_C_R2SCAN", "1"),
@@ -135,6 +157,13 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": False,
+        "cuda_fast_paths": {
+            "component_scaling": "unavailable",
+            "mixed_ao_precision": "qualification-required",
+            "mixed_density_precision": "qualification-required",
+            "response": "unavailable",
+            "graph_replay": "qualification-required",
+        },
         "components": (
             ("LDA_X", "2/25"),
             ("GGA_X_B88", "18/25"),
@@ -163,6 +192,13 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": True,
         "incremental_xc": False,
         "stationary_second_order": False,
+        "cuda_fast_paths": {
+            "component_scaling": "unavailable",
+            "mixed_ao_precision": "qualification-required",
+            "mixed_density_precision": "qualification-required",
+            "response": "unavailable",
+            "graph_replay": "qualification-required",
+        },
         "components": (
             ("MGGA_X_WB97M_V", "1"),
             ("MGGA_C_WB97M_V", "1"),

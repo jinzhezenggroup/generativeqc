@@ -111,3 +111,39 @@ def test_cuda_fast_path_capabilities_ignore_display_names() -> None:
         assert generator.cpp_fast_path_capabilities(
             renamed
         ) == generator.cpp_fast_path_capabilities(item)
+
+
+def test_python_cuda_fast_path_capability_census_is_manifest_owned() -> None:
+    assert {
+        item["name"]: item["cuda_fast_paths"] for item in SEMILOCAL_FAMILIES
+    } == CUDA_FAST_PATH_CENSUS
+
+
+def test_native_xc_dispatch_consumes_generated_capabilities() -> None:
+    from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
+
+    source = emit_native_xc_point_dispatch()
+    for item in SEMILOCAL_FAMILIES:
+        code = f"semilocal_family_code(SemilocalFamily::{item['symbol']})"
+        assert f"return &launch_points<{code}, false>;" in source
+        assert (f"return &launch_points<{code}, true>;" in source) == (
+            item["cuda_fast_paths"]["response"] == "qualified"
+        )
+
+
+def test_grid_jit_tracks_and_ships_capability_headers() -> None:
+    import re
+
+    from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+
+    _, _, headers = emit_grid_source()
+    packaged = dict(
+        re.findall(
+            r'^"([^\"]+)"\s*=\s*"([^\"]+)"$',
+            (ROOT / "pyproject.toml").read_text(),
+            re.MULTILINE,
+        )
+    )
+    for relative in ("src/dft/semilocal_family.hpp", "src/dft/xc_capabilities.hpp"):
+        assert ROOT / relative in headers
+        assert packaged[relative] == f"generativeqc_compiler/assets/{relative}"

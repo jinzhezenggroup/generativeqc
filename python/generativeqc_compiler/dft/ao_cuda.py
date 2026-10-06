@@ -1075,6 +1075,8 @@ def emit_grid_source(
             asset_path("src/runtime/resource_ledger.hpp"),
             asset_path("src/dft/grid_task_view.cuh"),
             asset_path("src/dft/xc_point.hpp"),
+            asset_path("src/dft/semilocal_family.hpp"),
+            asset_path("src/dft/xc_capabilities.hpp"),
             asset_path("src/tensor/cuda_error.hpp"),
             asset_path("src/tensor/cuda_contraction_selection.cuh"),
             asset_path("src/tensor/cuda_contraction.cuh"),

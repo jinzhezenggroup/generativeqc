@@ -361,8 +361,7 @@ def native_grid_xc_compiled_region_evidence(
         )
     if not isinstance(target, CudaTargetInfo):
         raise TypeError("native grid/XC compiled evidence requires CudaTargetInfo")
-    if functional not in _POINT_FEATURE_TERMS:
-        raise ValueError("native grid/XC compiled evidence supports only LDA/PBE")
+    _point_feature_terms(functional)
     scopes = _active_scopes(materialized, shape, functional, target)
     scope_profitability = tuple(
         _pressure_envelope(

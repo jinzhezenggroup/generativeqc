@@ -129,3 +129,43 @@ def test_cuda_rsh_admission_is_resolved_provider_capability() -> None:
     constructor_end = source.index("std::size_t atom_count()", constructor_begin)
     constructor = source[constructor_begin:constructor_end]
     assert "cuda_rsh_provider_compatible(fock_, *range_strategy_)" in constructor
+
+
+@pytest.mark.parametrize(
+    ("selector", "expected"),
+    [
+        ("lda-rks", True),
+        ("pbe-rks", True),
+        ("lda-uks", False),
+        ("pbe-uks", False),
+        ("pbe0-rks", False),
+        ("r2scan-rks", False),
+    ],
+)
+def test_stationary_second_order_preserves_spin_and_method_domain(
+    selector: str, expected: bool
+) -> None:
+    from generativeqc.ks import stationary_second_order_eligible
+
+    options = resolve_ks_options(selector, KsOptions(grid=GridSpec()))
+    assert stationary_second_order_eligible(options.method_ir) is expected
+
+
+def test_stationary_second_order_rejects_scaled_pbe() -> None:
+    from generativeqc.ks import stationary_second_order_eligible
+
+    graph = resolve_method(
+        MethodSpec(
+            "scaled-second-order",
+            (("GGA_X_PBE", Fraction(1, 2)), ("GGA_C_PBE", Fraction(1))),
+        ),
+        spin="unpolarized",
+    )
+    assert not stationary_second_order_eligible(graph)
+
+
+def test_cpu_stationary_force_preserves_intrinsic_d4_admission() -> None:
+    from generativeqc.ks import cpu_stationary_all_electron_force_eligible
+
+    options = resolve_ks_options("pbe-d4-rks", KsOptions(grid=GridSpec()))
+    assert cpu_stationary_all_electron_force_eligible(options.method_ir)
