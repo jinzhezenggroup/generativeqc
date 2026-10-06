@@ -1,0 +1,83 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Canonical scheduling and independent force gates accepted; clean complete 96 warm/moved-warm medians show >2% benefit with unchanged semantic work. Generic memory/compile promotion, cold/moved speed claims and full issue1894 closure remain out of scope.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 79441,
+      "path": "pairs-48.json.gz",
+      "role": "samples",
+      "sha256": "44c5feb2423b5b5705517b5c53238b1e49d4d68bacf81d9fb48bc98f40c6548f"
+    },
+    {
+      "bytes": 18541,
+      "path": "reference-48.json.gz",
+      "role": "input",
+      "sha256": "f527651200f09cbb598217ac9a73862567cf0c5ebbd27168802d1d867eb11c6e"
+    },
+    {
+      "bytes": 124953,
+      "path": "pairs-96.json.gz",
+      "role": "samples",
+      "sha256": "31c38b27c234910af33947ace7be8b969421956bdd7f215b36e5253f4e3346e7"
+    },
+    {
+      "bytes": 31677,
+      "path": "reference-96.json.gz",
+      "role": "input",
+      "sha256": "d041e7032dffa40a2af3d5f41608869c4552affb4c1f837c5958a691d5a0b89c"
+    },
+    {
+      "bytes": 8050,
+      "path": "qualification.json",
+      "role": "summary",
+      "sha256": "f555439759f430c11cd4c923ae94d24fc2b86ffdf2c22edf6100c0b385ee87a7"
+    },
+    {
+      "bytes": 43656,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "b3579f45fdccc40a8b30d54237a33d791e0d2b8e33a9851a5b926aeb5a6d6a40"
+    },
+    {
+      "bytes": 4605,
+      "path": "source-files.sha256",
+      "role": "input",
+      "sha256": "e0f3f166548ea8a38e0bca3d1beccc18a83720505c44fe1fe1b691183768f32b"
+    },
+    {
+      "bytes": 5290,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "e49accc3c9e5f91bd9d2a6f3a602902fb1aeb759e61698171d77096734dcbfee"
+    },
+    {
+      "bytes": 44106,
+      "path": "integration-source.patch",
+      "role": "source-patch",
+      "sha256": "78a1d22767f94cc6d1ce03367a004934d5b53dd6c9f0061a0dba195b945e22e6"
+    },
+    {
+      "bytes": 57325,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "9c060015788c8f10ffe3f57f6b7b427e4e610521a726d5defc7e23c75fbcf901"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-normalize-20261006/reproduce.sh"
+    ],
+    "prerequisites": "n2/main gpu:pro6000:1 (sm_120), CUDA 12.9, ccache, compute-sanitizer, compiler Python dependencies, CuPy and GPU4PySCF 1.8.1 for a fresh independent reference",
+    "source_restore": "Check out source.revision, apply source.patch, verify source-files.sha256; retain publication outside restored checkout. Qualification tests/docs added later are not timed scientific work."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "83109befe5b97a5542b30e169da74c81d04719e6"
+  }
+}

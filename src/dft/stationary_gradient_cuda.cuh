@@ -24,6 +24,8 @@ struct Owner {
   bool profile = false, geometry_pending = false;
   bool becke_primitive_requested = false, becke_primitive = false,
        becke_primitive_configured = false;
+  bool becke_normalize_supported = false, becke_normalize_cooperative = false,
+       becke_normalize_configured = false;
   cudaStream_t geometry_stream{};
   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
   cudaEvent_t becke_events[8]{};
@@ -238,7 +240,18 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
     profile_record(owner, owner.becke_events[2], stream);
     phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
     profile_record(owner, owner.becke_events[3], stream);
-    phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
+    if constexpr (stationary_becke_cooperative_normalize) {
+      if (owner.becke_normalize_cooperative)
+        phased_becke_normalize_cooperative<<<blocks(view.npoint,
+                                                    stationary_becke_normalize_point_lanes),
+                                             dim3(stationary_becke_normalize_point_lanes,
+                                                  128 / stationary_becke_normalize_point_lanes),
+                                             0, stream>>>(phased);
+      else
+        phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
+    } else {
+      phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
+    }
     profile_record(owner, owner.becke_events[4], stream);
     if (owner.becke_primitive) {
       phased_becke_pair<true, true><<<pair_blocks, 128, 0, stream>>>(phased);
@@ -427,6 +440,19 @@ int stationary_configure_phased_becke_v1(void* pointer, size_t bytes, char* erro
     cuda_check(cudaStreamSynchronize(owner->context.stream));
     owner->phased_bytes = bytes;
     owner->bytes += bytes;
+    if constexpr (stationary_becke_cooperative_normalize) {
+      cudaDeviceProp property{};
+      cudaFuncAttributes attributes{};
+      cuda_check(cudaGetDeviceProperties(&property, owner->context.device));
+      cuda_check(cudaFuncGetAttributes(&attributes, phased_becke_normalize_cooperative));
+      owner->becke_normalize_supported =
+          owner->atoms <= stationary_becke_normalize_max_atoms &&
+          size_t(property.maxThreadsDim[0]) >= stationary_becke_normalize_point_lanes &&
+          size_t(property.maxThreadsDim[1]) >= 128 / stationary_becke_normalize_point_lanes &&
+          property.maxThreadsPerBlock >= 128 && attributes.maxThreadsPerBlock >= 128 &&
+          attributes.sharedSizeBytes <= size_t(property.sharedMemPerBlock);
+      owner->becke_normalize_cooperative = owner->becke_normalize_supported;
+    }
     ++owner->launches;
     ++owner->synchronizations;
   });
@@ -436,6 +462,29 @@ int stationary_phased_becke_metrics_v1(void* pointer, uint64_t* output, size_t c
   if (!owner || !output || count != 2) return 1;
   output[0] = owner->phased_bytes;
   output[1] = owner->phased_batches;
+  return 0;
+}
+// Qualification may compare the two schedules, but never mutate a live
+// topology/geometry owner. Both use the same reservation and canonical AD.
+int stationary_configure_becke_normalize_v1(void* pointer, int enabled, char* error, size_t size) {
+  using namespace generativeqc_stationary_cuda;
+  auto* owner = static_cast<Owner*>(pointer);
+  return guarded(owner, error, size, [&] {
+    if (!owner || owner->topology_ready || owner->becke_normalize_configured ||
+        (enabled != 0 && enabled != 1))
+      throw std::invalid_argument("Becke normalization must be configured once before topology");
+    owner->context.check_device();
+    owner->becke_normalize_configured = true;
+    owner->becke_normalize_cooperative = enabled && owner->becke_normalize_supported;
+  });
+}
+int stationary_becke_normalize_metrics_v1(void* pointer, uint64_t* output, size_t count) {
+  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
+  if (!owner || !output || count != 4) return 1;
+  output[0] = owner->becke_normalize_supported;
+  output[1] = owner->becke_normalize_cooperative;
+  output[2] = owner->phased_batches;
+  output[3] = owner->phased_points;
   return 0;
 }
 int stationary_configure_becke_primitive_v1(void* pointer, int enabled, char* error, size_t size) {

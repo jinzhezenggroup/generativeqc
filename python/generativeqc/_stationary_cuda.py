@@ -551,9 +551,12 @@ class _CudaSources:
         cooperative_becke: bool | None = None,
         phased_becke: bool | None = None,
         becke_primitive: bool | None = None,
+        becke_normalize: bool | None = None,
     ) -> None:
         if type(integral_derivatives) is not bool:
             raise TypeError("integral_derivatives must be boolean")
+        if becke_normalize is not None and type(becke_normalize) is not bool:
+            raise TypeError("Becke normalization selection must be boolean or None")
         phased_becke = _resolve_phased_becke_policy(basis.natom, phased_becke)
         becke_primitive = _resolve_becke_primitive_policy(becke_primitive)
         self.source_names = source_names
@@ -565,6 +568,11 @@ class _CudaSources:
         self.profile_device = False
         self.handle = ct.c_void_p()
         self.library = lib = ct.CDLL(str(artifact.library))
+        configure_normalize = getattr(
+            lib, "stationary_configure_becke_normalize_v1", None
+        )
+        if becke_normalize is not None and configure_normalize is None:
+            raise ValueError("stationary artifact lacks normalization schedule control")
         self.natom, self.nao, self.point_capacity = basis.natom, basis.nao, points
         if spin_blocks not in (1, 2):
             raise ValueError("stationary CUDA requires one or two density spin blocks")
@@ -826,6 +834,16 @@ class _CudaSources:
                 "stationary_configure_becke_primitive_v1",
                 self.handle,
                 int(becke_primitive),
+            )
+        # Qualification selects a schedule only during construction. Legacy
+        # artifacts keep their serial default; never reconfigure a live owner.
+        if becke_normalize is not None:
+            assert configure_normalize is not None
+            configure_normalize.argtypes = [ct.c_void_p, ct.c_int, *tail]
+            self._call(
+                "stationary_configure_becke_normalize_v1",
+                self.handle,
+                int(becke_normalize),
             )
         if profile_device:
             self.enable_profile()
