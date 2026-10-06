@@ -474,7 +474,7 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
         "void launch_bounded_direct_shell_quartet_kernel_scaled("
     )
     assert (
-        "bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true>"
+        "bounded_direct_shell_quartet_kernel<Unrestricted, Purpose, true, -1, -1, PairDerivatives>"
         in fallback_source[force_wrapper:fock_wrapper]
     )
 

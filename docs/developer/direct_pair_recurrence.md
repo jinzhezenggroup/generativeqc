@@ -25,9 +25,24 @@ axis Gaussian arithmetic. It does not recover individual primitive coefficients
 by dividing cached products, because zero/underflow can erase those inputs.
 
 Mixed precision, missing primitive-pair storage, the separately qualified
-reachable-Coulomb/Hermite-convolution value schedules, SR/LR operators and
-derivative consumers retain their existing owners. The value switch does not
-qualify a derivative schedule or establish an endpoint speedup.
+reachable-Coulomb/Hermite-convolution value schedules and SR/LR operators retain
+their existing owners. The value switch does not select derivatives or establish
+an endpoint speedup.
+
+The separate default-off switch
+`GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES=1` is also frozen at preparation.
+It selects dddd tasks in the stationary DFT `FullSources` bounded scheduler,
+including its angular-partition qualification mode. The existing FP64 `Dual3`
+algebra shares one pair-product Hermite/Coulomb preparation for all six component
+packets and both J'/K' density channels. Distinct atom seeds collapse repeated
+shell centers; only N-1 atoms are differentiated and translation recovers the
+last. Each component retains its Schwarz and independent source-density gates.
+
+The derivative workspace is below 32 KiB, uses no global derivative tensor and
+has a separate kernel specialization so the disabled path retains its resource
+footprint. Missing primitive-pair data/offsets, reachable/convolution derivative
+schedules, non-dddd shells and other radial operators use existing consumers.
+The value and derivative switches are independently selectable.
 
 `tests/python/test_direct_pair_materialized_cuda.py` emits and checks the
 generated consumer on a GPU. Set
@@ -36,7 +51,14 @@ with `--partition=main --gres=gpu:5090:1`. To check the actual DFT native launch
 and its fallback work counts, also set
 `GENERATIVEQC_PAIR_MATERIALIZED_DFT_STREAM_OBJECT` to its compiled
 `direct_bounded_dddd.cu.o`. Compilation uses ccache and retains commands and
-before/after statistics in the pytest temporary directory.
+before/after statistics in the pytest temporary directory. The same executable's
+`--derivatives` case checks raw component derivatives, independent host source
+contractions, repeated atoms, same-pair domains and exact preparation counts.
+
+`tests/python/test_cuda_hybrid_snapshot.py::test_separate_full_range_derivatives_match_libcint`,
+enabled by `GENERATIVEQC_RESOURCE_CUDA_TEST=1` inside Slurm, exercises both
+derivative selections with one- and two-oxygen Cartesian/spherical systems and
+independent Libcint J'/K' responses. Two oxygens supply nonzero dddd derivatives.
 
 `tests/python/test_direct_pair_materialized_runtime.py`, enabled with
 `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_RUNTIME_TEST=1` in the same Slurm

@@ -267,6 +267,7 @@ unsigned direct_hermite_convolution_mode() noexcept;
 /** Default-off pair-materialized value schedule; freeze at preparation.
  * This changes recurrence lifetime, never the Direct operator or precision. */
 bool direct_pair_materialized_values_requested() noexcept;
+bool direct_pair_materialized_derivatives_requested() noexcept;
 bool resident_ppps_bra_requested() noexcept;
 bool ppps_signature_bucketing_requested() noexcept;
 bool psps_signature_bucketing_requested() noexcept;
