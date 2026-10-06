@@ -61,9 +61,18 @@ FockExecutionVariant execution_variant(const ResolvedFockBuild& strategy,
   result.one_electron_value_override = one_electron_policy.diagnostic_override;
   result.one_electron_value_capability_fallback = one_electron_policy.capability_fallback;
   if (needs(strategy.spec, FockApproximation::DensityFitted)) {
-    result.df_pair_storage = requested_df_pair_storage();
-    result.df_value_mapping = cuda_policy::df_value_mapping_requested();
-    if (strategy.spec.derivative_order || retain_df_derivatives)
+    const bool range_fitted =
+        strategy.spec.exchange.present &&
+        strategy.spec.exchange.approximation == FockApproximation::DensityFitted &&
+        strategy.spec.exchange.op != FockOperator::FullRange;
+    // The first RSH-DF owner is intentionally host-materialized: the existing
+    // generated CUDA source is full-Coulomb only. Keep packed/value-mapping
+    // policy out of this scientific identity until a range source is qualified.
+    result.df_pair_storage =
+        range_fitted ? DfPairStorage::Dense : requested_df_pair_storage();
+    result.df_value_mapping =
+        range_fitted ? 0U : cuda_policy::df_value_mapping_requested();
+    if ((strategy.spec.derivative_order || retain_df_derivatives) && !range_fitted)
       result.df_derivative_mapping = cuda_policy::df_derivative_mapping_requested();
   }
   return result;
@@ -183,6 +192,8 @@ struct PreparedFockPlan::Impl {
     if (has_df) {
       auxiliary = aux ? *aux : system;
       fitted.emplace();
+      fitted->op = fitted_operator;
+      fitted->omega = fitted_omega;
     }
     if (strategy.backend == FockBackend::Cpu) {
       auto ints = integrals::build_integrals(system, derivatives, full_exact);
@@ -197,9 +208,9 @@ struct PreparedFockPlan::Impl {
       if (has_df) {
         fitted->one_electron = std::move(ints);
         const bool materialize_df_derivatives =
-            derivatives && cpu_materialized_df_derivatives_requested();
-        fitted->raw = integrals::build_density_fitting_integrals(system, *auxiliary,
-                                                                 materialize_df_derivatives);
+            derivatives && (range_fitted || cpu_materialized_df_derivatives_requested());
+        fitted->raw = integrals::build_density_fitting_integrals(
+            system, *auxiliary, materialize_df_derivatives, fitted_range, fitted_omega);
         if (derivatives && !materialize_df_derivatives) {
           fitted->raw.ncoord = system.atoms.size() * 3U;
           fitted->df_gradient_orbital = system;
@@ -251,7 +262,7 @@ struct PreparedFockPlan::Impl {
       df_resource = {memory.free_bytes, memory.total_bytes, memory.available};
 #endif
       df_workload = {diagnostic.nbf, molecule::ao_count(*auxiliary), system.atoms.size(), 1U, 0U,
-                     df_derivatives};
+                     df_derivatives && !range_fitted};
     }
     const auto resolved_df =
         has_df ? resolve_df_budget(df_workload, df_resource, budget) : DfResolvedBudget{};
@@ -274,7 +285,8 @@ struct PreparedFockPlan::Impl {
       const auto resolved = resolve_df_subbudget(df_workload, resolved_df, diagnostic.device_bytes);
       diagnostic.response_device_bytes = resolved.response_bytes;
       const auto plan_budget = resolved.value_bytes;
-      if (!resolved.feasible || !plan_budget || (df_derivatives && !resolved.response_bytes))
+      if (!resolved.feasible || !plan_budget ||
+          (df_derivatives && !range_fitted && !resolved.response_bytes))
         throw std::bad_alloc();
       auto& data = *fitted;
       data.raw.nbf = diagnostic.nbf;
@@ -282,7 +294,12 @@ struct PreparedFockPlan::Impl {
       data.raw.ncoord = diagnostic.ncoord;
       data.metric_relative_threshold = strategy.metric_relative_threshold;
       data.resolved_budget = resolved;
-      if (df_derivatives) {
+      if (range_fitted) {
+        // Until the generated DF source accepts a range operator, materialize
+        // the exact same LR/SR metric and three-center tensor used by response.
+        data.raw = integrals::build_density_fitting_integrals(
+            system, *auxiliary, df_derivatives, fitted_range, fitted_omega);
+      } else if (df_derivatives) {
         data.df_gradient_orbital = system;
         data.df_gradient_auxiliary = *auxiliary;
         data.df_gradient_mapping = diagnostic.variant.df_derivative_mapping;
@@ -303,29 +320,41 @@ struct PreparedFockPlan::Impl {
                                                        df_retains_packed_raw(data.value_storage))
                    : plan_density_fitting_tiles(1, n, a, n, plan_budget, fixed, true);
       };
-      // Reuse the existing tile planner before and after source metadata is
-      // known. Value/response ownership comes from the shared DF resource policy.
-      (void)plan_values(data.raw.nbf, data.raw.naux, df_source_bytes(system, *auxiliary));
-      CudaDensityFittingIntegralSource* raw_source{};
-      std::vector<double> metrics;
-      std::size_t nbf{}, naux{};
-      checked(create_cuda_density_fitting_integral_source(device, {system}, {*auxiliary},
-                                                          &raw_source, metrics, nbf, naux, detail),
-              detail);
-      std::unique_ptr<CudaDensityFittingIntegralSource,
-                      decltype(&destroy_cuda_density_fitting_integral_source)>
-          source(raw_source, &destroy_cuda_density_fitting_integral_source);
-      diagnostic.fitted_source = cuda_density_fitting_integral_source_diagnostic(source.get());
-      const auto tiles =
-          plan_values(nbf, naux, cuda_density_fitting_integral_source_device_bytes(source.get()));
       CudaDensityFittingJkPlan* raw_plan{};
-      // from_source owns the transferred handle on both success and failure.
-      raw_source = source.release();
-      checked(create_cuda_density_fitting_jk_plan_from_source(
-                  device, &raw_source, 1, nbf, naux, metrics, strategy.metric_relative_threshold,
-                  tiles.auxiliary_tile, tiles.ao_pair_tile, &raw_plan, diagnostic.fitted, detail,
-                  tiles.stores_full_three_center, tiles.value_storage),
-              detail);
+      if (range_fitted) {
+        const auto tiles =
+            plan_density_fitting_tiles(1, data.raw.nbf, data.raw.naux, data.raw.nbf, plan_budget,
+                                       0, false);
+        checked(create_cuda_density_fitting_jk_plan_tiled(
+                    device, 1, data.raw.nbf, data.raw.naux, data.raw.metric,
+                    data.raw.three_center, strategy.metric_relative_threshold,
+                    tiles.auxiliary_tile, tiles.ao_pair_tile, &raw_plan, diagnostic.fitted, detail),
+                detail);
+      } else {
+        // Reuse the existing tile planner before and after source metadata is
+        // known. Value/response ownership comes from the shared DF resource policy.
+        (void)plan_values(data.raw.nbf, data.raw.naux, df_source_bytes(system, *auxiliary));
+        CudaDensityFittingIntegralSource* raw_source{};
+        std::vector<double> metrics;
+        std::size_t nbf{}, naux{};
+        checked(create_cuda_density_fitting_integral_source(
+                    device, {system}, {*auxiliary}, &raw_source, metrics, nbf, naux, detail),
+                detail);
+        std::unique_ptr<CudaDensityFittingIntegralSource,
+                        decltype(&destroy_cuda_density_fitting_integral_source)>
+            source(raw_source, &destroy_cuda_density_fitting_integral_source);
+        diagnostic.fitted_source = cuda_density_fitting_integral_source_diagnostic(source.get());
+        const auto tiles =
+            plan_values(nbf, naux, cuda_density_fitting_integral_source_device_bytes(source.get()));
+        // from_source owns the transferred handle on both success and failure.
+        raw_source = source.release();
+        checked(create_cuda_density_fitting_jk_plan_from_source(
+                    device, &raw_source, 1, nbf, naux, metrics,
+                    strategy.metric_relative_threshold, tiles.auxiliary_tile, tiles.ao_pair_tile,
+                    &raw_plan, diagnostic.fitted, detail, tiles.stores_full_three_center,
+                    tiles.value_storage),
+                detail);
+      }
       cuda_df.reset(raw_plan);
       if (!diagnostic.fitted.empty()) {
         for (auto& item : diagnostic.fitted) {
