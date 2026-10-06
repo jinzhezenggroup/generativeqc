@@ -219,12 +219,18 @@ def _discover_explicit_model_and_guess_choices(root: Path) -> dict[str, str]:
 
     fock_relative = Path("src/scf/fock_build.hpp")
     fock = _read(root / fock_relative)
+    fock = re.sub(r"//[^\n]*|/\*.*?\*/", " ", fock, flags=re.DOTALL)
     if "SeminumericalCosx" not in fock:
         raise ValueError("missing audited seminumerical COSX approximation")
+    term = re.search(
+        r"struct\s+FockTermSpec\s*\{(?P<body>.*?)\n\};", fock, flags=re.DOTALL
+    )
+    if term is None:
+        raise ValueError("missing audited FockTermSpec")
     if not re.search(
         r"FockApproximation\s+approximation\s*"
         r"(?:\{\s*FockApproximation::Exact\s*\}|=\s*FockApproximation::Exact)\s*;",
-        fock,
+        term.group("body"),
     ):
         raise ValueError("Fock approximation default drifted from Exact")
     result["public-model:cosx-exchange"] = fock_relative.as_posix()

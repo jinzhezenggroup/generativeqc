@@ -239,15 +239,27 @@ def test_public_density_fitting_default_is_audited(tmp_path: Path) -> None:
     assert any("density-fitting default drifted" in error for error in errors)
 
 
-def test_fock_approximation_default_is_audited(tmp_path: Path) -> None:
+@pytest.mark.parametrize("approximation", ["DensityFitted", "SeminumericalCosx"])
+@pytest.mark.parametrize("commented_exact", ["", "//", "/*"])
+def test_fock_approximation_default_is_audited(
+    tmp_path: Path, approximation: str, commented_exact: str
+) -> None:
     payload = _payload()
     _copy_audited_sources(payload, tmp_path)
     source = tmp_path / "src/scf/fock_build.hpp"
-    changed = source.read_text().replace(
-        "FockApproximation approximation{FockApproximation::Exact};",
-        "FockApproximation approximation{FockApproximation::DensityFitted};",
-        1,
+    original = source.read_text()
+    exact = "FockApproximation approximation{FockApproximation::Exact};"
+    replacement = (
+        f"FockApproximation approximation{{FockApproximation::{approximation}}};"
     )
+    if commented_exact:
+        suffix = " */" if commented_exact == "/*" else ""
+        replacement += f"\n  {commented_exact} {exact}{suffix}"
+    changed = original.replace(exact, replacement, 1)
+    assert changed != original
+    # The provider domain retains an independent Exact default. Neither it nor
+    # comments inside FockTermSpec may hide a changed mathematical request.
+    assert exact in changed
     source.write_text(changed)
     errors = validate_inventory(payload, root=tmp_path)
     assert any("Fock approximation default drifted" in error for error in errors)
