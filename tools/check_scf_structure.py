@@ -384,6 +384,9 @@ CUDA_ALLOWED["cuda_direct_numerics"] = (
         "scf/cuda/direct_gradient_types.cuh",
     )
 )
+# The output-layout policy is a leaf shared by device tasks and host interfaces.
+CUDA_MODULES["cuda_direct_force_sources"] = ("direct_force_sources.hpp",)
+CUDA_ALLOWED["cuda_direct_force_sources"] = ()
 CUDA_MODULES["cuda_direct_contractions"] = (
     "eri_tensor_index",
     "direct_eri_symmetry",
@@ -394,6 +397,7 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_scatter",
     "direct_force_low_order",
     "direct_force_low_order_sources",
+    "direct_force_execution",
     "direct_force_order4_sources",
     "direct_force_order5_sources",
     "direct_force_order2",
@@ -411,6 +415,7 @@ CUDA_ALLOWED["cuda_direct_contractions"] = (
         # this exact dependency does not admit integral tensors or CPU oracles.
         "integrals/range_moments.hpp",
         "scf/cuda/direct_constants.hpp",
+        "scf/cuda/direct_force_sources.hpp",
         "scf/cuda/direct_metadata.hpp",
         "scf/cuda/packed_basis.hpp",
         "scf/cuda/direct_queue_index.cuh",
@@ -456,6 +461,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "weighted_eri_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_direct_kernel_interfaces"] = (
+    "scf/cuda/direct_force_sources.hpp",
     "scf/cuda/direct_metadata.hpp",
     "scf/cuda/packed_basis.hpp",
     "scf/cuda_weighted_eri.hpp",
