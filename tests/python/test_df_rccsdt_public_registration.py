@@ -164,6 +164,14 @@ def test_public_df_rccsdt_force_matches_public_energy_difference() -> None:
     assert result.converged and result.forces is not None
     assert result.correlation is not None
     assert result.correlation.response_absolute_residual < 1e-9
+    # H2 can converge at its initial residual, so positive iteration counts
+    # are not a valid publication gate. Identity and provenance cannot come
+    # from the zero-initialized primal correlation diagnostic.
+    assert result.correlation.response_operator_hash
+    assert result.correlation.force_provenance_flags == 0xF
+    assert result.correlation.planned_endpoint_peak_bytes == (
+        result.correlation.numeric_capacity_bytes
+    )
 
     force = np.asarray(result.forces)
     analytic = -float(force[1, 2])
