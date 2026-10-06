@@ -59,9 +59,9 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
 
 
 def test_production_auto_policy_promotes_only_the_measured_large_rks_envelope() -> None:
-    assert tuple(profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES) == (
-        "sm120-ordinary-rks-second-jet-v1",
-    )
+    assert tuple(
+        profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
+    ) == ("sm120-ordinary-rks-second-jet-v1",)
 
     below_envelope = resolve_force_active_ao_policy(_workload())
     assert not below_envelope.selected
