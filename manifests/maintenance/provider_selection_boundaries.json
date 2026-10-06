@@ -96,7 +96,7 @@
       "contract": "#1890",
       "reason": "DF-CCSD(T) force method surface still carries DF/Lambda GEMM implementation selectors.",
       "selectors": {
-        "df_matrix_gemm": 2,
+        "df_matrix_gemm": 1,
         "lambda_matrix_gemm": 1
       }
     },
