@@ -10,11 +10,7 @@ from generativeqc_compiler.common.cuda_resources import KernelResources
 from generativeqc_compiler.common.cuda_target import CudaTargetInfo
 from generativeqc_compiler.common.gpu_profitability import GpuProfitability
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.xc.native_semilocal import (
-    device_feature_ingredients,
-    legacy_grid_xc_selector,
-)
-
+from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
 from .xc_contraction_cuda import DEFAULT_XC_MATRIX_SCHEDULE
 
 GRID_XC_COMPILED_RESOURCE_SCHEMA = "generativeqc.dft.grid-xc-compiled-region.v1"
