@@ -1,0 +1,32 @@
+{
+  "matrix_job": 6112,
+  "matrix_job_exit": 0,
+  "matrix_step": "StepId=6112.0 UserId=1001 StartTime=2026-10-06T00:44:28 TimeLimit=01:55:00 State=RUNNING Partition=main NodeList=node1 Nodes=1 CPUs=8 Tasks=1 Name=bash Network=(null) TRES=cpu=8,mem=24G,node=1 ResvPorts=(null) CPUFreqReq=Default Dist=Cyclic SrunHost:Pid=node1:27891 TresPerStep=cpu:8 TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8,cpu:8",
+  "matrix_environment": "node=node1\njob=6112\nstep=0\nvisible=1",
+  "allocated_runtime_device": {
+    "process_local_device": 0,
+    "pci_bus_id": "0000:21:00.0",
+    "runtime_uuid": "b'\\xd0\\xb9\\xe1\\xb7 \\x83a\\x98\\xdaP\\xc3\\xe5V\\x93i\\x1c'",
+    "visible_device_count": 1
+  },
+  "original_samples_sha256": {
+    "samples/hf-48-reference.json": "61cf97cf29eb05b5828ca6f31c958a59254438c081fd5ad39c7faaa2b729aaf6",
+    "samples/hf-48-control.json": "b396830e3b551fe849877a624f7ebad76bc50cc8127cb1496a4df3af080ced20",
+    "samples/hf-48-candidate.json": "3152af5abc3b6b51c113c219a868053258c1ce45eed50df20466cb56d79daa05",
+    "samples/hf-96-reference.json": "ebf2ccadcc196f098981c68b7156771dd7977163447c3ac254c60e92212e85f6",
+    "samples/hf-96-control.json": "e2e5d5092b44fccde99f6be16dc34afafab9f5fd4c7e084b3975756fe645ad54",
+    "samples/hf-96-candidate.json": "54ebfaae45a6938bf7784bdfce9dc71a0d2763ccfe2cf0db01a8ae8321f9b16b",
+    "samples/pbe0-48-reference.json": "1fb4703bd3bb68a86d8c715de1d1b4e2ae470196fa78a1c9fc6cf672ae0fb6b0",
+    "samples/pbe0-48-control.json": "a469f58660e92a0675072e2748d0f42e3191abe446c65dc75fd80c816a482250",
+    "samples/pbe0-48-candidate.json": "9998cfe809db8449c6d33125e13c688af303851c5c64455d7fb5f28fcae2b0ff",
+    "samples/pbe0-96-reference.json": "82a2263cdf0fab75d7a40603914bb529bf81f3b685e0bf9e85032196c7d66b7b",
+    "samples/pbe0-96-control.json": "9a07b02b0fcc9b14aae83bb472f42e7fe8bfe32f8663f5cfa05ebb227032bf6c",
+    "samples/pbe0-96-candidate.json": "b4d4b3ec8c0fd468a05cd95bba917bd9717794fb66cfe8760ee2276459bab7b2"
+  },
+  "ccache_version": "ccache version 4.5.1",
+  "matrix_drivers_sha256": [
+    "8a7758ed6db308110b7aa57d4cc77bb033e6720efe45ce963a4aa688f6586e5b  /data/jzzeng/qc-1892-p0b-cta-20261005/.artifacts/campaigns/6112-endpoints/run-endpoint-arm.py",
+    "1f3b2f47550f5da772051ee3e690dde6b1d1dc7ac3a06a4500bbbb2f1c5cbcdb  /data/jzzeng/qc-1892-p0b-cta-20261005/.artifacts/campaigns/6112-endpoints/run-matched-matrix.sh"
+  ],
+  "raw_retention": "original logs, profiler databases, compiler products and scheduler receipts remain ignored under .artifacts/p0b/"
+}

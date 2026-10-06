@@ -53,6 +53,31 @@ std::uint64_t primal_identity(const RccsdNativeState& state) {
   }
   return identity;
 }
+
+void publish_force_diagnostic(DFCCSDTResult& result) {
+  auto& diagnostic = result.correlation;
+  const auto& response = result.orbital.orbital_response;
+  diagnostic.response_iterations = response.iterations;
+  diagnostic.response_restarts = response.restarts;
+  diagnostic.response_absolute_residual =
+      std::max(response.residual_norm, result.orbital.orbital_residual);
+  diagnostic.response_relative_residual = response.relative_residual;
+  diagnostic.response_workspace_bytes = response.workspace_bytes;
+  diagnostic.measured_response_workspace_peak_bytes = response.measured_workspace_peak_bytes;
+  diagnostic.response_workspace_allocation_count = response.workspace_allocation_count;
+  diagnostic.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  diagnostic.planned_endpoint_peak_bytes = result.numeric_capacity_bytes;
+  // Complete admission includes every force phase. It is not an observed
+  // endpoint allocation peak or a derivative-only workspace measurement.
+  // The internal fixed-frame audit mode is not a converged orbital response;
+  // conversely, a qualified initial-residual solve may take zero iterations.
+  diagnostic.force_provenance_flags = response.converged() ? 0xf : 0xe;
+  std::fill_n(diagnostic.response_operator_hash, sizeof(diagnostic.response_operator_hash), '\0');
+  std::copy_n(
+      result.orbital.operator_hash.c_str(),
+      std::min(sizeof(diagnostic.response_operator_hash) - 1, result.orbital.operator_hash.size()),
+      diagnostic.response_operator_hash);
+}
 }  // namespace
 
 static DFCCSDTResult run_df_ccsdt_native_attempt(
@@ -335,7 +360,7 @@ static DFCCSDTResult run_df_ccsdt_native_attempt(
     if (!std::isfinite(value)) throw std::runtime_error("nonfinite complete DF CCSD(T) force");
   }
   result.method_result.forces = result.forces;
-  result.correlation.numeric_capacity_bytes = result.numeric_capacity_bytes;
+  publish_force_diagnostic(result);
   result.total_seconds = elapsed(started);
   return result;
 }

@@ -1,0 +1,50 @@
+{
+  "scope": "driver resource attributes only; no kernel launch or timing",
+  "slurm": {
+    "SLURM_JOB_ID": "6083",
+    "SLURM_STEP_ID": "0",
+    "CUDA_VISIBLE_DEVICES": "1"
+  },
+  "device": "NVIDIA GeForce RTX 5090",
+  "binary_sha256": "b2d9886bde67dc01f764a38f8e60dfc2461382607e1f5fe4a8eae2912b3abab3",
+  "module_sha256": "85e28ac4747d34cc966db883cee0b6e659e42f43f2a86b74a30ea67d5ff815c9",
+  "driver_reserved_shared_bytes_per_block": 1024,
+  "rows": [
+    {
+      "symbol": "_ZN12generativeqc3scf14cuda_execution35bounded_direct_shell_quartet_kernelILb0ELNS1_22DirectScreeningPurposeE1ELb1ELin1ELin1ELb0EEEvNS1_11DeviceBatchEdPKdPKNS1_22ShellPairDensityBoundsEPKjS6_S6_PKmmSB_S6_S6_PKhPdPyPNS1_28DeviceShellClassProfileEntryEddNS1_19DirectRangeOperatorEddbbNS0_6detail24BoundedDirectBlockDomainE",
+      "cuobjdump_shared_bytes": 4108,
+      "cuobjdump_stack_bytes_per_thread": 90680,
+      "driver": {
+        "application_static_shared_bytes": 3084,
+        "local_bytes_per_thread": 90680,
+        "registers_per_thread": 255
+      },
+      "shared_gap_bytes": 1024,
+      "gap_matches_measured_driver_reservation": true
+    },
+    {
+      "symbol": "_ZN12generativeqc3scf14cuda_execution35bounded_direct_shell_quartet_kernelILb0ELNS1_22DirectScreeningPurposeE1ELb1ELin1ELi0ELb1EEEvNS1_11DeviceBatchEdPKdPKNS1_22ShellPairDensityBoundsEPKjS6_S6_PKmmSB_S6_S6_PKhPdPyPNS1_28DeviceShellClassProfileEntryEddNS1_19DirectRangeOperatorEddbbNS0_6detail24BoundedDirectBlockDomainE",
+      "cuobjdump_shared_bytes": 4192,
+      "cuobjdump_stack_bytes_per_thread": 87520,
+      "driver": {
+        "application_static_shared_bytes": 3168,
+        "local_bytes_per_thread": 87520,
+        "registers_per_thread": 255
+      },
+      "shared_gap_bytes": 1024,
+      "gap_matches_measured_driver_reservation": true
+    },
+    {
+      "symbol": "_ZN12generativeqc3scf14cuda_execution35bounded_direct_shell_quartet_kernelILb0ELNS1_22DirectScreeningPurposeE1ELb1ELin1ELi4ELb1EEEvNS1_11DeviceBatchEdPKdPKNS1_22ShellPairDensityBoundsEPKjS6_S6_PKmmSB_S6_S6_PKhPdPyPNS1_28DeviceShellClassProfileEntryEddNS1_19DirectRangeOperatorEddbbNS0_6detail24BoundedDirectBlockDomainE",
+      "cuobjdump_shared_bytes": 4192,
+      "cuobjdump_stack_bytes_per_thread": 87376,
+      "driver": {
+        "application_static_shared_bytes": 3168,
+        "local_bytes_per_thread": 87376,
+        "registers_per_thread": 255
+      },
+      "shared_gap_bytes": 1024,
+      "gap_matches_measured_driver_reservation": true
+    }
+  ]
+}

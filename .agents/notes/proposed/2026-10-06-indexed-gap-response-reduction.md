@@ -377,10 +377,76 @@ Its executable SHA256 is
 `484b7de849c545bd9cd3824ceb67fea53688d1ba8d634ebf91c6152b71bf13f3`;
 ten compiled CLI rejection/acceptance tests pass. Job 2483 starts only after
 qualification success and explicitly checks the shared-primal result and
-frozen library before proceeding; its numerical outcome is still pending.
+frozen library before proceeding; its outcome is recorded separately below.
 This is a hypothesis test, not a production
 policy change or a new acceptance gate. No running candidate source/library
 is replaced, and only n2 is used.
+
+### DIIS-four cold experiment and upstream integration
+
+Job 2483 completes all four 28-AO cold cases at requested RHF energy/density
+tolerances `1e-12` / `1e-12` and reference DIIS history four. Against both
+serial references, maximum force differences are `3.598e-14` for serial,
+`4.175e-14` for parallel and `4.441e-14` for omitted; energy differences are
+zero. All reference solves take 26 iterations, with reported energy change
+zero and density RMS `1.642e-13`. These receipts still belong to the frozen
+`39bca1ae...` library and the ignored wrapper, not a production default change.
+
+The first 230-AO serial attempt again fails RHF convergence after 938.95 seconds
+at the fixed 150-iteration limit. No large CC/force result is published and
+the remaining large compositions are not attempted. Thus DIIS four does not
+repair the tightened large-reference convergence gate. The complete failed
+attempt, sampled memory and `failed:1` status are retained in
+`reference-diis4-2483/`; its report keeps
+`legacy_cold_gate_failures_superseded: false`. No acceptance criterion is
+weakened and this is not proof of the cold discrepancy's root cause.
+
+Commit `c194df14de921d3b52bc656e08a8e81ef92e8dac` publishes the diagnostic and
+the preceding qualification evidence. Its complete source patch is retained
+as `same-primal-qualified-source.patch`, with a machine-readable receipt.
+The earlier working-tree patch is retained too, but excludes files that were
+then untracked; it is not a complete reproduction patch. All 8,216 compiled
+manifest entries match this commit except the subsequently appended historical
+note. The initial/qualified manifests differ only in the Python shell-order
+fix, not in compiled scientific inputs.
+
+Upstream advances to `88589bdf46b04317cacba505cde5e39b60423286`, including
+public DF-force diagnostic publication. The only merge conflict is between
+adjacent anonymous-namespace helpers; both primal census/admission helpers
+and `publish_force_diagnostic` are retained, including the completed owner's
+publication call. This does not alter response equations or gap defaults.
+Imported historical experiment-patch whitespace is left unchanged; the
+gap PR's own diff passes whitespace checks.
+
+The combined source tree before this evidence append is
+`f754f81c686caf990a8670d41aafd4b0e5c77edb`. All 8,262 manifest entries match
+both before and after an isolated cached rebuild, without replacing the
+running experiment's checkout or library. The new library SHA256 is
+`e2d12f289c12b6e094b729bd502cff6e4c77f77db1d39a7872d67f19edd2ac64`,
+and the same-primal executable is
+`8805ab3c6ba98c9f1710d36482b119f947f8b83c672d075bcc1382c3729e56e3`.
+The build records 455 cache hits and 12 misses with verified explicit CXX/CUDA
+launchers and checkout-root normalization. Local focused/public-publication
+validation is 73 passes and 112 expected skips; compiler, SCF, vendor,
+default-promotion, cross-method, 330-file CUDA ownership, generated method
+metadata and configured formatting checks pass.
+
+This newer binary requires its own qualification; the earlier large diagnostic
+must not be relabeled as its result. Jobs 2484, 2485 and 2486 respectively run
+full native qualification, same-primal/public-force tests and memcheck, and the
+230-AO shared-primal diagnostic. They are ordered by Slurm dependencies, use
+only n2, and have explicit finite limits. Their results are pending at this
+checkpoint. The original failed cold gate and unpromoted defaults remain.
+
+Jobs 2484 and 2485 subsequently complete on the `e2d12f28...` library:
+45 native response tests, 48 independent complete-force tests across all four
+controls, and 82 memcheck tests with zero errors; separately, 15 force-owner
+tests, one public H2 force/energy finite-difference test with real published
+response diagnostics, and three new diagnostic memcheck cases with zero errors.
+The upstream public publication path is therefore checked, not dropped to
+resolve the helper conflict. Job 2486 is running on the isolated combined
+source; its large comparison is still pending. No live candidate source or
+library is overlaid when adding these historical receipts.
 
 ### Remaining gates
 
