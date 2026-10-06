@@ -84,7 +84,9 @@ class QualifiedForceActiveAoProfile:
         if not self.profile_id or not self.evidence:
             raise ValueError("qualified force active-AO profile needs evidence")
         if not self.compositions:
-            raise ValueError("qualified force active-AO profile needs an execution domain")
+            raise ValueError(
+                "qualified force active-AO profile needs an execution domain"
+            )
         if any(
             value not in _SUPPORTED_DERIVATIVE_ORDERS
             for value in self.derivative_orders
