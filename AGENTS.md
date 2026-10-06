@@ -27,8 +27,9 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 - Verify the selected launcher with `--version` before configuring or starting a
   cache-miss compile. If neither launcher is usable, report the missing prerequisite
   rather than silently starting an uncached full build or JIT compile. Python/JIT
-  environments may install the portable `sccache` wheel with
-  `python -m pip install sccache` or the `compiler-cache` project extra.
+  standard Python installations already declare the portable PyPI `sccache`
+  wheel as a base dependency; source/development environments must still verify
+  the executable rather than assuming dependency resolution succeeded.
 - Keep CMake and runtime JIT selection consistent: automatic selection is
   `sccache` then `ccache`. Configure explicit CMake launchers with the selected
   executable when reproducibility requires pinning the launcher. Verify generated
