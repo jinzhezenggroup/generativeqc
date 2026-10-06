@@ -192,3 +192,8 @@ def test_tensor_schedule_classifications_preserve_existing_decisions() -> None:
         entries["tensor-schedule:layouts"]["classification"]
         == "guarded-promotion-candidate"
     )
+    reduction = entries["tensor-lowering:reduction-provider-cub"]
+    assert reduction["classification"] == "negative-evidence"
+    assert reduction["sources"] == [
+        "python/generativeqc_compiler/tensor/cuda_reduction.py"
+    ]
