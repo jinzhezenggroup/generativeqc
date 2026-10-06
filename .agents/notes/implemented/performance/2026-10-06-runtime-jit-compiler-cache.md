@@ -19,8 +19,10 @@ the first compile for a given `PATH`. If neither launcher is usable, a cache-mis
 compile fails with an actionable prerequisite message instead of silently running
 uncached.
 
-The PyPI `sccache` wheel is exposed through the optional `compiler-cache`
-project extra for Python/JIT environments. Existing system `ccache` remains a
+The PyPI `sccache` wheel is a base Python dependency because bounded runtime JIT
+is reachable from supported production calculations, not only an advanced-user
+extension. A normal Python installation therefore supplies the preferred cache
+launcher without a separate setup step. Existing system `ccache` remains a
 supported fallback and continues to serve CI environments that already persist
 its cache.
 
@@ -33,10 +35,12 @@ source, headers, flags and environment remain the artifact identity inputs.
 
 Requiring only `ccache` would diverge from the existing CMake preference and
 would unnecessarily require a system package when a portable PyPI `sccache`
-wheel is available. Adding `sccache` to base runtime dependencies would impose
-a large tool binary on users who never request JIT. Including launcher version
-in the JIT artifact key would invalidate scientifically identical compiled
-artifacts when only the cache implementation changed.
+wheel is available. Keeping `sccache` behind an optional extra was rejected:
+bounded JIT is reachable from supported production calculations, so a standard
+installation should not discover a missing cache prerequisite only at the first
+artifact miss. Including launcher version in the JIT artifact key would
+invalidate scientifically identical compiled artifacts when only the cache
+implementation changed.
 
 ## Invariants
 
@@ -53,8 +57,8 @@ artifacts when only the cache implementation changed.
 
 Focused tests cover `sccache` preference, `ccache` fallback, fail-closed
 behavior when neither launcher exists, and CPU/CUDA adapter command wrapping.
-Repository CI already provisions `ccache`; the new optional extra provides
-`sccache` for Python/JIT installations without changing that CI cache store.
+Repository CI already provisions `ccache`; standard Python installations now
+declare `sccache` directly without changing that existing CI cache store.
 
 ## Consequences
 
