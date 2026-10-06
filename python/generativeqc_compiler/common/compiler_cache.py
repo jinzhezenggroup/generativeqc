@@ -260,7 +260,7 @@ def _run_sccache(
         tempfile.TemporaryDirectory(prefix="gqc-scc-", dir="/tmp") as folder,
     ):
         endpoint = Path(folder) / "server.sock"
-        environment = {
+        environment: dict[str, str] = {
             **os.environ,
             "SCCACHE_SERVER_UDS": str(endpoint),
             "SCCACHE_DIR": str(slot / "cache"),
