@@ -28,7 +28,14 @@ from generativeqc_compiler.integral.first_derivatives_execute import (
 from generativeqc_compiler.integral.first_derivatives_native import (
     first_component_identity,
 )
-from generativeqc_compiler.integral.first_directional import DirectionalMatrixTerm
+from generativeqc_compiler.integral.first_directional import (
+    DirectionalMatrixTerm,
+    directional_identity,
+)
+from generativeqc_compiler.integral.first_directional_execute import (
+    DirectionalFirstAccumulator,
+    compile_directional_first,
+)
 from generativeqc_compiler.integral.one_electron_derivatives import (
     build_one_electron_derivative_ir,
 )
@@ -59,6 +66,7 @@ __all__ = [
     "checked_direction",
     "checked_second_hvp_options",
     "generated_directional_semilocal_rks_integral_first_order",
+    "generated_directional_semilocal_rks_integral_first_order_cuda",
     "generated_weighted_first_integral_gradient",
     "generated_weighted_second_integral_hvp",
     "nuclear_hvp_from_topology",
@@ -302,6 +310,169 @@ def generated_directional_semilocal_rks_integral_first_order(
     vector = checked_direction(direction, len(topology.atoms))
     ao_density = _checked_ao_weight(density, topology.nbf, "RKS reference density")
     return _contract_directional_first_order(topology, ao_density, vector, cache=cache)
+
+
+def generated_directional_semilocal_rks_integral_first_order_cuda(
+    topology: RKSIntegralTopology,
+    density: typing.Any,
+    direction: typing.Any,
+    compiler: typing.Any,
+    *,
+    cache: typing.Any = ".artifacts",
+    device_id: int = 0,
+    budget_bytes: int = 64 << 20,
+    record_capacity: int = 128,
+    component_tile: int = 8,
+) -> tuple[np.ndarray, np.ndarray, dict[str, typing.Any]]:
+    """Execute the semilocal RKS integral-only nuclear RHS on generated CUDA.
+
+    Host work stages shell geometry and primitive records only. Direction
+    contraction, reference-density weighting, Cartesian normalization and AO
+    matrix accumulation execute in the common directional first-integral owner.
+    XC geometry remains a separate source.
+    """
+    from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
+
+    topology.check_current()
+    vector = checked_direction(direction, len(topology.atoms))
+    ao_density = _checked_ao_weight(density, topology.nbf, "RKS reference density")
+    if not isinstance(compiler, CudaCompilerAdapter):
+        raise TypeError(
+            "CUDA RKS directional first integrals require an explicit "
+            "CudaCompilerAdapter"
+        )
+    if type(component_tile) is not int or not 1 <= component_tile <= 8:
+        raise ValueError("directional component_tile must be between one and eight")
+
+    shells = topology.shells
+    offsets = np.cumsum((0, *topology.shell_sizes))
+    primitives = tuple(
+        normalized_radial_primitives(
+            shell.angular_momentum,
+            tuple((p.exponent, p.coefficient) for p in shell.primitives),
+        )
+        for shell in shells
+    )
+    coords = np.asarray(
+        [atom.position for atom in topology.atoms], dtype=np.float64
+    )
+    charges = np.asarray(
+        [atom.atomic_number for atom in topology.atoms], dtype=np.float64
+    )
+    programs: dict[str, typing.Any] = {}
+    cache_path = Path(cache) / "directional-first-cuda"
+    one = (DirectionalMatrixTerm(0, (0, 1)),)
+    overlap = (DirectionalMatrixTerm(1, (0, 1)),)
+
+    def compiled(
+        ir: typing.Any,
+        indices: tuple[int, ...],
+        terms: tuple[DirectionalMatrixTerm, ...],
+    ) -> typing.Any:
+        key = directional_identity(ir, indices, terms)
+        if key not in programs:
+            programs[key] = compile_directional_first(
+                ir,
+                compiler,
+                cache_path,
+                component_indices=indices,
+                terms=terms,
+            )
+        return programs[key]
+
+    seed = compiled(
+        build_one_electron_derivative_ir("overlap", (0, 0)),
+        (0,),
+        overlap,
+    )
+    with DirectionalFirstAccumulator(
+        seed,
+        nbf=topology.nbf,
+        natoms=len(topology.atoms),
+        outputs=2,
+        capacity=record_capacity,
+        device_id=device_id,
+        budget_bytes=budget_bytes,
+    ) as owner:
+        owner.reset(ao_density, vector)
+
+        def append(
+            ir: typing.Any,
+            slots: tuple[int, ...],
+            atoms: tuple[int, ...],
+            terms: tuple[DirectionalMatrixTerm, ...],
+        ) -> None:
+            count = ir.signature.component_count
+            for start in range(0, count, component_tile):
+                indices = tuple(range(start, min(start + component_tile, count)))
+                owner.append_shell(
+                    compiled(ir, indices, terms),
+                    tuple(primitives[s] for s in slots),
+                    coords[list(atoms)],
+                    offsets=tuple(int(offsets[s]) for s in slots),
+                    atoms=tuple(int(atom) for atom in atoms),
+                )
+
+        if np.any(vector):
+            for a, b in product(range(len(shells)), repeat=2):
+                angular = (shells[a].angular_momentum, shells[b].angular_momentum)
+                atoms = (shells[a].atom_index, shells[b].atom_index)
+                append(
+                    build_one_electron_derivative_ir("overlap", angular),
+                    (a, b),
+                    atoms,
+                    overlap,
+                )
+                append(
+                    build_one_electron_derivative_ir("kinetic", angular),
+                    (a, b),
+                    atoms,
+                    one,
+                )
+                for nucleus, charge in enumerate(charges):
+                    append(
+                        build_one_electron_derivative_ir(
+                            "nuclear_attraction", angular, charge=float(charge)
+                        ),
+                        (a, b),
+                        (*atoms, nucleus),
+                        one,
+                    )
+            for slots in product(range(len(shells)), repeat=4):
+                angular = tuple(shells[s].angular_momentum for s in slots)
+                atoms = tuple(shells[s].atom_index for s in slots)
+                append(
+                    build_weighted_eri_ir(angular),
+                    slots,
+                    atoms,
+                    SEMILOCAL_RKS_FIRST_ERI_TERMS,
+                )
+        matrices = owner.finish()
+        topology.check_current()
+        diagnostics = {
+            "backend": "cuda-generated-directional-first",
+            "direction_density_reduction": "cuda-generated",
+            "matrix_accumulation": "cuda",
+            "matrix_downloads": owner.statistics["matrix_downloads"],
+            "primitive_records": owner.statistics["primitive_records"],
+            "chunks": owner.statistics["chunks"],
+            "compiled_programs": len(programs),
+            "storage": dict(owner.storage),
+            "program_identities": tuple(sorted(programs)),
+            "native_artifacts": tuple(
+                sorted(
+                    artifact.native.metadata["key"]
+                    for artifact in programs.values()
+                )
+            ),
+            "raw_derivative_downloads": 0,
+            "device_id": device_id,
+            "scope": (
+                "semilocal RKS directional integral H1/S1 only; "
+                "XC geometry and CPKS remain separate"
+            ),
+        }
+    return matrices[0], matrices[1], diagnostics
 
 
 def generated_weighted_first_integral_gradient(

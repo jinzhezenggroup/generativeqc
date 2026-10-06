@@ -25,6 +25,7 @@ from .response_solver import GMRESOptions, solve, solve_many
 from .rks_hessian_integrals import (
     checked_direction,
     generated_directional_semilocal_rks_integral_first_order,
+    generated_directional_semilocal_rks_integral_first_order_cuda,
     rks_integral_topology,
 )
 from .rks_response import NativeRKSResponse
@@ -93,12 +94,14 @@ class DirectionalRKSResponse:
     overlap_derivative: np.ndarray
     response: StationaryNuclearResponse
     grid_branch_identity: str
+    integral_first_backend: str = "cpu"
 
     @property
     def diagnostics(self) -> dict[str, typing.Any]:
         return {
             "molecular_hvp": False,
             "nuclear_response_solves": 1,
+            "integral_first_backend": self.integral_first_backend,
             "xc_geometry_point_model": "native-scf-domain",
             "xc_geometry_execution": "cpu",
             "grid_response": "analytic-becke-jvp",
@@ -537,6 +540,7 @@ def _assemble_directional_rks_response(
     overlap: np.ndarray,
     solved: StationaryNuclearResponse,
     branch_identity: str,
+    integral_first_backend: str = "cpu",
 ) -> DirectionalRKSResponse:
     """Publish one immutable directional response from an already solved RHS."""
     identity = canonical_hash(
@@ -565,6 +569,7 @@ def _assemble_directional_rks_response(
         overlap_derivative=immutable(overlap),
         response=solved,
         grid_branch_identity=branch_identity,
+        integral_first_backend=integral_first_backend,
     )
 
 
@@ -575,6 +580,10 @@ def directional_rks_responses(
     cache: typing.Any = ".artifacts",
     strategy: str = "recycled",
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
+    first_budget_bytes: int = 64 << 20,
 ) -> DirectionalRKSBatchResponse:
     """Solve multiple direct LDA/PBE RKS nuclear directions in one shared call."""
     if not isinstance(operator, NativeRKSResponse):
@@ -604,11 +613,14 @@ def directional_rks_responses(
     frozen = []
     branches = []
     for vector in vectors:
-        integral, overlap = generated_directional_semilocal_rks_integral_first_order(
-            rks_integral_topology(operator),
-            operator.state.density[0],
+        integral, overlap = _directional_integral_first_order(
+            operator,
             vector,
             cache=cache,
+            first_backend=first_backend,
+            first_compiler=first_compiler,
+            first_device_id=first_device_id,
+            first_budget_bytes=first_budget_bytes,
         )
         xc, branch_identity = _native_rks_xc_geometry_direction(operator, vector)
         integrals.append(immutable(integral))
@@ -634,6 +646,7 @@ def directional_rks_responses(
             overlap,
             solved,
             branch_identity,
+            integral_first_backend=first_backend,
         )
         for vector, integral, xc, overlap, solved, branch_identity in zip(
             vectors,
@@ -662,12 +675,53 @@ def directional_rks_responses(
     )
 
 
+def _directional_integral_first_order(
+    operator: NativeRKSResponse,
+    vector: np.ndarray,
+    *,
+    cache: typing.Any,
+    first_backend: str,
+    first_compiler: typing.Any,
+    first_device_id: int,
+    first_budget_bytes: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Select one explicit generated first-integral execution backend."""
+    topology = rks_integral_topology(operator)
+    if first_backend == "cpu":
+        if first_compiler is not None:
+            raise ValueError("CPU RKS directional first integrals do not take a compiler")
+        return generated_directional_semilocal_rks_integral_first_order(
+            topology,
+            operator.state.density[0],
+            vector,
+            cache=cache,
+        )
+    if first_backend != "cuda":
+        raise ValueError("first-integral backend must be cpu or cuda")
+    integral, overlap, _ = (
+        generated_directional_semilocal_rks_integral_first_order_cuda(
+            topology,
+            operator.state.density[0],
+            vector,
+            first_compiler,
+            cache=cache,
+            device_id=first_device_id,
+            budget_bytes=first_budget_bytes,
+        )
+    )
+    return integral, overlap
+
+
 def directional_rks_response(
     operator: typing.Any,
     direction: typing.Any,
     *,
     cache: typing.Any = ".artifacts",
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
+    first_budget_bytes: int = 64 << 20,
 ) -> DirectionalRKSResponse:
     """Solve one all-electron direct LDA/PBE RKS nuclear perturbation.
 
@@ -680,14 +734,16 @@ def directional_rks_response(
     if solver_options is not None and not isinstance(solver_options, GMRESOptions):
         raise TypeError("solver_options must be GMRESOptions")
     operator.validate_current()
-    state = operator.state
     basis = operator.xc_kernel.basis
     vector = checked_direction(direction, basis.natom)
-    integral, overlap = generated_directional_semilocal_rks_integral_first_order(
-        rks_integral_topology(operator),
-        state.density[0],
+    integral, overlap = _directional_integral_first_order(
+        operator,
         vector,
         cache=cache,
+        first_backend=first_backend,
+        first_compiler=first_compiler,
+        first_device_id=first_device_id,
+        first_budget_bytes=first_budget_bytes,
     )
     xc, branch_identity = _native_rks_xc_geometry_direction(operator, vector)
     frozen = immutable(integral + xc)
@@ -706,4 +762,5 @@ def directional_rks_response(
         overlap,
         solved,
         branch_identity,
+        integral_first_backend=first_backend,
     )

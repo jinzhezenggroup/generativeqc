@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
 from generativeqc.response_solver import GMRESOptions
+import generativeqc.rks_hessian_directional as rks_directional
 from generativeqc.rks_hessian import rks_hessian, rks_hvp
 from generativeqc.rks_response import NativeRKSResponse
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter
@@ -69,6 +70,56 @@ def rks_case(
             yield operator, direction, cache
 
 
+def test_complete_rks_hvp_can_use_cuda_directional_first_integrals(
+    rks_case: tuple[NativeRKSResponse, np.ndarray, Path],
+    compiler: CudaCompilerAdapter,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    operator, direction, cache = rks_case
+    solver = GMRESOptions(atol=1e-12, rtol=1e-11)
+    expected = rks_hvp(
+        operator,
+        direction,
+        cache=cache,
+        solver_options=solver,
+    )
+
+    def forbidden(*args: object, **kwargs: object) -> object:
+        raise AssertionError("CPU directional first-integral fallback was used")
+
+    monkeypatch.setattr(
+        rks_directional,
+        "generated_directional_semilocal_rks_integral_first_order",
+        forbidden,
+    )
+    actual = rks_hvp(
+        operator,
+        direction,
+        cache=cache,
+        solver_options=solver,
+        first_backend="cuda",
+        first_compiler=compiler,
+    )
+
+    np.testing.assert_allclose(actual.value, expected.value, atol=1e-9, rtol=5e-10)
+    np.testing.assert_allclose(
+        actual.directional_response.integral_frozen_fock_derivative,
+        expected.directional_response.integral_frozen_fock_derivative,
+        atol=1e-10,
+        rtol=5e-11,
+    )
+    np.testing.assert_allclose(
+        actual.directional_response.overlap_derivative,
+        expected.directional_response.overlap_derivative,
+        atol=1e-10,
+        rtol=5e-11,
+    )
+    assert actual.directional_response.diagnostics["integral_first_backend"] == "cuda"
+    assert actual.diagnostics["directional_first_integral_backend"] == "cuda"
+    assert actual.diagnostics["response_first_integral_backend"] == "cpu"
+    assert actual.diagnostics["execution_residency"] == "mixed-host-device"
+
+
 def test_complete_rks_hvp_can_use_cuda_second_integrals(
     rks_case: tuple[NativeRKSResponse, np.ndarray, Path],
     compiler: CudaCompilerAdapter,
@@ -124,11 +175,14 @@ def test_full_rks_hessian_threads_cuda_second_integrals(
         block_size=3,
         cache=cache,
         solver_options=solver,
+        first_backend="cuda",
+        first_compiler=compiler,
         second_backend="cuda",
         second_compiler=compiler,
     )
 
     np.testing.assert_allclose(actual.matrix, expected.matrix, atol=2e-9, rtol=8e-10)
+    assert actual.diagnostics["directional_first_integral_backend"] == "cuda"
     assert actual.diagnostics["second_integral_backend"] == "cuda"
     assert actual.diagnostics["execution_residency"] == "mixed-host-device"
     assert not actual.diagnostics["posthoc_symmetrization"]

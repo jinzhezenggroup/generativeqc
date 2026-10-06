@@ -445,10 +445,14 @@ def _rks_hvp_with_response(
             "integral_providers": deepcopy(provider_diagnostics),
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace_bytes,
+            "directional_first_integral_backend": directional.integral_first_backend,
             "response_first_integral_backend": "cpu",
             "second_integral_backend": second_backend,
             "execution_residency": (
-                "mixed-host-device" if second_backend == "cuda" else "host"
+                "mixed-host-device"
+                if directional.integral_first_backend == "cuda"
+                or second_backend == "cuda"
+                else "host"
             ),
             "xc_second_order": "native-scf-point-response/analytic-grid-mixed",
             "full_molecular_hessian_allocated": False,
@@ -475,6 +479,9 @@ def rks_hvp(
     cache: typing.Any = ".artifacts",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
     second_backend: str = "cpu",
     second_compiler: typing.Any = None,
     second_device_id: int = 0,
@@ -497,6 +504,10 @@ def rks_hvp(
         vector,
         cache=cache_path,
         solver_options=solver_options,
+        first_backend=first_backend,
+        first_compiler=first_compiler,
+        first_device_id=first_device_id,
+        first_budget_bytes=integral_budget_bytes,
     )
     return _rks_hvp_with_response(
         operator,
@@ -507,8 +518,8 @@ def rks_hvp(
         response_driver_identity="native-rks-shared-cpks-direction-v1",
         nuclear_response_solves=1,
         execution=(
-            "bounded-mixed-cuda-second-rks-hvp-v1"
-            if second_backend == "cuda"
+            "bounded-mixed-cuda-integrals-rks-hvp-v1"
+            if first_backend == "cuda" or second_backend == "cuda"
             else "bounded-cpu-native-rks-hvp-v2"
         ),
         integral_budget_bytes=integral_budget_bytes,
@@ -528,6 +539,9 @@ def rks_hvp_many(
     strategy: str = "recycled",
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
     second_backend: str = "cpu",
     second_compiler: typing.Any = None,
     second_device_id: int = 0,
@@ -566,6 +580,10 @@ def rks_hvp_many(
         cache=cache_path,
         strategy=strategy,
         solver_options=solver_options,
+        first_backend=first_backend,
+        first_compiler=first_compiler,
+        first_device_id=first_device_id,
+        first_budget_bytes=integral_budget_bytes,
     )
     results = tuple(
         _rks_hvp_with_response(
@@ -577,8 +595,8 @@ def rks_hvp_many(
             response_driver_identity="native-rks-shared-cpks-multi-rhs-v1",
             nuclear_response_solves=0,
             execution=(
-                "bounded-mixed-cuda-second-rks-hvp-multi-rhs-v1"
-                if second_backend == "cuda"
+                "bounded-mixed-cuda-integrals-rks-hvp-multi-rhs-v1"
+                if first_backend == "cuda" or second_backend == "cuda"
                 else "bounded-cpu-native-rks-hvp-multi-rhs-v1"
             ),
             integral_budget_bytes=integral_budget_bytes,
@@ -616,16 +634,17 @@ def rks_hvp_many(
             "rank_deficient_rhs": directional.solve_result.rank_deficient_rhs,
             "integral_budget_bytes": integral_budget_bytes,
             "plan_weight_workspace_bound_bytes": plan_weight_workspace,
+            "directional_first_integral_backend": first_backend,
             "response_first_integral_backend": "cpu",
             "second_integral_backend": second_backend,
             "execution_residency": (
-                "mixed-host-device" if second_backend == "cuda" else "host"
+                "mixed-host-device" if first_backend == "cuda" or second_backend == "cuda" else "host"
             ),
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,
             "execution": (
-                "bounded-mixed-cuda-second-rks-hvp-multi-rhs-v1"
-                if second_backend == "cuda"
+                "bounded-mixed-cuda-integrals-rks-hvp-multi-rhs-v1"
+                if first_backend == "cuda" or second_backend == "cuda"
                 else "bounded-cpu-native-rks-hvp-multi-rhs-v1"
             ),
             "public_calculator_endpoint": _public_calculator_endpoint,
@@ -651,6 +670,9 @@ def rks_hessian(
     output_budget_bytes: int = 64 << 20,
     integral_budget_bytes: int = 64 << 20,
     solver_options: typing.Any = None,
+    first_backend: str = "cpu",
+    first_compiler: typing.Any = None,
+    first_device_id: int = 0,
     second_backend: str = "cpu",
     second_compiler: typing.Any = None,
     second_device_id: int = 0,
@@ -707,6 +729,9 @@ def rks_hessian(
             strategy=strategy,
             integral_budget_bytes=integral_budget_bytes,
             solver_options=solver_options,
+            first_backend=first_backend,
+            first_compiler=first_compiler,
+            first_device_id=first_device_id,
             second_backend=second_backend,
             second_compiler=second_compiler,
             second_device_id=second_device_id,
@@ -751,10 +776,13 @@ def rks_hessian(
             "output_peak_bound_bytes": output_peak_bound,
             "output_budget_bytes": output_budget_bytes,
             "integral_budget_bytes": integral_budget_bytes,
+            "directional_first_integral_backend": first_backend,
             "response_first_integral_backend": "cpu",
             "second_integral_backend": second_backend,
             "execution_residency": (
-                "mixed-host-device" if second_backend == "cuda" else "host"
+                "mixed-host-device"
+                if first_backend == "cuda" or second_backend == "cuda"
+                else "host"
             ),
             "raw_symmetry_error": symmetry_error,
             "posthoc_symmetrization": False,
