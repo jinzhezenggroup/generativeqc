@@ -256,10 +256,10 @@ void incremental_direct_jk_policy_resolution() {
           "ineligible lower activated incremental Direct-J/K");
 
   auto exact_spec = make_hf_fock_spec(FockSpin::Restricted);
-  require(incremental_direct_jk_exact_eligible(resolve_fock_build(exact_spec, FockBackend::Cpu)),
+  require(direct_jk_incremental_exact_eligible(resolve_fock_build(exact_spec, FockBackend::Cpu)),
           "exact Direct-J/K strategy was not recognized by shared eligibility");
   exact_spec.coulomb.approximation = FockApproximation::DensityFitted;
-  require(!incremental_direct_jk_exact_eligible(resolve_fock_build(exact_spec, FockBackend::Cpu)),
+  require(!direct_jk_incremental_exact_eligible(resolve_fock_build(exact_spec, FockBackend::Cpu)),
           "approximate J strategy passed exact incremental eligibility");
 }
 
