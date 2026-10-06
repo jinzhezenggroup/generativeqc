@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_warp_queue.cuh",
+  "reason": "CTA-local class-queue scheduling adapter and CUDA atomic/broadcast operations; it owns no screening, integral recurrence, contraction, or force equation.",
+  "regions": [],
+  "role": "runtime",
+  "subsystem": "direct_integrals"
+}
