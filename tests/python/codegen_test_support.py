@@ -7,7 +7,6 @@ This module contains only test support. Responsibility-owned tests live in focus
 from __future__ import annotations
 
 # ruff: noqa: F401  # Intentional re-exports for focused codegen test modules.
-
 import itertools
 import json
 import math
@@ -230,5 +229,3 @@ def _direct_cuda_source() -> typing.Any:
             "cuda_rhf.cpp",
         )
     )
-
-
