@@ -52,6 +52,7 @@ from generativeqc_compiler.xc.grid_native import NativeGridContraction
 from generativeqc_compiler.xc.grid_response import partition_response
 from generativeqc_compiler.xc.native import NativeContractionProgram
 
+from .ks import uses_molecular_nonlocal_domain
 from ._dft_gradient import (
     StationaryDerivativeContract,
     _native_ao_atoms,
@@ -477,7 +478,11 @@ def complete_rks_gradient_diagnostic(
     plan = StationaryGradientPlan(
         method,
         StationaryMeanField(
-            state._source._batch._calculator._ks_options.scf_domain,
+            (
+                state._source._batch._calculator._ks_options.scf_domain
+                if uses_molecular_nonlocal_domain(state._source.method_ir)
+                else SCF_POINT_MODEL
+            ),
             hamiltonian=state._source.hamiltonian,
         ),
     )
