@@ -1154,6 +1154,7 @@ macro(generativeqc_register_cuda_generated_sources target)
     OUTPUTS ${GENERATIVEQC_DF_OCCUPIED_TRIPLES_SOURCES}
     DEPENDS
       ${GENERATIVEQC_RCCSD_GENERATOR_INPUTS}
+      "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/indexed_cuda_reduction.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/scalar_cpp.py"
       "${CMAKE_CURRENT_SOURCE_DIR}/python/generativeqc_compiler/tensor/cuda_gemm.py"
     ARGS --output-dir "${CMAKE_CURRENT_BINARY_DIR}/generated")

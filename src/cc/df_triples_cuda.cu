@@ -131,15 +131,19 @@ double validate_inputs(std::size_t o, std::size_t v, std::size_t q, const Layout
 struct ResponseLayout {
   Layout value;
   std::array<std::size_t, 9> outputs{};
-  std::size_t bar_w{}, bar_v{}, bar_panel{}, packed{}, gap{}, host_bytes{}, complete{};
+  std::size_t bar_w{}, bar_v{}, bar_panel{}, packed{}, gap{}, host_bytes{}, output_bytes{},
+      complete{};
 };
 ResponseLayout response_layout(std::size_t o, std::size_t v, std::size_t q, std::size_t panels,
-                               std::size_t caller_bytes) {
+                               std::size_t caller_bytes, bool parallel_gap_reduction,
+                               bool include_gap_response) {
   ResponseLayout p;
   p.value = layout(o, v, q, panels);
   auto cursor = p.value.arena;
   std::size_t values = 0;
   for (std::size_t x = 0; x < p.outputs.size(); ++x) {
+    p.host_bytes = checked_add(p.host_bytes, bytes(p.value.sizes[x]));
+    if (!include_gap_response && x >= 7) continue;
     p.outputs[x] = reserve(cursor, bytes(p.value.sizes[x]));
     values = checked_add(values, p.value.sizes[x]);
   }
@@ -147,12 +151,18 @@ ResponseLayout response_layout(std::size_t o, std::size_t v, std::size_t q, std:
   p.bar_v = reserve(cursor, bytes(p.value.v3));
   p.bar_panel = reserve(cursor, bytes(p.value.v3));
   p.packed = reserve(cursor, bytes(checked_mul(v, v)));
-  p.gap = reserve(cursor, bytes(generated_df::gap_response_arena_elements(o, v)));
+  if (include_gap_response)
+    p.gap = reserve(cursor,
+                    bytes(generated_df::gap_response_arena_elements(o, v, parallel_gap_reduction)));
   p.value.arena = align256(cursor);
   p.value.total = checked_add(p.value.arena, provider_allowance);
-  p.host_bytes = bytes(values);
-  p.complete = checked_add(caller_bytes, checked_add(p.value.total, checked_mul(2, p.host_bytes)));
-  (void)checked_mul(43, checked_mul(p.value.tiles, p.value.v3));
+  p.output_bytes = bytes(values);
+  p.complete = checked_add(caller_bytes,
+                           checked_add(p.value.total, checked_add(p.host_bytes, p.output_bytes)));
+  const auto scalar_outputs = include_gap_response
+                                  ? generated_df::response_scalar_outputs_with_gap
+                                  : generated_df::response_scalar_outputs_without_gap;
+  (void)checked_mul(scalar_outputs, checked_mul(p.value.tiles, p.value.v3));
   // At most three forward and three reverse-regenerated panels per tile, plus
   // two factor products per distinct occupied index. Charge complete work
   // before input access even for logical shapes too large to execute.
@@ -449,13 +459,16 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
                                       const double* ovov, const double* fov, const double* t1,
                                       const double* t2, const double* eps_o, const double* eps_v,
                                       double threshold, std::size_t max_bytes, int device,
-                                      std::size_t caller_bytes, std::size_t max_panel_buffers) {
+                                      std::size_t caller_bytes, std::size_t max_panel_buffers,
+                                      bool parallel_gap_reduction, bool include_gap_response) {
   const auto started = Clock::now();
   if (!o || !v || !q || !max_bytes || device < 0 || !std::isfinite(threshold) || threshold <= 0 ||
       !max_panel_buffers || max_panel_buffers > 3)
     throw std::invalid_argument("invalid DF triples response dimensions, threshold or panel limit");
-  auto r = response_layout(o, v, q, max_panel_buffers, caller_bytes);
-  if (r.complete > max_bytes) r = response_layout(o, v, q, 1, caller_bytes);
+  auto r = response_layout(o, v, q, max_panel_buffers, caller_bytes, parallel_gap_reduction,
+                           include_gap_response);
+  if (r.complete > max_bytes)
+    r = response_layout(o, v, q, 1, caller_bytes, parallel_gap_reduction, include_gap_response);
   if (r.complete > max_bytes)
     throw std::length_error("DF triples response exceeds complete numeric budget");
   const auto& p = r.value;
@@ -467,7 +480,8 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
   const std::array<std::vector<double>*, 9> outputs{&result.bov,  &result.bvv,   &result.ovoo,
                                                     &result.ovov, &result.fov,   &result.t1,
                                                     &result.t2,   &result.eps_o, &result.eps_v};
-  for (std::size_t x = 0; x < 9; ++x) outputs[x]->resize(p.sizes[x]);
+  const std::size_t requested_outputs = include_gap_response ? 9 : 7;
+  for (std::size_t x = 0; x < requested_outputs; ++x) outputs[x]->resize(p.sizes[x]);
   int failed = 0;
   {
     runtime::CudaDeviceScope device_scope(device);
@@ -487,12 +501,13 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
     };
     for (std::size_t x = 0; x < 9; ++x) {
       *input_fields[x] = pointer(p.inputs[x]);
-      *output_fields[x] = pointer(r.outputs[x]);
+      *output_fields[x] = x < requested_outputs ? pointer(r.outputs[x]) : nullptr;
       generativeqc_tensor::cuda_check(cudaMemcpyAsync(pointer(p.inputs[x]), host[x],
                                                       bytes(p.sizes[x]), cudaMemcpyHostToDevice,
                                                       context.stream));
-      generativeqc_tensor::cuda_check(
-          cudaMemsetAsync(pointer(r.outputs[x]), 0, bytes(p.sizes[x]), context.stream));
+      if (x < requested_outputs)
+        generativeqc_tensor::cuda_check(
+            cudaMemsetAsync(pointer(r.outputs[x]), 0, bytes(p.sizes[x]), context.stream));
       d.h2d_bytes = checked_add(d.h2d_bytes, bytes(p.sizes[x]));
     }
     generativeqc_tensor::cuda_check(cudaMemsetAsync(context.error, 0, sizeof(int), context.stream));
@@ -586,15 +601,20 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
             generativeqc_tensor::cuda_check(cudaGetLastError());
             result.reverse_kernels += 3;
           }
-          generated_df::response_gap_tile(o, v, i, j, k, multiplicity, threshold, in, moments,
-                                          p.blocks, bar_v, context.error, context.stream);
-          generated_df::GapCudaState gap{
-              o, v, bar_v, pointer(r.gap), context.error, context.stream};
-          const auto gaps = generated_df::gap_response_cuda(gap);
-          scatter_gap<<<small_blocks, 256, 0, context.stream>>>(v, i, j, k, gaps, out.eps_o,
-                                                                out.eps_v, context.error);
-          generativeqc_tensor::cuda_check(cudaGetLastError());
-          result.reverse_kernels += 2 + generated_df::gap_response_operations;
+          if (include_gap_response) {
+            generated_df::response_gap_tile(o, v, i, j, k, multiplicity, threshold, in, moments,
+                                            p.blocks, bar_v, context.error, context.stream);
+            generated_df::GapCudaState gap{
+                o, v, bar_v, pointer(r.gap), context.error, context.stream, parallel_gap_reduction};
+            const auto gaps = generated_df::gap_response_cuda(gap);
+            scatter_gap<<<small_blocks, 256, 0, context.stream>>>(v, i, j, k, gaps, out.eps_o,
+                                                                  out.eps_v, context.error);
+            generativeqc_tensor::cuda_check(cudaGetLastError());
+            const auto gap_kernels =
+                generated_df::gap_response_kernel_count(o, v, parallel_gap_reduction);
+            result.reverse_kernels += 2 + gap_kernels;
+            result.gap.kernels += gap_kernels;
+          }
           for (std::size_t index = 0; index < 3; ++index) {
             if (std::find(occupied.begin(), occupied.begin() + index, occupied[index]) !=
                 occupied.begin() + index)
@@ -614,11 +634,30 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
           ++tile;
         }
     if (tile != p.tiles) throw std::logic_error("DF triples response occupied work mismatch");
+    result.gap.requested = include_gap_response;
+    if (include_gap_response) {
+      result.gap.parallel = generated_df::gap_response_parallel_selected(v, parallel_gap_reduction);
+      result.gap.schedule = result.gap.parallel
+                                ? generated_df::gap_response_parallel_schedule_identity
+                                : "serial-source-major";
+      result.gap.workspace_bytes =
+          bytes(generated_df::gap_response_arena_elements(o, v, parallel_gap_reduction));
+      result.gap.materialized_elements = checked_mul(
+          p.tiles, generated_df::gap_response_materialized_elements(o, v, parallel_gap_reduction));
+      result.gap.value_reads = checked_mul(
+          p.tiles, generated_df::gap_response_value_reads(o, v, parallel_gap_reduction));
+      result.gap.value_writes = checked_mul(
+          p.tiles, generated_df::gap_response_value_writes(o, v, parallel_gap_reduction));
+      result.gap.reduction_summands = checked_mul(
+          p.tiles, generated_df::gap_response_reduction_summands(o, v, parallel_gap_reduction));
+    } else {
+      result.gap.schedule = generated_df::response_without_gap_identity;
+    }
     reduce<<<1, 256, 0, context.stream>>>(pointer(p.energies), p.tiles, pointer(p.energy),
                                           context.error);
     generativeqc_tensor::cuda_check(cudaGetLastError());
     ++d.reduction_kernels;
-    for (std::size_t x = 0; x < 9; ++x)
+    for (std::size_t x = 0; x < requested_outputs; ++x)
       generativeqc_tensor::cuda_check(cudaMemcpyAsync(outputs[x]->data(), pointer(r.outputs[x]),
                                                       bytes(p.sizes[x]), cudaMemcpyDeviceToHost,
                                                       context.stream));
@@ -637,10 +676,13 @@ DFCudaResponseResult pullback_df_cuda(std::size_t o, std::size_t v, std::size_t 
     d.provider_retained_bytes = context.metrics.provider_retained_bytes;
     d.panel_capacity = p.panel_capacity;
     d.epilogue_points = checked_mul(p.tiles, p.v3);
-    d.d2h_bytes = checked_add(r.host_bytes, sizeof(double) + sizeof(int));
+    d.d2h_bytes = checked_add(r.output_bytes, sizeof(double) + sizeof(int));
     result.borrowed_host_bytes = r.host_bytes;
     result.numeric_capacity_bytes = r.complete;
-    result.scalar_response_evaluations = checked_mul(43, d.epilogue_points);
+    result.scalar_response_evaluations =
+        checked_mul(include_gap_response ? generated_df::response_scalar_outputs_with_gap
+                                         : generated_df::response_scalar_outputs_without_gap,
+                    d.epilogue_points);
   }
   d.seconds = std::chrono::duration<double>(Clock::now() - started).count();
   return result;

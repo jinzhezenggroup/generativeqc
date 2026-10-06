@@ -17,6 +17,11 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     if not compiler or not cache:
         pytest.skip("requires host C++ and ccache")
     header = (ROOT / "src/methods/df_ccsdt_force.hpp").read_text()
+    triples_header = (ROOT / "src/cc/df_triples.hpp").read_text()
+    assert (
+        "bool parallel_gap_reduction = true, bool include_gap_response = true"
+        in triples_header
+    )
     declaration = (
         "DFCCSDTResult run_df_ccsdt_native("
         + header.split("DFCCSDTResult run_df_ccsdt_native(", 1)[1].split(");", 1)[0]
@@ -32,17 +37,26 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     definition += (
         " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
-        "ccsd_batch_limit,derived_denominators,packed_diis}; }\n"
+        "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
+        "request_triples_gap_cotangents,descriptor.energy_tolerance,"
+        "descriptor.density_tolerance}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
         "if (argc <"
         + endpoint.split("if (argc <", 1)[1].split("    std::ifstream input", 1)[0]
     )
-    descriptor_diis = next(
+    descriptor_controls = "\n".join(
         line
         for line in endpoint.splitlines()
-        if "descriptor.ccsd_diis_history =" in line
+        if any(
+            field in line
+            for field in (
+                "descriptor.ccsd_diis_history =",
+                "descriptor.energy_tolerance =",
+                "descriptor.density_tolerance =",
+            )
+        )
     )
     assert 'field("ccsd_diis_history", diis_history);' in endpoint
     endpoint_call = (
@@ -70,7 +84,8 @@ struct DFCCSDTResult {
   unsigned diis_history;
   bool reduction;
   std::size_t batch_limit, ccsd_batch_limit;
-  bool derived_denominators, packed_diis;
+  bool derived_denominators, packed_diis, parallel_gap, request_gap;
+  double reference_energy_tolerance{}, reference_density_tolerance{};
 };
 """
         + declaration
@@ -80,10 +95,10 @@ struct DFCCSDTResult {
 generativeqc::methods::detail::DFCCSDTResult select(int argc,const char** argv) {
   generativeqc::runtime::ExecutionContext execution;
   generativeqc::core::System orbital, auxiliary;
-  generativeqc_method_descriptor descriptor;
+  generativeqc_method_descriptor descriptor{};
 """
         + selectors
-        + descriptor_diis
+        + descriptor_controls
         + "\n"
         + endpoint_call
         + r"""
@@ -100,14 +115,15 @@ int main() {
   if(options.df_matrix_gemm) return 2;
   generativeqc::runtime::ExecutionContext context;
   generativeqc::core::System system;
-  generativeqc_method_descriptor descriptor;
+  generativeqc_method_descriptor descriptor{};
   using generativeqc::methods::detail::run_df_ccsdt_native;
   auto ordinary=run_df_ccsdt_native(context,system,system,descriptor);
   auto explicit_matrix=run_df_ccsdt_native(context,system,system,descriptor,
                                          true,true,true,true,true,8);
   if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda ||
      !ordinary.derived_denominators || !explicit_matrix.derived_denominators ||
-     ordinary.packed_diis || explicit_matrix.packed_diis) return 3;
+     ordinary.packed_diis || explicit_matrix.packed_diis || !ordinary.parallel_gap ||
+     !explicit_matrix.parallel_gap || ordinary.request_gap || explicit_matrix.request_gap) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame)) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
@@ -128,7 +144,8 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction || !defaults.derived_denominators) return 9;
+     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
+     !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
@@ -271,7 +288,43 @@ int main() {
                       "6","8","0","0","2","1","7","0","0","1",token};
     try { (void)select(19,bad);return 31; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,20}) {
+  for(const char* parallel : {"0", "1"}) for(const char* requested : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           parallel,requested};
+    const auto result = select(21,selected);
+    if(result.parallel_gap != (parallel[0]=='1') || result.request_gap != (requested[0]=='1') ||
+       result.frame.resident_jk_maximum_bytes || !result.packed_diis) return 32;
+    const auto partial_gap = select(20,selected);
+    if(partial_gap.parallel_gap != (parallel[0]=='1') || partial_gap.request_gap) return 33;
+    const auto default_gap = select(19,selected);
+    if(!default_gap.parallel_gap || default_gap.request_gap) return 34;
+  }
+  for(int index : {19,20}) for(const char* token : {"", "-1", "+1", "2", "1junk", "1.0"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0","1","auto","0","1"};
+    bad[index]=token;
+    try { (void)select(21,bad);return 35; } catch(const std::invalid_argument&) {}
+  }
+  for(const char* tolerance : {"1e-12", "1e-13"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           "1","0",tolerance};
+    const auto result = select(22,selected);
+    if(result.reference_energy_tolerance != std::stod(tolerance) ||
+       result.reference_density_tolerance != std::stod(tolerance) ||
+       !result.parallel_gap || result.request_gap) return 36;
+    const auto legacy = select(21,selected);
+    if(legacy.reference_energy_tolerance != 1e-12 ||
+       legacy.reference_density_tolerance != 1e-11) return 37;
+  }
+  for(const char* tolerance : {"", "0", "-1e-13", "nan", "inf", "1e-11", "1e-13x"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0","1","auto",
+                      "0","1",tolerance};
+    try { (void)select(22,bad);return 38; } catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,23}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }
@@ -324,7 +377,8 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     definition = re.sub(r"\s*=\s*[^,)]+", "", declaration).strip().removesuffix(";")
     definition += (
         " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
-        "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis}; }\n"
+        "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis,"
+        "external_reservation_bytes}; }\n"
     )
     owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     call = "auto state =" + owner.split("auto state =", 1)[1].split(";", 1)[0] + ";\n"
@@ -346,7 +400,10 @@ struct RccsdNativeState {
   bool derived, retained, matrix;
   const core::System* auxiliary;
   bool packed;
+  std::size_t reserved;
 };
+struct DFPhysicalResponseComparison { std::size_t output_bytes; };
+std::size_t checked_add(std::size_t left, std::size_t right) { return left + right; }
 """
         + declaration
         + definition
@@ -355,7 +412,10 @@ int probe() {
   runtime::ExecutionContext execution;
   core::System system, auxiliary;
   generativeqc_method_descriptor descriptor;
+  RccsdNativeState* replay_state=nullptr;
   const std::size_t recycle_bytes=123;
+  DFPhysicalResponseComparison comparison{576};
+  for(auto* physical_replay : {static_cast<DFPhysicalResponseComparison*>(nullptr), &comparison})
   for(bool packed_diis : {false,true})
   for(bool derived_denominators : {false,true})
   for(bool forces : {false,true})
@@ -366,11 +426,12 @@ int probe() {
         + r"""
     if(state.reference_plan || state.batch!=ccsd_batch_limit ||
        state.derived!=derived_denominators || state.retained!=forces ||
-       state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary || state.packed!=packed_diis) return 1;
+       state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary || state.packed!=packed_diis ||
+       state.reserved!=recycle_bytes+(physical_replay ? physical_replay->output_bytes : 0)) return 1;
   }
   const auto ordinary=run_rccsd_native_state(execution,system,descriptor);
   if(ordinary.reference_plan || ordinary.batch!=8 || !ordinary.derived ||
-     ordinary.retained || !ordinary.matrix || ordinary.auxiliary || ordinary.packed) return 2;
+     ordinary.retained || !ordinary.matrix || ordinary.auxiliary || ordinary.packed || ordinary.reserved) return 2;
   scf::CudaRhfBucketPlan resident;
   auto* reference=&resident;
   const auto explicit_state=run_rccsd_native_state(execution,system,descriptor,
