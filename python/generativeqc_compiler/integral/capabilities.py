@@ -303,9 +303,21 @@ def query_integral_capability(
         integral.recurrence.startswith("rys")
         and KernelConsumer.FORCE not in integral.consumers
     ):
-        reasons.append(
-            "CUDA direct Rys lowering currently requires a force contraction"
-        )
+        # Value-only Direct Fock is a separate lowering input. Its root count
+        # must follow the value IR, rather than an unrequested force derivative.
+        if KernelConsumer.FOCK not in integral.consumers or integral.derivative:
+            reasons.append(
+                "CUDA direct Rys values require a value-only Fock contraction"
+            )
+        elif isinstance(integral.spec, ShellClassSpec) and (
+            integral.required_rys_roots not in (2, 3, 4, 5)
+            or max(integral.spec.angular) > 2
+            or integral.spec.angular[3] > 1
+        ):
+            reasons.append(
+                "CUDA component-lane Rys values require two through five roots, "
+                "s/p/d centers and at most p angular momentum on the fourth center"
+            )
     return CapabilityCheck(not reasons, reasons=tuple(reasons))
 
 

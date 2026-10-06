@@ -165,6 +165,7 @@ class KernelSelection:
         scalar_thread_tasks = _supports_scalar_rys(self.spec, self.schedule)
         if (
             selected_integral.recurrence.startswith("rys")
+            and KernelConsumer.FORCE in self.consumers
             and selected_integral.required_rys_roots == 2
             and not scalar_thread_tasks
         ):

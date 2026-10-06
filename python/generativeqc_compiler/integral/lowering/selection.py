@@ -63,8 +63,16 @@ def _supports_rys_component_lane_fock(
 
     integral = plan.kernel.integral if support_integral is None else support_integral
     return (
-        KernelConsumer.FORCE in integral.consumers
-        and supports_component_lane_rys(spec, plan.schedule)
+        supports_component_lane_rys(spec, plan.schedule)
         and integral.recurrence.startswith("rys")
-        and integral.required_rys_roots in (3, 4)
+        and (
+            (
+                KernelConsumer.FORCE in integral.consumers
+                and integral.required_rys_roots in (3, 4)
+            )
+            or (
+                integral.derivative is None
+                and integral.required_rys_roots in (2, 3, 4, 5)
+            )
+        )
     )

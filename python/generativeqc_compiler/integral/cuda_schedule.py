@@ -224,9 +224,27 @@ class CudaKernelIR:
             and self.schedule.component_tile < component_count
         ):
             raise ValueError("non-tiled schedules must cover every shell component")
+        if _uses_component_fixed_root_value(self.integral) and (
+            self.schedule.kind != ScheduleKind.COMPONENT_LANES
+            or self.schedule.warp_size != 32
+            or self.schedule.block_threads < component_count
+        ):
+            raise ValueError(
+                "Rys values require one CUDA component lane per Cartesian component"
+            )
 
 
 KernelIR = CudaKernelIR
+
+
+def _uses_component_fixed_root_value(integral: IntegralIR) -> bool:
+    """Identify the value lowering independently of force schedule policy."""
+
+    return (
+        integral.recurrence.startswith("rys")
+        and KernelConsumer.FOCK in integral.consumers
+        and KernelConsumer.FORCE not in integral.consumers
+    )
 
 
 def _uses_scalar_fixed_root_force(integral: IntegralIR) -> bool:
@@ -369,6 +387,23 @@ def schedule_candidates(
     component_count = integral.spec.component_count
     warp_size = target.warp_size
     candidates: list[CudaScheduleIR] = []
+
+    if _uses_component_fixed_root_value(integral):
+        # This decoder has one component per lane. Enumerate only implemented
+        # value schedules; an unsupported geometry must not silently emit the
+        # incumbent recurrence under a Rys artifact identity.
+        threads = ((component_count + warp_size - 1) // warp_size) * warp_size
+        if threads > target.maximum_threads_per_block or warp_size != 32:
+            return ()
+        candidate = CudaScheduleIR(
+            kind=ScheduleKind.COMPONENT_LANES,
+            block_threads=threads,
+            component_tile=component_count,
+            shared_coulomb=True,
+            warp_size=warp_size,
+        )
+        candidate.validate_for(target)
+        return (candidate,)
 
     # The two-root fixed-root force backend owns one complete shell task per
     # lane.  Root count comes from IntegralIR mathematics; launch bounds come
