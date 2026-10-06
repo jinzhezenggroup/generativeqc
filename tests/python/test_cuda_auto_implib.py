@@ -139,6 +139,12 @@ def test_cmake_launcher_discovers_runtime_import(tmp_path: Path) -> None:
     readelf = shutil.which("readelf")
     if cmake is None or readelf is None:
         pytest.skip("CMake and ELF inspector required")
+    cmake_version_text = subprocess.check_output([cmake, "--version"], text=True)
+    cmake_version = tuple(
+        int(part) for part in cmake_version_text.split()[2].split(".")[:2]
+    )
+    if cmake_version < (4, 1):
+        pytest.skip("CUDA_LINKER_LAUNCHER integration requires CMake 4.1+")
 
     (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
     (tmp_path / "cmake").symlink_to(ROOT / "cmake", target_is_directory=True)
