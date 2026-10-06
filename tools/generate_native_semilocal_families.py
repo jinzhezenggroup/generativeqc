@@ -12,7 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "manifests/native_semilocal_families.json"
 CPP_OUTPUT = ROOT / "src/dft/semilocal_family.hpp"
 PYTHON_OUTPUT = ROOT / "python/generativeqc_compiler/dft/_generated_native_semilocal.py"
-PYTHON_COMPAT_OUTPUT = ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+PYTHON_COMPAT_OUTPUT = (
+    ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+)
 SCHEMA = "generativeqc.native-semilocal-families.v3"
 FAST_PATH_FIELDS = (
     "component_scaling",
