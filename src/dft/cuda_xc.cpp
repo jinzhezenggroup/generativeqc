@@ -11,6 +11,7 @@
 #include "dft/semilocal_family.hpp"
 #include "generated_split_hybrid_registry.cuh"
 #include "generativeqc/generativeqc.hpp"
+#include "libxc_semilocal_cpu/generated_libxc_semilocal_registry.hpp"
 #include "tensor/cuda_error.hpp"
 
 #if defined(GENERATIVEQC_TEST_HOOKS)
@@ -51,6 +52,10 @@ CudaXcProgramTraits cuda_xc_program_traits(std::uint32_t functional) noexcept {
   if (generated::split_hybrid_registered(functional))
     return {true, true, generated::split_hybrid_is_mgga(functional),
             generated::split_hybrid_fast_path_capabilities(functional)};
+  if (const auto automatic = generated::automatic_libxc_entry(functional); automatic) {
+    const auto ingredients = automatic.program->ingredient_mask;
+    return {true, ingredients != 1U, ingredients == 15U, {}};
+  }
   return {};
 }
 
