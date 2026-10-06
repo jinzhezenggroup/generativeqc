@@ -1,0 +1,79 @@
+
+=== job.txt ===
+JobId=6183 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:01 TimeLimit=00:25:00 TimeMin=N/A SubmitTime=2026-10-06T12:39:07 EligibleTime=2026-10-06T12:39:07 AccrueTime=Unknown StartTime=2026-10-06T12:39:07 EndTime=2026-10-06T13:04:07 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T12:39:07 Scheduler=Main Partition=main AllocNode:Sid=localhost:416086 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== job.exit ===
+0
+
+=== device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=0
+
+=== ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== ccache-before.txt ===
+Summary:
+  Hits:             5485 /  9175 (59.78 %)
+    Direct:         5242 /  9200 (56.98 %)
+    Preprocessed:    243 /  3957 (6.14 %)
+  Misses:           3690
+    Direct:         3958
+    Preprocessed:   3714
+  Uncacheable:      3422
+Primary storage:
+  Hits:            11881 / 18399 (64.57 %)
+  Misses:           6518
+  Cache size (GB):  2.68 /  5.00 (53.59 %)
+
+Use the -v/--verbose option for more details.
+
+=== ccache-after.txt ===
+Summary:
+  Hits:             5485 /  9175 (59.78 %)
+    Direct:         5242 /  9200 (56.98 %)
+    Preprocessed:    243 /  3957 (6.14 %)
+  Misses:           3690
+    Direct:         3958
+    Preprocessed:   3714
+  Uncacheable:      3438
+Primary storage:
+  Hits:            11881 / 18399 (64.57 %)
+  Misses:           6518
+  Cache size (GB):  2.68 /  5.00 (53.59 %)
+
+Use the -v/--verbose option for more details.
+
+=== core-check.txt ===
+build/cuda-release-sm120/libgenerativeqc.so: OK
+
+=== gate-import.txt ===
+/data/jzzeng/qc-becke-physical-1894-v4/.artifacts/issue1894/physical-v7/gate-tests/test_global_hybrid_cuda_forces.py
+
+=== nonlocal-physical-forces.log ===
+..                                                                       [100%]
+=============================== warnings summary ===============================
+.artifacts/issue1894/physical-v7/gate-tests/test_wb97mv_complete_cuda.py: 292 warnings
+  /home/jzzeng/codes/wb97m-20261002/gpu-env/lib/python3.13/site-packages/gpu4pyscf/dft/gen_grid.py:370: DeprecationWarning: `distance_matrix` is deprecated in favor of `scipy.spatial.distance.cdist` as of SciPy 1.18.0 and will be removed in SciPy 1.20.0.
+    dist = distance_matrix(atom_coords, atom_coords)
+
+.artifacts/issue1894/physical-v7/gate-tests/test_wb97mv_complete_cuda.py: 292 warnings
+  /home/jzzeng/codes/wb97m-20261002/gpu-env/lib/python3.13/site-packages/gpu4pyscf/dft/gen_grid.py:370: DeprecationWarning: `minkowski_distance` is deprecated in favor of `scipy.spatial.distance.minkowski` as of SciPy 1.18.0 and will be removed in SciPy 1.20.0.
+    dist = distance_matrix(atom_coords, atom_coords)
+
+.artifacts/issue1894/physical-v7/gate-tests/test_wb97mv_complete_cuda.py: 292 warnings
+  /home/jzzeng/codes/wb97m-20261002/gpu-env/lib/python3.13/site-packages/gpu4pyscf/dft/gen_grid.py:370: DeprecationWarning: `minkowski_distance_p` is deprecated in favor of `scipy.spatial.distance.minkowski` as of SciPy 1.18.0 and will be removed in SciPy 1.20.0.
+    dist = distance_matrix(atom_coords, atom_coords)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 16 deselected, 876 warnings in 46.02s

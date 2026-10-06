@@ -55,21 +55,32 @@ def small_physical_becke_primitive(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def primitive_physical_cluster(
-    spin: str,
+    spin: str, *, molecular_radical: bool = False
 ) -> list[tuple[str, tuple[float, float, float]]]:
     """Return neutral separated H2 fragments and one open-shell H for UKS.
 
     Closed-shell 36-atom and doublet 35-atom clusters exercise the existing
     greater-than-32 cache admission with a modest independent-oracle AO domain.
+    The molecular-radical variant expands the existing asymmetric H3 doublet;
+    it keeps the atom count for a convergence-qualified nonlocal UKS gate.
     Neither native/compiler resource guards nor production defaults are patched.
     """
+    use_h3 = spin == "uks" and molecular_radical
     pairs = 18 if spin == "rks" else 17
-    atoms = []
-    for pair in range(pairs):
+    atoms = (
+        [
+            ("H", (0.0, 0.0, 0.0)),
+            ("H", (0.15, 0.13, 1.5)),
+            ("H", (1.8, -0.1, -0.3)),
+        ]
+        if use_h3
+        else []
+    )
+    for pair in range(int(use_h3), pairs):
         center = (8.0 * (pair % 3), 8.0 * ((pair // 3) % 3), 8.0 * (pair // 9))
         for offset in (-0.7, 0.7):
             atoms.append(("H", (center[0], center[1], center[2] + offset)))
-    if spin == "uks":
+    if spin == "uks" and not use_h3:
         atoms.append(("H", (24.0, 24.0, 16.0)))
     return atoms
 

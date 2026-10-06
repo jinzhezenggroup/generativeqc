@@ -386,7 +386,12 @@ def test_complete_cuda_force_matches_independent_engine(
 
         if basis != "sto-3g":
             pytest.skip("the explicit cluster gate uses its named modest-AO fixture")
-        atoms = primitive_physical_cluster("uks" if spin else "rks")
+        # Require a genuinely converged public state before force qualification.
+        # The isolated-H cluster fails cold UKS even with Becke selection off;
+        # expand this test's original H3 doublet without shrinking the domain.
+        atoms = primitive_physical_cluster(
+            "uks" if spin else "rks", molecular_radical=bool(spin)
+        )
         monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
 
     from benchmarks.readme_wb97mv import (
@@ -535,6 +540,41 @@ def test_complete_cuda_force_matches_independent_engine(
                     "spin": spin,
                     "basis": basis,
                     "slurm_job": os.environ["SLURM_JOB_ID"],
+                    "cold_energy": cold.energy,
+                    "cold_reference_energy": oracle["energies_hartree"][0],
+                    "cold_forces": cold.forces.tolist(),
+                    "cold_reference_forces": oracle["forces_hartree_per_bohr"][0],
+                    "moved_energy": moved.energy,
+                    "moved_reference_energy": moved_oracle["energies_hartree"][0],
+                    "moved_forces": moved.forces.tolist(),
+                    "moved_reference_forces": moved_oracle["forces_hartree_per_bohr"][
+                        0
+                    ],
+                    "source_artifacts": {
+                        name: {
+                            "library": str(owner.artifact.library),
+                            "metadata": owner.artifact.metadata,
+                            "objects": {
+                                item["key"]: json.loads(
+                                    (
+                                        owner.artifact.library.parent.parent
+                                        / item["key"]
+                                        / "artifact.json"
+                                    ).read_text()
+                                )
+                                for item in owner.artifact.metadata["identity"][
+                                    "objects"
+                                ]
+                            },
+                        }
+                        for name, owner in (
+                            ("semilocal", batch._stationary_cuda_execution.sources),
+                            (
+                                "nonlocal",
+                                batch._stationary_cuda_execution.nonlocal_sources,
+                            ),
+                        )
+                    },
                     "energy_error": abs(cold.energy - oracle["energies_hartree"][0]),
                     "force_max_error": float(
                         np.max(

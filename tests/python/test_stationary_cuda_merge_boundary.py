@@ -50,9 +50,12 @@ def test_phased_becke_policy_defaults_only_in_measured_large_domain(
     assert runtime._resolve_phased_becke_policy(atoms, selection) is expected
 
 
-@pytest.mark.parametrize("spin,atoms", [("rks", 36), ("uks", 35)])
+@pytest.mark.parametrize(
+    "spin,atoms,molecular_radical",
+    [("rks", 36, False), ("uks", 35, False), ("uks", 35, True)],
+)
 def test_primitive_physical_fixture_uses_real_existing_admission(
-    spin: str, atoms: int
+    spin: str, atoms: int, molecular_radical: bool
 ) -> None:
     """Dry fixture eligibility is not a replacement for executed GPU selection."""
     from generativeqc import _stationary_cuda as runtime
@@ -62,7 +65,7 @@ def test_primitive_physical_fixture_uses_real_existing_admission(
     )
     from test_global_hybrid_cuda_forces import primitive_physical_cluster
 
-    cluster = primitive_physical_cluster(spin)
+    cluster = primitive_physical_cluster(spin, molecular_radical=molecular_radical)
     assert len(cluster) == atoms
     assert all(symbol == "H" for symbol, _ in cluster)
     assert len({coordinates for _, coordinates in cluster}) == atoms
