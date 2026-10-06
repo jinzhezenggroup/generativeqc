@@ -589,6 +589,113 @@ by this passing localization sample. The next diagnostic should replay only
 the two physical branches on identical captured seeds with explicit admission,
 avoiding repeated Lambda solves without adding a second scientific map.
 
+### Bounded fixed-seed physical replay
+
+The diagnostic-only `--physical-replay` mode invokes the same complete owner
+once for native RHF/DF-CCSD, triples pullback and its full-Fock companion,
+and corrected Lambda. It repeats the existing DF physical source/nuclear API
+four times on the unchanged factor seed, then the existing physical orbital
+API four times on one final `bar_f/bar_c` seed and the original reference.
+DF gradients do not feed the orbital branch. Input bit-pattern guards check
+factor, reference and orbital seed lifetime; no second equations or CPU
+production oracle are added. All ordinary and schedule-comparison calls keep
+the private replay pointer null. Recycling and DF preconditioning are refused
+for this diagnostic rather than silently changing accelerator state between
+replays. Previous orbital matrices are retired before each new owner.
+
+Small branch-gradient outputs are reserved before the cold solve. Each DF
+replay explicitly admits one reusable row/metric host buffer, copies the
+streamed three-center and metric weights, hashes them and discards each host
+tile. This is not the earlier transfer-free host-boundary instrumentation:
+new transfer bytes, buffer capacity, logical values and synchronized census
+time are reported. The census includes waits for preceding producer/derivative
+work, so it is not isolated transfer overhead and must not be added to its
+enclosing source time. Observer timing can alter launch ordering; passing
+instrumented replay is not a replacement for uninstrumented force acceptance.
+
+Frozen source tree: `af662f96c00038c500fb3839efd345854b5a0759`.
+All 8,263 manifest entries match before qualification and after the completed
+large run. This historical evidence append is the only subsequent source
+change. The isolated rebuild records 461 ccache hits/six misses; after updating
+only the CPU forwarding test, the final qualification build records five hits
+and no misses, with explicit CXX/CUDA launchers and checkout-root normalization.
+Library SHA256:
+`690fe1f02d749e3deb3475f0b7f9da2ce431967802c0e5a2e92aadbfaa8048c9`.
+Comparison executable SHA256:
+`3bcfbbf77a4a1ca61f7fed05cf24577ce4d0dae79462fb79a90b39d1579e36c0`.
+Force-probe SHA256:
+`38eb99c1f0bd0bd862fd52b161bfdc54f1291ea027614ac97a134f62486d16a9`.
+
+Job 2490 passes 19 force tests (including the new independent replay force FD
+and transactional budget-zero/one/577 refusal cases), the public H2 force FD,
+and seven memchecks with zero errors. Job 2491 passes 45 native response,
+48 independent complete-force tests across serial/parallel/omitted/default
+controls, and 82 memchecks with zero errors. Local validation is 73 passes and
+116 expected skips; ten compiled CLI tests, compiler/SCF/vendor/default/
+electronic-boundary checks, 330-file CUDA ownership, Ruff and configured C++
+formatting pass. The prior CPU forwarding mock is extended to check diagnostic
+output reservation as well as unchanged reference/batch/denominator arguments.
+Receipts are `build-physical/`, `build-physical-qualified/`,
+`physical-unit-2490/` and `physical-qualification-2491/`.
+
+### Completed physical replay: hash order is not error magnitude
+
+Job 2492 completes normally, exit zero, on n2's Slurm PRO6000 allocation.
+The 230-AO / 488-auxiliary diagnostic uses a 19-iteration native RHF reference,
+reference identity `17213576282514911214`, factor-seed identity
+`11207348646429377358`, and orbital-seed identity `1921003724709391898`.
+Complete diagnostic time is 1160.512006 seconds; the single common reference,
+DF source and CCSD phases are 125.452292, 3.609932 and 146.500149 seconds;
+triples and Lambda take 110.657632 and 274.150179 seconds. These are different
+semantic work from four complete schedule compositions and are not a cold
+endpoint speedup.
+
+| Replay | DF source/nuclear seconds | Orbital/nuclear seconds |
+|---|---:|---:|
+| 0 | 3.591661 | 121.035962 |
+| 1 | 3.594327 | 121.378218 |
+| 2 | 3.591456 | 121.454349 |
+| 3 | 3.589275 | 121.510418 |
+
+Every replay observes matching three-center and metric weight identities,
+respectively `9162779198716904414` and `9505834296765261631`, as well as
+matching coefficient-source identities. Each traverses 25,815,200
+three-center and 238,144 metric values, transfers 208,426,752 bytes, and uses
+a 1,905,152-byte census buffer. Host response-boundary fingerprinting reads
+268,526 values per replay. Planned complete numeric capacity is 7,107,922,489
+bytes within the unchanged 64-GiB budget; the separately sampled whole-job
+device peak is 29,889 MiB over 5,799 samples, not a derivative workspace peak.
+
+Across all six pairs, maximum DF nuclear-gradient difference is only
+`4.787403112826993e-15`. Maximum orbital/nuclear-gradient difference is
+`3.1174973713632426e-10`, and maximum combined branch-gradient difference is
+`3.117545245394371e-10`. Returned RHS, Z solution, hcore/overlap/Fock weights,
+stationarity and orbital gradient hashes differ in every pair. All orbital
+calls take 12 iterations/13 operator actions; maximum independently audited
+Z residual is `1.3688750763316764e-13` and maximum stationarity is
+`8.255108402410727e-12`. The observed combined variability passes `5e-10`
+against both endpoint replay references, but these are independently replayed
+branches with one final coefficient seed, not four cold force endpoints.
+Raw JSON, all-pairs report, trace, memory samples, input/native hashes and
+source/reproduction receipts are retained in `physical-large-2492/`.
+
+This is the important correction to the earlier localization: the first
+differing hash is not the dominant numerical error. In this observed run,
+the streamed DF weights agree and DF nuclear contraction variability is
+approximately five orders of magnitude below orbital/nuclear variability.
+Changing DF atomic accumulation solely because its hash differed first would
+therefore target the wrong branch. The next localization must distinguish
+initial orbital RHS/Z variability from the one-/two-electron nuclear pieces
+and their polarization contraction; returned final RHS hashes alone cannot
+make that distinction. Atomic J/K/reduction ordering and polarization
+cancellation remain hypotheses, not proved causes.
+
+This passing, different cold reference and weight-observed replay does not
+supersede job 2486's omission rejection or the original cold-force failures.
+No tolerance, screening, residual, precision, or default policy changes are
+made. PR #1999 remains draft and the complete-consumer promotion remains
+blocked by the original scientific gates, not completed by diagnostics.
+
 ### Remaining gates
 
 The same-primal diagnostic adds a private native-state replay input to the existing

@@ -185,3 +185,61 @@ extern "C" int df_gap_same_primal_fingerprints_probe(void* opaque, std::size_t b
   return run_df_gap_probe(opaque, budget, force_output, values, common_counts, case_counts,
                           fingerprints, error, error_size);
 }
+
+extern "C" int df_physical_response_replay_probe(void* opaque, std::size_t budget,
+                                                 double* gradients, double* forces, double* values,
+                                                 std::uint64_t* shared, std::size_t* counts,
+                                                 std::uint64_t* weights,
+                                                 std::uint64_t* fingerprints, char* error,
+                                                 std::size_t error_size) noexcept {
+  using namespace generativeqc;
+  try {
+    const auto& raw = *static_cast<posthf::RawSource*>(opaque);
+    core::ContextState context;
+    context.requested_backend = GENERATIVEQC_BACKEND_CUDA;
+    runtime::ExecutionContext execution(context);
+    const auto comparison = methods::detail::diagnose_df_ccsdt_physical_responses(
+        execution, raw.orbital(), raw.auxiliary(), force_descriptor(budget));
+    const std::uint64_t common[]{comparison.nocc,
+                                 comparison.nvir,
+                                 comparison.naux,
+                                 comparison.source_identity,
+                                 comparison.reference_identity,
+                                 comparison.factor_seed_identity,
+                                 comparison.orbital_seed_identity,
+                                 comparison.output_bytes,
+                                 comparison.numeric_capacity_bytes};
+    std::copy(std::begin(common), std::end(common), shared);
+    std::copy(comparison.forces.begin(), comparison.forces.end(), forces);
+    std::size_t offset = 0;
+    for (std::size_t index = 0; index < comparison.cases.size(); ++index) {
+      const auto& snapshot = comparison.cases[index];
+      for (const auto* gradient : {&snapshot.df_gradient, &snapshot.orbital_gradient}) {
+        std::copy(gradient->begin(), gradient->end(), gradients + offset);
+        offset += gradient->size();
+      }
+      const double scalars[]{comparison.energy,         snapshot.source_seconds,
+                             snapshot.orbital_seconds,  snapshot.weight_census_seconds,
+                             snapshot.orbital_residual, snapshot.maximum_stationarity};
+      const std::size_t work[]{snapshot.numeric_capacity_bytes, snapshot.weight_buffer_bytes,
+                               snapshot.weight_transfer_bytes,  snapshot.weight_elements[0],
+                               snapshot.weight_elements[1],     snapshot.fingerprints.value_reads,
+                               snapshot.orbital_iterations,     snapshot.orbital_actions};
+      std::copy(std::begin(scalars), std::end(scalars), values + index * std::size(scalars));
+      std::copy(std::begin(work), std::end(work), counts + index * std::size(work));
+      for (std::size_t kind = 0; kind < 2; ++kind) {
+        weights[(index * 2 + kind) * 2] = snapshot.weight_identities[kind];
+        weights[(index * 2 + kind) * 2 + 1] = snapshot.weight_elements[kind];
+      }
+      for (std::size_t stage = 0; stage < snapshot.fingerprints.identities.size(); ++stage) {
+        const auto slot = (index * snapshot.fingerprints.identities.size() + stage) * 2;
+        fingerprints[slot] = snapshot.fingerprints.identities[stage];
+        fingerprints[slot + 1] = snapshot.fingerprints.elements[stage];
+      }
+    }
+    return 0;
+  } catch (const std::exception& failure) {
+    if (error && error_size) std::snprintf(error, error_size, "%s", failure.what());
+    return 1;
+  }
+}

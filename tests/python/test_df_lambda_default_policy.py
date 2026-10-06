@@ -371,7 +371,8 @@ def test_force_owner_forwards_denominators_after_reference_and_batch(
     definition = re.sub(r"\s*=\s*[^,)]+", "", declaration).strip().removesuffix(";")
     definition += (
         " { return {cuda_reference_plan,df_auxiliary_batch_limit,derived_denominators,"
-        "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis}; }\n"
+        "retain_df_response,df_matrix_gemm,correlation_auxiliary,packed_diis,"
+        "external_reservation_bytes}; }\n"
     )
     owner = (ROOT / "src/methods/df_ccsdt_force.cu").read_text()
     call = "auto state =" + owner.split("auto state =", 1)[1].split(";", 1)[0] + ";\n"
@@ -393,7 +394,10 @@ struct RccsdNativeState {
   bool derived, retained, matrix;
   const core::System* auxiliary;
   bool packed;
+  std::size_t reserved;
 };
+struct DFPhysicalResponseComparison { std::size_t output_bytes; };
+std::size_t checked_add(std::size_t left, std::size_t right) { return left + right; }
 """
         + declaration
         + definition
@@ -404,6 +408,8 @@ int probe() {
   generativeqc_method_descriptor descriptor;
   RccsdNativeState* replay_state=nullptr;
   const std::size_t recycle_bytes=123;
+  DFPhysicalResponseComparison comparison{576};
+  for(auto* physical_replay : {static_cast<DFPhysicalResponseComparison*>(nullptr), &comparison})
   for(bool packed_diis : {false,true})
   for(bool derived_denominators : {false,true})
   for(bool forces : {false,true})
@@ -414,11 +420,12 @@ int probe() {
         + r"""
     if(state.reference_plan || state.batch!=ccsd_batch_limit ||
        state.derived!=derived_denominators || state.retained!=forces ||
-       state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary || state.packed!=packed_diis) return 1;
+       state.matrix!=df_matrix_gemm || state.auxiliary!=&auxiliary || state.packed!=packed_diis ||
+       state.reserved!=recycle_bytes+(physical_replay ? physical_replay->output_bytes : 0)) return 1;
   }
   const auto ordinary=run_rccsd_native_state(execution,system,descriptor);
   if(ordinary.reference_plan || ordinary.batch!=8 || !ordinary.derived ||
-     ordinary.retained || !ordinary.matrix || ordinary.auxiliary || ordinary.packed) return 2;
+     ordinary.retained || !ordinary.matrix || ordinary.auxiliary || ordinary.packed || ordinary.reserved) return 2;
   scf::CudaRhfBucketPlan resident;
   auto* reference=&resident;
   const auto explicit_state=run_rccsd_native_state(execution,system,descriptor,

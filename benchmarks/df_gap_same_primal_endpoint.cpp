@@ -27,11 +27,95 @@ void read_shells(std::istream& input, generativeqc::core::System& system, std::s
     throw std::invalid_argument(detail);
 }
 
+void write_physical_comparison(
+    const char* filename,
+    const generativeqc::methods::detail::DFPhysicalResponseComparison& comparison,
+    std::size_t budget) {
+  std::ofstream output(filename);
+  if (!output) throw std::runtime_error("cannot open physical-response JSON output");
+  output << std::setprecision(17) << "{\n";
+  const auto field = [&](const char* name, auto value) {
+    output << "  " << std::quoted(name) << ": " << value << ",\n";
+  };
+  const auto array = [&](const char* name, const auto& values) {
+    output << "  " << std::quoted(name) << ": [";
+    for (std::size_t index = 0; index < values.size(); ++index) {
+      if (index) output << ',';
+      output << values[index];
+    }
+    output << ']';
+  };
+  field("physical_response_replay", "true");
+  field("cold_endpoint_timing", "false");
+  field("native_primal_calls", 1);
+  field("triples_calls", 1);
+  field("lambda_calls", 1);
+  field("complete_diagnostic_seconds", comparison.total_seconds);
+  field("nbf", comparison.nocc + comparison.nvir);
+  field("nocc", comparison.nocc);
+  field("nvir", comparison.nvir);
+  field("naux", comparison.naux);
+  field("numeric_budget_bytes", budget);
+  field("numeric_capacity_bytes", comparison.numeric_capacity_bytes);
+  field("output_bytes", comparison.output_bytes);
+  field("source_identity", comparison.source_identity);
+  field("reference_identity", comparison.reference_identity);
+  field("factor_seed_identity", comparison.factor_seed_identity);
+  field("orbital_seed_identity", comparison.orbital_seed_identity);
+  field("reference_iterations", comparison.reference_iterations);
+  field("reference_seconds", comparison.primal.reference_seconds);
+  field("source_seconds", comparison.primal.problem_seconds);
+  field("ccsd_seconds", comparison.primal.solver_seconds);
+  field("triples_seconds", comparison.triples_seconds);
+  field("lambda_seconds", comparison.lambda_seconds);
+  field("lambda_residual", comparison.lambda.independent_residual_norm);
+  field("total_energy", comparison.energy);
+  array("forces", comparison.forces);
+  output << ",\n  \"cases\": [\n";
+  for (std::size_t index = 0; index < comparison.cases.size(); ++index) {
+    const auto& snapshot = comparison.cases[index];
+    output << " {\n";
+    field("index", index);
+    field("source_seconds", snapshot.source_seconds);
+    field("orbital_seconds", snapshot.orbital_seconds);
+    field("weight_census_seconds", snapshot.weight_census_seconds);
+    field("weight_transfer_bytes", snapshot.weight_transfer_bytes);
+    field("weight_buffer_bytes", snapshot.weight_buffer_bytes);
+    field("numeric_capacity_bytes", snapshot.numeric_capacity_bytes);
+    field("z_residual", snapshot.orbital_residual);
+    field("stationarity", snapshot.maximum_stationarity);
+    field("z_iterations", snapshot.orbital_iterations);
+    field("z_operator_actions", snapshot.orbital_actions);
+    field("fingerprint_seconds", snapshot.fingerprints.seconds);
+    field("fingerprint_value_reads", snapshot.fingerprints.value_reads);
+    field("three_center_weight_identity", snapshot.weight_identities[0]);
+    field("three_center_weight_elements", snapshot.weight_elements[0]);
+    field("metric_weight_identity", snapshot.weight_identities[1]);
+    field("metric_weight_elements", snapshot.weight_elements[1]);
+    output << "  \"response_fingerprints\": {";
+    for (std::size_t stage = 25; stage < 34; ++stage) {
+      if (stage != 25) output << ',';
+      output << std::quoted(generativeqc::methods::detail::df_gap_fingerprint_names[stage])
+             << ": {\"identity\": " << snapshot.fingerprints.identities[stage]
+             << ", \"elements\": " << snapshot.fingerprints.elements[stage] << '}';
+    }
+    output << "},\n";
+    array("df_gradient", snapshot.df_gradient);
+    output << ",\n";
+    array("orbital_gradient", snapshot.orbital_gradient);
+    output << "\n }" << (index + 1 == comparison.cases.size() ? "\n" : ",\n");
+  }
+  output << " ]\n}\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   try {
-    if (argc != 3) throw std::invalid_argument("usage: df-gap-same-primal INPUT OUTPUT_JSON");
+    const bool physical = argc == 4 && std::string(argv[3]) == "--physical-replay";
+    if (argc != 3 && !physical)
+      throw std::invalid_argument(
+          "usage: df-gap-same-primal INPUT OUTPUT_JSON [--physical-replay]");
     std::ifstream input(argv[1]);
     std::size_t atoms = 0, orbital_shells = 0, auxiliary_shells = 0, budget = 0;
     input >> atoms >> orbital_shells >> auxiliary_shells >> budget;
@@ -65,6 +149,12 @@ int main(int argc, char** argv) {
     generativeqc::hf::RHFFrameResponseOptions frame_options;
     frame_options.profile_jk = true;
     frame_options.gmres.true_residual_every = 30;
+    if (physical) {
+      const auto comparison = generativeqc::methods::detail::diagnose_df_ccsdt_physical_responses(
+          execution, orbital, auxiliary, descriptor, frame_options);
+      write_physical_comparison(argv[2], comparison, budget);
+      return 0;
+    }
     const auto comparison = generativeqc::methods::detail::diagnose_df_ccsdt_gap_schedules(
         execution, orbital, auxiliary, descriptor, frame_options, 8, 8, true, true);
     std::ofstream output(argv[2]);

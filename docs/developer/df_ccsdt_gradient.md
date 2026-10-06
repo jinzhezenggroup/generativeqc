@@ -289,3 +289,24 @@ separately, along with logical host value reads, and remains included in
 diagnostic response/total times. Identity
 differences localize the first observed divergence but are not numerical
 acceptance gates, proof of causation, or a replacement for force tolerances.
+
+The optional `--physical-replay` benchmark mode runs one native primal,
+triples response and Lambda solve, then four source/nuclear responses on the
+same factor seed and four orbital/nuclear responses on one final `bar_f/bar_c`
+seed. The original physical reference is shared and its host identity is
+guarded; DF gradients are not inputs to the orbital solve. This diagnostic
+requires an explicit positive budget and refuses recycling/DF preconditioning.
+Small gradient outputs are reserved before the cold solve; preceding orbital
+matrices are retired before the next response owner is admitted.
+
+Unlike the host-boundary-only comparison, physical replay explicitly copies
+device three-center and metric weights through one admitted row/metric buffer.
+It reports the buffer capacity, logical values, transfer bytes and synchronized
+census time. Host weight copies are discarded after hashing; no complete
+three-center weight tensor is retained. Both the observer overhead and repeated
+physical work remain included in diagnostic timings. The observer can change
+launch timing, so a passing replay does not supersede an uninstrumented failure.
+Weight hashes distinguish source-weight variability from later contraction
+variability only within the observed run; unchanged force/residual gates and
+independent reference qualification still apply. Ordinary cold and same-primal
+schedule calls do not enable physical replay or its added transfers.

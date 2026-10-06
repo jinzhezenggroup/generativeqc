@@ -139,4 +139,43 @@ DFGapForceComparison diagnose_df_ccsdt_gap_schedules(
     const generativeqc_method_descriptor&, const hf::RHFFrameResponseOptions& frame_options = {},
     std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
     bool derived_denominators = true, bool packed_diis = false);
+
+/** A physical-branch replay, not another triples/Lambda composition. Host
+ * fingerprints retain no weight matrices; streamed device weights are copied
+ * through one explicitly admitted reusable buffer for the diagnostic census. */
+struct DFPhysicalResponseSnapshot {
+  std::vector<double> df_gradient, orbital_gradient;
+  DFGapResponseFingerprints fingerprints;
+  std::array<std::uint64_t, 2> weight_identities{};
+  std::array<std::size_t, 2> weight_elements{};
+  std::size_t weight_transfer_bytes{}, weight_buffer_bytes{}, numeric_capacity_bytes{};
+  std::size_t orbital_iterations{}, orbital_actions{};
+  double source_seconds{}, orbital_seconds{}, weight_census_seconds{};
+  double orbital_residual{}, maximum_stationarity{};
+};
+
+/** Four native physical responses on one immutable reference and factor seed,
+ * followed by one complete force publication. All orbital replays use the
+ * final coefficient source, not the independently computed DF gradients.
+ * No scientific equations, defaults, or acceptance tolerances are changed. */
+struct DFPhysicalResponseComparison {
+  std::array<DFPhysicalResponseSnapshot, 4> cases;
+  std::vector<double> forces;
+  std::uint64_t source_identity{}, reference_identity{}, factor_seed_identity{},
+      orbital_seed_identity{};
+  std::size_t nocc{}, nvir{}, naux{}, output_bytes{}, numeric_capacity_bytes{};
+  int reference_iterations{};
+  double energy{}, total_seconds{}, triples_seconds{}, lambda_seconds{};
+  CcPerformanceDiagnostic primal;
+  cc::LambdaDiagnostic lambda;
+};
+
+/** Diagnostic-only late-phase replay through the existing complete force owner.
+ * Requires CUDA, a positive explicit budget, and ordinary unrecycled diagonal
+ * orbital response. Output storage is reserved before the cold solve; scratch,
+ * device-to-host weight transfers and synchronization are explicit and included
+ * in phase/endpoint timing. This does not qualify a cold endpoint speedup. */
+DFPhysicalResponseComparison diagnose_df_ccsdt_physical_responses(
+    runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
+    const generativeqc_method_descriptor&, const hf::RHFFrameResponseOptions& frame_options = {});
 }  // namespace generativeqc::methods::detail
