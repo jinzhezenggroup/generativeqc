@@ -99,6 +99,7 @@ void enqueue(const CudaXcLayout& l, CudaXcPointLauncher point_launcher, cudaStre
   }
   for (std::size_t begin = 0; begin < l.npoint; begin += l.tile_points) {
     const auto block = bind_native_ao_grid_block(l, ao_offsets, ao_ids, begin);
+    const auto tile = begin / l.tile_points;
     const I count = block.npoint, active = block.nactive;
     const auto* ids = block.ao_ids;
     // Route B changes only AO arithmetic. The AO panel and all downstream
