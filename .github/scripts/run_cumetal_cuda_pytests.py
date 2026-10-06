@@ -107,14 +107,18 @@ def stream_process(
     return return_code, "".join(output), timed_out
 
 
-def junit_status(path: Path) -> tuple[int, int, list[str]]:
+def junit_status(path: Path) -> tuple[int, list[str], list[str]]:
     if not path.exists():
-        return 0, 0, []
+        return 0, [], []
     root = ET.parse(path).getroot()
     cases = root.findall(".//testcase")
-    skipped = [case for case in cases if case.find("skipped") is not None]
+    skipped = []
     missing_provenance = []
     for case in cases:
+        skip = case.find("skipped")
+        if skip is not None:
+            reason = skip.get("message") or skip.text or "<no reason>"
+            skipped.append(f"{case.get('name', '<unnamed>')}: {reason}")
         # Pytest's FD capture retains native CuMetal stdout/stderr separately
         # for each parameterized endpoint. A sibling's dispatch or a session
         # smoke must not qualify a case with no Apple-GPU execution of its own.
@@ -123,7 +127,7 @@ def junit_status(path: Path) -> tuple[int, int, list[str]]:
         )
         if "device=apple_gpu" not in output or "launch_success=true" not in output:
             missing_provenance.append(case.get("name", "<unnamed>"))
-    return len(cases), len(skipped), missing_provenance
+    return len(cases), skipped, missing_provenance
 
 
 def main() -> None:
@@ -159,6 +163,7 @@ def main() -> None:
             "pytest",
             nodeid,
             "-vv",
+            "-ra",
             "--capture=fd",
             "-o",
             "junit_logging=all",
@@ -176,7 +181,9 @@ def main() -> None:
         elif cases < 1:
             failure = f"INVALID RESULT: {nodeid} produced no testcases"
         elif skipped:
-            failure = f"SKIPPED: {nodeid} ({skipped}/{cases} cases)"
+            failure = f"SKIPPED: {nodeid} ({len(skipped)}/{cases} cases): " + "; ".join(
+                skipped
+            )
         elif missing_provenance:
             failure = f"MISSING APPLE-GPU PROVENANCE: {nodeid}: " + ", ".join(
                 missing_provenance

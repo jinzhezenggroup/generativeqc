@@ -110,7 +110,7 @@ def test_junit_provenance_isolated_for_each_native_endpoint(
     assert result.returncode == 0, result.stdout + result.stderr
     cases, skipped, missing = _runner()["junit_status"](junit)
     assert cases == 4
-    assert skipped == 0
+    assert skipped == []
     assert missing == (
         []
         if trace_every_endpoint
@@ -125,12 +125,12 @@ def test_junit_provenance_isolated_for_each_native_endpoint(
 def test_junit_missing_or_malformed_reports_fail_closed(tmp_path: Path) -> None:
     status = _runner()["junit_status"]
     junit = tmp_path / "endpoint.xml"
-    assert status(junit) == (0, 0, [])
+    assert status(junit) == (0, [], [])
     junit.write_text("<testsuite><testcase", encoding="utf-8")
     with pytest.raises(ET.ParseError):
         status(junit)
     junit.write_text("<testsuite />", encoding="utf-8")
-    assert status(junit) == (0, 0, [])
+    assert status(junit) == (0, [], [])
 
 
 @pytest.mark.parametrize("missing_provenance", (False, True))
@@ -168,5 +168,54 @@ def test_runner_rejects_shared_process_provenance(
     assert "--capture=fd" in command
     assert "junit_logging=all" in command
     assert "junit_log_passing_tests=true" in command
+    assert "-ra" in command
     assert "-s" not in command
     assert 0 < timeout <= runtime["TIMEOUT_SECONDS"]
+
+
+def test_runner_retains_native_cuda_skip_reason(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A mandatory endpoint's skip must expose the actual runtime failure."""
+    namespace = _runner()
+    main = namespace["main"]
+    runtime = main.__globals__
+    monkeypatch.setitem(runtime, "selected_nodeids", lambda: ["test_group"])
+    monkeypatch.setitem(runtime, "Path", lambda _: tmp_path / "endpoint.xml")
+    reason = "CUDA device unavailable: native kernel registration failed"
+
+    def run(command: list[str], timeout: int) -> tuple[int, str, bool]:
+        suite = ET.Element("testsuite")
+        case = ET.SubElement(suite, "testcase", name="test_rhf")
+        ET.SubElement(case, "skipped", message=reason)
+        ET.SubElement(case, "system-err").text = "native runtime diagnostics"
+        ET.ElementTree(suite).write(tmp_path / "endpoint.xml")
+        return 0, "test_rhf SKIPPED", False
+
+    monkeypatch.setitem(runtime, "stream_process", run)
+    with pytest.raises(SystemExit) as error:
+        main()
+    assert error.value.code == 1
+    assert (
+        f"SKIPPED: test_group (1/1 cases): test_rhf: {reason}"
+        in capsys.readouterr().err
+    )
+    assert (tmp_path / "endpoint.xml").exists()
+
+
+def test_cumetal_workflow_preserves_endpoint_diagnostics_after_qualification() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    for name in (
+        "Run bounded CuMetal QC endpoint gate",
+        "Run bounded CuMetal QC qualification on the Apple GPU",
+    ):
+        endpoint_step = workflow.split(f"- name: {name}", 1)[1]
+        endpoint_step = endpoint_step.split("\n      - name:", 1)[0]
+        assert 'CUMETAL_DEBUG_REGISTRATION: "1"' in endpoint_step
+    step = workflow.split("- name: Preserve CuMetal QC endpoint diagnostics", 1)[1]
+    step = step.split("\n  cumetal-benchmark:", 1)[0]
+    assert "if: always()" in step
+    assert "path: /tmp/generativeqc-cuda-test-*.xml" in step
+    assert workflow.index("Preserve CuMetal QC endpoint diagnostics") > workflow.index(
+        "Run bounded CuMetal QC qualification on the Apple GPU"
+    )

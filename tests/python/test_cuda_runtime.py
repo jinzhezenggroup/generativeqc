@@ -77,9 +77,9 @@ def test_cuda_minimal_density_fitting_matches_cpu_reference() -> None:
         "energy_tolerance": 1.0e-10,
         "density_tolerance": 1.0e-8,
     }
-    reference = Calculator(
-        device="cpu", density_fitting="cpu", **options
-    ).singlepoint(atoms, properties=("energy",))
+    reference = Calculator(device="cpu", density_fitting="cpu", **options).singlepoint(
+        atoms, properties=("energy",)
+    )
     try:
         result = Calculator(
             device="cuda", density_fitting="cuda", **options
