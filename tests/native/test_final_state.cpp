@@ -164,6 +164,39 @@ void stationary_uhf_determinant_reuse() {
   require(!validate_final_state(id, identity, fock, 0, density, physical, candidate, limits,
                                 diagnostic, detail, nullptr),
           "physical-reference export accepted a noncanonical determinant frame");
+
+  // Opting into stationary reuse must not remove the canonical correction or
+  // force projector check for forced rebuild, export, or an absent candidate.
+  const initial_guess::EigenOperation canonical = [&](const auto& input, const auto* overlap,
+                                                      const auto* x, auto n) {
+    require(input == fock && overlap && *overlap == identity && x && *x == identity && n == 3,
+            "canonical correction lost its actual F/S/X inputs");
+    return reference::EigenResult{{-3, -2, 1}, identity};
+  };
+  for (const bool weighted : {false, true}) {
+    for (const int route : {0, 1, 2}) {
+      limits.require_canonicality = route == 1;
+      const auto corrected = select_final_state(id, identity, fock, identity, 0, density,
+                                                route == 2 ? nullptr : &candidate, evaluate,
+                                                canonical, limits, weighted, route == 0, nullptr);
+      require(corrected.state && !corrected.reused && corrected.fock_evaluations == 2 &&
+                  corrected.density_updates == 1 &&
+                  corrected.fixed_point_checks == unsigned(weighted) &&
+                  corrected.eigen_solves == 2U * (1U + unsigned(weighted)) &&
+                  corrected.fixed_point_eigen_solves == 2U * unsigned(weighted),
+              "stationary reuse bypassed canonical correction or accepted force probe");
+      near(corrected.state->diagnostic.energy, selected.state->diagnostic.energy,
+           "canonical correction changed the stationary energy");
+      require(corrected.state->density == density,
+              "canonical correction changed the stationary determinant");
+      if (weighted) {
+        require(corrected.state->weighted_density == selected.state->weighted_density,
+                "canonical correction changed the stationary Pulay weight");
+      } else {
+        require(corrected.state->weighted_density.empty(), "energy-only correction constructed W");
+      }
+    }
+  }
 }
 
 void identity_and_physical_origin() {
