@@ -249,6 +249,10 @@ CUDA_ALLOWED["cuda_direct_queues"] = tuple(
     "scf/cuda/packed_basis.",
     "scf/cuda/device_timer.",
 )
+# The prepared lowering adapter reads the optional compiler inventory only.
+# Keep it separate from provider lifetime and retained device recurrences.
+CUDA_MODULES["cuda_direct_fock_lowering"] = ("direct_fock_lowering.hpp",)
+CUDA_ALLOWED["cuda_direct_fock_lowering"] = ("scf/aot_shell_registry.hpp",)
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
 CUDA_MODULES["cuda_direct_provider_host"] = (
@@ -267,6 +271,7 @@ CUDA_ALLOWED["cuda_direct_provider_host"] = (
     "scf/cuda/direct_bounded_dddd.hpp",
     "scf/cuda/direct_constants.hpp",
     "scf/cuda/direct_density_bounds.hpp",
+    "scf/cuda/direct_fock_lowering.hpp",
     "scf/cuda/direct_pair_cache.hpp",
     "scf/cuda/direct_schwarz_kernels.hpp",
     "scf/cuda/queue_plan.hpp",
@@ -514,6 +519,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     # The driver owns finalization work counts. The host-only journal is a
     # leaf sink with no dependency on any scientific provider or collector.
     "runtime/df_progress_trace.hpp",
+    "runtime/cuda_component_trace.hpp",
     "runtime/resource_cuda.cuh",
     "runtime/resource_usage.hpp",
     "scf/aot_shell_registry.hpp",
@@ -533,6 +539,7 @@ CUDA_ALLOWED["cuda_hf_driver"] = (
     "scf/cuda/direct_reference_force.hpp",
     "scf/cuda/direct_schwarz_kernels.hpp",
     "scf/cuda/direct_density_bounds.hpp",
+    "scf/cuda/direct_fock_lowering.hpp",
     "scf/cuda/direct_generated_tasks.hpp",
     "scf/cuda/direct_jk_kernels.hpp",
     "scf/cuda/weighted_eri_kernels.hpp",
