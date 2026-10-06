@@ -10,21 +10,82 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.integral.expr import Graph
+from generativeqc_compiler.integral.expr import Expr, Graph
 
 
 @dataclass(frozen=True)
 class GridResponseProgram:
     """Shared scalar primal/JVP roots, independent of runtime or molecule size."""
 
-    graph: object
-    roots: tuple
+    graph: Graph
+    roots: tuple[Expr, ...]
     identity: str
 
     def evaluate(self, **variables: typing.Any) -> typing.Any:
         from generativeqc_compiler.common.array_graph import evaluate_array_graph
 
         return evaluate_array_graph(self.graph, self.roots, variables)
+
+
+def grid_response_primal(
+    graph: Graph, kind: str, variables: dict[str, Expr], iterations: int = 3
+) -> Expr:
+    """Compose the authoritative scalar mathematics into another graph.
+
+    Bindings are expressions, not an opaque call or a trusted equation hash.
+    This lets a structured partition graph include the actual Becke and ratio
+    nodes before differentiating the complete normalized-product objective.
+    """
+    if type(iterations) is not int or not 1 <= iterations <= 5:
+        raise ValueError("partition iterations must be an integer in [1, 5]")
+    if kind == "norm":
+        return graph.power(
+            graph.sum(variables[name] * variables[name] for name in ("x", "y", "z")),
+            0.5,
+        )
+    if kind == "ratio":
+        return variables["a"] / variables["b"]
+    if kind == "log":
+        return graph.stable_unary("log", variables["p"])
+    if kind == "becke":
+        coordinate = variables["mu"]
+        for _ in range(iterations):
+            coordinate = 0.5 * coordinate * (3 - coordinate * coordinate)
+        return 0.5 * (1 - coordinate)
+    raise ValueError("unknown grid response primitive")
+
+
+def grid_response_graph_identity(
+    graph: Graph,
+    roots: tuple[Expr, ...],
+    kind: str,
+    *,
+    schema: str = "generativeqc.grid-response-program/v1",
+) -> str:
+    """Authenticate actual reachable roots, including a composed primal/JVP.
+
+    Cached metadata is not proof of recognition. Cross-graph roots are rejected
+    before serialization, and unreachable scratch expressions are irrelevant.
+    """
+    if any(root.graph is not graph for root in roots):
+        raise ValueError("Becke AD roots belong to a different graph")
+    reachable = graph.topological_order(roots)
+    indices = {node: index for index, node in enumerate(reachable)}
+    return canonical_hash(
+        {
+            "schema": schema,
+            "kind": kind,
+            "nodes": [
+                (
+                    graph.nodes[node].operation,
+                    [indices[child] for child in graph.nodes[node].arguments],
+                    str(graph.nodes[node].payload),
+                )
+                for node in reachable
+            ],
+            "roots": [indices[root.identifier] for root in roots],
+        }
+    )
 
 
 @lru_cache(maxsize=8, typed=True)
@@ -35,45 +96,24 @@ def grid_response_program(kind: typing.Any, iterations: typing.Any = 3) -> typin
     graph = Graph()
     if kind == "norm":
         names = ("x", "y", "z")
-        xyz = [graph.variable(name) for name in names]
-        primal = graph.power(graph.sum(v * v for v in xyz), 0.5)
     elif kind == "ratio":
         names = ("a", "b")
-        primal = graph.variable("a") / graph.variable("b")
     elif kind == "log":
         names = ("p",)
-        primal = graph.stable_unary("log", graph.variable("p"))
     elif kind == "becke":
         names = ("mu",)
-        mu = graph.variable("mu")
-        for _ in range(iterations):
-            mu = 0.5 * mu * (3 - mu * mu)
-        primal = 0.5 * (1 - mu)
     else:
         raise ValueError("unknown grid response primitive")
+    primal = grid_response_primal(
+        graph, kind, {name: graph.variable(name) for name in names}, iterations
+    )
     tangent = graph.differentiate(
         primal,
         graph.variable("direction"),
         {name: graph.variable(f"d{name}") for name in names},
     )
     roots = (primal, tangent)
-    reachable = graph.topological_order(roots)
-    indices = {node: i for i, node in enumerate(reachable)}
-    identity = canonical_hash(
-        {
-            "schema": "generativeqc.grid-response-program/v1",
-            "kind": kind,
-            "nodes": [
-                (
-                    graph.nodes[i].operation,
-                    [indices[j] for j in graph.nodes[i].arguments],
-                    str(graph.nodes[i].payload),
-                )
-                for i in reachable
-            ],
-            "roots": [indices[root.identifier] for root in roots],
-        }
-    )
+    identity = grid_response_graph_identity(graph, roots, kind)
     return GridResponseProgram(graph, roots, identity)
 
 
@@ -93,22 +133,17 @@ def grid_mixed_response_program(
     graph = Graph()
     if kind == "norm":
         names = ("x", "y", "z")
-        xyz = [graph.variable(name) for name in names]
-        primal = graph.power(graph.sum(v * v for v in xyz), 0.5)
     elif kind == "ratio":
         names = ("a", "b")
-        primal = graph.variable("a") / graph.variable("b")
     elif kind == "log":
         names = ("p",)
-        primal = graph.stable_unary("log", graph.variable("p"))
     elif kind == "becke":
         names = ("mu",)
-        mu = graph.variable("mu")
-        for _ in range(iterations):
-            mu = 0.5 * mu * (3 - mu * mu)
-        primal = 0.5 * (1 - mu)
     else:
         raise ValueError("unknown grid response primitive")
+    primal = grid_response_primal(
+        graph, kind, {name: graph.variable(name) for name in names}, iterations
+    )
 
     left = graph.differentiate(
         primal,
@@ -129,21 +164,7 @@ def grid_mixed_response_program(
         },
     )
     roots = (primal, left, right, mixed)
-    reachable = graph.topological_order(roots)
-    indices = {node: i for i, node in enumerate(reachable)}
-    identity = canonical_hash(
-        {
-            "schema": "generativeqc.grid-mixed-response-program/v1",
-            "kind": kind,
-            "nodes": [
-                (
-                    graph.nodes[i].operation,
-                    [indices[j] for j in graph.nodes[i].arguments],
-                    str(graph.nodes[i].payload),
-                )
-                for i in reachable
-            ],
-            "roots": [indices[root.identifier] for root in roots],
-        }
+    identity = grid_response_graph_identity(
+        graph, roots, kind, schema="generativeqc.grid-mixed-response-program/v1"
     )
     return GridResponseProgram(graph, roots, identity)

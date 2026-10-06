@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Specified converged RKS/UKS nonlocal physical force cohort passes independent vector/oracle/FD gates and both actual source-owner selections. Not performance acceptance or full #1894 completion; isolated-H cold SCF controls fail before force execution.",
+    "scope": "numerical",
+    "status": "accepted"
+  },
+  "files": [
+    {
+      "bytes": 10072,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "762ee4fc1ed82034cfdba64c8508171b1674cb0caedd9adb2f99a2f4b60f950c"
+    },
+    {
+      "bytes": 50138,
+      "path": "observations.json.gz",
+      "role": "samples",
+      "sha256": "624eb7ec95fecad88bb6553ae689ef53722603f1d0c4248f06ca56002c4460c3"
+    },
+    {
+      "bytes": 65978,
+      "path": "source-files.sha256.gz",
+      "role": "input",
+      "sha256": "3ea66e50fec796a0f1caebf852727eb4871df256b7314b482c6291bff6c541d1"
+    },
+    {
+      "bytes": 6290,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "8f112565f7e28e34ec5dd45796a8bd749b0ebaaabee25796d44ccaee74cb8a72"
+    },
+    {
+      "bytes": 4368,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "4876d8270f6d8a7426479b349cacd356f9dc21e90fadac3a62616087541f7b7d"
+    },
+    {
+      "bytes": 3700,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "af2b6d8bc8f6a1bda17ed80439d170f98e2f5394fa8dbee7b040dcc9655087e8"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-physical-forces-20261006/reproduce.sh"
+    ],
+    "prerequisites": "CUDA 12.9 sm_120, ccache/CMake/Ninja/C++ compiler, finite main/gpu:5090:1 Slurm, Python compiler dependencies, NumPy/pytest/CuPy/GPU4PySCF, PySCF 2.14/Libxc 7.0. Set CUDA_ROOT and PYTHON to installations; preserve scheduler visibility.",
+    "source_restore": "Keep this bundle outside checkout; restore source.revision and apply source.patch. Validate the decompressed source manifest. Scientific/build inputs are identical to the original frozen core build."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "5828f274205693021b8a1ec4dd8145c51d411771"
+  }
+}

@@ -1,0 +1,86 @@
+--- step.txt ---
+StepId=6116.0 UserId=1001 StartTime=2026-10-06T08:09:48 TimeLimit=00:14:00 State=RUNNING Partition=main NodeList=node1 Nodes=1 CPUs=8 Tasks=1 Name=bash Network=(null) TRES=cpu=8,mem=32G,node=1 ResvPorts=(null) CPUFreqReq=Default Dist=Cyclic SrunHost:Pid=node1:256916 TresPerStep=cpu:8 TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8,cpu:8
+
+--- environment.txt ---
+node=node1
+job=6116
+step=0
+visible=0
+
+--- source-check.txt ---
+benchmarks/becke_phased_probe.cu: OK
+benchmarks/becke_phased_probe.py: OK
+python/generativeqc_compiler/xc/grid_native.py: OK
+python/generativeqc_compiler/xc/grid_phased.py: OK
+python/generativeqc_compiler/xc/becke_partition.py: OK
+tests/python/test_becke_partition_primitive.py: OK
+tests/python/test_becke_partition_cuda.py: OK
+
+--- binary-check.txt ---
+.artifacts/primitive/partition.cu: OK
+.artifacts/primitive/partition.so: OK
+
+--- cuda-tests.log ---
+ssssssssssssss..............ssssssssssssss.......                        [100%]
+21 passed, 28 skipped in 6.83s
+
+--- job.exit ---
+0
+
+--- memcheck (intrusive; not timing evidence) ---
+========= ERROR SUMMARY: 0 errors
+
+--- initcheck (intrusive; not timing evidence) ---
+========= ERROR SUMMARY: 0 errors
+
+--- racecheck (intrusive; not timing evidence) ---
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+
+--- synccheck (intrusive; not timing evidence) ---
+========= ERROR SUMMARY: 0 errors
+
+--- later host requalification ---
+........................................................................ [ 16%]
+........................................................................ [ 32%]
+........................................................................ [ 48%]
+........................................................................ [ 64%]
+........................................................................ [ 80%]
+........................................................................ [ 96%]
+..................                                                       [100%]
+450 passed in 29.93s
+
+--- build provenance and ccache before/after ---
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+Python 3.13.9
+Summary:
+  Hits:             353 /  670 (52.69 %)
+    Direct:         350 /  670 (52.24 %)
+    Preprocessed:     3 /  320 (0.94 %)
+  Misses:           317
+    Direct:         320
+    Preprocessed:   317
+  Uncacheable:     2913
+Primary storage:
+  Hits:             732 / 1340 (54.63 %)
+  Misses:           608
+  Cache size (GB): 0.16 / 5.00 (3.16 %)
+
+Use the -v/--verbose option for more details.
+Summary:
+  Hits:             353 /  670 (52.69 %)
+    Direct:         350 /  670 (52.24 %)
+    Preprocessed:     3 /  320 (0.94 %)
+  Misses:           317
+    Direct:         320
+    Preprocessed:   317
+  Uncacheable:     2914
+Primary storage:
+  Hits:             732 / 1340 (54.63 %)
+  Misses:           608
+  Cache size (GB): 0.16 / 5.00 (3.16 %)
+
+Use the -v/--verbose option for more details.

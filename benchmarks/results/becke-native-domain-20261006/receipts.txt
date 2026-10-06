@@ -1,0 +1,113 @@
+
+=== job.txt ===
+JobId=6139 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:25:00 TimeMin=N/A SubmitTime=2026-10-06T10:09:55 EligibleTime=2026-10-06T10:09:55 AccrueTime=Unknown StartTime=2026-10-06T10:09:55 EndTime=2026-10-06T10:34:55 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T10:09:55 Scheduler=Main Partition=main AllocNode:Sid=localhost:303584 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=4 NumTasks=1 CPUs/Task=4 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=4,mem=16G,node=1,billing=4 AllocTRES=cpu=4,mem=16G,node=1,billing=4 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=4 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-native-domain-1894-v3 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:4 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== job.exit ===
+0
+
+=== device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=0
+
+=== ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== ccache-before.txt ===
+Summary:
+  Hits:            4139 /  7210 (57.41 %)
+    Direct:        3896 /  7232 (53.87 %)
+    Preprocessed:   243 /  3335 (7.29 %)
+  Misses:          3071
+    Direct:        3336
+    Preprocessed:  3092
+  Uncacheable:     3151
+Primary storage:
+  Hits:            9037 / 14463 (62.48 %)
+  Misses:          5426
+  Cache size (GB): 2.00 /  5.00 (39.96 %)
+
+Use the -v/--verbose option for more details.
+
+=== ccache-after.txt ===
+Summary:
+  Hits:            4139 /  7211 (57.40 %)
+    Direct:        3896 /  7233 (53.86 %)
+    Preprocessed:   243 /  3336 (7.28 %)
+  Misses:          3072
+    Direct:        3337
+    Preprocessed:  3093
+  Uncacheable:     3151
+Primary storage:
+  Hits:            9037 / 14465 (62.47 %)
+  Misses:          5428
+  Cache size (GB): 2.01 /  5.00 (40.11 %)
+
+Use the -v/--verbose option for more details.
+
+=== compiled.sha256 ===
+c8b9eaee3a81b552d16be7326bdc8f40f2178bf577c78008e8d8c0c12d898947  /data/jzzeng/qc-becke-native-domain-1894-v3/.artifacts/issue1894/native-domain/job-6139/owner.cu
+bb6f9dd2fa34df64b134a42c2edd0239bd018d64fb5e49d3de3f26346152911d  /data/jzzeng/qc-becke-native-domain-1894-v3/.artifacts/issue1894/native-domain/job-6139/owner.o
+f38ad0f84e1885621ed82ce816c3ddcb15561cbcb9d0a1ea8c37f923c3d69981  /data/jzzeng/qc-becke-native-domain-1894-v3/.artifacts/issue1894/native-domain/job-6139/owner.so
+
+=== generation.log ===
+	Command being timed: "/home/jzzeng/codes/wb97m-20261002/gpu-env/bin/python tools/generate_stationary_force_aot.py --profile pbe0_rks --output /data/jzzeng/qc-becke-native-domain-1894-v3/.artifacts/issue1894/native-domain/job-6139/owner.cu"
+	User time (seconds): 20.74
+	System time (seconds): 2.76
+	Percent of CPU this job got: 128%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:18.33
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 484864
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 648471
+	Voluntary context switches: 70
+	Involuntary context switches: 659
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 9720
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+=== cuda-tests.log ===
+................................................                         [100%]
+48 passed in 11.77s
+
+=== memcheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 4.25s
+========= ERROR SUMMARY: 0 errors
+
+=== racecheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 9.25s
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+
+=== initcheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 3.05s
+========= ERROR SUMMARY: 0 errors
+
+=== synccheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 2.43s
+========= ERROR SUMMARY: 0 errors

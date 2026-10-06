@@ -182,7 +182,7 @@ GENERATIVEQC_GRID_HD inline double maximum_log_product(size_t na, Logs logs, Zer
   return maximum;
 }
 template <class Logs, class Products, class Bars, class Zeros, class Ratio>
-GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, double seed,
+GENERATIVEQC_GRID_HD double normalized_product_adjoint(size_t na, size_t owner, double seed,
     Logs logs, Products products, Bars bar_product, Zeros zeros,
     double maximum, Ratio ratio) {
   double total = 0;
@@ -195,6 +195,10 @@ GENERATIVEQC_GRID_HD void normalized_product_adjoint(size_t na, size_t owner, do
   const auto objective = ratio(products[owner], total);
   for (size_t a = 0; a < na; ++a)
     bar_product[a] = seed * (objective[2] + (a == owner ? objective[1] : 0));
+  // Indexed consumers broadcast this same denominator adjoint instead of
+  // materializing it for products whose first derivatives are annihilated.
+  // Preserve the dense branch's addition and multiplication order.
+  return seed * (objective[2] + 0.0);
 }
 GENERATIVEQC_GRID_HD inline void point_motion_adjoint(size_t na, size_t owner,
     const double* bar_distance, const std::array<double, 4>* distances, double* gradient) {

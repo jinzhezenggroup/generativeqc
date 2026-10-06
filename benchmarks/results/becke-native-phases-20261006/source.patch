@@ -1,0 +1,796 @@
+diff --git a/benchmarks/dft_force_components.py b/benchmarks/dft_force_components.py
+index 53d9b87f4..e4c46d5a0 100644
+--- a/benchmarks/dft_force_components.py
++++ b/benchmarks/dft_force_components.py
+@@ -34,6 +34,75 @@ WORK_COUNT_POLICY = (
+     "generated/screened/compacted/executed; logical/capacity bounds remain under "
+     "capacity, and unavailable stages are left empty rather than inferred"
+ )
++BECKE_PHASES = (
++    "point_center_distance",
++    "pair_primal_switch_log",
++    "atom_log_reduction",
++    "normalization",
++    "reverse_derivative",
++    "atom_gather",
++    "point_motion_publication",
++)
++
++
++def _becke_owner(work: Mapping[str, typing.Any]) -> dict[str, typing.Any]:
++    """Retain route evidence without mistaking logical bytes for GPU traffic.
++
++    Native times are cumulative/delta event observations, not additive wall
++    components. Disabled profiling and the unsplit generic route are unmeasured
++    even when their ABI returns a zero-filled duration array.
++    """
++    profile_measured = (
++        work.get("becke_phase_profile_supported") is True
++        and work.get("becke_phase_profile_enabled") is True
++        and (_int_or_none(work.get("becke_profile_batches")) or 0) > 0
++    )
++    times = _mapping(work.get("becke_phase_ms")) if profile_measured else {}
++    selection_names = (
++        "becke_primitive_requested",
++        "becke_primitive_selected",
++        "becke_threads_per_point",
++        "becke_shared_bytes",
++        "phased_becke_bytes",
++    )
++    counters: dict[str, int] = {}
++    logical_bytes: dict[str, int] = {}
++    for name, value in work.items():
++        if (
++            name.startswith(("becke_", "phased_becke_"))
++            and name not in selection_names
++            and name.endswith(
++                (
++                    "_batches",
++                    "_points",
++                    "_entries",
++                    "_visits",
++                    "_launches",
++                    "_bytes",
++                    "_records",
++                    "_synchronizations",
++                    "_evaluations",
++                )
++            )
++        ):
++            _store_counter(
++                logical_bytes if name.endswith("_bytes") else counters, name, value
++            )
++    return {
++        "selection": {name: work.get(name) for name in selection_names},
++        "work_counters": counters,
++        "work_counter_semantics": work.get("becke_work_counter_semantics"),
++        "logical_traffic_bytes": logical_bytes,
++        "logical_traffic_model": work.get("becke_traffic_model"),
++        "profile_supported": work.get("becke_phase_profile_supported"),
++        "profile_enabled": work.get("becke_phase_profile_enabled"),
++        "profile_intrusive": profile_measured,
++        "profile_scope": work.get("becke_phase_profile_scope"),
++        "profiled_ms": {
++            name: _value(times, name, field=f"becke_phase_ms.{name}")
++            for name in BECKE_PHASES
++        },
++    }
+ 
+ 
+ def _finite_nonnegative(value: typing.Any, *, field: str) -> float | None:
+@@ -318,6 +387,10 @@ def _normalize_composite(
+             ),
+         },
+         "source_component_seconds": dict(component),
++        "becke_owners": {
++            str(name): _becke_owner(_mapping(metrics))
++            for name, metrics in _mapping(work.get("stationary_source_work")).items()
++        },
+         "endpoint_seconds": endpoint,
+         "attributed_wall_seconds": attributed,
+         "unattributed_wall_seconds": _unattributed(endpoint, attributed),
+@@ -442,6 +515,7 @@ def _normalize_stationary(
+     return {
+         "schema": "generativeqc.dft-force-components.v1",
+         "source_route": "stationary-exclusive-wall",
++        "becke_owners": {"stationary": _becke_owner(work)},
+         "source_exclusive_wall_seconds": dict(phases),
+         "grid_work_plan": dict(_mapping(work.get("grid_work_plan"))),
+         "resident_ao_selection": (
+diff --git a/python/generativeqc/_stationary_composite_cuda.py b/python/generativeqc/_stationary_composite_cuda.py
+index a01bedc39..8a5066cef 100644
+--- a/python/generativeqc/_stationary_composite_cuda.py
++++ b/python/generativeqc/_stationary_composite_cuda.py
+@@ -62,6 +62,7 @@ from ._resident_ao_maps import ResidentAoMapCache, ResidentAoMapDomain
+ from ._stationary_cuda import (
+     _DOUBLE,
+     _CudaSources,
++    _metric_delta,
+     _native_grid_artifact,
+     _ptr,
+     _resolve_becke_primitive_policy,
+@@ -412,6 +413,11 @@ class PreparedCompositeStationaryCudaGradient:
+                 self.close()
+                 raise
+         component_seconds = {"prepare": perf_counter() - started}
++        # Both retained owners have independent streams and cumulative counters.
++        # Snapshot before nuclear/grid work; never merge their device durations
++        # into a clean host-wall endpoint or omit the nonlocal owner's traffic.
++        source_metrics_before = self.sources.metrics()
++        nonlocal_metrics_before = self.nonlocal_sources.metrics()
+         component_start = perf_counter()
+         evaluate = source._library.generativeqc_ks_snapshot_cuda_integral_gradient_v1
+         evaluate.argtypes = [
+@@ -585,6 +591,14 @@ class PreparedCompositeStationaryCudaGradient:
+             "prepared_execution_reused": reused,
+             "execution_index": self.executions,
+             "snapshot_export_work": dict(source.export_work),
++            "stationary_source_work": {
++                "semilocal": _metric_delta(
++                    self.sources.metrics(), source_metrics_before
++                ),
++                "nonlocal": _metric_delta(
++                    self.nonlocal_sources.metrics(), nonlocal_metrics_before
++                ),
++            },
+             "host_scope": "snapshot validation, bounded tile scheduling, and canonical host source sum",
+             "endpoint_seconds": perf_counter() - started,
+             "component_seconds": component_seconds,
+diff --git a/python/generativeqc/_stationary_cuda.py b/python/generativeqc/_stationary_cuda.py
+index 3b3a8fb3e..721eddfaf 100644
+--- a/python/generativeqc/_stationary_cuda.py
++++ b/python/generativeqc/_stationary_cuda.py
+@@ -111,6 +111,34 @@ _INT = ct.POINTER(ct.c_int64)
+ _SOURCE_NAMES = STATIONARY_RUNTIME_SOURCE_NAMES
+ _DEFAULT_MAX_PRIMITIVE_RECORDS = 16_000_000
+ _AUTO_PHASED_BECKE_MIN_ATOMS = 48
++_BECKE_PHASE_NAMES = (
++    "point_center_distance",
++    "pair_primal_switch_log",
++    "atom_log_reduction",
++    "normalization",
++    "reverse_derivative",
++    "atom_gather",
++    "point_motion_publication",
++)
++_BECKE_PHASE_COUNTER_NAMES = (
++    "becke_phase_batches",
++    "becke_phase_points",
++    "becke_distance_atom_entries",
++    "becke_pair_primal_visits",
++    "becke_log_incident_visits",
++    "becke_normalization_atom_entries",
++    "becke_reverse_pair_visits",
++    "becke_gather_incident_visits",
++    "becke_motion_atom_entries",
++    "becke_phase_launches",
++    "becke_primal_pair_panel_write_bytes",
++    "becke_reverse_pair_panel_write_bytes",
++    "becke_gather_unique_pair_panel_read_bytes",
++    "becke_gather_extra_center_direction_read_bytes",
++    "becke_profile_batches",
++    "becke_profile_event_records",
++    "becke_profile_synchronizations",
++)
+ 
+ 
+ def _resolve_phased_becke_policy(atoms: int, selection: bool | None) -> bool:
+@@ -1650,6 +1678,45 @@ class _CudaSources:
+                     primitive_values,
+                 )
+             )
++        becke_counters = getattr(
++            self.library, "stationary_becke_phase_metrics_v1", None
++        )
++        if becke_counters is not None:
++            becke_counters.argtypes = [
++                ct.c_void_p,
++                ct.POINTER(ct.c_uint64),
++                ct.c_size_t,
++            ]
++            becke_values = (ct.c_uint64 * len(_BECKE_PHASE_COUNTER_NAMES))()
++            if becke_counters(self.handle, becke_values, len(becke_values)):
++                raise RuntimeError("stationary Becke phase counters unavailable")
++            metrics.update(zip(_BECKE_PHASE_COUNTER_NAMES, becke_values))
++            metrics["becke_work_counter_semantics"] = (
++                "launched dense domains; failed forces are not accepted work"
++            )
++            metrics["becke_traffic_model"] = (
++                "logical distinct pair-panel values and extra cached directions; "
++                "not executed loads or hardware transactions"
++            )
++        becke_profile = getattr(self.library, "stationary_becke_phase_profile_v1", None)
++        metrics["becke_phase_profile_supported"] = becke_profile is not None
++        metrics["becke_phase_profile_enabled"] = (
++            self.profile_device and becke_profile is not None
++        )
++        if becke_profile is not None:
++            becke_profile.argtypes = [
++                ct.c_void_p,
++                ct.POINTER(ct.c_double),
++                ct.c_size_t,
++            ]
++            becke_times = (ct.c_double * len(_BECKE_PHASE_NAMES))()
++            if becke_profile(self.handle, becke_times, len(becke_times)):
++                raise RuntimeError("stationary Becke phase profile unavailable")
++            metrics["becke_phase_ms"] = dict(zip(_BECKE_PHASE_NAMES, becke_times))
++            metrics["becke_phase_profile_scope"] = (
++                "phased kernels after AO/XC seeds; intrusive per-tile fence "
++                "when enabled; generic fallback is not split"
++            )
+         profile = (ct.c_double * 10)()
+         if self.profile_device:
+             self.library.stationary_profile_metrics.argtypes = [
+@@ -2194,6 +2261,7 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
+         "phased_becke_batches",
+         "becke_primitive_batches",
+         "becke_primitive_reverse_pair_visits",
++        *_BECKE_PHASE_COUNTER_NAMES,
+     ):
+         if name in after and name in before:
+             result[name] = after[name] - before[name]
+@@ -2202,6 +2270,11 @@ def _metric_delta(after: typing.Any, before: typing.Any) -> typing.Any:
+             name: value - before["device_phase_ms"][name]
+             for name, value in after["device_phase_ms"].items()
+         }
++    if "becke_phase_ms" in after and "becke_phase_ms" in before:
++        result["becke_phase_ms"] = {
++            name: value - before["becke_phase_ms"][name]
++            for name, value in after["becke_phase_ms"].items()
++        }
+     return result
+ 
+ 
+diff --git a/python/generativeqc_compiler/xc/grid_response_ir.py b/python/generativeqc_compiler/xc/grid_response_ir.py
+index 1046ec1c1..351e5cba7 100644
+--- a/python/generativeqc_compiler/xc/grid_response_ir.py
++++ b/python/generativeqc_compiler/xc/grid_response_ir.py
+@@ -17,8 +17,8 @@ from generativeqc_compiler.integral.expr import Expr, Graph
+ class GridResponseProgram:
+     """Shared scalar primal/JVP roots, independent of runtime or molecule size."""
+ 
+-    graph: object
+-    roots: tuple
++    graph: Graph
++    roots: tuple[Expr, ...]
+     identity: str
+ 
+     def evaluate(self, **variables: typing.Any) -> typing.Any:
+diff --git a/src/dft/stationary_gradient_cuda.cuh b/src/dft/stationary_gradient_cuda.cuh
+index c3265df4b..90c44e26c 100644
+--- a/src/dft/stationary_gradient_cuda.cuh
++++ b/src/dft/stationary_gradient_cuda.cuh
+@@ -26,6 +26,8 @@ struct Owner {
+        becke_primitive_configured = false;
+   cudaStream_t geometry_stream{};
+   cudaEvent_t stage0{}, stage1{}, stage2{}, stage3{};
++  cudaEvent_t becke_events[8]{};
++  double becke_phase_ms[7]{};
+   double synchronization_wait_ms{}, setup_transfer_ms{}, setup_validation_ms{};
+   double primitive_h2d_ms{}, primitive_kernel_ms{}, primitive_reduction_ms{};
+   double geometry_h2d_ms{}, geometry_kernel_ms{}, geometry_reduction_ms{}, final_d2h_wall_ms{};
+@@ -39,6 +41,7 @@ struct Owner {
+   uint64_t center_distance_evaluations{}, center_geometry_preparations{},
+       becke_pair_state_evaluations{}, phased_batches{};
+   uint64_t becke_primitive_batches{}, becke_primitive_reverse_pair_visits{};
++  uint64_t phased_points{}, becke_profile_batches{};
+   bool retains_becke_pair_state() const {
+     return bool(phased_storage) ||
+            (becke_threads_per_point > 1 && atoms <= stationary_becke_retained_max_atoms);
+@@ -226,22 +229,45 @@ void launch_geometry(Owner& owner, cudaStream_t stream, generativeqc::dft::GridT
+   if (owner.phased_storage) {
+     const dim3 atom_blocks(blocks(view.npoint, 128), na);
+     const dim3 pair_blocks(blocks(view.npoint, 128), na * (na - 1) / 2);
++    // These events follow the AO/XC seed producer on its borrowed stream.
++    // Disabled profiling records nothing and adds no device synchronization.
++    profile_record(owner, owner.becke_events[0], stream);
+     phased_becke_atom<0><<<atom_blocks, 128, 0, stream>>>(phased);
++    profile_record(owner, owner.becke_events[1], stream);
+     phased_becke_pair<false><<<pair_blocks, 128, 0, stream>>>(phased);
++    profile_record(owner, owner.becke_events[2], stream);
+     phased_becke_atom<1><<<atom_blocks, 128, 0, stream>>>(phased);
++    profile_record(owner, owner.becke_events[3], stream);
+     phased_becke_normalize<<<blocks(view.npoint, 128), 128, 0, stream>>>(phased);
++    profile_record(owner, owner.becke_events[4], stream);
+     if (owner.becke_primitive) {
+       phased_becke_pair<true, true><<<pair_blocks, 128, 0, stream>>>(phased);
++      profile_record(owner, owner.becke_events[5], stream);
+       phased_becke_atom<2, true><<<atom_blocks, 128, 0, stream>>>(phased);
+       ++owner.becke_primitive_batches;
+       owner.becke_primitive_reverse_pair_visits += view.npoint * na * (na - 1) / 2;
+     } else {
+       phased_becke_pair<true><<<pair_blocks, 128, 0, stream>>>(phased);
++      profile_record(owner, owner.becke_events[5], stream);
+       phased_becke_atom<2><<<atom_blocks, 128, 0, stream>>>(phased);
+     }
++    profile_record(owner, owner.becke_events[6], stream);
+     phased_becke_atom<3><<<atom_blocks, 128, 0, stream>>>(phased);
++    profile_record(owner, owner.becke_events[7], stream);
+     owner.launches += 7;
+     ++owner.phased_batches;
++    owner.phased_points += view.npoint;
++    if (owner.profile) {
++      // Event reuse across deferred tiles is safe only after the last event.
++      // This intentional per-tile fence is intrusive qualification, never a
++      // clean endpoint sample; report its event/fence counts separately.
++      cuda_check(cudaEventSynchronize(owner.becke_events[7]));
++      ++owner.synchronizations;
++      ++owner.becke_profile_batches;
++      for (size_t phase = 0; phase < 7; ++phase)
++        profile_elapsed(owner, owner.becke_phase_ms[phase], owner.becke_events[phase],
++                        owner.becke_events[phase + 1]);
++    }
+   }
+ }
+ }  // namespace generativeqc_stationary_cuda
+@@ -443,6 +469,42 @@ int stationary_becke_primitive_metrics_v1(void* pointer, uint64_t* output, size_
+   output[3] = owner->becke_primitive_reverse_pair_visits;
+   return 0;
+ }
++int stationary_becke_phase_metrics_v1(void* pointer, uint64_t* output, size_t count) {
++  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
++  if (!owner || !output || count != 17) return 1;
++  const uint64_t points = owner->phased_points;
++  const uint64_t atom_entries = points * owner->atoms;
++  const uint64_t pairs = points * owner->atoms * (owner->atoms - 1) / 2;
++  const uint64_t reverse_words = owner->becke_primitive ? 2 : 4;
++  // Dense launched domains and logical distinct panel values, not hardware
++  // transactions or completed work from a failed force. Conditional primal/log
++  // reads and scalar transcendental evaluations are deliberately not inferred.
++  const uint64_t values[]{owner->phased_batches,
++                          points,
++                          atom_entries,
++                          pairs,
++                          2 * pairs,
++                          atom_entries,
++                          pairs,
++                          2 * pairs,
++                          atom_entries,
++                          7 * owner->phased_batches,
++                          4 * 8 * pairs,
++                          reverse_words * 8 * pairs,
++                          2 * reverse_words * 8 * pairs,
++                          owner->becke_primitive ? 2 * 3 * 8 * pairs : 0,
++                          owner->becke_profile_batches,
++                          8 * owner->becke_profile_batches,
++                          owner->becke_profile_batches};
++  std::copy(values, values + 17, output);
++  return 0;
++}
++int stationary_becke_phase_profile_v1(void* pointer, double* output, size_t count) {
++  auto* owner = static_cast<generativeqc_stationary_cuda::Owner*>(pointer);
++  if (!owner || !output || count != 7) return 1;
++  std::copy(owner->becke_phase_ms, owner->becke_phase_ms + 7, output);
++  return 0;
++}
+ int stationary_topology(void* pointer, const double* primitives, const int64_t* ao_ranges,
+                         const double* ao_norms, const int64_t* ao_atoms, char* error, size_t size) {
+   using namespace generativeqc_stationary_cuda;
+@@ -489,7 +551,7 @@ int stationary_profile(void* pointer, char* error, size_t size) {
+     if (!p) throw std::invalid_argument("null stationary owner");
+     p->context.check_device();
+     if (p->profile) return;
+-    cudaEvent_t events[4]{};
++    cudaEvent_t events[12]{};
+     try {
+       for (auto& event : events) cuda_check(cudaEventCreate(&event));
+     } catch (...) {
+@@ -501,6 +563,7 @@ int stationary_profile(void* pointer, char* error, size_t size) {
+     p->stage1 = events[1];
+     p->stage2 = events[2];
+     p->stage3 = events[3];
++    std::copy(events + 4, events + 12, p->becke_events);
+     p->profile = true;
+   });
+ }
+@@ -1218,6 +1281,8 @@ void stationary_destroy(void* pointer) {
+     if (p->stage1) cudaEventDestroy(p->stage1);
+     if (p->stage2) cudaEventDestroy(p->stage2);
+     if (p->stage3) cudaEventDestroy(p->stage3);
++    for (auto event : p->becke_events)
++      if (event) cudaEventDestroy(event);
+   }
+   if (have_device) cudaSetDevice(previous);
+   delete p;
+diff --git a/tests/python/test_benchmark_dft_force_components.py b/tests/python/test_benchmark_dft_force_components.py
+index b12a19868..7c89bdaea 100644
+--- a/tests/python/test_benchmark_dft_force_components.py
++++ b/tests/python/test_benchmark_dft_force_components.py
+@@ -7,6 +7,70 @@ import pytest
+ from tools.benchmark_dft_force_components import _coverage, extract_records
+ 
+ 
++@pytest.mark.parametrize(
++    "supported,enabled,batches",
++    [(False, True, 4), (True, False, 4), (True, True, 0), (True, True, 4)],
++)
++def test_becke_phase_observations_are_not_clean_wall_components(
++    supported: bool, enabled: bool, batches: int
++) -> None:
++    from benchmarks.dft_force_components import BECKE_PHASES, normalize_force_work
++
++    work = {
++        "endpoint_seconds": 1.0,
++        "becke_primitive_requested": 1,
++        "becke_primitive_selected": 0,
++        "becke_reverse_pair_visits": 64,
++        "becke_reverse_pair_panel_write_bytes": 2048,
++        "becke_profile_batches": batches,
++        "becke_phase_profile_supported": supported,
++        "becke_phase_profile_enabled": enabled,
++        "becke_phase_ms": dict.fromkeys(BECKE_PHASES, 2000.0),
++        "becke_work_counter_semantics": "launched dense domains",
++        "becke_traffic_model": "logical values, not hardware traffic",
++    }
++    result = normalize_force_work(work)
++    owner = result["becke_owners"]["stationary"]
++    assert owner["selection"]["becke_primitive_requested"] == 1
++    assert owner["selection"]["becke_primitive_selected"] == 0
++    assert owner["work_counters"]["becke_reverse_pair_visits"] == 64
++    assert owner["logical_traffic_bytes"] == {
++        "becke_reverse_pair_panel_write_bytes": 2048
++    }
++    assert owner["profiled_ms"] == dict.fromkeys(
++        BECKE_PHASES, 2000.0 if supported and enabled and batches else None
++    )
++    assert owner["profile_intrusive"] == bool(supported and enabled and batches)
++    assert result["attributed_wall_seconds"] == 0.0
++    assert result["endpoint_seconds"] == 1.0
++
++
++def test_composite_becke_owners_remain_separate_and_old_abi_is_unmeasured() -> None:
++    from benchmarks.dft_force_components import BECKE_PHASES, normalize_force_work
++
++    work = {
++        "execution": "cuda-complete-composite",
++        "component_seconds": {},
++        "stationary_source_work": {
++            "semilocal": {
++                "becke_primitive_selected": 1,
++                "becke_reverse_pair_visits": 16,
++            },
++            "nonlocal": {
++                "becke_primitive_selected": 0,
++                "becke_reverse_pair_visits": 32,
++            },
++        },
++    }
++    result = normalize_force_work(work)
++    owners = result["becke_owners"]
++    assert set(owners) == {"semilocal", "nonlocal"}
++    for name, selected, visits in (("semilocal", 1, 16), ("nonlocal", 0, 32)):
++        assert owners[name]["selection"]["becke_primitive_selected"] == selected
++        assert owners[name]["work_counters"]["becke_reverse_pair_visits"] == visits
++        assert owners[name]["profiled_ms"] == dict.fromkeys(BECKE_PHASES)
++
++
+ def test_extract_stationary_record_uses_normalized_component_schema() -> None:
+     payload = {
+         "schema": "generativeqc.stationary-cuda-force-benchmark.v1",
+diff --git a/tests/python/test_dft_mp_v1_capacity.py b/tests/python/test_dft_mp_v1_capacity.py
+index e1fa89c78..2f48dde19 100644
+--- a/tests/python/test_dft_mp_v1_capacity.py
++++ b/tests/python/test_dft_mp_v1_capacity.py
+@@ -347,7 +347,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
+             "107b14cccf490d0b516be2d32b576bd51370adfa79fdbe2c6bf651c5fe9b58d6"
+         ),
+         "native_owner_sha256": (
+-            "3f78cb6d8af0fa39c8420ea4c61fc8a9783d7ee78a47f288bd596de4f01496a7"
++            "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
+         ),
+         "native_allocation_sha256": (
+             "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
+@@ -377,7 +377,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
+             "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
+         ),
+         "native_launch_geometry_sha256": (
+-            "6b3343808acd8ba16c1de2bfc21b1fa491028e7005ff7d8a80521823f60ed535"
++            "797fcbc8d13fee9ab45f6c06064f715037d5ebd795ef712fcdca94a18378eab6"
+         ),
+         "native_configure_becke_sha256": (
+             "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
+@@ -391,6 +391,15 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
+         "native_becke_primitive_metrics_sha256": (
+             "e26f986b6a563378498e44e592e31acab8a11368e44efb273842dd679690d739"
+         ),
++        "native_becke_phase_metrics_sha256": (
++            "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
++        ),
++        "native_becke_phase_profile_sha256": (
++            "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"
++        ),
++        "native_profile_sha256": (
++            "39de20bb679f7000ed62211ddb8bafcd292052bbb8561bc25eb18f47bb055d86"
++        ),
+         "native_finish_span_sha256": (
+             "3f12a2c23709399c56776e34f5d7cd2394a95e153f754694bb7d523772efa431"
+         ),
+@@ -2403,6 +2412,24 @@ def test_geometry_resource_budget_changes_fail_closed(
+             "p->atoms > 128",
+             "native_configure_becke_sha256",
+         ),
++        (
++            "int stationary_becke_phase_metrics_v1(",
++            "const uint64_t reverse_words = owner->becke_primitive ? 2 : 4;",
++            "const uint64_t reverse_words = 1;",
++            "native_becke_phase_metrics_sha256",
++        ),
++        (
++            "int stationary_becke_phase_profile_v1(",
++            "count != 7",
++            "count != 8",
++            "native_becke_phase_profile_sha256",
++        ),
++        (
++            "int stationary_profile(",
++            "cudaEvent_t events[12]{};",
++            "cudaEvent_t events[4]{};",
++            "native_profile_sha256",
++        ),
+     ],
+ )
+ def test_cooperative_native_schedule_contract_fails_closed(
+diff --git a/tests/python/test_stationary_becke_phased_cuda.py b/tests/python/test_stationary_becke_phased_cuda.py
+index 9c0bca99c..f86520f9f 100644
+--- a/tests/python/test_stationary_becke_phased_cuda.py
++++ b/tests/python/test_stationary_becke_phased_cuda.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import ctypes as ct
++import json
+ import os
+ from pathlib import Path
+ from types import SimpleNamespace
+@@ -84,6 +85,7 @@ def native() -> SimpleNamespace:
+             size,
+         ],
+         "stationary_finish": [pointer, pointer, size],
++        "stationary_profile": [pointer],
+     }
+     if hasattr(library, "stationary_configure_becke_primitive_v1"):
+         signatures["stationary_configure_becke_primitive_v1"] = [pointer, ct.c_int]
+@@ -102,6 +104,12 @@ def native() -> SimpleNamespace:
+             ct.POINTER(ct.c_uint64),
+             size,
+         ]
++    for name, scalar in (
++        ("stationary_becke_phase_metrics_v1", ct.c_uint64),
++        ("stationary_becke_phase_profile_v1", ct.c_double),
++    ):
++        if hasattr(library, name):
++            getattr(library, name).argtypes = [pointer, ct.POINTER(scalar), size]
+ 
+     def call(name: str, *arguments: object) -> None:
+         error = ct.create_string_buffer(4096)
+@@ -117,6 +125,7 @@ def native() -> SimpleNamespace:
+ @pytest.mark.parametrize("selection", ["full", "subset", "empty"])
+ @pytest.mark.parametrize("external", [False, True])
+ @pytest.mark.parametrize("primitive", [False, True])
++@pytest.mark.parametrize("profiled", [False, True])
+ def test_shared_owner_phases_preserve_sources_and_work(
+     native: SimpleNamespace,
+     atoms: int,
+@@ -124,6 +133,7 @@ def test_shared_owner_phases_preserve_sources_and_work(
+     selection: str,
+     external: bool,
+     primitive: bool,
++    profiled: bool,
+ ) -> None:
+     """Replay identical AO/XC inputs through the actual bounded/phased owner.
+ 
+@@ -134,6 +144,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
+         native.library, "stationary_configure_becke_primitive_v1"
+     ):
+         pytest.skip("artifact predates whole-domain primitive admission")
++    if profiled and not hasattr(native.library, "stationary_becke_phase_profile_v1"):
++        pytest.skip("artifact predates separate Becke phase profiling")
+     cupy = native.cupy
+     rng = np.random.default_rng(183000 + atoms)
+     centers = rng.normal(size=(atoms, 3)) * 3
+@@ -157,6 +169,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
+     host_atoms = np.array([0, 1, atoms - 2, atoms - 1], dtype=np.int64)
+     baseline = []
+     for phased in (False, True):
++        max_abs_error = 0.0
++        max_scaled_error = 0.0
+         plan = plan_stationary_cuda_resources(
+             atoms=atoms,
+             aos=4,
+@@ -189,6 +203,8 @@ def test_shared_owner_phases_preserve_sources_and_work(
+         )
+         stream = cupy.cuda.Stream(non_blocking=True)
+         try:
++            if profiled:
++                native.call("stationary_profile", handle)
+             native.call(
+                 "stationary_configure_becke",
+                 handle,
+@@ -301,6 +317,17 @@ def test_shared_owner_phases_preserve_sources_and_work(
+                     "stationary_finish", handle, result.ctypes.data, result.size
+                 )
+                 if phased:
++                    difference = np.abs(result - baseline[geometry])
++                    max_abs_error = max(max_abs_error, float(np.max(difference)))
++                    max_scaled_error = max(
++                        max_scaled_error,
++                        float(
++                            np.max(
++                                difference
++                                / (2e-11 + 5e-12 * np.abs(baseline[geometry]))
++                            )
++                        ),
++                    )
+                     np.testing.assert_allclose(
+                         result, baseline[geometry], rtol=5e-12, atol=2e-11
+                     )
+@@ -319,6 +346,80 @@ def test_shared_owner_phases_preserve_sources_and_work(
+             assert phase_metrics[0] == plan.phased_becke_bytes
+             assert phase_metrics[1] == (6 if phased else 0)
+             assert metrics[0] == plan.allocation_bytes
++            if hasattr(native.library, "stationary_becke_phase_metrics_v1"):
++                phase_work = (ct.c_uint64 * 17)()
++                phase_times = (ct.c_double * 7)()
++                assert (
++                    native.library.stationary_becke_phase_metrics_v1(
++                        handle, phase_work, 17
++                    )
++                    == 0
++                )
++                assert (
++                    native.library.stationary_becke_phase_profile_v1(
++                        handle, phase_times, 7
++                    )
++                    == 0
++                )
++                points = 3 * 257 if phased else 0
++                pairs = points * atoms * (atoms - 1) // 2
++                words = 2 if primitive and phased else 4
++                profiled_batches = 6 if profiled and phased else 0
++                assert tuple(phase_work) == (
++                    6 if phased else 0,
++                    points,
++                    points * atoms,
++                    pairs,
++                    2 * pairs,
++                    points * atoms,
++                    pairs,
++                    2 * pairs,
++                    points * atoms,
++                    42 if phased else 0,
++                    4 * 8 * pairs,
++                    words * 8 * pairs,
++                    2 * words * 8 * pairs,
++                    2 * 3 * 8 * pairs if primitive and phased else 0,
++                    profiled_batches,
++                    8 * profiled_batches,
++                    profiled_batches,
++                )
++                if profiled_batches:
++                    assert all(
++                        np.isfinite(value) and value > 0 for value in phase_times
++                    )
++                else:
++                    assert tuple(phase_times) == (0.0,) * 7
++                if path := os.environ.get("GENERATIVEQC_BECKE_PHASE_RECORD"):
++                    with Path(path).open("a") as records:
++                        records.write(
++                            json.dumps(
++                                {
++                                    "atoms": atoms,
++                                    "implicit": implicit,
++                                    "selection": selection,
++                                    "external": external,
++                                    "primitive_requested": primitive,
++                                    "phased": phased,
++                                    "profiled": profiled,
++                                    "phase_work": list(phase_work),
++                                    "phase_ms": list(phase_times),
++                                    "generic_ad_max_abs_error": max_abs_error
++                                    if phased
++                                    else None,
++                                    "generic_ad_max_scaled_error": max_scaled_error
++                                    if phased
++                                    else None,
++                                    "generic_ad_tolerance": {
++                                        "atol": 2e-11,
++                                        "rtol": 5e-12,
++                                    },
++                                    "scope": "synthetic shared-owner qualification; not endpoint",
++                                },
++                                sort_keys=True,
++                            )
++                            + "\n"
++                        )
+             if hasattr(native.library, "stationary_becke_primitive_metrics_v1"):
+                 primitive_metrics = (ct.c_uint64 * 4)()
+                 assert (
+diff --git a/tests/python/test_stationary_task_work_budget.py b/tests/python/test_stationary_task_work_budget.py
+index 72726d5b0..b2cd6eec8 100644
+--- a/tests/python/test_stationary_task_work_budget.py
++++ b/tests/python/test_stationary_task_work_budget.py
+@@ -142,6 +142,34 @@ def test_task_metrics_are_reported_per_execution() -> None:
+     assert "phased_becke_batches" not in runtime._metric_delta(after, before)
+ 
+ 
++def test_becke_delta_preserves_optional_abi_and_differences_every_phase() -> None:
++    from generativeqc import _stationary_cuda as runtime
++
++    required = dict.fromkeys(
++        (
++            "h2d_bytes",
++            "d2h_bytes",
++            "launches",
++            "primitive_records",
++            "xc_points",
++            "grid_pair_visits",
++            "task_descriptors",
++            "task_batches",
++        ),
++        0,
++    )
++    before = {**required, **dict.fromkeys(runtime._BECKE_PHASE_COUNTER_NAMES, 3)}
++    after = {**required, **dict.fromkeys(runtime._BECKE_PHASE_COUNTER_NAMES, 11)}
++    before["becke_phase_ms"] = dict.fromkeys(runtime._BECKE_PHASE_NAMES, 0.25)
++    after["becke_phase_ms"] = dict.fromkeys(runtime._BECKE_PHASE_NAMES, 0.75)
++    after["becke_primitive_selected"] = 1
++    delta = runtime._metric_delta(after, before)
++    assert all(delta[name] == 8 for name in runtime._BECKE_PHASE_COUNTER_NAMES)
++    assert delta["becke_phase_ms"] == dict.fromkeys(runtime._BECKE_PHASE_NAMES, 0.5)
++    assert delta["becke_primitive_selected"] == 1
++    assert runtime._metric_delta(required, required) == required
++
++
+ PREAMBLE = r"""
+ #include <cmath>
+ #include <cstddef>
+diff --git a/tools/dft_mp_v1/qualify_capacity.py b/tools/dft_mp_v1/qualify_capacity.py
+index c9a5af7ed..11d9ccb25 100644
+--- a/tools/dft_mp_v1/qualify_capacity.py
++++ b/tools/dft_mp_v1/qualify_capacity.py
+@@ -371,7 +371,7 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
+     "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
+ )
+ NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
+-    "3f78cb6d8af0fa39c8420ea4c61fc8a9783d7ee78a47f288bd596de4f01496a7"
++    "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
+ )
+ NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
+     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
+@@ -405,7 +405,16 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
+     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
+ )
+ NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
+-    "6b3343808acd8ba16c1de2bfc21b1fa491028e7005ff7d8a80521823f60ed535"
++    "797fcbc8d13fee9ab45f6c06064f715037d5ebd795ef712fcdca94a18378eab6"
++)
++NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256 = (
++    "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
++)
++NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256 = (
++    "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"
++)
++NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256 = (
++    "39de20bb679f7000ed62211ddb8bafcd292052bbb8561bc25eb18f47bb055d86"
+ )
+ NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256 = (
+     "b7f8d1b346ae580f2c977cece992aa5cbea0582adcc9e0f2ab76c0fa94831e4b"
+@@ -921,6 +930,18 @@ def _source_limits(repository: Path) -> dict[str, Any]:
+             "int stationary_becke_primitive_metrics_v1(",
+             NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256,
+         ),
++        "native_becke_phase_metrics_sha256": (
++            "int stationary_becke_phase_metrics_v1(",
++            NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256,
++        ),
++        "native_becke_phase_profile_sha256": (
++            "int stationary_becke_phase_profile_v1(",
++            NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256,
++        ),
++        "native_profile_sha256": (
++            "int stationary_profile(",
++            NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256,
++        ),
+         "native_finish_span_sha256": (
+             "int stationary_finish_span(",
+             NATIVE_STATIONARY_FINISH_SPAN_CONTRACT_SHA256,

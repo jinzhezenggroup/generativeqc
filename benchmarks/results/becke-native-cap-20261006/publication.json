@@ -1,0 +1,59 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "Actual 128-atom native cap, route/counter/lifetime and sanitizer gates pass against generic native AD. Not a new independent physical oracle, performance acceptance or full issue completion.",
+    "scope": "numerical",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 4754,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "59ed4446b5ca3ca53214d4baaf7ef80d0fd0875470b1e332703829882baefa4d"
+    },
+    {
+      "bytes": 2609,
+      "path": "observations.json.gz",
+      "role": "samples",
+      "sha256": "494a8c3d8e4c4bae7f961c9ecc0b748ab7232704080e001ce3045042005087a9"
+    },
+    {
+      "bytes": 27759,
+      "path": "source-files.sha256.gz",
+      "role": "input",
+      "sha256": "e14efcc824b6a371fbad0dfa8c54e7ec4e39f536d4b5ede257032758aa80ee1e"
+    },
+    {
+      "bytes": 1088,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "9a5a0293cfe34ba8948a6e51d6ba3a4738d27e6ea1318e86d4c5c44f72d339e0"
+    },
+    {
+      "bytes": 3630,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "96245512d5adb1e54c9e25bbb8cb62381b707f585b00fa7f59bf5664cdca1947"
+    },
+    {
+      "bytes": 2076,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "68a87e077eaa7103843b4b393aced4a591f30423c846c1cf1c3e6c3c57139b51"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-native-cap-20261006/reproduce.sh"
+    ],
+    "prerequisites": "CUDA12.9 sm120/RTX5090, finite main/gpu:5090:1 Slurm, ccache/nvcc/C++ compiler, Python compiler dependencies plus NumPy/pytest/CuPy and compute-sanitizer. Set CUDA_ROOT/PYTHON. Full reproduction recipe not separately reexecuted.",
+    "source_restore": "Keep bundle outside source tree. Restore source.revision and apply source.patch. Verify the scientific/test manifest. Rebuild from those inputs; earlier publication retains original binary build proof."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "ad739338c870e12bc57eb8fd1d5a26b7c742bdd7"
+  }
+}

@@ -108,6 +108,7 @@ from generativeqc import _generated_methods as generated_methods
 from generativeqc._model_resolution import snapshot_basis
 from generativeqc._stationary_cuda import (
     COMPONENT_LABELS,
+    _resolve_becke_primitive_policy,
     _resolve_phased_becke_policy,
     complete_rks_cuda_gradient_diagnostic,
 )
@@ -160,6 +161,7 @@ _LOCAL_HELPERS = {
     "snapshot_basis": snapshot_basis,
     "BasisSet": BasisSet,
     "complete_rks_cuda_gradient_diagnostic": complete_rks_cuda_gradient_diagnostic,
+    "_resolve_becke_primitive_policy": _resolve_becke_primitive_policy,
     "resolved_basis_metadata": resolved_basis_metadata,
     "KsOptions": KsOptions,
     "ks_coefficients": ks_coefficients,
@@ -308,7 +310,7 @@ STATIONARY_PAGE_FLUSH_CONTRACT_SHA256 = (
     "1c2e0bb83a12eed7113825855cbe2164f53366b6bb270dd6c1247b498737c77b"
 )
 STATIONARY_PAGE_INITIALIZER_CONTRACT_SHA256 = (
-    "93c90107478ad20ff9d78231acfd4b13254a39278f2ae82a5dd5e22be29dc321"
+    "66e194029f680b9107882fa06df707d48efdb7aba8759707e7f538406168c689"
 )
 STATIONARY_PAGE_BULK_CONTRACT_SHA256 = (
     "b7bc1344bd86447cd6c9efcdfef944bb22c8b92b5ed5327d2028cf787d6a1729"
@@ -350,10 +352,13 @@ STATIONARY_AO_MAP_CACHE_CONTRACT_SHA256 = (
     "107b14cccf490d0b516be2d32b576bd51370adfa79fdbe2c6bf651c5fe9b58d6"
 )
 STATIONARY_TILE_RESOURCE_CONTRACT_SHA256 = (
-    "ae04ceaa389b148cb6d8f3a1316a4f23ebdbe698753efe1cf5ae81d96251ca42"
+    "1889ebf22dff9d64f602f714ab5157e69b01bf122ba682f04cea04b2c232dba8"
 )
 PHASED_BECKE_POLICY_CONTRACT_SHA256 = (
     "b1ff9a17cefee83a133a8217574f92c902ed601c46c0534e38ee3d5b121876b9"
+)
+BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256 = (
+    "9d11620513c8800057827b5af1fee1659552c1d43dd7d014c6fcb53c95f901ad"
 )
 STATIONARY_TILE_LAYOUT_CONTRACT_SHA256 = (
     "2887f95c615859955f768bee0be2a8b47a4d424f02e686748a92321bc9f5c3a7"
@@ -373,7 +378,7 @@ STATIONARY_PUBLIC_WRAPPER_CONTRACT_SHA256 = (
     "fdc50e612544de72683bd4a421709333c763244ec01977682fafbf0bdcf2562e"
 )
 NATIVE_STATIONARY_OWNER_CONTRACT_SHA256 = (
-    "de78cc8efd5e7c86f54862caf42c5269cdea6a9791f5cde776480fc660540b20"
+    "5cace07683ddacab86dcf7fd42dc26a1897c87b11baca127b3112efa293f0621"
 )
 NATIVE_STATIONARY_ALLOCATION_CONTRACT_SHA256 = (
     "4fd148d906538720ab568b0f7aa056e2d2b112b009c26eb9f4c08156f8f38a15"
@@ -407,7 +412,22 @@ NATIVE_STATIONARY_GEOMETRY_ROUTE_CONTRACT_SHA256 = (
     "3fc0a5f613dfaa01ab02104e15929680f3f61fa17c07d59d54241201f903d476"
 )
 NATIVE_STATIONARY_LAUNCH_GEOMETRY_CONTRACT_SHA256 = (
-    "a6f197f1ac3fa905f87a8b1d29b083fa51af9c14f57afabb05ad1376a1496264"
+    "797fcbc8d13fee9ab45f6c06064f715037d5ebd795ef712fcdca94a18378eab6"
+)
+NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256 = (
+    "a3e3753240f494f7ee15d43c2fb3231e009ab45fb265cbf55e776aea3f0c10d9"
+)
+NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256 = (
+    "d8d61c1a2240790216ea931bef7c41c7ac1a5325de9b76b96449b8f1108a3e5d"
+)
+NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256 = (
+    "39de20bb679f7000ed62211ddb8bafcd292052bbb8561bc25eb18f47bb055d86"
+)
+NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256 = (
+    "b7f8d1b346ae580f2c977cece992aa5cbea0582adcc9e0f2ab76c0fa94831e4b"
+)
+NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256 = (
+    "e26f986b6a563378498e44e592e31acab8a11368e44efb273842dd679690d739"
 )
 NATIVE_STATIONARY_CONFIGURE_BECKE_CONTRACT_SHA256 = (
     "dc844781c888d1bdd281238d4dd23c76048d17f816cb81b5a0616756a22ffe91"
@@ -455,7 +475,7 @@ GRID_PLAN_DEFINITION = (
     "tile_points=tile_points, active_ao_capacity=n, budget_bytes=max_device_bytes)"
 )
 GEOMETRY_RESOURCES_CONTRACT_SHA256 = (
-    "d48e0ce6b2637c492b7322748dbef2c65d14b07c424b84fab88fcbe1d45ca06a"
+    "a80c913e079445ef8db41ae229df41b59c77028b54e7351063add8f8e77e6c56"
 )
 MINIMUM_SOURCE_BYTES_DEFINITION = (
     "stationary_cuda_allocation_bytes(atoms=na, aos=n, primitives=basis.nprimitive, "
@@ -467,7 +487,8 @@ SOURCE_RESOURCES_DEFINITION = (
     "points=tile_points, tasks=primitive_tile, spins=plan.spin_blocks, "
     "sources=len(source_names), target=target, budget_bytes=max_device_bytes - "
     "grid_plan.peak_bytes - sum((value.peak_bytes for value in tensor_plans.values())) - "
-    "native_geometry_reserve, phased_becke=_resolve_phased_becke_policy(na, None))"
+    "native_geometry_reserve, phased_becke=_resolve_phased_becke_policy(na, None), "
+    "becke_primitive=_resolve_becke_primitive_policy())"
 )
 SOURCE_BYTES_DEFINITION = "source_resources.allocation_bytes"
 HOST_BOUND_DEFINITION = (
@@ -734,6 +755,18 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         or ast.unparse(phase_thresholds[0].value) != "48"
     ):
         raise RuntimeError("stationary CUDA phased Becke policy contract changed")
+    primitive_policies = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_resolve_becke_primitive_policy"
+    ]
+    if (
+        len(primitive_policies) != 1
+        or _source_node_sha256(source, primitive_policies[0])
+        != BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256
+    ):
+        raise RuntimeError("stationary CUDA Becke primitive policy contract changed")
     classes = {node.name: node for node in tree.body if isinstance(node, ast.ClassDef)}
     resource_owners = [
         node
@@ -810,6 +843,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "geometry_resources_sha256": resource_digest,
         "ordinary_tile_layout_sha256": STATIONARY_TILE_LAYOUT_CONTRACT_SHA256,
         "phased_becke_policy_sha256": PHASED_BECKE_POLICY_CONTRACT_SHA256,
+        "becke_primitive_policy_sha256": BECKE_PRIMITIVE_POLICY_CONTRACT_SHA256,
     }
     for label, (class_name, method_name, expected_digest) in page_methods.items():
         class_node = classes.get(class_name)
@@ -894,6 +928,26 @@ def _source_limits(repository: Path) -> dict[str, Any]:
         "native_metrics_sha256": (
             "int stationary_metrics(",
             NATIVE_STATIONARY_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_primitive_admission_sha256": (
+            "int stationary_configure_becke_primitive_v1(",
+            NATIVE_BECKE_PRIMITIVE_ADMISSION_CONTRACT_SHA256,
+        ),
+        "native_becke_primitive_metrics_sha256": (
+            "int stationary_becke_primitive_metrics_v1(",
+            NATIVE_BECKE_PRIMITIVE_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_phase_metrics_sha256": (
+            "int stationary_becke_phase_metrics_v1(",
+            NATIVE_BECKE_PHASE_METRICS_CONTRACT_SHA256,
+        ),
+        "native_becke_phase_profile_sha256": (
+            "int stationary_becke_phase_profile_v1(",
+            NATIVE_BECKE_PHASE_PROFILE_CONTRACT_SHA256,
+        ),
+        "native_profile_sha256": (
+            "int stationary_profile(",
+            NATIVE_STATIONARY_PROFILE_CONTRACT_SHA256,
         ),
         "native_finish_span_sha256": (
             "int stationary_finish_span(",
@@ -1200,6 +1254,7 @@ def _source_limits(repository: Path) -> dict[str, Any]:
             "basis_primitive_count": 4096,
         },
         "phased_becke_auto_min_atoms": 48,
+        "becke_primitive_requested": _resolve_becke_primitive_policy(),
         "native_integral_requirement_definition": NATIVE_REQUIREMENT_DEFINITION,
         "native_integral_host_reserve_definition": NATIVE_HOST_RESERVE_DEFINITION,
         "host_bound_total_definition": "host_bound + native_integral_host_reserve",
@@ -1574,6 +1629,7 @@ def _method_resources(
             limits["additional_device_bytes"] - grid_plan.peak_bytes - native_reserve,
         ),
         phased_becke=_resolve_phased_becke_policy(atom_count, None),
+        becke_primitive=_resolve_becke_primitive_policy(),
     )
     source_bytes = resources.allocation_bytes
     device_bound = grid_plan.peak_bytes + source_bytes

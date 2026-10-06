@@ -397,6 +397,7 @@ CUDA_MODULES["cuda_direct_contractions"] = (
     "direct_force_scatter",
     "direct_force_low_order",
     "direct_force_low_order_sources",
+    "direct_force_execution",
     "direct_force_order4_sources",
     "direct_force_order5_sources",
     "direct_force_order2",
@@ -460,6 +461,7 @@ CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "weighted_eri_kernels.hpp",
 )
 CUDA_ALLOWED["cuda_direct_kernel_interfaces"] = (
+    "scf/cuda/direct_force_sources.hpp",
     "scf/cuda/direct_metadata.hpp",
     "scf/cuda/packed_basis.hpp",
     "scf/cuda_weighted_eri.hpp",

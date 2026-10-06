@@ -1,0 +1,116 @@
+{
+  "attachments": [
+    {
+      "path": "receipts.txt",
+      "sha256": "f4e1ded72c760f3d655bb3c9267d20112b1ac21be0a42a02cbe05b55aa3c5459"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {},
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "identity_source": "finite main/gpu:5090:1 step and retained device visibility",
+    "name": "NVIDIA GeForce RTX 5090",
+    "node": "node1",
+    "slurm_job": "6139",
+    "step": "0"
+  },
+  "hardware": {
+    "reason": null,
+    "slurm_job": "6139",
+    "slurm_step": "0",
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "389ba8af8fc7ce291546a4b52e6ceb7c4c45b0f9d2f7d674a2147e12ed97dd9e",
+    "ir": "54a2495eba36e0cf9ae296828afcaf58bf0dee24844bcf08a02cee59c977bf32",
+    "schedule": "a2df76c7db763590c97cdb2a8edd2bf5f5848ded77d01de7826d436171ff4f7b",
+    "source": "c8b9eaee3a81b552d16be7326bdc8f40f2178bf577c78008e8d8c0c12d898947"
+  },
+  "inputs_hash": "3ce0e97b533423d7043f64bcff9075bd5fecca70f51479981e0c16721ec31d92",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "No timing comparison, physical molecular reference or complete E+F endpoint is in this cohort.",
+    "status": "not-run"
+  },
+  "residuals": {},
+  "revision": "5b021012fc3ef9cb9111cea197855029b80967bc",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "atom_domain": [
+      1,
+      128
+    ],
+    "complete_endpoint": false,
+    "fast_compile": false,
+    "host_followup": "Later Decimal tests and capacity-contract edits do not change compiler/native/device-test inputs; they are not attributed to this frozen device cohort.",
+    "iterations": 3,
+    "promotion": "none; default remains off",
+    "qualified_actual_atoms": [
+      48,
+      96
+    ],
+    "scope": "actual shared owner with synthetic AO/XC inputs; ordinary/primitive comparison, tails, external sources, moved/restored geometry, invalid-point publication and recovery",
+    "traffic": "not measured; no hardware-byte claim"
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Synthetic borrowed AO/XC inputs, not SCF; no solver trace is inferred.",
+  "stages": {
+    "compilation": {
+      "binary_sha256": "f38ad0f84e1885621ed82ce816c3ddcb15561cbcb9d0a1ea8c37f923c3d69981",
+      "reason": "Mandatory ccache used; one additional cache miss, not a hit.",
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "Independent physical RKS/UKS/moved forces, per-phase work/traffic/timing and paired complete 48/96 PBE0 E+F remain required.",
+      "status": "not-run"
+    },
+    "numerical": {
+      "cuda_passed": 48,
+      "cuda_skipped": 0,
+      "force_atol": 2e-11,
+      "force_rtol": 5e-12,
+      "racecheck_hazards": 0,
+      "racecheck_warnings": 0,
+      "reason": "48 synthetic shared-owner route/work/invalidation/publication gates pass; each of four sanitizers passes one composite-source primitive case. Assertion tolerances are retained in the source patch; actual maxima were not recorded, so no quantitative numerical acceptance is inferred.",
+      "sanitizer_errors": 0,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "Source generation recognizes and revalidates the actual active-prefix primal/JVP; emitted operation and native bound are SHA-256 verified.",
+      "status": "pass"
+    },
+    "runtime": {
+      "reason": "Native requested/selected/batch/visit metrics are asserted; unsupported no-storage owners select the bounded route.",
+      "status": "pass"
+    },
+    "source": {
+      "reason": null,
+      "source_sha256": "c8b9eaee3a81b552d16be7326bdc8f40f2178bf577c78008e8d8c0c12d898947",
+      "status": "pass"
+    }
+  },
+  "subject": "issue1894 authenticated active-prefix native coefficient primitive: partial qualification",
+  "tier": "gpu-numerical",
+  "timings": [],
+  "toolchain": {
+    "ccache": "4.5.1",
+    "compile_flags": "-O3 -std=c++20 --expt-relaxed-constexpr --fmad=false -arch=sm_120 -Isrc -Xcompiler=-fPIC -c",
+    "cuda": "12.9.86",
+    "library_sha256": "f38ad0f84e1885621ed82ce816c3ddcb15561cbcb9d0a1ea8c37f923c3d69981",
+    "python": "3.13.9"
+  }
+}

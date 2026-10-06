@@ -1,0 +1,131 @@
+{
+  "archives": [],
+  "decision": {
+    "reason": "No admissible interleaved comparison. Candidate is not consistently faster, does not reduce pair visits/launches or modeled reverse-plus-gather traffic, and separate intrusive reverse gains are offset by gather cost. No default promotion or full issue completion.",
+    "scope": "performance",
+    "status": "inconclusive"
+  },
+  "files": [
+    {
+      "bytes": 60478,
+      "path": "evidence.json",
+      "role": "evidence",
+      "sha256": "653844045882f3ede516c42935288d25ba482972f5b81c33fb638d7c99e6b5df"
+    },
+    {
+      "bytes": 23303,
+      "path": "observations.json.gz",
+      "role": "samples",
+      "sha256": "8a46e62bcb46d8a3efaff0e8e664edeb97f13666257d77621bde7a05fe602793"
+    },
+    {
+      "bytes": 65843,
+      "path": "source-files.sha256.gz",
+      "role": "input",
+      "sha256": "d0bcd9d30e738f961c2214604699e58423e0c8379d37f3613d23dcf6bd36aaa7"
+    },
+    {
+      "bytes": 41187,
+      "path": "source.patch",
+      "role": "source-patch",
+      "sha256": "28b896c0178756088aa1ef075f0ced709f15a9ab5d705eb84cdfcc2dd473fc7f"
+    },
+    {
+      "bytes": 28886,
+      "path": "receipts.txt",
+      "role": "summary",
+      "sha256": "1ff577194fed2c8ca8571cb3a90297699a8c335eecfe2b23241d5bfca7296d11"
+    },
+    {
+      "bytes": 537,
+      "path": "profile-arm.py",
+      "role": "reproduction",
+      "sha256": "2e96b3a79d107ea8cd3c03cd2e230e132e2e3d2fe7d5334f5934b9301f266123"
+    },
+    {
+      "bytes": 4731,
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "sha256": "d19f21335ef436c79ee706cf5c906f791681ae24f946ddeb56b5a6b2ceab94b4"
+    },
+    {
+      "bytes": 5130,
+      "path": "summary.md",
+      "role": "summary",
+      "sha256": "5c05ee72323a0df1ba2c1b2a588f664d34e8a4f0bc585d9eccc39a16a8342a5f"
+    },
+    {
+      "bytes": 17907,
+      "path": "protocols/reference-48.json.gz",
+      "role": "samples",
+      "sha256": "46cce92306519c36eff7989c8f982189ec652d8b5697118703a73934d54a3edc"
+    },
+    {
+      "bytes": 35644,
+      "path": "protocols/phased-48.json.gz",
+      "role": "samples",
+      "sha256": "0ea57f4fa65de1333f71b31082559f11226925dc0927e0b9e1918582928f8123"
+    },
+    {
+      "bytes": 37051,
+      "path": "protocols/intrusive-phased-48.json.gz",
+      "role": "samples",
+      "sha256": "e40dba6aec1d9ff5a0f6c357d0dc0db0cfe46cf392cd668f3a49bd5e38e87611"
+    },
+    {
+      "bytes": 35527,
+      "path": "protocols/primitive-48.json.gz",
+      "role": "samples",
+      "sha256": "2d9bfa61d2a6341300433300a0146afdfece64d28bdc780f115769ea5a23d400"
+    },
+    {
+      "bytes": 37300,
+      "path": "protocols/intrusive-primitive-48.json.gz",
+      "role": "samples",
+      "sha256": "03d0f7082b8cffc739b0cb754d98eadf3ad65f9f2672065e58f4d3f113d88d40"
+    },
+    {
+      "bytes": 31055,
+      "path": "protocols/reference-96.json.gz",
+      "role": "samples",
+      "sha256": "3f71adb0d239a05a6c70e5acdfe5c2b1525d58082211e038991159fa7d0d76dc"
+    },
+    {
+      "bytes": 53093,
+      "path": "protocols/phased-96.json.gz",
+      "role": "samples",
+      "sha256": "8639e9ccbbb19f1f95c823e46a2f1025b65972de94ec9002cdd331304acef749"
+    },
+    {
+      "bytes": 54592,
+      "path": "protocols/intrusive-phased-96.json.gz",
+      "role": "samples",
+      "sha256": "29e1a4a591abc64ce6037d36005e642973576e718d37bceb5c7ca5455ff9a671"
+    },
+    {
+      "bytes": 53725,
+      "path": "protocols/primitive-96.json.gz",
+      "role": "samples",
+      "sha256": "3416630c89b974180381859520a329c39a2e375fea9d641efcd10cd6b06c9b86"
+    },
+    {
+      "bytes": 54417,
+      "path": "protocols/intrusive-primitive-96.json.gz",
+      "role": "samples",
+      "sha256": "7c97a2cbeb175ae3e5b86ecf2b50dd4f276fa0332bf7aa5cd2f2be578d194da8"
+    }
+  ],
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/becke-physical-endpoints-20261006/reproduce.sh"
+    ],
+    "prerequisites": "CUDA 12.9 sm120/RTX5090, ccache/CMake/Ninja, Python compiler/native dependencies, NumPy/pytest/CuPy/GPU4PySCF, PySCF2.14/Libxc7. Set CUDA_ROOT/PYTHON. All GPU commands require finite main/gpu:5090:1 Slurm and preserved device visibility. Full recipe not reexecuted as a separate campaign.",
+    "source_restore": "Keep bundle outside checkout. Restore source.revision and apply source.patch. Verify the decompressed scientific/build manifest before reproduction."
+  },
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "dirty": true,
+    "revision": "a65b075ca0b38f61508a5e596ba408d4f8214807"
+  }
+}
