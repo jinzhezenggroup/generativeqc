@@ -249,6 +249,7 @@ CUDA_ALLOWED["cuda_direct_queues"] = tuple(
     "scf/cuda/matrix_index.",
     "scf/cuda/packed_basis.",
     "scf/cuda/device_timer.",
+    "scf/direct_warp_queue.hpp",
 )
 # Provider host APIs own staging and lifetime while borrowing kernel launches.
 # A retained recurrence fragment must not enter a host implementation.
