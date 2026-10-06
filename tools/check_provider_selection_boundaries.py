@@ -165,9 +165,7 @@ def audit_provider_selection_boundaries(root: Path = ROOT) -> dict[str, typing.A
 
         expected = entry.get("selectors", {})
         if not expected or any(
-            name not in SELECTOR_IDENTIFIERS
-            or type(count) is not int
-            or count < 1
+            name not in SELECTOR_IDENTIFIERS or type(count) is not int or count < 1
             for name, count in expected.items()
         ):
             errors.append(

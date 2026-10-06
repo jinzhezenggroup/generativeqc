@@ -83,11 +83,14 @@ def test_new_native_selector_surfaces_require_classification(
 def test_same_selector_growth_and_retirement_both_fail(tmp_path: Path) -> None:
     file = _fixture(tmp_path, "bool use_cublas = true;")
     file.write_text("bool use_cublas = true; if (use_cublas) {}")
-    assert "count 2 != classified 1" in audit_provider_selection_boundaries(tmp_path)[
-        "errors"
-    ][0]
+    assert (
+        "count 2 != classified 1"
+        in audit_provider_selection_boundaries(tmp_path)["errors"][0]
+    )
     file.write_text("semantic_binding.execute();")
-    assert "remove retired" in audit_provider_selection_boundaries(tmp_path)["errors"][0]
+    assert (
+        "remove retired" in audit_provider_selection_boundaries(tmp_path)["errors"][0]
+    )
 
 
 def test_native_comments_and_strings_are_not_selector_surfaces(tmp_path: Path) -> None:
