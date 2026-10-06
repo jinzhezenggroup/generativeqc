@@ -515,7 +515,7 @@
     },
     {
       "id": "dft.force-active-ao",
-      "classification": "needs-qualification",
+      "classification": "already-default",
       "controls": [
         "dft-policy:force-active-ao-auto"
       ],
@@ -529,12 +529,15 @@
         "python/generativeqc/_stationary_cuda.py",
         "python/generativeqc/_stationary_composite_cuda.py"
       ],
-      "rationale": "Public CUDA DFT forces resolve one method-name-free active-AO policy from derivative order, execution composition, spin, provider/resource identity and workload bounds. The production positive-profile registry is intentionally empty because retained complete-force evidence does not cross the shared promotion gate; auto therefore resolves to dense while both ordinary and composite consumers reuse the resident-map owner.",
-      "revisit_condition": "Add a positive profile only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence, independent numerical gates, actual selected/dense AO-work counters and adjacent losing-domain controls under #1598. Matching must remain structural/workload/resource based and dense on every miss.",
+      "rationale": "Public CUDA DFT forces use one method-name-free active-AO policy keyed by derivative order, execution composition, spin, provider/resource identity and workload bounds. The measured sm_120 ordinary RKS second-jet 48–96 atom / 384–768 AO envelope now has a positive production profile: retained complete endpoints show about 18.4% and 30.7% warm wins at 48/96 atoms, while every profile miss remains dense. Historical cold/moved negative observations remain retained rather than generalized away.",
+      "revisit_condition": "Broaden beyond the current sm_120 ordinary RKS second-jet 48–96 atom evidence envelope only with source/device-identified complete cold, repeated warm, moved and moved-warm E/F evidence, independent numerical gates, actual selected/dense AO-work counters and adjacent losing-domain controls. Keep matching structural/workload/resource based and dense on every miss.",
       "evidence": [
         "issue:#1853",
         "issue:#1598",
-        "pr:#1833",
+        "pr:#1881",
+        "pr:#1934",
+        "benchmarks:benchmarks/results/pbe0-public-force-policy-20261005/README.md",
+        "benchmarks:benchmarks/results/pbe0-force-followups-20261005/README.md",
         "note:.agents/notes/implemented/performance/2026-10-04-cross-functional-force-active-ao-policy.md"
       ]
     },
