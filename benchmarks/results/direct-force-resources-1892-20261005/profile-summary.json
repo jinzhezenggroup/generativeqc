@@ -1,0 +1,81 @@
+{
+  "scope": "single-warm Nsight Systems attribution, not clean endpoint timing",
+  "job": 6111,
+  "exit": 0,
+  "atoms": 48,
+  "method": "pbe0",
+  "arms": {
+    "baseline": {
+      "library_sha256": "daf5d5b0f3bdca15bdf0e56243f0163455767333c2fa8ff6b9285f4a561ce2af",
+      "executed_nvtx_ranges": [
+        "p0b/profiled-warm",
+        "p0b/public-stationary-force"
+      ],
+      "generic_force": {
+        "symbol": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)-1, (int)-1>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)",
+        "launches": 1,
+        "block_x": 256,
+        "grid_x": 1360,
+        "registers_per_thread": 255,
+        "static_shared_bytes": 3084,
+        "local_bytes_per_thread": 0,
+        "gpu_interval_seconds": 2.252254201
+      },
+      "maximum_energy_error": 3.410605131648481e-12,
+      "maximum_force_error": 1.6921311574158437e-11
+    },
+    "default": {
+      "library_sha256": "cca2d24221b6c040a32907b70cb77590526a6dd891da1ba14352e9b8b4472098",
+      "executed_nvtx_ranges": [
+        "p0b/profiled-warm",
+        "p0b/public-stationary-force"
+      ],
+      "generic_force": {
+        "symbol": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)-1, (int)-1>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)",
+        "launches": 1,
+        "block_x": 256,
+        "grid_x": 1360,
+        "registers_per_thread": 255,
+        "static_shared_bytes": 3084,
+        "local_bytes_per_thread": 0,
+        "gpu_interval_seconds": 2.252667086
+      },
+      "maximum_energy_error": 1.8189894035458565e-12,
+      "maximum_force_error": 1.6564707938648837e-11
+    },
+    "128": {
+      "library_sha256": "cca2d24221b6c040a32907b70cb77590526a6dd891da1ba14352e9b8b4472098",
+      "executed_nvtx_ranges": [
+        "p0b/profiled-warm",
+        "p0b/public-stationary-force"
+      ],
+      "generic_force": {
+        "symbol": "void generativeqc::scf::cuda_execution::bounded_direct_shell_quartet_kernel<(bool)0, (generativeqc::scf::cuda_execution::DirectScreeningPurpose)1, (bool)1, (int)-1, (int)-1>(generativeqc::scf::cuda_execution::DeviceBatch, double, const double *, const generativeqc::scf::cuda_execution::ShellPairDensityBounds *, const unsigned int *, const double *, const double *, const unsigned long *, unsigned long, const unsigned int *, const double *, const double *, const unsigned char *, double *, unsigned long long *, generativeqc::scf::cuda_execution::DeviceShellClassProfileEntry *, double, double, generativeqc::scf::cuda_execution::DirectRangeOperator, double, double, bool, bool, generativeqc::scf::detail::BoundedDirectBlockDomain)",
+        "launches": 1,
+        "block_x": 128,
+        "grid_x": 1360,
+        "registers_per_thread": 255,
+        "static_shared_bytes": 3084,
+        "local_bytes_per_thread": 0,
+        "gpu_interval_seconds": 1.700066311
+      },
+      "maximum_energy_error": 3.410605131648481e-12,
+      "maximum_force_error": 1.6453352569278934e-11
+    }
+  },
+  "evidence_sha256": {
+    "128.json": "bc0dbda1bc446b24a02d928f279250359061ccb9f240fa1940d706aeb637f6f8",
+    "baseline.json": "1b1a0e02ace573fd26712d00a7c6b9be6085ba4d700c4fe9d64741edf8de3827",
+    "default.json": "875806ddc606eec1abe7653d55a49e8373268c3df13d9d04dd8964ba6e1d20d0",
+    "128.sqlite": "28f57c6e61ac26067790ee93c8918d0be65310ea7f7ac59024812e210a114c24",
+    "baseline.sqlite": "3318e7bce74d00f3008df0349df55f70a92f8d753071717b0e4c9f741da06338",
+    "default.sqlite": "d248b7e1b1c4ae2a8cc1a7af496fc303892e20b9de42d639703228f2ff9b67da",
+    "128.nsys-rep": "02d8277fd32993494e60175a49de0f092234b611d99e8685ead7290a05159237",
+    "baseline.nsys-rep": "6289dbbde2ce8d3990068d7536173196cf9562d0db70f1784e04d0e4042ada6f",
+    "default.nsys-rep": "66e16ce603198e6afe14f59d2db1c329e78a5b06e57c6cb3e7ee9b7729a12dd7",
+    "run-profile48.sh": "a67f4faf998e87e8e16cb49d39f022693119356ad918d7a2caa8928a9c7d26a3",
+    "profile-single-warm.py": "6202fd3eb8ecac8eb268384797b5ed7639c3d4dc1139781e29d915f745869bdd"
+  },
+  "hardware_counters": "not measured; no occupancy/stall/local-traffic claim",
+  "caveat": "CUDA Event tracing is intrusive; use separate job 6112 for speed claims"
+}

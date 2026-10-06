@@ -1,0 +1,26 @@
+{
+  "scope": "driver resource attributes only; no kernel launch or timing",
+  "slurm": {
+    "SLURM_JOB_ID": "6083",
+    "SLURM_STEP_ID": "0",
+    "CUDA_VISIBLE_DEVICES": "1"
+  },
+  "device": "NVIDIA GeForce RTX 5090",
+  "binary_sha256": "daf5d5b0f3bdca15bdf0e56243f0163455767333c2fa8ff6b9285f4a561ce2af",
+  "module_sha256": "0fc205aac99d475836e719b091b2f00a72b267cc901afb607f4cbc478f42020b",
+  "driver_reserved_shared_bytes_per_block": 1024,
+  "rows": [
+    {
+      "symbol": "_ZN12generativeqc3scf14cuda_execution35bounded_direct_shell_quartet_kernelILb0ELNS1_22DirectScreeningPurposeE1ELb1ELin1ELin1EEEvNS1_11DeviceBatchEdPKdPKNS1_22ShellPairDensityBoundsEPKjS6_S6_PKmmSB_S6_S6_PKhPdPyPNS1_28DeviceShellClassProfileEntryEddNS1_19DirectRangeOperatorEddbbNS0_6detail24BoundedDirectBlockDomainE",
+      "cuobjdump_shared_bytes": 4108,
+      "cuobjdump_stack_bytes_per_thread": 90680,
+      "driver": {
+        "application_static_shared_bytes": 3084,
+        "local_bytes_per_thread": 90680,
+        "registers_per_thread": 255
+      },
+      "shared_gap_bytes": 1024,
+      "gap_matches_measured_driver_reservation": true
+    }
+  ]
+}

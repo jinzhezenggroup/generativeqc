@@ -1,0 +1,204 @@
+--- a/src/scf/cuda/direct_bounded_fallback.cu
++++ b/src/scf/cuda/direct_bounded_fallback.cu
+@@ -5,6 +5,7 @@
+ #include <cmath>
+ #include <cstddef>
+ #include <cstdint>
++#include <cstdlib>
+ #include <type_traits>
+ 
+ #include "generated_derivative_cuda_shell_aot.cuh"
+@@ -28,6 +29,17 @@
+ 
+ namespace generativeqc::scf::cuda_execution {
+ 
++/** Each experimental page belongs to one complete warp. Its scratch is
++ * disjoint from every other warp, so unrelated recurrence shapes must not
++ * wait at CTA barriers. The ordinary shared-CTA schedule stays unchanged. */
++template <bool WarpPages>
++__device__ __forceinline__ void bounded_direct_page_barrier() {
++  if constexpr (WarpPages)
++    __syncwarp();
++  else
++    __syncthreads();
++}
++
+ /**
+  * Enumerate, screen, queue, and drain shell pair-of-pairs hierarchically.
+  *
+@@ -39,7 +51,7 @@
+  * outer domain plus exact work only in surviving blocks.
+  */
+ template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force, int FixedAngularOrder = -1,
+-          int FixedRadialOperator = -1>
++          int FixedRadialOperator = -1, bool WarpPages = false>
+ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell_quartet_kernel(
+     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
+     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
+@@ -56,17 +68,29 @@
+   const auto radial_operator = FixedRadialOperator < 0
+                                    ? runtime_radial_operator
+                                    : static_cast<DirectRangeOperator>(FixedRadialOperator);
+-  __shared__ ActiveShellQuartetTile queue[detail::kBoundedDirectQueueCapacity];
+-  __shared__ std::uint32_t queue_count;
+-  __shared__ unsigned long long block_quartet;
++  static_assert(!WarpPages || (Force && FixedAngularOrder < 0));
++  constexpr unsigned worker_threads = WarpPages ? detail::kDirectQuartetThreads
++                                                : kBoundedDirectThreads;
++  constexpr unsigned worker_count = WarpPages ? kBoundedDirectThreads / worker_threads : 1U;
++  constexpr unsigned queue_capacity = WarpPages ? worker_threads
++                                                : detail::kBoundedDirectQueueCapacity;
++  __shared__ ActiveShellQuartetTile queues[worker_count * queue_capacity];
++  __shared__ std::uint32_t queue_counts[worker_count];
++  __shared__ unsigned long long block_quartets[worker_count];
+   const unsigned lane = threadIdx.x % detail::kDirectQuartetThreads;
+   const unsigned warp = threadIdx.x / detail::kDirectQuartetThreads;
++  const unsigned worker = WarpPages ? warp : 0U;
++  const unsigned worker_lane = WarpPages ? lane : threadIdx.x;
++  const unsigned worker_warp = WarpPages ? 0U : warp;
++  auto* queue = queues + worker * queue_capacity;
++  auto& queue_count = queue_counts[worker];
++  auto& block_quartet = block_quartets[worker];
+   constexpr auto full_block_candidates =
+       detail::kBoundedDirectShellPairBlockSize * detail::kBoundedDirectShellPairBlockSize;
+   constexpr auto indexed_page_candidates =
+       full_block_candidates / detail::kBoundedDirectIndexedCandidatePages;
+   static_assert(full_block_candidates % detail::kBoundedDirectIndexedCandidatePages == 0);
+-  static_assert(indexed_page_candidates <= detail::kBoundedDirectQueueCapacity);
++  static_assert(worker_threads <= queue_capacity);
+   const std::size_t pages = block_domain.prefix ? detail::kBoundedDirectIndexedCandidatePages : 1U;
+   const std::size_t products =
+       block_domain.prefix ? block_domain.quartet_count
+@@ -76,11 +100,11 @@
+   while (true) {
+     // Empty pages and screened/inactive claims bypass the candidate-loop barrier.
+     // All warps must finish reading this claim before the leader overwrites it.
+-    __syncthreads();
+-    if (threadIdx.x == 0) {
++    bounded_direct_page_barrier<WarpPages>();
++    if (worker_lane == 0) {
+       block_quartet = atomicAdd(global_cursor, 1ULL);
+     }
+-    __syncthreads();
++    bounded_direct_page_barrier<WarpPages>();
+     if (block_quartet >= total) return;
+ 
+     const std::size_t packed_block_quartet = static_cast<std::size_t>(block_quartet) / pages;
+@@ -136,10 +160,10 @@
+                                      ? min(candidate_count, page_begin + indexed_page_candidates)
+                                      : candidate_count;
+     for (std::size_t candidate_begin = page_begin; candidate_begin < page_end;
+-         candidate_begin += detail::kBoundedDirectQueueCapacity) {
+-      if (threadIdx.x == 0) queue_count = 0;
+-      __syncthreads();
+-      const std::size_t candidate = candidate_begin + threadIdx.x;
++         candidate_begin += queue_capacity) {
++      if (worker_lane == 0) queue_count = 0;
++      bounded_direct_page_barrier<WarpPages>();
++      const std::size_t candidate = candidate_begin + worker_lane;
+       if (candidate < page_end) {
+         std::size_t first_local = 0;
+         std::size_t second_local = 0;
+@@ -182,7 +206,7 @@
+           }
+         }
+       }
+-      __syncthreads();
++      bounded_direct_page_barrier<WarpPages>();
+ 
+       // Retained low-order specialized tasks fit in one scalar lane. Drain
+       // ssss/order2 Fock and order-zero-through-three force tasks concurrently before
+@@ -190,7 +214,7 @@
+       // compiler-owned; if that generated class is unavailable, order one
+       // deliberately falls through to the generic full-warp oracle/fallback.
+       if constexpr (FixedAngularOrder < 0 || FixedAngularOrder <= 5) {
+-        for (std::uint32_t slot = threadIdx.x; slot < queue_count; slot += blockDim.x) {
++        for (std::uint32_t slot = worker_lane; slot < queue_count; slot += worker_threads) {
+           const ActiveShellQuartetTile task = queue[slot];
+           const std::int32_t first_shell = batch.shell_pair_first[task.first_pair];
+           const std::int32_t second_shell = batch.shell_pair_second[task.first_pair];
+@@ -296,11 +320,11 @@
+           }
+         }
+       }
+-      __syncthreads();
++      bounded_direct_page_barrier<WarpPages>();
+ 
+       if constexpr (FixedAngularOrder < 0 || FixedAngularOrder >= 4) {
+-        for (std::uint32_t slot = warp; slot < queue_count;
+-             slot += kBoundedDirectThreads / detail::kDirectQuartetThreads) {
++        for (std::uint32_t slot = worker_warp; slot < queue_count;
++             slot += worker_threads / detail::kDirectQuartetThreads) {
+           const ActiveShellQuartetTile base = queue[slot];
+           const std::int32_t first_shell = batch.shell_pair_first[base.first_pair];
+           const std::int32_t second_shell = batch.shell_pair_second[base.first_pair];
+@@ -427,7 +451,7 @@
+           }
+         }
+       }
+-      __syncthreads();
++      bounded_direct_page_barrier<WarpPages>();
+     }
+   }
+ }
+@@ -503,6 +527,41 @@
+     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
+     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
+     detail::BoundedDirectBlockDomain block_domain) {
++  // This is a switchable scheduling experiment, not a new scientific owner.
++  // Claim each existing block/page exactly once, retain all screening and
++  // generated coverage checks, and freeze only this seam's full-range operator.
++  const char* warp_pages = std::getenv("GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_WARP_PAGES");
++  if (warp_pages && warp_pages[0] == '1' && warp_pages[1] == '\0') {
++    const auto launch = [&]<bool Unrestricted, DirectScreeningPurpose Purpose,
++                           DirectRangeOperator Operator>() {
++      bounded_direct_shell_quartet_kernel<Unrestricted, Purpose, true, -1,
++                                          static_cast<int>(Operator), true>
++          <<<grid, block, shared_bytes, stream>>>(
++              batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,
++              shell_pair_order, shell_pair_block_bounds, system_density_bounds,
++              enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds,
++              density, active, output, global_cursor, profile, coulomb_coefficient,
++              exchange_coefficient, Operator, 0.0, 0.0, false, false, block_domain);
++    };
++    const auto launch_sources = [&]<bool Unrestricted, DirectScreeningPurpose Purpose>() {
++      if (separate_sources)
++        launch.template operator()<Unrestricted, Purpose, DirectRangeOperator::FullSources>();
++      else
++        launch.template operator()<Unrestricted, Purpose, DirectRangeOperator::Full>();
++    };
++    if (unrestricted) {
++      if (purpose == DirectScreeningPurpose::Fock)
++        launch_sources.template operator()<true, DirectScreeningPurpose::Fock>();
++      else
++        launch_sources.template operator()<true, DirectScreeningPurpose::Force>();
++    } else {
++      if (purpose == DirectScreeningPurpose::Fock)
++        launch_sources.template operator()<false, DirectScreeningPurpose::Fock>();
++      else
++        launch_sources.template operator()<false, DirectScreeningPurpose::Force>();
++    }
++    return;
++  }
+   const auto radial_operator =
+       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
+   if (unrestricted == true) {
+--- a/tests/native/test_cuda_fock_provider.cpp
++++ b/tests/native/test_cuda_fock_provider.cpp
+@@ -2279,7 +2279,15 @@
+                                     : owner->shared->batch.total_shell_pair_block_quartets;
+       const auto pages =
+           indexed ? generativeqc::scf::detail::kBoundedDirectIndexedCandidatePages : 1U;
+-      require(cursor == products * pages + owner->shared->worker_blocks,
++      // Warp-private scheduling changes only the number of terminal claims,
++      // not the scientific domain. Preserve an exact cursor receipt for each arm.
++      const char* warp_pages = std::getenv("GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_WARP_PAGES");
++      const bool independent_warps = warp_pages && warp_pages[0] == '1' && warp_pages[1] == '\0';
++      const auto workers_per_block =
++          independent_warps ? generativeqc::scf::detail::kBoundedDirectQueueCapacity /
++                                  generativeqc::scf::detail::kDirectQuartetThreads
++                            : 1U;
++      require(cursor == products * pages + owner->shared->worker_blocks * workers_per_block,
+               "full-range scheduler domain mismatch");
+       std::vector<double> range_actual;
+       check(execute_generated_rsh_energy_derivatives(*owner, false, plan->density, nullptr, 0.0,

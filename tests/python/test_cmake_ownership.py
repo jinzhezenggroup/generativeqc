@@ -25,6 +25,15 @@ def test_generated_commands_are_centralized() -> None:
         assert "add_custom_command(" not in _read(relative)
 
 
+def test_cuda_implib_generation_runs_at_build_time() -> None:
+    """CUDA import trampolines belong to the incremental build graph."""
+    implib = _read("cmake/GenerativeQCCudaImplib.cmake")
+    assert "execute_process(" not in implib
+    assert "generativeqc_register_generated_sources(" in implib
+    assert "file(GENERATE" in implib
+    assert "if(NOT TARGET ${codegen_target})" in implib
+
+
 def test_generated_command_preserves_list_valued_arguments(
     tmp_path: typing.Any,
 ) -> None:

@@ -1,0 +1,29 @@
+{
+  "scope": "four native settings and six actual full-range through-f sanitizer runs",
+  "job": 6091,
+  "step": 0,
+  "exit": 0,
+  "native_settings": [
+    "0",
+    "64",
+    "128",
+    "invalid"
+  ],
+  "sanitizers": [
+    "memcheck",
+    "initcheck",
+    "synccheck"
+  ],
+  "evidence_sha256": {
+    "initcheck-128.log": "68fa5656f29fb1e590a37d1f86549130f03dd0276ed7e9c4a7b4347a480318f9",
+    "initcheck-64.log": "0c37364518103291638de97091c667b4e382d390f5fbf4d01e6c6d76dfb2c092",
+    "memcheck-128.log": "8a659c0fd2eab85138f883cc723a25afe884386139862f24a700767fc6b9986d",
+    "memcheck-64.log": "4c6377a5b0f4fd4b43efb723959adddeda9d89af571ce895102bcea7bb9ed4d6",
+    "synccheck-128.log": "d66d57d7f6f217e8342c3cc500d62a0a90b58092203c090d0f52dd018eec712b",
+    "synccheck-64.log": "606a8fe34d9bf0f2a8022be6458d8b7ae8d09ad68d2711a7a1fbdaac6b55ae71",
+    "through-f-0.log": "117e679a4457a3c2407a0e6b8b0f8bbfcbc2d385d87f3db9aa3e38cde6a195a4",
+    "through-f-128.log": "b265c486c4e6408469de8f98333965d09b213c89b553a81cefa176e2575040dc",
+    "through-f-64.log": "5f3742ac128d4c6aae6cef34b4c36d4e18c07c479398041a25f138e4f624020f",
+    "through-f-invalid.log": "d623730850281c9ad45315fcf1e4aa019a6593af8d613a27503fae04885124e7"
+  }
+}

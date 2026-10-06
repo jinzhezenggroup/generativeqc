@@ -44,6 +44,7 @@ build
 architecture
 compiler_architecture
 electronic_structure_boundaries
+provider_selection_boundaries
 ```
 
 ```{toctree}

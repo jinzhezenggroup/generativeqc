@@ -21,6 +21,10 @@ from generativeqc_compiler.common.cuda_time_estimator import (
     estimate_cuda_time,
 )
 from generativeqc_compiler.common.gpu_profitability import GpuProfitability
+from generativeqc_compiler.common.ncu_efficiency import (
+    NcuExecutionEvidence,
+    assess_ncu_execution,
+)
 
 
 def _ptxas_resources(
@@ -59,7 +63,8 @@ def _parser() -> argparse.ArgumentParser:
         description=(
             "Build a CUDA resource/parallelism screening report without probing "
             "or executing a GPU. Optional explicit calibration adds an experimental "
-            "homogeneous-kernel timing estimate, never an endpoint prediction."
+            "homogeneous-kernel timing estimate, never an endpoint prediction. "
+            "Optional retained NCU evidence adds mechanism classification only."
         )
     )
     parser.add_argument("--arch", required=True, help="CUDA architecture, e.g. sm_120")
@@ -68,6 +73,14 @@ def _parser() -> argparse.ArgumentParser:
         "--ptxas",
         type=Path,
         help="optional PTXAS -v diagnostics; compilation may happen elsewhere",
+    )
+    parser.add_argument(
+        "--ncu-evidence",
+        type=Path,
+        help=(
+            "optional ncu-execution-evidence.v1 JSON; measured counters calibrate "
+            "mechanism diagnosis but never alter screening priority"
+        ),
     )
     parser.add_argument("--grid-blocks", type=int)
     parser.add_argument(
@@ -108,7 +121,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    """Emit static evidence and, only on request, calibrated kernel timing."""
+    """Emit static evidence plus optional timing and NCU mechanism calibration."""
     parser = _parser()
     args = parser.parse_args()
     try:
@@ -139,7 +152,21 @@ def _report(args: argparse.Namespace) -> dict[str, object]:
             raise ValueError("calibration schema and model version disagree")
     elif args.spill_traffic_bytes is not None or args.allow_per_sm_fallback:
         raise ValueError("timing options require --calibration")
+
+    ncu_evidence = None
+    ncu_assessment = None
+    if args.ncu_evidence is not None:
+        ncu_payload = json.loads(args.ncu_evidence.read_text(encoding="utf-8"))
+        ncu_evidence = NcuExecutionEvidence.from_payload(ncu_payload)
+        ncu_assessment = assess_ncu_execution(ncu_evidence)
+
     target = cuda_target_info(args.arch)
+    if ncu_evidence is not None and ncu_evidence.architecture != target.architecture:
+        raise ValueError(
+            "NCU evidence architecture "
+            f"{ncu_evidence.architecture} does not match requested target "
+            f"{target.architecture}"
+        )
     ptxas_evidence = None
     if args.ptxas is not None:
         resources, architecture_verified = _ptxas_resources(
@@ -209,6 +236,34 @@ def _report(args: argparse.Namespace) -> dict[str, object]:
             spill_traffic_bytes=args.spill_traffic_bytes,
             allow_per_sm_fallback=args.allow_per_sm_fallback,
         ).to_payload()
+    if ncu_evidence is not None and ncu_assessment is not None:
+        payload["ncu_execution_evidence"] = ncu_evidence.to_payload()
+        payload["ncu_execution_assessment"] = ncu_assessment.to_payload()
+        ncu_theoretical = ncu_evidence.theoretical_occupancy_fraction
+        occupancy_error = (
+            None
+            if ncu_theoretical is None
+            else report.occupancy_upper_bound - ncu_theoretical
+        )
+        payload["ncu_static_calibration"] = {
+            "schema": "generativeqc.compiler.ncu-static-calibration.v1",
+            "scope": (
+                "compare the static/PTXAS per-SM occupancy upper bound with the "
+                "source-matched NCU theoretical occupancy; diagnostic only"
+            ),
+            "static_occupancy_upper_bound": report.occupancy_upper_bound,
+            "ncu_theoretical_occupancy_fraction": ncu_theoretical,
+            "ncu_achieved_occupancy_fraction": (
+                ncu_evidence.achieved_occupancy_fraction
+            ),
+            "static_minus_ncu_theoretical": occupancy_error,
+            "absolute_error": (
+                None if occupancy_error is None else abs(occupancy_error)
+            ),
+            "within_two_percentage_points": (
+                None if occupancy_error is None else abs(occupancy_error) <= 0.02
+            ),
+        }
     return payload
 
 

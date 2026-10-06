@@ -163,7 +163,8 @@
       "family": "coupled_cluster",
       "provider": "df_rccsdt",
       "properties": [
-        "energy"
+        "energy",
+        "forces"
       ],
       "supports_batch": false,
       "aliases": [

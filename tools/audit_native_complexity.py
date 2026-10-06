@@ -279,6 +279,27 @@ def _access_indices(
     return result
 
 
+def _call_dependencies(
+    expression: str,
+    loop_variables: tuple[str, ...],
+    aliases: dict[str, str],
+) -> list[frozenset[str]]:
+    """Return loop-index dependencies carried through opaque helper calls."""
+
+    result: list[frozenset[str]] = []
+    for match in _CALL.finditer(expression):
+        opening = match.end() - 1
+        closing = _matching(expression, opening, "(", ")")
+        if closing < 0:
+            continue
+        dependencies = _dependencies(
+            expression[opening + 1 : closing], loop_variables, aliases
+        )
+        if dependencies:
+            result.append(dependencies)
+    return result
+
+
 def _pure_product(
     expression: str,
     aliases: dict[str, str],
@@ -371,8 +392,10 @@ def _classify_high_order(
             for index in _access_indices(rhs, aliases)
         ]
         access_dependencies = [item for item in access_dependencies if item]
-        if len(lhs_dependencies) >= 4 and any(
-            len(item) >= 4 for item in access_dependencies
+        call_dependencies = _call_dependencies(rhs, dynamic_variables, aliases)
+        if len(lhs_dependencies) >= 4 and (
+            any(len(item) >= 4 for item in access_dependencies)
+            or any(len(item) >= 4 for item in call_dependencies)
         ):
             return (
                 "high-rank-output-materialization",
