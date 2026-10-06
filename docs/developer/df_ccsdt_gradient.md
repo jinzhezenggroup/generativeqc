@@ -28,6 +28,30 @@ cotangents. Its T1/T2 sources drive the corrected-Lambda solve. The full
 occupied/virtual degeneracies. These matrices **replace** the epsilon-diagonal
 sources; adding both would count denominator response twice.
 
+The fixed-canonical API requests all nine cotangents by default. Its explicit
+`include_gap_response=false` demand omits the epsilon outputs, seed VJP,
+reduction, scatter and associated arena. Omitted vectors are empty, not fake
+zero derivatives. All nine primal inputs remain validated, uploaded and
+charged, and the original energy/denominator audits remain active. Only a
+consumer supplying the replacement full-Fock response may omit these sources.
+
+For requested epsilon outputs, `parallel_gap_reduction=true` selects a generic
+TensorIR linear-reduction region for virtual dimensions at least four. It
+streams pointwise producers, shares aliased scalar outputs, composes vector
+marginals without intermediate vectors, and uses fixed FP64 warp trees with
+at most 256 scalar partials. Runtime tile counts determine the actual partial
+reservation. The original source-major serial order remains the default and
+explicit comparison path; no floating-point atomics, fast math, FP32 or new CC
+equation is introduced. The graph and schedule have a compiler-visible identity.
+
+`DFGapReductionDiagnostic` reports demand, schedule identity, actual launch count,
+reserved workspace, cumulative intermediate elements and logical value
+reads/writes and summands. These count generated work, not DRAM transactions,
+total instructions or measured peak VRAM. Native reduction tests independently
+compare signed seeds with `math.fsum`/NumPy, preserve all requested cotangents,
+and refuse publication after nonfinite arithmetic, including partial-drain
+overflow. Complete force finite differences must also qualify demand changes.
+
 `pullback_df_factors_cuda` combines retained Gram-block and virtual-factor
 cotangents. Compressed Bov includes both ov/vo sectors, so full symmetric
 embedding assigns half to each. `pullback_df_source_cuda` then reverses the
@@ -167,7 +191,7 @@ The `benchmarks/df_ccsdt_force_endpoint.cpp` executable accepts the following
 positional arguments (brackets denote optional trailing controls):
 
 ```text
-df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1]]]]]]]]]]
+df-force-endpoint INPUT OUTPUT_JSON REDUCTION_0_OR_1 [MATRIX_0_OR_1 [FORCES_0_OR_1 [LAMBDA_MATRIX_0_OR_1 [Q_BATCH_LIMIT [DIIS_HISTORY [CCSD_Q_BATCH_LIMIT [ORBITAL_SCHWARZ [PROFILE_JK_0_OR_1 [NUCLEAR_0_LEGACY_1_CANONICAL_2_SYMMETRIC [DERIVED_DENOMINATORS_0_OR_1 [Z_TRUE_RESIDUAL_INTERVAL [Z_DF_PRECONDITIONER_0_OR_1 [Z_RECYCLE_REPEAT_0_OR_1 [PACKED_DIIS_0_OR_1 [RESIDENT_JK_MAXIMUM_BYTES_OR_AUTO [PARALLEL_GAP_0_OR_1 [REQUEST_GAP_0_OR_1]]]]]]]]]]]]]]]]]
 ```
 
 `MATRIX`, `FORCES` and `LAMBDA_MATRIX` default to one, `Q_BATCH_LIMIT` to eight,
@@ -185,6 +209,19 @@ defaults to one. Zero retains the explicit CUDA denominator representation.
 It accepts only the complete token `0` or `1`; it does not change the meaning
 of the screening token at argument ten, profiling at eleven, or the nuclear
 response schedule at twelve.
+
+Arguments fourteen through seventeen select the true-residual interval, DF Z
+preconditioner, repeated recycling endpoint and packed DIIS. Argument eighteen
+accepts a resident exact J/K byte limit or `auto` to retain its ordinary policy.
+Arguments nineteen and twenty select parallel gap reduction and requested
+epsilon cotangents. Both accept only `0` or `1`; omitted controls currently
+retain serial reduction and all cotangents. Requesting these diagonal sources
+is a matched-work diagnostic control for the complete force owner: its
+full-Fock response replaces them and never adds them to molecular forces.
+Automatic demand promotion still requires complete cold-force acceptance;
+isolated reduction accuracy or a smaller arena does not qualify that change.
+Keep automatic J/K selection and all earlier selectors matched when comparing
+serial/all-output, parallel/all-output and demand-pruned endpoints.
 
 For example, an exact force endpoint with the default six-vector DIIS history
 and explicit symmetric response is:

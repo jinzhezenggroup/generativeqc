@@ -40,9 +40,16 @@ extern "C" int df_complete_force_probe(void* opaque, bool forces, bool triples, 
       options.resident_jk_maximum_bytes = std::stoull(resident);
     const auto* selected = std::getenv("GENERATIVEQC_TEST_PACKED_CC_HISTORY");
     const bool packed = selected && std::string(selected) == "1";
+    const auto* gap_selected = std::getenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE");
+    const bool parallel_gap = gap_selected && std::string(gap_selected) == "1";
+    const auto* gap_omitted = std::getenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE");
+    const bool include_gap = !(gap_omitted && std::string(gap_omitted) == "1");
     const auto result = methods::detail::run_df_ccsdt_native(
         execution, raw.orbital(), raw.auxiliary(), descriptor, forces, triples, true, true, true, 8,
-        8, options, true, packed);
+        8, options, true, packed, parallel_gap, include_gap);
+    if (forces && triples && !include_gap &&
+        (result.triples_gap.requested || result.triples_gap.kernels))
+      throw std::runtime_error("complete-force qualification did not omit unrequested gap outputs");
     if (forces && options.resident_jk_maximum_bytes.value_or(0) > 0 &&
         !result.orbital.resident_jk_bytes)
       throw std::runtime_error(

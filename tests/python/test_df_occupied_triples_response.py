@@ -442,6 +442,97 @@ def test_native_complete_response_matches_reverse_and_work(
     assert counts[2] == counts[3] + (96 << 20) and counts[4] <= 96 << 20
 
 
+def response_inputs(occupied: int, virtuals: int, auxiliaries: int) -> list[np.ndarray]:
+    """Physical Gram inputs without the fixture's unnecessary full MO ERI.
+
+    Large response comparisons need only the retained occupied blocks; building
+    a validation-only virtual fourth-power tensor would obscure their bounded
+    production storage contract.
+    """
+    rng = np.random.default_rng(1763 + 100 * occupied + virtuals + auxiliaries)
+    factors = rng.normal(
+        scale=0.2, size=(auxiliaries, occupied + virtuals, occupied + virtuals)
+    )
+    factors = (factors + factors.transpose(0, 2, 1)) / 2
+    bov = factors[:, :occupied, occupied:]
+    boo = factors[:, :occupied, :occupied]
+    t2 = rng.normal(scale=0.03, size=(occupied, occupied, virtuals, virtuals))
+    t2 = (t2 + t2.transpose(1, 0, 3, 2)) / 2
+    return [
+        np.ascontiguousarray(value)
+        for value in [
+            bov,
+            factors[:, occupied:, occupied:],
+            np.einsum("Qia,Qjk->iajk", bov, boo),
+            np.einsum("Qia,Qjb->iajb", bov, bov),
+            rng.normal(scale=0.01, size=(occupied, virtuals)),
+            rng.normal(scale=0.04, size=(occupied, virtuals)),
+            t2,
+            np.linspace(-1.1, -0.6, occupied),
+            np.linspace(0.2, 1.3, virtuals),
+        ]
+    ]
+
+
+def test_response_fixture_preserves_the_independent_physical_gram_inputs() -> None:
+    expected, _ = case(2, 4, 3)
+    for actual, reference in zip(response_inputs(2, 4, 3), expected, strict=True):
+        np.testing.assert_allclose(actual, reference, atol=3e-15, rtol=3e-15)
+
+
+@pytest.mark.parametrize("virtuals", [4, 5, 17, 221])
+def test_parallel_gap_schedule_preserves_all_requested_cotangents(
+    native_response_probe: typing.Any, monkeypatch: pytest.MonkeyPatch, virtuals: int
+) -> None:
+    inputs = response_inputs(2, virtuals, 3)
+    monkeypatch.setenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE", "0")
+    monkeypatch.setenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE", "0")
+    status, serial, energy, serial_counts, error = run_native(
+        native_response_probe, inputs, budget=4 << 30
+    )
+    assert status == 0, error
+    monkeypatch.setenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE", "1")
+    status, parallel, actual_energy, parallel_counts, error = run_native(
+        native_response_probe, inputs, budget=4 << 30
+    )
+    assert status == 0, error
+    for actual, expected in zip(parallel, serial, strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
+    np.testing.assert_allclose(actual_energy[0], energy[0], atol=3e-12, rtol=3e-12)
+    assert parallel_counts[0] <= serial_counts[0]
+    assert parallel_counts[13] < serial_counts[13]
+    assert parallel_counts[12] == serial_counts[12]
+
+
+@pytest.mark.parametrize("virtuals", [4, 5, 7, 221])
+def test_omitted_gap_keeps_input_charges_and_requested_derivatives(
+    native_response_probe: typing.Any, monkeypatch: pytest.MonkeyPatch, virtuals: int
+) -> None:
+    inputs = response_inputs(2, virtuals, 3)
+    monkeypatch.setenv("GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE", "0")
+    monkeypatch.setenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE", "0")
+    status, complete, energy, complete_counts, error = run_native(
+        native_response_probe, inputs, budget=4 << 30
+    )
+    assert status == 0, error
+    monkeypatch.setenv("GENERATIVEQC_TEST_OMIT_GAP_RESPONSE", "1")
+    status, omitted, actual_energy, counts, error = run_native(
+        native_response_probe, inputs, budget=4 << 30
+    )
+    assert status == 0, error
+    for actual, expected in zip(omitted[:7], complete[:7], strict=True):
+        np.testing.assert_allclose(actual, expected, atol=3e-12, rtol=3e-11)
+    assert np.isnan(omitted[7]).all() and np.isnan(omitted[8]).all()
+    np.testing.assert_allclose(actual_energy[0], energy[0], atol=3e-12, rtol=3e-12)
+    assert counts[1] == complete_counts[1] == counts[15] == complete_counts[15]
+    assert complete_counts[16] - counts[16] == 8 * (2 + virtuals)
+    assert complete_counts[0] - counts[0] == complete_counts[2] - counts[2] + 8 * (
+        2 + virtuals
+    )
+    assert complete_counts[13] - counts[13] == 10 * counts[10]
+    assert complete_counts[12] - counts[12] == counts[11]
+
+
 @pytest.mark.parametrize("gap", [0.0, 1e-11])
 def test_native_response_handles_same_space_degeneracy_at_fixed_frame(
     native_response_probe: typing.Any, gap: float
@@ -455,9 +546,18 @@ def test_native_response_handles_same_space_degeneracy_at_fixed_frame(
         np.testing.assert_allclose(actual, want, atol=3e-12, rtol=3e-11)
 
 
+@pytest.mark.parametrize("mode", ["serial", "parallel", "omitted"])
 def test_native_response_panel_fallback_exact_budget_and_replay(
     native_response_probe: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
 ) -> None:
+    monkeypatch.setenv(
+        "GENERATIVEQC_TEST_PARALLEL_GAP_RESPONSE", "0" if mode == "serial" else "1"
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_TEST_OMIT_GAP_RESPONSE", "1" if mode == "omitted" else "0"
+    )
     inputs, _ = case(3, 5, 4)
     status, want, values, counts, error = run_native(native_response_probe, inputs)
     assert status == 0, error
@@ -486,15 +586,24 @@ def test_native_response_panel_fallback_exact_budget_and_replay(
 
 
 @pytest.mark.parametrize(
-    "bad", ["nan", "pair", "gap", "threshold", "overflow", "masked_overflow"]
+    "bad", ["nan", "nan_eps", "pair", "gap", "threshold", "overflow", "masked_overflow"]
 )
+@pytest.mark.parametrize("include_gap", [False, True])
 def test_native_response_failure_is_transactional(
-    native_response_probe: typing.Any, bad: str
+    native_response_probe: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    bad: str,
+    include_gap: bool,
 ) -> None:
+    monkeypatch.setenv(
+        "GENERATIVEQC_TEST_OMIT_GAP_RESPONSE", "0" if include_gap else "1"
+    )
     inputs, _ = case(2, 3)
     threshold = 1e-10
     if bad == "nan":
         inputs[0][0, 0, 0] = np.nan
+    elif bad == "nan_eps":
+        inputs[-1][0] = np.nan
     elif bad == "pair":
         inputs[1][0, 1, 0] += 0.1
     elif bad == "gap":

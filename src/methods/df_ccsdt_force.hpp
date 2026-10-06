@@ -28,6 +28,7 @@ struct DFCCSDTResult {
   cc::LambdaDiagnostic lambda;
   hf::RHFFrameResponseResult orbital;
   cc::triples::DFCudaResult triples;
+  cc::triples::DFGapReductionDiagnostic triples_gap;
   cc::triples::DFCudaFockResult triples_fock;
 };
 
@@ -42,14 +43,19 @@ struct DFCCSDTResult {
  * and force endpoint comparisons with the same compiled library.
  * All phase bounds charge simultaneously live owners; no CPU integral/CC
  * reference fallback or four-index full MO Hamiltonian is used.
+ * request_triples_gap_cotangents is a matched-schedule control: full-Fock
+ * response replaces these diagonal sources, so their optional computation
+ * does not contribute to molecular forces. Fixed-canonical consumers still
+ * request them from the lower-level triples response API.
+ * Legacy demand remains the default until complete cold-force qualification
+ * passes; these controls must not weaken its numerical acceptance gates.
  */
-DFCCSDTResult run_df_ccsdt_native(runtime::ExecutionContext&, const core::System& orbital,
-                                  const core::System& auxiliary,
-                                  const generativeqc_method_descriptor&, bool forces = true,
-                                  bool with_triples = true, bool df_auxiliary_reduction = true,
-                                  bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
-                                  std::size_t lambda_batch_limit = 8,
-                                  std::size_t ccsd_batch_limit = 8,
-                                  const hf::RHFFrameResponseOptions& frame_options = {},
-                                  bool derived_denominators = true, bool packed_diis = false);
+DFCCSDTResult run_df_ccsdt_native(
+    runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
+    const generativeqc_method_descriptor&, bool forces = true, bool with_triples = true,
+    bool df_auxiliary_reduction = true, bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
+    std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
+    const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
+    bool packed_diis = false, bool parallel_gap_reduction = false,
+    bool request_triples_gap_cotangents = true);
 }  // namespace generativeqc::methods::detail
