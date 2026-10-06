@@ -37,7 +37,8 @@
       "native_nonlocal_correlation": false,
       "cuda_nonlocal_correlation": false,
       "molecular_nonlocal_domain": false,
-      "incremental_xc": false
+      "incremental_xc": false,
+      "stationary_second_order": true
     },
     {
       "symbol": "Pbe",
@@ -75,7 +76,8 @@
       "native_nonlocal_correlation": true,
       "cuda_nonlocal_correlation": false,
       "molecular_nonlocal_domain": false,
-      "incremental_xc": true
+      "incremental_xc": true,
+      "stationary_second_order": true
     },
     {
       "symbol": "R2scan",
@@ -113,7 +115,8 @@
       "native_nonlocal_correlation": false,
       "cuda_nonlocal_correlation": false,
       "molecular_nonlocal_domain": false,
-      "incremental_xc": false
+      "incremental_xc": false,
+      "stationary_second_order": false
     },
     {
       "symbol": "B3lyp",
@@ -159,7 +162,8 @@
       "native_nonlocal_correlation": false,
       "cuda_nonlocal_correlation": false,
       "molecular_nonlocal_domain": false,
-      "incremental_xc": false
+      "incremental_xc": false,
+      "stationary_second_order": false
     },
     {
       "symbol": "Wb97mv",
@@ -198,7 +202,8 @@
       "native_nonlocal_correlation": true,
       "cuda_nonlocal_correlation": true,
       "molecular_nonlocal_domain": true,
-      "incremental_xc": false
+      "incremental_xc": false,
+      "stationary_second_order": false
     }
   ]
 }
