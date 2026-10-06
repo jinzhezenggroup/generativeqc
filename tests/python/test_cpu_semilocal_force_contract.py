@@ -442,3 +442,55 @@ def test_existing_hybrid_and_fitted_defaults_remain_conservative(
     )
     assert fitted._default_properties() == FORCES
     assert fitted._default_properties(batch=True) == FORCES
+
+
+@pytest.mark.parametrize("method,ao_order", [("lda-rks", 0), ("pbe-rks", 1)])
+def test_preparation_and_force_replay_admit_only_requested_derivatives(
+    fake_native: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    ao_order: int,
+) -> None:
+    calculator = Calculator(method=method)
+    calls = []
+    require_basis = calculator_module.require_basis
+
+    def record(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        calls.append((kwargs["operator"], kwargs["derivative_order"]))
+        return require_basis(*args, **kwargs)
+
+    monkeypatch.setattr(calculator_module, "require_basis", record)
+    monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", fake_native.force)
+    with calculator.prepare_batch([H2]) as batch:
+        assert ("ao", ao_order) in calls
+        assert all(order == 0 for operator, order in calls if operator != "ao")
+        calls.clear()
+        batch.execute(strict=True, properties=FORCES)
+        assert all(
+            (operator, 1) in calls
+            for operator in ("overlap", "kinetic", "nuclear_attraction", "eri")
+        )
+    calls.clear()
+    plan = calculator.estimate_resources([H2], properties=FORCES)
+    with calculator.prepare_batch([H2], resource_plan=plan):
+        assert ("eri", 1) in calls
+
+
+def test_force_derivative_rejection_precedes_native_replay(
+    fake_native: typing.Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calculator = Calculator(method="pbe-rks")
+    require_basis = calculator_module.require_basis
+
+    def reject_derivative(*args: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        if kwargs["operator"] != "ao" and kwargs["derivative_order"]:
+            raise NotImplementedError("injected unavailable force derivative")
+        return require_basis(*args, **kwargs)
+
+    monkeypatch.setattr(calculator_module, "require_basis", reject_derivative)
+    with calculator.prepare_batch([H2]) as batch:
+        with pytest.raises(NotImplementedError, match="unavailable force derivative"):
+            batch.execute(strict=True, properties=FORCES)
+        fake_native.library.generativeqc_batch_execute.assert_not_called()
+        assert batch.execute(strict=True, properties=ENERGY).items[0].forces is None

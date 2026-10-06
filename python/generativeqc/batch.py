@@ -243,12 +243,6 @@ class PreparedBatch:
             multiplicities=self._multiplicities,
         )
         self._effective_ks_options = self._ks_profile_selection.options
-        for atoms in self._systems:
-            calculator._preflight_hf_basis(
-                atoms,
-                compute_forces="forces"
-                in calculator._capabilities.supported_properties,
-            )
         self.resource_plan = resource_plan
         self._planned_properties = None
         from ._cpu_force_resources import qualified_direct_semilocal_context
@@ -262,6 +256,15 @@ class PreparedBatch:
                     if request.name == "ks"
                 ),
                 None,
+            )
+        prepared_properties = (
+            calculator._resource_properties(self._planned_properties)
+            if self._output_aware_cpu_forces
+            else calculator._capabilities.supported_properties
+        )
+        for atoms in self._systems:
+            calculator._preflight_hf_basis(
+                atoms, compute_forces="forces" in prepared_properties
             )
         self.resource_diagnostics = None
         self._resource_ledger = None
@@ -991,6 +994,12 @@ class PreparedBatch:
             raise RuntimeError(
                 "prepared basis/model identity changed; prepare a new batch before reusing densities or Fock/DIIS state"
             )
+        if compute_forces and self._output_aware_cpu_forces:
+            # Energy-default preparation admits only value operators. Recheck
+            # derivative support before a later explicit force replay; never
+            # infer derivative admission from the advertised capability alone.
+            for atoms in self._systems:
+                self._calculator._preflight_hf_basis(atoms, compute_forces=True)
         from .checkpoint import _controls
 
         controls = _controls(self._calculator)
