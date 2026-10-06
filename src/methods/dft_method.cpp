@@ -1398,8 +1398,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const char* issue =
           execution_plan_.automatic_program
               ? "#1122"
-              : (execution_plan_.semilocal_family == dft::SemilocalFamily::R2scan ? "#164"
-                                                                                  : "#163");
+              : (dft::semilocal_family_requires_tau(execution_plan_.semilocal_family) ? "#164"
+                                                                                     : "#163");
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);
@@ -1538,7 +1538,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
                         options_.semilocal_correlation_scale};
       if (range_correction_) identity.model.range_correction = range_correction_->strategy();
       if (nonlocal_) identity.model.nonlocal_correlation = nonlocal_->parameters();
-      if (execution_plan_.semilocal_family == dft::SemilocalFamily::Wb97mv)
+      if (dft::semilocal_family_uses_molecular_nonlocal_domain(
+              execution_plan_.semilocal_family))
         identity.model.nonlocal_density_domain = dft::nlc::Vv10DensityDomain::MolecularV1;
       dft::KsPhysicalState physical{identity,
                                     true,
@@ -2319,9 +2320,10 @@ generativeqc_status read_dft_derivative_state(PreparedBatch& batch, std::size_t 
 
 void validate_ks_spin_state(const NativeKsExecutionPlan& execution_plan,
                             const core::System& system) {
-  if (execution_plan.semilocal_family == dft::SemilocalFamily::Wb97mv && !system.ecp_terms.empty())
+  if (dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan.semilocal_family) &&
+      !system.ecp_terms.empty())
     throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
-                      "WB97M-V ECP execution is not qualified");
+                      "molecular-nonlocal KS ECP execution is not qualified");
   if (!unrestricted(execution_plan)) {
     if (system.electron_count <= 0 || system.electron_count % 2 || system.multiplicity != 1)
       throw std::invalid_argument(
