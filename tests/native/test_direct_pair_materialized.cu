@@ -169,7 +169,7 @@ __global__ void shared_components(DeviceBatch batch, const ActiveShellQuartetTil
   // dddd production stream needs only six, retaining the same admission math.
   contract_materialized_direct_pair_fock<Unrestricted, Order, WholeShell ? 40 : 1>(
       batch, tasks[blockIdx.x], threshold, schwarz, density, active, fock, nullptr, shared, work,
-      channel == 1, channel == 2, values);
+      channel == 1, channel == 2 || channel == 3, values, channel == 3);
 }
 
 /** Independent retained Dual3 component traversal, without shared preparation. */
@@ -259,7 +259,7 @@ void qualify(bool same_pair, bool coincident, double threshold) {
   check(cudaGetLastError());
   const auto expected_values = retained.read();
   std::size_t admitted_count = 0, live_packets = 0;
-  for (unsigned channel = 0; channel < 3; ++channel) {
+  for (unsigned channel = 0; channel < 4; ++channel) {
     work.clear();
     materialized.clear();
     fock.clear();
@@ -295,11 +295,11 @@ void qualify(bool same_pair, bool coincident, double threshold) {
         const auto total = fixture.host_density[c + n * d] +
                            (Unrestricted ? fixture.host_density[matrix + c + n * d] : 0.0);
         for (unsigned spin = 0; spin < (Unrestricted ? 2U : 1U); ++spin) {
-          if (channel != 2)
+          if (channel == 0 || channel == 1)
             expected_fock[spin * matrix + a + n * b] += total * expected_values[ordinal];
           if (channel != 1)
-            // A K-only consumer publishes positive K; the combined HF
-            // consumer applies its restricted/unrestricted exchange factor.
+            // A raw K consumer publishes positive K; combined HF and
+            // HF-exchange-only apply the independent spin factor.
             expected_fock[spin * matrix + a + n * c] +=
                 (channel == 2 ? 1.0 : (Unrestricted ? -1.0 : -0.5)) *
                 fixture.host_density[spin * matrix + b + n * d] * expected_values[ordinal];
@@ -368,7 +368,7 @@ void qualify_dft_stream() {
   topology.pair_class_offsets = class_offsets.data;
   topology.shell_pair_bounds = shell_bounds.data;
   topology.shell_pair_density_bounds = density_bounds.data;
-  for (unsigned channel = 0; channel < 3; ++channel) {
+  for (unsigned channel = 0; channel < 4; ++channel) {
     topology.fock_consumer = static_cast<generativeqc::scf::detail::GeneratedFockConsumer>(channel);
     Device<GeneratedShellPairStream> stream(std::vector<GeneratedShellPairStream>{topology});
     std::vector<double> expected((Unrestricted ? 2 : 1) * matrix, 0.0);
@@ -384,7 +384,8 @@ void qualify_dft_stream() {
         const auto total = fixture.host_density[c + n * d] +
                            (Unrestricted ? fixture.host_density[matrix + c + n * d] : 0.0);
         for (unsigned spin = 0; spin < (Unrestricted ? 2U : 1U); ++spin) {
-          if (channel != 2) expected[spin * matrix + a + n * b] += total * values[ordinal];
+          if (channel == 0 || channel == 1)
+            expected[spin * matrix + a + n * b] += total * values[ordinal];
           if (channel != 1)
             expected[spin * matrix + a + n * c] +=
                 (channel == 2 ? 1.0 : (Unrestricted ? -1.0 : -0.5)) *
