@@ -7,6 +7,7 @@
 #include <stdexcept>
 
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/cuda_target_info.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -16,6 +17,7 @@
 #include "scf/cuda/direct_bounded_dddd.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
+#include "scf/cuda/direct_fock_lowering.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_pair_cache.hpp"
 #include "scf/cuda/direct_schwarz_kernels.hpp"
@@ -133,6 +135,7 @@ std::unique_ptr<GeneratedCoulombPlan> prepare_generated_coulomb(
   plan->screening = screening;
   plan->class_mask = present;
   plan->value_class_mask = value_class_mask;
+  plan->rys_fock_mask = prepare_direct_fock_rys_mask(false) & value_class_mask;
   plan->value_capability = value_capability;
   // Reuse the target-legal HF worker and recurrence-stack policy; a prepared
   // KS owner must not rely on an earlier HF call having raised the CUDA limit.
@@ -358,6 +361,7 @@ std::unique_ptr<GeneratedExchangePlan> prepare_generated_exchange(
   // The owner drains H2D on failed preparation before this staging is freed.
   std::vector<std::uint32_t> bounded_pair_order;
   auto plan = std::make_unique<GeneratedExchangePlan>();
+  plan->rys_fock_mask = prepare_direct_fock_rys_mask(true) & shared->value_class_mask;
   plan->shared = std::move(shared);
   plan->force_capability = force_capability;
   plan->angular_force_opt_in = angular_force;
@@ -592,7 +596,7 @@ cudaError_t enqueue_generated_exchange_prepared(GeneratedExchangePlan& p, bool u
       const auto cls = kernels[i].shell_class;
       if (!(shared.class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
         continue;
-      error = generated::launch_shell_class_streaming_fock(
+      error = direct_fock_streaming_launcher(p.rys_fock_mask, cls)(
           cls, shared.stream, unrestricted, shared.worker_blocks, p.topology,
           b.shell_pair_primitive_offsets, b.shell_primitive_pairs, b.direct_ao_coefficients,
           b.positions, shared.screening, false, 0, shared.schwarz, p.direct_spin, p.direct_exchange,
@@ -696,6 +700,11 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
       (unrestricted ? beta_exchange == nullptr : beta_exchange != nullptr) ||
       (!full_range && (!std::isfinite(omega) || omega <= 0.0)))
     return cudaErrorInvalidValue;
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_k", p.shared->stream,
+      {static_cast<std::size_t>(p.shared->batch.batch_size),
+       static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
+  runtime::cuda_trace::trace_counter("prepared_rys_class_mask", full_range ? p.rys_fock_mask : 0);
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   return error == cudaSuccess ? enqueue_generated_exchange_prepared(p, unrestricted, alpha_exchange,
                                                                     beta_exchange, range, omega)
@@ -920,7 +929,7 @@ cudaError_t enqueue_generated_coulomb_direct(GeneratedCoulombPlan& p, const doub
     const auto cls = kernels[i].shell_class;
     if (!(p.value_class_mask & kGeneratedStreamingFockShellClassMask & (std::uint64_t{1} << cls)))
       continue;
-    error = generated::launch_shell_class_streaming_fock(
+    error = direct_fock_streaming_launcher(p.rys_fock_mask, cls)(
         cls, p.stream, false, p.worker_blocks, p.topology, b.shell_pair_primitive_offsets,
         b.shell_primitive_pairs, b.direct_ao_coefficients, b.positions, p.screening, false, 0,
         p.schwarz, p.density, p.coulomb, p.heads + cls,
@@ -955,6 +964,10 @@ cudaError_t project_generated_coulomb(GeneratedCoulombPlan& p, double* coulomb) 
 cudaError_t enqueue_generated_coulomb(GeneratedCoulombPlan& p, const double* density,
                                       const double* beta, double* coulomb) {
   if (!p.value_capability) return cudaErrorNotSupported;
+  runtime::cuda_trace::TraceOperation trace("direct_j", p.stream,
+                                            {static_cast<std::size_t>(p.batch.batch_size),
+                                             static_cast<std::size_t>(p.batch.nbf), 0, true, true});
+  runtime::cuda_trace::trace_counter("prepared_rys_class_mask", p.rys_fock_mask);
   auto error = enqueue_generated_coulomb_direct(p, density, beta);
   return error == cudaSuccess ? project_generated_coulomb(p, coulomb) : error;
 }
@@ -964,6 +977,11 @@ cudaError_t enqueue_generated_coulomb(GeneratedExchangePlan& p, bool unrestricte
   if (p.shared == nullptr || (!p.shared->value_capability && !p.bounded_value_capability) ||
       coulomb == nullptr)
     return cudaErrorNotSupported;
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_j", p.shared->stream,
+      {static_cast<std::size_t>(p.shared->batch.batch_size),
+       static_cast<std::size_t>(p.shared->batch.nbf), 0, true, true});
+  runtime::cuda_trace::trace_counter("prepared_rys_class_mask", p.shared->rys_fock_mask);
   auto error = prepare_generated_exchange_density(p, unrestricted, alpha, beta);
   return error == cudaSuccess
              ? enqueue_generated_coulomb_prepared(p, unrestricted, alpha, beta, coulomb)

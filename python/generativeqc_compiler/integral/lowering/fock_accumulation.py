@@ -205,10 +205,10 @@ def emit_generated_shell_fock_accumulation() -> str:
         spin_offset="task.spin_offset",
         coulomb_scale=f"({exchange_only} ? 0.0 : 1.0)",
         restricted_exchange_scale=(
-            f"({coulomb_only} ? 0.0 : ({exchange_only} ? 1.0 : -0.5))"
+            f"({exchange_only} ? ({coulomb_only} ? -0.5 : 1.0) : ({coulomb_only} ? 0.0 : -0.5))"
         ),
         unrestricted_exchange_scale=(
-            f"({coulomb_only} ? 0.0 : ({exchange_only} ? 1.0 : -1.0))"
+            f"({exchange_only} ? ({coulomb_only} ? -1.0 : 1.0) : ({coulomb_only} ? 0.0 : -1.0))"
         ),
         description=(
             "Scatter one canonical integral using GENERATIVEQC's shared HF/J-only/K-only convention."
@@ -248,7 +248,7 @@ def emit_direct_fock_accumulation_header() -> str:
         parameters="""    std::size_t n, std::size_t physical_offset, std::size_t spin_offset,
     const double* density, double* fock, std::size_t i, std::size_t j,
     std::size_t k, std::size_t l, Integral integral, bool coulomb_only = false,
-    bool exchange_only = false""",
+    bool exchange_only = false, bool hf_exchange = false""",
         setup="  const std::size_t matrix_size = n * n;",
         permutation_setup="""    if (!unique_eri_symmetry_permutation(permutation, i, j, k, l)) {
       continue;
@@ -262,9 +262,11 @@ def emit_direct_fock_accumulation_header() -> str:
         density_offset="physical_offset",
         spin_offset="spin_offset",
         coulomb_scale="exchange_only ? 0.0 : 1.0",
-        restricted_exchange_scale=("coulomb_only ? 0.0 : (exchange_only ? 1.0 : -0.5)"),
+        restricted_exchange_scale=(
+            "hf_exchange ? -0.5 : (coulomb_only ? 0.0 : (exchange_only ? 1.0 : -0.5))"
+        ),
         unrestricted_exchange_scale=(
-            "coulomb_only ? 0.0 : (exchange_only ? 1.0 : -1.0)"
+            "hf_exchange ? -1.0 : (coulomb_only ? 0.0 : (exchange_only ? 1.0 : -1.0))"
         ),
         description=(
             "Scatter one symmetry-canonical ERI into HF, Coulomb-only, or exchange-only matrices."
