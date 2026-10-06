@@ -3,8 +3,12 @@
 import shutil
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -149,11 +153,10 @@ int main() {
     assert "480 randomized geometry domains match" in result.stdout
 
 
-def test_actual_candidate_page_partition_preserves_tails(tmp_path: Path) -> None:
-    """Compile the production claim/page arithmetic, including empty tail pages."""
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("host C++ compiler unavailable")
+def test_actual_candidate_page_partition_preserves_tails(
+    tmp_path: Path, native_cxx: "NativeCxx"
+) -> None:
+    """Compile real claim/page/packet arithmetic at each production launch width."""
     source = (ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text()
     start = source.index("  constexpr auto full_block_candidates")
     preparation = source[start : source.index("\n\n  while (true)", start)]
@@ -163,7 +166,16 @@ def test_actual_candidate_page_partition_preserves_tails(tmp_path: Path) -> None
         if "const std::size_t packed_block_quartet" in line
     )
     start = source.index("    const std::size_t page_begin =")
-    page = source[start : source.index("    for (std::size_t candidate_begin", start)]
+    packet_start = source.index("    for (std::size_t candidate_begin", start)
+    page = source[start:packet_start]
+    packet = source[
+        packet_start : source.index(
+            "      if (threadIdx.x == 0) queue_count", packet_start
+        )
+    ]
+    candidate = next(
+        line for line in source.splitlines() if "const std::size_t candidate =" in line
+    )
     program = tmp_path / "pages.cpp"
     program.write_text(
         '#include "scf/direct_block_domain.hpp"\n'
@@ -171,8 +183,11 @@ def test_actual_candidate_page_partition_preserves_tails(tmp_path: Path) -> None
         "#include <algorithm>\n#include <cassert>\n#include <vector>\n"
         "namespace detail = generativeqc::scf::detail;\n"
         "using std::min;\nint main() {\n"
+        "for (bool Force : {false, true}) for (unsigned threads : {128U, 256U}) {\n"
+        "if (!Force && threads != 256U) continue;\n"
+        "struct {unsigned x;} blockDim{threads};\n"
         "for (bool indexed : {false, true}) {\n"
-        "std::vector<std::size_t> counts{0, 1, 17, 32, 63, 64, 65, 255, 256, 257, 528, 1024};\n"
+        "std::vector<std::size_t> counts{0, 1, 17, 32, 63, 64, 65, 127, 128, 129, 255, 256, 257, 528, 1024};\n"
         "std::uint64_t prefix = 0;\n"
         "detail::BoundedDirectBlockDomain block_domain{indexed ? &prefix : nullptr, counts.size(), counts.size()};\n"
         "struct {std::size_t total_shell_pair_block_quartets;} batch{counts.size()};\n"
@@ -184,24 +199,21 @@ def test_actual_candidate_page_partition_preserves_tails(tmp_path: Path) -> None
         + "\nassert(packed_block_quartet < counts.size());\n"
         "const auto candidate_count = counts[packed_block_quartet];\n"
         + page
-        + "\nfor (auto candidate = page_begin; candidate < page_end; ++candidate)\n"
+        + packet
+        + "for (unsigned lane = 0; lane < blockDim.x; ++lane) {\n"
+        "struct {unsigned x;} threadIdx{lane};\n"
+        + candidate
+        + "\nif (candidate < page_end)\n"
         "  ++visits[packed_block_quartet][candidate];\n"
-        "}\nfor (const auto& row : visits) for (auto count : row) assert(count == 1);\n"
         "}\n}\n"
+        "}\nfor (const auto& row : visits) for (auto count : row) assert(count == 1);\n"
+        "}\n}\n}\n"
     )
-    executable = tmp_path / "pages"
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-I",
-            str(ROOT / "src"),
-            str(program),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        timeout=30,
+    executable = native_cxx.build_executable(
+        [program],
+        tmp_path / "pages",
+        compile_args=["-std=c++20", "-I", str(ROOT / "src")],
+        compile_timeout=30,
     )
     subprocess.run([str(executable)], check=True, timeout=10)
 
