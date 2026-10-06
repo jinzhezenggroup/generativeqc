@@ -260,6 +260,7 @@ def test_ks_separate_physical_residual_is_published(method: typing.Any) -> None:
         [("He", (0.0, 0.0, 0.0))],
         charge=1 if uks else 0,
         multiplicity=2 if uks else 1,
+        properties=("energy",),
     )
     assert result.converged
     assert result.physical_residual_rms == 0.0
