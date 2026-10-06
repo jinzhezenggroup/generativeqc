@@ -33,6 +33,83 @@ std::size_t checked_expanded_primitive_references(const std::vector<core::System
 
 /** Prepare immutable batch metadata without CUDA compilation; numerical kernels consume the
  * resulting views. */
+bool make_direct_force_resident_bra_schedule(const HostBatch& host,
+                                             std::vector<PsssResidentTask>& tasks,
+                                             std::vector<std::uint32_t>& ket_pairs,
+                                             std::size_t& bra_primitive_pair_capacity,
+                                             std::size_t byte_budget, bool include_tasks) {
+  tasks.clear();
+  ket_pairs.clear();
+  bra_primitive_pair_capacity = 0U;
+  const auto& offsets = host.system_shell_pair_offsets;
+  const auto pairs = host.shell_pair_first.size();
+  if (offsets.empty() || offsets.front() != 0 || offsets.back() < 0 ||
+      static_cast<std::size_t>(offsets.back()) != pairs || host.shell_pair_second.size() != pairs ||
+      host.shell_pair_primitive_offsets.size() != pairs + 1U)
+    return false;
+  std::size_t task_count = 0U, ket_count = 0U, maximum_bra_pairs = 0U;
+  for (std::size_t system = 0; system + 1U < offsets.size(); ++system) {
+    if (offsets[system] < 0 || offsets[system + 1U] < offsets[system] ||
+        static_cast<std::size_t>(offsets[system + 1U]) > pairs)
+      return false;
+    std::size_t bras = 0U, kets = 0U;
+    for (auto pair = offsets[system]; pair < offsets[system + 1U]; ++pair) {
+      if (static_cast<std::size_t>(pair) > std::numeric_limits<std::uint32_t>::max()) return false;
+      const auto first = host.shell_pair_first[pair], second = host.shell_pair_second[pair];
+      if (first < 0 || second < 0 || static_cast<std::size_t>(first) >= host.shell_angular.size() ||
+          static_cast<std::size_t>(second) >= host.shell_angular.size())
+        return false;
+      const unsigned order = host.shell_angular[first] + host.shell_angular[second];
+      if (order == 0U) ++kets;
+      if (order == 1U) {
+        const auto primitives =
+            host.shell_pair_primitive_offsets[pair + 1U] - host.shell_pair_primitive_offsets[pair];
+        if (primitives <= 0) return false;
+        maximum_bra_pairs = std::max(maximum_bra_pairs, static_cast<std::size_t>(primitives));
+        ++bras;
+      }
+    }
+    const std::size_t chunks = kets / kResidentPsssThreads + (kets % kResidentPsssThreads != 0U);
+    std::size_t system_tasks = 0U;
+    if ((include_tasks && !runtime::checked_multiply(bras, chunks, system_tasks)) ||
+        !runtime::checked_add(task_count, system_tasks, task_count) ||
+        !runtime::checked_add(ket_count, kets, ket_count) ||
+        task_count > std::numeric_limits<std::uint32_t>::max() ||
+        ket_count > std::numeric_limits<std::uint32_t>::max())
+      return false;
+  }
+  std::size_t task_bytes = 0U, ket_bytes = 0U, bytes = 0U;
+  if (!runtime::checked_multiply(task_count, sizeof(PsssResidentTask), task_bytes) ||
+      !runtime::checked_multiply(ket_count, sizeof(std::uint32_t), ket_bytes) ||
+      !runtime::checked_add(task_bytes, ket_bytes, bytes) || bytes > byte_budget)
+    return false;
+
+  tasks.reserve(task_count);
+  ket_pairs.reserve(ket_count);
+  for (std::size_t system = 0; system + 1U < offsets.size(); ++system) {
+    const auto ket_begin = ket_pairs.size();
+    for (auto pair = offsets[system]; pair < offsets[system + 1U]; ++pair) {
+      const auto first = host.shell_pair_first[pair], second = host.shell_pair_second[pair];
+      if (host.shell_angular[first] + host.shell_angular[second] == 0U)
+        ket_pairs.push_back(static_cast<std::uint32_t>(pair));
+    }
+    if (!include_tasks) continue;
+    const auto system_kets = ket_pairs.size() - ket_begin;
+    for (auto pair = offsets[system]; pair < offsets[system + 1U]; ++pair) {
+      const auto first = host.shell_pair_first[pair], second = host.shell_pair_second[pair];
+      if (host.shell_angular[first] + host.shell_angular[second] != 1U) continue;
+      for (std::size_t ket = 0; ket < system_kets; ket += kResidentPsssThreads) {
+        tasks.push_back({static_cast<std::uint32_t>(pair),
+                         static_cast<std::uint32_t>(ket_begin + ket),
+                         static_cast<std::uint32_t>(
+                             std::min<std::size_t>(kResidentPsssThreads, system_kets - ket))});
+      }
+    }
+  }
+  bra_primitive_pair_capacity = maximum_bra_pairs;
+  return true;
+}
+
 bool pack_host_batch(const std::vector<core::System>& systems,
                      const std::vector<const std::vector<double>*>& initial_densities,
                      HostBatch& host, bool unrestricted, bool matrix_direct,
@@ -221,41 +298,6 @@ bool pack_host_batch(const std::vector<core::System>& systems,
     const std::size_t system_shell_pair_begin =
         static_cast<std::size_t>(host.system_shell_pair_offsets.back());
     const std::size_t system_shell_pair_count = system_shell_pair_end - system_shell_pair_begin;
-    if (resident_psss == ResidentPsssPolicy::Build) {
-      std::vector<std::uint32_t> psss_bra_pairs;
-      const std::size_t resident_ket_begin = host.psss_resident_ket_pairs.size();
-      for (std::size_t pair = system_shell_pair_begin; pair < system_shell_pair_end; ++pair) {
-        if (pair > std::numeric_limits<std::uint32_t>::max()) return false;
-        const std::int32_t first_shell = host.shell_pair_first[pair];
-        const std::int32_t second_shell = host.shell_pair_second[pair];
-        const unsigned first_angular = host.shell_angular[first_shell];
-        const unsigned second_angular = host.shell_angular[second_shell];
-        if (first_angular + second_angular == 1U) {
-          psss_bra_pairs.push_back(static_cast<std::uint32_t>(pair));
-        } else if (first_angular == 0U && second_angular == 0U) {
-          host.psss_resident_ket_pairs.push_back(static_cast<std::uint32_t>(pair));
-        }
-      }
-      const std::size_t resident_ket_count =
-          host.psss_resident_ket_pairs.size() - resident_ket_begin;
-      if (resident_ket_begin > std::numeric_limits<std::uint32_t>::max() ||
-          resident_ket_count > std::numeric_limits<std::uint32_t>::max()) {
-        return false;
-      }
-      for (const std::uint32_t bra_pair : psss_bra_pairs) {
-        if (matrix_direct) break;
-        for (std::size_t ket = 0; ket < resident_ket_count; ket += kResidentPsssThreads) {
-          const std::size_t chunk_count =
-              std::min<std::size_t>(kResidentPsssThreads, resident_ket_count - ket);
-          const std::size_t chunk_begin = resident_ket_begin + ket;
-          if (chunk_begin > std::numeric_limits<std::uint32_t>::max()) {
-            return false;
-          }
-          host.psss_resident_tasks.push_back({bra_pair, static_cast<std::uint32_t>(chunk_begin),
-                                              static_cast<std::uint32_t>(chunk_count)});
-        }
-      }
-    }
     host.system_shell_pair_offsets.push_back(static_cast<std::int64_t>(system_shell_pair_end));
     const std::size_t system_shell_pair_block_count = detail::bounded_direct_queue_refill_count(
         system_shell_pair_count, detail::kBoundedDirectShellPairBlockSize);
@@ -326,6 +368,13 @@ bool pack_host_batch(const std::vector<core::System>& systems,
     if (valid_warm) {
       std::copy(warm->begin(), warm->end(), host.warm_density.begin() + system_index * warm_size);
     }
+  }
+  if (resident_psss == ResidentPsssPolicy::Build && !df_values) {
+    std::size_t bra_primitive_pair_capacity = 0U;
+    if (!make_direct_force_resident_bra_schedule(
+            host, host.psss_resident_tasks, host.psss_resident_ket_pairs,
+            bra_primitive_pair_capacity, std::numeric_limits<std::size_t>::max(), !matrix_direct))
+      return false;
   }
   return true;
 }
