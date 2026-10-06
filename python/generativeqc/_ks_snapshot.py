@@ -31,6 +31,7 @@ from .ks import (
     electronic_method_ir,
     native_xc_functional_code,
     scf_domain_for_method,
+    uses_molecular_nonlocal_domain,
 )
 
 _SCF_DOMAIN_VERSION_BY_DOMAIN = {
@@ -831,7 +832,11 @@ class NativeKsSnapshot:
         self.functional = options.functional
         self.model_terms = ()
         self.nonlocal_density_policy = None
-        if options.execution_plan.nonlocal_correlation is not None:
+        if (
+            options.execution_plan.nonlocal_correlation is not None
+            and options.has_range_exchange
+            and uses_molecular_nonlocal_domain(options.method_ir)
+        ):
             from generativeqc_compiler.dft.nonlocal_policy import (
                 MOLECULAR_VV10_DENSITY_POLICY,
             )
