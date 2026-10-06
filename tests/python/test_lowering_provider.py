@@ -29,6 +29,7 @@ from generativeqc_compiler.tensor.cuda_providers import (
     reduction_provider_candidates,
     tensor_lowering_diagnostics,
 )
+from generativeqc_compiler.tensor.cuda_reduction import ReductionLoweringBinding
 from generativeqc_compiler.tensor.cuda_search import estimate_schedule
 
 TARGET = cuda_target_info("sm_80")
@@ -319,12 +320,11 @@ def test_generated_and_cub_reduction_providers_share_one_request() -> None:
     cub = plan_cuda(
         program,
         TARGET,
-        schedule=TensorSchedule(
-            stream_reductions=True,
-            reduction_provider="cub",
-        ),
+        schedule=TensorSchedule(stream_reductions=True),
     )
-    report = tensor_lowering_diagnostics(cub)
+    report = tensor_lowering_diagnostics(
+        cub, ReductionLoweringBinding("cub")
+    )
     selected = next(
         row
         for row in report["candidates"]
