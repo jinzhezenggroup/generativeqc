@@ -1675,15 +1675,25 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           : 0U;
   const std::uint64_t host_generated_streaming_fock_shell_class_mask =
       host_generated_fock_shell_class_mask & kGeneratedStreamingFockShellClassMask;
+  const std::uint64_t host_native_streaming_fock_shell_class_mask =
+      host_generated_fock_shell_class_mask & kNativeStreamingFockShellClassMask;
+  const bool independent_streaming_fock =
+      bounded_direct_streaming && plan.separate_fock_jk && !mixed_precision_fock &&
+      (host_generated_streaming_fock_shell_class_mask |
+       host_native_streaming_fock_shell_class_mask) == host_present_shell_class_mask;
   // Keep the scheduling A/B orthogonal to mixed-precision arithmetic.  A
   // primary-streaming diagnostic is active only for strict FP64 execution;
   // mixed execution retains its separately qualified routing.
+  // A complete independent J/K owner must own primary work: otherwise fused
+  // incumbent pages consume every class and the selected Rys kernels only see
+  // an empty overflow tail. Explicit diagnostic masks still override routing.
   const std::uint64_t host_primary_streaming_fock_shell_class_mask =
       !mixed_precision_fock
-          ? requested_primary_streaming_fock_mask & host_generated_streaming_fock_shell_class_mask
+          ? (independent_streaming_fock && !primary_streaming_fock_override.has_value()
+                 ? host_generated_streaming_fock_shell_class_mask
+                 : requested_primary_streaming_fock_mask &
+                       host_generated_streaming_fock_shell_class_mask)
           : 0U;
-  const std::uint64_t host_native_streaming_fock_shell_class_mask =
-      host_generated_fock_shell_class_mask & kNativeStreamingFockShellClassMask;
   const std::uint64_t host_uncovered_fock_shell_class_mask =
       host_present_shell_class_mask & ~host_generated_fock_shell_class_mask;
   // Per-item admission: each item divides the certified batch budget with its
@@ -2256,10 +2266,7 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
           bool allow_mixed_precision) -> cudaError_t {
     // Split only a complete strict-FP64 streaming owner. Partial/higher-l and
     // mixed routes retain their already qualified fused fallback semantics.
-    const bool complete =
-        (host_generated_streaming_fock_shell_class_mask |
-         host_native_streaming_fock_shell_class_mask) == host_present_shell_class_mask;
-    if (!plan.separate_fock_jk || mixed_precision_fock || !complete)
+    if (!independent_streaming_fock)
       return launch_bounded_streaming_fock_consumer(is_unrestricted, quartet_density, quartet_fock,
                                                     allow_mixed_precision, bounded_stream_topology,
                                                     0);
