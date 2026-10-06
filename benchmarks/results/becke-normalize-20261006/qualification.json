@@ -1,0 +1,210 @@
+{
+  "schema": "generativeqc.becke-normalization-qualification.v1",
+  "slurm_job": "2505",
+  "partition": "main",
+  "gres": "gpu:pro6000:1",
+  "visibility_receipt": "job=2505 node=node2 visibility=0",
+  "finite_time_limit": "00:30:00",
+  "exit_status": 0,
+  "integration_base": "80296618e2003427b220331e1c0d4dad6752391e",
+  "integration_source_identity": "845b118bf3ecae96805c5fa9326c3f792e47bf667ccdbd7fcf14635f998f1b9a",
+  "integration_core_sha256": "d69d055ba25f98f9a857855f74594d8b2fe8baeab83ba9762be463c270d26114",
+  "ccache_version": "ccache version 4.5.1",
+  "compiler_invocation_inventory": {
+    "matched_compile_commands": 211,
+    "explicit_ccache_commands": 211,
+    "cxx_launcher": "ccache",
+    "cuda_launcher": "ccache"
+  },
+  "wrapper_compile_seconds": 114.62,
+  "wrapper_compile_scope": "finite cached generated pbe0_rks owner compile; not whole-core build cost",
+  "wrapper_compile_flags": "-O3 -std=c++20 --expt-relaxed-constexpr --fmad=false --split-compile=8 -arch=sm_120 -Isrc -Xcompiler=-fPIC -Xptxas=-v; g++-11 host; ccache",
+  "compiled_receipt": [
+    "fe818ea2e65ef598e6eddd6cb99f9d28b569797b8ce6c86e01397cea06319a59  /home/jzzeng/codes/qc-pbe0-1894-normalize-20261006/.artifacts/final-2505/owner.cu",
+    "d2bfe86184bc1fa1696c25be3f8094e6d4a68ae7019dde3f9b59a3bca49c4c8b  /home/jzzeng/codes/qc-pbe0-1894-normalize-20261006/.artifacts/final-2505/owner.o",
+    "e5411fb185aedac8a1eb4ce732d8348318d9d409e4c58f9560b9b23b90f41e2a  /home/jzzeng/codes/qc-pbe0-1894-normalize-20261006/.artifacts/final-2505/owner.so"
+  ],
+  "cooperative_kernel": {
+    "registers": 56,
+    "static_shared_bytes": 9424,
+    "stack_bytes": 0,
+    "spill_store_bytes": 0,
+    "spill_load_bytes": 0
+  },
+  "source_file_sha256": {
+    "tests/python/test_becke_normalize_cooperative.py": "816ba84b22dc94da71d176dcbca80416eb7d691ff9d4a87d6ea75f409532267e",
+    "python/generativeqc_compiler/method/stationary_becke_phased.py": "91f450d5f827a7884a7cc62e96b17786655f6ff5e7dd69f802ffde9fe871c9bf",
+    "src/dft/stationary_gradient_cuda.cuh": "9fa813b3596b0cae2891e5adc535f3ebde0950ba95fbfd413ed1050da97a4de7"
+  },
+  "normalization_tests": {
+    "passed": 49,
+    "host_cases": 5,
+    "cuda_isolated_cases": 39,
+    "physical_small_domain_fallback_cases": 5
+  },
+  "sanitizers": {
+    "memcheck": {
+      "passed": 39,
+      "deselected": 10,
+      "errors": 0
+    },
+    "racecheck": {
+      "passed": 39,
+      "deselected": 10,
+      "errors": 0
+    },
+    "initcheck": {
+      "passed": 39,
+      "deselected": 10,
+      "errors": 0
+    },
+    "synccheck": {
+      "passed": 39,
+      "deselected": 10,
+      "errors": 0
+    }
+  },
+  "native_snapshot_cpu_tests": {
+    "passed": 5,
+    "skipped_opt_in_cuda_cases": 4
+  },
+  "native_owner_tests": {
+    "passed": 144,
+    "scope": "synthetic shared-owner generic/phased/primitive, tails, moved/restored geometry, external sources and profiling; not physical endpoint timing"
+  },
+  "physical_small_domain_fallback_oracles": {
+    "candidate/fd-pbe-rks.json": {
+      "steps": [
+        0.001,
+        0.0003,
+        0.0001
+      ],
+      "estimates": [
+        0.0007770356376113341,
+        0.0007770364381561498,
+        0.000777036390786634
+      ],
+      "analytic": 0.0007770364545221717
+    },
+    "candidate/water-pbe-rks.json": {
+      "energy": -75.17414597534027,
+      "reference_energy": -75.17414597534038,
+      "energy_error": 1.1368683772161603e-13,
+      "gradient": [
+        [
+          0.31300053262058625,
+          0.007641582734357666,
+          0.048148637629167546
+        ],
+        [
+          -0.01666148574516358,
+          -0.023304426612672458,
+          -0.1289961519054197
+        ],
+        [
+          -0.2963390468754161,
+          0.01566284387831507,
+          0.08084751427625969
+        ]
+      ],
+      "reference_gradient": [
+        [
+          0.31300053261975735,
+          0.007641582730091856,
+          0.048148637607316136
+        ],
+        [
+          -0.016661485738665896,
+          -0.023304426609020046,
+          -0.12899615188515723
+        ],
+        [
+          -0.2963390468810956,
+          0.015662843878927857,
+          0.08084751427784265
+        ]
+      ],
+      "analytic_max_error": 2.185140957067233e-11,
+      "source_max_errors": {
+        "one_electron": 8.831779751972135e-11,
+        "coulomb": 9.101519538035063e-11,
+        "xc_ao": 8.830464137687954e-12,
+        "xc_grid": 1.106892355551281e-11,
+        "xc_weight": 1.0998757460356501e-11,
+        "overlap_pulay": 2.9055369221708816e-12,
+        "nuclear": 4.440892098500626e-16
+      }
+    },
+    "candidate/water-pbe-uks-b3.json": {
+      "energy_error": 8.526512829121202e-14,
+      "analytic_max_error": 4.269695708103427e-12
+    },
+    "baseline/water-pbe-rks.json": {
+      "energy": -75.17414597534027,
+      "reference_energy": -75.17414597534038,
+      "energy_error": 1.1368683772161603e-13,
+      "gradient": [
+        [
+          0.31300053262058714,
+          0.007641582734358887,
+          0.04814863762916466
+        ],
+        [
+          -0.016661485745164767,
+          -0.02330442661267229,
+          -0.1289961519054188
+        ],
+        [
+          -0.29633904687541857,
+          0.015662843878314375,
+          0.08084751427625769
+        ]
+      ],
+      "reference_gradient": [
+        [
+          0.31300053261975735,
+          0.007641582730091856,
+          0.048148637607316136
+        ],
+        [
+          -0.016661485738665896,
+          -0.023304426609020046,
+          -0.12899615188515723
+        ],
+        [
+          -0.2963390468810956,
+          0.015662843878927857,
+          0.08084751427784265
+        ]
+      ],
+      "analytic_max_error": 2.1848522990808306e-11,
+      "source_max_errors": {
+        "one_electron": 8.826983588505755e-11,
+        "coulomb": 9.096723374568683e-11,
+        "xc_ao": 8.83182416089312e-12,
+        "xc_grid": 1.106892355551281e-11,
+        "xc_weight": 1.0998979504961426e-11,
+        "overlap_pulay": 2.9055369221708816e-12,
+        "nuclear": 4.440892098500626e-16
+      }
+    },
+    "baseline/water-pbe-uks-b3.json": {
+      "energy_error": 7.105427357601002e-14,
+      "analytic_max_error": 4.270139797313277e-12
+    }
+  },
+  "physical_scope": "three-atom RKS/UKS and three-step reconverged finite difference; native phased admission intentionally remains above 32 atoms and metrics remain unsupported/unselected under either request",
+  "host_tests": {
+    "passed": 574,
+    "skipped_gpu_cases": 44,
+    "compiler_modules": 480,
+    "dependency_errors": 0,
+    "cuda_ownership_files": 332,
+    "registered_promotion_entries": 34,
+    "audited_controls": 75
+  },
+  "ccache_before": "Summary:\n  Hits:            21660 / 47206 (45.88 %)\n    Direct:        19179 / 47725 (40.19 %)\n    Preprocessed:   2481 / 28521 (8.70 %)\n  Misses:          25546\n    Direct:        28546\n    Preprocessed:  26040\n  Errors:            470\n  Uncacheable:      1463\nPrimary storage:\n  Hits:            45300 / 95425 (47.47 %)\n  Misses:          50125\n  Cache size (GB):  2.41 /  5.00 (48.12 %)\n  Cleanups:           74\n\nUse the -v/--verbose option for more details.\n",
+  "ccache_after": "Summary:\n  Hits:            21660 / 47208 (45.88 %)\n    Direct:        19179 / 47727 (40.18 %)\n    Preprocessed:   2481 / 28523 (8.70 %)\n  Misses:          25548\n    Direct:        28548\n    Preprocessed:  26042\n  Errors:            470\n  Uncacheable:      1501\nPrimary storage:\n  Hits:            45300 / 95429 (47.47 %)\n  Misses:          50129\n  Cache size (GB):  2.41 /  5.00 (48.29 %)\n  Cleanups:           74\n\nUse the -v/--verbose option for more details.\n",
+  "ccache_scope": "existing shared cache; counters cannot attribute hits or compile-speed benefit to this owner",
+  "transient_failures": "Initial integration harness runs required packaged PBE RKS/UKS artifacts and incorrectly expected phased admission for three atoms. Prerequisites and fallback expectations were corrected; successful final source/test hashes are retained. No production admission threshold was widened."
+}
