@@ -5,6 +5,7 @@
 #include <memory>
 #include <vector>
 
+#include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/cuda/topology.hpp"
@@ -91,6 +92,9 @@ struct GeneratedExchangePlan {
   bool force_capability{}, bounded_value_capability{};
   /** Experimental schedule only; false retains the qualified single traversal. */
   bool angular_force_opt_in{};
+  /** Optional complete psss lease consumed by the shared force scheduler.
+   * Storage is charged to this owner; an empty lease retains bounded execution. */
+  DirectForceResidentBraSchedule force_resident_bra{};
   const std::uint32_t* bounded_pair_order{};
   /** Optional geometry-live row index; owned by allocations, never by a call. */
   detail::BoundedDirectBlockDomain bounded_block_domain{};

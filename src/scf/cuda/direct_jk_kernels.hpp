@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "scf/cuda/direct_force_schedule.hpp"
 #include "scf/cuda/packed_basis.hpp"
 #include "scf/direct_block_domain.hpp"
 
@@ -174,7 +175,8 @@ cudaError_t launch_bounded_shell_angular_energy_derivative(
     const std::uint32_t* class_state, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* output, unsigned long long* cursor,
     DirectCoulombRange range, double omega, double coulomb_coefficient, double exchange_coefficient,
-    detail::BoundedDirectBlockDomain block_domain = {});
+    detail::BoundedDirectBlockDomain block_domain = {},
+    DirectForceResidentBraSchedule resident = {});
 
 /** SR/LR exchange derivative through the same bounded shell scheduler.
  * The full-range Schwarz/density bounds remain conservative for both ranges. */

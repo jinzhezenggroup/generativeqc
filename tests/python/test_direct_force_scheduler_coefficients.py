@@ -69,7 +69,7 @@ def test_top_level_shell_force_dispatch_forwards_explicit_coefficients() -> None
         assert symbol in source
     assert "double coulomb_coefficient" in header
     assert "double exchange_coefficient" in header
-    assert header.count("DirectForceOutputMode output_mode") == 2
+    assert header.count("DirectForceOutputMode output_mode") == 3
     for symbol in (
         "contract_direct_force_class_task",
         "contract_direct_force_precontracted_task",
