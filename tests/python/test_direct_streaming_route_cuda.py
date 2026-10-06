@@ -1,6 +1,7 @@
 """Primary streaming must preserve complete bounded HF endpoints and replay."""
 
 import os
+import re
 from dataclasses import asdict
 
 import numpy as np
@@ -106,3 +107,43 @@ def test_primary_streaming_partition_replay_matches_libcint(
         ):
             assert item.energy == pytest.approx(energy, abs=2e-9)
             np.testing.assert_allclose(item.forces, forces, atol=2e-8, rtol=0)
+
+
+@pytest.mark.parametrize("lowerings", [("incumbent", "rys"), ("rys", "incumbent")])
+def test_independent_lowering_owns_primary_hf_work(
+    lowerings: tuple[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Default routing must execute selected classes before their overflow tail.
+
+    This tiny topology fits the incumbent page arena, so a tail-only selection
+    would launch every alternative but admit zero generated shell quartets.
+    The ordinary device-side class ledger exposes actual admitted work.
+    """
+    monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_J_FOCK_LOWERING", lowerings[0])
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_K_FOCK_LOWERING", lowerings[1])
+    monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_FOCK_CLASS_PROFILE", "profile")
+    monkeypatch.delenv(
+        "GENERATIVEQC_BOUNDED_DIRECT_PRIMARY_STREAMING_MASK", raising=False
+    )
+    monkeypatch.delenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", raising=False)
+    atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
+    calculator = Calculator(
+        method="rhf",
+        basis="def2-svp",
+        basis_representation="spherical",
+        device="cuda",
+        density_fitting="none",
+        energy_tolerance=1e-12,
+        density_tolerance=1e-10,
+        screening_tolerance=1e-14,
+    )
+    with calculator.prepare_batch([atoms]) as prepared:
+        assert prepared.execute(strict=True).items[0].converged
+    # dsss is a legal Rys class present in def2-SVP water; native dddd work
+    # alone must not make an empty generated route appear qualified.
+    assert re.search(
+        r"\bdsss\s+class=\d+ fp64_quartets=[1-9]\d*", capfd.readouterr().err
+    )
