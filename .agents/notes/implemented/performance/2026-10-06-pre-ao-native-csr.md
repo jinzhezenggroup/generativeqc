@@ -3,6 +3,10 @@
 Status: implemented (local guarded default; final public-route validation pending)
 Date: 2026-10-06
 
+The frozen all-native promotion experiment below is historical. The current
+portfolio preserves the subsequently enabled sampled default; see the
+[superseding portfolio decision](2026-10-06-pre-ao-portfolio-default.md).
+
 ## Problem
 
 Issue #1893's 2026-10-06 code-level plan targets preventing dense AO/jet work,

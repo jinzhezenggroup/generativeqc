@@ -13,6 +13,11 @@ from benchmarks.verify_preao_force import (
     verify_census,
     verify_public_default,
 )
+from benchmarks.verify_preao_portfolio import (
+    accelerator_identity,
+    verify_dispatch,
+    warm_eligibility,
+)
 
 
 def force_work(*, selected: bool) -> dict[str, typing.Any]:
@@ -148,3 +153,64 @@ def test_published_gzip_report_keeps_the_original_values(tmp_path: Path) -> None
         gzip.compress(json.dumps(report).encode(), mtime=0)
     )
     assert load_report(path) == report
+
+
+@pytest.mark.parametrize("mode", ["current-default", "auto"])
+def test_portfolio_preserves_incumbent_sampled_dispatch(mode: str) -> None:
+    report = {
+        "p0c_execution_mode": mode,
+        "p0c_domain_producer": "sampled-jets",
+        "p0c_force_work": [
+            {
+                "force_active_ao_policy": {
+                    "producer": "sampled-jets",
+                    "decision": "selected",
+                    "actual_mode": "selected",
+                    "profile_id": "ordinary-direct-active-ao-cost-v3",
+                    "cutoff": 1e-16,
+                    "cache_bytes": 16 << 20,
+                }
+            }
+        ],
+    }
+    assert verify_dispatch(report, mode) == "sampled-jets"
+    report["p0c_force_work"][0]["force_active_ao_policy"]["cache_bytes"] = 64 << 20
+    with pytest.raises(AssertionError):
+        verify_dispatch(report, mode)
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_portfolio_requires_real_warm_gains_only_for_sparse_extensions(
+    sparse: bool,
+) -> None:
+    comparison = {
+        "workloads": {
+            f"24/{phase}": {
+                "relative_improvement": 0.0,
+                "noise_floor": 0.02,
+                "significant": False,
+            }
+            for phase in ("cold", "warm", "moved", "moved-warm")
+        }
+    }
+    assert warm_eligibility(comparison, 24, sparse=sparse) is not sparse
+    for phase in ("warm", "moved-warm"):
+        comparison["workloads"][f"24/{phase}"].update(
+            relative_improvement=0.04, significant=True
+        )
+    assert warm_eligibility(comparison, 24, sparse=sparse)
+    comparison["workloads"]["24/moved"]["relative_improvement"] = -0.03
+    assert not warm_eligibility(comparison, 24, sparse=sparse)
+
+
+def test_portfolio_device_identity_excludes_dynamic_telemetry() -> None:
+    accelerator = {
+        "name": "test GPU",
+        "device_id": 0,
+        "nvidia_smi": {"temperature_celsius": 31},
+    }
+    other = copy.deepcopy(accelerator)
+    other["nvidia_smi"]["temperature_celsius"] = 50
+    assert accelerator_identity(accelerator) == accelerator_identity(other)
+    other["device_id"] = 1
+    assert accelerator_identity(accelerator) != accelerator_identity(other)

@@ -37,6 +37,7 @@ def run() -> None:
             "sampled-jets",
             "pre-ao-envelope-native-csr",
             "auto",
+            "current-default",
         ),
     )
     parser.add_argument("--intrusive", action="store_true")
@@ -47,7 +48,7 @@ def run() -> None:
     work_records = []
 
     def diagnostic(*values: typing.Any, **kwargs: typing.Any) -> typing.Any:
-        if arguments.domain_producer != "auto":
+        if arguments.domain_producer not in ("auto", "current-default"):
             kwargs.update(
                 resident_ao_cutoff=None
                 if arguments.domain_producer == "dense"
@@ -68,7 +69,7 @@ def run() -> None:
             raise ValueError(
                 "composite intrusive timers require a separate explicit harness"
             )
-        if arguments.domain_producer != "auto":
+        if arguments.domain_producer not in ("auto", "current-default"):
             kwargs.update(
                 active_ao_cutoff=None
                 if arguments.domain_producer == "dense"
@@ -87,9 +88,14 @@ def run() -> None:
         forces, work = original_force(self, *values, **kwargs)
         if arguments.domain_producer == "auto":
             policy = work["force_active_ao_policy"]
-            if policy["producer"] != "pre-ao-envelope-native-csr" or policy[
-                "actual_mode"
-            ] not in ("selected", "dense-identity", "dense-fallback"):
+            if policy["producer"] not in (
+                "pre-ao-envelope-native-csr",
+                "sampled-jets",
+            ) or policy["actual_mode"] not in (
+                "selected",
+                "dense-identity",
+                "dense-fallback",
+            ):
                 raise RuntimeError(
                     "guarded default did not execute the qualified native CSR domain"
                 )
@@ -107,7 +113,19 @@ def run() -> None:
 
     output = Path(remaining[remaining.index("--output") + 1])
     with ExitStack() as stack:
-        if arguments.domain_producer != "auto":
+        if arguments.domain_producer == "current-default":
+            stack.enter_context(
+                patch.object(
+                    _force_active_ao,
+                    "QUALIFIED_FORCE_ACTIVE_AO_PROFILES",
+                    tuple(
+                        profile
+                        for profile in _force_active_ao.QUALIFIED_FORCE_ACTIVE_AO_PROFILES
+                        if profile.producer == "sampled-jets"
+                    ),
+                )
+            )
+        elif arguments.domain_producer != "auto":
             stack.enter_context(
                 patch.object(_force_active_ao, "QUALIFIED_FORCE_ACTIVE_AO_PROFILES", ())
             )
@@ -128,11 +146,18 @@ def run() -> None:
         finally:
             if output.exists():
                 record = json.loads(output.read_text())
-                record["p0c_domain_producer"] = (
-                    "pre-ao-envelope-native-csr"
-                    if arguments.domain_producer == "auto"
-                    else arguments.domain_producer
-                )
+                if arguments.domain_producer in ("auto", "current-default"):
+                    producers = {
+                        work["force_active_ao_policy"]["producer"] or "dense"
+                        for work in work_records
+                    }
+                    if len(producers) != 1:
+                        raise RuntimeError(
+                            "automatic producer changed within one geometry protocol"
+                        )
+                    record["p0c_domain_producer"] = producers.pop()
+                else:
+                    record["p0c_domain_producer"] = arguments.domain_producer
                 record["p0c_execution_mode"] = arguments.domain_producer
                 record["p0c_intrusive_stage_profile"] = arguments.intrusive
                 record["p0c_force_work"] = work_records
