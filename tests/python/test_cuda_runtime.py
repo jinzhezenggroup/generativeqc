@@ -63,6 +63,38 @@ def test_cuda_minimal_uhf_matches_cpu_reference() -> None:
     assert np.allclose(result.forces, reference.forces, atol=force_atol, rtol=0.0)
 
 
+def test_cuda_minimal_density_fitting_matches_cpu_reference() -> None:
+    """Exercise the public CUDA DF SCF path with a tiny independent CPU DF oracle."""
+
+    atoms = [("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]
+    basis = (
+        Shell(0, 0, (Primitive(1.0, 1.0),)),
+        Shell(1, 0, (Primitive(1.0, 1.0),)),
+    )
+    options = {
+        "basis": basis,
+        "auxiliary_basis": basis,
+        "energy_tolerance": 1.0e-10,
+        "density_tolerance": 1.0e-8,
+    }
+    reference = Calculator(
+        device="cpu", density_fitting="cpu", **options
+    ).singlepoint(atoms, properties=("energy",))
+    try:
+        result = Calculator(
+            device="cuda", density_fitting="cuda", **options
+        ).singlepoint(atoms, properties=("energy",))
+    except RuntimeError as error:
+        pytest.skip(f"CUDA device unavailable: {error}")
+
+    energy_atol, _ = _cuda_tolerances()
+    assert result.executed_backend == "cuda"
+    assert result.converged and reference.converged
+    assert result.energy == pytest.approx(reference.energy, abs=energy_atol)
+    assert result.forces is None
+
+
+
 @pytest.mark.parametrize("fixture_name", ("minimal_h2", "water", "water_sdf"))
 def test_cuda_resident_rhf_response_matches_host_operator(
     fixture_name: typing.Any,
