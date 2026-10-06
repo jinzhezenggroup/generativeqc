@@ -158,8 +158,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     // #1978 qualified a 128-thread full-range force CTA. Admission must
     // follow the actual force launch width so a smaller CTA does not skip the
     // second half of a 256-candidate queue page.
-    const unsigned candidate_packet =
-        Force ? blockDim.x : detail::kBoundedDirectQueueCapacity;
+    const unsigned candidate_packet = Force ? blockDim.x : detail::kBoundedDirectQueueCapacity;
     for (std::size_t candidate_begin = page_begin; candidate_begin < page_end;
          candidate_begin += candidate_packet) {
       if (threadIdx.x == 0) queue_count = 0;
