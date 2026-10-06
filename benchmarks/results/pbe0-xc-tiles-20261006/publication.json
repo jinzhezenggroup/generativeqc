@@ -1,0 +1,107 @@
+{
+  "schema": "generativeqc.benchmark-publication.v1",
+  "source": {
+    "revision": "83109befe5b97a5542b30e169da74c81d04719e6",
+    "dirty": true
+  },
+  "decision": {
+    "status": "accepted",
+    "scope": "numerical",
+    "reason": "Independent full E/F gates and four positive complete replay comparisons accepted for this frozen RKS cohort; no global default, IR/provider or generic memory/compile promotion."
+  },
+  "reproduction": {
+    "command": [
+      "bash",
+      "benchmarks/results/pbe0-xc-tiles-20261006/reproduce.sh"
+    ],
+    "prerequisites": "n2 finite main/gpu:pro6000:1, CUDA 12.9, ccache, matching benchmark Python; optional GPU4PySCF 1.8.1 for a fresh reference",
+    "source_restore": "Retain publication and measured benchmark outside checkout; restore source.revision, apply source.patch, copy the checksum-bound benchmark, verify source-files.sha256. Raw null archive Git metadata is not a clean checkout claim."
+  },
+  "archives": [],
+  "files": [
+    {
+      "path": "README.md",
+      "role": "summary",
+      "bytes": 3903,
+      "sha256": "9a64519f8995dcf868c74443482637a40eff56fab043d3b16d605ebff960b000"
+    },
+    {
+      "path": "receipts.json",
+      "role": "summary",
+      "bytes": 6210,
+      "sha256": "7d5bc6a252fad5c005a0a209675ec9df27561d59d28dfd56d0a124c82e8e3847"
+    },
+    {
+      "path": "reproduce.sh",
+      "role": "reproduction",
+      "bytes": 3914,
+      "sha256": "9248a685c6ed5809cdf7c9c9910993430afb476ae6356341508f642878c5345a"
+    },
+    {
+      "path": "source.patch",
+      "role": "source-patch",
+      "bytes": 43656,
+      "sha256": "b3579f45fdccc40a8b30d54237a33d791e0d2b8e33a9851a5b926aeb5a6d6a40"
+    },
+    {
+      "path": "source-files.sha256",
+      "role": "input",
+      "bytes": 4704,
+      "sha256": "d591d77629b70b42f7df44eb6beeedcc15ef49bf03c4e98805d527b2b34af0e6"
+    },
+    {
+      "path": "pairs-48.json.gz",
+      "role": "samples",
+      "bytes": 63068,
+      "sha256": "490c28437e0855c013e218858fcb4f7e3ff14e6aa0f4b1b19588d7d6af01e789"
+    },
+    {
+      "path": "pairs-96.json.gz",
+      "role": "samples",
+      "bytes": 78233,
+      "sha256": "bc29a677cceddd5e64eabe22026e4b78f6d9fcd938fdb5a5fe193320785d3f3e"
+    },
+    {
+      "path": "pairs-48.samples-warm.json.gz",
+      "role": "samples",
+      "bytes": 59116,
+      "sha256": "ea597b1c2938b7c2c8e5926c4c9c0758b92e24e5a00efa9164e3862bd23cdd84"
+    },
+    {
+      "path": "pairs-48.samples-moved-warm.json.gz",
+      "role": "samples",
+      "bytes": 63089,
+      "sha256": "224fc0af4d9084e5f833585d12e69f71274b9763dd6ea6abc1e2242e36ae8fbc"
+    },
+    {
+      "path": "pairs-96.samples-warm.json.gz",
+      "role": "samples",
+      "bytes": 72911,
+      "sha256": "fb88c9d1ca6c18319e28798d592e7c479d8916937d56f61a248fb54f2d4b4c1f"
+    },
+    {
+      "path": "pairs-96.samples-moved-warm.json.gz",
+      "role": "samples",
+      "bytes": 79847,
+      "sha256": "14dc71e3ca8be32c92ffc5ebce8aa1807c8c21add4fa974f86885f5285edf03e"
+    },
+    {
+      "path": "reference-48.json.gz",
+      "role": "input",
+      "bytes": 20450,
+      "sha256": "ab455640550f4294b6e0996670ceeb06c08879a9a4d9b5a36c16bc9154550cf9"
+    },
+    {
+      "path": "reference-96.json.gz",
+      "role": "input",
+      "bytes": 35394,
+      "sha256": "c9189954d07547a6640cfa0620756c30cc80cd6be7bfe87dd0b62f76b58dc557"
+    },
+    {
+      "path": "evidence.json",
+      "role": "evidence",
+      "bytes": 90193,
+      "sha256": "3f8321635486188823490c437a3ece1eb9e1bd3dcef73b56d091af1b17a9c73b"
+    }
+  ]
+}
