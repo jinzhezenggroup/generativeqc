@@ -79,6 +79,7 @@ class QualifiedForceActiveAoProfile:
     max_aos: int
     min_grid_points: int
     max_grid_points: int
+    min_dense_point_ao_square_work: int
     tile_policy: str
     tile_points: int | None
     min_device_bytes: int
@@ -109,6 +110,11 @@ class QualifiedForceActiveAoProfile:
         ):
             if type(low) is not int or type(high) is not int or low <= 0 or high < low:
                 raise ValueError(f"invalid qualified {name} range")
+        if (
+            type(self.min_dense_point_ao_square_work) is not int
+            or self.min_dense_point_ao_square_work <= 0
+        ):
+            raise ValueError("qualified dense-work crossover must be positive")
         if self.tile_policy not in ("fixed", "budget-auto"):
             raise ValueError("qualified tile policy is invalid")
         if self.tile_points is not None and (
@@ -144,6 +150,8 @@ class QualifiedForceActiveAoProfile:
             and self.min_atoms <= workload.atoms <= self.max_atoms
             and self.min_aos <= workload.aos <= self.max_aos
             and self.min_grid_points <= workload.grid_points <= self.max_grid_points
+            and workload.grid_points * workload.aos * workload.aos
+            >= self.min_dense_point_ao_square_work
             and workload.tile_policy == self.tile_policy
             and (self.tile_points is None or workload.tile_points == self.tile_points)
             and workload.max_device_bytes >= self.min_device_bytes
@@ -164,15 +172,15 @@ class ForceActiveAoDecision:
         return self.cutoff is not None
 
 
-# #1598 / #1853 promotion registry. The first positive production profile is
-# intentionally structural rather than functional-name based: it covers the
-# sm_120 ordinary RKS second-jet workload envelope that has complete 48/96-atom
-# cold/warm/moved evidence. Smaller, larger, spin-polarized, composite, DF, ECP,
-# alternate-tile, or under-budget workloads remain dense until separately
-# qualified.
+# #1598 / #1853 promotion registry. Admission is capability- and cost-driven,
+# not molecule-size-window driven. The retained 48-atom positive endpoint is the
+# measured crossover anchor: above its dense point×AO² work, map discovery can be
+# amortized by the ordinary RKS second-jet force consumer. The broad numeric bounds
+# below are implementation-capacity guards; profitability is controlled by the
+# dense-work crossover and every unsupported capability still falls back dense.
 QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
     QualifiedForceActiveAoProfile(
-        profile_id="sm120-ordinary-rks-second-jet-v1",
+        profile_id="sm120-ordinary-rks-second-jet-v2",
         evidence=(
             "benchmarks/results/pbe0-public-force-policy-20261005/README.md",
             "benchmarks/results/pbe0-force-followups-20261005/README.md",
@@ -182,12 +190,13 @@ QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = 
         derivative_orders=(2,),
         spin_blocks=(1,),
         density_fitted=False,
-        min_atoms=48,
-        max_atoms=96,
-        min_aos=384,
-        max_aos=768,
-        min_grid_points=1_179_648,
-        max_grid_points=2_359_296,
+        min_atoms=1,
+        max_atoms=(1 << 31) - 1,
+        min_aos=1,
+        max_aos=2048,
+        min_grid_points=1,
+        max_grid_points=(1 << 63) - 1,
+        min_dense_point_ao_square_work=173_946_175_488,
         tile_policy="fixed",
         tile_points=256,
         min_device_bytes=512 << 20,
