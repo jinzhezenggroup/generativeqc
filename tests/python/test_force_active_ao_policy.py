@@ -47,6 +47,7 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
         "max_aos": 1024,
         "min_grid_points": 100_000,
         "max_grid_points": 4_000_000,
+        "min_dense_point_ao_square_work": 1,
         "tile_policy": "fixed",
         "tile_points": 256,
         "min_device_bytes": 512 << 20,
@@ -58,23 +59,26 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
     return QualifiedForceActiveAoProfile(**values)
 
 
-def test_production_auto_policy_promotes_only_the_measured_large_rks_envelope() -> None:
+def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> None:
     assert tuple(
         profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-    ) == ("sm120-ordinary-rks-second-jet-v1",)
+    ) == ("sm120-ordinary-rks-second-jet-v2",)
 
-    below_envelope = resolve_force_active_ao_policy(_workload())
-    assert not below_envelope.selected
-    assert below_envelope.reason == "no-qualified-profile"
+    below_crossover = resolve_force_active_ao_policy(_workload())
+    assert not below_crossover.selected
+    assert below_crossover.reason == "no-qualified-profile"
 
+    # Admission is continuous in predicted dense point×AO² work. Atom count,
+    # AO count and grid count are not benchmark fingerprints.
     for workload in (
         _workload(grid_points=1_179_648),
-        _workload(atoms=96, aos=768, grid_points=2_359_296),
-        _workload(atoms=72, aos=576, grid_points=1_769_472),
+        _workload(atoms=40, aos=512, grid_points=700_000),
+        _workload(atoms=120, aos=960, grid_points=3_000_000),
+        _workload(atoms=200, aos=384, grid_points=1_179_648),
     ):
         decision = resolve_force_active_ao_policy(workload)
         assert decision.selected
-        assert decision.profile_id == "sm120-ordinary-rks-second-jet-v1"
+        assert decision.profile_id == "sm120-ordinary-rks-second-jet-v2"
         assert decision.cutoff == 1e-16
         assert decision.cache_bytes == 16 << 20
 
@@ -87,17 +91,14 @@ def test_production_auto_policy_promotes_only_the_measured_large_rks_envelope() 
         {"spin_blocks": 2, "grid_points": 1_179_648},
         {"composition": "composite", "grid_points": 1_179_648},
         {"density_fitted": True, "grid_points": 1_179_648},
-        {"atoms": 47, "grid_points": 1_179_648},
-        {"aos": 383, "grid_points": 1_179_648},
-        {"atoms": 97, "aos": 768, "grid_points": 2_359_296},
-        {"aos": 769, "grid_points": 2_359_296},
-        {"grid_points": 2_359_297},
+        {"grid_points": 1_179_647},
+        {"aos": 2049, "grid_points": 1_179_648},
         {"tile_points": 128, "grid_points": 1_179_648},
         {"max_device_bytes": (512 << 20) - 1, "grid_points": 1_179_648},
         {"max_host_bytes": (256 << 20) - 1, "grid_points": 1_179_648},
     ],
 )
-def test_production_profile_keeps_adjacent_unqualified_domains_dense(
+def test_production_cost_profile_keeps_capability_or_profitability_misses_dense(
     updates: dict[str, object],
 ) -> None:
     decision = resolve_force_active_ao_policy(_workload(**updates))
