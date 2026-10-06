@@ -22,6 +22,40 @@ from generativeqc_compiler.integral.weighted_eri_inputs import PRIMITIVE_RANGE_R
 from .basis import BasisSet
 
 CPU_FORCE_HOST_CAP = 256 << 20
+CPU_DIRECT_SEMILOCAL_FORCE_METHODS = frozenset(
+    ("lda-rks", "pbe-rks", "lda-uks", "pbe-uks")
+)
+
+
+def qualified_all_electron_basis(basis: typing.Any) -> bool:
+    """Bound direct CPU semilocal promotion to all-electron s/p/d bases."""
+    if isinstance(basis, BasisSet):
+        if any(element.ecp_core_electrons for element in basis.elements):
+            return False
+        shells = (shell for element in basis.elements for shell in element.shells)
+    else:
+        try:
+            shells = iter(basis)
+        except TypeError:
+            return False
+    return all(shell.angular_momentum <= 2 for shell in shells)
+
+
+def qualified_direct_semilocal_context(calculator: typing.Any) -> bool:
+    """One admission predicate for the optional all-electron CPU force owner."""
+    from . import _native
+
+    return (
+        calculator._device_name == "cpu"
+        and calculator._method_name in CPU_DIRECT_SEMILOCAL_FORCE_METHODS
+        and calculator._density_fitting_mode == _native.DENSITY_FITTING_NONE
+        and calculator._automatic_libxc_name is None
+        and calculator._dispersion_method_ir is None
+        and calculator._ks_options is not None
+        and calculator._ks_options.coefficients == (1.0, 1.0, 0.0)
+        and calculator._ks_options.execution_plan.nonlocal_correlation is None
+        and qualified_all_electron_basis(calculator._basis)
+    )
 
 
 def qualified_basis(basis: typing.Any) -> bool:

@@ -12,6 +12,8 @@ from types import SimpleNamespace
 import pytest
 from generativeqc import _generated_methods as method_manifest
 from generativeqc import _native
+from generativeqc._cpu_force_resources import qualified_direct_semilocal_context
+from generativeqc._model_resolution import snapshot_basis
 from generativeqc.ks import (
     SPLIT_HYBRID_SCF_DOMAIN,
     _scf_domain_for_ir,
@@ -38,6 +40,7 @@ def _nodes() -> tuple[str, dict[str, ast.Assign], ast.If]:
         if isinstance(node, ast.FunctionDef) and node.name == "__init__"
     )
     predicate_names = {
+        "cpu_direct_semilocal_force",
         "semilocal_force",
         "density_fitted_force",
         "cuda_hybrid_force",
@@ -99,8 +102,14 @@ def _promoted(
         _method=(
             _native.METHOD_PBE_UKS if spin == "polarized" else _native.METHOD_PBE_RKS
         ),
-        _basis="sto-3g",
-        _method_name=method.lower(),
+        _basis=snapshot_basis("sto-3g"),
+        _method_name=("lda" if method == "LDA_XC_PW" else method.lower())
+        + ("-uks" if spin == "polarized" else "-rks"),
+        _density_fitting_mode=(
+            _native.DENSITY_FITTING_AUTO
+            if density_fitting
+            else _native.DENSITY_FITTING_NONE
+        ),
         _automatic_libxc_name=None,
         _dispersion_method_ir=None,
     )
@@ -115,7 +124,8 @@ def _promoted(
         "semilocal_force": False,
         "named_cpu_all_electron_force": False,
         "cuda_wb97mv_force": False,
-        "qualified_basis": lambda basis: blocked != "unqualified-ecp",
+        "qualified_basis": lambda basis: blocked == "ecp",
+        "qualified_direct_semilocal_context": qualified_direct_semilocal_context,
         "cuda_global_hybrid_force_eligible": cuda_global_hybrid_force_eligible,
         "SPLIT_HYBRID_SCF_DOMAIN": SPLIT_HYBRID_SCF_DOMAIN,
         "_native": _native,
@@ -146,7 +156,13 @@ def _promoted(
             post_scf=(),
         )
     predicates = (
-        [("semilocal_force", assignments["semilocal_force"].value)]
+        [
+            (
+                "cpu_direct_semilocal_force",
+                assignments["cpu_direct_semilocal_force"].value,
+            ),
+            ("semilocal_force", assignments["semilocal_force"].value),
+        ]
         if include_semilocal
         else []
     ) + [
@@ -306,3 +322,31 @@ def test_capacity_audit_rejects_a_changed_hybrid_guard(
         RuntimeError, match="public global-hybrid force predicate changed"
     ):
         qualify_capacity._source_public_route(tmp_path)
+
+
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+@pytest.mark.parametrize("method", ["LDA_XC_PW", "PBE"])
+@pytest.mark.parametrize(
+    "blocked",
+    [
+        None,
+        "missing-options",
+        "automatic-libxc",
+        "nonlocal",
+        "dispersion",
+        "unsupported-device",
+    ],
+)
+def test_expanded_cpu_branch_uses_its_shared_qualified_context(
+    spin: str,
+    method: str,
+    blocked: str | None,
+) -> None:
+    assert _promoted(
+        precision=_native.PRECISION_FP64,
+        spin=spin,
+        method=method,
+        include_semilocal=True,
+        device="cpu",
+        blocked=blocked,
+    ) is (blocked is None)

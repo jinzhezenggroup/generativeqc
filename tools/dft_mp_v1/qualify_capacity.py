@@ -263,8 +263,12 @@ STATIONARY_LAYOUT_CONTRACT_SHA256 = (
 NATIVE_SPHERICAL_AO_COUNT_CONTRACT_SHA256 = (
     "b6e7a3a70accf7f4abeb82f0168634ae33b7c58f282044b8a9cd0462672200f0"
 )
+# The complete predicate now also admits a bounded all-electron CPU branch.
+# That branch remains inside the CPU device guard: CUDA semilocal coefficients,
+# automatic-Libxc/nonlocal exclusions, promotion and runtime ownership are
+# unchanged. Keep hashing the full predicate so future guard drift fails closed.
 PUBLIC_SEMILOCAL_FORCE_CONTRACT_SHA256 = (
-    "fba0a84cb3d993919caf6e6d10391239598ef876cda41123d683479fccf767e0"
+    "083183902052ec67c806a67e6bbdf2422b21e609e1a10ec0f1a8b9035a6370d5"
 )
 PUBLIC_FORCE_PROMOTION_CONTRACT_SHA256 = (
     "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
