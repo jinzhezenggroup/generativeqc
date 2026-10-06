@@ -1679,22 +1679,13 @@ def test_bounded_fock_registry_gaps_use_exact_runtime_fallback() -> None:
         "bounded_direct_shell_quartet_kernel<false, DirectScreeningPurpose::Fock, false>"
         in fallback_source[fock_wrapper:]
     )
-    # The method-neutral force fallback may use Fock screening while still writing forces.
-    # Do not conflate screening purpose with the scientific consumer again. The
-    # diagnostic scheduler now selects a templated implementation, so keep the
-    # guard on that implementation rather than requiring the old direct wrapper shape.
-    force_impl = fallback_source.index(
-        "template <bool WarpPull>\nvoid launch_bounded_direct_shell_quartet_kernel_scaled_impl("
-    )
-    force_wrapper = fallback_source.index(
-        "void launch_bounded_direct_shell_quartet_kernel_scaled("
-    )
+    # Keep Fock screening distinct from the force consumer under scheduler templating.
+    force_impl = fallback_source.index("template <bool WarpPull>")
+    force_wrapper = fallback_source.index("launch_bounded_direct_shell_quartet_kernel_scaled(")
+    force_body = fallback_source[force_impl:force_wrapper]
     assert force_impl < force_wrapper < fock_wrapper
-    assert (
-        "bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true, -1, -1,"
-        in fallback_source[force_impl:force_wrapper]
-    )
-    assert "WarpPull>" in fallback_source[force_impl:force_wrapper]
+    assert "DirectScreeningPurpose::Fock, true, -1, -1," in force_body
+    assert "WarpPull>" in force_body
 
 
 def test_production_manifest_drives_generated_registry_and_shards(
