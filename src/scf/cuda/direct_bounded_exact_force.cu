@@ -128,8 +128,8 @@ __global__ void contract_bounded_exact_low_order_force_page_kernel(
       // here to preserve the same final-density ledger as the fixed schedule.
       profile_bounded_direct_shell_quartet(batch, task, profile);
       contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>(
-          batch, task, screening_tolerance, schwarz_bounds, density, topology.active, forces,
-          0U, coulomb_coefficient, exchange_coefficient);
+          batch, task, screening_tolerance, schwarz_bounds, density, topology.active, forces, 0U,
+          coulomb_coefficient, exchange_coefficient);
     }
     __syncthreads();
   }

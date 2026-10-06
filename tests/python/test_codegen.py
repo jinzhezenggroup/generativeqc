@@ -2347,7 +2347,10 @@ def test_bounded_order3_force_uses_generated_shell_task_math() -> None:
     bounded = (REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_fallback.cu").read_text(
         encoding="utf-8"
     )
-    assert "contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>" in bounded
+    assert (
+        "contract_direct_force_precontracted_task<Unrestricted, DirectForceOutputMode::Combined>"
+        in bounded
+    )
     dispatcher = (
         REPOSITORY_ROOT / "src/scf/cuda/direct_bounded_contraction.cuh"
     ).read_text(encoding="utf-8")
