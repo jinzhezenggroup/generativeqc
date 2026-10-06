@@ -273,6 +273,7 @@ jobs:
       # must emit its own completed Apple-GPU provenance, so a green ABI smoke
       # cannot stand in for QC CUDA execution.
       - name: Run bounded CuMetal QC endpoint gate
+        id: qc_gate
         if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         timeout-minutes: 6
         env:
@@ -291,6 +292,41 @@ jobs:
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
         run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
+
+      - name: Capture one CuMetal PTX compiler diagnostic
+        # One authorized capture only: the first CI attempt for the next update
+        # from this exact PR head. This never substitutes for the failed gate.
+        id: qc_ptx_diagnostic
+        if: >-
+          failure() && github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1997 &&
+          github.event.action == 'synchronize' &&
+          github.event.before == '0f67b413da60fa3d146eead32360901adeda4698' &&
+          github.run_attempt == 1 && steps.qc_gate.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-cumetal/libgenerativeqc.dylib
+          PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
+          CUMETAL_DIAGNOSTIC_OUTPUT: ${{ runner.temp }}/cumetal-ptx-diagnostic
+          CUMETAL_DIAGNOSTIC_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: .venv/bin/python .github/scripts/diagnose_cumetal_ptx.py
+
+      - name: Preserve one-shot CuMetal compiler diagnostic
+        if: always() && steps.qc_ptx_diagnostic.outcome != 'skipped' && steps.qc_ptx_diagnostic.outcome != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cumetal-ptx-diagnostic-only
+          path: |
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/diagnostic.json
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/*.txt
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/legacy-capture.xml
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/ptx/*.ptx
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/typed-output.metal
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Preserve CUDA test results
         if: always()
