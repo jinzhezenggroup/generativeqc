@@ -72,8 +72,7 @@ bool accept_eigen_frame(const EigenFrameDiagnostic& diagnostic, std::string& det
       diagnostic.maximum_metric_error < 0 || diagnostic.scaled_eigen_residual < 0 ||
       diagnostic.maximum_metric_error > 1e-8 ||
       (require_eigen_residual &&
-       (diagnostic.maximum_eigen_residual > 1e-8 ||
-        diagnostic.scaled_eigen_residual > 1e-12))) {
+       (diagnostic.maximum_eigen_residual > 1e-8 || diagnostic.scaled_eigen_residual > 1e-12))) {
     detail = require_eigen_residual
                  ? "DF eigensystem failed physical eigen residual or metric orthogonality checks"
                  : "DF determinant frame failed metric orthogonality checks";

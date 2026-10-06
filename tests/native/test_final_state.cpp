@@ -127,10 +127,7 @@ void stationary_uhf_determinant_reuse() {
   const std::vector<Matrix> density{alpha_density, beta_density};
   const PhysicalFockFrame physical{id, true, {fock, fock}};
   const FinalFrameCandidate candidate{
-      id,
-      6,
-      true,
-      {{{-3, -2, 1}, alpha_coefficients}, {{-3, -2, 1}, identity}}};
+      id, 6, true, {{{-3, -2, 1}, alpha_coefficients}, {{-3, -2, 1}, identity}}};
 
   FinalStateLimits limits;
   FinalStateDiagnostic diagnostic;

@@ -93,8 +93,7 @@ bool validate_final_state(const FinalStateIdentity& current, const Matrix& overl
   const double weight = current.model.spec.spin == FockSpin::Restricted ? 2.0 : 1.0;
   const double tolerance = std::min(1e-8, limits.density_tolerance);
   diagnostic.eigenframes.resize(density.size());
-  const bool require_eigen_residual =
-      limits.require_canonicality || !limits.allow_stationary_reuse;
+  const bool require_eigen_residual = limits.require_canonicality || !limits.allow_stationary_reuse;
   if (operations) {
     if (!operations->products(current, overlap, hcore, nuclear_energy, density, fock, orbitals,
                               limits, diagnostic, detail))
@@ -211,13 +210,12 @@ FinalStateSelection select_final_state(
       }
       FinalStateDiagnostic diagnostic;
       auto validation_limits = limits;
-      validation_limits.allow_stationary_reuse =
-          limits.allow_stationary_reuse && step == 0 && frame == candidate && !force_rebuild &&
-          !limits.require_canonicality;
-      const bool valid =
-          frame && validate_final_state(current, overlap, hcore, nuclear_energy, density, physical,
-                                        *frame, validation_limits, diagnostic, result.detail,
-                                        operations);
+      validation_limits.allow_stationary_reuse = limits.allow_stationary_reuse && step == 0 &&
+                                                 frame == candidate && !force_rebuild &&
+                                                 !limits.require_canonicality;
+      const bool valid = frame && validate_final_state(current, overlap, hcore, nuclear_energy,
+                                                       density, physical, *frame, validation_limits,
+                                                       diagnostic, result.detail, operations);
       const bool stationary_reuse = valid && validation_limits.allow_stationary_reuse;
       const auto materialize = [&] {
         if (std::any_of(physical.spins.begin(), physical.spins.end(),
