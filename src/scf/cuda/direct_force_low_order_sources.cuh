@@ -158,10 +158,9 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
     if (output >= Roots::component_count) return;
 #pragma unroll
     for (unsigned source = 0; source < source_count; ++source) {
-      const auto coefficients = LongRange
-                                    ? DirectForceSourceCoefficients{0.0, exchange_coefficient}
-                                    : Sources::coefficients(source, coulomb_coefficient,
-                                                            exchange_coefficient);
+      const auto coefficients =
+          LongRange ? DirectForceSourceCoefficients{0.0, exchange_coefficient}
+                    : Sources::coefficients(source, coulomb_coefficient, exchange_coefficient);
       const double coulomb = coefficients.coulomb;
       const double exchange = coefficients.exchange;
       if (coulomb == 0.0 && exchange == 0.0) continue;
@@ -253,9 +252,9 @@ __device__ inline __noinline__ void contract_two_electron_force_low_order_source
 #pragma unroll
   for (unsigned source = 0; source < source_count; ++source) {
     if (!source_active[source]) continue;
-    scatter_direct_force_independent_gradient(
-        center_atoms, unique_center_atoms, unique_center_count, result[source],
-        Sources::output(forces, batch.total_atoms, source));
+    scatter_direct_force_independent_gradient(center_atoms, unique_center_atoms,
+                                              unique_center_count, result[source],
+                                              Sources::output(forces, batch.total_atoms, source));
   }
 }
 
@@ -267,12 +266,12 @@ __device__ inline void contract_two_electron_force_low_order_sources(
     double screening_tolerance, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* forces, double coulomb_coefficient,
     double exchange_coefficient, double omega = 0.0) {
-#define GENERATIVEQC_LOW_ORDER_SOURCES_CASE(ShellClass)                                      \
-  case ShellClass:                                                                           \
-    contract_two_electron_force_low_order_sources_task<                                    \
-        Unrestricted, ShellClass, LongRange, LowOrderSourceRoots<ShellClass>, Mode>(        \
-        batch, task, screening_tolerance, schwarz_bounds, density, active, forces,           \
-        coulomb_coefficient, exchange_coefficient, omega);                                   \
+#define GENERATIVEQC_LOW_ORDER_SOURCES_CASE(ShellClass)                                        \
+  case ShellClass:                                                                             \
+    contract_two_electron_force_low_order_sources_task<Unrestricted, ShellClass, LongRange,    \
+                                                       LowOrderSourceRoots<ShellClass>, Mode>( \
+        batch, task, screening_tolerance, schwarz_bounds, density, active, forces,             \
+        coulomb_coefficient, exchange_coefficient, omega);                                     \
     break
   switch (shell_class) {
     GENERATIVEQC_LOW_ORDER_SOURCES_CASE(kSsssShellClass);
