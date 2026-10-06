@@ -32,7 +32,8 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     definition += (
         " { return {df_matrix_gemm,forces,lambda_matrix_gemm,frame_options,"
         "descriptor.ccsd_diis_history,df_auxiliary_reduction,lambda_batch_limit,"
-        "ccsd_batch_limit,derived_denominators,packed_diis}; }\n"
+        "ccsd_batch_limit,derived_denominators,packed_diis,parallel_gap_reduction,"
+        "request_triples_gap_cotangents}; }\n"
     )
     endpoint = (ROOT / "benchmarks/df_ccsdt_force_endpoint.cpp").read_text()
     selectors = (
@@ -70,7 +71,7 @@ struct DFCCSDTResult {
   unsigned diis_history;
   bool reduction;
   std::size_t batch_limit, ccsd_batch_limit;
-  bool derived_denominators, packed_diis;
+  bool derived_denominators, packed_diis, parallel_gap, request_gap;
 };
 """
         + declaration
@@ -107,7 +108,8 @@ int main() {
                                          true,true,true,true,true,8);
   if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda ||
      !ordinary.derived_denominators || !explicit_matrix.derived_denominators ||
-     ordinary.packed_diis || explicit_matrix.packed_diis) return 3;
+     ordinary.packed_diis || explicit_matrix.packed_diis || ordinary.parallel_gap ||
+     explicit_matrix.parallel_gap || !ordinary.request_gap || !explicit_matrix.request_gap) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame)) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
@@ -271,7 +273,25 @@ int main() {
                       "6","8","0","0","2","1","7","0","0","1",token};
     try { (void)select(19,bad);return 31; } catch(const std::invalid_argument&) {}
   }
-  for(int argc : {0,1,2,3,20}) {
+  for(const char* parallel : {"0", "1"}) for(const char* requested : {"0", "1"}) {
+    const char* selected[]{"endpoint","input","output","1","1","1","1","8",
+                           "6","8","0","0","2","1","7","0","0","1","auto",
+                           parallel,requested};
+    const auto result = select(21,selected);
+    if(result.parallel_gap != (parallel[0]=='1') || result.request_gap != (requested[0]=='1') ||
+       result.frame.resident_jk_maximum_bytes || !result.packed_diis) return 32;
+    const auto partial_gap = select(20,selected);
+    if(partial_gap.parallel_gap != (parallel[0]=='1') || !partial_gap.request_gap) return 33;
+    const auto legacy_gap = select(19,selected);
+    if(legacy_gap.parallel_gap || !legacy_gap.request_gap) return 34;
+  }
+  for(int index : {19,20}) for(const char* token : {"", "-1", "+1", "2", "1junk", "1.0"}) {
+    const char* bad[]{"endpoint","input","output","1","1","1","1","8",
+                      "6","8","0","0","2","1","7","0","0","1","auto","0","1"};
+    bad[index]=token;
+    try { (void)select(21,bad);return 35; } catch(const std::invalid_argument&) {}
+  }
+  for(int argc : {0,1,2,3,22}) {
     try { (void)select(argc,nullptr);return 16; }
     catch(const std::invalid_argument&) {}
   }

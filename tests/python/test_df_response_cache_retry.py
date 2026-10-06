@@ -38,6 +38,7 @@ struct MethodError : std::runtime_error {
 int calls = 0, live = 0, drains = 0, clears = 0, late_calls = 0, failure = 0;
 const char* phase = "triples";
 bool expected_packed = false;
+bool expected_parallel_gap = false, expected_gap_cotangents = true;
 struct ResourceOwner {
   ResourceOwner() { ++live; }
   ~ResourceOwner() {
@@ -127,6 +128,8 @@ _TAIL = r"""
 (void)df_auxiliary_reduction;
 (void)lambda_matrix_gemm;
 (void)lambda_batch_limit;
+assert(parallel_gap_reduction == expected_parallel_gap);
+assert(request_triples_gap_cotangents == expected_gap_cotangents);
 later_phase(state.budget);
 DFCCSDTResult result;
 result.total_seconds = elapsed(started);
@@ -145,10 +148,15 @@ int main() {
   current_cache = &cache;
   auto call = [&] {
     return run_df_ccsdt_native(execution, system, auxiliary, descriptor, true, true, true, true,
-                               true, 8, 8, opts, true, expected_packed);
+                               true, 8, 8, opts, true, expected_packed,
+                               expected_parallel_gap, expected_gap_cotangents);
   };
-  for (bool selected_packed : {false, true}) {
+  for (bool selected_packed : {false, true})
+  for (bool parallel_gap : {false, true})
+  for (bool gap_cotangents : {false, true}) {
   expected_packed = selected_packed;
+  expected_parallel_gap = parallel_gap;
+  expected_gap_cotangents = gap_cotangents;
   auto reset = [&] {
     assert(live == 0);
     calls = drains = clears = late_calls = 0;

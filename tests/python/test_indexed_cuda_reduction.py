@@ -8,18 +8,29 @@ import math
 import os
 import shutil
 import subprocess
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 from generativeqc_compiler.cc.occupied_triples_response import gap_vjp
-from generativeqc_compiler.tensor import cast, multiply
+from generativeqc_compiler.tensor import (
+    Index,
+    IndexSpace,
+    TensorSpec,
+    add,
+    cast,
+    input_tensor,
+    multiply,
+    reduce_sum,
+)
 from generativeqc_compiler.tensor.indexed_cuda_reduction import (
     IndexedReductionSchedule,
     emit_indexed_reduction_cuda,
     plan_indexed_reduction,
 )
+from generativeqc_compiler.tensor.interpreter import execute
 from generativeqc_compiler.tensor.program import Program
 
 from tools.generate_rccsd_native import _cuda_program, _dim, _required_function
@@ -82,6 +93,59 @@ def test_fp32_is_not_silently_admitted() -> None:
     root = gap_vjp(3).outputs["bar_eps_i"]
     with pytest.raises(ValueError, match="FP64"):
         plan_indexed_reduction(Program({"narrow": cast(root, "float32")}))
+
+
+@pytest.mark.parametrize("placement", ["producer", "output"])
+@pytest.mark.parametrize(
+    ("coefficient", "literal"),
+    [
+        (Fraction(1, 3), "0x1.5555555555555p-2"),
+        (Fraction(9007199254740993, 9007199254740995), "0x1.ffffffffffffep-1"),
+        (Fraction(10**400, 10**400 + 1), "0x1.0000000000000p+0"),
+        (Fraction(-1, 10**400), "-0x0.0p+0"),
+    ],
+)
+def test_rational_coefficients_match_tensorir_fp64_rounding(
+    placement: str, coefficient: Fraction, literal: str
+) -> None:
+    space = IndexSpace("coefficient_probe", "virtual", 1)
+    source = input_tensor(
+        "seed", TensorSpec((Index("a", space), Index("b", space)), role="input")
+    )
+    scaled = add(source, coefficients=(coefficient,))
+    root = (
+        reduce_sum(scaled, (0,))
+        if placement == "producer"
+        else add(reduce_sum(source, (0,)), coefficients=(coefficient,))
+    )
+    program = Program({"result": root})
+    expected = execute(program, {"seed": np.ones((1, 1))}).outputs["result"]
+    assert expected[0] == float.fromhex(literal) == float(coefficient)
+    emitted, _, _ = emit_indexed_reduction_cuda(
+        plan_indexed_reduction(program),
+        "coefficient_probe",
+        dimension=_dim,
+        parameters=("v",),
+        input_bindings={"seed": "state.seed"},
+        state_type="ProbeState",
+        output_type="ProbeOutputs",
+    )
+    assert f"__dmul_rn({literal}," in emitted
+
+
+def test_nonrepresentable_coefficient_is_rejected_during_emission() -> None:
+    program = gap_vjp(3)
+    root = add(program.outputs["bar_eps_v"], coefficients=(10**400,))
+    with pytest.raises(ValueError, match="outside finite FP64"):
+        emit_indexed_reduction_cuda(
+            plan_indexed_reduction(Program({"result": root})),
+            "coefficient_probe",
+            dimension=_dim,
+            parameters=("o", "v"),
+            input_bindings={"bar_gap": "state.bar_gap"},
+            state_type="ProbeState",
+            output_type="ProbeOutputs",
+        )
 
 
 def test_parallel_emission_has_bounded_partials_and_no_cube_slots() -> None:

@@ -13,6 +13,8 @@ import json
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
+from .cuda_dtype import scalar_type
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
@@ -189,8 +191,7 @@ def emit_indexed_reduction_cuda(
         for child, coefficient in zip(
             node.inputs, node.attrs["coefficients"], strict=True
         ):
-            numerator, denominator = coefficient
-            factor = f"({numerator}.0/{denominator}.0)"
+            factor = scalar_type("float64").literal(coefficient)
             terms.append(f"__dmul_rn({factor},{linear(child, leaves)})")
         expression = terms[0]
         for term in terms[1:]:
