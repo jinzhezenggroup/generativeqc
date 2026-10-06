@@ -30,7 +30,7 @@ def test_routine_cumetal_gate_spans_scientific_cuda_owners() -> None:
         in gate
     )
     assert (
-        "tests/python/test_dft_cuda.py::test_native_cuda_dft_matches_independently_converged_cpu_endpoint"
+        "tests/python/test_cuda_runtime.py::test_cuda_minimal_pbe_rks_matches_cpu_reference"
         in gate
     )
 
