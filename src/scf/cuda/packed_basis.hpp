@@ -84,6 +84,14 @@ struct DeviceBatch {
   // Frozen strict-FP64 Hermite reassociation: bit 0 values, bit 1 derivatives.
   // Mixed precision and the public-AO fallback do not consume this experiment.
   unsigned direct_hermite_convolution{};
+  // Frozen qualification schedule: share cached pair geometry and one
+  // high-order Coulomb recurrence across each exact Fock component packet.
+  // Unsupported precision/layout domains retain their existing source owner.
+  bool direct_pair_materialized_values{};
+  // Separate full-range dddd J'/K' qualification. Forward AD uses one shared
+  // pair-product recurrence per independent atom; other derivative owners stay
+  // available when the resident cache or retained recurrence is unavailable.
+  bool direct_pair_materialized_derivatives{};
 };
 
 }  // namespace generativeqc::scf::cuda_execution

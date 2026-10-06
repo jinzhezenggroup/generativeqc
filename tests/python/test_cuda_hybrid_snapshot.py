@@ -67,20 +67,38 @@ def test_cuda_hybrid_snapshot_matches_cpu_composition_and_state(method: str) -> 
 
 @pytest.mark.parametrize("method", ("pbe0-rks", "pbe0-uks", "pbe-rks"))
 @pytest.mark.parametrize("representation", ("cartesian", "spherical"))
+@pytest.mark.parametrize("materialized_derivative", ("0", "1"))
+@pytest.mark.parametrize("two_oxygens", (False, True))
+@pytest.mark.parametrize("angular_partition", (False, True))
 def test_separate_full_range_derivatives_match_libcint(
-    method: str, representation: str
+    method: str,
+    representation: str,
+    materialized_derivative: str,
+    two_oxygens: bool,
+    angular_partition: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One shell traversal must still publish independent J'/K' source channels.
 
     The fixed final density removes SCF differences from this derivative gate.
-    Libcint evaluates the independent analytic integral derivatives, including
-    the d-shell classes that use the shared high-order recurrence on CUDA.
+    Two oxygens exercise nonzero dddd responses across distinct atoms. Libcint
+    independently evaluates both sources in Cartesian and spherical layouts.
     """
     from pyscf import gto
     from pyscf.grad import rhf
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    monkeypatch.setenv(
+        "GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES", materialized_derivative
+    )
+    monkeypatch.setenv(
+        "GENERATIVEQC_BOUNDED_ANGULAR_FORCE", "angular" if angular_partition else "none"
+    )
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
+    if two_oxygens:
+        atoms += [
+            (element, (x + 1.1, y - 0.7, z + 5.8)) for element, (x, y, z) in atoms
+        ]
     unrestricted = method.endswith("uks")
     charge, multiplicity = (1, 2) if unrestricted else (0, 1)
     calculator = Calculator(

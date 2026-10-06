@@ -1,0 +1,86 @@
+
+=== job.txt ===
+JobId=6203 JobName=bash UserId=jzzeng(1001) GroupId=group(1001) MCS_label=N/A Priority=1 Nice=0 Account=(null) QOS=(null) JobState=RUNNING Reason=None Dependency=(null) Requeue=1 Restarts=0 BatchFlag=0 Reboot=0 ExitCode=0:0 RunTime=00:00:00 TimeLimit=00:10:00 TimeMin=N/A SubmitTime=2026-10-06T14:02:36 EligibleTime=2026-10-06T14:02:36 AccrueTime=Unknown StartTime=2026-10-06T14:02:36 EndTime=2026-10-06T14:12:36 Deadline=N/A SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T14:02:36 Scheduler=Main Partition=main AllocNode:Sid=localhost:479805 ReqNodeList=(null) ExcNodeList=(null) NodeList=node1 BatchHost=node1 NumNodes=1 NumCPUs=8 NumTasks=1 CPUs/Task=8 ReqB:S:C:T=0:0:*:* ReqTRES=cpu=8,mem=32G,node=1,billing=8 AllocTRES=cpu=8,mem=32G,node=1,billing=8 Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=* MinCPUsNode=8 MinMemoryCPU=4G MinTmpDiskNode=0 Features=(null) DelayBoot=00:00:00 OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null) Command=bash WorkDir=/data/jzzeng/qc-becke-physical-1894-v4 Power= TresPerNode=gres/gpu:5090:1 TresPerTask=cpu:8 MailUser=jzzeng MailType=INVALID_DEPEND,BEGIN,END,FAIL,REQUEUE,STAGE_OUT 
+
+=== job.exit ===
+0
+
+=== device-visibility.txt ===
+CUDA_VISIBLE_DEVICES=2
+
+=== probe-check.txt ===
+/data/jzzeng/qc-becke-native-domain-1894-v4/.artifacts/issue1894/phases-v4/job-6148/owner.so: OK
+
+=== ccache-version.txt ===
+ccache version 4.5.1
+Features: file-storage http-storage redis-storage
+
+Copyright (C) 2002-2007 Andrew Tridgell
+Copyright (C) 2009-2021 Joel Rosdahl and other contributors
+
+See <https://ccache.dev/credits.html> for a complete list of contributors.
+
+This program is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation; either version 3 of the License, or (at your option) any later
+version.
+
+=== ccache-before.txt ===
+Summary:
+  Hits:             353 /  670 (52.69 %)
+    Direct:         350 /  670 (52.24 %)
+    Preprocessed:     3 /  320 (0.94 %)
+  Misses:           317
+    Direct:         320
+    Preprocessed:   317
+  Uncacheable:     2928
+Primary storage:
+  Hits:             732 / 1340 (54.63 %)
+  Misses:           608
+  Cache size (GB): 0.16 / 5.00 (3.16 %)
+
+Use the -v/--verbose option for more details.
+
+=== ccache-after.txt ===
+Summary:
+  Hits:             353 /  670 (52.69 %)
+    Direct:         350 /  670 (52.24 %)
+    Preprocessed:     3 /  320 (0.94 %)
+  Misses:           317
+    Direct:         320
+    Preprocessed:   317
+  Uncacheable:     2928
+Primary storage:
+  Hits:             732 / 1340 (54.63 %)
+  Misses:           608
+  Cache size (GB): 0.16 / 5.00 (3.16 %)
+
+Use the -v/--verbose option for more details.
+
+=== cuda-tests.log ===
+................................................                         [100%]
+48 passed, 96 deselected in 29.47s
+
+=== memcheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 5.85s
+========= ERROR SUMMARY: 0 errors
+
+=== racecheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 13.07s
+========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+
+=== initcheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 3.93s
+========= ERROR SUMMARY: 0 errors
+
+=== synccheck.log ===
+========= COMPUTE-SANITIZER
+.                                                                        [100%]
+1 passed in 2.62s
+========= ERROR SUMMARY: 0 errors

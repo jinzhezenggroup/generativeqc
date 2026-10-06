@@ -40,6 +40,7 @@ def plan_composite_stationary_cuda_resources(
     max_device_bytes: int,
     max_host_bytes: int,
     tile_points: int | None = None,
+    becke_primitive: bool = False,
 ) -> CompositeStationaryCudaResources:
     """Prefer 1024 points, retaining bounded smaller tiles under tight totals.
 
@@ -84,6 +85,7 @@ def plan_composite_stationary_cuda_resources(
             )
             // 2,
             cooperative_becke=True,
+            becke_primitive=becke_primitive,
         )
         device = (
             grid.peak_bytes

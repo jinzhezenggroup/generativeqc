@@ -83,6 +83,7 @@ scf_proposals
 incremental_low_rank
 range_separated_integrals
 weighted_eri
+direct_pair_recurrence
 hf_force_finalization
 ```
 

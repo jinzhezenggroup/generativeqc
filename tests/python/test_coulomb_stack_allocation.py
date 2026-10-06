@@ -46,13 +46,28 @@ def stack_probe(tmp_path_factory: pytest.TempPathFactory, native_cxx: object) ->
 @pytest.mark.parametrize("kind", [1, 2, 3], ids=["oom", "cuda-error", "logic-error"])
 @pytest.mark.parametrize("reachable", range(4))
 @pytest.mark.parametrize("hermite", range(4))
+@pytest.mark.parametrize("pair_materialized", [False, True])
+@pytest.mark.parametrize("pair_derivatives", [False, True])
 def test_stack_reservation_oom_falls_back_but_other_failures_propagate(
-    stack_probe: Path, kind: int, reachable: int, hermite: int
+    stack_probe: Path,
+    kind: int,
+    reachable: int,
+    hermite: int,
+    pair_materialized: bool,
+    pair_derivatives: bool,
 ) -> None:
     # The shared driver also checks stream fencing, no leaked allocations,
     # and successful fresh preparation after each rejected optional owner.
     subprocess.run(
-        [str(stack_probe), "6", str(kind), str(int(reachable)), str(hermite)],
+        [
+            str(stack_probe),
+            "6",
+            str(kind),
+            str(int(reachable)),
+            str(hermite),
+            str(int(pair_materialized)),
+            str(int(pair_derivatives)),
+        ],
         check=True,
         timeout=10,
     )

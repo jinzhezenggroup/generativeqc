@@ -1,0 +1,127 @@
+{
+  "attachments": [
+    {
+      "path": "receipts.txt",
+      "sha256": "7c010aa0d305cc59bdda9669870827ee8dfe6d220618af1c5975db4b87230537"
+    }
+  ],
+  "backend_selected": "cuda",
+  "block_errors": {},
+  "compilation": {
+    "reason": "not measured",
+    "seconds": null
+  },
+  "device": {
+    "identity_source": "finite main/gpu:5090:1 step and retained device visibility",
+    "name": "NVIDIA GeForce RTX 5090",
+    "node": "node1",
+    "slurm_job": "6148",
+    "step": "0"
+  },
+  "hardware": {
+    "reason": null,
+    "slurm_job": "6148",
+    "slurm_step": "0",
+    "status": "pass"
+  },
+  "hash_reasons": {},
+  "hashes": {
+    "equation": "389ba8af8fc7ce291546a4b52e6ceb7c4c45b0f9d2f7d674a2147e12ed97dd9e",
+    "ir": "54a2495eba36e0cf9ae296828afcaf58bf0dee24844bcf08a02cee59c977bf32",
+    "schedule": "b7bd889ae7801db144c966b2f7e4bc8e461cceb570fc3cf2e1173c4d51ecd677",
+    "source": "c8b9eaee3a81b552d16be7326bdc8f40f2178bf577c78008e8d8c0c12d898947"
+  },
+  "inputs_hash": "91ff764a2706dfb836a64e041aea7de58f1bfccbae706801d2b20e4206cf91a2",
+  "memory": {
+    "allocated_bytes": null,
+    "peak_bytes": null,
+    "reason": "not measured"
+  },
+  "performance": {
+    "reason": "Intrusive synthetic phase observations are not clean endpoint timing or a promotion comparison.",
+    "status": "not-run"
+  },
+  "residuals": {
+    "generic_ad_max_absolute_error": 0.0,
+    "generic_ad_max_scaled_error": 0.0
+  },
+  "revision": "a65b075ca0b38f61508a5e596ba408d4f8214807",
+  "schema": "generativeqc.validation",
+  "schema_version": 1,
+  "settings": {
+    "atom_domain": [
+      1,
+      128
+    ],
+    "compiler_cache_scope": "Mandatory ccache invocation verified. Shared before/after counters include concurrent builds and cannot attribute individual hits/misses to this owner compile.",
+    "complete_endpoint": false,
+    "fast_compile": false,
+    "generated_source_scope": "The emitted mathematical .cu is unchanged; the included native header adds telemetry. The complete header/compiler input manifest and new binary bind this cohort, not the .cu checksum alone.",
+    "host_followup": "Subsequent optional physical-gate and host telemetry tests do not modify this frozen native/GPU-test cohort.",
+    "iterations": 3,
+    "profile_enabled_cases": [
+      false,
+      true
+    ],
+    "profile_scope": "Seven CUDA-event intervals after AO/XC seeds. Profiling adds eight event records and one explicit fence per tile; intrusive. Disabled/unsplit generic durations are unmeasured, even when ABI values are zero.",
+    "promotion": "none; default remains off",
+    "qualified_actual_atoms": [
+      48,
+      96
+    ],
+    "scope": "actual shared owner with synthetic AO/XC inputs; ordinary/primitive comparison, tails, external sources, moved/restored geometry, invalid-point publication and recovery",
+    "source_inputs_sha256": "a783ca9724f32326bbc14e4a42011939d3dfa52f10eada8f8074b6c9676e3fa2",
+    "traffic": "Logical distinct pair-panel values and additional cached direction values; not executed loads or hardware transactions."
+  },
+  "solver_iterations": [],
+  "solver_trace_reason": "Synthetic borrowed AO/XC inputs, not SCF; no solver trace is inferred.",
+  "stages": {
+    "compilation": {
+      "binary_sha256": "cf82d6ecd5e973c38fd2f30f54fc04ebde00dd0fe5bd832ff558f7715faa6bfb",
+      "reason": "Mandatory ccache invocation verified. Shared before/after counters include concurrent builds and cannot attribute individual hits/misses to this owner compile.",
+      "status": "pass"
+    },
+    "endpoint": {
+      "reason": "This cohort is synthetic; independent physical RKS/UKS and paired complete 48/96 PBE0 endpoints remain separate acceptance gates.",
+      "status": "not-run"
+    },
+    "numerical": {
+      "cuda_passed": 96,
+      "cuda_skipped": 0,
+      "force_atol": 2e-11,
+      "force_rtol": 5e-12,
+      "racecheck_hazards": 0,
+      "racecheck_warnings": 0,
+      "reason": "96 synthetic route/profile/counter/invalidation tests; four sanitizer cases. Recorded maxima are comparisons to the generic native AD route, not independent physical force errors.",
+      "sanitizer_errors": 0,
+      "status": "pass"
+    },
+    "production": {
+      "reason": "no evidence registered",
+      "status": "not-run"
+    },
+    "representation": {
+      "reason": "Source generation recognizes and revalidates the actual active-prefix primal/JVP; emitted operation and native bound are SHA-256 verified.",
+      "status": "pass"
+    },
+    "runtime": {
+      "reason": "17 counters, seven separate event durations, optional ABI, disabled profiling, tails, and actual primitive selection are asserted.",
+      "status": "pass"
+    },
+    "source": {
+      "reason": null,
+      "source_sha256": "c8b9eaee3a81b552d16be7326bdc8f40f2178bf577c78008e8d8c0c12d898947",
+      "status": "pass"
+    }
+  },
+  "subject": "issue1894 native phase counters and intrusive timers: partial qualification",
+  "tier": "gpu-numerical",
+  "timings": [],
+  "toolchain": {
+    "ccache": "4.5.1",
+    "compile_flags": "-O3 -std=c++20 --expt-relaxed-constexpr --fmad=false -arch=sm_120 -Isrc -Xcompiler=-fPIC -c",
+    "cuda": "12.9.86",
+    "library_sha256": "cf82d6ecd5e973c38fd2f30f54fc04ebde00dd0fe5bd832ff558f7715faa6bfb",
+    "python": "3.13.9"
+  }
+}

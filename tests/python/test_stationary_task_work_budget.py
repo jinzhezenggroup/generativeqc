@@ -3,6 +3,7 @@
 import re
 import shutil
 import subprocess
+import typing
 from pathlib import Path
 
 import pytest
@@ -140,6 +141,85 @@ def test_task_metrics_are_reported_per_execution() -> None:
     assert delta["phased_becke_batches"] == 3
     del after["phased_becke_batches"]
     assert "phased_becke_batches" not in runtime._metric_delta(after, before)
+
+
+def test_becke_delta_preserves_optional_abi_and_differences_every_phase() -> None:
+    from generativeqc import _stationary_cuda as runtime
+
+    required = dict.fromkeys(
+        (
+            "h2d_bytes",
+            "d2h_bytes",
+            "launches",
+            "primitive_records",
+            "xc_points",
+            "grid_pair_visits",
+            "task_descriptors",
+            "task_batches",
+        ),
+        0,
+    )
+    before = {**required, **dict.fromkeys(runtime._BECKE_PHASE_COUNTER_NAMES, 3)}
+    after = {**required, **dict.fromkeys(runtime._BECKE_PHASE_COUNTER_NAMES, 11)}
+    before["becke_phase_ms"] = dict.fromkeys(runtime._BECKE_PHASE_NAMES, 0.25)
+    after["becke_phase_ms"] = dict.fromkeys(runtime._BECKE_PHASE_NAMES, 0.75)
+    after["becke_primitive_selected"] = 1
+    delta = runtime._metric_delta(after, before)
+    assert all(delta[name] == 8 for name in runtime._BECKE_PHASE_COUNTER_NAMES)
+    assert delta["becke_phase_ms"] == dict.fromkeys(runtime._BECKE_PHASE_NAMES, 0.5)
+    assert delta["becke_primitive_selected"] == 1
+    assert runtime._metric_delta(required, required) == required
+
+
+@pytest.mark.parametrize("abi", [False, True])
+@pytest.mark.parametrize("profiled", [False, True])
+def test_becke_metric_abi_is_optional_and_reports_profile_state(
+    abi: bool, profiled: bool
+) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    from generativeqc import _stationary_cuda as runtime
+
+    from benchmarks.dft_force_components import BECKE_PHASES
+
+    assert BECKE_PHASES == runtime._BECKE_PHASE_NAMES
+    owner = object.__new__(runtime._CudaSources)
+    owner.handle = None
+    owner.profile_device = profiled
+    owner.library = SimpleNamespace(
+        stationary_metrics=Mock(return_value=0),
+        stationary_profile_metrics=Mock(return_value=0),
+    )
+    if abi:
+
+        def counters(_handle: object, output: typing.Any, count: int) -> int:
+            assert count == 17
+            for index in range(count):
+                output[index] = index + 1
+            return 0
+
+        def times(_handle: object, output: typing.Any, count: int) -> int:
+            assert count == 7
+            for index in range(count):
+                output[index] = index + 0.5
+            return 0
+
+        owner.library.stationary_becke_phase_metrics_v1 = Mock(side_effect=counters)
+        owner.library.stationary_becke_phase_profile_v1 = Mock(side_effect=times)
+    metrics = owner.metrics()
+    assert metrics["becke_phase_profile_supported"] is abi
+    assert metrics["becke_phase_profile_enabled"] is (abi and profiled)
+    if abi:
+        assert tuple(
+            metrics[name] for name in runtime._BECKE_PHASE_COUNTER_NAMES
+        ) == tuple(range(1, 18))
+        assert metrics["becke_phase_ms"] == {
+            name: index + 0.5 for index, name in enumerate(BECKE_PHASES)
+        }
+    else:
+        assert "becke_phase_ms" not in metrics
+        assert "becke_phase_batches" not in metrics
 
 
 PREAMBLE = r"""
