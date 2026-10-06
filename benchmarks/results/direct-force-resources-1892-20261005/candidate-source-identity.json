@@ -1,0 +1,8 @@
+{
+  "base_commit": "de18539de8a17fbae61b590f7f28e739c9a5be19",
+  "changed_files": [
+    "src/scf/cuda/direct_bounded_fallback.cu"
+  ],
+  "source_manifest_sha256": "c9006e677156e7d86c1b117fa5d0d0ea00a7828dafaab30ad157a6a12a619714",
+  "scope": "default-off CTA/packet launch experiment, not promoted"
+}
