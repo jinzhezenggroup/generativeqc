@@ -20,8 +20,11 @@ def test_native_semilocal_generated_outputs_are_current() -> None:
         encoding="utf-8"
     ) == generator.emit_cpp(families)
     assert (
-        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+        ROOT / "python/generativeqc_compiler/dft/_generated_native_semilocal.py"
     ).read_text(encoding="utf-8") == generator.emit_python(families)
+    assert (
+        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+    ).read_text(encoding="utf-8") == generator.emit_python_compat()
 
 
 def test_native_semilocal_transport_codes_are_manifest_owned() -> None:
@@ -50,6 +53,16 @@ def test_native_semilocal_execution_traits_are_manifest_owned() -> None:
     assert by_name["R2SCAN"]["stationary_ecp_gradient"] is False
     assert by_name["B3LYP"]["stationary_kernel"] == "composed"
     assert by_name["WB97M-V"]["stationary_kernel"] == "wb97mv"
+    assert {
+        name for name, record in by_name.items() if record["stationary_second_order"]
+    } == {"LDA", "PBE"}
+    assert by_name["PBE"]["native_range_exchange"] is True
+    assert by_name["PBE"]["cuda_nonlocal_correlation"] is False
+    assert by_name["WB97M-V"]["molecular_nonlocal_domain"] is True
+    assert by_name["LDA"]["aliases"] == ("LDA_XC_PW",)
+    assert all(
+        not record["aliases"] for name, record in by_name.items() if name != "LDA"
+    )
 
 
 CUDA_FAST_PATH_CENSUS = {
@@ -105,3 +118,94 @@ def test_cuda_fast_path_capabilities_ignore_display_names() -> None:
         assert generator.cpp_fast_path_capabilities(
             renamed
         ) == generator.cpp_fast_path_capabilities(item)
+
+
+def test_python_cuda_fast_path_capability_census_is_manifest_owned() -> None:
+    assert {
+        item["name"]: item["cuda_fast_paths"] for item in SEMILOCAL_FAMILIES
+    } == CUDA_FAST_PATH_CENSUS
+
+
+def test_native_xc_dispatch_consumes_generated_capabilities() -> None:
+    from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
+
+    source = emit_native_xc_point_dispatch()
+    for item in SEMILOCAL_FAMILIES:
+        code = f"semilocal_family_code(SemilocalFamily::{item['symbol']})"
+        assert f"return &launch_points<{code}, false>;" in source
+        assert (f"return &launch_points<{code}, true>;" in source) == (
+            item["cuda_fast_paths"]["response"] == "qualified"
+        )
+
+
+def test_grid_jit_tracks_and_ships_capability_headers() -> None:
+    import re
+
+    from generativeqc_compiler.dft.ao_cuda import emit_grid_source
+
+    _, _, headers = emit_grid_source()
+    packaged = dict(
+        re.findall(
+            r'^"([^\"]+)"\s*=\s*"([^\"]+)"$',
+            (ROOT / "pyproject.toml").read_text(),
+            re.MULTILINE,
+        )
+    )
+    for relative in ("src/dft/semilocal_family.hpp", "src/dft/xc_capabilities.hpp"):
+        assert ROOT / relative in headers
+        assert packaged[relative] == f"generativeqc_compiler/assets/{relative}"
+
+
+def test_legacy_xc_metadata_imports_share_canonical_dft_records() -> None:
+    from generativeqc_compiler.dft import _generated_native_semilocal as native
+    from generativeqc_compiler.xc import _generated_native_semilocal as legacy
+
+    assert legacy.SEMILOCAL_FAMILIES is native.SEMILOCAL_FAMILIES
+    assert legacy.SEMILOCAL_FAMILY_BY_CODE is native.SEMILOCAL_FAMILY_BY_CODE
+    assert (
+        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+    ).read_text() == generator.emit_python_compat()
+
+
+def test_grid_native_layer_does_not_import_xc_algebra() -> None:
+    import os
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; from generativeqc_compiler.dft import cuda; "
+                "assert not any(name.startswith('generativeqc_compiler.xc') for name in sys.modules)"
+            ),
+        ],
+        check=True,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "python")},
+        timeout=30,
+    )
+
+
+def test_grid_native_selector_matches_resolved_alias_data() -> None:
+    from dataclasses import replace
+    from fractions import Fraction
+
+    import pytest
+    from generativeqc_compiler.dft.native_semilocal import (
+        device_feature_ingredients,
+        legacy_grid_xc_selector,
+    )
+    from generativeqc_compiler.xc.spec import functional
+
+    assert legacy_grid_xc_selector("LDA_XC_PW") == 0
+    assert legacy_grid_xc_selector("LDA") == 0
+    assert legacy_grid_xc_selector("PBE") == 1
+    assert (
+        legacy_grid_xc_selector(replace(functional("PBE"), identifier="renamed")) == 1
+    )
+    assert device_feature_ingredients("R2SCAN") == ("rho", "gradient", "tau")
+    with pytest.raises(ValueError):
+        legacy_grid_xc_selector(
+            replace(functional("PBE"), components=(("GGA_X_PBE", Fraction(1)),))
+        )

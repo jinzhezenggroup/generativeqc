@@ -785,19 +785,19 @@ class PreparedBatch:
         direct_semilocal_all_electron = (
             not ecp_force and qualified_direct_semilocal_context(calculator)
         )
-        direct_all_electron = direct_semilocal_all_electron or (
-            calculator._method_name
-            in (
-                "pbe0-rks",
-                "pbe0-uks",
-                "b3lyp-rks",
-                "b3lyp-uks",
-                "pbe-d4-rks",
-                "wb97m-v",
-                "wb97m-v-rks",
-                "wb97m-v-uks",
+        from .ks import cpu_stationary_all_electron_force_eligible
+
+        direct_compiled_all_electron = (
+            not ecp_force
+            and calculator._automatic_libxc_name is None
+            and calculator._ks_options is not None
+            and cpu_stationary_all_electron_force_eligible(
+                calculator._ks_options.method_ir,
+                dispersion_method_ir=calculator._dispersion_method_ir,
             )
-            and not ecp_force
+        )
+        direct_all_electron = (
+            direct_semilocal_all_electron or direct_compiled_all_electron
         )
         density_fitted_all_electron = (
             calculator._density_fitting_mode != _native.DENSITY_FITTING_NONE

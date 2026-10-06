@@ -92,7 +92,7 @@ def test_host_inventory_preserves_current_model_and_solver_charge(
         _item(n),
         diis_history=8,
         max_iterations=100,
-        pbe=True,
+        requires_first_ao_derivatives=True,
         backend=backend,
         model=_model(),
     )
@@ -133,7 +133,11 @@ def _library(quadrature_status: int = 0) -> SimpleNamespace:
 
 def test_quadrature_setup_coexists_with_prepared_coulomb() -> None:
     result = _load("_cuda_item_inventory")(
-        _library(), _item(32), diis_history=8, pbe=True, tile=16
+        _library(),
+        _item(32),
+        diis_history=8,
+        requires_first_ao_derivatives=True,
+        tile=16,
     )
     assert result["quadrature_setup"] == 320 << 20
     assert result["setup"] == 328 << 20
@@ -146,7 +150,11 @@ def test_unavailable_quadrature_inventory_fails_closed(missing: bool) -> None:
         del library.generativeqc_resource_quadrature_cuda_v1
     with pytest.raises(NotImplementedError, match="quadrature"):
         _load("_cuda_item_inventory")(
-            library, _item(32), diis_history=8, pbe=True, tile=16
+            library,
+            _item(32),
+            diis_history=8,
+            requires_first_ao_derivatives=True,
+            tile=16,
         )
 
 
@@ -192,11 +200,11 @@ def test_request_does_not_read_retired_version_properties() -> None:
 
 @pytest.mark.parametrize("delta", [-1, 0, 1])
 @pytest.mark.parametrize(
-    "backend,spins,pbe",
+    "backend,spins,requires_first_ao_derivatives",
     [("cpu", 1, True), ("cpu", 2, True), ("cpu", 1, False), ("cuda", 1, True)],
 )
 def test_cpu_ao_cache_boundary_keeps_exact_transient_charge(
-    delta: int, backend: str, spins: int, pbe: bool
+    delta: int, backend: str, spins: int, requires_first_ao_derivatives: bool
 ) -> None:
     inventory = _load("_item_host_inventory")
     cap = inventory.__globals__["_CPU_AO_GRID_CACHE_CAP"]
@@ -207,17 +215,23 @@ def test_cpu_ao_cache_boundary_keeps_exact_transient_charge(
         item,
         diis_history=8,
         max_iterations=100,
-        pbe=pbe,
+        requires_first_ao_derivatives=requires_first_ao_derivatives,
         backend=backend,
         model=_model(),
     )
     expected = (
-        32 * points * n if backend == "cpu" and pbe and spins == 1 and delta <= 0 else 0
+        32 * points * n
+        if backend == "cpu"
+        and requires_first_ao_derivatives
+        and spins == 1
+        and delta <= 0
+        else 0
     )
     assert row["ao_grid_cache"] == expected
     matrix_work = 8 * spins * n * n * (128 + 2 * 9) + 16 * 9 * 9
     tile = (
-        8 * min(points, 16) * n * (4 if pbe else 1) + 8 * spins * n * n
+        8 * min(points, 16) * n * (4 if requires_first_ao_derivatives else 1)
+        + 8 * spins * n * n
         if backend == "cpu"
         else 0
     )

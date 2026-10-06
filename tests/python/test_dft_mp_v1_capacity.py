@@ -174,13 +174,13 @@ def test_frozen_capacity_report_uses_actual_basis_and_grid_identities() -> None:
             (ROOT / "manifests/public_methods.json").read_bytes()
         ),
         "semilocal_force_predicate_sha256": (
-            "083183902052ec67c806a67e6bbdf2422b21e609e1a10ec0f1a8b9035a6370d5"
+            "4ca7125d7acd5e77fc670333e775390ac10ee95e06c7e66c0fc7cc7c4cac74fc"
         ),
         "global_hybrid_force_predicate_sha256": (
             "18f4f010596672eb47b8d085e28b8a26373c41178ac1c6a5ff4fa705ef2f3944"
         ),
         "force_capability_promotion_sha256": (
-            "49f903598301e16b11be96d1b24eb084aa7bee3194942702b174b41e59d4b01c"
+            "07aac35e787923d81b5e6aad929c55d417a00dfce599f80c361797fb8b4dba9c"
         ),
         "cuda_force_method_sha256": (
             "3defc2e5e05b2fd1af16e82bda36fa479a41b7b7a15029a49fecf98090e9c95b"
@@ -411,7 +411,7 @@ def test_report_exposes_exact_first_gate_and_all_losing_work() -> None:
             "522c7571c3d18db25685ffbffb55279deadde63df64ee4c8b330f04017f7b3ae"
         ),
         "decode_sha256": (
-            "5bd874ce5ba8d4d5d78eb282244144052822bb2f0266d40d33361735302b1a97"
+            "41393b2bbdb36b0099a0cc6a2eaf07958b0f3ddc8d36b719cfbe461b9c26d445"
         ),
         "grid_cache_sha256": (
             "569705abf406d2ec00ec9526e84f23301448d5511fc2bf79ee9ef6993a794ca6"
@@ -1769,7 +1769,9 @@ def test_spherical_ao_count_fails_closed_when_native_count_moves(
         ('self._device_name == "cuda"', 0),
         ('self._device_name == "cuda"', 1),
         ("self._ks_options.execution_plan.nonlocal_correlation is not None", 0),
-        ('self._method_name == "pbe-d4-rks" and basis_has_ecp', 0),
+        ("basis_has_ecp", 0),
+        ("isinstance(primitive, DispersionCorrectionPrimitive)", 0),
+        ("isinstance(primitive.specification, D4Spec)", 0),
         ('self._device_name == "cpu"', 0),
         ("qualified_basis(self._basis) or cpu_direct_semilocal_force", 0),
     ],

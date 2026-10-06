@@ -31,26 +31,33 @@ bool valid_model(const KsFinalStateIdentity& identity) {
 #endif
   const auto automatic_entry = generated::automatic_libxc_entry(model.functional);
   const bool automatic_libxc = static_cast<bool>(automatic_entry);
-  SemilocalFamily family;
-  try {
-    family = split_hybrid ? SemilocalFamily::R2scan
-                          : (automatic_libxc ? SemilocalFamily::Lda
-                                             : semilocal_family_from_code(model.functional));
-  } catch (const std::invalid_argument&) {
-    return false;
-  }
-  const bool pbe = family == SemilocalFamily::Pbe;
-  const bool b3lyp = family == SemilocalFamily::B3lyp;
-  const bool wb97mv = family == SemilocalFamily::Wb97mv;
-  const bool cuda_pbe0 =
-      pbe && fock.backend == scf::FockBackend::Cuda && fock.spec.exchange.present &&
+  const auto* family_metadata = split_hybrid || automatic_libxc
+                                    ? nullptr
+                                    : semilocal_family_metadata_from_code(model.functional);
+  if (!split_hybrid && !automatic_libxc && !family_metadata) return false;
+  const auto family = split_hybrid
+                          ? SemilocalFamily::R2scan
+                          : (automatic_libxc ? SemilocalFamily::Lda : family_metadata->family);
+  const bool scalable_semilocal =
+      family_metadata && family_metadata->component_coefficients_are_native_scales;
+  const bool molecular_nonlocal = family_metadata && family_metadata->molecular_nonlocal_domain;
+  const double qualified_exact_exchange =
+      family_metadata ? family_metadata->cuda_global_hybrid_exact_exchange : -1.0;
+  const bool canonical_global_hybrid = qualified_exact_exchange > 0.0 && !scalable_semilocal;
+  const double expected_semilocal_exchange =
+      scalable_semilocal && qualified_exact_exchange > 0.0 ? 1.0 - qualified_exact_exchange : 1.0;
+  const double exchange_divisor = model.spins == 1 ? 2.0 : 1.0;
+  const bool cuda_scaled_global_hybrid =
+      scalable_semilocal && qualified_exact_exchange > 0.0 &&
+      fock.backend == scf::FockBackend::Cuda && fock.spec.exchange.present &&
       ((fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
         fock.spec.exchange.approximation == scf::FockApproximation::Exact) ||
        (fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
         fock.spec.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
-      model.semilocal_exchange_scale == 0.75 && model.semilocal_correlation_scale == 1.0 &&
-      !model.range_correction && !model.nonlocal_correlation &&
-      fock.spec.exchange.coefficient == (model.spins == 1 ? -0.125 : -0.25);
+      model.semilocal_exchange_scale == expected_semilocal_exchange &&
+      model.semilocal_correlation_scale == 1.0 && !model.range_correction &&
+      !model.nonlocal_correlation &&
+      fock.spec.exchange.coefficient == -qualified_exact_exchange / exchange_divisor;
   // Admit matching exact J/K for the three qualified CUDA semilocal
   // families, plus the independently exercised PBE density-fitted J/K route.
   // Mixed exact/DF ownership remains fail-closed.
@@ -58,11 +65,13 @@ bool valid_model(const KsFinalStateIdentity& identity) {
       fock.backend == scf::FockBackend::Cuda && semilocal_family_has_cuda_ks(family) &&
       ((fock.spec.coulomb.approximation == scf::FockApproximation::Exact &&
         fock.spec.exchange.approximation == scf::FockApproximation::Exact) ||
-       (pbe && fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
+       (scalable_semilocal &&
+        fock.spec.coulomb.approximation == scf::FockApproximation::DensityFitted &&
         fock.spec.exchange.approximation == scf::FockApproximation::DensityFitted)) &&
       !model.range_correction && !model.nonlocal_correlation;
   const bool cuda_range_exchange = [&] {
-    if (!pbe || fock.backend != scf::FockBackend::Cuda || !model.range_correction ||
+    if (!family_metadata || !family_metadata->native_range_exchange || molecular_nonlocal ||
+        fock.backend != scf::FockBackend::Cuda || !model.range_correction ||
         model.nonlocal_correlation || model.semilocal_exchange_scale != 1.0 ||
         model.semilocal_correlation_scale != 1.0)
       return false;
@@ -121,20 +130,27 @@ bool valid_model(const KsFinalStateIdentity& identity) {
         (fock.spec.exchange.approximation != scf::FockApproximation::Exact &&
          fock.spec.exchange.approximation != scf::FockApproximation::DensityFitted) ||
         fock.spec.exchange.coefficient >= 0)) ||
-      (!b3lyp && !wb97mv &&
-       (!pbe || (fock.backend == scf::FockBackend::Cuda && !cuda_pbe0 && !cuda_range_exchange)) &&
+      (family_metadata && model.nonlocal_correlation &&
+       !family_metadata->native_nonlocal_correlation) ||
+      (family_metadata && model.range_correction && !family_metadata->native_range_exchange) ||
+      (family_metadata && fock.backend == scf::FockBackend::Cuda && model.nonlocal_correlation &&
+       !family_metadata->cuda_nonlocal_correlation) ||
+      (!canonical_global_hybrid && !molecular_nonlocal &&
+       (!scalable_semilocal || (fock.backend == scf::FockBackend::Cuda &&
+                                !cuda_scaled_global_hybrid && !cuda_range_exchange)) &&
        (model.semilocal_exchange_scale != 1 || model.semilocal_correlation_scale != 1 ||
         (fock.spec.exchange.present && !cuda_primary_exchange && !cuda_range_exchange) ||
         (model.range_correction && !cuda_range_exchange))) ||
-      (b3lyp && (model.semilocal_exchange_scale != 1 || model.semilocal_correlation_scale != 1 ||
-                 !fock.spec.exchange.present ||
-                 fock.spec.exchange.coefficient != (model.spins == 1 ? -0.1 : -0.2) ||
-                 (fock.backend == scf::FockBackend::Cuda &&
-                  (fock.spec.coulomb.approximation != scf::FockApproximation::Exact ||
-                   fock.spec.exchange.approximation != scf::FockApproximation::Exact)))))
+      (canonical_global_hybrid &&
+       (model.semilocal_exchange_scale != 1 || model.semilocal_correlation_scale != 1 ||
+        !fock.spec.exchange.present ||
+        fock.spec.exchange.coefficient != -qualified_exact_exchange / exchange_divisor ||
+        (fock.backend == scf::FockBackend::Cuda &&
+         (fock.spec.coulomb.approximation != scf::FockApproximation::Exact ||
+          fock.spec.exchange.approximation != scf::FockApproximation::Exact)))))
     return false;
   try {
-    if (wb97mv) {
+    if (molecular_nonlocal) {
       if (!model.range_correction || !model.nonlocal_correlation ||
           model.nonlocal_density_domain != nlc::Vv10DensityDomain::MolecularV1 ||
           model.semilocal_exchange_scale != 1.0 || model.semilocal_correlation_scale != 1.0)
