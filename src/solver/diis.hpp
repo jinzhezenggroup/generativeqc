@@ -21,15 +21,20 @@ namespace generativeqc::solver {
  */
 class Diis {
  public:
+  struct UpdateResult {
+    std::vector<double> vector;
+    bool modified{};
+  };
+
   Diis(unsigned capacity, std::size_t elements) : history_(capacity, elements) {}
 
   [[nodiscard]] unsigned restarts() const noexcept { return restarts_; }
 
   void clear() { history_.clear(); }
 
-  std::vector<double> update(std::vector<double> vector, std::vector<double> error) {
+  UpdateResult update_with_status(std::vector<double> vector, std::vector<double> error) {
     history_.validate(vector, error);
-    if (!history_.capacity()) return vector;
+    if (!history_.capacity()) return {std::move(vector), false};
     history_.push(vector, std::move(error));
     while (history_.size() > 1) {
       const auto n = history_.size();
@@ -54,13 +59,18 @@ class Diis {
         for (std::size_t row = 0; row < n; ++row)
           for (std::size_t i = 0; i < history_.elements(); ++i)
             result[i] += coefficients[row] * history_.vectors()[row][i];
-        return result;
+        return {std::move(result), true};
       }
-      if (action == detail::DiisCoefficientAction::RetainCurrent) return vector;
+      if (action == detail::DiisCoefficientAction::RetainCurrent)
+        return {std::move(vector), false};
       history_.retire_oldest();
       ++restarts_;
     }
-    return vector;
+    return {std::move(vector), false};
+  }
+
+  std::vector<double> update(std::vector<double> vector, std::vector<double> error) {
+    return update_with_status(std::move(vector), std::move(error)).vector;
   }
 
  private:
