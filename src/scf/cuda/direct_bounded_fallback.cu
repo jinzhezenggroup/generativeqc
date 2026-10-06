@@ -532,14 +532,16 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     unsigned long long* global_cursor, DeviceShellClassProfileEntry* profile,
     double coulomb_coefficient, double exchange_coefficient, bool separate_sources,
     detail::BoundedDirectBlockDomain block_domain) {
-  // Promote the source-matched #1978 static-128 result at the existing
-  // full-range force boundary only. Preserve explicitly nonstandard launch
-  // shapes so diagnostics and specialized callers retain their own contract.
-  if (block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U)
-    block.x = kBoundedDirectForceThreads;
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
   auto launch = [&]<bool Unrestricted, DirectScreeningPurpose Purpose, bool PairDerivatives>() {
+    // Promote #1978's generic full-range force schedule. The materialized
+    // derivative consumer owns six fixed 256-component slots and still needs
+    // all 256 lanes; reducing it would silently omit half of each AO packet.
+    if constexpr (!PairDerivatives) {
+      if (block.x == kBoundedDirectThreads && block.y == 1U && block.z == 1U)
+        block.x = kBoundedDirectForceThreads;
+    }
     const auto workspace_bytes =
         PairDerivatives ? std::max(shared_bytes, sizeof(MaterializedDirectPairDerivativeRecurrence))
                         : shared_bytes;
