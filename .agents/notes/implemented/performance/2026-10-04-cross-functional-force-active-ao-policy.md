@@ -64,27 +64,37 @@ Agent: dot
 
 The retained public-profile campaign in merged #1934 supersedes the earlier
 empty-registry promotion decision for one structural domain. Production now
-registers `sm120-ordinary-rks-second-jet-v1` for all-electron, direct,
-ordinary RKS second-jet workloads on `sm_120` with:
+registers `sm120-ordinary-rks-second-jet-v2` for all-electron, Direct,
+ordinary RKS second-jet workloads on `sm_120`.
 
-- 48–96 atoms;
-- 384–768 AOs;
-- 1,179,648–2,359,296 grid points;
-- fixed 256-point tiles;
-- at least 512 MiB device and 256 MiB host force budgets.
+Admission is deliberately **not** an atom/AO/grid benchmark window. The runtime
+uses the predicted dense contraction work
 
-The profile keeps the measured `1e-16` sampled-jet cutoff and a 16 MiB
-resident-map cache allowance. Matching remains structural; no functional or
-molecule name appears in the selector. Every architecture, spin, derivative
-order, composition, provider, workload, tile or resource miss remains dense.
+```text
+grid_points * AO_count^2
+```
 
-This scope deliberately does not extrapolate beyond the retained evidence
-envelope. In the current-composition campaign the force-map candidate improved
-48/96-atom warm complete E+F by about 18.4%/30.7% and also improved the recorded
-cold/moved observations. Earlier narrow-composition cold/moved negatives remain
-retained and are the reason the promotion is bounded rather than global.
-Supplemental reversed-order cold observations likewise remain evidence, not a
-claim of universal profitability.
+and admits map discovery once that work reaches the smallest retained strongly
+positive endpoint, 173,946,175,488 point·AO² (the 48-atom campaign). This is a
+continuous cost crossover: a different molecular size or grid shape can match,
+while a nominally large molecule with too little dense work stays dense.
+
+The remaining predicates are genuine execution-capability/resource guards:
+ordinary composition, RKS, second AO jet, Direct/all-electron, `sm_120`, fixed
+256-point tiles, at least 512 MiB device and 256 MiB host force budgets, and the
+current 2048-AO implementation capacity. The profile keeps the measured
+`1e-16` sampled-jet cutoff and a 16 MiB resident-map cache allowance.
+
+No functional or molecule name appears in the selector. UKS, first-jet,
+composite, DF, ECP, another architecture/tile policy, insufficient resources,
+or work below the crossover remains dense. Future evidence should refine this
+cost model or qualify additional capabilities rather than adding benchmark-shape
+ranges.
+
+In the current-composition campaign the force-map candidate improved 48/96-atom
+warm complete E+F by about 18.4%/30.7%. Earlier narrow-composition cold/moved
+negatives and supplemental reversed-order cold observations remain retained;
+they motivate guarded admission rather than a global unconditional switch.
 
 Agent: ChatGPT
 Model: GPT-5.6 Sol
