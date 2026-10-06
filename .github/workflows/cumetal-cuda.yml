@@ -61,7 +61,7 @@ jobs:
     if: needs.merge_queue_liveness.outputs.active != 'false'
     runs-on: macos-15
     # Keep the 50-minute full-suite step inside a separate finite job budget.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
     env:
       CUMETAL_COMMIT: 8a1434ffc1a4f7a17d2f8a41e157afbac22af171
       CUMETAL_SOURCE: /tmp/cuda-metal
@@ -246,25 +246,27 @@ jobs:
           grep -q 'launch_success=true' /tmp/generativeqc-cuda-runtime.log
           grep -q 'PASS: CUDA runtime contracts' /tmp/generativeqc-cuda-runtime.log
 
-      - name: Install resident-response test dependency
-        if: github.event_name == 'pull_request'
+      - name: Install bounded CuMetal QC test dependency
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         run: uv pip install --python .venv/bin/python pytest
 
-      # This NVIDIA-only test skips on CuMetal. Keep the skip visible rather
-      # than labeling a successful collection as resident GPU qualification.
-      - name: Report NVIDIA-only resident-response test coverage
-        if: github.event_name == 'pull_request'
-        timeout-minutes: 5
+      # Run a small scientific endpoint set on every routine change. Each group
+      # must emit its own completed Apple-GPU provenance, so a green ABI smoke
+      # cannot stand in for QC CUDA execution.
+      - name: Run bounded CuMetal QC endpoint gate
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        timeout-minutes: 6
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
           DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-cumetal/libgenerativeqc.dylib
           CUMETAL_TRACE_GPU: "1"
+          CUMETAL_CUDA_TEST_MODE: gate
+          CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "90"
+          CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"
+          GENERATIVEQC_DFT_CUDA_TEST: "1"
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
-        run: |
-          .venv/bin/python -m pytest \
-            tests/python/test_cuda_runtime.py::test_cuda_resident_rhf_response_matches_host_operator \
-            -vv -rs
+        run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
 
       - name: Preserve CUDA test results
         if: always()
@@ -282,9 +284,9 @@ jobs:
         # scoped GFN2 wheel provider is intentionally Linux-only.
         run: uv pip install --python .venv/bin/python 'pytest>=8'
 
-      - name: Run full CUDA suite on the Apple GPU
+      - name: Run bounded CuMetal QC qualification on the Apple GPU
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        timeout-minutes: 50
+        timeout-minutes: 45
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
           DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
@@ -292,7 +294,9 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: full
-          CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "300"
+          CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "180"
+          CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "2400"
+          GENERATIVEQC_DFT_CUDA_TEST: "1"
         run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
 
 
