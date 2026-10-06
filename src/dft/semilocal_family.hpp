@@ -39,6 +39,7 @@ struct SemilocalFamilyMetadata {
   bool cuda_nonlocal_correlation;
   bool molecular_nonlocal_domain;
   bool incremental_xc;
+  bool stationary_second_order;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
@@ -63,6 +64,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      false,
+     true,
      {CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"LDA_X", "LDA_C_PW", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -82,6 +84,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      false,
      false,
+     true,
      true,
      {CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"GGA_X_PBE", "GGA_C_PBE", nullptr, nullptr},
@@ -103,6 +106,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      false,
+     false,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -118,6 +122,7 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      true,
      0.2,
+     false,
      false,
      false,
      false,
@@ -220,6 +225,11 @@ constexpr bool semilocal_family_uses_molecular_nonlocal_domain(SemilocalFamily f
 
 constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) noexcept {
   return semilocal_family_metadata(family).incremental_xc;
+}
+
+constexpr bool semilocal_family_supports_stationary_second_order(
+    SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).stationary_second_order;
 }
 
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {
