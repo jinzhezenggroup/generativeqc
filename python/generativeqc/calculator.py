@@ -859,7 +859,10 @@ class Calculator:
         basis_has_ecp = isinstance(self._basis, BasisSet) and any(
             element.ecp_core_electrons for element in self._basis.elements
         )
-        from .ks import cpu_stationary_all_electron_force_eligible
+        from .ks import (
+            cpu_stationary_all_electron_force_eligible,
+            stationary_second_order_eligible,
+        )
 
         cpu_composed_all_electron_force = (
             self._device_name == "cpu"
@@ -1002,10 +1005,7 @@ class Calculator:
             and self._dispersion_method_ir is None
             and second_order_basis
             and self._ks_options is not None
-            and self._ks_options.functional.ingredients in (("rho",), ("rho", "sigma"))
-            and self._ks_options.coefficients == (1.0, 1.0, 0.0)
-            and not self._ks_options.execution_plan.exchange
-            and self._ks_options.execution_plan.nonlocal_correlation is None
+            and stationary_second_order_eligible(self._ks_options.method_ir)
         )
         if public_rks_second_order:
             self._capabilities = replace(
