@@ -55,21 +55,26 @@ from generativeqc_compiler.dft.xc_schedule import (
 from .contractions import GeometryPartials
 from .integration import _tiles
 from .native import NativeContractionProgram
+from .native_semilocal import legacy_grid_xc_selector
 from .program_ir import fixed_density_tile_program
-from .spec import UnsupportedXC, functional
+from .spec import UnsupportedXC
 
 
 def _native_device_xc(
     program: typing.Any, spatial: typing.Any, density_grid: typing.Any
 ) -> typing.Any:
     """Keep feature validation and execution on the same canonical CUDA route."""
-    return (
-        spatial is not None
-        and density_grid is not None
-        and program.contract.request.observable == "potential"
-        and program.spec.identifier in ("LDA_XC_PW", "PBE")
-        and program.spec == functional(program.spec.identifier, spin=program.spec.spin)
-    )
+    if (
+        spatial is None
+        or density_grid is None
+        or program.contract.request.observable != "potential"
+    ):
+        return False
+    try:
+        legacy_grid_xc_selector(program.spec)
+    except ValueError:
+        return False
+    return True
 
 
 class PreparedXCContractions:
@@ -577,7 +582,7 @@ class PreparedXCContractions:
         route: typing.Any,
         nspin: typing.Any,
     ) -> typing.Any:
-        """Run the audited LDA/PBE potential contract entirely on CUDA tiles."""
+        """Run the audited native grid-XC potential contract entirely on CUDA tiles."""
         result = {
             "energy": 0.0,
             "electrons": np.zeros(2),
@@ -593,7 +598,7 @@ class PreparedXCContractions:
             default=None,
         )
         with self.spatial.device_xc_tasks(
-            density, self.program.spec.identifier, stamp=stamp, route=route
+            density, self.program.spec, stamp=stamp, route=route
         ) as tasks:
             for index, (_, ids, lease) in enumerate(tasks):
                 active = lease.view.nactive
@@ -601,7 +606,7 @@ class PreparedXCContractions:
                     try:
                         integrals, potential = lease.xc(
                             self.spatial.grid.weights[ids],
-                            self.program.spec.identifier,
+                            self.program.spec,
                             restricted=nspin == 1,
                             reset=evaluated == 0,
                             download=index == last_nonempty,

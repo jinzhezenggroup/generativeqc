@@ -1,0 +1,7 @@
+{
+  "path": "src/scf/cuda/direct_force_sources.hpp",
+  "role": "runtime",
+  "subsystem": "direct_integrals",
+  "reason": "Compile-time output layout and caller-coefficient routing for shared Direct force tasks. Selects independent source slots and output offsets without adding density factors, force equations, screening or primitive reductions; those scientific responsibilities remain in the contraction owner.",
+  "regions": []
+}

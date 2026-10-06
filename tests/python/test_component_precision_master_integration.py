@@ -1,10 +1,7 @@
 """Execute native AUTO/DF/SolverRegion integration guards without a CUDA device."""
 
-import shutil
 import subprocess
 from pathlib import Path
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -14,38 +11,28 @@ def _span(source: str, begin: str, end: str) -> str:
     return source[start : source.index(end, start)]
 
 
-def _run(tmp_path: Path, source: str) -> None:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a host C++ compiler")
+def _run(tmp_path: Path, source: str, native_cxx: object) -> None:
     unit, executable = tmp_path / "integration.cpp", tmp_path / "integration"
     unit.write_text(source)
-    result = subprocess.run(
-        [
-            compiler,
+    native_cxx.build_executable(
+        [unit],
+        executable,
+        compile_args=(
             "-std=c++20",
             "-Wall",
             "-Wextra",
             "-Werror",
-            "-I",
-            str(ROOT / "src"),
-            "-I",
-            str(ROOT / "include"),
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=45,
+            f"-I{ROOT / 'src'}",
+            f"-I{ROOT / 'include'}",
+        ),
+        compile_timeout=45,
     )
-    assert result.returncode == 0, result.stderr
     subprocess.run([str(executable)], check=True, timeout=10)
 
 
 def test_pbe0_chunks_and_semilocal_replay_exclude_each_auto_component(
     tmp_path: Path,
+    native_cxx: object,
 ) -> None:
     source = (ROOT / "src/dft/cuda_ks.cpp").read_text()
     chunk = _span(
@@ -179,15 +166,17 @@ int main() {
   assert(!large.replay());
 }
 """,
+        native_cxx,
     )
 
 
 def test_native_global_hybrid_admission_combines_direct_auto_and_strict_df(
     tmp_path: Path,
+    native_cxx: object,
 ) -> None:
     source = (ROOT / "src/methods/dft_method.cpp").read_text()
     admission = _span(
-        source, "  const double pbe0_fock_coefficient", "  bool cuda_split_hybrid"
+        source, "  const bool cuda_global_hybrid", "  bool cuda_split_hybrid"
     )
     _run(
         tmp_path,
@@ -206,6 +195,7 @@ bool admitted(bool fitted, bool automatic, bool unrestricted, bool b3lyp,
     dft::SemilocalFamily semilocal_family;
   } execution_plan{excluded == 2, excluded == 3,
                    b3lyp ? dft::SemilocalFamily::B3lyp : dft::SemilocalFamily::Pbe};
+  const auto& semilocal_metadata = dft::semilocal_family_metadata(execution_plan.semilocal_family);
   scf::ScfOptions options;
   options.precision_mode = automatic ? GENERATIVEQC_PRECISION_AUTO : GENERATIVEQC_PRECISION_FP64;
   options.density_fitting_mode = fitted ? GENERATIVEQC_DENSITY_FITTING_AUTO
@@ -222,7 +212,7 @@ bool admitted(bool fitted, bool automatic, bool unrestricted, bool b3lyp,
 """
         + admission
         + r"""
-  return cuda_pbe0 || cuda_b3lyp;
+  return cuda_curated_global_hybrid;
 }
 int main() {
   for (bool fitted : {false, true}) for (bool automatic : {false, true})
@@ -233,4 +223,5 @@ int main() {
     }
 }
 """,
+        native_cxx,
     )

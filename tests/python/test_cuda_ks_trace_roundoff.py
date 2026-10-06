@@ -1,7 +1,7 @@
-"""Stress the actual scalar KS diagnostic body against exact analytic sums.
+"""Stress the actual KS diagnostic block against independent trace/metric sums.
 
-This host harness removes only the CUDA entry annotation; real-device molecular
-SCF and force gates remain separate qualification requirements.
+The host harness emulates CUDA lanes/barriers; device tests execute the same
+block body. Molecular SCF and force gates remain separate requirements.
 """
 
 from __future__ import annotations
@@ -40,7 +40,12 @@ def diagnostic_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
     path.write_text(
         "#include <cmath>\n#include <cstddef>\n#include <cstdint>\n"
         "#include <cstdlib>\n#include <iomanip>\n#include <iostream>\n"
-        "#include <vector>\n#define __global__\n#define __device__\n"
+        "#include <vector>\n#include <thread>\n#include <barrier>\n"
+        "#define __global__\n#define __device__\n#define __shared__ static\n"
+        "struct Index { unsigned x; };\n"
+        "thread_local Index threadIdx{};\nconst Index blockDim{256};\n"
+        "std::barrier team_barrier(256);\n"
+        "void __syncthreads() { team_barrier.arrive_and_wait(); }\n"
         "using std::isfinite;\n"
         "double __dadd_rn(double left, double right) { return left + right; }\n"
         + descriptor
@@ -65,10 +70,15 @@ int main(int argc, char** argv) {
   const double totals[3] = {};
   const int status[2] = {};
   Scalars output;
-  diagnostic_kernel(matrix, spins, density.data(), density.data(), residual.data(),
+  std::vector<std::thread> lanes;
+  for (unsigned lane = 0; lane < blockDim.x; ++lane) lanes.emplace_back([&, lane] {
+    threadIdx.x = lane;
+    diagnostic_kernel(matrix, spins, density.data(), density.data(), residual.data(),
                     hcore.data(), overlap.data(), coulomb.data(), exchange.data(), -0.25,
                     range_exchange.data(), -0.5, totals, status, status, nullptr,
-                    nullptr, nullptr, status, nullptr, &output);
+                      nullptr, nullptr, status, nullptr, &output);
+  });
+  for (auto& lane : lanes) lane.join();
   std::cout << std::setprecision(17)
             << output.one_electron - reference << ' '
             << output.hartree - reference << ' '
@@ -82,8 +92,9 @@ int main(int argc, char** argv) {
         [
             cache,
             compiler,
-            "-std=c++17",
+            "-std=c++20",
             "-O2",
+            "-pthread",
             "-ffp-contract=off",
             str(path),
             "-o",
@@ -110,6 +121,53 @@ def test_diagnostic_energy_traces_do_not_lose_sub_ulp_terms(
     one, hartree, exchange, failure = map(float, completed.stdout.split())
     assert failure == 0
     assert (one, hartree, exchange) == pytest.approx((0, 0, 0), abs=1e-15)
+
+
+@pytest.mark.parametrize("matrix", (3, 255, 258, 513, 771))
+@pytest.mark.parametrize("spins", (1, 2))
+def test_host_diagnostic_handles_incomplete_lane_tiles(
+    diagnostic_probe: Path, matrix: int, spins: int
+) -> None:
+    """Exercise idle lanes and partial final tiles in the production body."""
+    completed = subprocess.run(
+        [str(diagnostic_probe), str(matrix), str(spins)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    one, hartree, exchange, failure = map(float, completed.stdout.split())
+    assert failure == 0
+    assert (one, hartree, exchange) == pytest.approx((0, 0, 0), abs=1e-15)
+
+
+def test_parallel_diagnostic_is_the_bounded_production_default() -> None:
+    """The public runtime must select the qualified owner without an opt-in."""
+    source = (ROOT / "src/dft/cuda_ks_kernels.cu").read_text()
+    compact = "".join(source.split())
+    assert "constexprunsignedkDiagnosticThreads=256;" in compact
+    assert "__shared__DiagnosticPartialpartials[kDiagnosticThreads];" in compact
+    assert "diagnostic_kernel<<<1,kDiagnosticThreads,0,stream>>>" in compact
+    assert "diagnostic_kernel<<<1,1," not in compact
+    assert (
+        "atomicAdd"
+        not in source[
+            source.index("__global__ void diagnostic_kernel") : source.index(
+                "__global__ void advance_kernel"
+            )
+        ]
+    )
+
+
+def test_compensated_diagnostic_merge_keeps_both_lane_words() -> None:
+    """Dropping lane corrections would silently undo signed-trace accuracy."""
+    source = (ROOT / "src/dft/cuda_ks_kernels.cu").read_text()
+    compact = "".join(source.split())
+    for word in ("energy", "correction"):
+        assert (
+            f"accumulate_diagnostic_trace(part.{word}[term],"
+            "total.energy[term],total.correction[term]);"
+        ) in compact
+    assert "for(unsignedindex=0;index<blockDim.x;++index)" in compact
 
 
 @pytest.fixture(scope="module")
@@ -174,7 +232,7 @@ def test_cuda_diagnostic_traces_match_exact_sum(
     output = cp.zeros(16)
     cuda_diagnostic_probe(
         (1,),
-        (1,),
+        (256,),
         (
             np.uint64(matrix),
             np.uint32(spins),
@@ -219,6 +277,12 @@ def _cuda_trace_result(
     *,
     xc_energy: float = 0.0,
     solver_failure: bool = False,
+    proposal: Any = None,
+    residual: Any = None,
+    overlap: Any = None,
+    enabled: int | None = None,
+    full_output: bool = False,
+    errors: tuple[int, ...] = (0, 0, 0, 0, 0),
 ) -> tuple[Any, int]:
     """Keep pointer-null and failure-bit tests on the production CUDA entry."""
     import cupy as cp
@@ -226,8 +290,11 @@ def _cuda_trace_result(
 
     spins, matrix = density.shape
     device_density = cp.asarray(density)
-    residual = cp.zeros_like(device_density)
-    overlap = cp.zeros(matrix)
+    device_proposal = device_density if proposal is None else cp.asarray(proposal)
+    device_residual = (
+        cp.zeros_like(device_density) if residual is None else cp.asarray(residual)
+    )
+    device_overlap = cp.zeros(matrix) if overlap is None else cp.asarray(overlap)
     device_hcore = cp.asarray(hcore)
     device_coulomb = cp.asarray(coulomb)
     device_exchange = cp.asarray(exchange) if exchange is not None else np.uint64(0)
@@ -235,38 +302,35 @@ def _cuda_trace_result(
         cp.asarray(range_exchange) if range_exchange is not None else np.uint64(0)
     )
     totals = cp.asarray([xc_energy, 0.0, 0.0])
-    status = cp.zeros(2, dtype=cp.int32)
+    status = [cp.asarray([value], dtype=cp.int32) for value in errors]
     solver = cp.asarray([int(solver_failure)] * spins, dtype=cp.int32)
-    output = cp.zeros(16)
+    mask = np.uint64(0) if enabled is None else cp.asarray([enabled], dtype=cp.uint8)
+    output = cp.full(16, -99.0)
     kernel(
         (1,),
-        (1,),
+        (256,),
         (
             np.uint64(matrix),
             np.uint32(spins),
             device_density,
-            device_density,
-            residual,
+            device_proposal,
+            device_residual,
             device_hcore,
-            overlap,
+            device_overlap,
             device_coulomb,
             device_exchange,
             np.float64(-0.193),
             device_range,
             np.float64(0.471),
             totals,
-            status,
-            status,
-            np.uint64(0),
-            np.uint64(0),
-            np.uint64(0),
+            *status,
             solver,
-            np.uint64(0),
+            mask,
             output,
         ),
     )
     copied = cp.asnumpy(output)
-    return copied[:3], int(copied.view(np.int32)[28])
+    return copied if full_output else copied[:3], int(copied.view(np.int32)[28])
 
 
 @pytest.mark.parametrize("spins", (1, 2))
@@ -350,3 +414,109 @@ def test_cuda_trace_failure_bits_reject_nonfinite_inputs(
     assert failure & (4 if invalid == "solver" else 8)
     if invalid == "solver":
         assert np.isfinite(actual).all()
+
+
+@pytest.mark.parametrize("matrix", (1, 255, 256, 257, 384**2, 768**2))
+@pytest.mark.parametrize("spins", (1, 2))
+def test_cuda_parallel_diagnostics_preserve_all_physical_metrics(
+    cuda_diagnostic_probe: Any, matrix: int, spins: int
+) -> None:
+    """Independent sums cover inactive lanes, tails, spin maxima and RMS gates."""
+    import numpy as np
+
+    rng = np.random.default_rng(1895)
+    density = rng.normal(size=(spins, matrix))
+    proposal = density + rng.normal(size=density.shape) * 3e-7
+    residual = rng.normal(size=density.shape) * 2e-10
+    overlap = rng.normal(size=matrix)
+    zero = np.zeros(matrix)
+    actual, failure = _cuda_trace_result(
+        cuda_diagnostic_probe,
+        density,
+        zero,
+        zero,
+        None,
+        None,
+        proposal=proposal,
+        residual=residual,
+        overlap=overlap,
+        full_output=True,
+    )
+    error2 = [math.fsum(row * row) / matrix for row in residual]
+    change2 = [math.fsum(row * row) / matrix for row in proposal - density]
+    electrons = [math.fsum(row * overlap) for row in density]
+    if spins == 1:
+        electrons = [electrons[0] / 2] * 2
+    expected = [
+        math.sqrt(max(error2)),
+        math.sqrt(max(change2)),
+        math.sqrt(math.fsum(error2) / spins),
+        math.sqrt(math.fsum(change2) / spins),
+        np.max(np.abs(residual)),
+        *electrons,
+    ]
+    assert failure == 0
+    np.testing.assert_allclose(actual[4:9], expected[:5], rtol=3e-13, atol=0)
+    np.testing.assert_allclose(actual[9:11], expected[5:], rtol=3e-13, atol=1e-13)
+    assert actual[8] == expected[4]
+    # The native result is 120 bytes; the adjacent output word is a canary.
+    assert actual[15] == -99.0
+
+
+@pytest.mark.parametrize("invalid", ("residual", "proposal", "overlap"))
+def test_cuda_parallel_metric_nonfinite_is_not_hidden_by_maximum(
+    cuda_diagnostic_probe: Any, invalid: str
+) -> None:
+    """NaNs on a nonzero lane must survive even though fmax ignores a NaN."""
+    import numpy as np
+
+    density = np.ones((2, 257))
+    metrics = {
+        "residual": np.zeros_like(density),
+        "proposal": density.copy(),
+        "overlap": np.ones(257),
+    }
+    metrics[invalid].flat[-2] = np.nan
+    _, failure = _cuda_trace_result(
+        cuda_diagnostic_probe,
+        density,
+        np.ones(257),
+        np.ones(257),
+        None,
+        None,
+        **metrics,
+    )
+    assert failure & 8
+
+
+def test_cuda_parallel_diagnostics_mask_and_failure_union(
+    cuda_diagnostic_probe: Any,
+) -> None:
+    """Inactive work leaves output untouched; every upstream failure is retained."""
+    import numpy as np
+
+    density = np.ones((2, 257))
+    values = np.ones(257)
+    masked, _ = _cuda_trace_result(
+        cuda_diagnostic_probe,
+        density,
+        values,
+        values,
+        None,
+        None,
+        enabled=0,
+        full_output=True,
+    )
+    assert np.all(masked == -99.0)
+    _, failure = _cuda_trace_result(
+        cuda_diagnostic_probe,
+        density,
+        values,
+        values,
+        None,
+        None,
+        errors=(1, 1, 1, 1, 1),
+        solver_failure=True,
+        enabled=1,
+    )
+    assert failure == 1 | 2 | 4 | 16 | 32 | 64

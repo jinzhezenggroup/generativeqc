@@ -58,6 +58,12 @@ struct FinalStateLimits {
   // Physical-reference export also requires absolute C^T F C canonicality
   // and maximum (rather than RMS-only) density reconstruction gates.
   bool require_canonicality{};
+  // A solver-owned retained determinant may already satisfy the physical
+  // commutator/idempotency gates without its DIIS/effective orbital frame
+  // diagonalizing the current physical Fock column by column. This permits
+  // only that original candidate to prove stationarity; correction steps,
+  // forced rebuilds and physical-reference export remain canonical.
+  bool allow_stationary_reuse{};
 };
 
 struct FinalStateDiagnostic {
@@ -145,9 +151,10 @@ using PhysicalFockOperation = std::function<PhysicalFockFrame(
 /** Always evaluate physical F[D_returned] before selecting a candidate. A
  * bounded correction solves that F, projects D, advances both determinant
  * generations, evaluates the new F and checks again, including energy change.
- * Force selection also compares D with a fresh physical-Fock occupied projector
- * at the requested density tolerance, including its maximum elementwise drift.
- * An accepted force uses D F[D] D / spin_weight for W. Energy-only selection
+ * A solver-owned retained candidate may explicitly prove stationarity from its
+ * exact D/C witness plus the physical commutator without a second canonical
+ * projector; corrections and requested canonical export retain the projector
+ * gate. An accepted force uses D F[D] D / spin_weight for W. Energy-only selection
  * retains its existing frame validation without the additional eigen solve.
  * `force_rebuild` exercises the actual correction path, even for a valid
  * candidate. Callbacks are synchronous/borrowed; exceptions propagate as an

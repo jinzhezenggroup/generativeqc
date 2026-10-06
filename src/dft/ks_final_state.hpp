@@ -22,7 +22,7 @@ struct KsModelIdentity {
   std::uint32_t scf_domain_version{1};
   GridSpec grid;
   std::size_t tile_points{};
-  /** 0=LDA, 1=PBE, 2=r2SCAN, 3=B3LYP, 4=WB97M-V; immutable provenance. */
+  /** Stable generated semilocal/registered functional code; immutable provenance. */
   std::uint32_t functional{};
   unsigned spins{};
   // CPU is exactly -1; CUDA is a nonnegative visible device ordinal. The

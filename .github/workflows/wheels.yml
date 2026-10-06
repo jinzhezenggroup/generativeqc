@@ -5,19 +5,32 @@ name: Python wheels
 # Linux runtime dependencies, and the installed-wheel test proves lazy provider
 # resolution through a CUDA-backed native call.
 on:
-  # Wheel construction is release/package qualification rather than a routine
-  # pull-request correctness gate. Master still builds every merged state, and
-  # any branch can be qualified explicitly with workflow_dispatch.
-  push:
-    branches: [master]
+  # Qualify wheel/link contract changes on their pull requests. Broader package
+  # qualification runs weekly and on explicit maintainer demand instead of
+  # repeating an expensive build after every merge.
+  schedule:
+    - cron: "17 4 * * 1"
+  pull_request:
+    paths:
+      - ".github/workflows/wheels.yml"
+      - "cmake/GenerativeQCCudaImplib.cmake"
+      - "cmake/3rdparty/implib/**"
+      - "pyproject.toml"
+      - "python/ci/prepare-wheel-build.sh"
+      - "python/ci/repair-wheel.sh"
+      - "src/runtime/nvidia_host_api/**"
+      - "tools/generate_cuda_implib.py"
+      - "tools/link_cuda_implib.py"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'push' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  # Coalesce pending PR runs by PR number, and periodic/manual runs by ref.
+  # Preserve every in-flight wheel qualification.
+  cancel-in-progress: false
 
 jobs:
   build_wheels:

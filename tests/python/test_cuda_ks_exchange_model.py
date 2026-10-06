@@ -4,9 +4,14 @@ Small record fixtures isolate admission from grid/provider numerical validators;
 those validators and the full GPU state-export tests remain separate gates.
 """
 
-import shutil
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from conftest import NativeCxx
 
 import pytest
 
@@ -20,18 +25,11 @@ PREFIX = r"""
 #include <stdexcept>
 #include <string>
 #include <vector>
-enum class SemilocalFamily : unsigned { Lda=0, Pbe=1, R2scan=2, B3lyp=3, Wb97mv=4 };
-SemilocalFamily semilocal_family_from_code(unsigned code) {
- if(code>4)throw std::invalid_argument("family");
- return static_cast<SemilocalFamily>(code);
-}
-unsigned semilocal_family_domain_version(SemilocalFamily family) {
- return family==SemilocalFamily::Wb97mv?3:family==SemilocalFamily::B3lyp?2:1;
-}
-bool semilocal_family_has_cuda_ks(SemilocalFamily family) {
- return family==SemilocalFamily::Lda || family==SemilocalFamily::Pbe ||
-        family==SemilocalFamily::R2scan;
-}
+#include "dft/semilocal_family.hpp"
+using generativeqc::dft::SemilocalFamily;
+using generativeqc::dft::semilocal_family_metadata_from_code;
+using generativeqc::dft::semilocal_family_domain_version;
+using generativeqc::dft::semilocal_family_has_cuda_ks;
 namespace generated {
 struct SemilocalPointProgram { std::uint32_t domain_version{1}; };
 struct AutomaticLibxcEntry {
@@ -153,30 +151,21 @@ int main(int argc,char** argv) {
 
 
 @pytest.fixture(scope="module")
-def model_probe(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    compiler = shutil.which("c++")
-    if compiler is None:
-        pytest.skip("requires a C++20 compiler")
+def model_probe(
+    tmp_path_factory: pytest.TempPathFactory, native_cxx: NativeCxx
+) -> Path:
     source = (ROOT / "src/dft/ks_final_state.cpp").read_text()
     start = source.index("bool valid_model(")
     end = source.index("bool finite_components(", start)
     directory = tmp_path_factory.mktemp("ks-exchange-model")
     unit, executable = directory / "probe.cpp", directory / "probe"
     unit.write_text(PREFIX + source[start:end] + DRIVER)
-    subprocess.run(
-        [
-            compiler,
-            "-std=c++20",
-            "-O2",
-            "-fsanitize=undefined",
-            str(unit),
-            "-o",
-            str(executable),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=30,
+    native_cxx.build_executable(
+        [unit],
+        executable,
+        compile_args=("-std=c++20", "-O2", "-fsanitize=undefined", f"-I{ROOT / 'src'}"),
+        link_args=("-fsanitize=undefined",),
+        compile_timeout=30,
     )
     return executable
 

@@ -478,7 +478,9 @@ def test_cuda_ci_compiles_opted_in_ao_and_retains_ptxas() -> None:
     artifact = cuda.split(
         "      - name: Preserve opted-in AO radial resource reports\n", 1
     )[1].split("      - name: ", 1)[0]
-    assert "if: always()" in artifact
+    # Reports survive failed PR/merge-queue builds. Master push runs maintain
+    # the trusted compiler cache and deliberately omit diagnostic artifacts.
+    assert "if: ${{ always() && github.event_name != 'push' }}" in artifact
     assert "build/ao-radial-compile" in artifact
     assert "name: ao-radial-release-compile" in artifact
     script = textwrap.dedent(step.split("        run: |\n", 1)[1])

@@ -5,18 +5,13 @@ from __future__ import annotations
 import ast
 import typing
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import pytest
+from generativeqc import _native as NATIVE
+from generativeqc.calculator import Calculator
 
 ROOT = Path(__file__).resolve().parents[2]
-NATIVE = SimpleNamespace(
-    METHOD_RCCSD=1,
-    METHOD_RCCSD_T=2,
-    METHOD_MP2=3,
-    METHOD_RHF=4,
-    DENSITY_FITTING_NONE=0,
-)
 SUPPORTED = frozenset({"energy", "forces"})
 
 
@@ -60,8 +55,20 @@ def selector(request: pytest.FixtureRequest) -> typing.Any:
 def _owner(batched: bool, method: int, *, fitted: bool = False) -> SimpleNamespace:
     calculator = SimpleNamespace(
         _method=method,
+        _method_name={
+            NATIVE.METHOD_RCCSD: "rccsd",
+            NATIVE.METHOD_RCCSD_T: "rccsd(t)",
+            NATIVE.METHOD_MP2: "mp2",
+            NATIVE.METHOD_RHF: "rhf",
+        }[method],
+        _device_name="cpu",
         _density_fitting_mode=int(fitted),
         _capabilities=SimpleNamespace(supported_properties=SUPPORTED),
+    )
+    # The actual facade guard delegates default selection to this checked-in
+    # helper. Bind it rather than copying the policy or returning a test stub.
+    calculator._default_properties = MethodType(
+        Calculator._default_properties, calculator
     )
     return SimpleNamespace(_calculator=calculator) if batched else calculator
 

@@ -675,7 +675,9 @@ EigenResult device_df_eigen(const Matrix& matrix, const Matrix* overlap,
       data.one_electron.nuclear_repulsion, std::move(density),
       device_candidate ? &snapshot.candidate : nullptr,
       reference_validation ? physical : device_physical, eigen,
-      {options.density_tolerance, options.energy_tolerance, 16, options.export_physical_reference},
+      {options.density_tolerance, options.energy_tolerance, 16, options.export_physical_reference,
+       device_candidate && !reference_validation && !options.export_physical_reference &&
+           identity.model.spec.spin == FockSpin::Unrestricted},
       options.compute_forces, force, reference_validation ? nullptr : &operations);
   if (selected.status == solver::FinalStateStatus::OutOfMemory) throw std::bad_alloc();
   if (!selected.state) throw std::runtime_error(selected.detail);

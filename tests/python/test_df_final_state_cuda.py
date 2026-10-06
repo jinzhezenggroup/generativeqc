@@ -39,6 +39,7 @@ def test_selection_rebuild_and_force_transitions(
     Necessary strict corrections are counted, never assumed away.
     """
     assert os.environ.get("SLURM_JOB_ID")
+    monkeypatch.setenv("GENERATIVEQC_DF_REFERENCE_FINAL_VALIDATION", "0")
     atoms = [("O", (0, 0, 0)), ("H", (0, 0, 1.8)), ("H", (1.7, 0, -0.6))]
     if method == "uhf":
         atoms.pop()  # OH doublet exercises two distinct, nonempty spin frames.
@@ -108,7 +109,15 @@ def test_selection_rebuild_and_force_transitions(
                 corrections = calls(phases, "strict_final_correction")
                 checks = calls(phases, "final_state_fixed_point")
                 promoted = calls(phases, "final_state_fixed_point_promotion")
-                assert checks == (size if "forces" in properties else 0) + promoted
+                reused = calls(phases, "final_state_reuse")
+                # Only retained UHF determinants on the ordinary device route
+                # skip the projector probe. Corrected items, RHF, and both
+                # forced-rebuild providers still need an accepted force check.
+                stationary_reused = reused if method == "uhf" and mode == "reuse" else 0
+                accepted_checks = (
+                    size - stationary_reused if "forces" in properties else 0
+                )
+                assert checks == accepted_checks + promoted
                 assert 0 <= promoted <= corrections
                 assert (reference + device) // spins == corrections + checks - promoted
                 assert calls(phases, "final_state_read") == size

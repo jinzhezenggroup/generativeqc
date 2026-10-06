@@ -68,7 +68,7 @@ def test_generated_force_error_retains_cause_and_neighbor_results(
             return np.full((2, 3), index + 1.0), {}
 
         monkeypatch.setattr(batch, "_public_dft_cpu_force", force)
-        result = batch.execute()
+        result = batch.execute(properties=("energy", "forces"))
         assert visited == [0, 1, 2]
         assert tuple(item.index for item in result.items) == (0, 1, 2)
         assert result.failure_indices == (1,)
@@ -84,7 +84,7 @@ def test_generated_force_error_retains_cause_and_neighbor_results(
 
         visited.clear()
         with pytest.raises(RuntimeError) as caught:
-            batch.execute(strict=True)
+            batch.execute(strict=True, properties=("energy", "forces"))
         assert visited == [0, 1, 2]
         assert f"1: {failed.status_message}" in str(caught.value)
 
@@ -94,7 +94,7 @@ def test_generated_force_error_retains_cause_and_neighbor_results(
         energy = batch.execute(strict=True, properties=("energy",))
         assert energy.succeeded and not visited
         fail = False
-        recovered = batch.execute(strict=True)
+        recovered = batch.execute(strict=True, properties=("energy", "forces"))
         assert visited == [0, 1, 2]
         assert recovered.succeeded
         assert all(str(error) not in item.status_message for item in recovered.items)

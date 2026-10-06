@@ -63,7 +63,9 @@ def test_python_ci_shards_the_known_long_tail_without_invalidating_ccache() -> N
     for path_name in (
         "test_cc_complete_gradient.py",
         "test_ecp_heavy.py",
-        "test_codegen.py",
+        "test_codegen_high_l.py",
+        "test_codegen_production.py",
+        "test_codegen_cuda_compile.py",
         "test_second_derivatives_inputs.py",
         "test_derivative_aot_audit.py",
         "test_eri_cpu_codegen.py",

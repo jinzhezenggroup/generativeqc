@@ -26,6 +26,9 @@ def test_cpu_rks_ao_cache_can_feed_incremental_xc() -> None:
 
 
 def test_pbe_rks_binds_cached_and_streamed_evaluators() -> None:
-    binding = "RksXcEvaluator(evaluate_pbe_xc_rks, evaluate_pbe_xc_rks_cached)"
+    binding = (
+        "RksXcEvaluator(evaluate_pbe_xc_rks, dft::SemilocalFamily::Pbe, "
+        "evaluate_pbe_xc_rks_cached)"
+    )
     assert RKS.count(binding) >= 3
     assert "integrate_pbe_rks_with_tail_scaled_cached" in XC

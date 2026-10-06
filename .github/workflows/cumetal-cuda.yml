@@ -1,8 +1,6 @@
 name: CuMetal CUDA
 
 on:
-  push:
-    branches: [master]
   pull_request:
   merge_group:
     types: [checks_requested]
@@ -15,7 +13,7 @@ permissions:
 
 # Preserve the running job and let GitHub replace only superseded pending work.
 concurrency:
-  group: cumetal-cuda-${{ github.event_name == 'pull_request' && github.event.pull_request.number || (github.event_name == 'push' || github.event_name == 'merge_group') && github.ref || github.run_id }}
+  group: cumetal-cuda-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'merge_group' && github.ref || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -59,14 +57,20 @@ jobs:
     name: CUDA runtime tests (CuMetal / Apple GPU)
     needs: merge_queue_liveness
     if: needs.merge_queue_liveness.outputs.active != 'false'
-    runs-on: macos-15
-    # Keep the 50-minute full-suite step inside a separate finite job budget.
-    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
+    runs-on: macos-26
+    # Keep the 40-minute qualification budget inside a separate finite job budget.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 75 || 30 }}
     env:
-      CUMETAL_COMMIT: 8a1434ffc1a4f7a17d2f8a41e157afbac22af171
+      CUMETAL_COMMIT: e87f368060cf09a45b148b4f8892470c74093ebd
       CUMETAL_SOURCE: /tmp/cuda-metal
       CUMETAL_PREFIX: /tmp/cumetal-install
       CUMETAL_CCACHE_DIR: /tmp/cumetal-ccache
+      # Registered PTX targets AIR 2.8 / macOS 26. Keep the runner, Metal
+      # compiler, SDK, and immutable build-tree cache identity aligned.
+      CUMETAL_TOOLCHAIN_ID: macos26-xcode26.3-sdk26.2
+      CUMETAL_XCODE_VERSION: "26.3"
+      CUMETAL_MACOS_SDK_VERSION: "26.2"
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       GENERATIVEQC_BUILD: ${{ github.workspace }}/build-cumetal
       CCACHE_DIR: /tmp/generativeqc-ccache
       CCACHE_MAXSIZE: 2G
@@ -76,10 +80,20 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify Apple Silicon runner
+      - name: Verify Apple Silicon and CuMetal toolchain
         run: |
           test "$(uname -m)" = arm64
+          test "$(sw_vers -productVersion | cut -d. -f1)" = 26
+          test -d "$DEVELOPER_DIR"
+          version="$(xcodebuild -version)"
+          printf '%s\n' "$version"
+          grep -Fxq "Xcode $CUMETAL_XCODE_VERSION" <<< "$version"
+          sdk_version="$(xcrun --sdk macosx --show-sdk-version)"
+          printf 'macOS SDK %s\n' "$sdk_version"
+          test "$sdk_version" = "$CUMETAL_MACOS_SDK_VERSION"
+          xcrun --sdk macosx --show-sdk-path
           xcrun --find metal
+          xcrun metal --version
 
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
@@ -96,33 +110,38 @@ jobs:
       - name: Install CuMetal build prerequisites and ccache
         run: brew install llvm z3 ninja ccache
 
-      - name: Cache CuMetal toolchain
+      - name: Restore CuMetal toolchain
         id: cache-cumetal
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             /tmp/cuda-metal
             /tmp/cumetal-install
-          key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
+          key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}
 
       - name: Restore CuMetal ccache
+        id: cumetal_ccache
         if: steps.cache-cumetal.outputs.cache-hit != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CUMETAL_CCACHE_DIR }}
-          key: ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
+          key: ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}
           restore-keys: |
             ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Restore GenerativeQC ccache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: generativeqc_ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ env.CCACHE_DIR }}
           # Include every family that can alter generated/native compilation.
           # The previous key omitted compiler/CMake inputs, so an immutable
           # exact cache could stay permanently half-stale after codegen changes.
-          key: ccache-cumetal-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-cumetal-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'cmake/**', 'include/**', 'src/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          # ccache validates compiler/flags/headers when reusing older entries;
+          # unlike the immutable toolchain directory, these are safe fallbacks.
           restore-keys: |
+            ccache-cumetal-v3-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_TOOLCHAIN_ID }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-v2-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
             ccache-cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}-
 
@@ -149,8 +168,41 @@ jobs:
           cmake --install "$CUMETAL_SOURCE/build"
           ccache --show-stats
 
+      - name: Save CuMetal compiler cache
+        if: github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true' && steps.cumetal_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CUMETAL_CCACHE_DIR }}
+          key: ${{ steps.cumetal_ccache.outputs.cache-primary-key }}
+
       - name: Verify CuMetal
         run: CUMETAL_ROOT="$CUMETAL_PREFIX" "$CUMETAL_PREFIX/bin/cumetal" doctor
+
+      - name: Compare exact retained CuMetal PTX
+        id: retained_ptx
+        # A compiler result cannot replace the real QC endpoint gate below.
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1997 &&
+          github.event.action == 'synchronize' &&
+          github.event.before == '48e7afd1cb8e52f0abb85af08727e7684b969631' &&
+          github.run_attempt == 1
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          CUMETAL_COMPARISON_OUTPUT: ${{ runner.temp }}/cumetal-retained-ptx
+        run: .venv/bin/python .github/scripts/compare_cumetal_ptx.py
+
+      - name: Preserve exact-input CuMetal compiler comparison
+        if: always() && steps.retained_ptx.outcome != 'skipped' && steps.retained_ptx.outcome != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cumetal-retained-ptx-comparison
+          path: ${{ runner.temp }}/cumetal-retained-ptx
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Generate a CMake CUDA toolkit backed by CuMetal
         run: |
@@ -184,6 +236,15 @@ jobs:
           done
           "$FAKE_CUDA/bin/nvcc" --version
 
+      - name: Save CuMetal toolchain
+        if: github.event_name != 'merge_group' && steps.cache-cumetal.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            /tmp/cuda-metal
+            /tmp/cumetal-install
+          key: ${{ steps.cache-cumetal.outputs.cache-primary-key }}
+
       - name: Reset ccache statistics
         run: ccache --zero-stats
 
@@ -208,6 +269,13 @@ jobs:
 
       - name: Build CUDA runtime test target
         run: cmake --build "$GENERATIVEQC_BUILD" --target generativeqc_cuda_runtime_tests --parallel 3
+
+      - name: Save GenerativeQC ccache
+        if: github.event_name != 'merge_group' && steps.generativeqc_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ steps.generativeqc_ccache.outputs.cache-primary-key }}
 
       - name: Show ccache statistics
         run: ccache --show-stats
@@ -246,25 +314,103 @@ jobs:
           grep -q 'launch_success=true' /tmp/generativeqc-cuda-runtime.log
           grep -q 'PASS: CUDA runtime contracts' /tmp/generativeqc-cuda-runtime.log
 
-      - name: Install resident-response test dependency
-        if: github.event_name == 'pull_request'
+      - name: Install bounded CuMetal QC test dependency
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
         run: uv pip install --python .venv/bin/python pytest
 
-      # This NVIDIA-only test skips on CuMetal. Keep the skip visible rather
-      # than labeling a successful collection as resident GPU qualification.
-      - name: Report NVIDIA-only resident-response test coverage
-        if: github.event_name == 'pull_request'
-        timeout-minutes: 5
+      # Quarantine the exact pinned shared-owner QC lane for upstream failures.
+      # The runner reports explicit JUnit skips and QC NOT QUALIFIED; new nodes
+      # retain strict acceptance. Native build/CTest above remain required.
+      - name: Run bounded CuMetal QC endpoint gate
+        id: qc_gate
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        timeout-minutes: 6
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
           DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-cumetal/libgenerativeqc.dylib
           CUMETAL_TRACE_GPU: "1"
+          CUMETAL_CUDA_TEST_MODE: gate
+          CUMETAL_CUDA_QUARANTINE: upstream-ptx-e87f368
+          CUMETAL_DEBUG_REGISTRATION: "1"
+          # Strict typed PTX lowering retains the existing fast48 arithmetic
+          # contract and fails rather than retrying the legacy compiler.
+          CUMETAL_PTX_BACKEND: cumetal-ir
+          CUMETAL_FP64_MODE: fast48
+          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
+          CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "90"
+          CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
-        run: |
-          .venv/bin/python -m pytest \
-            tests/python/test_cuda_runtime.py::test_cuda_resident_rhf_response_matches_host_operator \
-            -vv -rs
+        run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
+
+      - name: Diagnose one CuMetal RHF timeout
+        id: qc_timeout_diagnostic
+        # Observe one timed-out strict gate with its partially warmed JIT cache.
+        # This result can never replace the required endpoint acceptance result.
+        if: >-
+          failure() && github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1997 &&
+          github.event.action == 'synchronize' &&
+          github.event.before == 'de9eebb88be4d7ded840a35541daff2ce43a7a44' &&
+          github.run_attempt == 1 && steps.qc_gate.outcome == 'failure' &&
+          steps.qc_gate.outputs.rhf_timed_out == 'true'
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-cumetal/libgenerativeqc.dylib
+          PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
+          CUMETAL_PTX_BACKEND: cumetal-ir
+          CUMETAL_FP64_MODE: fast48
+          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
+          CUMETAL_DIAGNOSTIC_OUTPUT: ${{ runner.temp }}/cumetal-timeout-diagnostic
+          CUMETAL_DIAGNOSTIC_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: .venv/bin/python .github/scripts/diagnose_cumetal_timeout.py
+
+      - name: Preserve one-shot CuMetal timeout diagnostic
+        if: always() && steps.qc_timeout_diagnostic.outcome != 'skipped' && steps.qc_timeout_diagnostic.outcome != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cumetal-timeout-diagnostic-only
+          path: ${{ runner.temp }}/cumetal-timeout-diagnostic
+          if-no-files-found: warn
+          retention-days: 1
+
+      - name: Capture one CuMetal PTX compiler diagnostic
+        # One authorized capture only: the first CI attempt for the next update
+        # from this exact PR head. This never substitutes for the failed gate.
+        id: qc_ptx_diagnostic
+        if: >-
+          failure() && github.event_name == 'pull_request' &&
+          github.event.pull_request.number == 1997 &&
+          github.event.action == 'synchronize' &&
+          github.event.before == '0f67b413da60fa3d146eead32360901adeda4698' &&
+          github.run_attempt == 1 && steps.qc_gate.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 4
+        env:
+          CUMETAL_ROOT: /tmp/cumetal-install
+          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
+          GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-cumetal/libgenerativeqc.dylib
+          PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
+          CUMETAL_DIAGNOSTIC_OUTPUT: ${{ runner.temp }}/cumetal-ptx-diagnostic
+          CUMETAL_DIAGNOSTIC_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: .venv/bin/python .github/scripts/diagnose_cumetal_ptx.py
+
+      - name: Preserve one-shot CuMetal compiler diagnostic
+        if: always() && steps.qc_ptx_diagnostic.outcome != 'skipped' && steps.qc_ptx_diagnostic.outcome != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: cumetal-ptx-diagnostic-only
+          path: |
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/diagnostic.json
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/*.txt
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/legacy-capture.xml
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/ptx/*.ptx
+            ${{ runner.temp }}/cumetal-ptx-diagnostic/typed-output.metal
+          if-no-files-found: warn
+          retention-days: 1
 
       - name: Preserve CUDA test results
         if: always()
@@ -282,9 +428,9 @@ jobs:
         # scoped GFN2 wheel provider is intentionally Linux-only.
         run: uv pip install --python .venv/bin/python 'pytest>=8'
 
-      - name: Run full CUDA suite on the Apple GPU
+      - name: Run bounded CuMetal QC qualification on the Apple GPU
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-        timeout-minutes: 50
+        timeout-minutes: 45
         env:
           CUMETAL_ROOT: /tmp/cumetal-install
           DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
@@ -292,158 +438,26 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
           CUMETAL_TRACE_GPU: "1"
           CUMETAL_CUDA_TEST_MODE: full
-          CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "300"
+          # Same exact scope as routine CI; provider changes must fail closed.
+          CUMETAL_CUDA_QUARANTINE: upstream-ptx-e87f368
+          CUMETAL_DEBUG_REGISTRATION: "1"
+          CUMETAL_PTX_BACKEND: cumetal-ir
+          CUMETAL_FP64_MODE: fast48
+          CUMETAL_CACHE_DIR: ${{ runner.temp }}/cumetal-qc-jit-${{ env.CUMETAL_TOOLCHAIN_ID }}-cumetal-ir-fast48
+          CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "180"
+          CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "2400"
+          GENERATIVEQC_DFT_CUDA_TEST: "1"
         run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
 
-
-  cumetal-benchmark:
-    name: CuMetal performance (CodSpeed / Apple GPU)
-    # The required CuMetal runtime correctness job still runs on every PR and
-    # merge group. Keep performance telemetry on master/manual qualification to
-    # avoid competing with that required Apple-GPU check for queue runner capacity.
-    if: github.event_name != 'pull_request' && github.event_name != 'merge_group' && github.event_name != 'schedule'
-    runs-on: macos-15
-    timeout-minutes: 15
-    env:
-      CUMETAL_COMMIT: 8a1434ffc1a4f7a17d2f8a41e157afbac22af171
-      CUMETAL_SOURCE: /tmp/cuda-metal
-      CUMETAL_PREFIX: /tmp/cumetal-install
-      CUMETAL_CCACHE_DIR: /tmp/cumetal-ccache
-      GENERATIVEQC_BENCH_BUILD: ${{ github.workspace }}/build-cumetal-benchmark
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Preserve CuMetal QC endpoint diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          fetch-depth: 0
-          persist-credentials: false
+          name: test-results-cumetal-qc
+          path: /tmp/generativeqc-cuda-test-*.xml
+          if-no-files-found: ignore
+          retention-days: 1
 
-      - name: Verify Apple Silicon runner
-        run: |
-          test "$(uname -m)" = arm64
-          xcrun --find metal
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
-        with:
-          version: "0.10.7"
-          python-version: "3.11"
-          enable-cache: true
-
-      - name: Prepare benchmark environment
-        run: |
-          uv venv --python 3.11
-          uv pip install --python .venv/bin/python pytest-codspeed==5.0.3
-          brew install llvm z3 ninja ccache
-
-      - name: Cache CuMetal toolchain
-        id: cache-cumetal
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            /tmp/cuda-metal
-            /tmp/cumetal-install
-          key: cumetal-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
-
-      - name: Restore CuMetal build ccache
-        if: steps.cache-cumetal.outputs.cache-hit != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ env.CUMETAL_CCACHE_DIR }}
-          key: ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-${{ env.CUMETAL_COMMIT }}
-          restore-keys: |
-            ccache-cumetal-toolchain-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Build pinned CuMetal on a cold cache
-        if: steps.cache-cumetal.outputs.cache-hit != 'true'
-        env:
-          CCACHE_DIR: ${{ env.CUMETAL_CCACHE_DIR }}
-          CCACHE_COMPILERCHECK: content
-        run: |
-          ccache --zero-stats
-          git clone --recurse-submodules https://github.com/Lulzx/cuda-metal.git "$CUMETAL_SOURCE"
-          git -C "$CUMETAL_SOURCE" checkout "$CUMETAL_COMMIT"
-          git -C "$CUMETAL_SOURCE" submodule update --init --recursive
-          cmake -S "$CUMETAL_SOURCE" -B "$CUMETAL_SOURCE/build" -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_INSTALL_PREFIX="$CUMETAL_PREFIX" \
-            -DCMAKE_C_COMPILER_LAUNCHER="$(command -v ccache)" \
-            -DCMAKE_CXX_COMPILER_LAUNCHER="$(command -v ccache)" \
-            -DCMAKE_OBJCXX_COMPILER_LAUNCHER="$(command -v ccache)" \
-            -DCUMETAL_BUILD_TESTS=OFF \
-            -DCUMETAL_ENABLE_BINARY_SHIM=OFF \
-            -DLLVM_DIR="$(brew --prefix llvm)/lib/cmake/llvm"
-          cmake --build "$CUMETAL_SOURCE/build" --parallel 3
-          cmake --install "$CUMETAL_SOURCE/build"
-
-      - name: Verify CuMetal
-        run: CUMETAL_ROOT="$CUMETAL_PREFIX" "$CUMETAL_PREFIX/bin/cumetal" doctor
-
-      - name: Build CuMetal FP32 CodSpeed benchmark
-        run: |
-          mkdir -p "$GENERATIVEQC_BENCH_BUILD"
-          CUMETAL_ROOT="$CUMETAL_PREFIX" \
-            "$CUMETAL_PREFIX/bin/cumetalc" benchmarks/cumetal_fp32_codspeed.cu \
-            -I"$CUMETAL_PREFIX/include" \
-            -o "$GENERATIVEQC_BENCH_BUILD/generativeqc_cumetal_fp32_benchmark"
-
-      - name: Smoke CuMetal FP32 proxy workloads
-        shell: bash
-        env:
-          CUMETAL_ROOT: /tmp/cumetal-install
-          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
-          GENERATIVEQC_CUMETAL_FP32_BENCH: ${{ github.workspace }}/build-cumetal-benchmark/generativeqc_cumetal_fp32_benchmark
-        run: |
-          set -euo pipefail
-          log="${RUNNER_TEMP}/cumetal-fp32-smoke.log"
-          {
-            printf 'run compute\n'
-            printf 'run memory\n'
-            printf 'run gather\n'
-            printf 'run mixed\n'
-            printf 'quit\n'
-          } | "${GENERATIVEQC_CUMETAL_FP32_BENCH}" | tee "${log}"
-
-          .venv/bin/python - "${log}" <<'PY'
-          import math
-          import pathlib
-          import sys
-
-          lines = pathlib.Path(sys.argv[1]).read_text().splitlines()
-          assert any(line.startswith("READY device=") for line in lines), lines
-          samples = {}
-          for line in lines:
-              fields = line.split()
-              if len(fields) == 3 and fields[0] == "OK":
-                  samples[fields[1]] = float(fields[2])
-          expected = {"compute", "memory", "gather", "mixed"}
-          assert samples.keys() >= expected, samples
-          assert all(math.isfinite(samples[name]) and samples[name] > 0.0 for name in expected), samples
-          PY
-
-      # With CodSpeed disabled, its benchmark fixture invokes each workload once.
-      # Keep collection, fixture, and Python harness regressions gating as well.
-      - name: Validate CuMetal benchmark harness without profiling
-        env:
-          CUMETAL_ROOT: /tmp/cumetal-install
-          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
-          GENERATIVEQC_CUMETAL_FP32_BENCH: ${{ github.workspace }}/build-cumetal-benchmark/generativeqc_cumetal_fp32_benchmark
-        run: env -u CODSPEED_ENV .venv/bin/python -m pytest benchmarks/test_cumetal_fp32_codspeed.py -q
-
-      - name: Run CodSpeed FP32 CuMetal proxy suite
-        id: codspeed
-        continue-on-error: true
-        uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
-        env:
-          CUMETAL_ROOT: /tmp/cumetal-install
-          DYLD_LIBRARY_PATH: /tmp/cuda-metal/build
-          GENERATIVEQC_CUMETAL_FP32_BENCH: ${{ github.workspace }}/build-cumetal-benchmark/generativeqc_cumetal_fp32_benchmark
-        with:
-          mode: walltime
-          run: .venv/bin/python -m pytest benchmarks/test_cumetal_fp32_codspeed.py --codspeed -q
-
-      - name: Report CodSpeed telemetry failure
-        if: steps.codspeed.outcome == 'failure'
-        run: |
-          echo "::warning::CuMetal workloads and the Python harness passed their unprofiled gates, but CodSpeed telemetry failed. Treating profiler/upload infrastructure as non-gating."
 
   upload-test-results:
     name: Upload CUDA test results

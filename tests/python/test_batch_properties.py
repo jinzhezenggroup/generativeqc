@@ -102,13 +102,17 @@ def test_invalid_batch_properties_reject_before_execution(
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks", "lda-uks", "pbe-uks"])
-def test_energy_only_dft_batch_rejects_forces_before_execution(
+def test_unqualified_dft_basis_rejects_forces_before_execution(
     method: typing.Any, monkeypatch: typing.Any
 ) -> None:
     preparation = (
         {"charges": [-1], "multiplicities": [2]} if method.endswith("uks") else {}
     )
-    with Calculator(method=method).prepare_batch(SYSTEMS[:1], **preparation) as batch:
+    # The f-containing basis context remains outside the qualified s/p/d CPU
+    # force domain, even though the named semilocal methods can expose forces.
+    calculator = Calculator(method=method, basis="def2-tzvp")
+    assert calculator.capabilities.supported_properties == frozenset({"energy"})
+    with calculator.prepare_batch(SYSTEMS[:1], **preparation) as batch:
 
         def forbidden(*args: typing.Any) -> None:
             pytest.fail("unsupported force request reached native execution")

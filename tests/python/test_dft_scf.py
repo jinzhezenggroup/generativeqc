@@ -43,9 +43,28 @@ def test_uks_public_energy_and_spin_contract(
     assert capabilities.available
     assert capabilities.supported_properties == frozenset(("energy",))
     calculator = Calculator(method=method, basis="sto-3g", device=device)
-    result = calculator.singlepoint([("H", (0, 0, 0))], multiplicity=2)
+    atoms = [("H", (0, 0, 0))]
+    result = calculator.singlepoint(atoms, multiplicity=2, properties=("energy",))
     assert result.converged and result.forces is None
     assert result.executed_backend == ("cpu_reference" if device == "cpu" else "cuda")
+    assert calculator.capabilities.supported_properties == frozenset(
+        {"energy", "forces"}
+    )
+    forced = calculator.singlepoint(
+        atoms, multiplicity=2, properties=("energy", "forces")
+    )
+    assert forced.converged and forced.energy == pytest.approx(result.energy, abs=2e-9)
+    assert forced.forces is not None and forced.forces.shape == (1, 3)
+    # An isolated atom has zero nuclear force by translational invariance.
+    np.testing.assert_allclose(forced.forces, 0.0, atol=1e-9, rtol=0)
+    if device == "cpu":
+        assert calculator.singlepoint(atoms, multiplicity=2).forces is None
+
+
+@pytest.mark.parametrize("method", ("lda-uks", "pbe-uks"))
+def test_uks_unqualified_cpu_basis_still_rejects_force_requests(method: str) -> None:
+    calculator = Calculator(method=method, basis="def2-tzvp", device="cpu")
+    assert calculator.capabilities.supported_properties == frozenset({"energy"})
     with pytest.raises(ValueError, match="does not support properties.*forces"):
         calculator.singlepoint(
             [("H", (0, 0, 0))], multiplicity=2, properties=("energy", "forces")

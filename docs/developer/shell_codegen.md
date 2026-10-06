@@ -964,8 +964,8 @@ JSON artifact is never treated as a pass.
 Run Python gates:
 
 ```bash
-python -m pytest tests/python/test_codegen.py -q
-python -m ruff check python/generativeqc_compiler/integral tests/python/test_codegen.py
+python -m pytest tests/python/test_codegen_high_l.py tests/python/test_codegen_production.py tests/python/test_codegen_cuda_compile.py -q
+python -m ruff check python/generativeqc_compiler/integral tests/python/test_codegen_high_l.py tests/python/test_codegen_production.py tests/python/test_codegen_cuda_compile.py
 ```
 
 Run the explicit CUDA gate:

@@ -58,3 +58,46 @@ No new GPU measurement, performance claim or default promotion accompanies this
 regression-test preservation.
 
 Agent: dot
+
+
+## 2026-10-06: guarded positive production profile
+
+The retained public-profile campaign in merged #1934 supersedes the earlier
+empty-registry promotion decision for one structural domain. Production now
+registers `sm120-ordinary-direct-active-ao-v2` for ordinary all-electron Direct DFT
+force workloads on `sm_120`.
+
+Admission is deliberately **not** an atom/AO/grid benchmark window. The runtime
+uses the predicted dense contraction work
+
+```text
+grid_points * AO_count^2
+```
+
+and admits map discovery once that work reaches the smallest retained strongly
+positive endpoint, 173,946,175,488 point·AO² (the 48-atom campaign). This is a
+continuous cost crossover: a different molecular size or grid shape can match,
+while a nominally large molecule with too little dense work stays dense.
+
+The remaining predicates are genuine execution-capability/resource guards:
+ordinary composition, Direct/all-electron, supported AO jet orders 1/2 and
+RKS/UKS spin layouts, fixed 256-point tiles, and the admitted host/device force
+budgets. The profile keeps the measured
+`1e-16` sampled-jet cutoff and a 16 MiB resident-map cache allowance.
+
+No functional or molecule name appears in the selector. Independent CUDA
+correctness coverage already exercises LDA/PBE/PBE0, RKS/UKS and AO jet orders
+1/2 through the same resident-map consumer. Composite, DF, ECP, another tile policy, insufficient resources, or work below
+the crossover remains dense. Different CUDA architectures use the same guard;
+future multi-device evidence should recalibrate the cost model rather than add
+architecture branches. Future evidence should refine this
+cost model or qualify additional capabilities rather than adding benchmark-shape
+ranges.
+
+In the current-composition campaign the force-map candidate improved 48/96-atom
+warm complete E+F by about 18.4%/30.7%. Earlier narrow-composition cold/moved
+negatives and supplemental reversed-order cold observations remain retained;
+they motivate guarded admission rather than a global unconditional switch.
+
+Agent: ChatGPT
+Model: GPT-5.6 Sol
