@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.common.provenance import canonical_hash
+from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
@@ -71,6 +72,17 @@ def registry_entries() -> tuple[RegistryEntry, ...]:
     return tuple(result)
 
 
+def _point_expression_identity(program: object, policy: object) -> str:
+    return canonical_hash(
+        {
+            "schema": "generativeqc.automatic-libxc-work-point.v1",
+            "interior_expression": program.expression_hash,
+            "work_policy": policy.to_payload(),
+            "features": program.spec.features,
+        }
+    )
+
+
 def _point_program_source(entry: RegistryEntry) -> str:
     program = build_bulk_runtime_program(
         entry.name,
@@ -94,14 +106,7 @@ def _point_program_source(entry: RegistryEntry) -> str:
     emitter = ScalarCEmitter(program.graph, variables)
     emitter.emit(program.roots)
     refs = [emitter.reference(root) for root in program.roots]
-    expression_identity = canonical_hash(
-        {
-            "schema": "generativeqc.automatic-libxc-work-point.v1",
-            "interior_expression": program.expression_hash,
-            "work_policy": policy.to_payload(),
-            "features": features,
-        }
-    )
+    expression_identity = _point_expression_identity(program, policy)
     stem = entry.stem
     lines = [
         f"SemilocalPointValue automatic_{stem}_point(",
@@ -195,6 +200,137 @@ def _point_program_source(entry: RegistryEntry) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+
+def _cuda_point_program_source(entry: RegistryEntry) -> str:
+    """Emit the same work-domain E/vxc program for one CUDA device entry."""
+    program = build_bulk_runtime_program(
+        entry.name,
+        spin="polarized",
+        order=1,
+    )
+    features = program.spec.features
+    try:
+        ingredient_mask = SUPPORTED_LAYOUTS[features]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported automatic Libxc CUDA point layout for {entry.name}: {features!r}"
+        ) from exc
+    expected_outputs = ((), *((i,) for i in range(len(features))))
+    if program.outputs != expected_outputs:
+        raise ValueError(f"automatic Libxc CUDA E/vxc output layout changed: {entry.name}")
+
+    policy = automatic_work_policy(entry.name)
+    work_lines, work_arguments = polarized_work_setup(policy, features)
+    variables = dict(zip(features, work_arguments, strict=True))
+    emitter = CudaEmitter(program.graph, variables)
+    emitter.emit(program.roots)
+    refs = [emitter.reference(root) for root in program.roots]
+    expression_identity = _point_expression_identity(program, policy)
+    stem = entry.stem
+    signature = (
+        "double rho_a, double rho_b, double sigma_aa, double sigma_ab, "
+        "double sigma_bb, double tau_a, double tau_b"
+    )
+    lines = [
+        f"__device__ __noinline__ AutomaticLibxcCudaValue automatic_{stem}_point({signature}) {{",
+        "  AutomaticLibxcCudaValue out{};",
+        "  if (!isfinite(rho_a) || !isfinite(rho_b) || rho_a < 0.0 || rho_b < 0.0) {",
+        "    out.valid = false;",
+        "    return out;",
+        "  }",
+    ]
+    if ingredient_mask == 1:
+        lines.extend(
+            [
+                "  (void)sigma_aa;",
+                "  (void)sigma_ab;",
+                "  (void)sigma_bb;",
+                "  (void)tau_a;",
+                "  (void)tau_b;",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "  if (!isfinite(sigma_aa) || !isfinite(sigma_ab) || !isfinite(sigma_bb)) {",
+                "    out.valid = false;",
+                "    return out;",
+                "  }",
+            ]
+        )
+        if ingredient_mask == 7:
+            lines.extend(["  (void)tau_a;", "  (void)tau_b;"])
+        else:
+            lines.extend(
+                [
+                    "  if (!isfinite(tau_a) || !isfinite(tau_b) || tau_a < 0.0 || tau_b < 0.0) {",
+                    "    out.valid = false;",
+                    "    return out;",
+                    "  }",
+                ]
+            )
+    lines.extend(work_lines)
+    lines.extend(emitter.lines)
+    lines.append(
+        f"  out.energy_density = {refs[0]} * total_density / (work_rho_a + work_rho_b);"
+    )
+    for index, ref in enumerate(refs[1:]):
+        lines.append(f"  out.feature_derivative[{index}] = {ref};")
+    lines.extend(
+        [
+            "  if (!isfinite(out.energy_density)) out.valid = false;",
+            f"  for (unsigned i = 0; i < {len(features)}U; ++i)",
+            "    if (!isfinite(out.feature_derivative[i])) out.valid = false;",
+            "  return out;",
+            "}",
+            f'inline constexpr const char* kAutomatic_{stem}_CudaExpressionIdentity = "{expression_identity}";',
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def emit_cuda_header() -> str:
+    entries = registry_entries()
+    bodies = "\n".join(_cuda_point_program_source(entry) for entry in entries)
+    cases = "\n".join(
+        f"    case 0x{entry.code:x}U: return {{true, automatic_{entry.stem}_point("
+        "rho_a, rho_b, sigma_aa, sigma_ab, sigma_bb, tau_a, tau_b)}};"
+        for entry in entries
+    )
+    return "\n".join(
+        [
+            "// Generated automatic Libxc CUDA point registry; do not edit.",
+            "#pragma once",
+            "#include <cmath>",
+            "#include <cstdint>",
+            "",
+            "namespace generativeqc::dft::generated {",
+            "struct AutomaticLibxcCudaValue {",
+            "  double energy_density{};",
+            "  double feature_derivative[7]{};",
+            "  bool valid{true};",
+            "};",
+            "struct AutomaticLibxcCudaResult {",
+            "  bool matched{};",
+            "  AutomaticLibxcCudaValue value{};",
+            "};",
+            "",
+            bodies,
+            "__device__ inline AutomaticLibxcCudaResult evaluate_automatic_libxc_cuda(",
+            "    std::uint32_t functional, double rho_a, double rho_b, double sigma_aa,",
+            "    double sigma_ab, double sigma_bb, double tau_a, double tau_b) {",
+            "  switch (functional) {",
+            cases,
+            "    default: return {};",
+            "  }",
+            "}",
+            "}  // namespace generativeqc::dft::generated",
+            "",
+        ]
+    )
 
 
 def emit_header() -> str:
@@ -303,17 +439,23 @@ def write_if_changed(path: Path, content: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-directory", required=True, type=Path)
+    parser.add_argument("--output-directory", type=Path)
+    parser.add_argument("--cuda-output", type=Path)
     args = parser.parse_args()
+    if args.output_directory is None and args.cuda_output is None:
+        parser.error("at least one of --output-directory or --cuda-output is required")
     entries = registry_entries()
-    output = args.output_directory
-    write_if_changed(output / "generated_libxc_semilocal_registry.hpp", emit_header())
-    write_if_changed(output / "generated_libxc_semilocal_registry.cpp", emit_registry())
-    for index in range(SHARD_COUNT):
-        write_if_changed(
-            output / f"generated_libxc_semilocal_{index}.cpp",
-            emit_shard(index, entries),
-        )
+    if args.output_directory is not None:
+        output = args.output_directory
+        write_if_changed(output / "generated_libxc_semilocal_registry.hpp", emit_header())
+        write_if_changed(output / "generated_libxc_semilocal_registry.cpp", emit_registry())
+        for index in range(SHARD_COUNT):
+            write_if_changed(
+                output / f"generated_libxc_semilocal_{index}.cpp",
+                emit_shard(index, entries),
+            )
+    if args.cuda_output is not None:
+        write_if_changed(args.cuda_output, emit_cuda_header())
 
 
 if __name__ == "__main__":
