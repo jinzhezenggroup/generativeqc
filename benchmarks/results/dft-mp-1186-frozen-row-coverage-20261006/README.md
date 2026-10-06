@@ -28,8 +28,8 @@ Retained evidence examined at this baseline:
 - `benchmarks/results/issue172-r2scan3c-20260923/manifest.json` records an
   earlier H100 r2SCAN-3c campaign (`source_git_tree`
   `0e6350acbf193cde487c6772c2f783baf9cd86f2`) with small composite-method
-  cases. Its manifest SHA-256 is
-  `141c967f3be66b49964d88a8d276093d84e660971824bde03069aeff8418f040`.
+  cases. Its manifest SHA-256 over the Git/LF bytes is
+  `398069b03ce8bcf350608337efcecbe4312f6669907fb08105da26ce4161301c`.
   Its source, method, input and grid identities differ from this frozen contract.
 - #1741's retained PBE0 and r2SCAN geometry regressions establish shared
   implementation behavior on real GPU hardware. The published PBE0 campaign
