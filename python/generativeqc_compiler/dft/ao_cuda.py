@@ -14,11 +14,7 @@ from generativeqc_compiler.common.paths import asset_path
 from generativeqc_compiler.common.provenance import canonical_hash
 from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.integral.expr import AlgebraForm, Graph
-from generativeqc_compiler.xc._generated_native_semilocal import (
-    SEMILOCAL_FAMILIES,
-    SEMILOCAL_FAMILY_BY_CODE,
-)
-
+from ._generated_native_semilocal import SEMILOCAL_FAMILIES, SEMILOCAL_FAMILY_BY_CODE
 from .ao import jet_indices
 from .feature_policy import emit_feature_policy
 from .grid_contraction import emit_grid_contraction
