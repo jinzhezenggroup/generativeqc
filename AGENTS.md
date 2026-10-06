@@ -23,7 +23,11 @@ repo-wide unless a nested `AGENTS.md` adds more specific constraints.
 
 - Use a compiler cache for local C++ and CUDA builds, including PR qualification
   builds and cache-miss runtime JIT compilation. Prefer `sccache`; fall back to
-  `ccache`.
+  `ccache`. Runtime JIT requires sccache 0.16.0+ with per-invocation foreground
+  server/process-group ownership and local workers, preserving finite timeouts
+  without stopping the shared server or unrelated compilations. Its persistent
+  JIT cache slots require exclusive leases and must be outside the shared cache
+  tree, since sccache disk-LRU startup cleans temporary files recursively.
 - Verify the selected launcher with `--version` before configuring or starting a
   cache-miss compile. If neither launcher is usable, report the missing prerequisite
   rather than silently starting an uncached full build or JIT compile. Python/JIT

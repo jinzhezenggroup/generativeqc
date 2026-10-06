@@ -121,10 +121,26 @@ generic CUDA path is an intentional build choice.
 
 Builds automatically prefer `sccache` and fall back to `ccache` when either
 is on `PATH`. Runtime JIT compilation uses the same precedence on artifact
-cache misses and refuses to start an uncached compiler process. `sccache` is a base Python dependency so a normal `pip install generativeqc`
+cache misses and refuses to start an uncached compiler process. `sccache` is a
+base Python dependency so a normal `pip install generativeqc`
 provides the preferred launcher on supported wheel platforms; a system `ccache`
 remains the fallback. An already valid JIT artifact can replay without either
 launcher because no compilation is performed.
+
+Runtime sccache requires version 0.16.0 or later and uses a private foreground
+server for each finite compiler invocation. Server startup, compilation and
+cleanup share the invocation deadline; its compiler children are terminated
+without stopping other invocations or the user's shared sccache server. These
+private workers lease separate persistent JIT cache slots under
+`$XDG_CACHE_HOME/generativeqc/sccache-jit` (default `~/.cache` for the cache home).
+`GENERATIVEQC_JIT_SCCACHE_ROOT` can relocate this exclusively owned pool; keep it
+outside the shared sccache cache tree. Sequential calls reuse the lowest free
+slot, while concurrent calls receive independent stores. Disk-cache environment
+options such as `SCCACHE_CACHE_SIZE` apply per slot; the shared configuration
+file's `[cache.disk]` policy is not inherited by this separate JIT disk pool.
+Configured remote cache backends remain available. Distributed sccache compilation
+is refused because remote compiler processes cannot be owned by the local timeout.
+An older or unusable sccache executable falls back to verified ccache.
 
 Override native CMake builds with `-DGENERATIVEQC_COMPILER_CACHE=off` or an
 explicit executable. That CMake-only escape hatch does not weaken the runtime

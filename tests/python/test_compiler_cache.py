@@ -92,39 +92,67 @@ def test_compiler_cache_rejects_uncached_compilation(
 def test_cpu_and_cuda_adapters_wrap_cache_miss_commands(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    wrapped: list[list[str]] = []
     launched: list[list[str]] = []
-
-    def wrap(command: list[str]) -> list[str]:
-        wrapped.append(command)
-        return ["verified-cache", *command]
 
     def compile_run(command: list[str], timeout: float, *, label: str) -> CompileResult:
         assert timeout > 0 and label in {"C++", "NVCC"}
         launched.append(command)
         return CompileResult(0, False, 0.01, "", "")
 
-    monkeypatch.setattr(cpp_adapter, "cached_compiler_command", wrap)
-    monkeypatch.setattr(cpp_adapter, "run_compiler", compile_run)
+    monkeypatch.setattr(cpp_adapter, "run_cached_compiler", compile_run)
     cpu = CppCompilerAdapter(Path(sys.executable))
     cpu.compile_shared(tmp_path / "x.cpp", tmp_path / "x.so")
-    assert launched[-1][0] == "verified-cache"
-    assert wrapped[-1][0] == str(cpu.cxx)
+    assert launched[-1][0] == str(cpu.cxx)
 
-    monkeypatch.setattr(cuda_adapter, "cached_compiler_command", wrap)
-    monkeypatch.setattr(cuda_adapter, "run_compiler", compile_run)
+    monkeypatch.setattr(cuda_adapter, "run_cached_compiler", compile_run)
     cuda = CudaCompilerAdapter(Path("/opt/cuda/bin/nvcc"), cuda_target_info("sm_120"))
     cuda.compile(tmp_path / "x.cu", tmp_path / "x.o")
-    assert launched[-1][0] == "verified-cache"
-    assert wrapped[-1][0] == "/opt/cuda/bin/nvcc"
+    assert launched[-1][0] == "/opt/cuda/bin/nvcc"
+    assert "-c" in launched[-1]
+    cuda.compile_shared(tmp_path / "x.cu", tmp_path / "x.so")
+    assert "--shared" in launched[-1]
+    cuda.link_shared_objects([tmp_path / "x.o"], tmp_path / "x.so")
+    assert "--shared" in launched[-1]
+    result = cuda.link(tmp_path / "driver.cu", [], tmp_path / "driver")
+    assert launched[-1][0] == "/opt/cuda/bin/nvcc"
+    assert result.returncode == 0
 
-    link_commands: list[list[str]] = []
 
-    def link_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        link_commands.append(command)
-        return subprocess.CompletedProcess(command, 0, "", "")
+def test_older_sccache_falls_back_before_starting_an_unowned_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        compiler_cache.shutil, "which", lambda name, *, path: f"/bin/{name}"
+    )
+    monkeypatch.setattr(
+        compiler_cache.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command,
+            0,
+            "sccache 0.10.0" if "sccache" in command[0] else "ccache 4.14.1",
+            "",
+        ),
+    )
+    assert compiler_cache.resolve_compiler_cache().name == "ccache"
 
-    monkeypatch.setattr(cuda_adapter.subprocess, "run", link_run)
-    cuda.link(tmp_path / "driver.cu", [], tmp_path / "driver")
-    assert link_commands[-1][0] == "verified-cache"
-    assert "/opt/cuda/bin/nvcc" in link_commands[-1]
+
+def test_discovery_timeout_consumes_compilation_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import time
+
+    monkeypatch.setattr(
+        compiler_cache.shutil, "which", lambda name, *, path: f"/bin/{name}"
+    )
+
+    def stalled(command: list[str], **kwargs: Any) -> Any:
+        time.sleep(kwargs["timeout"])
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(compiler_cache.subprocess, "run", stalled)
+    result = compiler_cache.run_cached_compiler(
+        ["c++", "-c", "x.cpp"], 0.05, label="probe"
+    )
+    assert result.timed_out and result.returncode == 124
+    assert result.duration_seconds < 0.5
