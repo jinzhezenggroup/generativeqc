@@ -1245,7 +1245,8 @@ class KsPreparedCalculation final : public PreparedCalculation {
       const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
-      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
+      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr,
+      bool combined_two_electron = false) {
 #if GENERATIVEQC_HAS_CUDA
     if (!cuda_ || !system_.ecp_terms.empty()) return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     const bool fitted = options_.density_fitting_mode != GENERATIVEQC_DENSITY_FITTING_NONE;
@@ -1255,6 +1256,10 @@ class KsPreparedCalculation final : public PreparedCalculation {
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     }
     const bool range_exchange = execution_plan_.range_exchange;
+    if (combined_two_electron && (fitted || range_exchange)) {
+      detail = "combined stationary two-electron derivative requires full-range Direct sources";
+      return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
+    }
     if (range_exchange != range_strategy_.has_value()) {
       detail = "CUDA stationary integral gradient has inconsistent range-exchange ownership";
       return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
@@ -1332,7 +1337,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
     scf::OneElectronGradientResources one;
     const auto nc = 3 * system_.atoms.size();
     std::vector<double> candidate;
-    candidate.reserve((range_exchange ? 5 : 4) * nc);
+    candidate.reserve((combined_two_electron ? 3 : range_exchange ? 5 : 4) * nc);
     std::vector<double> hcore, pulay, value;
     status = GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
     if (!fitted)
@@ -1380,7 +1385,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                          resident_density.matrix_elements, value, detail)
                    : scf::execute_prepared_cuda_direct_shell_full_range_derivatives_device(
                          fock_, resident_density.alpha, resident_density.beta,
-                         resident_density.matrix_elements, value, detail);
+                         resident_density.matrix_elements, value, detail, !combined_two_electron);
       if (status != GENERATIVEQC_STATUS_SUCCESS) return status;
       candidate.insert(candidate.end(), value.begin(), value.end());
     }
@@ -2064,10 +2069,12 @@ class KsPreparedBatch final : public PreparedBatch {
       std::size_t index, const dft::CudaKsFinalStateToken& expected, std::vector<double>& output,
       std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
       const std::vector<scf::reference::Matrix>* cached_density = nullptr,
-      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr) {
+      const std::vector<scf::reference::Matrix>* cached_weighted_density = nullptr,
+      bool combined_two_electron = false) {
     if (index < items_.size() && items_[index].plan)
       return items_[index].plan->cuda_integral_gradient(
-          expected, output, maximum_bytes, work, detail, cached_density, cached_weighted_density);
+          expected, output, maximum_bytes, work, detail, cached_density, cached_weighted_density,
+          combined_two_electron);
     detail = "KS batch item has no prepared final-state owner";
     return GENERATIVEQC_STATUS_INVALID_ARGUMENT;
   }
@@ -2230,11 +2237,12 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     const std::vector<scf::reference::Matrix>& density,
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
-    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail) {
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+    bool combined_two_electron) {
   auto* ks = dynamic_cast<KsPreparedBatch*>(&batch);
   if (ks)
     return ks->cuda_integral_gradient(index, expected, output, maximum_bytes, work, detail,
-                                      &density, &weighted_density);
+                                      &density, &weighted_density, combined_two_electron);
   detail = "CUDA integral gradient requires a native KS batch";
   return GENERATIVEQC_STATUS_NOT_IMPLEMENTED;
 }

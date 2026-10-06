@@ -31,11 +31,13 @@ an endpoint speedup.
 
 The separate default-off switch
 `GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_DERIVATIVES=1` is also frozen at preparation.
-It selects dddd tasks in the stationary DFT `FullSources` bounded scheduler,
+It selects dddd tasks in the stationary DFT `Full` (Combined) and
+`FullSources` (Separate) bounded scheduler,
 including its angular-partition qualification mode. The existing FP64 `Dual3`
 Hermite response algebra borrows one scalar order-9 Coulomb simplex per
-primitive-pair product for all six component packets, independent atoms and both
-J'/K' density channels. The existing Coulomb IR defines its spatial responses
+primitive-pair product for all six component packets and independent atoms.
+`Separate` retains J'/K' density channels; `Combined` precontracts the caller's
+signed J/K coefficients into one density weight before consuming the derivative. The existing Coulomb IR defines its spatial responses
 as the next Cartesian states; a view exposes those responses to the same
 contraction body. Bra Hermite responses survive all ket products. Distinct atom
 seeds collapse repeated shell centers; only N-1 atoms are differentiated and
@@ -57,7 +59,8 @@ and its fallback work counts, also set
 `direct_bounded_dddd.cu.o`. Compilation uses ccache and retains commands and
 before/after statistics in the pytest temporary directory. The same executable's
 `--derivatives` case checks raw component derivatives, independent host source
-contractions, repeated atoms, same-pair domains and exact preparation counts.
+and signed combined contractions, a one-channel output canary, repeated atoms,
+same-pair domains and exact preparation counts.
 `tests/python/test_materialized_coulomb_response.py` checks every degree-0--8
 spatial response against differentiation of the authoritative Coulomb IR with
 its existing Boys leaf rule.

@@ -114,7 +114,7 @@ generativeqc_status execute_cuda_direct_rsh_energy_derivatives_device(
 generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    std::vector<double>& derivatives, std::string& detail);
+    std::vector<double>& derivatives, std::string& detail, bool separate_sources = true);
 
 /** Shell-scheduled RSH fixed-density derivatives [J', SR-K', LR-K'] with
  * explicit omega. The retained owner performs one density transform and three

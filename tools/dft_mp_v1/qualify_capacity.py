@@ -344,8 +344,11 @@ STATIONARY_SUBMIT_PAGE_CONTRACT_SHA256 = (
 STATIONARY_NUCLEAR_PAIR_LOOP_CONTRACT_SHA256 = (
     "5a69bf4fd85d28b137e1ae35bce4a1d32134375bbaca9f66f60c9377a0c8f935"
 )
+# Audited full-range Combined output has three channels; Separate/DF retains
+# four. The bounded v1 fallback, strict shape/finite checks, host reserve and
+# complete reduction remain bound by the exact whole-owner source span.
 STATIONARY_ENDPOINT_OWNER_CONTRACT_SHA256 = (
-    "1b742026ef1ee6b2853fa1e6e60f39a9b251413850565bbd37ac053e008b95a8"
+    "9cd2aabf912ae2b93336cb856b8a51d906373a49172d8769f19d61b4898f9973"
 )
 STATIONARY_AO_MAP_RESERVE_CONTRACT_SHA256 = (
     "0b9f834f9405340009f7af3a5712840728e5dd46328dad4b52fa07122bc2ecb1"

@@ -255,6 +255,24 @@ the native SCF composition contract. See the
 conditions and [hybrid acceptance gates](../maintainer/hybrid_cuda_acceptance.md)
 for independent complete-endpoint qualification.
 
+Full-range Direct CUDA total-force execution defaults to precontracting the signed J/K
+cotangents together before evaluating the compiler-owned weighted derivative.
+Set `GENERATIVEQC_DIRECT_FORCE_REDUCTION=separate` for independent source
+contraction or `combined` for the default layout. Both layouts use the same
+shell-class, resident-bra and bounded fallback scheduler, precision and screening.
+The combined stationary diagnostic publishes `two_electron` in place of the
+independent `coulomb` and `exact_exchange` components; it still includes the
+one-electron, overlap Pulay, nuclear and moving-grid contributions.
+
+Snapshot v1 and explicit J'/K' exports retain separate source identities. The
+optional private integral-gradient v2 bridge returns three channels
+`[one_electron, overlap_pulay, two_electron]` for combined full-range execution.
+If that bridge is unavailable, the stationary consumer retries the complete
+v1 owner within the same budget. Range-separated, fitted and ECP consumers
+retain their own derivative contracts. The `direct_jk_force` CUDA component
+trace records total two-electron derivative time and its actual output-channel
+count; measure complete endpoint wall time with tracing disabled.
+
 ## Densities, operators, and coefficients
 
 `FockBuildSpec` version 1 records spin, requested derivative order, and

@@ -627,8 +627,15 @@ class NativeKsSnapshot:
         maximum_bytes: int,
         *,
         range_exchange: bool,
+        combined_two_electron: bool = False,
     ) -> typing.Any:
-        """Execute all prepared stationary integral sources without host D/W upload."""
+        """Execute prepared stationary sources without host density uploads.
+
+        Full-range combined output has three channels: one-electron, overlap
+        Pulay, and total two-electron derivatives. The ordinary v1 export keeps
+        independent J/K channels. Missing optional bridges return ``None`` so
+        the caller can select a complete bounded owner supported by that library.
+        """
         if self.backend != "cuda":
             return None
         if type(atom_count) is not int or atom_count < 1:
@@ -637,17 +644,28 @@ class NativeKsSnapshot:
             raise ValueError("stationary derivative budget must be positive")
         if type(range_exchange) is not bool:
             raise TypeError("range_exchange must be bool")
+        if type(combined_two_electron) is not bool:
+            raise TypeError("combined_two_electron must be bool")
+        if combined_two_electron and range_exchange:
+            raise ValueError(
+                "combined two-electron derivative requires full-range sources"
+            )
         self.check_current()
         evaluate = getattr(
             self._library,
-            "generativeqc_ks_snapshot_cuda_integral_gradient_v1",
+            "generativeqc_ks_snapshot_cuda_integral_gradient_v2"
+            if combined_two_electron
+            else "generativeqc_ks_snapshot_cuda_integral_gradient_v1",
             None,
         )
         if evaluate is None:
             return None
+        # Assign the complete signature once: mutating an assigned argtypes
+        # list leaves ctypes' argument converters bound to the old layout.
         evaluate.argtypes = [
             ct.c_void_p,
             ct.c_void_p,
+            *((ct.c_int,) if combined_two_electron else ()),
             ct.POINTER(ct.c_double),
             ct.c_size_t,
             ct.c_size_t,
@@ -655,12 +673,13 @@ class NativeKsSnapshot:
             ct.c_size_t,
         ]
         evaluate.restype = ct.c_int
-        source_count = 5 if range_exchange else 4
+        source_count = 3 if combined_two_electron else 5 if range_exchange else 4
         output = np.empty((source_count, atom_count, 3), dtype=np.float64)
         usage = np.zeros(9, dtype=np.uint64)
         status = evaluate(
             self._batch._batch,
             self._handle,
+            *((1,) if combined_two_electron else ()),
             output.ctypes.data_as(ct.POINTER(ct.c_double)),
             output.size,
             maximum_bytes,

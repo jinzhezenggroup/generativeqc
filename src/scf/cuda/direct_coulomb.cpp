@@ -716,7 +716,8 @@ cudaError_t enqueue_generated_exchange(GeneratedExchangePlan& p, bool unrestrict
 
 cudaError_t execute_generated_full_range_energy_derivatives(
     GeneratedExchangePlan& p, bool unrestricted, const double* alpha, const double* beta,
-    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives) {
+    double coulomb_coefficient, double exchange_coefficient, std::vector<double>& derivatives,
+    bool separate_sources) {
   if (!p.force_capability || p.bounded_pair_order == nullptr ||
       p.shell_pair_block_bounds == nullptr || p.force == nullptr || p.force_cursor == nullptr ||
       !std::isfinite(coulomb_coefficient) || !std::isfinite(exchange_coefficient))
@@ -726,8 +727,14 @@ cudaError_t execute_generated_full_range_energy_derivatives(
 
   auto& shared = *p.shared;
   const auto b = shared.batch;
+  runtime::cuda_trace::TraceOperation trace(
+      "direct_jk_force", shared.stream,
+      {static_cast<std::size_t>(b.batch_size), static_cast<std::size_t>(b.nbf), 0, true, true});
   const std::size_t coordinates = static_cast<std::size_t>(b.total_atoms) * 3U;
-  std::vector<double> result(2U * coordinates);
+  // Total-force consumers combine the compiler-owned cotangents before AD;
+  // derivative exports retain independent channels on exactly the same domain.
+  std::vector<double> result((separate_sources ? 2U : 1U) * coordinates);
+  runtime::cuda_trace::trace_counter("direct_force_output_channels", separate_sources ? 2U : 1U);
   // Drain any pending D2H before result is destroyed on failure or exception.
   struct HostResultDrain {
     cudaStream_t stream;
@@ -750,7 +757,8 @@ cudaError_t execute_generated_full_range_energy_derivatives(
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, DirectCoulombRange::Full, 0.0,
-          coulomb_coefficient, exchange_coefficient, p.bounded_block_domain, p.force_resident_bra);
+          coulomb_coefficient, exchange_coefficient, p.bounded_block_domain, p.force_resident_bra,
+          separate_sources);
       if (error != cudaSuccess) return error;
     } else {
       launch_bounded_shell_energy_derivative(
@@ -758,7 +766,7 @@ cudaError_t execute_generated_full_range_energy_derivatives(
           shared.shell_bounds, p.shell_pair_density_bounds, p.bounded_pair_order,
           p.shell_pair_block_bounds, p.system_density_bounds, p.heads, shared.schwarz,
           p.direct_spin, shared.active, p.force, p.force_cursor, coulomb_coefficient,
-          exchange_coefficient, p.bounded_block_domain);
+          exchange_coefficient, p.bounded_block_domain, separate_sources);
       error = cudaGetLastError();
       if (error != cudaSuccess) return error;
     }

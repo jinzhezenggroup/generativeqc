@@ -47,7 +47,8 @@ generativeqc_status dft_cuda_integral_gradient_cached(
     PreparedBatch& batch, std::size_t index, const dft::CudaKsFinalStateToken& expected,
     const std::vector<scf::reference::Matrix>& density,
     const std::vector<scf::reference::Matrix>& weighted_density, std::vector<double>& output,
-    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail);
+    std::size_t maximum_bytes, std::array<std::uint64_t, 9>& work, std::string& detail,
+    bool combined_two_electron = false);
 
 /** Token-checked density-fitted stationary integral sources for CPU or CUDA.
  * Output is source-major [hcore, overlap/Pulay, J_DF, K_DF], each block

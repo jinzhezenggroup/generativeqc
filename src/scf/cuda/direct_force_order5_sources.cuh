@@ -30,22 +30,22 @@ struct Order5SourceRoots {
   }
 };
 
-/** Contract separate full-range J/K sources with one shell-pair geometry and
+/** Contract separate or combined J/K sources with one shell-pair geometry and
  * radial ladder per primitive. The existing task adapter owns screening,
  * canonical component weights, source-zero guards and atom scatter. This
  * experimental owner changes no shell/AO admission predicate or queue size. */
-template <bool Unrestricted>
+template <bool Unrestricted, DirectForceOutputMode Mode = DirectForceOutputMode::Separate>
 __device__ inline void contract_two_electron_force_order5_sources(
     unsigned shell_class, const DeviceBatch& batch, ActiveShellQuartetTile task,
     double screening_tolerance, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* forces, double coulomb_coefficient,
     double exchange_coefficient) {
-#define GENERATIVEQC_ORDER5_SOURCE_CASE(ShellClass)                                     \
-  case ShellClass:                                                                      \
-    contract_two_electron_force_low_order_sources_task<Unrestricted, ShellClass, false, \
-                                                       Order5SourceRoots<ShellClass>>(  \
-        batch, task, screening_tolerance, schwarz_bounds, density, active, forces,      \
-        coulomb_coefficient, exchange_coefficient);                                     \
+#define GENERATIVEQC_ORDER5_SOURCE_CASE(ShellClass)                                          \
+  case ShellClass:                                                                           \
+    contract_two_electron_force_low_order_sources_task<Unrestricted, ShellClass, false,      \
+                                                       Order5SourceRoots<ShellClass>, Mode>( \
+        batch, task, screening_tolerance, schwarz_bounds, density, active, forces,           \
+        coulomb_coefficient, exchange_coefficient);                                          \
     break
   switch (shell_class) {
     GENERATIVEQC_ORDER5_SOURCE_CASE(kDpppShellClass);

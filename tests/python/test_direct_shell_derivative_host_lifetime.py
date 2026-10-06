@@ -48,7 +48,11 @@ def host_lifetime_probe(
     prefix = PREFIX.replace(
         "// PRODUCTION_DENSITY_COEFFICIENT", emit_direct_force_density_coefficient()
     )
-    cpp.write_text(prefix + body + SUFFIX)
+    # Retain the public default argument used by the RSH split wrapper.
+    header = (ROOT / "src/scf/cuda/direct_coulomb.hpp").read_text()
+    start = header.index("cudaError_t execute_generated_full_range_energy_derivatives(")
+    declaration = header[start:].split(";", 1)[0] + ";\n"
+    cpp.write_text(prefix + declaration + body + SUFFIX)
     native_cxx.build_executable(
         [cpp],
         binary,
@@ -71,6 +75,7 @@ def host_lifetime_probe(
         for angular_schedule in (False, True)
         for route, count in (
             ("full_range", 8),
+            ("full_range_combined", 8),
             ("rsh", 8),
             ("rsh_split", 14),
             ("rsh_zero", 8),
@@ -111,7 +116,7 @@ def test_pending_downloads_outlive_early_returns_and_exceptions(
 
 
 @pytest.mark.parametrize("angular_schedule", [False, True])
-@pytest.mark.parametrize("route", ["full_range", "rsh_split"])
+@pytest.mark.parametrize("route", ["full_range", "full_range_combined", "rsh_split"])
 @pytest.mark.parametrize(
     "coulomb,short,long,density_fixture",
     [
@@ -155,6 +160,36 @@ def test_shell_derivatives_preserve_disabled_sources(
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.parametrize("angular_schedule", [False, True])
+@pytest.mark.parametrize(
+    "route,output_channels,copy_count,copy_bytes",
+    [
+        ("full_range", 2, 1, 48),
+        ("full_range_combined", 1, 1, 24),
+        ("rsh", 3, 1, 72),
+        ("rsh_split", 3, 2, 72),
+        ("rsh_zero", 3, 1, 48),
+    ],
+)
+def test_shell_derivative_output_channels_and_download_bytes(
+    host_lifetime_probe: Path,
+    route: str,
+    angular_schedule: bool,
+    output_channels: int,
+    copy_count: int,
+    copy_bytes: int,
+) -> None:
+    result = subprocess.run(
+        [str(host_lifetime_probe), "0", "0", route, str(int(angular_schedule))],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"{output_channels} {copy_count} {copy_bytes}"
+
+
 def test_preparation_staging_outlives_the_stream_draining_owner() -> None:
     source = (ROOT / "src/scf/cuda/direct_coulomb.cpp").read_text()
     body = source.split(
@@ -183,10 +218,12 @@ using cudaError_t = int;
 using cudaStream_t = int;
 constexpr int cudaSuccess=0, cudaErrorInvalidValue=1, cudaMemcpyDeviceToHost=2;
 int step=0, fail_step=0, syncs=0; bool throw_error=false;
-unsigned source_count=2, submitted_copies=0;
+unsigned source_count=2, submitted_copies=0, traced_channels=0;
+std::size_t submitted_bytes=0;
+void* force_buffer=nullptr;
 bool tracking=false, pending=false, freed_pending=false;
 void* watched[32]{}; unsigned watched_count=0; bool split=false;
-bool density_fixture=false, angular_schedule=false;
+bool density_fixture=false, angular_schedule=false, separate_sources=true;
 unsigned full_calls=0, range_calls=0, fused_calls=0, angular_calls=0;
 void* operator new(std::size_t n) {
   void* p=std::malloc(n);
@@ -207,20 +244,24 @@ int operation() {
 }
 struct Copy {void* dst; double values[9]; std::size_t bytes;};
 Copy copies[3]{}; unsigned copy_count=0;
+std::size_t expected_device_bytes() {
+  return (split ? (submitted_copies==0 ? 6U : 3U) : 3*source_count)*sizeof(double);
+}
 int cudaMemsetAsync(void* dst,int value,std::size_t n,cudaStream_t) {
   int error=operation(); if(error) return error;
+  if(dst==force_buffer && n!=expected_device_bytes())
+    throw std::runtime_error("wrong force reset bytes");
   std::memset(dst,value,n); return cudaSuccess;
 }
 int cudaGetLastError() { return operation(); }
 int cudaMemcpyAsync(void* dst,const void* src,std::size_t n,int,cudaStream_t) {
   int error=operation(); if(error) return error;
-  const auto expected=(split ? (submitted_copies==0 ? 6U : 3U) : 3*source_count)*sizeof(double);
-  if(n!=expected || copy_count>=1U)
+  if(n!=expected_device_bytes() || copy_count>=1U)
     throw std::runtime_error("bad copy");
   copies[copy_count].dst=dst;
   copies[copy_count].bytes=n;
   std::memcpy(copies[copy_count++].values,src,n);
-  ++submitted_copies; pending=true; return cudaSuccess;
+  ++submitted_copies; submitted_bytes+=n; pending=true; return cudaSuccess;
 }
 int cudaStreamSynchronize(cudaStream_t) {
   ++syncs;
@@ -229,10 +270,23 @@ int cudaStreamSynchronize(cudaStream_t) {
     std::memcpy(copies[i].dst,copies[i].values,copies[i].bytes);
   pending=false; copy_count=0; return cudaSuccess;
 }
+namespace generativeqc::runtime::cuda_trace {
+struct TraceShape {
+  std::size_t systems{}, nbf{}, naux{};
+  bool source_backed{}, streamed{};
+  std::size_t system_offset{};
+};
+struct TraceOperation {
+  TraceOperation(const char*,cudaStream_t,TraceShape) noexcept {}
+};
+void trace_counter(const char* name,std::uint64_t count) noexcept {
+  if(std::strcmp(name,"direct_force_output_channels")==0) traced_channels=count;
+}
+}
 namespace generativeqc::scf::cuda_execution {
 namespace detail { constexpr unsigned kDirectQuartetShellClassCount=1; }
 enum class DirectCoulombRange { Full, Short, Long };
-struct Batch { int total_atoms=1; };
+struct Batch { int total_atoms=1, batch_size=1, nbf=2; };
 struct Shared {
   Batch batch; cudaStream_t stream=1; unsigned worker_blocks=1;
   double screening=0, *shell_bounds=nullptr, *schwarz=nullptr;
@@ -256,14 +310,17 @@ int prepare_generated_exchange_density(GeneratedExchangePlan& plan,bool,const do
 }
 // Independent labelled source values expose both coefficient and force-sign
 // mistakes in the host decomposition, without evaluating any integral kernel.
-void full_sources(double* force,const double* density,double cj,double ck,bool accumulate=false) {
+void full_sources(double* force,const double* density,double cj,double ck,
+                  bool separate,bool accumulate=false) {
+  if(separate!=separate_sources) throw std::runtime_error("wrong full-range source layout");
   const double j=density_fixture ? direct_force_density_coefficient_scaled<true>(
       2,0,0,density,1,1,0,0,cj,0.0) : cj;
   const double k=density_fixture ? direct_force_density_coefficient_scaled<true>(
       2,0,0,density,1,1,0,0,0.0,ck) : ck;
   for(unsigned i=0;i<3;++i) {
     force[i]=(accumulate ? force[i] : 0.0)-j*(1+i);
-    force[3+i]=(accumulate ? force[3+i] : 0.0)-k*(10+i);
+    if(separate) force[3+i]=(accumulate ? force[3+i] : 0.0)-k*(10+i);
+    else force[i]-=k*(10+i);
   }
 }
 void range_source(double* force,const double* density,double ck,bool accumulate=false) {
@@ -275,7 +332,8 @@ template<class... Args> void launch_bounded_shell_energy_derivative(Args&&... ar
   ++full_calls;
   const auto values=std::make_tuple(args...);
   if(std::get<18>(values)!=37) throw std::runtime_error("full range lost borrowed domain");
-  full_sources(std::get<14>(values),std::get<12>(values),std::get<16>(values),std::get<17>(values));
+  full_sources(std::get<14>(values),std::get<12>(values),std::get<16>(values),
+               std::get<17>(values),std::get<19>(values));
 }
 template<class... Args> void launch_bounded_shell_range_exchange_derivative(Args&&... args) {
   ++range_calls;
@@ -293,7 +351,9 @@ template<class... Args> int launch_bounded_shell_angular_energy_derivative(Args&
      (range==DirectCoulombRange::Long && std::get<18>(values)!=0.0))
     throw std::runtime_error("wrong angular radial/source arguments");
   if(std::get<20>(values)!=37) throw std::runtime_error("angular route lost borrowed domain");
-  if constexpr (sizeof...(Args)==22) {
+  bool separate=true;
+  if constexpr (sizeof...(Args)==23) {
+    separate=std::get<22>(values);
     if(range!=DirectCoulombRange::Full || std::get<21>(values)!=41)
       throw std::runtime_error("full-range route lost resident lease");
   } else if(range==DirectCoulombRange::Full)
@@ -309,7 +369,7 @@ template<class... Args> int launch_bounded_shell_angular_energy_derivative(Args&
     if(error!=cudaSuccess) return error;
     if(range==DirectCoulombRange::Full)
       full_sources(std::get<14>(values),std::get<12>(values),
-                   std::get<18>(values)/13.0,std::get<19>(values)/13.0,true);
+                   std::get<18>(values)/13.0,std::get<19>(values)/13.0,separate,true);
     else
       range_source(std::get<14>(values),std::get<12>(values),std::get<19>(values)/13.0,true);
     error=cudaGetLastError();
@@ -336,26 +396,31 @@ int main(int argc,char** argv) {
   throw_error=argc>2 && std::atoi(argv[2]);
   const bool zero_exchange=argc>3 && std::strcmp(argv[3],"rsh_zero")==0;
   split=zero_exchange || (argc>3 && std::strcmp(argv[3],"rsh_split")==0);
-  source_count=(argc>3 && std::strcmp(argv[3],"full_range")!=0) ? 3U : 2U;
+  separate_sources=!(argc>3 && std::strcmp(argv[3],"full_range_combined")==0);
+  const bool full_range=!separate_sources ||
+      !(argc>3 && std::strcmp(argv[3],"full_range")!=0);
+  source_count=full_range ? (separate_sources ? 2U : 1U) : 3U;
   angular_schedule=argc>4 && std::atoi(argv[4]);
   const double cj=argc>5 ? std::strtod(argv[5],nullptr) : 1.0;
   const double cs=argc>6 ? std::strtod(argv[6],nullptr) :
-      (zero_exchange ? 0.0 : (source_count==2 ? -0.5 : -0.1));
+      (zero_exchange ? 0.0 : (full_range ? -0.5 : -0.1));
   const double cl=argc>7 ? std::strtod(argv[7],nullptr) : (zero_exchange ? 0.0 : -0.5);
   density_fixture=argc>8 && std::atoi(argv[8]);
-  const bool want_full=(source_count==2 || split) && (cj!=0.0 || cs!=0.0);
+  const bool want_full=(full_range || split) && (cj!=0.0 || cs!=0.0);
   const bool want_range=split && (cs!=0.0 || cl!=0.0);
   const bool want_fused=source_count==3 && !split;
   const int expected_syncs=want_range ? 2 : 1;
   const auto dispatch_matches = [&]() {
     return full_calls==unsigned(want_full) && range_calls==unsigned(want_range) &&
            fused_calls==unsigned(want_fused) &&
+           traced_channels==(full_range ? source_count : (split ? 2U : 0U)) &&
            angular_calls==(angular_schedule ? unsigned(want_full)+unsigned(want_range) : 0U);
   };
   using namespace generativeqc::scf::cuda_execution;
   Shared shared;
   std::uint32_t pair=0,head=0; unsigned long long cursor=0;
   double force[9]{}, bound=1, density=1;
+  force_buffer=force;
   // The total density is small; the unused same-spin exchange squares overflow.
   double spin_density[]{1.0,1e200,1e200,1.0,1.0,-1e200,-1e200,1.0};
   if(density_fixture && (direct_force_density_coefficient_scaled<true>(
@@ -368,8 +433,12 @@ int main(int argc,char** argv) {
   const auto result_matches = [&]() {
     if(output.size()!=3*source_count) return false;
     for(unsigned i=0;i<3;++i) {
-      if(!std::isfinite(output[i]) || !std::isfinite(output[3+i]) ||
-         std::abs(output[i]-cj*(density_fixture ? 4 : 1)*(1+i))>1e-12 ||
+      const double j=cj*(density_fixture ? 4 : 1)*(1+i);
+      if(!std::isfinite(output[i]) ||
+         std::abs(output[i]-(j+(separate_sources ? 0.0 : cs*(10+i))))>1e-12)
+        return false;
+      if(!separate_sources) continue;
+      if(!std::isfinite(output[3+i]) ||
          std::abs(output[3+i]-(source_count==2 ? cs*(10+i) : -10.0*cs))>1e-12 ||
          (source_count==3 && (!std::isfinite(output[6+i]) ||
           std::abs(output[6+i]-cl*(20+i))>1e-12))) return false;
@@ -377,11 +446,12 @@ int main(int argc,char** argv) {
     return true;
   };
   const auto execute = [&]() {
-    submitted_copies=0; full_calls=0; range_calls=0; fused_calls=0; angular_calls=0;
-    return source_count==2
+    submitted_copies=0; submitted_bytes=0; traced_channels=0;
+    full_calls=0; range_calls=0; fused_calls=0; angular_calls=0;
+    return full_range
         ? execute_generated_full_range_energy_derivatives(
             plan,density_fixture,density_fixture ? spin_density : &density,
-            density_fixture ? spin_density+4 : nullptr,cj,cs,output)
+            density_fixture ? spin_density+4 : nullptr,cj,cs,output,separate_sources)
         : execute_generated_rsh_energy_derivatives(
             plan,density_fixture,density_fixture ? spin_density : &density,
             density_fixture ? spin_density+4 : nullptr,cj,cs,cl,split ? 0.3 : 0.4,output);
@@ -409,5 +479,6 @@ int main(int argc,char** argv) {
      !dispatch_matches() || !result_matches()) {
     std::cerr<<"owner did not recover";return 8;
   }
+  std::cout<<output.size()/3<<" "<<submitted_copies<<" "<<submitted_bytes<<"\n";
 }
 """

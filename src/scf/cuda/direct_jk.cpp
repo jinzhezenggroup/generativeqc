@@ -1652,7 +1652,7 @@ generativeqc_status execute_cuda_direct_energy_derivative_item(CudaDirectJkPlan*
 generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     CudaDirectJkPlan* plan, FockSpin spin, double coulomb_coefficient, double exchange_coefficient,
     const double* density, const double* beta, std::size_t matrix_elements,
-    std::vector<double>& derivatives, std::string& detail) {
+    std::vector<double>& derivatives, std::string& detail, bool separate_sources) {
   if (plan == nullptr || plan->generated_exchange == nullptr ||
       !plan->generated_exchange->force_capability) {
     detail = "prepared Direct owner has no retained shell derivative lease";
@@ -1674,7 +1674,7 @@ generativeqc_status execute_cuda_direct_shell_full_range_derivatives_device(
     direct_jk_check(cudaSetDevice(plan->device_id));
     direct_jk_check(cuda_execution::execute_generated_full_range_energy_derivatives(
         *plan->generated_exchange, unrestricted, density, beta, coulomb_coefficient,
-        exchange_coefficient, derivatives));
+        exchange_coefficient, derivatives, separate_sources));
     direct_jk_finite_result(derivatives);
   });
 }

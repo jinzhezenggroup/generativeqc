@@ -184,8 +184,13 @@ def test_split_hybrid_auto_force_remains_fail_closed(name: str, spin: str) -> No
     ),
 )
 @pytest.mark.parametrize("spin", ("rks", "uks"))
+@pytest.mark.parametrize("force_reduction", ("separate", "combined"))
 def test_public_cuda_global_hybrid_force(
-    name: str, spin: str, precision: str, monkeypatch: pytest.MonkeyPatch
+    name: str,
+    spin: str,
+    precision: str,
+    force_reduction: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from generativeqc import Calculator, GridSpec, KsOptions
     from generativeqc._dft_gradient import StationaryKsState
@@ -195,6 +200,7 @@ def test_public_cuda_global_hybrid_force(
     from test_dft_complete_cuda import no_cpu_derivatives
 
     assert os.environ.get("SLURM_JOB_ID"), "real GPU tests require Slurm"
+    monkeypatch.setenv("GENERATIVEQC_DIRECT_FORCE_REDUCTION", force_reduction)
     atoms = [
         ("H", (0.13, -0.21, -1.3)),
         ("H", (-0.08, 0.16, 0.24)),
@@ -304,10 +310,9 @@ def test_public_cuda_global_hybrid_force(
                 == "prepared-native-complete"
             )
             assert work["stationary_native_integral_sources"] == (
-                "one_electron",
-                "overlap_pulay",
-                "coulomb",
-                "exact_exchange",
+                ("one_electron", "overlap_pulay", "two_electron")
+                if force_reduction == "combined"
+                else ("one_electron", "overlap_pulay", "coulomb", "exact_exchange")
             )
             assert work["stationary_task_executor"]["sources"] == ()
             assert (
