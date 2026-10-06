@@ -17,8 +17,8 @@ from generativeqc_compiler.integral.expr import Expr, Graph
 class GridResponseProgram:
     """Shared scalar primal/JVP roots, independent of runtime or molecule size."""
 
-    graph: object
-    roots: tuple
+    graph: Graph
+    roots: tuple[Expr, ...]
     identity: str
 
     def evaluate(self, **variables: typing.Any) -> typing.Any:
