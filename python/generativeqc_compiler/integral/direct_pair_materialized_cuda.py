@@ -70,7 +70,8 @@ __device__ inline void contract_materialized_direct_pair_fock(
     double* fock, const std::uint64_t* generated_mask,
     MaterializedDirectPairRecurrence<AngularOrder>& shared,
     MaterializedDirectPairWork* work = nullptr, bool coulomb_only = false,
-    bool exchange_only = false, double* checked_components = nullptr) {
+    bool exchange_only = false, double* checked_components = nullptr,
+    bool hf_exchange = false) {
   if (task.first_pair >= batch.total_shell_pairs || task.second_pair >= batch.total_shell_pairs)
     return;
   const auto first_pair = task.first_pair, second_pair = task.second_pair;
@@ -174,7 +175,7 @@ __device__ inline void contract_materialized_direct_pair_fock(
     if (checked_components) checked_components[ordinal] = value[slot];
     if (value[slot] != 0.0)
       accumulate_direct_fock_integral<Unrestricted>(n, physical, spin, density, fock,
-          i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only);
+          i[slot], j[slot], k[slot], l[slot], value[slot], coulomb_only, exchange_only, hf_exchange);
     if (work) atomicAdd(&work->published_components, 1ULL);
   }
 }

@@ -6,7 +6,13 @@
 namespace generativeqc::scf::detail {
 
 /** Value consumer identity; integral recurrence and quartet symmetry are shared. */
-enum class GeneratedFockConsumer : std::uint32_t { HartreeFock = 0, Coulomb = 1, Exchange = 2 };
+enum class GeneratedFockConsumer : std::uint32_t {
+  HartreeFock = 0,
+  Coulomb = 1,
+  Exchange = 2,
+  /** K contribution to an HF Fock matrix, with existing RHF/UHF spin factors. */
+  HartreeFockExchange = 3
+};
 
 /** Stable geometry-cache ABI shared by handwritten and generated kernels. */
 struct GeneratedPrimitivePairData {

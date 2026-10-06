@@ -487,7 +487,9 @@ __device__ __forceinline__ bool {prefix}_stream_survives(
   const auto bd = topology.shell_pair_density_bounds[bd_pair];
   const bool exchange_only =
       topology.fock_consumer ==
-      generativeqc::scf::detail::GeneratedFockConsumer::Exchange;
+      generativeqc::scf::detail::GeneratedFockConsumer::Exchange ||
+      topology.fock_consumer ==
+      generativeqc::scf::detail::GeneratedFockConsumer::HartreeFockExchange;
   double density_bound = exchange_only ? 0.0 : fmax(ab.coulomb, cd.coulomb);
   if constexpr (Unrestricted) {{
     const double exchange_bound = fmax(
@@ -627,7 +629,11 @@ __device__ __forceinline__ void {prefix}_stream_populate_task(
           : (topology.fock_consumer ==
                      generativeqc::scf::detail::GeneratedFockConsumer::Exchange
                  ? kGenerated{class_name}ExchangeConsumerBit
-                 : 0U);
+                 : (topology.fock_consumer ==
+                            generativeqc::scf::detail::GeneratedFockConsumer::HartreeFockExchange
+                        ? kGenerated{class_name}ExchangeConsumerBit |
+                              kGenerated{class_name}CoulombConsumerBit
+                        : 0U));
   task.reversed_shell_pair_mask = reversed_mask | consumer_bit;
 }}
 """
@@ -1278,15 +1284,18 @@ def _scope_profile_identifiers(
 def emit_profile_shard(
     profile: ResolvedProductionProfile,
     selections: Iterable[KernelSelection],
+    *,
+    variant: str = "",
 ) -> str:
     """Emit one architecture-namespaced shard with collision-free symbols."""
 
     items = tuple(selections)
-    identifier = _profile_identifier(profile.target.architecture)
+    identifier = _profile_identifier(profile.target.architecture) + variant
     namespace = f"generativeqc::scf::generated::profile_{identifier}"
     body = [
         f"// Stable AOT shard map version: {_STABLE_AOT_SHARD_MAP_VERSION}\n",
-        _PRODUCTION_PRELUDE,
+        # Alternatives share their incumbent TU's global helper definitions.
+        _PRODUCTION_PRELUDE if not variant else "",
         f"\nnamespace {namespace} {{\n",
     ]
     for selection in items:

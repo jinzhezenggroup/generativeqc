@@ -120,7 +120,7 @@ struct GeneratedCoulombPlan {
   cudaStream_t stream{};
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
-  std::uint64_t class_mask{}, value_class_mask{};
+  std::uint64_t class_mask{}, value_class_mask{}, rys_fock_mask{};
   bool value_capability{true};
   unsigned worker_blocks{};
   double screening{};
@@ -133,6 +133,10 @@ struct GeneratedCoulombPlan {
   ~GeneratedCoulombPlan();
 };
 std::uint64_t present_direct_shell_class_mask(const HostBatch&) { return 1; }
+std::uint64_t requested_rys_mask=1;
+std::uint64_t prepare_direct_fock_rys_mask(bool exchange) {
+  assert(!exchange); return requested_rys_mask;
+}
 bool make_bounded_stream_shell_pair_order(const HostBatch&, std::vector<std::uint32_t>& a,
                                         std::vector<std::uint32_t>& b) {
   a={0,1}; b={0,2}; return true;
@@ -185,11 +189,14 @@ int main(int argc,char** argv) {
   assert(recovered->batch.direct_hermite_convolution==hermite);
   assert(recovered->batch.direct_pair_materialized_values==pair_materialized);
   assert(recovered->batch.direct_pair_materialized_derivatives==pair_derivatives);
+  assert(recovered->rys_fock_mask==1);
   // A prepared owner freezes its policy; only a new owner sees later changes.
   cuda_policy::reachable_policy=reachable ^ 3U;
   cuda_policy::hermite_policy=hermite ^ 3U;
   cuda_policy::pair_materialized_policy=!pair_materialized;
   cuda_policy::pair_derivatives_policy=!pair_derivatives;
+  requested_rys_mask=0;
+  assert(recovered->rys_fock_mask==1);
   assert(recovered->batch.direct_coulomb_reachable==reachable);
   assert(recovered->batch.direct_hermite_convolution==hermite);
   assert(recovered->batch.direct_pair_materialized_values==pair_materialized);
@@ -199,6 +206,8 @@ int main(int argc,char** argv) {
   assert(reselected->batch.direct_hermite_convolution==(hermite ^ 3U));
   assert(reselected->batch.direct_pair_materialized_values==!pair_materialized);
   assert(reselected->batch.direct_pair_materialized_derivatives==!pair_derivatives);
+  assert(reselected->rys_fock_mask==0);
+  assert(recovered->rys_fock_mask==1);
   assert(recovered->batch.direct_coulomb_reachable==reachable);
   assert(recovered->batch.direct_hermite_convolution==hermite);
   assert(recovered->batch.direct_pair_materialized_values==pair_materialized);

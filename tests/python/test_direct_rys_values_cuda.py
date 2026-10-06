@@ -9,9 +9,27 @@ loads a native reference recurrence as its oracle.
 import ctypes
 import os
 from itertools import product
+from pathlib import Path
 
 import numpy as np
 import pytest
+from generativeqc_compiler.integral.production_profile import resolve_production_profile
+from generativeqc_compiler.integral.production_rys_values import (
+    direct_rys_value_candidates,
+)
+
+# Qualify the complete compiled inventory, rather than using the earlier six
+# arithmetic fixtures as a production class allowlist.
+CLASSES = tuple(
+    item.spec.name
+    for item in direct_rys_value_candidates(
+        resolve_production_profile(
+            Path(__file__).resolve().parents[2]
+            / "python/generativeqc_compiler/integral/production_shell_classes.json",
+            "sm_120",
+        )
+    )
+)
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("GENERATIVEQC_RESOURCE_CUDA_TEST") != "1"
@@ -42,7 +60,7 @@ class ShellTask(ctypes.Structure):
     scope="module",
     params=tuple(
         product(
-            ("ppps", "dpss", "ddss", "pppp", "ddpp", "dddp"),
+            CLASSES,
             ("cartesian", "coincident", "reversed_pairs"),
         )
     ),
@@ -71,7 +89,7 @@ def quartet_case(request: pytest.FixtureRequest) -> tuple:
 
 
 @pytest.mark.parametrize("unrestricted", (False, True))
-@pytest.mark.parametrize("consumer", ("combined", "j", "k"))
+@pytest.mark.parametrize("consumer", ("combined", "j", "k", "hf-k"))
 def test_value_rys_fixed_density_matrices_match_libcint(
     quartet_case: tuple,
     unrestricted: bool,
@@ -95,7 +113,7 @@ def test_value_rys_fixed_density_matrices_match_libcint(
     task.matrix_order = n
     task.shell_pair[:] = (0, 1)
     task.reversed_shell_pair_mask = (
-        fixture.reversed_mask | {"combined": 0, "j": 4, "k": 8}[consumer]
+        fixture.reversed_mask | {"combined": 0, "j": 4, "k": 8, "hf-k": 12}[consumer]
     )
     arrays = [
         cp.asarray(np.frombuffer(bytes(task), dtype=np.uint8)),
@@ -144,7 +162,9 @@ def test_value_rys_fixed_density_matrices_match_libcint(
     j = np.einsum("abcd,cd->ab", eri, fixture.density)
     k = np.stack([np.einsum("acbd,cd->ab", eri, d) for d in density])
     expected = (
-        k
+        -(1.0 if unrestricted else 0.5) * k
+        if consumer == "hf-k"
+        else k
         if consumer == "k"
         else np.repeat(j[None], len(density), axis=0)
         if consumer == "j"
