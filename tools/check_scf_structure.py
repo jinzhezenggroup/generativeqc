@@ -239,6 +239,7 @@ CUDA_MODULES["cuda_direct_queues"] = (
     "direct_bounded_tasks",
     "direct_queue_scan",
     "direct_queue_diagnostics",
+    "direct_warp_queue",
 )
 CUDA_ALLOWED["cuda_direct_queues"] = tuple(
     "scf/cuda/" + stem + "." for stem in CUDA_MODULES["cuda_direct_queues"]
@@ -441,7 +442,10 @@ CUDA_ALLOWED["cuda_direct_consumers"] = (
         "scf/cuda/" + Path(name).stem + ".hpp"
         for name in CUDA_MODULES["cuda_direct_consumers"]
     )
-    + ("scf/cuda_weighted_eri.hpp",)
+    + (
+        "scf/cuda_weighted_eri.hpp",
+        "scf/cuda/direct_warp_queue.cuh",
+    )
 )
 CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_cached_tensor_kernels.hpp",
