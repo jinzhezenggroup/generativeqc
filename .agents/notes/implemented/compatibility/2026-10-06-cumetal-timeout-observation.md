@@ -3,6 +3,11 @@
 Status: implemented
 Date: 2026-10-06
 
+The later [pinned QC quarantine decision](2026-10-06-cumetal-qc-quarantine.md)
+supersedes routine acceptance after the diagnostic identified upstream lowering
+failures and the user authorized temporarily skipping the affected shared-owner
+lane. The diagnostic procedure and historical evidence below remain unchanged.
+
 ## Evidence and boundary
 
 PR #1997 head `de9eebb88be4d7ded840a35541daff2ce43a7a44` selected

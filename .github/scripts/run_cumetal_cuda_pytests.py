@@ -1,18 +1,21 @@
 """Run bounded CuMetal-backed QC CUDA tests on the Apple GPU.
 
-Routine CI exercises a small representative endpoint set. Scheduled/manual
-qualification runs a broader explicit CuMetal-compatible manifest. Keep the
+Routine CI selects a small representative endpoint set. Scheduled/manual
+qualification selects a broader explicit CuMetal-compatible manifest. Keep the
 manifest explicit: NVIDIA-only/Slurm-only tests must never be counted as CuMetal
 coverage, and adding every CUDA-named source test would make this lane both slow
 and misleading.
 
 Every selected pytest invocation must execute at least one Apple-GPU dispatch.
-Skips, empty selections, missing provenance, per-test timeouts, and exhaustion of
-the whole-suite time budget are failures.
+Unexpected skips, empty selections, missing provenance, per-test timeouts, and
+exhaustion of the whole-suite time budget are failures. An explicit, pin-bound
+upstream quarantine records only its exact endpoint groups as unqualified skips;
+without that opt-in, all selected endpoints retain the strict acceptance gate.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import subprocess
@@ -22,6 +25,9 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+QUARANTINE_MANIFEST = (
+    Path(__file__).resolve().parents[2] / "manifests/cumetal_qc_quarantine.json"
+)
 MODE = os.environ.get("CUMETAL_CUDA_TEST_MODE", "gate").strip().lower()
 TIMEOUT_SECONDS = int(os.environ.get("CUMETAL_CUDA_TEST_TIMEOUT_SECONDS", "90"))
 SUITE_BUDGET_SECONDS = int(
@@ -65,6 +71,65 @@ def selected_nodeids() -> list[str]:
     if MODE == "full":
         return list(QUALIFICATION_NODEIDS)
     raise SystemExit(f"unsupported CUMETAL_CUDA_TEST_MODE={MODE!r}")
+
+
+def quarantine() -> tuple[set[str], str]:
+    """Admit only the reviewed provider contract and exact endpoint allowlist."""
+    requested = os.environ.get("CUMETAL_CUDA_QUARANTINE", "")
+    if not requested:
+        return set(), ""
+    manifest = json.loads(QUARANTINE_MANIFEST.read_text(encoding="utf-8"))
+    if requested != manifest["id"]:
+        raise SystemExit(f"unknown CuMetal QC quarantine: {requested!r}")
+    for variable, field in (
+        ("CUMETAL_COMMIT", "provider_commit"),
+        ("CUMETAL_PTX_BACKEND", "ptx_backend"),
+        ("CUMETAL_FP64_MODE", "fp64_mode"),
+    ):
+        if os.environ.get(variable) != manifest[field]:
+            raise SystemExit(
+                f"CuMetal QC quarantine contract changed: {variable}; "
+                "revisit the quarantine and qualify the actual endpoints"
+            )
+    if not os.environ.get("CUMETAL_ROOT"):
+        raise SystemExit("CuMetal QC quarantine requires CUMETAL_ROOT")
+    nodes = manifest["nodeids"]
+    if (
+        not isinstance(nodes, list)
+        or not nodes
+        or not all(isinstance(node, str) for node in nodes)
+        or len(set(nodes)) != len(nodes)
+        or not set(nodes).issubset(QUALIFICATION_NODEIDS)
+        or not isinstance(manifest["reason"], str)
+        or not manifest["reason"].strip()
+    ):
+        raise SystemExit("invalid exact CuMetal QC quarantine manifest")
+    return set(nodes), f"{requested}: {manifest['reason']}"
+
+
+def record_quarantine(junit: Path, nodeid: str, reason: str) -> None:
+    """Report a skipped endpoint group without manufacturing executed testcases."""
+    suite = ET.Element(
+        "testsuite", name="CuMetal QC quarantine", tests="1", skipped="1"
+    )
+    case = ET.SubElement(suite, "testcase", name=nodeid, classname="cumetal.quarantine")
+    ET.SubElement(case, "skipped", message=reason)
+    ET.ElementTree(suite).write(junit, encoding="utf-8", xml_declaration=True)
+    print(f"::warning::QUARANTINED (QC NOT QUALIFIED): {nodeid}: {reason}", flush=True)
+
+
+def report_quarantine(nodeids: list[str], reason: str) -> None:
+    if not nodeids:
+        return
+    summary = (
+        f"CuMetal QC NOT QUALIFIED: {len(nodeids)} endpoint groups quarantined.\n"
+        "Native build/runtime smoke evidence does not qualify these QC endpoints.\n"
+        f"Reason: {reason}\n" + "".join(f"- SKIPPED: {nodeid}\n" for nodeid in nodeids)
+    )
+    print(summary, flush=True)
+    if github_summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(github_summary, "a", encoding="utf-8") as output:
+            output.write(summary + "\n")
 
 
 def stream_process(
@@ -132,6 +197,7 @@ def junit_status(path: Path) -> tuple[int, list[str], list[str]]:
 
 def main() -> None:
     nodeids = selected_nodeids()
+    quarantined, quarantine_reason = quarantine()
     started = time.monotonic()
     print(
         f"Running CuMetal CUDA mode={MODE}: {len(nodeids)} endpoint groups; "
@@ -139,8 +205,16 @@ def main() -> None:
         flush=True,
     )
     failures: list[str] = []
+    skipped_nodeids: list[str] = []
+    executed = 0
 
     for index, nodeid in enumerate(nodeids):
+        junit = Path(f"/tmp/generativeqc-cuda-test-{index}.xml")
+        junit.unlink(missing_ok=True)
+        if nodeid in quarantined:
+            record_quarantine(junit, nodeid, quarantine_reason)
+            skipped_nodeids.append(nodeid)
+            continue
         elapsed = time.monotonic() - started
         remaining = int(SUITE_BUDGET_SECONDS - elapsed)
         if remaining <= 0:
@@ -155,8 +229,6 @@ def main() -> None:
             f"\n::group::CUDA pytest {index + 1}/{len(nodeids)}: {nodeid}",
             flush=True,
         )
-        junit = Path(f"/tmp/generativeqc-cuda-test-{index}.xml")
-        junit.unlink(missing_ok=True)
         command = [
             sys.executable,
             "-m",
@@ -172,6 +244,7 @@ def main() -> None:
             f"--junitxml={junit}",
         ]
         return_code, _output, timed_out = stream_process(command, timeout)
+        executed += 1
         cases, skipped, missing_provenance = junit_status(junit)
         failure: str | None = None
         if timed_out:
@@ -202,6 +275,7 @@ def main() -> None:
         if failure is not None and MODE == "gate":
             break
 
+    report_quarantine(skipped_nodeids, quarantine_reason)
     if failures:
         print("\nCUDA test failures:", file=sys.stderr)
         for failure in failures:
@@ -210,7 +284,8 @@ def main() -> None:
 
     elapsed = time.monotonic() - started
     print(
-        f"\nExecuted {len(nodeids)} CuMetal CUDA endpoint groups with zero skips "
+        f"\nExecuted {executed} CuMetal CUDA endpoint groups with zero unexpected skips; "
+        f"{len(skipped_nodeids)} quarantined (not qualified) "
         f"in {elapsed:.1f}s"
     )
 
