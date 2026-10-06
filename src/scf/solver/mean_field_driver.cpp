@@ -70,7 +70,7 @@ class ExactIncrementalDirectJk {
                            IncrementalDirectJkDiagnostic& diagnostic)
       : plan_(plan),
         policy_(resolve_incremental_direct_jk_policy(
-            options, {incremental_direct_jk_exact_eligible(plan.strategy()), false, false})),
+            options, {direct_jk_incremental_exact_eligible(plan.strategy()), false, false})),
         diagnostic_(diagnostic) {
     diagnostic_.requested = policy_.requested;
     diagnostic_.active = policy_.active;
@@ -79,7 +79,7 @@ class ExactIncrementalDirectJk {
   DirectJkMatrices build(const Matrix& density, const Matrix& beta = {}) {
     if (!diagnostic_.active) return plan_.build(density, beta);
     const runtime::CpuRetainedCapacity anchor_capacity(numeric_capacity());
-    if (incremental_direct_jk_requires_full_build(anchored_, delta_updates_since_full_, policy_)) {
+    if (direct_jk_incremental_requires_full_build(anchored_, delta_updates_since_full_, policy_)) {
       const bool refresh = anchored_;
       auto current = plan_.build(density, beta);
       anchor_density_ = density;
