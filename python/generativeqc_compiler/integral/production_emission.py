@@ -1210,7 +1210,11 @@ def emit_production_shard(
                 capabilities=selection.capabilities,
             )
         )
-        body.append(_launch_wrapper(selection.spec))
+        if (
+            KernelConsumer.FORCE in integral.consumers
+            or not integral.recurrence.startswith("rys")
+        ):
+            body.append(_launch_wrapper(selection.spec))
         if KernelConsumer.FOCK in selection.consumers:
             body.append(_fock_launch_wrapper(selection.spec))
             if selection.has_capability(CAPABILITY_MIXED_FOCK):
@@ -1315,7 +1319,11 @@ def emit_profile_shard(
             _scope_profile_identifiers(force_symbol, selection, identifier),
             force_symbol,
         )
-        body.append(force_wrapper)
+        if (
+            KernelConsumer.FORCE in selection.consumers
+            or not selection.recurrence.startswith("rys")
+        ):
+            body.append(force_wrapper)
         if KernelConsumer.FOCK in selection.consumers:
             fock_symbol = f"{force_symbol}_fock"
             fock_wrapper = _scope_profile_identifiers(

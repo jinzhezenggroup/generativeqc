@@ -12,6 +12,7 @@ from ..rys import (
     emit_rys3_roots_cuda,
     emit_rys4_roots_cuda,
     emit_rys5_roots_cuda,
+    emit_rys_hrr_state_cuda,
 )
 from .common import _emitted_component_names, _generic_task_component_setup
 
@@ -177,6 +178,7 @@ def _emit_rys_component_lane_force_consumer_cuda(
   }}"""
         )
     recovered_atomic_code = "\n".join(recovered_atomic_blocks)
+    hrr_state_cuda = emit_rys_hrr_state_cuda(nroots, bra_extent, ket_extent)
     return (
         roots_cuda
         + f"""
@@ -215,38 +217,7 @@ struct GeneratedDppp{class_tag}Axis {{
 {axis_fourth_field}
 }};
 
-__device__ __forceinline__ double generated_dppp_{symbol_tag}_ket_hrr(
-    const volatile double (&trr)[{bra_extent}][{ket_extent}], unsigned a,
-    unsigned c, unsigned d,
-    double cd) {{
-  const double base = trr[a][c];
-  return d == 0U ? base : trr[a][c + 1U] - cd * base;
-}}
-
-__device__ __forceinline__ double generated_dppp_{symbol_tag}_state(
-    const volatile double (&trr)[{bra_extent}][{ket_extent}], unsigned a,
-    unsigned b, unsigned c,
-    unsigned d, double ab, double cd) {{
-  const double base = generated_dppp_{symbol_tag}_ket_hrr(
-      trr, a, c, d, cd);
-  if (b == 0U) return base;
-  const double raised = generated_dppp_{symbol_tag}_ket_hrr(
-      trr, a + 1U, c, d, cd);
-  if (b == 1U) return raised - ab * base;
-  const double raised_twice = generated_dppp_{symbol_tag}_ket_hrr(
-      trr, a + 2U, c, d, cd);
-  if (b == 2U) {{
-    return raised_twice - 2.0 * ab * raised + ab * ab * base;
-  }}
-  // A d shell on the second center needs b=3 only for its raised first
-  // derivative. The exact shell bound keeps a+3 inside the addressed TRR
-  // table without introducing a runtime HRR loop.
-  const double raised_thrice = generated_dppp_{symbol_tag}_ket_hrr(
-      trr, a + 3U, c, d, cd);
-  return raised_thrice - 3.0 * ab * raised_twice +
-      3.0 * ab * ab * raised - ab * ab * ab * base;
-}}
-
+{hrr_state_cuda}
 /**
  * Evaluate all one-axis values required for the requested center derivatives.
  *

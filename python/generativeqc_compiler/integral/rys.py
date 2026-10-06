@@ -267,6 +267,49 @@ def build_ppps_rys_force_program() -> RysForceProgram:
     return build_rys_force_program(FUSED_SHELL_SPEC_BY_NAME["ppps"])
 
 
+def emit_rys_hrr_state_cuda(nroots: int, bra_extent: int, ket_extent: int) -> str:
+    """Emit the shared runtime-indexed HRR decoder for value and force axes.
+
+    Callers own the exact TRR bounds. This decoder covers b <= 3 and d <= 1;
+    the additional bra state is used by a raised second-center d derivative.
+    Value plans supply smaller bounds and never request that derivative state.
+    """
+
+    symbol_tag = f"rys{nroots}"
+    return f"""__device__ __forceinline__ double generated_dppp_{symbol_tag}_ket_hrr(
+    const volatile double (&trr)[{bra_extent}][{ket_extent}], unsigned a,
+    unsigned c, unsigned d,
+    double cd) {{
+  const double base = trr[a][c];
+  return d == 0U ? base : trr[a][c + 1U] - cd * base;
+}}
+
+__device__ __forceinline__ double generated_dppp_{symbol_tag}_state(
+    const volatile double (&trr)[{bra_extent}][{ket_extent}], unsigned a,
+    unsigned b, unsigned c,
+    unsigned d, double ab, double cd) {{
+  const double base = generated_dppp_{symbol_tag}_ket_hrr(
+      trr, a, c, d, cd);
+  if (b == 0U) return base;
+  const double raised = generated_dppp_{symbol_tag}_ket_hrr(
+      trr, a + 1U, c, d, cd);
+  if (b == 1U) return raised - ab * base;
+  const double raised_twice = generated_dppp_{symbol_tag}_ket_hrr(
+      trr, a + 2U, c, d, cd);
+  if (b == 2U) {{
+    return raised_twice - 2.0 * ab * raised + ab * ab * base;
+  }}
+  // A d shell on the second center needs b=3 only for its raised first
+  // derivative. The exact shell bound keeps a+3 inside the addressed TRR
+  // table without introducing a runtime HRR loop.
+  const double raised_thrice = generated_dppp_{symbol_tag}_ket_hrr(
+      trr, a + 3U, c, d, cd);
+  return raised_thrice - 3.0 * ab * raised_twice +
+      3.0 * ab * ab * raised - ab * ab * ab * base;
+}}
+"""
+
+
 def boys_values(argument: float, count: int) -> tuple[float, ...]:
     """Return a stable reference Boys sequence for code-generation tests."""
 
