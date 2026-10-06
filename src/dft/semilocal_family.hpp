@@ -228,8 +228,7 @@ constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) 
   return semilocal_family_metadata(family).incremental_xc;
 }
 
-constexpr bool semilocal_family_supports_stationary_second_order(
-    SemilocalFamily family) noexcept {
+constexpr bool semilocal_family_supports_stationary_second_order(SemilocalFamily family) noexcept {
   return semilocal_family_metadata(family).stationary_second_order;
 }
 
