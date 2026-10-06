@@ -22,3 +22,4 @@ def test_legacy_xc_gradient_cuda_owner_is_not_a_production_build_input() -> None
     assert "emit_native_geometry_cuda" not in geometry
     assert "geometry_kernel<<<1, workers" not in geometry
     assert not (ROOT / "tools/generate_xc_gradient_cuda.py").exists()
+    assert not (ROOT / "docs/cuda_ownership/generated/xc_gradient.json").exists()
