@@ -119,9 +119,17 @@ generic CUDA path is an intentional build choice.
 
 ## Compiler cache, generated shards, and compile units
 
-Builds automatically use `sccache` or `ccache` when either is on `PATH`.
-Override this with `-DGENERATIVEQC_COMPILER_CACHE=off` or an explicit
-executable.
+Builds automatically prefer `sccache` and fall back to `ccache` when either
+is on `PATH`. Runtime JIT compilation uses the same precedence on artifact
+cache misses and refuses to start an uncached compiler process. The easiest
+Python/JIT setup is `python -m pip install 'generativeqc[compiler-cache]'`
+(or `python -m pip install sccache` in an existing environment). An already
+valid JIT artifact can replay without either launcher because no compilation is
+performed.
+
+Override native CMake builds with `-DGENERATIVEQC_COMPILER_CACHE=off` or an
+explicit executable. That CMake-only escape hatch does not weaken the runtime
+JIT requirement.
 
 Generated CUDA is split into eight stable shards by default. Tune this with
 `-DGENERATIVEQC_AOT_SHARDS=N` when local compile parallelism or memory is

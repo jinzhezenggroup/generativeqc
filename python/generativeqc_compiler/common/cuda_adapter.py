@@ -11,6 +11,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .compiler_cache import cached_compiler_command
 from .compiler_process import CompileResult as CudaCompileResult
 from .compiler_process import run_compiler
 
@@ -120,7 +121,9 @@ class CudaCompilerAdapter:
 
     def _run_compiler(self, command: list[str]) -> CudaCompileResult:
         """Bound NVCC and every child for either object or shared-library builds."""
-        return run_compiler(command, self.compile_timeout, label="NVCC")
+        return run_compiler(
+            cached_compiler_command(command), self.compile_timeout, label="NVCC"
+        )
 
     def link(
         self,
@@ -136,8 +139,9 @@ class CudaCompilerAdapter:
         """Link compiled candidates and the target-probing driver."""
 
         return subprocess.run(
-            [
-                str(self.nvcc),
+            cached_compiler_command(
+                [
+                    str(self.nvcc),
                 f"-std={standard}",
                 f"-arch={self.target.architecture}",
                 "-O3",
@@ -145,9 +149,10 @@ class CudaCompilerAdapter:
                 str(driver),
                 *(str(item) for item in objects),
                 *options,
-                "-o",
-                str(executable),
-            ],
+                    "-o",
+                    str(executable),
+                ]
+            ),
             check=False,
             capture_output=True,
             text=True,

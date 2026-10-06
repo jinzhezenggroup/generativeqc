@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .backend import TargetInfo
+from .compiler_cache import cached_compiler_command
 from .compiler_process import CompileResult, run_compiler
 
 
@@ -74,8 +75,9 @@ class CppCompilerAdapter:
         if not sources:
             raise ValueError("shared-library compilation requires at least one source")
         return run_compiler(
-            [
-                str(self.cxx),
+            cached_compiler_command(
+                [
+                    str(self.cxx),
                 "-std=c++17",
                 "-O3",
                 "-shared",
@@ -84,9 +86,10 @@ class CppCompilerAdapter:
                 *options,
                 *(str(source) for source in sources),
                 *(f"-l{name}" for name in libraries),
-                "-o",
-                str(output),
-            ],
+                    "-o",
+                    str(output),
+                ]
+            ),
             self.compile_timeout,
             label="C++",
         )
