@@ -62,7 +62,7 @@ def _profile(**updates: object) -> QualifiedForceActiveAoProfile:
 def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> None:
     assert tuple(
         profile.profile_id for profile in QUALIFIED_FORCE_ACTIVE_AO_PROFILES
-    ) == ("sm120-ordinary-rks-second-jet-v2",)
+    ) == ("sm120-ordinary-direct-active-ao-v2",)
 
     below_crossover = resolve_force_active_ao_policy(_workload())
     assert not below_crossover.selected
@@ -75,6 +75,8 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
         _workload(atoms=40, aos=512, grid_points=700_000),
         _workload(atoms=120, aos=960, grid_points=3_000_000),
         _workload(atoms=200, aos=384, grid_points=1_179_648),
+        _workload(derivative_order=1, grid_points=1_179_648),
+        _workload(spin_blocks=2, grid_points=1_179_648),
     ):
         decision = resolve_force_active_ao_policy(workload)
         assert decision.selected
@@ -87,8 +89,6 @@ def test_production_auto_policy_uses_dense_work_crossover_not_size_window() -> N
     "updates",
     [
         {"architecture": "sm_90", "grid_points": 1_179_648},
-        {"derivative_order": 1, "grid_points": 1_179_648},
-        {"spin_blocks": 2, "grid_points": 1_179_648},
         {"composition": "composite", "grid_points": 1_179_648},
         {"density_fitted": True, "grid_points": 1_179_648},
         {"grid_points": 1_179_647},
