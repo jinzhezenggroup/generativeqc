@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -56,6 +57,67 @@ ld.lld: error: undefined symbol: cublasDgemm_v2
     assert cudart is not None and cudart.name == "cudart"
     assert provider_for_symbol("cublasLtMatmul") is None
     assert provider_for_symbol("ordinary_missing_symbol") is None
+
+
+def test_truncated_diagnostics_discover_more_than_three_batches() -> None:
+    required = {f"cudaProbe{index:03d}" for index in range(61)}
+    compiled: set[str] = set()
+
+    def compile_trampolines(*, symbols: dict[str, set[str]], **_: object) -> list[str]:
+        compiled.update(symbols["cudart"])
+        return ["generated-trampolines.o"]
+
+    def link(command: list[str]) -> subprocess.CompletedProcess[str]:
+        missing = sorted(required - compiled)
+        diagnostics = "".join(
+            f"ld.lld: error: undefined symbol: {symbol}\n" for symbol in missing[:20]
+        )
+        if len(missing) > 20:
+            diagnostics += "ld.lld: error: too many errors emitted, stopping now\n"
+        return subprocess.CompletedProcess(command, int(bool(missing)), "", diagnostics)
+
+    with (
+        patch("tools.link_cuda_implib._run", side_effect=link) as run,
+        patch(
+            "tools.link_cuda_implib._compile_trampolines",
+            side_effect=compile_trampolines,
+        ),
+    ):
+        status = link_with_auto_implib(
+            command=["c++"],
+            cc="cc",
+            implib_root=ROOT / "cmake/3rdparty/implib",
+            work_dir=Path("unused"),
+            target="x86_64",
+        )
+
+    assert status == 0
+    assert compiled == required
+    assert run.call_count == 5
+
+
+def test_symbol_discovery_stops_when_link_failure_makes_no_progress() -> None:
+    failure = subprocess.CompletedProcess(
+        ["c++"], 1, "", "ld.lld: error: undefined symbol: cudaDeviceSynchronize\n"
+    )
+    with (
+        patch("tools.link_cuda_implib._run", return_value=failure) as run,
+        patch(
+            "tools.link_cuda_implib._compile_trampolines",
+            return_value=["generated-trampolines.o"],
+        ) as compile_trampolines,
+    ):
+        status = link_with_auto_implib(
+            command=["c++"],
+            cc="cc",
+            implib_root=ROOT / "cmake/3rdparty/implib",
+            work_dir=Path("unused"),
+            target="x86_64",
+        )
+
+    assert status == 1
+    assert run.call_count == 2
+    assert compile_trampolines.call_count == 1
 
 
 def test_linker_driven_implib_retries_without_provider_dependency(
@@ -139,12 +201,6 @@ def test_cmake_launcher_discovers_runtime_import(tmp_path: Path) -> None:
     readelf = shutil.which("readelf")
     if cmake is None or readelf is None:
         pytest.skip("CMake and ELF inspector required")
-    cmake_version_text = subprocess.check_output([cmake, "--version"], text=True)
-    cmake_version = tuple(
-        int(part) for part in cmake_version_text.split()[2].split(".")[:2]
-    )
-    if cmake_version < (4, 1):
-        pytest.skip("CUDA_LINKER_LAUNCHER integration requires CMake 4.1+")
 
     (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
     (tmp_path / "cmake").symlink_to(ROOT / "cmake", target_is_directory=True)
@@ -177,6 +233,69 @@ def test_cmake_launcher_discovers_runtime_import(tmp_path: Path) -> None:
     )
     dynamic = _run(readelf, "-d", str(build / "libprobe.so")).stdout
     assert "Shared library: [libcudart" not in dynamic
+
+
+def test_cuda_only_target_wraps_host_link_and_keeps_device_link(tmp_path: Path) -> None:
+    """Inspect generated commands with an NVIDIA toolchain model, without CUDA."""
+    _implib_target()
+    cmake, ninja, cxx = (shutil.which(name) for name in ("cmake", "ninja", "c++"))
+    if cmake is None or ninja is None or cxx is None:
+        pytest.skip("CMake, Ninja, and a host C++ compiler required")
+
+    (tmp_path / "tools").symlink_to(ROOT / "tools", target_is_directory=True)
+    (tmp_path / "cmake").symlink_to(ROOT / "cmake", target_is_directory=True)
+    (tmp_path / "probe.cu").write_text("int probe() { return 0; }\n")
+    # Supply compiler-identification results so CMake can generate the genuine
+    # NVIDIA CUDA link rules without an installed toolkit. Never execute the
+    # generated CUDA compilation/device-link commands in this host-only test.
+    (tmp_path / "CMakeLists.txt").write_text(
+        "cmake_minimum_required(VERSION 3.24)\n"
+        "project(CudaLinkProbe LANGUAGES C CXX)\n"
+        f'set(Python3_EXECUTABLE "{sys.executable}")\n'
+        f'set(CMAKE_CUDA_COMPILER "{cxx}")\n'
+        "set(CMAKE_CUDA_COMPILER_ID NVIDIA)\n"
+        "set(CMAKE_CUDA_COMPILER_VERSION 12.9.0)\n"
+        "set(CMAKE_CUDA_COMPILER_WORKS TRUE)\n"
+        "set(CMAKE_CUDA_COMPILER_FORCED TRUE)\n"
+        "set(CMAKE_CUDA_COMPILER_ID_RUN TRUE)\n"
+        "set(CMAKE_CUDA_ARCHITECTURES 80)\n"
+        "set(CMAKE_CUDA_RUNTIME_LIBRARY None)\n"
+        'set(CMAKE_CUDA_COMPILER_PRODUCED_OUTPUT "#$ LIBRARIES=-lcudart\\n'
+        '${CMAKE_CXX_COMPILER} dummy.o -lcudart\\n")\n'
+        "enable_language(CUDA)\n"
+        f'include("{ROOT / "cmake/GenerativeQCCudaImplib.cmake"}")\n'
+        "add_library(probe SHARED probe.cu)\n"
+        "set_target_properties(probe PROPERTIES\n"
+        "  CUDA_SEPARABLE_COMPILATION ON CUDA_RESOLVE_DEVICE_SYMBOLS ON)\n"
+        "generativeqc_attach_cuda_implib(probe)\n"
+    )
+    build = tmp_path / "build"
+    _run(
+        cmake,
+        "-G",
+        "Ninja",
+        "-S",
+        str(tmp_path),
+        "-B",
+        str(build),
+        f"-DCMAKE_MAKE_PROGRAM={ninja}",
+    )
+    rules = (build / "CMakeFiles/rules.ninja").read_text()
+    assert "rule CXX_SHARED_LIBRARY_LINKER" in rules
+    assert "rule CXX_SHARED_LIBRARY_DEVICE_LINKER" in rules
+    host_rule = rules.split("rule CXX_SHARED_LIBRARY_LINKER", 1)[1].split("\n\n", 1)[0]
+    device_rule = rules.split("rule CXX_SHARED_LIBRARY_DEVICE_LINKER", 1)[1].split(
+        "\n\n", 1
+    )[0]
+    assert "tools/link_cuda_implib.py" in host_rule
+    assert " -dlink " in device_rule
+    assert "tools/link_cuda_implib.py" not in device_rule
+    graph = (build / "build.ninja").read_text()
+    host_edge = next(
+        line for line in graph.splitlines() if line.startswith("build libprobe.so:")
+    )
+    assert "CMakeFiles/probe.dir/probe.cu.o" in host_edge
+    assert "CMakeFiles/probe.dir/cmake_device_link.o" in host_edge
 
 
 def test_unrelated_undefined_symbol_remains_fatal(tmp_path: Path) -> None:

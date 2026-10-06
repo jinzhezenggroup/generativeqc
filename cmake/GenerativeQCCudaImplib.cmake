@@ -31,10 +31,6 @@ function(generativeqc_attach_cuda_implib target)
   if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "GenerativeQC provider-free CUDA wheels currently require Linux ELF")
   endif()
-  if(CMAKE_VERSION VERSION_LESS 4.1)
-    message(FATAL_ERROR
-      "GenerativeQC CUDA wheels require CMake 4.1+ for CUDA_LINKER_LAUNCHER")
-  endif()
   if(NOT CMAKE_GENERATOR MATCHES "Ninja|Makefiles")
     message(FATAL_ERROR
       "GenerativeQC provider-free CUDA wheels require a Ninja or Makefile generator")
@@ -56,21 +52,18 @@ function(generativeqc_attach_cuda_implib target)
   endif()
 
   # Derive imports from the strict final-link diagnostics instead of maintaining
-  # a hand-written CUDA/cuBLAS/cuSOLVER symbol inventory. Use CMake's supported
-  # per-language linker launcher rather than RULE_LAUNCH_LINK, which CMake
-  # reserves for ctest internals. Setting both launchers lets CMake select the
-  # one matching each target's computed linker language.
-  foreach(_generativeqc_link_language IN ITEMS CXX CUDA)
-    get_target_property(
-      _generativeqc_existing_link_launcher
-      ${target}
-      ${_generativeqc_link_language}_LINKER_LAUNCHER)
-    if(_generativeqc_existing_link_launcher)
-      message(FATAL_ERROR
-        "cannot compose CUDA wheel auto-implib with an existing "
-        "${_generativeqc_link_language}_LINKER_LAUNCHER on ${target}")
-    endif()
-  endforeach()
+  # a hand-written CUDA/cuBLAS/cuSOLVER symbol inventory. NVIDIA CUDA host-link
+  # rules bypass CMake's language linker launchers, so use the supported CXX
+  # final host-link rule even for CUDA-only targets. CUDA source compilation
+  # and separable/device-link settings remain owned by the original target.
+  get_target_property(_generativeqc_existing_link_launcher
+                     ${target} CXX_LINKER_LAUNCHER)
+  if(_generativeqc_existing_link_launcher)
+    message(FATAL_ERROR
+      "cannot compose CUDA wheel auto-implib with an existing "
+      "CXX_LINKER_LAUNCHER on ${target}")
+  endif()
+  set_property(TARGET ${target} PROPERTY LINKER_LANGUAGE CXX)
 
   set(_generativeqc_implib_launcher
       "${PROJECT_SOURCE_DIR}/tools/link_cuda_implib.py")
@@ -88,8 +81,6 @@ function(generativeqc_attach_cuda_implib target)
       --)
   set_property(TARGET ${target} PROPERTY
                CXX_LINKER_LAUNCHER "${_generativeqc_link_launcher}")
-  set_property(TARGET ${target} PROPERTY
-               CUDA_LINKER_LAUNCHER "${_generativeqc_link_launcher}")
 
   generativeqc_ensure_cuda_wheel_import_interface()
   target_link_libraries(${target} PRIVATE generativeqc_cuda_wheel_imports)

@@ -156,12 +156,13 @@ def link_with_auto_implib(
     implib_root: Path,
     work_dir: Path,
     target: str,
-    max_attempts: int = 4,
 ) -> int:
     discovered: dict[str, set[str]] = {}
-    last_failure: subprocess.CompletedProcess[str] | None = None
 
-    for _ in range(max_attempts):
+    # Linkers can truncate diagnostics (lld defaults to 20 errors), so a fixed
+    # retry budget can stop before all imports from these fixed inputs are seen.
+    # Continue only while the finite set of discovered provider symbols grows.
+    while True:
         objects = (
             _compile_trampolines(
                 cc=cc,
@@ -184,21 +185,11 @@ def link_with_auto_implib(
             sys.stderr.write(result.stderr)
             return 0
 
-        last_failure = result
         new_symbols = unresolved_provider_symbols(result.stderr)
         if not _merge(discovered, new_symbols):
             sys.stdout.write(result.stdout)
             sys.stderr.write(result.stderr)
             return result.returncode
-
-    assert last_failure is not None
-    sys.stdout.write(last_failure.stdout)
-    sys.stderr.write(last_failure.stderr)
-    print(
-        "[generativeqc auto-implib] provider symbol discovery did not converge",
-        file=sys.stderr,
-    )
-    return last_failure.returncode
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
