@@ -64,8 +64,8 @@ Agent: dot
 
 The retained public-profile campaign in merged #1934 supersedes the earlier
 empty-registry promotion decision for one structural domain. Production now
-registers `sm120-ordinary-rks-second-jet-v2` for all-electron, Direct,
-ordinary RKS second-jet workloads on `sm_120`.
+registers `sm120-ordinary-direct-active-ao-v2` for ordinary all-electron Direct DFT
+force workloads on `sm_120`.
 
 Admission is deliberately **not** an atom/AO/grid benchmark window. The runtime
 uses the predicted dense contraction work
@@ -80,14 +80,16 @@ continuous cost crossover: a different molecular size or grid shape can match,
 while a nominally large molecule with too little dense work stays dense.
 
 The remaining predicates are genuine execution-capability/resource guards:
-ordinary composition, RKS, second AO jet, Direct/all-electron, `sm_120`, fixed
-256-point tiles, at least 512 MiB device and 256 MiB host force budgets, and the
-current 2048-AO implementation capacity. The profile keeps the measured
+ordinary composition, Direct/all-electron, `sm_120`, supported AO jet orders
+1/2 and RKS/UKS spin layouts, fixed 256-point tiles, at least 512 MiB device and
+256 MiB host force budgets, and the current 2048-AO implementation capacity. The profile keeps the measured
 `1e-16` sampled-jet cutoff and a 16 MiB resident-map cache allowance.
 
-No functional or molecule name appears in the selector. UKS, first-jet,
-composite, DF, ECP, another architecture/tile policy, insufficient resources,
-or work below the crossover remains dense. Future evidence should refine this
+No functional or molecule name appears in the selector. Independent CUDA
+correctness coverage already exercises LDA/PBE/PBE0, RKS/UKS and AO jet orders
+1/2 through the same resident-map consumer. Composite, DF, ECP, another
+architecture/tile policy, insufficient resources, or work below the crossover
+remains dense. Future evidence should refine this
 cost model or qualify additional capabilities rather than adding benchmark-shape
 ranges.
 
