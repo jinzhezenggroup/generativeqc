@@ -9,6 +9,11 @@ from ..cuda_schedule import (
 )
 from ..rys import (
     build_rys_force_program,
+    emit_rys2_roots_cuda,
+    emit_rys3_roots_cuda,
+    emit_rys4_roots_cuda,
+    emit_rys5_roots_cuda,
+    emit_rys_hrr_state_cuda,
 )
 from .common import _emitted_component_names, _generic_task_component_setup
 
@@ -22,6 +27,68 @@ if TYPE_CHECKING:
     )
 
 
+def emit_rys_value_support_cuda(spec: ShellClassSpec, integral: IntegralIR) -> str:
+    """Own roots, geometry and HRR for a derivative-free Direct Fock plan.
+
+    Strict tables are shared with existing compiler value lowerings. There is
+    no force-program dependency, and addressed TRR bounds contain only values.
+    Production admission and resource qualification remain separate decisions.
+    """
+
+    if integral.spec != spec or integral.derivative is not None:
+        raise ValueError("Rys value support requires the matching value-only IR")
+    nroots = integral.required_rys_roots
+    emitters = {
+        2: emit_rys2_roots_cuda,
+        3: emit_rys3_roots_cuda,
+        4: emit_rys4_roots_cuda,
+        5: emit_rys5_roots_cuda,
+    }
+    if nroots not in emitters or integral.recurrence != f"rys{nroots}":
+        raise ValueError(
+            "Rys value support requires an exact two- through five-root IR"
+        )
+    roots = emitters[nroots](
+        symbol_prefix=f"generated_dppp_rys{nroots}", high_accuracy=True
+    )
+    fields = "\n".join(
+        f"  double {field};"
+        for field in (
+            "p",
+            "q",
+            "pax",
+            "pay",
+            "paz",
+            "qcx",
+            "qcy",
+            "qcz",
+            "abx",
+            "aby",
+            "abz",
+            "cdx",
+            "cdy",
+            "cdz",
+            "dx",
+            "dy",
+            "dz",
+            "primitive_prefactor",
+        )
+    )
+    hrr = emit_rys_hrr_state_cuda(
+        nroots, sum(spec.angular[:2]) + 1, sum(spec.angular[2:]) + 1
+    )
+    return (
+        roots
+        + f"""
+/** Geometry shared by the component lanes of a value-only primitive quartet. */
+struct GeneratedDpppRys{nroots}Primitive {{
+{fields}
+}};
+
+{hrr}"""
+    )
+
+
 def _emit_rys_component_lane_fock_consumer_cuda(
     spec: ShellClassSpec,
     plan: FusedShellPlan,
@@ -31,19 +98,22 @@ def _emit_rys_component_lane_fock_consumer_cuda(
 ) -> str:
     """Emit fixed-root Rys value contraction with one lane per component.
 
-    The force emitter immediately preceding the Fock source already owns the
-    accepted fixed-root tables, shell-pair geometry, and HRR state helpers.
-    Reusing those definitions here avoids the exponential subset/Wick value
-    contraction for high-angular-momentum classes.  This mirrors GPU4PySCF's
-    fixed-root J/K structure while retaining GenerativeQC's exact screening and
-    canonical Fock scatter conventions.
+    A derivative-free plan owns value support directly. Legacy fused plans can
+    still reuse the preceding force emitter's qualified tables and HRR bounds.
+    Both routes retain the same screening, primitive-pair inputs and canonical
+    RHF/UHF scatter; requesting values never implicitly requests derivatives.
     """
 
     recurrence_integral = (
         plan.kernel.integral if support_integral is None else support_integral
     )
-    program = build_rys_force_program(spec, integral=recurrence_integral)
-    recurrence = f"rys{program.nroots}"
+    force_support = recurrence_integral.derivative is not None
+    nroots = (
+        build_rys_force_program(spec, integral=recurrence_integral).nroots
+        if force_support
+        else recurrence_integral.required_rys_roots
+    )
+    recurrence = f"rys{nroots}"
     if recurrence_integral.recurrence != recurrence:
         raise ValueError(
             f"component-lane Rys Fock for {spec.name} requires {recurrence}"
@@ -55,8 +125,8 @@ def _emit_rys_component_lane_fock_consumer_cuda(
         raise ValueError(
             "component-lane Rys Fock requires one lane per Cartesian component"
         )
-    if program.nroots not in (3, 4):
-        raise ValueError("component-lane Rys Fock supports three or four roots")
+    if nroots not in ((3, 4) if force_support else (2, 3, 4, 5)):
+        raise ValueError("component-lane Rys Fock has no support for this root count")
     if max(spec.angular) > 2 or spec.angular[3] > 1:
         raise ValueError(
             "component-lane Rys Fock currently supports s/p/d shells with "
@@ -65,13 +135,19 @@ def _emit_rys_component_lane_fock_consumer_cuda(
 
     task_component_setup = _generic_task_component_setup(spec)
     component_names = _emitted_component_names(spec)
-    symbol_tag = f"rys{program.nroots}"
-    class_tag = f"Rys{program.nroots}"
-    bra_extent = sum(spec.angular[:2]) + 2
-    ket_extent = sum(spec.angular[2:]) + 2
+    symbol_tag = f"rys{nroots}"
+    class_tag = f"Rys{nroots}"
+    support_order = 2 if force_support else 1
+    bra_extent = sum(spec.angular[:2]) + support_order
+    ket_extent = sum(spec.angular[2:]) + support_order
     task_qualifier = "__noinline__" if spec.angular[1] == 2 else "__forceinline__"
     kernel_qualifier = (
         f"__launch_bounds__(kGeneratedDpppFockBlockThreads, {minimum_blocks_per_sm})"
+    )
+    bounds_comment = (
+        "are inherited from the validated force HRR and include no dynamic bounds."
+        if force_support
+        else "follow the selected value IR and include no dynamic bounds."
     )
 
     def axis_count(center: int, axis: int) -> str:
@@ -98,7 +174,7 @@ __device__ __noinline__ double generated_dppp_{symbol_tag}_value_axis(
     double c0, double cp, double ab, double cd,
     double b10, double b00, double b01, double seed) {{
   // Runtime component ordinals require addressed storage.  The exact extents
-  // are inherited from the validated force HRR and include no dynamic bounds.
+  // {bounds_comment}
   volatile double trr[{bra_extent}][{ket_extent}];
   trr[0][0] = seed;
 #pragma unroll
@@ -138,7 +214,7 @@ __device__ {task_qualifier} void generated_dppp_shell_class_fock_task(
     GeneratedDpppShellTask task;
     GeneratedDpppVec3 positions[4];
     GeneratedDppp{class_tag}Primitive primitive;
-    double roots_weights[{2 * program.nroots}];
+    double roots_weights[{2 * nroots}];
   }};
   __shared__ Shared shared;
   const unsigned lane = threadIdx.x;
@@ -246,7 +322,7 @@ __device__ {task_qualifier} void generated_dppp_shell_class_fock_task(
       if (retained_by_schwarz) {{
         const GeneratedDppp{class_tag}Primitive& primitive = shared.primitive;
 #pragma unroll 1
-        for (unsigned root_index = 0U; root_index < {program.nroots}U;
+        for (unsigned root_index = 0U; root_index < {nroots}U;
              ++root_index) {{
           const double root = shared.roots_weights[2U * root_index];
           const double weighted_root =

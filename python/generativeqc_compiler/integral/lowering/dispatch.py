@@ -39,6 +39,7 @@ from .common import (
     _specialize_dppp_identifiers,
 )
 from .fock import _emit_shell_class_fock_cuda, _emit_shell_class_mixed_fock_cuda
+from .fock_component import emit_rys_value_support_cuda
 from .force_packed import (
     _emit_packed_force_consumer_cuda,
     _emit_scalar_thread_force_consumer_cuda,
@@ -1228,6 +1229,41 @@ void generated_dppp_shell_class_force_uhf_persistent_kernel(
       task_offset, task_count, task_head);
 }}
 """
+    if (
+        plan.kernel.integral.recurrence.startswith("rys")
+        and KernelConsumer.FORCE not in plan.kernel.integral.consumers
+    ):
+        # Keep the shared task/scatter ABI but give a value-only Rys artifact
+        # its own roots and exact TRR bounds. Do not manufacture a derivative
+        # plan or fall back to Cartesian math under this lowering identity.
+        marker = """template <bool Unrestricted>
+__device__ __forceinline__ void generated_dppp_shell_class_force_task("""
+        begin = source.find(marker)
+        if begin < 0:
+            raise RuntimeError("generated force task marker changed unexpectedly")
+        value_plan = (
+            plan
+            if fock_schedule is None
+            else build_fused_shell_plan(
+                spec,
+                integral=plan.kernel.integral,
+                schedule=fock_schedule,
+                target=plan.kernel.target,
+            )
+        )
+        source = source[:begin] + emit_rys_value_support_cuda(
+            spec, plan.kernel.integral
+        )
+        source += _emit_shell_class_fock_cuda(
+            spec, value_plan, honor_schedule_block_threads=True
+        )
+        if CAPABILITY_MIXED_FOCK in selected_capabilities:
+            source += _emit_shell_class_mixed_fock_cuda(spec, value_plan)
+        source = source.replace(
+            "GENERATIVEQC_PAIR_UNROLL",
+            "#pragma unroll" if plan.schedule.unroll_pair_terms else "#pragma unroll 1",
+        )
+        return _specialize_dppp_identifiers(source, spec)
     if (
         plan.schedule.kind == ScheduleKind.COMPONENT_LANES
         and plan.kernel.integral.recurrence.startswith("rys")
