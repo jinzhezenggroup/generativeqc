@@ -93,6 +93,7 @@ bool validate_final_state(const FinalStateIdentity& current, const Matrix& overl
   const double weight = current.model.spec.spin == FockSpin::Restricted ? 2.0 : 1.0;
   const double tolerance = std::min(1e-8, limits.density_tolerance);
   diagnostic.eigenframes.resize(density.size());
+  const bool require_eigen_residual = limits.require_canonicality || !limits.allow_stationary_reuse;
   if (operations) {
     if (!operations->products(current, overlap, hcore, nuclear_energy, density, fock, orbitals,
                               limits, diagnostic, detail))
@@ -102,12 +103,12 @@ bool validate_final_state(const FinalStateIdentity& current, const Matrix& overl
       return false;
     }
     for (const auto& frame : diagnostic.eigenframes)
-      if (!accept_eigen_frame(frame, detail)) return false;
+      if (!accept_eigen_frame(frame, detail, require_eigen_residual)) return false;
   } else {
     for (std::size_t spin = 0; spin < density.size(); ++spin) {
       const auto& frame = orbitals.spins[spin];
       if (!validate_eigen_frame(fock.spins[spin], &overlap, frame.values, frame.vectors, n,
-                                diagnostic.eigenframes[spin], detail))
+                                diagnostic.eigenframes[spin], detail, require_eigen_residual))
         return false;
       const auto reconstructed =
           reference::density_from_orbitals(frame.vectors, n, current.occupied[spin], weight);
@@ -208,9 +209,14 @@ FinalStateSelection select_final_state(
         return result;
       }
       FinalStateDiagnostic diagnostic;
-      const bool valid =
-          frame && validate_final_state(current, overlap, hcore, nuclear_energy, density, physical,
-                                        *frame, limits, diagnostic, result.detail, operations);
+      auto validation_limits = limits;
+      validation_limits.allow_stationary_reuse = limits.allow_stationary_reuse && step == 0 &&
+                                                 frame == candidate && !force_rebuild &&
+                                                 !limits.require_canonicality;
+      const bool valid = frame && validate_final_state(current, overlap, hcore, nuclear_energy,
+                                                       density, physical, *frame, validation_limits,
+                                                       diagnostic, result.detail, operations);
+      const bool stationary_reuse = valid && validation_limits.allow_stationary_reuse;
       const auto materialize = [&] {
         if (std::any_of(physical.spins.begin(), physical.spins.end(),
                         [](const auto& f) { return f.empty(); })) {
@@ -267,7 +273,7 @@ FinalStateSelection select_final_state(
       };
       bool accepted = valid && !(force_rebuild && step == 0) &&
                       diagnostic.energy_change <= limits.energy_tolerance;
-      if (accepted && compute_weighted_density) {
+      if (accepted && compute_weighted_density && !stationary_reuse) {
         runtime::host_trace::Region check("final_state_fixed_point", n);
         ++result.fixed_point_checks;
         if (!solve_physical(true)) return result;

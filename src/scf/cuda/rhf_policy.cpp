@@ -480,6 +480,10 @@ unsigned direct_hermite_convolution_mode() noexcept {
   return std::strcmp(mode, "1") == 0 || std::strcmp(mode, "all") == 0 ? 3 : 0;
 }
 
+bool direct_pair_materialized_values_requested() noexcept {
+  return enabled("GENERATIVEQC_DIRECT_PAIR_MATERIALIZED_VALUES");
+}
+
 bool resident_ppps_bra_requested() noexcept { return enabled("GENERATIVEQC_PPPS_RESIDENT_BRA"); }
 
 bool ppps_signature_bucketing_requested() noexcept {

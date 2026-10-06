@@ -11,7 +11,7 @@ def inventory(
     points: int,
     *,
     backend: str = "cpu",
-    pbe: bool = True,
+    requires_first_ao_derivatives: bool = True,
     spins: int = 1,
 ) -> dict[str, int]:
     item = {
@@ -36,7 +36,7 @@ def inventory(
         item,
         diis_history=8,
         max_iterations=100,
-        pbe=pbe,
+        requires_first_ao_derivatives=requires_first_ao_derivatives,
         backend=backend,
         model=model,
     )
@@ -48,7 +48,7 @@ def test_cache_is_charged_up_to_but_not_above_native_cap(n: int, offset: int) ->
     cap = 64 * 1024 * 1024
     points = cap // (32 * n) + offset
     cached = inventory(n, points)
-    reference = inventory(n, points, pbe=False)
+    reference = inventory(n, points, requires_first_ao_derivatives=False)
     expected = points * n * 32 if points * n * 32 <= cap else 0
     assert cached["ao_grid_cache"] == expected
     # GGA also retains the historical four-jet tile allowance independently.
@@ -59,12 +59,19 @@ def test_cache_is_charged_up_to_but_not_above_native_cap(n: int, offset: int) ->
 
 
 @pytest.mark.parametrize(
-    "backend,pbe,spins",
+    "backend,requires_first_ao_derivatives,spins",
     [("cpu", False, 1), ("cpu", True, 2), ("cuda", True, 1), ("cuda", True, 2)],
 )
 def test_unaffected_routes_do_not_reserve_cpu_rks_cache(
-    backend: str, pbe: bool, spins: int
+    backend: str, requires_first_ao_derivatives: bool, spins: int
 ) -> None:
     assert (
-        inventory(7, 1024, backend=backend, pbe=pbe, spins=spins)["ao_grid_cache"] == 0
+        inventory(
+            7,
+            1024,
+            backend=backend,
+            requires_first_ao_derivatives=requires_first_ao_derivatives,
+            spins=spins,
+        )["ao_grid_cache"]
+        == 0
     )

@@ -33,6 +33,13 @@ struct SemilocalFamilyMetadata {
   bool requires_gradient;
   bool requires_tau;
   bool stationary_ecp_gradient;
+  double cuda_global_hybrid_exact_exchange;
+  bool native_range_exchange;
+  bool native_nonlocal_correlation;
+  bool cuda_nonlocal_correlation;
+  bool molecular_nonlocal_domain;
+  bool incremental_xc;
+  bool stationary_second_order;
   CudaXcFastPathCapabilities cuda_fast_paths;
   std::array<const char*, 4> component_ids;
   std::array<double, 4> component_coefficients;
@@ -51,6 +58,13 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      false,
      false,
      true,
+     -1.0,
+     false,
+     false,
+     false,
+     false,
+     false,
+     true,
      {CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"LDA_X", "LDA_C_PW", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -64,6 +78,13 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      true,
      false,
+     true,
+     0.25,
+     true,
+     true,
+     false,
+     false,
+     true,
      true,
      {CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified, CudaXcCapability::Qualified},
      {"GGA_X_PBE", "GGA_C_PBE", nullptr, nullptr},
@@ -79,6 +100,13 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      true,
      false,
+     -1.0,
+     false,
+     false,
+     false,
+     false,
+     false,
+     false,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::Qualified, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -93,6 +121,13 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      false,
      true,
+     0.2,
+     false,
+     false,
+     false,
+     false,
+     false,
+     false,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"LDA_X", "GGA_X_B88", "LDA_C_VWN_RPA", "GGA_C_LYP"},
      {0.08, 0.72, 0.19, 0.81},
@@ -107,6 +142,13 @@ inline constexpr std::array<SemilocalFamilyMetadata, 5> kSemilocalFamilyMetadata
      true,
      true,
      true,
+     -1.0,
+     true,
+     true,
+     true,
+     true,
+     false,
+     false,
      {CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired, CudaXcCapability::QualificationRequired, CudaXcCapability::Unavailable, CudaXcCapability::QualificationRequired},
      {"MGGA_X_WB97M_V", "MGGA_C_WB97M_V", nullptr, nullptr},
      {1.0, 1.0, 0.0, 0.0},
@@ -158,6 +200,36 @@ constexpr bool semilocal_family_requires_tau(SemilocalFamily family) noexcept {
 
 constexpr bool semilocal_family_has_stationary_ecp_gradient(SemilocalFamily family) noexcept {
   return semilocal_family_metadata(family).stationary_ecp_gradient;
+}
+
+constexpr double semilocal_family_cuda_global_hybrid_exact_exchange(
+    SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).cuda_global_hybrid_exact_exchange;
+}
+
+constexpr bool semilocal_family_supports_range_exchange(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).native_range_exchange;
+}
+
+constexpr bool semilocal_family_supports_nonlocal_correlation(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).native_nonlocal_correlation;
+}
+
+constexpr bool semilocal_family_supports_cuda_nonlocal_correlation(
+    SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).cuda_nonlocal_correlation;
+}
+
+constexpr bool semilocal_family_uses_molecular_nonlocal_domain(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).molecular_nonlocal_domain;
+}
+
+constexpr bool semilocal_family_supports_incremental_xc(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).incremental_xc;
+}
+
+constexpr bool semilocal_family_supports_stationary_second_order(SemilocalFamily family) noexcept {
+  return semilocal_family_metadata(family).stationary_second_order;
 }
 
 inline SemilocalFamily semilocal_family_from_code(std::uint32_t code) {

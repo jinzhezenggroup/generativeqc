@@ -63,21 +63,21 @@ def test_wb97mv_geometry_layout_admits_f_without_spdf_integral_schedule() -> Non
 )
 def test_wb97mv_cuda_named_force_basis_domain(basis: str, expected: bool) -> None:
     """A non-bundled diffuse name must still require an explicit local snapshot."""
-    from generativeqc.ks import cuda_wb97mv_force_basis_eligible
+    from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
-    assert cuda_wb97mv_force_basis_eligible(basis) is expected
+    assert cuda_nonlocal_force_basis_eligible(basis) is expected
 
 
 def test_wb97mv_cuda_local_force_basis_admits_f_but_not_g() -> None:
     """Geometry-only f admission must not expand the generic GPU angular domain."""
     from generativeqc import load_basis
-    from generativeqc.ks import cuda_wb97mv_force_basis_eligible
+    from generativeqc.ks import cuda_nonlocal_force_basis_eligible
 
     basis = load_basis(
         Path(__file__).resolve().parents[2]
         / "benchmarks/results/omol25-wb97mv-20261001/def2-tzvpd-ho.json"
     )
-    assert cuda_wb97mv_force_basis_eligible(basis)
+    assert cuda_nonlocal_force_basis_eligible(basis)
     higher = replace(
         basis,
         elements=tuple(
@@ -93,7 +93,7 @@ def test_wb97mv_cuda_local_force_basis_admits_f_but_not_g() -> None:
             for element in basis.elements
         ),
     )
-    assert not cuda_wb97mv_force_basis_eligible(higher)
+    assert not cuda_nonlocal_force_basis_eligible(higher)
 
 
 def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
@@ -116,7 +116,7 @@ def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
         for node in ast.walk(constructor)
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name) and target.id == "cuda_wb97mv_force"
+            isinstance(target, ast.Name) and target.id == "cuda_nonlocal_force"
             for target in node.targets
         )
     )
@@ -125,10 +125,11 @@ def test_wb97mv_cuda_force_gate_treats_auto_as_scf_component_policy() -> None:
     assert "_precision_mode" not in segment
     for guard in (
         'self._device_name == "cuda"',
-        'self._method_name.startswith("wb97m-v")',
         "not basis_has_ecp",
         "self._ks_options is not None",
-        "cuda_wb97mv_force_basis_eligible(self._basis)",
+        "self._ks_options.execution_plan.nonlocal_correlation is not None",
+        "self._ks_options.has_range_exchange",
+        "cuda_nonlocal_force_basis_eligible(self._basis)",
     ):
         assert guard in segment
 
