@@ -17,6 +17,11 @@ def test_lambda_matrix_defaults_and_explicit_benchmark_selection(
     if not compiler or not cache:
         pytest.skip("requires host C++ and ccache")
     header = (ROOT / "src/methods/df_ccsdt_force.hpp").read_text()
+    triples_header = (ROOT / "src/cc/df_triples.hpp").read_text()
+    assert (
+        "bool parallel_gap_reduction = true, bool include_gap_response = true"
+        in triples_header
+    )
     declaration = (
         "DFCCSDTResult run_df_ccsdt_native("
         + header.split("DFCCSDTResult run_df_ccsdt_native(", 1)[1].split(");", 1)[0]
@@ -117,8 +122,8 @@ int main() {
                                          true,true,true,true,true,8);
   if(!ordinary.primal || !ordinary.lambda || !explicit_matrix.lambda ||
      !ordinary.derived_denominators || !explicit_matrix.derived_denominators ||
-     ordinary.packed_diis || explicit_matrix.packed_diis || ordinary.parallel_gap ||
-     explicit_matrix.parallel_gap || !ordinary.request_gap || !explicit_matrix.request_gap) return 3;
+     ordinary.packed_diis || explicit_matrix.packed_diis || !ordinary.parallel_gap ||
+     !explicit_matrix.parallel_gap || ordinary.request_gap || explicit_matrix.request_gap) return 3;
   if(!default_frame(ordinary.frame) || !default_frame(explicit_matrix.frame)) return 7;
   generativeqc::hf::RHFFrameResponseOptions explicit_frame;
   explicit_frame.orbital_screening_tolerance = 1e-7;
@@ -139,7 +144,8 @@ int main() {
   if(std::array<bool,3>{defaults.primal,defaults.forces,defaults.lambda} !=
      std::array<bool,3>{true,true,true}) return 4;
   if(!default_frame(defaults.frame) || defaults.diis_history != 6 ||
-     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction || !defaults.derived_denominators) return 9;
+     defaults.batch_limit != 8 || defaults.ccsd_batch_limit != 8 || !defaults.reduction ||
+     !defaults.derived_denominators || !defaults.parallel_gap || defaults.request_gap) return 9;
   if(!select(7,matrix).lambda || select(7,scalar).lambda) return 5;
   try { (void)select(7,invalid);return 6; }
   catch(const std::invalid_argument&) {}
@@ -290,9 +296,9 @@ int main() {
     if(result.parallel_gap != (parallel[0]=='1') || result.request_gap != (requested[0]=='1') ||
        result.frame.resident_jk_maximum_bytes || !result.packed_diis) return 32;
     const auto partial_gap = select(20,selected);
-    if(partial_gap.parallel_gap != (parallel[0]=='1') || !partial_gap.request_gap) return 33;
-    const auto legacy_gap = select(19,selected);
-    if(legacy_gap.parallel_gap || !legacy_gap.request_gap) return 34;
+    if(partial_gap.parallel_gap != (parallel[0]=='1') || partial_gap.request_gap) return 33;
+    const auto default_gap = select(19,selected);
+    if(!default_gap.parallel_gap || default_gap.request_gap) return 34;
   }
   for(int index : {19,20}) for(const char* token : {"", "-1", "+1", "2", "1junk", "1.0"}) {
     const char* bad[]{"endpoint","input","output","1","1","1","1","8",

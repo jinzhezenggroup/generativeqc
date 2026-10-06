@@ -52,8 +52,10 @@ struct DFCCSDTResult {
  * response replaces these diagonal sources, so their optional computation
  * does not contribute to molecular forces. Fixed-canonical consumers still
  * request them from the lower-level triples response API.
- * Legacy demand remains the default until complete cold-force qualification
- * passes; these controls must not weaken its numerical acceptance gates.
+ * The complete molecular-force owner defaults to the bounded parallel gap
+ * reduction and omits diagonal gap cotangents because full-Fock response
+ * replaces them. Serial/all-output execution remains available explicitly for
+ * matched validation; neither selector weakens numerical acceptance gates.
  */
 DFCCSDTResult run_df_ccsdt_native(
     runtime::ExecutionContext&, const core::System& orbital, const core::System& auxiliary,
@@ -61,8 +63,8 @@ DFCCSDTResult run_df_ccsdt_native(
     bool df_auxiliary_reduction = true, bool df_matrix_gemm = true, bool lambda_matrix_gemm = true,
     std::size_t lambda_batch_limit = 8, std::size_t ccsd_batch_limit = 8,
     const hf::RHFFrameResponseOptions& frame_options = {}, bool derived_denominators = true,
-    bool packed_diis = false, bool parallel_gap_reduction = false,
-    bool request_triples_gap_cotangents = true);
+    bool packed_diis = false, bool parallel_gap_reduction = true,
+    bool request_triples_gap_cotangents = false);
 
 /** Ordered existing host boundaries for diagnostic bit-pattern comparisons.
  * Empty payloads remain distinguishable through their explicit element counts.

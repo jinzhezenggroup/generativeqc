@@ -741,3 +741,24 @@ infer complete savings by subtracting a different allocation's profiled
 kernel sum. Raw receipts remain ignored under `.artifacts/issue1763-gap/`
 and on n2 under `/data/jzzeng/gap1763-20261006/`; no Release publication is
 authorized or used.
+
+
+### Default-policy correction after repeatability scope split
+
+After separating the large-force repeatability investigation into #2019, the
+default-policy conclusion is corrected: the retained serial-repeat variability
+and the earlier cold-endpoint divergence are not evidence that this PR
+introduced the repeatability problem. In job 2486 the two serial force
+compositions already differ by 4.149791621e-10, while omitted differs from the
+serial repeat by 1.370459302e-10. The fixed-seed physical replay further places
+the dominant observed variability in the pre-existing orbital/nuclear response
+branch rather than the new gap reduction.
+
+Accordingly, the complete molecular-force owner now defaults to the bounded
+parallel gap reduction and does not request the detached epsilon cotangents that
+its mandatory full-Fock response replaces. The fixed-canonical triples API
+continues to request all nine cotangents by default, but uses the bounded
+parallel schedule unless explicitly disabled. Serial/all-output controls remain
+available for matched diagnostics. #2019 retains every historical rejection and
+the unchanged strict force gates independently; it is not a default-promotion
+gate for this compiler-owned reduction.

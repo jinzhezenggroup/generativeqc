@@ -36,14 +36,15 @@ zero derivatives. All nine primal inputs remain validated, uploaded and
 charged, and the original energy/denominator audits remain active. Only a
 consumer supplying the replacement full-Fock response may omit these sources.
 
-For requested epsilon outputs, `parallel_gap_reduction=true` selects a generic
-TensorIR linear-reduction region for virtual dimensions at least four. It
-streams pointwise producers, shares aliased scalar outputs, composes vector
-marginals without intermediate vectors, and uses fixed FP64 warp trees with
-at most 256 scalar partials. Runtime tile counts determine the actual partial
-reservation. The original source-major serial order remains the default and
-explicit comparison path; no floating-point atomics, fast math, FP32 or new CC
-equation is introduced. The graph and schedule have a compiler-visible identity.
+For requested epsilon outputs, the generic TensorIR linear-reduction region is
+the default schedule for virtual dimensions at least four. It streams pointwise
+producers, shares aliased scalar outputs, composes vector marginals without
+intermediate vectors, and uses fixed FP64 warp trees with at most 256 scalar
+partials. Runtime tile counts determine the actual partial reservation.
+`parallel_gap_reduction=false` retains the original source-major serial order
+as an explicit comparison path; no floating-point atomics, fast math, FP32 or
+new CC equation is introduced. The graph and schedule have a compiler-visible
+identity.
 
 `DFGapReductionDiagnostic` reports demand, schedule identity, actual launch count,
 reserved workspace, cumulative intermediate elements and logical value
@@ -218,12 +219,14 @@ Arguments fourteen through seventeen select the true-residual interval, DF Z
 preconditioner, repeated recycling endpoint and packed DIIS. Argument eighteen
 accepts a resident exact J/K byte limit or `auto` to retain its ordinary policy.
 Arguments nineteen and twenty select parallel gap reduction and requested
-epsilon cotangents. Both accept only `0` or `1`; omitted controls currently
-retain serial reduction and all cotangents. Requesting these diagonal sources
-is a matched-work diagnostic control for the complete force owner: its
-full-Fock response replaces them and never adds them to molecular forces.
-Automatic demand promotion still requires complete cold-force acceptance;
-isolated reduction accuracy or a smaller arena does not qualify that change.
+epsilon cotangents. Both accept only `0` or `1`; when omitted, the complete
+force owner now defaults to parallel reduction and omits the diagonal
+cotangents because its full-Fock response replaces them. Passing `0 1`
+restores the original serial/all-output path for matched validation. The
+lower-level fixed-canonical triples API still requests all nine cotangents by
+default, while using the parallel gap schedule unless explicitly disabled.
+The separately tracked large-force repeatability issue is pre-existing and does
+not by itself block these defaults; its strict numerical gates remain unchanged.
 Keep automatic J/K selection and all earlier selectors matched when comparing
 serial/all-output, parallel/all-output and demand-pruned endpoints.
 

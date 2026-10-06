@@ -91,8 +91,8 @@ int main(int argc, char** argv) {
     const bool packed_diis = argc > 17 && selector(17);
     if (argc > 18 && std::string(argv[18]) != "auto")
       frame_options.resident_jk_maximum_bytes = unsigned_argument(18, 0);
-    const bool parallel_gap_reduction = argc > 19 && selector(19);
-    const bool request_triples_gap_cotangents = argc <= 20 || selector(20);
+    const bool parallel_gap_reduction = argc <= 19 || selector(19);
+    const bool request_triples_gap_cotangents = argc > 20 && selector(20);
     double reference_energy_tolerance = 1e-12, reference_density_tolerance = 1e-11;
     if (argc > 21) {
       const std::string token(argv[21]);

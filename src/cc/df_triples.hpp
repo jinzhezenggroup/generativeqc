@@ -96,8 +96,9 @@ DFCudaResult evaluate_df_cuda(std::size_t o, std::size_t v, std::size_t q, const
  * owned CUDA/provider storage and caller_bytes for all other live numeric state.
  * No CPU mathematical fallback or complete ovvv/rank-six tensor is constructed.
  * A one-panel fallback preserves the same equations when three panels do not fit.
- * parallel_gap_reduction opts into the compiler's bounded FP64 reduction tree;
- * false retains the original serial order for independent schedule comparisons.
+ * The compiler's bounded FP64 reduction tree is the default gap schedule;
+ * parallel_gap_reduction=false retains the original serial order for independent
+ * schedule comparisons.
  * include_gap_response=false explicitly omits the epsilon cotangents (empty
  * vectors), their kernels and their workspace. All primal denominator checks
  * remain active. A molecular consumer must instead supply full same-space Fock
@@ -109,7 +110,7 @@ DFCudaResponseResult pullback_df_cuda(
     const double* ovoo, const double* ovov, const double* fov, const double* t1, const double* t2,
     const double* eps_o, const double* eps_v, double denominator_threshold, std::size_t max_bytes,
     int device, std::size_t caller_bytes = 0, std::size_t max_panel_buffers = 3,
-    bool parallel_gap_reduction = false, bool include_gap_response = true);
+    bool parallel_gap_reduction = true, bool include_gap_response = true);
 /** Full oo/vv derivative of the separable triples Fock inverse on CUDA.
  * Fixed j>=k pages vary i and retain cubic X/Y vectors; no same-space energy
  * differences are divided. max_page_rows=0 requests all occupied rows. If they
