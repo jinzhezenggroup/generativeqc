@@ -7,12 +7,12 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "python"), str(ROOT)]
 
 from generativeqc_compiler.common.provenance import canonical_hash
-from generativeqc_compiler.integral.cuda import CudaEmitter
 from generativeqc_compiler.integral.scalar_c import ScalarCEmitter
 from generativeqc_compiler.xc.automatic_semilocal import (
     AUTOMATIC_SCF_DOMAIN,
@@ -72,7 +72,7 @@ def registry_entries() -> tuple[RegistryEntry, ...]:
     return tuple(result)
 
 
-def _point_expression_identity(program: object, policy: object) -> str:
+def _point_expression_identity(program: Any, policy: Any) -> str:
     return canonical_hash(
         {
             "schema": "generativeqc.automatic-libxc-work-point.v1",
@@ -205,6 +205,8 @@ def _point_program_source(entry: RegistryEntry) -> str:
 
 def _cuda_point_program_source(entry: RegistryEntry) -> str:
     """Emit the same work-domain E/vxc program for one CUDA device entry."""
+    from generativeqc_compiler.integral.cuda import CudaEmitter
+
     program = build_bulk_runtime_program(
         entry.name,
         spin="polarized",
