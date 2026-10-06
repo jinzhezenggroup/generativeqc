@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <type_traits>
 
 #include "generated_derivative_cuda_shell_aot.cuh"
@@ -24,6 +25,7 @@
 #include "scf/cuda/direct_queue_profile.cuh"
 #include "scf/cuda/direct_screening.cuh"
 #include "scf/cuda/direct_task_encoding.cuh"
+#include "scf/cuda/direct_warp_queue.cuh"
 #include "scf/cuda/packed_basis.hpp"
 
 namespace generativeqc::scf::cuda_execution {
@@ -39,7 +41,7 @@ namespace generativeqc::scf::cuda_execution {
  * outer domain plus exact work only in surviving blocks.
  */
 template <bool Unrestricted, DirectScreeningPurpose Purpose, bool Force, int FixedAngularOrder = -1,
-          int FixedRadialOperator = -1>
+          int FixedRadialOperator = -1, bool DynamicWarpPull = false>
 __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell_quartet_kernel(
     DeviceBatch batch, double screening_tolerance, const double* shell_pair_bounds,
     const ShellPairDensityBounds* shell_pair_density_bounds, const std::uint32_t* shell_pair_order,
@@ -53,6 +55,11 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     double secondary_exchange_coefficient, bool coulomb_only, bool exchange_only,
     detail::BoundedDirectBlockDomain block_domain = {}) {
   static_assert(FixedAngularOrder < 0 || (Force && FixedAngularOrder <= 12));
+  static_assert(!DynamicWarpPull || (Force && FixedAngularOrder < 0));
+  using WarpStorage = BoundedWarpQueueStorage<DynamicWarpPull,
+                                             detail::kBoundedDirectQueueCapacity,
+                                             detail::kDirectQuartetShellClassCount>;
+  __shared__ WarpStorage warp_queue;
   const auto radial_operator = FixedRadialOperator < 0
                                    ? runtime_radial_operator
                                    : static_cast<DirectRangeOperator>(FixedRadialOperator);
@@ -135,8 +142,11 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
     const std::size_t page_end = block_domain.prefix
                                      ? min(candidate_count, page_begin + indexed_page_candidates)
                                      : candidate_count;
+    // Admission width and warp drain must both follow the actual CTA. Merely
+    // shrinking a launch would silently skip candidates or queued tasks.
+    const unsigned candidate_packet = Force ? blockDim.x : detail::kBoundedDirectQueueCapacity;
     for (std::size_t candidate_begin = page_begin; candidate_begin < page_end;
-         candidate_begin += detail::kBoundedDirectQueueCapacity) {
+         candidate_begin += candidate_packet) {
       if (threadIdx.x == 0) queue_count = 0;
       __syncthreads();
       const std::size_t candidate = candidate_begin + threadIdx.x;
@@ -176,6 +186,7 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
             const std::uint32_t slot = atomicAdd(&queue_count, 1U);
             queue[slot] = {static_cast<std::uint32_t>(first_pair),
                            static_cast<std::uint32_t>(second_pair), 0U};
+            if constexpr (DynamicWarpPull) warp_queue.classes[slot] = shell_class;
             if constexpr (Force) {
               profile_bounded_direct_shell_quartet(batch, queue[slot], profile);
             }
@@ -296,11 +307,21 @@ __global__ __launch_bounds__(kBoundedDirectThreads, 1) void bounded_direct_shell
           }
         }
       }
+      // Admission was published before the scalar drain. Only the integer
+      // index is prepared here; neither tasks nor scientific inputs are copied.
+      if constexpr (DynamicWarpPull) {
+        if (threadIdx.x == 0U) warp_queue.prepare(queue_count);
+      }
       __syncthreads();
 
       if constexpr (FixedAngularOrder < 0 || FixedAngularOrder >= 4) {
-        for (std::uint32_t slot = warp; slot < queue_count;
-             slot += kBoundedDirectThreads / detail::kDirectQuartetThreads) {
+        BoundedWarpTaskCursor<DynamicWarpPull, detail::kBoundedDirectQueueCapacity,
+                              detail::kDirectQuartetShellClassCount>
+            task_cursor(warp, blockDim.x / detail::kDirectQuartetThreads);
+        // Each warp claims a whole task and owns all its tiles until completion.
+        // No other warp can overwrite that task's mutable tile field.
+        for (std::uint32_t slot = task_cursor.next(warp_queue, lane, queue_count);
+             slot < queue_count; slot = task_cursor.next(warp_queue, lane, queue_count)) {
           const ActiveShellQuartetTile base = queue[slot];
           const std::int32_t first_shell = batch.shell_pair_first[base.first_pair];
           const std::int32_t second_shell = batch.shell_pair_second[base.first_pair];
@@ -505,6 +526,31 @@ void launch_bounded_direct_shell_quartet_kernel_scaled(
     detail::BoundedDirectBlockDomain block_domain) {
   const auto radial_operator =
       separate_sources ? DirectRangeOperator::FullSources : DirectRangeOperator::Full;
+  // Private qualification seam. The default, Fock/value, angular replay and
+  // SR/LR/RSH launch boundaries keep their incumbent schedule. Set once before
+  // preparation/capture; a captured graph retains its chosen launch.
+  if (purpose == DirectScreeningPurpose::Force) {
+    const auto schedule = bounded_force_warp_schedule(
+        std::getenv("GENERATIVEQC_EXPERIMENT_DIRECT_FORCE_SCHEDULE"), block.x, block.y, block.z);
+    block.x = schedule.threads;
+    if (schedule.dynamic) {
+#define GENERATIVEQC_WARP_FORCE(U)                                                        \
+  bounded_direct_shell_quartet_kernel<U, DirectScreeningPurpose::Force, true, -1, -1, true> \
+      <<<grid, block, shared_bytes, stream>>>(                                             \
+          batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds,       \
+          shell_pair_order, shell_pair_block_bounds, system_density_bounds,               \
+          enabled_mask_pointer, enabled_mask, bounded_generated_overflow, schwarz_bounds, \
+          density, active, output, global_cursor, profile, coulomb_coefficient,            \
+          exchange_coefficient, radial_operator, 0.0, 0.0, false, false, block_domain)
+      if (unrestricted) {
+        GENERATIVEQC_WARP_FORCE(true);
+      } else {
+        GENERATIVEQC_WARP_FORCE(false);
+      }
+#undef GENERATIVEQC_WARP_FORCE
+      return;
+    }
+  }
   if (unrestricted == true) {
     if (purpose == DirectScreeningPurpose::Fock) {
       bounded_direct_shell_quartet_kernel<true, DirectScreeningPurpose::Fock, true>

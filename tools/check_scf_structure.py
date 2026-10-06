@@ -226,6 +226,7 @@ CUDA_ALLOWED["cuda_matrix_library"] = (
 # cannot acquire host bucket/graph ownership or integral recurrence code.
 CUDA_MODULES["cuda_direct_queues"] = (
     "direct_queue_index",
+    "direct_warp_queue",
     "direct_screening",
     "direct_task_encoding",
     "direct_page_screening",
@@ -441,7 +442,7 @@ CUDA_ALLOWED["cuda_direct_consumers"] = (
         "scf/cuda/" + Path(name).stem + ".hpp"
         for name in CUDA_MODULES["cuda_direct_consumers"]
     )
-    + ("scf/cuda_weighted_eri.hpp",)
+    + ("scf/cuda_weighted_eri.hpp", "scf/cuda/direct_warp_queue.cuh")
 )
 CUDA_MODULES["cuda_direct_kernel_interfaces"] = (
     "direct_cached_tensor_kernels.hpp",
