@@ -330,6 +330,32 @@ def _stream(
         (True, True, True),
     ],
 )
+def test_disabled_diis_evaluates_each_accepted_state_once(
+    solver_probe: tuple[Path, bool], df: bool, hoist: bool, matrix: bool
+) -> None:
+    """Jacobi-only solves must not evaluate a trial and then repeat it next iteration."""
+    _, _, arrays = _case(2, 3, 5)
+    status, _, _ = _run(
+        solver_probe,
+        arrays,
+        df=df,
+        hoist=hoist,
+        matrix=matrix,
+        diis=0,
+        max_iterations=4,
+    )
+    assert status["iterations_called"] == status["iterations"]
+
+
+@pytest.mark.parametrize(
+    "df,hoist,matrix",
+    [
+        (False, False, False),
+        (True, False, False),
+        (True, True, False),
+        (True, True, True),
+    ],
+)
 def test_canonical_spectrum_preserves_solver_trajectory(
     solver_probe: tuple[Path, bool], df: bool, hoist: bool, matrix: bool
 ) -> None:
