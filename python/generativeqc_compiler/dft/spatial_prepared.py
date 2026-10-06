@@ -24,16 +24,12 @@ from generativeqc_compiler.common.resources import (
     ResourceRequest,
     plan_resources,
 )
-from generativeqc_compiler.xc.native_semilocal import (
-    device_feature_ingredients,
-    legacy_grid_xc_selector,
-)
-
 from .ao import NativeAO, jet_indices
 from .cuda import CudaGrid
 from .density_source import DensitySource
 from .features import density_features, requested_ingredients, spin_densities
 from .grid import ExplicitGrid, MolecularGrid, checked_int
+from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
 from .plan import plan_tiles
 from .spatial import (
     SpatialPolicy,
