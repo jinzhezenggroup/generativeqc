@@ -29,19 +29,32 @@ __global__ void build_fock_direct_quartet_kernel(
       static_cast<std::size_t>(blockIdx.x), threadIdx.x);
 }
 
-/** One bounded packet shares cached primitive-pair preparation and recurrence.
- * The exact existing queue/admission domain and generated-class exclusions are
- * retained. Its shared workspace is below the portable 48 KiB CUDA limit. */
+/** The first packet consumes all components of an admitted shell quartet.
+ * Compaction admits every packet together on the same precision/source route.
+ * Generated-class exclusions and independent AO screening remain unchanged. */
 template <bool Unrestricted, unsigned AngularOrder>
 __global__ void build_fock_direct_pair_materialized_kernel(
     DeviceBatch batch, const std::uint32_t* count, const ActiveShellQuartetTile* tasks,
     double screening_tolerance, const double* schwarz_bounds, const double* density,
     const std::uint8_t* active, double* fock, const std::uint64_t* generated_mask) {
   if (blockIdx.x >= *count) return;
+  const auto task = tasks[blockIdx.x];
+  if (task.tile != 0U) return;
+  // At fixed total angular order, balanced shell angular momenta maximize
+  // the product of Cartesian component counts. This bounds per-lane register
+  // slots without allocating the 40-slot ffff maximum for every lower order.
+  constexpr unsigned slots = [] {
+    unsigned components = 1;
+    for (unsigned shell = 0; shell < 4; ++shell) {
+      const unsigned angular = AngularOrder / 4 + (shell < AngularOrder % 4);
+      components *= (angular + 1) * (angular + 2) / 2;
+    }
+    return (components + detail::kDirectQuartetTileSize - 1) / detail::kDirectQuartetTileSize;
+  }();
   __shared__ MaterializedDirectPairRecurrence<AngularOrder> shared;
-  contract_materialized_direct_pair_fock<Unrestricted, AngularOrder>(
-      batch, tasks[blockIdx.x], screening_tolerance, schwarz_bounds, density, active, fock,
-      generated_mask, shared);
+  contract_materialized_direct_pair_fock<Unrestricted, AngularOrder, slots>(
+      batch, task, screening_tolerance, schwarz_bounds, density, active, fock, generated_mask,
+      shared);
 }
 
 /** Pack exact ssss shell tasks across all lanes of one worker warp. */
