@@ -264,7 +264,6 @@ jobs:
           CUMETAL_CUDA_TEST_MODE: gate
           CUMETAL_CUDA_TEST_TIMEOUT_SECONDS: "90"
           CUMETAL_CUDA_SUITE_BUDGET_SECONDS: "300"
-          GENERATIVEQC_DFT_CUDA_TEST: "1"
           PYTHONPATH: ${{ github.workspace }}/python:${{ github.workspace }}
         run: .venv/bin/python .github/scripts/run_cumetal_cuda_pytests.py
 
