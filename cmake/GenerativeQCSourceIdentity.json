@@ -77,7 +77,6 @@
     "tools/generate_df_lambda.py",
     "tools/generate_rccsdt_native.py",
     "tools/generate_xc_cpu.py",
-    "tools/generate_xc_gradient_cuda.py",
     "tools/run_codegen.py",
     "tools/generativeqc_posthf/plan_spec.py",
     "tools/generate_scf_array_native.py",
