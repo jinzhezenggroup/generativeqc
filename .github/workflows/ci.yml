@@ -1,8 +1,8 @@
 name: CI
 
 on:
-  # Pull requests already run the full workflow. Limit push runs to master so
-  # a same-repository PR branch does not schedule the same jobs twice.
+  # Pull requests and merge groups own correctness. Master pushes remain only
+  # to publish stable caches that ephemeral queue refs can consume.
   push:
     branches: [master]
   pull_request:
@@ -66,9 +66,139 @@ jobs:
           cat "${error_file}" >&2
           echo "active=true" >> "${GITHUB_OUTPUT}"
 
+  master-cpu-cache:
+    name: Seed CPU ccache (${{ matrix.compiler }})
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    runs-on: ubuntu-24.04
+    env:
+      CCACHE_MAXSIZE: 1G
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install ccache 4.14
+        run: |
+          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
+          curl --fail --silent --show-error --location \
+            --output "/tmp/${archive}" \
+            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
+          tar -xJf "/tmp/${archive}" -C /tmp
+          sudo install -m 0755 \
+            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
+            /usr/local/bin/ccache
+      - name: Restore plain CPU ccache
+        id: master_cpu_ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ccache-cpu-v3-${{ matrix.compiler }}-plain-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          restore-keys: |
+            ccache-cpu-v3-${{ matrix.compiler }}-plain-
+      - name: Build plain CPU cache seed
+        env:
+          CXX: ${{ matrix.compiler == 'gcc' && 'g++' || 'clang++' }}
+        run: |
+          ccache --zero-stats
+          cmake -S . -B build -G Ninja \
+            -DGENERATIVEQC_ENABLE_CUDA=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGENERATIVEQC_COMPILER_CACHE=ccache
+          cmake --build build --parallel
+          ccache --show-stats
+      - name: Save plain CPU ccache
+        if: steps.master_cpu_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.master_cpu_ccache.outputs.cache-primary-key }}
+
+  master-python-cache:
+    name: Seed Python native ccache
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    env:
+      CCACHE_MAXSIZE: 1G
+      GENERATIVEQC_ENABLE_CUDA: "OFF"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install uv and Python 3.11
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.7"
+          python-version: "3.11"
+          enable-cache: true
+          cache-suffix: "python-cache-seed-v1"
+          prune-cache: true
+      - name: Install ccache 4.14
+        run: |
+          archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
+          curl --fail --silent --show-error --location \
+            --output "/tmp/${archive}" \
+            "https://github.com/ccache/ccache/releases/download/v${CCACHE_VERSION}/${archive}"
+          tar -xJf "/tmp/${archive}" -C /tmp
+          sudo install -m 0755 \
+            "/tmp/ccache-${CCACHE_VERSION}-linux-x86_64-glibc/ccache" \
+            /usr/local/bin/ccache
+      - name: Restore Python-build ccache
+        id: master_python_ccache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ccache-python-v2-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          restore-keys: |
+            ccache-python-v2-
+            ccache-python-
+      - name: Prepare Python native cache seed
+        run: |
+          uv venv --python 3.11
+          uv pip install --python .venv/bin/python \
+            numpy scipy scikit-build-core scipy-openblas32
+          xtb_linalg="$(
+            .venv/bin/python - <<'PY_INNER'
+          from pathlib import Path
+          import scipy
+
+          site = Path(scipy.__file__).resolve().parent.parent
+          matches = sorted((site / "scipy.libs").glob("libscipy_openblas*.so"))
+          if len(matches) != 1:
+              raise SystemExit(f"expected one SciPy OpenBLAS runtime, found {matches}")
+          print(matches[0])
+          PY_INNER
+          )"
+          echo "GENERATIVEQC_XTB_CPU_LINALG_LIBRARY=${xtb_linalg}" >> "$GITHUB_ENV"
+      - name: Build Python native cache seed
+        run: |
+          ccache --zero-stats
+          cmake -S . -B build -G Ninja \
+            -DGENERATIVEQC_ENABLE_CUDA=OFF \
+            -DGENERATIVEQC_BUILD_TESTS=OFF \
+            -DGENERATIVEQC_PYTHON_WHEEL=ON \
+            -DGENERATIVEQC_BUNDLE_XTB_OPENBLAS=OFF \
+            -DGENERATIVEQC_XTB_CPU_LINALG_LIBRARY="$GENERATIVEQC_XTB_CPU_LINALG_LIBRARY" \
+            -DPython3_EXECUTABLE="$PWD/.venv/bin/python" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGENERATIVEQC_COMPILER_CACHE=ccache
+          cmake --build build --parallel
+          ccache --show-stats
+      - name: Save Python-build ccache
+        if: steps.master_python_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.master_python_ccache.outputs.cache-primary-key }}
   cpu:
     needs: merge_queue_liveness
-    if: needs.merge_queue_liveness.outputs.active != 'false'
+    if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -101,10 +231,9 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
-          key: ccache-cpu-v2-${{ matrix.compiler }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
+          key: ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 'coverage' || 'plain' }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tests/native/**', 'tools/**', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py') }}
           restore-keys: |
-            ccache-cpu-v2-${{ matrix.compiler }}-
-            ccache-cpu-${{ matrix.compiler }}-
+            ccache-cpu-v3-${{ matrix.compiler }}-${{ matrix.compiler == 'gcc' && github.event_name != 'merge_group' && 'coverage' || 'plain' }}-
       - name: Reset ccache statistics
         run: ccache --zero-stats
       - name: Configure
@@ -125,7 +254,7 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
       - name: Save ccache immediately after build
-        if: steps.cpu_ccache.outputs.cache-hit != 'true'
+        if: github.event_name != 'merge_group' && steps.cpu_ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
@@ -398,19 +527,84 @@ jobs:
           compression-level: 0
           retention-days: 1
       - name: Preserve opted-in AO radial resource reports
-        if: always()
+        if: ${{ always() && github.event_name != 'push' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ao-radial-release-compile
-          path: build/ao-radial-compile
+          path: |
+            build/ao-radial-compile/**/ao.cu
+            build/ao-radial-compile/**/ptxas.txt
+            build/ao-radial-compile/**/resources.json
+          if-no-files-found: error
+          retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
 
+  master-cache-cleanup:
+    name: Trim trusted CUDA cache snapshots
+    needs: cuda-compile
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && needs.cuda-compile.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Keep only the two newest trusted CUDA snapshots
+        # Cache housekeeping must not invalidate an otherwise successful producer.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_name='cuda-ccache-master-12.9-sm120-v2'
+          workflow_payload="$(gh api --method GET \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml")"
+          workflow_id="$(jq -er '.id | select(type == "number")' <<<"$workflow_payload")"
+          artifacts_payload="$(gh api --method GET \
+            "/repos/${GITHUB_REPOSITORY}/actions/artifacts" \
+            -f name="$artifact_name" -f per_page=100 --paginate --slurp)"
+          artifacts="$(jq -c --arg name "$artifact_name" \
+            '[.[].artifacts[] | select(.name == $name and .expired == false)]' \
+            <<<"$artifacts_payload")"
+          candidate_run_ids="$(jq -r '[.[].workflow_run.id // empty] | unique[]' <<<"$artifacts")"
+          trusted_artifacts=''
+          # A same-name artifact is not proof of provenance. Match restore's
+          # successful master-push boundary before counting or deleting it.
+          # The current run is still in progress; its new snapshot cannot yet
+          # replace either of the two completed, restorable snapshots.
+          while read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            [[ "$run_id" =~ ^[0-9]+$ ]]
+            run_payload="$(gh api --method GET \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+            if jq -e --argjson workflow_id "$workflow_id" '
+                .workflow_id == $workflow_id
+                and .event == "push"
+                and .head_branch == "master"
+                and .status == "completed"
+                and .conclusion == "success"
+              ' <<<"$run_payload" >/dev/null; then
+              trusted_artifacts+="$(jq -c --argjson run_id "$run_id" \
+                '.[] | select(.workflow_run.id == $run_id) | {id, created_at}' \
+                <<<"$artifacts")"$'\n'
+            fi
+          done <<<"$candidate_run_ids"
+          # Finish all discovery before any mutation. A failed API request,
+          # including a later page, leaves every existing snapshot untouched.
+          delete_ids="$(jq -sr 'sort_by([.created_at, .id]) | reverse | .[2:][] | .id' \
+            <<<"$trusted_artifacts")"
+          while read -r artifact_id; do
+            [[ -n "$artifact_id" ]] || continue
+            gh api --method DELETE \
+              "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}"
+          done <<<"$delete_ids"
   # Resource qualification must complete even when production compilation
   # starts cold. Both required jobs check out the exact same event commit;
   # generate the native grid through its original CMake dependency graph here.
   cuda-resources:
     name: CUDA 12.9 release resources (sm_120)
     needs: merge_queue_liveness
-    if: needs.merge_queue_liveness.outputs.active != 'false'
+    if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
@@ -478,7 +672,8 @@ jobs:
       # This is release resource evidence. The separate production compile-only
       # job uses fast compilation and cannot supply acceptance resources.
       - name: Restore f-shell release objects
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: f_shell_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/f-shell-cache
           # The validator compiles source emitted by the common/integral compiler
@@ -496,8 +691,15 @@ jobs:
           python3 tools/validate_f_shells.py --tier compile --smoke
           --nvcc "$CUDACXX" --compile-jobs 2 --compile-timeout 900
           --output build/f-shell-smoke.json
+      - name: Save f-shell release objects
+        if: github.event_name != 'merge_group' && steps.f_shell_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/f-shell-cache
+          key: ${{ steps.f_shell_cache.outputs.cache-primary-key }}
       - name: Restore generated XC compile cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: xc_compile_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/xc-cache
           key: xc-cuda-12.9-sm120-${{ hashFiles('include/**', 'python/generativeqc_compiler/common/**', 'python/generativeqc_compiler/integral/**', 'python/generativeqc_compiler/xc/**', 'tools/validate_xc.py') }}
@@ -508,6 +710,12 @@ jobs:
           python3 tools/validate_xc.py --tier cuda-compile
           --functionals PBE --nvcc "$CUDACXX"
           --cache build/xc-cache --output build/xc-compile
+      - name: Save generated XC compile cache
+        if: github.event_name != 'merge_group' && steps.xc_compile_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/xc-cache
+          key: ${{ steps.xc_compile_cache.outputs.cache-primary-key }}
       - name: Compile native grid/XC region resources
         run: >-
           python3 tools/validate_native_xc_resources.py
@@ -517,7 +725,8 @@ jobs:
           --output build/native-xc-resource
           --functional PBE --npoint 4096 --tile-points 256 --nao 96 --spins 2
       - name: Restore stationary CUDA compile cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: stationary_cuda_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/stationary-cuda-compile
           key: stationary-cuda-12.9-sm120-${{ hashFiles('python/generativeqc_compiler/common/**', 'python/generativeqc_compiler/integral/**', 'python/generativeqc_compiler/method/**', 'python/generativeqc_compiler/tensor/**', 'tools/validate_stationary_cuda_compile.py') }}
@@ -527,8 +736,15 @@ jobs:
         run: >-
           python3 tools/validate_stationary_cuda_compile.py
           --nvcc "$CUDACXX" --cache build/stationary-cuda-compile
+      - name: Save stationary CUDA compile cache
+        if: github.event_name != 'merge_group' && steps.stationary_cuda_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/stationary-cuda-compile
+          key: ${{ steps.stationary_cuda_cache.outputs.cache-primary-key }}
       - name: Restore TensorIR CUDA compile cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: tensor_static_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: build/tensor-static-cuda-compile
           key: tensor-static-cuda-12.9-sm120-${{ hashFiles('python/generativeqc_compiler/common/**', 'python/generativeqc_compiler/tensor/**', 'tools/validate_tensor_cuda_compile.py') }}
@@ -539,32 +755,45 @@ jobs:
           PYTHONPATH=python python3 tools/validate_tensor_cuda_compile.py
           --nvcc "$CUDACXX" --architecture sm_120
           --cache build/tensor-static-cuda-compile
+      - name: Save TensorIR CUDA compile cache
+        if: github.event_name != 'merge_group' && steps.tensor_static_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: build/tensor-static-cuda-compile
+          key: ${{ steps.tensor_static_cache.outputs.cache-primary-key }}
       - name: Preserve generated XC resource reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: xc-release-compile
           path: |
-            build/xc-compile
-            build/native-xc-resource
+            build/xc-compile/**/compiler.log
+            build/xc-compile/**/contract.json
+            build/xc-compile/**/report.json
+            build/xc-compile/summary.json
+            build/native-xc-resource/compiler.log
+            build/native-xc-resource/generated_grid_policy.cu
+            build/native-xc-resource/report.json
+          retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
       - name: Preserve f-shell release resource report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: f-shell-release-smoke
           path: build/f-shell-smoke.json
+          retention-days: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 14 }}
 
   python:
     name: python (${{ matrix.shard }})
     needs: merge_queue_liveness
-    if: needs.merge_queue_liveness.outputs.active != 'false'
+    if: needs.merge_queue_liveness.outputs.active != 'false' && github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
         shard: [core-a, core-b, runtime-heavy, posthf, compiler-heavy, ecp-forces]
     runs-on: ubuntu-24.04
     # Full nightly/manual qualification includes expensive Hessian and Au replay.
-    # Keep routine PR/push feedback capped separately; do not truncate that tier.
+    # Keep routine PR/merge-group feedback capped separately; do not truncate that tier.
     # The broad core suite is split deterministically by test file so routine
     # feedback does not leave one ~18-minute serial critical-path shard.
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 90 || 30 }}
@@ -666,10 +895,10 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DGENERATIVEQC_COMPILER_CACHE=ccache
           cmake --build build --parallel
-      # The six Python shards build the same native library. One shard saves
-      # the cache immediately so the next queued master run can reuse it.
+      # The six Python shards build the same native library. Stable refs may
+      # publish it, while ephemeral merge-group refs remain read-only consumers.
       - name: Save Python-build ccache immediately
-        if: matrix.shard == 'core-a' && steps.python_ccache.outputs.cache-hit != 'true'
+        if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.python_ccache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ccache
@@ -683,10 +912,10 @@ jobs:
             --no-deps --no-build-isolation -Cbuild-dir=build
       # Core and compiler-heavy reference tests need the external oracle inputs.
       # Builds and installed production paths above remain completely offline.
-      - name: Cache pinned GFN1 and D3 reference inputs
+      - name: Restore pinned GFN1 and D3 reference inputs
         if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'compiler-heavy'
         id: gfn1_reference_sources
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             .cache/generativeqc-sources/xtbloom-gfn1-parameters
@@ -697,17 +926,27 @@ jobs:
         run: |
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-parameters
           .venv/bin/python tools/source_registry.py sync xtbloom-gfn1-d3
+      - name: Save pinned GFN1 and D3 reference inputs
+        if: matrix.shard == 'core-a' && github.event_name != 'merge_group' && steps.gfn1_reference_sources.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .cache/generativeqc-sources/xtbloom-gfn1-parameters
+            .cache/generativeqc-sources/xtbloom-gfn1-d3
+          key: ${{ steps.gfn1_reference_sources.outputs.cache-primary-key }}
       - name: Show ccache statistics
         run: ccache --show-stats
-      # Probe objects are produced after the shared library cache is saved.
-      # Keep them small and shard-local; actions/cache saves only on job success.
-      - name: Cache native Python probes
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Probe caches are useful only for shards that compile native probes.
+      # Merge-group refs are ephemeral, so they restore but never publish caches.
+      - name: Restore native Python probes
+        id: python_probe_ccache
+        if: matrix.shard == 'core-a' || matrix.shard == 'core-b' || matrix.shard == 'runtime-heavy' || matrix.shard == 'compiler-heavy'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/ccache-python-probes
-          key: ccache-python-probes-v1-${{ matrix.shard }}-${{ github.sha }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py', 'tests/python/**', 'tests/native/**', 'benchmarks/**') }}
+          key: ccache-python-probes-v2-${{ matrix.shard }}-${{ hashFiles('cmake/**', 'python/generativeqc_compiler/**', 'python/generativeqc/**', 'CMakeLists.txt', 'include/**', 'src/**', 'tools/**', 'pyproject.toml', 'manifests/xtbloom-d3.json', 'data/parameters/d3_production.bin', 'python/generativeqc_compiler/common/d3_data.py', 'tests/python/**', 'tests/native/**', 'benchmarks/**') }}
           restore-keys: |
-            ccache-python-probes-v1-${{ matrix.shard }}-
+            ccache-python-probes-v2-${{ matrix.shard }}-
       - name: Reset native probe ccache statistics
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
@@ -1095,14 +1334,20 @@ jobs:
             --junitxml=".artifacts/pytest-${{ matrix.shard }}.xml" \
             "${coverage_args[@]}" \
             "${extra_args[@]}"
+      - name: Save native Python probes
+        if: github.event_name != 'merge_group' && steps.python_probe_ccache.outcome == 'success' && steps.python_probe_ccache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/ccache-python-probes
+          key: ${{ steps.python_probe_ccache.outputs.cache-primary-key }}
       - name: Show post-test ccache statistics
         if: always()
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache-python-probes
           CCACHE_MAXSIZE: 256M
         run: ccache --show-stats
-      - name: Preserve transient benchmark/debug artifacts
-        if: always()
+      - name: Preserve transient benchmark/debug artifacts on failure
+        if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: benchmark-debug-${{ github.run_id }}-${{ matrix.shard }}
@@ -1123,12 +1368,10 @@ jobs:
   cpu-benchmark:
     name: CPU performance (CodSpeed)
     # PRs always run two representative endpoints and add targeted coverage when
-    # changed paths touch advanced DFT machinery; master/manual runs the full
-    # endpoint set. Merge-group CI revalidates correctness only: performance was
-    # already measured on the PR and should not consume queue runner capacity.
-    # Scheduled qualification already has expensive numerical coverage and does
-    # not need duplicate performance instrumentation.
-    if: github.event_name != 'schedule' && github.event_name != 'merge_group'
+    # changed paths touch advanced DFT machinery. Scheduled/manual qualification
+    # runs the full endpoint set. Merge-group and post-merge master pushes do not
+    # repeat performance work already covered before integration.
+    if: github.event_name != 'merge_group' && github.event_name != 'push'
     runs-on: ubuntu-24.04
     # Leave enough headroom for a fully cold hosted-runner build before
     # CodSpeed starts; performance checks should not become false negatives just
@@ -1173,6 +1416,8 @@ jobs:
           version: "0.10.7"
           python-version: "3.11"
           enable-cache: true
+          cache-suffix: "cpu-benchmark-v1"
+          prune-cache: true
       - name: Install ccache 4.14
         run: |
           archive="ccache-${CCACHE_VERSION}-linux-x86_64-glibc.tar.xz"
@@ -1206,15 +1451,16 @@ jobs:
       - name: Install benchmark dependencies
         run: |
           uv venv --python 3.11
-          uv pip install --python .venv/bin/python --editable .
-          uv pip install --python .venv/bin/python pytest-codspeed==5.0.3
+          uv pip install --python .venv/bin/python \
+            numpy pytest pytest-codspeed==5.0.3
       - name: Run CPU CodSpeed endpoint suite
         uses: CodSpeedHQ/action@88472375d0a4572cf70a9f1fe3a4e0ab8da1b924 # v5.0.1
         env:
+          PYTHONPATH: ${{ github.workspace }}/python
           GENERATIVEQC_LIBRARY: ${{ github.workspace }}/build-benchmark/libgenerativeqc.so
         with:
           # Hosted GitHub runners are noisy for wall-clock gating; simulation
-          # provides the stable PR/master regression signal without Macro Runner quota.
+          # provides the stable PR/scheduled regression signal without Macro Runner quota.
           # PRs keep two always-on endpoints and can add a targeted advanced-DFT
           # endpoint through GENERATIVEQC_CODSPEED_EXTRA_CASES.
           mode: simulation
@@ -1223,7 +1469,7 @@ jobs:
   upload-coverage:
     timeout-minutes: 8
     needs: [cpu, python]
-    if: ${{ github.event_name != 'merge_group' && !cancelled() && needs.cpu.result == 'success' && needs.python.result == 'success' }}
+    if: ${{ github.event_name != 'merge_group' && github.event_name != 'push' && !cancelled() && needs.cpu.result == 'success' && needs.python.result == 'success' }}
     # Coverage reporting is observability rather than a correctness gate. A
     # Codecov or artifact-service outage must not fail the workflow.
     continue-on-error: true
@@ -1294,7 +1540,7 @@ jobs:
     timeout-minutes: 5
     needs: [merge_queue_liveness, cpu, cuda-compile, cuda-resources, python]
     runs-on: ubuntu-24.04
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !(github.event_name == 'push' && github.ref == 'refs/heads/master') }}
     steps:
       - name: Accept an orphaned merge-group run
         if: needs.merge_queue_liveness.outputs.active == 'false'

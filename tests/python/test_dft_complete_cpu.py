@@ -340,6 +340,17 @@ def test_production_grid_open_shell_converges_against_independent_dense_quadratu
             gradient_error,
             record_property,
         )
+        if accuracy == "standard":
+            public = calc.singlepoint(
+                ATOMS,
+                charge=charge,
+                multiplicity=multiplicity,
+                properties=("energy", "forces"),
+            )
+            assert public.energy == pytest.approx(energy, abs=2e-9)
+            np.testing.assert_allclose(
+                public.forces, -result.gradient, atol=1e-7, rtol=0
+            )
 
 
 @pytest.mark.parametrize("method", ["lda-rks", "pbe-rks"])
@@ -365,6 +376,9 @@ def test_production_grid_light_element_energy_and_force(method: typing.Any) -> N
         assert energy == pytest.approx(reference_energy, abs=2e-9)
         np.testing.assert_allclose(result.gradient, reference, atol=1e-7, rtol=0)
         np.testing.assert_allclose(result.gradient.sum(axis=0), 0, atol=3e-10, rtol=0)
+        public = calc.singlepoint(ATOMS, properties=("energy", "forces"))
+        assert public.energy == pytest.approx(reference_energy, abs=2e-9)
+        np.testing.assert_allclose(public.forces, -reference, atol=1e-7, rtol=0)
 
 
 def test_production_grid_transition_metal_energy_and_force() -> None:
@@ -1076,8 +1090,7 @@ def test_failure_isolation_native_malformed_geometry_and_detached_state() -> Non
             assert method_capabilities(method).supported_properties == frozenset(
                 {"energy"}
             )
-        with pytest.raises(ValueError, match="does not support properties"):
-            calc.singlepoint(ATOMS, properties=("energy", "forces"))
+        assert calc.capabilities.supported_properties == frozenset({"energy", "forces"})
 
 
 @pytest.mark.parametrize("fail_publication", [False, True])

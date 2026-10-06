@@ -28,6 +28,7 @@ from .density_source import DensitySource
 from .features import requested_ingredients, spin_densities
 from .grid import checked_int
 from .indexed_layout import AoGridBlockLayout
+from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
 from .plan import plan_tiles
 
 
@@ -203,28 +204,28 @@ class DeviceGridTask:
         reset: typing.Any = False,
         download: typing.Any = False,
     ) -> typing.Any:
-        """Evaluate native LDA/PBE XC and scatter its local spin potentials.
+        """Evaluate one qualified native grid-XC family and scatter its potential.
 
         AO jets and density features remain device-resident. Only the tile's
         three scalar integrals and, when requested, the accumulated global
         potential cross back to the host.
         """
         view = self.view
-        if functional not in ("LDA_XC_PW", "PBE"):
-            raise ValueError("native CUDA XC supports LDA_XC_PW or PBE")
         if (
             type(restricted) is not bool
             or type(reset) is not bool
             or type(download) is not bool
         ):
             raise ValueError("XC flags must be boolean")
+        spin = "unpolarized" if restricted else "polarized"
+        selector = legacy_grid_xc_selector(functional, spin=spin)
         weights = immutable(weights, shape=(view.npoint,))
         integrals = np.empty(3)
         self._owner._call(
             "grid_cuda_xc_v2",
             self._owner._handle,
             view.generation,
-            int(functional == "PBE"),
+            selector,
             int(restricted),
             1,
             pointer(weights),
@@ -1010,21 +1011,11 @@ class CudaGrid:
         block_layout: AoGridBlockLayout | None = None,
     ) -> typing.Any:
         """Lend the minimal prepared feature layout required by native CUDA XC."""
-        if functional not in ("LDA_XC_PW", "PBE", "R2SCAN", "WB97M-V"):
-            raise ValueError(
-                "native CUDA XC task supports LDA_XC_PW, PBE, R2SCAN, or WB97M-V"
-            )
-        required = (
-            {"rho"}
-            if functional == "LDA_XC_PW"
-            else {"rho", "gradient"}
-            if functional == "PBE"
-            else {"rho", "gradient", "tau"}
-        )
-        # Legacy names describe only the input feature layout of this lease;
-        # scientific XC evaluation belongs to its downstream consumer.
+        required = device_feature_ingredients(functional)
+        # Scientific XC evaluation belongs to the downstream consumer; this
+        # lease is selected solely from the functional ingredient contract.
         with self.feature_task(
-            points, ao_ids, tuple(required), stamp=stamp, block_layout=block_layout
+            points, ao_ids, required, stamp=stamp, block_layout=block_layout
         ) as lease:
             yield lease
 
@@ -1395,17 +1386,7 @@ class CudaGrid:
         stamp: typing.Any = None,
     ) -> typing.Any:
         """Compatibility wrapper over the ingredient-driven resident feature lease."""
-        if functional not in ("LDA_XC_PW", "PBE", "R2SCAN", "WB97M-V"):
-            raise ValueError(
-                "native CUDA XC task supports LDA_XC_PW, PBE, R2SCAN, or WB97M-V"
-            )
-        required = (
-            {"rho"}
-            if functional == "LDA_XC_PW"
-            else {"rho", "gradient"}
-            if functional == "PBE"
-            else {"rho", "gradient", "tau"}
-        )
+        required = device_feature_ingredients(functional)
         with self.feature_task_with_features(
             points, ao_ids, required, stamp=stamp
         ) as borrowed:

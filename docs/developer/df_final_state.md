@@ -137,10 +137,18 @@ host J/K substitution. Failed strict selection clears the convergence claim.
 Host DIIS recovery supplies no compact candidate. Its current solve epoch and
 an offset generation range distinguish recovered D from compact iterations
 without invalidating another item's token. It therefore enters real correction.
-Both UHF spin channels are selected jointly. Each correction evaluates one pair
-of physical Fock matrices and uses two provider solves, including the empty
-beta channel; a rejected fixed-point probe can supply those solves. Complete
-forces consume the selected density and its matching W
+Both UHF spin channels are selected jointly. A successful CUDA DF-UHF compact
+solve may retain its original determinant when the exact density/owner witness,
+S-orthogonality, density reconstruction, electron/idempotency checks and the
+current physical commutator all pass. That stationary reuse does not require
+the DIIS/effective orbital columns to diagonalize the current physical Fock and
+does not run a second lowest-orbital projector probe; forces use the matching
+physical W = D F[D] D spin blocks. Physical-reference export, explicit forced
+rebuilds, stale/external states and every correction keep the canonical
+solve/project/re-evaluate contract. Each correction evaluates one pair of
+physical Fock matrices and uses two provider solves, including the empty beta
+channel; a rejected fixed-point probe can supply those solves. Complete forces
+consume the selected density and its matching W
 exactly once in the existing one-electron/Pulay, raw three-center, auxiliary
 metric and nuclear response. Energy-only selection constructs no W and invokes
 no derivative consumer. CPU finalization preserves its independent sequence.

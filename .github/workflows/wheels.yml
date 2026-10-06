@@ -5,11 +5,11 @@ name: Python wheels
 # Linux runtime dependencies, and the installed-wheel test proves lazy provider
 # resolution through a CUDA-backed native call.
 on:
-  # Master still qualifies every merged state. Pull requests run this expensive
-  # packaging gate only when the wheel/link contract itself changes, so ordinary
-  # scientific and performance work does not consume an extra CUDA wheel build.
-  push:
-    branches: [master]
+  # Qualify wheel/link contract changes on their pull requests. Broader package
+  # qualification runs weekly and on explicit maintainer demand instead of
+  # repeating an expensive build after every merge.
+  schedule:
+    - cron: "17 4 * * 1"
   pull_request:
     paths:
       - ".github/workflows/wheels.yml"
@@ -27,8 +27,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'push' && github.ref || github.run_id }}
-  # Preserve in-flight wheel qualification when a reviewed follow-up is pushed.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  # Coalesce pending PR runs by PR number, and periodic/manual runs by ref.
+  # Preserve every in-flight wheel qualification.
   cancel-in-progress: false
 
 jobs:

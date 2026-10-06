@@ -1,0 +1,32 @@
+{
+  "id": "upstream-ptx-e87f368",
+  "provider_commit": "e87f368060cf09a45b148b4f8892470c74093ebd",
+  "ptx_backend": "cumetal-ir",
+  "fp64_mode": "fast48",
+  "reason": "Upstream typed PTX cannot lower shared SCF initialize_state_kernel (__nv_longlong_as_double has no typed PTX definition) and one-electron PTX (ptx.branchtargets is not normalized). The shared-owner QC lane is unqualified; later endpoints were not independently observed failing.",
+  "evidence": [
+    "https://github.com/jinzhezenggroup/generativeqc/pull/1997#issuecomment-6009823623",
+    "https://github.com/jinzhezenggroup/generativeqc/actions/runs/37414311819"
+  ],
+  "reenable_when": [
+    "Upstream supports both shared owners with the selected typed PTX and precision contract.",
+    "Run gate and full modes with CUMETAL_CUDA_QUARANTINE unset on the real Apple GPU; every endpoint must pass its unchanged numerical/oracle assertions and per-case dispatch provenance, without skips or timeout extensions.",
+    "Remove the workflow quarantine opt-in after retaining successful endpoint evidence; a provider/backend/precision change must trigger review, never automatically inherit this quarantine."
+  ],
+  "nodeids": [
+    "tests/python/test_cuda_runtime.py::test_cuda_minimal_rhf_matches_cpu_reference",
+    "tests/python/test_cuda_runtime.py::test_cuda_minimal_uhf_matches_cpu_reference",
+    "tests/python/test_cuda_runtime.py::test_cuda_minimal_density_fitting_matches_cpu_reference",
+    "tests/python/test_cuda_runtime.py::test_cuda_minimal_pbe_rks_matches_cpu_reference",
+    "tests/python/test_dft_cuda.py::test_native_cuda_dft_matches_independently_converged_cpu_endpoint",
+    "tests/python/test_calculator.py::test_cuda_energy_only_output_selection_omits_forces",
+    "tests/python/test_batch.py::test_cuda_real_spherical_batch_reuses_fixed_topology_plan",
+    "tests/python/test_batch.py::test_cuda_bounded_direct_streaming_matches_exact_replay",
+    "tests/python/test_batch.py::test_cuda_uhf_ragged_batch_warm_start_and_failure_isolation",
+    "tests/python/test_calculator.py::test_cuda_spherical_def2_svp_water_matches_pyscf",
+    "tests/python/test_calculator.py::test_cuda_def2_tzvp_water_uses_graph_native_eigensolver",
+    "tests/python/test_calculator.py::test_cartesian_d_f_cuda_matches_pyscf_libcint_reference",
+    "tests/python/test_calculator.py::test_cuda_uhf_direct_jk_matches_pyscf_and_force_finite_difference",
+    "tests/python/test_dft_cuda.py::test_native_cuda_dft_ragged_batch_replay_and_failure_isolation"
+  ]
+}
