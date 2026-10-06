@@ -5,8 +5,6 @@ from generativeqc_compiler.dft._generated_native_semilocal import (
     SEMILOCAL_FAMILIES,
     SEMILOCAL_FAMILY_BY_CODE,
     SEMILOCAL_FAMILY_CODES,
-    _SemilocalFamilyFields,
-    _SemilocalFamilyRecord,
 )
 
 __all__ = [

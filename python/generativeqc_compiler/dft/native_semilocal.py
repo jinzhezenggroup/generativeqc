@@ -37,7 +37,9 @@ def native_semilocal_record(
     components = getattr(value, "components", None)
     range_omega = getattr(value, "range_omega", None)
     if components is None or range_omega is None:
-        raise TypeError("native semilocal lookup requires a selector or functional-like object")
+        raise TypeError(
+            "native semilocal lookup requires a selector or functional-like object"
+        )
     try:
         actual = {name: Fraction(coefficient) for name, coefficient in components}
         omega = Fraction(range_omega)

@@ -21,6 +21,7 @@ from generativeqc_compiler.common.resources import (
     ResourceBudget,
     plan_resources,
 )
+
 from .ao import DOUBLE, SIZE, jet_indices, pointer
 from .ao_cuda import emit_grid_source
 from .density_source import DensitySource

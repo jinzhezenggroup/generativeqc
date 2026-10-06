@@ -59,7 +59,7 @@ SEMILOCAL_FAMILIES: tuple[_SemilocalFamilyRecord, ...] = (
         "molecular_nonlocal_domain": False,
         "incremental_xc": False,
         "stationary_second_order": True,
-        "aliases": ('LDA_XC_PW',),
+        "aliases": ("LDA_XC_PW",),
         "cuda_fast_paths": {
             "component_scaling": "qualification-required",
             "mixed_ao_precision": "qualified",
