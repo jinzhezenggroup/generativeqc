@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from generativeqc_compiler.dft.ao_cuda import emit_native_xc_point_dispatch
+from generativeqc_compiler.xc.automatic_semilocal import automatic_functional_code
 
 from tools.generate_xc_split_hybrid_registry import emit_registry
 
@@ -28,6 +29,18 @@ def test_admitted_point_consumers(tmp_path: Path) -> None:
     (tmp_path / "generated_split_hybrid_registry.cuh").write_text(
         emit_registry(), encoding="utf-8"
     )
+    dispatch = emit_native_xc_point_dispatch()
+    for name, feature_terms in (
+        ("LDA_C_VWN_4", 1),
+        ("GGA_X_PBE_SOL", 4),
+        ("MGGA_X_R2SCAN01", 5),
+    ):
+        code = automatic_functional_code(name)
+        assert (
+            f"functional == 0x{code:x}U && !response) "
+            f"return &launch_automatic_libxc_points<{feature_terms}>;"
+        ) in dispatch
+
     source = tmp_path / "dispatch.cpp"
     source.write_text(
         "#include <cstdint>\n#include <stdexcept>\n#include <limits>\n"
@@ -42,7 +55,9 @@ def test_admitted_point_consumers(tmp_path: Path) -> None:
         "  selected_functional = F; selected_response = R;\n}\n"
         "template <unsigned Mask> void launch_split_hybrid_points() {\n"
         "  selected_functional = Mask; selected_response = false;\n}\n"
-        + emit_native_xc_point_dispatch()
+        "template <unsigned Terms> void launch_automatic_libxc_points() {\n"
+        "  selected_functional = 100 + Terms; selected_response = false;\n}\n"
+        + dispatch
         + r"""
 int main() {
   CudaXcPointLauncher entries[7]{};
