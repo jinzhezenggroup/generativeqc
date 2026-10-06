@@ -164,10 +164,38 @@ class ForceActiveAoDecision:
         return self.cutoff is not None
 
 
-# #1598 promotion registry. Current complete force evidence does not cross the
-# repository's 5% endpoint threshold, so automatic production selection is
-# intentionally dense until an evidence-bound profile is added.
-QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = ()
+# #1598 / #1853 promotion registry. The first positive production profile is
+# intentionally structural rather than functional-name based: it covers the
+# sm_120 ordinary RKS second-jet workload envelope that has complete 48/96-atom
+# cold/warm/moved evidence. Smaller, larger, spin-polarized, composite, DF, ECP,
+# alternate-tile, or under-budget workloads remain dense until separately
+# qualified.
+QUALIFIED_FORCE_ACTIVE_AO_PROFILES: tuple[QualifiedForceActiveAoProfile, ...] = (
+    QualifiedForceActiveAoProfile(
+        profile_id="sm120-ordinary-rks-second-jet-v1",
+        evidence=(
+            "benchmarks/results/pbe0-public-force-policy-20261005/README.md",
+            "benchmarks/results/pbe0-force-followups-20261005/README.md",
+        ),
+        architectures=("sm_120",),
+        compositions=("ordinary",),
+        derivative_orders=(2,),
+        spin_blocks=(1,),
+        density_fitted=False,
+        min_atoms=48,
+        max_atoms=96,
+        min_aos=384,
+        max_aos=768,
+        min_grid_points=1_179_648,
+        max_grid_points=2_359_296,
+        tile_policy="fixed",
+        tile_points=256,
+        min_device_bytes=512 << 20,
+        min_host_bytes=256 << 20,
+        cutoff=1e-16,
+        cache_bytes=16 << 20,
+    ),
+)
 
 
 def resolve_force_active_ao_policy(
