@@ -159,14 +159,16 @@ and `segment_sum` primitives. Packing scatter still assigns unique GEMM
 destinations; TensorIR `scatter_add` instead has explicit repeated-destination
 accumulation semantics.
 
-Eligible streamed reductions may explicitly request
-`TensorSchedule(reduction_provider="cub")`. The shared lowering-provider
-diagnostic advertises both generated cooperative CUDA and CUB BlockReduce for
-the same request, but CUB admission requires typed-true CCCL header capability
-evidence. Generated CUDA remains the production default. The retained H200 FP64
-comparison passed numerical and execution gates but did not show a significant
-complete-endpoint improvement, so lower CUB register use did not trigger a
-promotion. See the [reviewed evidence](../../benchmarks/results/issue971-cub-block-reduce-h200/publication.json)
+Eligible streamed reductions keep provider identity outside
+`TensorSchedule`. Production uses the default generated
+`ReductionLoweringBinding`; qualification can bind CUB explicitly at lowering
+or compilation time. The shared lowering-provider diagnostic advertises both
+generated cooperative CUDA and CUB BlockReduce for the same semantic request,
+but CUB admission requires typed-true CCCL header capability evidence. The
+artifact identity includes the lowering binding, while plan/schedule identity
+does not. The retained H200 FP64 comparison passed numerical and execution
+gates but did not show a significant complete-endpoint improvement, so lower
+CUB register use did not trigger a promotion. See the [reviewed evidence](../../benchmarks/results/issue971-cub-block-reduce-h200/publication.json)
 and [qualification decision](../../.agents/notes/implemented/performance/2026-09-22-cub-block-reduce-qualification.md).
 
 `plan.batch_schedule` exposes a backend-neutral `BatchScheduleIR` with batch
