@@ -35,7 +35,6 @@ from codegen_test_support import (
     boys_values,
     build_dppp_component_kernel,
     build_dppp_contraction_kernel,
-    build_dppp_fused_plan,
     build_fused_shell_plan,
     build_integral_ir,
     build_ppps_rys_force_program,
@@ -46,7 +45,6 @@ from codegen_test_support import (
     build_weighted_shell_contraction_kernel,
     cartesian_components,
     cuda_target_info,
-    dppp_components,
     emit_rys_force_root_body_cuda,
     emit_shell_class_fused_cuda,
     evaluate_fused_shell_component,
@@ -871,8 +869,8 @@ def test_factored_dppp_lowering_matches_full_symbolic_kernel(
 
 
 def test_dppp_fused_plan_covers_components_and_shared_coulomb_states() -> None:
-    plan = build_dppp_fused_plan()
-    components = dppp_components()
+    plan = build_fused_shell_plan(DPPP_SPEC, target=TEST_CUDA_TARGET)
+    components = DPPP_SPEC.components
     assert plan.components == components
     assert len(components) == 162
     assert len(plan.coulomb_states) == 84
