@@ -49,6 +49,10 @@ struct DensityFittingScfData {
   integrals::IntegralData one_electron;
   integrals::DensityFittingIntegralData raw;
   DensityFittingThreeCenter three_center;
+  // Operator identity is part of the fitted tensor owner. Full-range remains the
+  // default; range-separated exchange owns a separately fitted metric/tensor.
+  FockOperator op{FockOperator::FullRange};
+  double omega{};
   // The metric cutoff selects the retained Hamiltonian as well as its response.
   // Cached plans must be rebuilt when callers change this numerical control.
   double metric_relative_threshold{};
