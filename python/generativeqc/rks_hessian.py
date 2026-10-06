@@ -241,9 +241,7 @@ def _coulomb_response_factor_coefficients(
     """Extract the bilinear Coulomb response factors from the MethodIR JVP."""
     block = plan.integral_block("coulomb", terms=1, coordinates=1)
 
-    def evaluate(
-        left: float, right: float, dleft: float, dright: float
-    ) -> float:
+    def evaluate(left: float, right: float, dleft: float, dright: float) -> float:
         feeds = {
             "density_left": np.asarray([[left]], dtype=np.float64),
             "density_right": np.asarray([[right]], dtype=np.float64),

@@ -521,9 +521,7 @@ def generated_weighted_first_integral_gradient_cuda(
         if pair_weights is not None:
             raise ValueError("CUDA Coulomb first derivative does not take pair_weights")
         d0 = _checked_ao_weight(density, topology.nbf, "RKS reference density")
-        d1 = _checked_ao_weight(
-            density_response, topology.nbf, "RKS density response"
-        )
+        d1 = _checked_ao_weight(density_response, topology.nbf, "RKS density response")
         if (
             coulomb_response_coefficients is None
             or len(coulomb_response_coefficients) != 2
@@ -669,9 +667,7 @@ def generated_weighted_first_integral_gradient_cuda(
             "compiled_programs": len(programs),
             "storage": dict(owner.storage),
             "program_identities": tuple(
-                sorted(
-                    artifact.program_identity for artifact in programs.values()
-                )
+                sorted(artifact.program_identity for artifact in programs.values())
             ),
             "native_artifacts": tuple(
                 sorted(
