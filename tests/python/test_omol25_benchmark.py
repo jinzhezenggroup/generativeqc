@@ -141,6 +141,32 @@ def test_source_identity_includes_public_and_geometry_consumers() -> None:
         assert hashes[path] == hashlib.sha256((root / path).read_bytes()).hexdigest()
 
 
+@pytest.mark.parametrize(
+    "path",
+    (
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py",
+    ),
+)
+def test_source_identity_tracks_direct_generated_header_owners(
+    monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    """Dirty header-emitter bytes must remain identifiable beside the binary hash."""
+    target = Path(__file__).resolve().parents[2] / path
+    read_bytes = Path.read_bytes
+    original = source_hashes()
+    assert original[path] == hashlib.sha256(read_bytes(target)).hexdigest()
+    changed_bytes = read_bytes(target) + b"\n# provenance regression fixture\n"
+    monkeypatch.setattr(
+        Path,
+        "read_bytes",
+        lambda source: changed_bytes if source == target else read_bytes(source),
+    )
+    changed = source_hashes()
+    assert changed[path] == hashlib.sha256(changed_bytes).hexdigest()
+    assert {key for key in changed if changed[key] != original[key]} == {path}
+
+
 @pytest.mark.parametrize("fail", [False, True])
 def test_reference_vv10_screening_matches_force_module_and_restores_defaults(
     monkeypatch: pytest.MonkeyPatch, fail: bool

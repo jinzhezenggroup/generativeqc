@@ -86,6 +86,22 @@ def source_hashes() -> dict[str, str]:
         "src/scf/cuda/direct_jk_kernels.cu",
         "src/scf/cuda/direct_jk_kernels.hpp",
         "src/scf/cuda/direct_jk_plan.hpp",
+        # The prepared DFT provider has its own value/derivative routes. Retain
+        # their compiler owners as well as the runtime that selects them, so a
+        # dirty recurrence experiment is identifiable beside the binary hash.
+        "src/scf/cuda/direct_angular_fock.cu",
+        "src/scf/cuda/direct_bounded_dddd.cu",
+        "src/scf/cuda/direct_bounded_fallback.cu",
+        "src/scf/cuda/direct_coulomb.cpp",
+        "src/scf/cuda/packed_basis.hpp",
+        "src/scf/cuda/rhf_policy.cpp",
+        "src/scf/cuda/rhf_policy.hpp",
+        "python/generativeqc_compiler/integral/direct_pair_materialized_cuda.py",
+        "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py",
+        "python/generativeqc_compiler/integral/direct_pair_support_cuda.py",
+        "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py",
         "src/scf/cuda/one_electron_gradient_bridge.cu",
         "src/scf/cuda/basis_transform_kernels.cu",
         "src/scf/cuda/basis_transform_kernels.hpp",
