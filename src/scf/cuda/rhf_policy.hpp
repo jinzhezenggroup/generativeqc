@@ -268,6 +268,8 @@ unsigned direct_hermite_convolution_mode() noexcept;
  * This changes recurrence lifetime, never the Direct operator or precision. */
 bool direct_pair_materialized_values_requested() noexcept;
 bool direct_pair_materialized_derivatives_requested() noexcept;
+/** Shared compiler-DAG force qualification; frozen with the Direct provider. */
+bool direct_pair_cooperative_derivatives_requested() noexcept;
 bool resident_ppps_bra_requested() noexcept;
 bool ppps_signature_bucketing_requested() noexcept;
 bool psps_signature_bucketing_requested() noexcept;

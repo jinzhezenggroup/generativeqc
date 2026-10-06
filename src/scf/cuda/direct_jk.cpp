@@ -370,6 +370,11 @@ generativeqc_status create_cuda_direct_jk_plan(
     plan->coordinates_per_item = coordinates;
     plan->screening_tolerance = screening_tolerance;
     configure_direct_coulomb_recurrence(plan->batch);
+    // Prove the complete angular-pass domain before selecting a kernel that
+    // intentionally omits the generic per-AO recurrence and its private frame.
+    if (!host.shell_angular.empty())
+      plan->batch.direct_maximum_shell_angular =
+          *std::max_element(host.shell_angular.begin(), host.shell_angular.end());
     plan->batch.batch_size = static_cast<std::int32_t>(systems.size());
     plan->batch.nbf = static_cast<std::int32_t>(host.nbf);
     plan->batch.direct_nbf = static_cast<std::int32_t>(host.direct_nbf);
