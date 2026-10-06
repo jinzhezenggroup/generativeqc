@@ -24,9 +24,17 @@ bool exact_value_exchange(const FockTermSpec& term) noexcept {
          term.omega >= 0.0;
 }
 
+bool fitted_value_term(const FockTermSpec& term) noexcept {
+  if (!term.present) return true;
+  if (term.approximation != FockApproximation::DensityFitted) return false;
+  if (term.op == FockOperator::FullRange) return term.omega == 0.0;
+  return (term.op == FockOperator::ShortRange || term.op == FockOperator::LongRange) &&
+         term.omega > 0.0;
+}
+
 bool fitted_full_range(const FockTermSpec& term) noexcept {
   return !term.present || (term.approximation == FockApproximation::DensityFitted &&
-                           term.op == FockOperator::FullRange);
+                           term.op == FockOperator::FullRange && term.omega == 0.0);
 }
 
 }  // namespace
@@ -46,7 +54,7 @@ PreparedCudaFockBinding prepared_cuda_fock_binding(const PreparedFockPlan& plan)
   }
 
   const bool fitted =
-      fitted_full_range(strategy.spec.coulomb) && fitted_full_range(strategy.spec.exchange);
+      fitted_value_term(strategy.spec.coulomb) && fitted_value_term(strategy.spec.exchange);
   if (!fitted) return {};
   auto* source = plan.cuda_fitted_source();
   if (!source || !plan.diagnostic().nbf) return {};
