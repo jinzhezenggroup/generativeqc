@@ -7,11 +7,11 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import generativeqc.rks_hessian_directional as rks_directional
 import numpy as np
 import pytest
 from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
 from generativeqc.response_solver import GMRESOptions
-import generativeqc.rks_hessian_directional as rks_directional
 from generativeqc.rks_hessian import rks_hessian, rks_hvp
 from generativeqc.rks_response import NativeRKSResponse
 from generativeqc_compiler.common.cuda_adapter import CudaCompilerAdapter

@@ -638,7 +638,9 @@ def rks_hvp_many(
             "response_first_integral_backend": "cpu",
             "second_integral_backend": second_backend,
             "execution_residency": (
-                "mixed-host-device" if first_backend == "cuda" or second_backend == "cuda" else "host"
+                "mixed-host-device"
+                if first_backend == "cuda" or second_backend == "cuda"
+                else "host"
             ),
             "full_molecular_hessian_allocated": False,
             "full_ao_rank_four_weights": False,

@@ -353,9 +353,7 @@ def generated_directional_semilocal_rks_integral_first_order_cuda(
         )
         for shell in shells
     )
-    coords = np.asarray(
-        [atom.position for atom in topology.atoms], dtype=np.float64
-    )
+    coords = np.asarray([atom.position for atom in topology.atoms], dtype=np.float64)
     charges = np.asarray(
         [atom.atomic_number for atom in topology.atoms], dtype=np.float64
     )
@@ -461,8 +459,7 @@ def generated_directional_semilocal_rks_integral_first_order_cuda(
             "program_identities": tuple(sorted(programs)),
             "native_artifacts": tuple(
                 sorted(
-                    artifact.native.metadata["key"]
-                    for artifact in programs.values()
+                    artifact.native.metadata["key"] for artifact in programs.values()
                 )
             ),
             "raw_derivative_downloads": 0,

@@ -689,7 +689,9 @@ def _directional_integral_first_order(
     topology = rks_integral_topology(operator)
     if first_backend == "cpu":
         if first_compiler is not None:
-            raise ValueError("CPU RKS directional first integrals do not take a compiler")
+            raise ValueError(
+                "CPU RKS directional first integrals do not take a compiler"
+            )
         return generated_directional_semilocal_rks_integral_first_order(
             topology,
             operator.state.density[0],
