@@ -154,3 +154,58 @@ def test_grid_jit_tracks_and_ships_capability_headers() -> None:
     for relative in ("src/dft/semilocal_family.hpp", "src/dft/xc_capabilities.hpp"):
         assert ROOT / relative in headers
         assert packaged[relative] == f"generativeqc_compiler/assets/{relative}"
+
+
+def test_legacy_xc_metadata_imports_share_canonical_dft_records() -> None:
+    from generativeqc_compiler.dft import _generated_native_semilocal as native
+    from generativeqc_compiler.xc import _generated_native_semilocal as legacy
+
+    assert legacy.SEMILOCAL_FAMILIES is native.SEMILOCAL_FAMILIES
+    assert legacy.SEMILOCAL_FAMILY_BY_CODE is native.SEMILOCAL_FAMILY_BY_CODE
+    assert (
+        ROOT / "python/generativeqc_compiler/xc/_generated_native_semilocal.py"
+    ).read_text() == generator.emit_python_compat()
+
+
+def test_grid_native_layer_does_not_import_xc_algebra() -> None:
+    import os
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; from generativeqc_compiler.dft import cuda; "
+                "assert not any(name.startswith('generativeqc_compiler.xc') for name in sys.modules)"
+            ),
+        ],
+        check=True,
+        env={**os.environ, "PYTHONPATH": str(ROOT / "python")},
+        timeout=30,
+    )
+
+
+def test_grid_native_selector_matches_resolved_alias_data() -> None:
+    from dataclasses import replace
+    from fractions import Fraction
+
+    import pytest
+    from generativeqc_compiler.dft.native_semilocal import (
+        device_feature_ingredients,
+        legacy_grid_xc_selector,
+    )
+    from generativeqc_compiler.xc.spec import functional
+
+    assert legacy_grid_xc_selector("LDA_XC_PW") == 0
+    assert legacy_grid_xc_selector("LDA") == 0
+    assert legacy_grid_xc_selector("PBE") == 1
+    assert (
+        legacy_grid_xc_selector(replace(functional("PBE"), identifier="renamed")) == 1
+    )
+    assert device_feature_ingredients("R2SCAN") == ("rho", "gradient", "tau")
+    with pytest.raises(ValueError):
+        legacy_grid_xc_selector(
+            replace(functional("PBE"), components=(("GGA_X_PBE", Fraction(1)),))
+        )

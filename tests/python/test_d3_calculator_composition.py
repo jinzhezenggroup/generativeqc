@@ -41,9 +41,8 @@ def _electronic(graph: typing.Any) -> typing.Any:
 
 
 def test_pbe_methodir_singlepoint_composes_energy_and_force_once() -> None:
-    # CPU public KS forces are intentionally qualified only for the bounded ECP
-    # domain. Reuse that admitted electronic endpoint rather than widening force
-    # capability merely to test dispersion composition.
+    # Retain the bounded ECP fixture to cover correction composition on that
+    # electronic owner as well as the all-electron PBE0 case below.
     from test_ecp import fixture
 
     atoms, basis, _ = fixture(representation="cartesian")
@@ -77,19 +76,25 @@ def test_pbe_methodir_singlepoint_composes_energy_and_force_once() -> None:
     )
 
 
-def test_pbe0_methodir_composes_energy_without_named_execution_branch() -> None:
+def test_pbe0_methodir_composes_energy_and_force_without_named_execution_branch() -> (
+    None
+):
     graph = resolve_method("PBE0-D3(BJ)", spin="unpolarized")
     plain = Calculator(
         method="pbe0-rks", ks_options=KsOptions(grid=GRID), max_iterations=200
-    ).singlepoint(H2, properties=("energy",))
+    ).singlepoint(H2, properties=("energy", "forces"))
     corrected = Calculator(
         method=graph, ks_options=KsOptions(grid=GRID), max_iterations=200
-    ).singlepoint(H2, properties=("energy",))
+    ).singlepoint(H2, properties=("energy", "forces"))
     numbers, coordinates = _numbers_and_coordinates(H2)
     d3 = evaluate_d3_correction(graph, numbers, coordinates)
 
     assert corrected.dispersion is not None
     assert corrected.energy == pytest.approx(plain.energy + d3.energy, abs=2e-12)
+
+    np.testing.assert_allclose(
+        corrected.forces, plain.forces - d3.gradient, atol=3e-10, rtol=0.0
+    )
 
 
 def test_existing_native_selector_can_bind_full_d3_composition() -> None:
@@ -202,9 +207,8 @@ def test_d3_local_memory_cap_participates_in_global_plan() -> None:
     assert "dispersion maximum_bytes=1" in plan.diagnostic
 
 
-def test_d3_does_not_promote_unqualified_pbe0_forces() -> None:
+def test_d3_reuses_qualified_pbe0_force_owner() -> None:
     graph = resolve_method("PBE0-D3(BJ)", spin="unpolarized")
     calculator = Calculator(method=graph, ks_options=KsOptions(grid=GRID))
-    assert "forces" not in calculator._capabilities.supported_properties
-    with pytest.raises(ValueError, match="does not support properties: forces"):
-        calculator.singlepoint(H2, properties=("energy", "forces"))
+    assert "forces" in calculator._capabilities.supported_properties
+    assert calculator.ks_options.method_ir == _electronic(graph)

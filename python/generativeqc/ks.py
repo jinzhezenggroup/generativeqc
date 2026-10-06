@@ -25,6 +25,7 @@ from generativeqc_compiler.method import (
     D4_METHOD_SUFFIX,
     METHOD_ALIASES,
     METHOD_CATALOG,
+    D3Spec,
     D4Spec,
     DispersionCorrectionPrimitive,
     MethodIR,
@@ -465,7 +466,14 @@ def cpu_stationary_all_electron_force_eligible(
     dispersion corrections reuse that owner without a method-name whitelist.
     """
     correction_graph = dispersion_method_ir or method_ir
-    has_dispersion = _d4_electronic_projection(correction_graph) is not None
+    corrections = tuple(
+        primitive
+        for primitive in correction_graph.primitives
+        if isinstance(primitive, DispersionCorrectionPrimitive)
+    )
+    has_dispersion = len(corrections) == 1 and isinstance(
+        corrections[0].specification, (D3Spec, D4Spec)
+    )
     if dispersion_method_ir is not None and not has_dispersion:
         return False
     try:

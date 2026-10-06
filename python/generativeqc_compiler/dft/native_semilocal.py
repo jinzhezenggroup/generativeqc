@@ -20,10 +20,10 @@ def _selector_record(value: str) -> typing.Mapping[str, typing.Any] | None:
 
 
 def native_semilocal_record(
-    value: typing.Any, *, spin: str = "polarized"
+    value: typing.Any, *, spin: str | None = None
 ) -> typing.Mapping[str, typing.Any]:
     """Resolve one exact native semilocal execution row without importing XC."""
-    if spin not in ("polarized", "unpolarized"):
+    if spin is not None and spin not in ("polarized", "unpolarized"):
         raise ValueError("native semilocal selector requires a supported spin")
     if isinstance(value, str):
         record = _selector_record(value)
@@ -32,7 +32,7 @@ def native_semilocal_record(
         return record
 
     actual_spin = getattr(value, "spin", None)
-    if actual_spin is not None and actual_spin != spin:
+    if spin is not None and actual_spin is not None and actual_spin != spin:
         raise ValueError("native semilocal functional spin disagrees with its consumer")
     components = getattr(value, "components", None)
     range_omega = getattr(value, "range_omega", None)
@@ -54,7 +54,7 @@ def native_semilocal_record(
     raise ValueError("semilocal composition has no exact native family record")
 
 
-def legacy_grid_xc_selector(value: typing.Any, *, spin: str = "polarized") -> int:
+def legacy_grid_xc_selector(value: typing.Any, *, spin: str | None = None) -> int:
     """Return the two-state legacy grid-XC ABI selector from family metadata."""
     record = native_semilocal_record(value, spin=spin)
     kernel = record["stationary_kernel"]
@@ -64,7 +64,7 @@ def legacy_grid_xc_selector(value: typing.Any, *, spin: str = "polarized") -> in
 
 
 def device_feature_ingredients(
-    value: typing.Any, *, spin: str = "polarized"
+    value: typing.Any, *, spin: str | None = None
 ) -> tuple[str, ...]:
     """Return resident feature inputs from generated native execution metadata."""
     record = native_semilocal_record(value, spin=spin)

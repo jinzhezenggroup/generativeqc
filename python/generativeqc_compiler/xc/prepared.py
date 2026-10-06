@@ -72,7 +72,7 @@ def _native_device_xc(
         return False
     try:
         legacy_grid_xc_selector(program.spec)
-    except UnsupportedXC:
+    except ValueError:
         return False
     return True
 

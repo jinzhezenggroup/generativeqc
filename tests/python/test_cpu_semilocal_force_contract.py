@@ -292,22 +292,17 @@ def test_estimates_track_requested_outputs(fake_native: typing.Any) -> typing.An
 
 
 @pytest.mark.parametrize("method", ["pbe-rks", "pbe-uks"])
-@pytest.mark.parametrize("kind", ["vv10", "d3"])
-def test_composed_contexts_do_not_advertise_rejected_forces(
-    fake_native: typing.Any, method: typing.Any, kind: typing.Any
+def test_nonlocal_contexts_do_not_advertise_rejected_forces(
+    fake_native: typing.Any, method: typing.Any
 ) -> typing.Any:
     spin = "polarized" if method.endswith("uks") else "unpolarized"
-    graph = (
-        resolve_method("PBE-D3(BJ)", spin=spin)
-        if kind == "d3"
-        else resolve_method(
-            MethodSpec(
-                "PBE+vv10",
-                (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
-                nonlocal_correlation=original_nonlocal_correlation("vv10"),
-            ),
-            spin=spin,
-        )
+    graph = resolve_method(
+        MethodSpec(
+            "PBE+vv10",
+            (("GGA_X_PBE", Fraction(1)), ("GGA_C_PBE", Fraction(1))),
+            nonlocal_correlation=original_nonlocal_correlation("vv10"),
+        ),
+        spin=spin,
     )
     calc = Calculator(
         method=graph,
@@ -494,3 +489,60 @@ def test_force_derivative_rejection_precedes_native_replay(
             batch.execute(strict=True, properties=FORCES)
         fake_native.library.generativeqc_batch_execute.assert_not_called()
         assert batch.execute(strict=True, properties=ENERGY).items[0].forces is None
+
+
+@pytest.mark.parametrize("method", ["PBE-D3(BJ)", "PBE0-D3(BJ)"])
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_d3_composition_reuses_electronic_force_and_adds_gradient_once(
+    fake_native: typing.Any, monkeypatch: pytest.MonkeyPatch, method: str, spin: str
+) -> None:
+    from generativeqc import dispersion as dispersion_module
+    from generativeqc.dispersion import D3CorrectionResult
+
+    requested = []
+
+    class Correction:
+        def __init__(
+            self, graph: object, systems: typing.Any, **kwargs: object
+        ) -> None:
+            self.counts = tuple(len(numbers) for numbers, _ in systems)
+
+        def execute(self, geometries: object, *, gradients: bool) -> tuple:
+            requested.append(gradients)
+            return tuple(
+                D3CorrectionResult(
+                    0,
+                    -0.125,
+                    np.full((count, 3), 0.25) if gradients else None,
+                    "cpu",
+                    "success",
+                    "stub",
+                    "stub",
+                    "stub",
+                    "stub",
+                )
+                for count in self.counts
+            )
+
+        def diagnostic(self) -> None:
+            return None
+
+        def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(dispersion_module, "D3CorrectionBatch", Correction)
+    monkeypatch.setattr(PreparedBatch, "_public_dft_cpu_force", fake_native.force)
+    calculator = Calculator(
+        method=resolve_method(method, spin=spin), ks_options=KsOptions(grid=GridSpec())
+    )
+    assert calculator.capabilities.supported_properties == FORCES
+    with calculator.prepare_batch([H2]) as batch:
+        for properties in (ENERGY, FORCES, ENERGY):
+            item = batch.execute(strict=True, properties=properties).items[0]
+            assert item.energy == -1.125
+            if properties == FORCES:
+                np.testing.assert_array_equal(item.forces, np.full((2, 3), 0.75))
+            else:
+                assert item.forces is None
+    assert requested == [False, True, False]
+    assert fake_native.force_calls == 1

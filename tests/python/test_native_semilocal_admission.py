@@ -169,3 +169,40 @@ def test_cpu_stationary_force_preserves_intrinsic_d4_admission() -> None:
 
     options = resolve_ks_options("pbe-d4-rks", KsOptions(grid=GridSpec()))
     assert cpu_stationary_all_electron_force_eligible(options.method_ir)
+
+
+@pytest.mark.parametrize("spin", ["unpolarized", "polarized"])
+def test_native_device_xc_selector_preserves_both_spin_flows(spin: str) -> None:
+    from types import SimpleNamespace
+
+    from generativeqc_compiler.dft.native_semilocal import (
+        device_feature_ingredients,
+        legacy_grid_xc_selector,
+    )
+    from generativeqc_compiler.xc.prepared import _native_device_xc
+    from generativeqc_compiler.xc.spec import functional
+
+    spec = functional("PBE", spin=spin)
+    assert device_feature_ingredients(spec) == ("rho", "gradient")
+    assert legacy_grid_xc_selector(spec) == 1
+    program = SimpleNamespace(
+        spec=spec,
+        contract=SimpleNamespace(request=SimpleNamespace(observable="potential")),
+    )
+    assert _native_device_xc(program, object(), object())
+    opposite = "polarized" if spin == "unpolarized" else "unpolarized"
+    with pytest.raises(ValueError, match="spin"):
+        legacy_grid_xc_selector(spec, spin=opposite)
+
+
+def test_native_device_xc_selector_falls_back_for_unsupported_graph() -> None:
+    from types import SimpleNamespace
+
+    from generativeqc_compiler.xc.prepared import _native_device_xc
+    from generativeqc_compiler.xc.spec import functional
+
+    program = SimpleNamespace(
+        spec=functional("R2SCAN"),
+        contract=SimpleNamespace(request=SimpleNamespace(observable="potential")),
+    )
+    assert not _native_device_xc(program, object(), object())
