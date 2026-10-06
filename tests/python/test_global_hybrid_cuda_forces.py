@@ -3,8 +3,8 @@
 Run with GENERATIVEQC_HYBRID_FORCE_CUDA_TEST=1 in a finite Slurm GPU allocation.
 Each case checks the converged endpoint, both reconverged finite-difference
 steps, source accounting, and reuse of the prepared force owner.
-GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST=1 explicitly admits the phased primitive
-on these small physical systems; it does not change production's auto threshold.
+GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST=1 uses physical hydrogen clusters inside
+the existing phased-cache domain; it does not change any admission threshold.
 """
 
 import json
@@ -46,15 +46,32 @@ def pinned_reference() -> None:
 def small_physical_becke_primitive(monkeypatch: pytest.MonkeyPatch) -> None:
     """Exercise the authenticated active-prefix primitive on physical RKS/UKS.
 
-    Production automatic phase admission starts at 48 atoms. The small-system
-    scientific oracle gate intentionally selects the same phased owner without
-    changing its native domain, memory admission, or generated math.
+    The native phased cache deliberately retains its small-atom fallback.
+    Changing the automatic threshold cannot admit two/three-atom owners; the
+    opted-in gate instead uses a physical 35/36-atom cluster in the actual domain.
     """
     if os.environ.get("GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST") == "1":
-        from generativeqc import _stationary_cuda as runtime
-
-        monkeypatch.setattr(runtime, "_AUTO_PHASED_BECKE_MIN_ATOMS", 2)
         monkeypatch.setenv("GENERATIVEQC_STATIONARY_BECKE_PRIMITIVE", "coefficients")
+
+
+def primitive_physical_cluster(
+    spin: str,
+) -> list[tuple[str, tuple[float, float, float]]]:
+    """Return neutral separated H2 fragments and one open-shell H for UKS.
+
+    Closed-shell 36-atom and doublet 35-atom clusters exercise the existing
+    greater-than-32 cache admission with a modest independent-oracle AO domain.
+    Neither native/compiler resource guards nor production defaults are patched.
+    """
+    pairs = 18 if spin == "rks" else 17
+    atoms = []
+    for pair in range(pairs):
+        center = (8.0 * (pair % 3), 8.0 * ((pair // 3) % 3), 8.0 * (pair // 9))
+        for offset in (-0.7, 0.7):
+            atoms.append(("H", (center[0], center[1], center[2] + offset)))
+    if spin == "uks":
+        atoms.append(("H", (24.0, 24.0, 16.0)))
+    return atoms
 
 
 @pytest.mark.parametrize(
@@ -172,6 +189,8 @@ def test_public_cuda_global_hybrid_force(
         ("H", (-0.08, 0.16, 0.24)),
         *(([("H", (0.18, -0.04, 1.51))]) if spin == "uks" else []),
     ]
+    if os.environ.get("GENERATIVEQC_HYBRID_BECKE_PRIMITIVE_TEST") == "1":
+        atoms = primitive_physical_cluster(spin)
     multiplicity = 2 if spin == "uks" else 1
     method = f"{name.lower()}-{spin}"
     composition = None
@@ -312,9 +331,10 @@ def test_public_cuda_global_hybrid_force(
         }
 
     xyz = np.asarray([position for _, position in atoms])
-    direction = np.array(
+    direction_pattern = np.array(
         [[0.13, -0.07, 0.11], [-0.05, 0.17, 0.03], [0.09, 0.02, -0.14]]
-    )[: len(atoms)]
+    )
+    direction = np.tile(direction_pattern, ((len(atoms) + 2) // 3, 1))[: len(atoms)]
     estimates = []
     for step in (3e-4, 1e-4):
         energies = []
@@ -339,6 +359,8 @@ def test_public_cuda_global_hybrid_force(
         {
             "method": method,
             "reference_xc": reference_xc,
+            "atoms": len(atoms),
+            "geometry_bohr": atoms,
             "precision": precision,
             "energy_error": abs(public.energy - reference_energy),
             "gradient_max_error": float(

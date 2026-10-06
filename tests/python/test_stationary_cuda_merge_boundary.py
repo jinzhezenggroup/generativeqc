@@ -50,6 +50,46 @@ def test_phased_becke_policy_defaults_only_in_measured_large_domain(
     assert runtime._resolve_phased_becke_policy(atoms, selection) is expected
 
 
+@pytest.mark.parametrize("spin,atoms", [("rks", 36), ("uks", 35)])
+def test_primitive_physical_fixture_uses_real_existing_admission(
+    spin: str, atoms: int
+) -> None:
+    """Dry fixture eligibility is not a replacement for executed GPU selection."""
+    from generativeqc import _stationary_cuda as runtime
+    from generativeqc_compiler.common.cuda_target import cuda_target_info
+    from generativeqc_compiler.method.stationary_resources import (
+        plan_stationary_cuda_resources,
+    )
+    from test_global_hybrid_cuda_forces import primitive_physical_cluster
+
+    cluster = primitive_physical_cluster(spin)
+    assert len(cluster) == atoms
+    assert all(symbol == "H" for symbol, _ in cluster)
+    assert len({coordinates for _, coordinates in cluster}) == atoms
+    assert atoms % 2 == int(spin == "uks")
+    assert runtime._AUTO_PHASED_BECKE_MIN_ATOMS == 48
+    assert runtime._resolve_phased_becke_policy(atoms, None) is False
+    parameters = {
+        "atoms": atoms,
+        "aos": atoms,
+        "primitives": 3 * atoms,
+        "points": 256,
+        "tasks": 1,
+        "spins": 2 if spin == "uks" else 1,
+        "sources": 7,
+        "budget_bytes": 512 << 20,
+        "target": cuda_target_info("sm_120"),
+        "cooperative_becke": True,
+    }
+    baseline = plan_stationary_cuda_resources(**parameters)
+    candidate = plan_stationary_cuda_resources(**parameters, becke_primitive=True)
+    assert baseline.becke_primitive is False
+    assert baseline.phased_becke_bytes == 0
+    assert candidate.becke_primitive is True
+    assert candidate.phased_becke_bytes > 0
+    assert candidate.geometry_lanes == baseline.geometry_lanes == 256
+
+
 @pytest.mark.parametrize("selection", [0, 1, "auto"])
 def test_phased_becke_policy_rejects_non_boolean_explicit_values(
     selection: int | str,

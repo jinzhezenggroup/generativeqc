@@ -77,8 +77,19 @@ physical RKS/UKS/moved forces or paired complete 48/96-atom PBE0 energy/force
 endpoints with actual solver histories. Hardware traffic is not measured, and
 no privileged profiler workaround is introduced. The experiment remains opt-in;
 default selection stays off and #1894 remains open. The separate physical gate
-may explicitly admit phases on small systems for an oracle comparison, but does
-not change the production automatic threshold of 48 atoms.
+uses 36-atom closed-shell and 35-atom doublet hydrogen clusters inside the existing
+greater-than-32 phased-cache domain. Lowering the automatic 48-atom policy
+threshold would not bypass the independent compiler/native cache guards and
+cannot select this primitive on H2/H3. Neither guard nor production threshold is
+changed. Host eligibility assertions are not executed GPU selection evidence.
+
+The profiling allocation-fault probe must mock all twelve native events: four
+existing source events and eight Becke phase boundaries. Its old four-event mock
+failed compilation in PR #1996's core-b CI cohort after phase telemetry was added.
+The corrected ccache-backed host probe injects every event-creation failure,
+checks that no partial event handles are published, retries successfully, and
+checks idempotent activation. This probe does not require or simulate physical
+GPU numerical acceptance.
 
 Do not reinterpret these observations as promotion of the unchanged indexed or
 dense-coefficient losing schedules, or conflate them with #1893 AO/XC gains.
