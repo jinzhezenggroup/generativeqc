@@ -35,6 +35,8 @@ struct GeneratedCoulombPlan {
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
   std::uint64_t class_mask{}, value_class_mask{};
+  /** Geometry-bound J lowering selection; K retains an independent mask. */
+  std::uint64_t rys_fock_mask{};
   /** True only when generated/native streaming value consumers cover every
    * present shell class without the bounded higher-l fallback. */
   bool value_capability{true};
@@ -81,6 +83,8 @@ struct GeneratedExchangePlan {
   std::unique_ptr<GeneratedCoulombPlan> shared;
   std::vector<void*> allocations;
   std::size_t device_bytes{}, host_preparation_bytes{};
+  /** Prepared strict-K choice never inherits the J owner's preference. */
+  std::uint64_t rys_fock_mask{};
   double *public_spin{}, *direct_spin{}, *direct_exchange{};
   double *density_temporary{}, *fock_temporary{}, *public_exchange{};
   ShellPairDensityBounds* shell_pair_density_bounds{};

@@ -95,6 +95,9 @@ struct CudaRhfBucketPlan {
   bool bounded_fock_class_timing{};
   // These switches change captured work even when topology and arithmetic match.
   bool bounded_streaming_override{};
+  /** Frozen optional strict-FP64 J/K decomposition and independent lowerings. */
+  bool separate_fock_jk{};
+  std::uint64_t j_rys_fock_mask{}, k_rys_fock_mask{};
   bool fock_only_diagnostic{};
   // Changing this diagnostic changes both captured pages and streaming flags.
   std::uint64_t primary_streaming_fock_mask{};

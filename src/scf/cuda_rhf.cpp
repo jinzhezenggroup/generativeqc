@@ -27,6 +27,7 @@
 #include "posthf/capacity.hpp"
 #include "runtime/allocation_measurement.hpp"
 #include "runtime/bounded_workspace.hpp"
+#include "runtime/cuda_component_trace.hpp"
 #include "runtime/df_progress_trace.hpp"
 #include "runtime/resource_cuda.cuh"
 #include "runtime/resource_usage.hpp"
@@ -43,6 +44,7 @@
 #include "scf/cuda/direct_cached_tensor_kernels.hpp"
 #include "scf/cuda/direct_constants.hpp"
 #include "scf/cuda/direct_density_bounds.hpp"
+#include "scf/cuda/direct_fock_lowering.hpp"
 #include "scf/cuda/direct_generated_tasks.hpp"
 #include "scf/cuda/direct_jk_kernels.hpp"
 #include "scf/cuda/direct_metadata.hpp"
@@ -607,6 +609,17 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   const bool ppss_signature_bucketing = ppss_signature_bucketing_requested();
   const unsigned resident_ppps_block_threads = ppps_resident_block_threads_requested();
   const bool first_setup = !plan.initialized;
+  // A reused/captured owner consumes its original choice even if environment
+  // controls change later. Each rebuilt geometry receives a fresh selection.
+  const auto j_rys_fock_mask =
+      first_setup ? cuda_execution::prepare_direct_fock_rys_mask(false) : plan.j_rys_fock_mask;
+  const auto k_rys_fock_mask =
+      first_setup ? cuda_execution::prepare_direct_fock_rys_mask(true) : plan.k_rys_fock_mask;
+  const char* separate_control = std::getenv("GENERATIVEQC_DIRECT_HF_SEPARATE_JK");
+  const bool separate_fock_jk =
+      first_setup ? j_rys_fock_mask != 0 || k_rys_fock_mask != 0 ||
+                        (separate_control != nullptr && std::strcmp(separate_control, "1") == 0)
+                  : plan.separate_fock_jk;
   detail::DirectQuartetTaskLayout direct_task_layout{};
   std::size_t total_shell_quartet_tiles = 0;
   if (requested_quartet_direct && first_setup && !requested_bounded_direct_streaming) {
@@ -932,6 +945,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     plan.inactive_eigensolver_profiling = inactive_eigensolver_profiling;
     plan.bounded_fock_class_timing = bounded_fock_class_timing;
     plan.bounded_streaming_override = bounded_direct_streaming_override_requested();
+    plan.separate_fock_jk = separate_fock_jk;
+    plan.j_rys_fock_mask = j_rys_fock_mask;
+    plan.k_rys_fock_mask = k_rys_fock_mask;
     plan.fock_only_diagnostic = bounded_direct_fock_only_diagnostic;
     plan.primary_streaming_fock_mask = requested_primary_streaming_fock_mask;
     plan.graph_native_eigensolver_override = requested_graph_native_eigensolver_override;
@@ -1540,6 +1556,15 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       bounded_direct_system_pair_density_bounds,
       bounded_direct_generated_overflow,
       active};
+  // All three views are immutable during replay. K already includes HF's
+  // restricted/unrestricted factor at scatter, so both passes accumulate into
+  // the existing direct Fock scratch without another matrix or scale kernel.
+  auto host_bounded_j_stream = host_bounded_stream_topology;
+  host_bounded_j_stream.fock_consumer = detail::GeneratedFockConsumer::Coulomb;
+  auto host_bounded_k_stream = host_bounded_stream_topology;
+  host_bounded_k_stream.fock_consumer = detail::GeneratedFockConsumer::HartreeFockExchange;
+  const std::array<GeneratedShellPairStream, 3> host_bounded_streams{
+      host_bounded_stream_topology, host_bounded_j_stream, host_bounded_k_stream};
   const std::pair<const void*, std::pair<void*, std::size_t>> static_uploads[] = {
       {host.atom_offsets.data(), {atom_offsets, host.atom_offsets.size() * sizeof(std::int64_t)}},
       {host.atom_systems.data(), {atom_systems, host.atom_systems.size() * sizeof(std::int32_t)}},
@@ -1628,8 +1653,8 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         bounded_direct_streaming
             ? plan.bounded_stream_pair_class_offsets.size() * sizeof(std::uint32_t)
             : 0}},
-      {&host_bounded_stream_topology,
-       {bounded_stream_topology, bounded_direct_streaming ? sizeof(GeneratedShellPairStream) : 0}},
+      {host_bounded_streams.data(),
+       {bounded_stream_topology, bounded_direct_streaming ? sizeof(host_bounded_streams) : 0}},
       {host_pair_first.data(), {ao_pair_first, host_pair_first.size() * sizeof(std::int32_t)}},
       {host_pair_second.data(), {ao_pair_second, host_pair_second.size() * sizeof(std::int32_t)}},
   };
@@ -2133,9 +2158,19 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
   std::size_t bounded_fock_kernel_count = 0;
   const generated::ShellKernelMetadata* bounded_fock_kernels =
       generated::selected_fock_shell_kernels(bounded_fock_kernel_count);
-  const auto launch_bounded_streaming_fock =
+  const auto launch_bounded_streaming_fock_consumer =
       [&](bool is_unrestricted, const double* quartet_density, double* quartet_fock,
-          bool allow_mixed_precision) -> cudaError_t {
+          bool allow_mixed_precision, const GeneratedShellPairStream* consumer_topology,
+          std::uint64_t rys_mask) -> cudaError_t {
+    // This shared optional ledger includes queue reset and all generated/native
+    // classes. Graph construction is labelled as capture, not device execution;
+    // clean endpoint timing always leaves the ledger disabled.
+    const char* operation = consumer_topology == bounded_stream_topology + 1   ? "direct_hf_j"
+                            : consumer_topology == bounded_stream_topology + 2 ? "direct_hf_k"
+                                                                               : "direct_hf_jk";
+    runtime::cuda_trace::TraceOperation trace(operation, resources.stream_,
+                                              {batch_size, nbf, 0, true, true});
+    runtime::cuda_trace::trace_counter("prepared_rys_class_mask", rys_mask);
     // Every selected class owns one independent queue head.  Reset the
     // complete fixed-size head array in one asynchronous memset before the
     // class-major launches instead of issuing one host API call per class.
@@ -2158,9 +2193,9 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
         error = cudaPeekAtLastError();
         if (error != cudaSuccess) return error;
       }
-      error = generated::launch_shell_class_streaming_fock(
+      error = cuda_execution::direct_fock_streaming_launcher(rys_mask, shell_class)(
           shell_class, resources.stream_, is_unrestricted, plan.persistent_quartet_worker_blocks,
-          bounded_stream_topology, device_batch.shell_pair_primitive_offsets,
+          consumer_topology, device_batch.shell_pair_primitive_offsets,
           device_batch.shell_primitive_pairs, device_batch.direct_ao_coefficients,
           device_batch.positions, options.screening_tolerance,
           allow_mixed_precision && mixed_precision_fock &&
@@ -2194,16 +2229,16 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
     if (is_unrestricted) {
       launch_bounded_direct_dddd_streaming_kernel(
           true, DirectScreeningPurpose::Fock, false, plan.persistent_quartet_worker_blocks,
-          detail::kDirectQuartetThreads, 0, resources.stream_, device_batch,
-          bounded_stream_topology, options.screening_tolerance, schwarz_bounds, quartet_density,
-          active, quartet_fock, bounded_direct_generated_task_heads + kDdddShellClass, nullptr,
+          detail::kDirectQuartetThreads, 0, resources.stream_, device_batch, consumer_topology,
+          options.screening_tolerance, schwarz_bounds, quartet_density, active, quartet_fock,
+          bounded_direct_generated_task_heads + kDdddShellClass, nullptr,
           bounded_fock_class_timing ? bounded_fock_fp64_work_counts + kDdddShellClass : nullptr);
     } else {
       launch_bounded_direct_dddd_streaming_kernel(
           false, DirectScreeningPurpose::Fock, false, plan.persistent_quartet_worker_blocks,
-          detail::kDirectQuartetThreads, 0, resources.stream_, device_batch,
-          bounded_stream_topology, options.screening_tolerance, schwarz_bounds, quartet_density,
-          active, quartet_fock, bounded_direct_generated_task_heads + kDdddShellClass, nullptr,
+          detail::kDirectQuartetThreads, 0, resources.stream_, device_batch, consumer_topology,
+          options.screening_tolerance, schwarz_bounds, quartet_density, active, quartet_fock,
+          bounded_direct_generated_task_heads + kDdddShellClass, nullptr,
           bounded_fock_class_timing ? bounded_fock_fp64_work_counts + kDdddShellClass : nullptr);
     }
     error = cudaPeekAtLastError();
@@ -2215,6 +2250,26 @@ std::vector<RhfBucketItem> execute_hf_cuda_bucket(CudaRhfBucketPlan& plan, const
       error = cudaPeekAtLastError();
     }
     return error;
+  };
+  const auto launch_bounded_streaming_fock =
+      [&](bool is_unrestricted, const double* quartet_density, double* quartet_fock,
+          bool allow_mixed_precision) -> cudaError_t {
+    // Split only a complete strict-FP64 streaming owner. Partial/higher-l and
+    // mixed routes retain their already qualified fused fallback semantics.
+    const bool complete =
+        (host_generated_streaming_fock_shell_class_mask |
+         host_native_streaming_fock_shell_class_mask) == host_present_shell_class_mask;
+    if (!plan.separate_fock_jk || mixed_precision_fock || !complete)
+      return launch_bounded_streaming_fock_consumer(is_unrestricted, quartet_density, quartet_fock,
+                                                    allow_mixed_precision, bounded_stream_topology,
+                                                    0);
+    auto error = launch_bounded_streaming_fock_consumer(
+        is_unrestricted, quartet_density, quartet_fock, false, bounded_stream_topology + 1,
+        plan.j_rys_fock_mask);
+    if (error != cudaSuccess) return error;
+    return launch_bounded_streaming_fock_consumer(is_unrestricted, quartet_density, quartet_fock,
+                                                  false, bounded_stream_topology + 2,
+                                                  plan.k_rys_fock_mask);
   };
   const auto launch_bounded_paged_generated_fock = [&](bool is_unrestricted,
                                                        const double* quartet_density,

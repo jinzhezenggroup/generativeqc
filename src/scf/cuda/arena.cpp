@@ -138,7 +138,8 @@ bool make_layout(std::size_t batch_size, std::size_t nbf, std::size_t direct_nbf
       !workspace.append<std::uint32_t>(
           bounded_direct_streaming ? detail::kDirectShellPairClassCount * (batch_size + 1) : 0,
           made.bounded_stream_pair_class_offsets) ||
-      !workspace.append<GeneratedShellPairStream>(bounded_direct_streaming ? 1 : 0,
+      // Combined, J-only and HF-weighted K-only views borrow one topology.
+      !workspace.append<GeneratedShellPairStream>(bounded_direct_streaming ? 3 : 0,
                                                   made.bounded_stream_topology) ||
       !workspace.append<double>(bounded_direct_streaming ? shell_pair_block_count : 0,
                                 made.bounded_direct_shell_pair_block_bounds) ||

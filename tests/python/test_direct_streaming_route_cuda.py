@@ -15,8 +15,14 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("method", ["rhf", "uhf"])
 @pytest.mark.parametrize("representation", ["cartesian", "spherical"])
+@pytest.mark.parametrize(
+    "lowerings", [None, ("incumbent", "rys"), ("rys", "incumbent"), ("rys", "rys")]
+)
 def test_primary_streaming_partition_replay_matches_libcint(
-    method: str, representation: str, monkeypatch: pytest.MonkeyPatch
+    method: str,
+    representation: str,
+    lowerings: tuple | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Changing the mask must recapture both routes, including active batch segments.
 
@@ -28,6 +34,9 @@ def test_primary_streaming_partition_replay_matches_libcint(
 
     assert os.environ.get("SLURM_JOB_ID")
     monkeypatch.setenv("GENERATIVEQC_BOUNDED_DIRECT_STREAMING", "force")
+    if lowerings is not None:
+        monkeypatch.setenv("GENERATIVEQC_DIRECT_J_FOCK_LOWERING", lowerings[0])
+        monkeypatch.setenv("GENERATIVEQC_DIRECT_K_FOCK_LOWERING", lowerings[1])
     monkeypatch.delenv("GENERATIVEQC_MIXED_PRECISION_FOCK_THRESHOLD", raising=False)
     separate = method == "uhf"
     atoms = [("O", (0.0, 0.0, 0.0)), ("H", (0.0, 0.0, 1.8)), ("H", (1.7, 0.0, -0.6))]
