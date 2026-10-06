@@ -21,17 +21,12 @@ from generativeqc_compiler.common.resources import (
     ResourceBudget,
     plan_resources,
 )
-from generativeqc_compiler.xc.native_semilocal import (
-    device_feature_ingredients,
-    legacy_grid_xc_selector,
-    native_semilocal_spec,
-)
-
 from .ao import DOUBLE, SIZE, jet_indices, pointer
 from .ao_cuda import emit_grid_source
 from .density_source import DensitySource
 from .features import requested_ingredients, spin_densities
 from .grid import checked_int
+from .native_semilocal import device_feature_ingredients, legacy_grid_xc_selector
 from .plan import plan_tiles
 
 
@@ -139,15 +134,14 @@ class DeviceGridTask:
         potential cross back to the host.
         """
         view = self.view
-        spin = "unpolarized" if restricted else "polarized"
-        spec = native_semilocal_spec(functional, spin=spin)
-        selector = legacy_grid_xc_selector(spec)
         if (
             type(restricted) is not bool
             or type(reset) is not bool
             or type(download) is not bool
         ):
             raise ValueError("XC flags must be boolean")
+        spin = "unpolarized" if restricted else "polarized"
+        selector = legacy_grid_xc_selector(functional, spin=spin)
         weights = immutable(weights, shape=(view.npoint,))
         integrals = np.empty(3)
         self._owner._call(
