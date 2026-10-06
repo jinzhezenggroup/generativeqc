@@ -100,6 +100,8 @@ def source_hashes() -> dict[str, str]:
         "python/generativeqc_compiler/integral/direct_pair_materialized_gradient_cuda.py",
         "python/generativeqc_compiler/integral/direct_pair_support_cuda.py",
         "python/generativeqc_compiler/integral/direct_cartesian_contraction_cuda.py",
+        "python/generativeqc_compiler/integral/direct_recurrence_cuda.py",
+        "python/generativeqc_compiler/integral/direct_order2_shell_cuda.py",
         "src/scf/cuda/one_electron_gradient_bridge.cu",
         "src/scf/cuda/basis_transform_kernels.cu",
         "src/scf/cuda/basis_transform_kernels.hpp",
