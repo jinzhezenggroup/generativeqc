@@ -50,6 +50,13 @@ wheel.install-dir = "generativeqc"
 # so one native wheel works across all supported Python 3 versions.
 wheel.py-api = "py3"
 
+# CUDA wheel link wrapping uses CMake's CUDA_LINKER_LAUNCHER, which is supported
+# by Ninja/Makefile generators starting in CMake 4.1. Native SDK builds keep the
+# repository-wide CMake 3.24 minimum; only PEP 517 wheel builds require 4.1+.
+[[tool.scikit-build.overrides]]
+if.state = "wheel"
+cmake.version = ">=4.1"
+
 [tool.scikit-build.wheel.force-include]
 "manifests/public_methods.json" = "generativeqc/data/public_methods.json"
 "src/runtime/compiled_execution_region.hpp" = "generativeqc_compiler/assets/src/runtime/compiled_execution_region.hpp"
