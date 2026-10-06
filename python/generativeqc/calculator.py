@@ -355,7 +355,6 @@ class Calculator:
                 for node in supplied_method_ir.primitives
                 if isinstance(node, GeometricCounterpoisePrimitive)
             )
-            electronic_family = None
             if corrections:
                 if len(corrections) != 1:
                     raise NotImplementedError(
@@ -367,7 +366,6 @@ class Calculator:
                         raise NotImplementedError(
                             "Calculator D3 execution does not accept a gCP primitive"
                         )
-                    electronic_family = "pbe"
                 elif isinstance(correction, D4Spec):
                     if gcp_nodes:
                         expected = resolve_method(
@@ -379,11 +377,8 @@ class Calculator:
                             != expected.manifest_identity
                         ):
                             raise NotImplementedError(
-                                "Calculator D4+gCP execution requires the canonical r2SCAN-3c MethodIR"
+                                "Calculator D4+gCP execution requires the canonical composite MethodIR"
                             )
-                        electronic_family = "r2scan"
-                    else:
-                        electronic_family = "parameterized-d4"
                 else:
                     raise NotImplementedError(
                         "Calculator MethodIR execution does not support this correction family"
@@ -414,62 +409,23 @@ class Calculator:
                     basis=None,
                 )
             )
-            semilocal = tuple(
-                node
-                for node in electronic_ir.primitives
-                if isinstance(node, SemilocalXCPrimitive)
-            )
-            components = (
-                set(dict(semilocal[0].functional.components))
-                if len(semilocal) == 1
-                else set()
-            )
-            if electronic_family is None:
-                if automatic_libxc_resolution is not None:
-                    if (
-                        electronic_ir.identity
-                        != automatic_libxc_resolution.method.identity
-                    ):
-                        raise RuntimeError(
-                            "automatic Libxc MethodIR changed during Calculator resolution"
-                        )
-                    electronic_family = "automatic-libxc"
-                else:
-                    if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
-                        raise NotImplementedError(
-                            "Calculator electronic MethodIR execution currently supports "
-                            "the PBE family or one automatic Libxc semilocal functional"
-                        )
-                    electronic_family = "pbe"
-
-            if electronic_family == "automatic-libxc":
+            if automatic_libxc_resolution is not None:
+                if (
+                    electronic_ir.identity
+                    != automatic_libxc_resolution.method.identity
+                ):
+                    raise RuntimeError(
+                        "automatic Libxc MethodIR changed during Calculator resolution"
+                    )
                 if automatic_libxc_transport is None:
                     raise RuntimeError(
                         "automatic Libxc native transport was not resolved"
                     )
                 method = automatic_libxc_transport
-            elif electronic_family == "parameterized-d4":
+            else:
                 from .ks import native_dft_carrier_for_ir
 
                 method = native_dft_carrier_for_ir(electronic_ir)
-            elif electronic_family == "pbe":
-                if not components <= {"GGA_X_PBE", "GGA_C_PBE"}:
-                    raise NotImplementedError(
-                        "Calculator PBE-family MethodIR has incompatible semilocal components"
-                    )
-                method = (
-                    "pbe-uks" if supplied_method_ir.spin == "polarized" else "pbe-rks"
-                )
-            else:
-                if components != {"MGGA_X_R2SCAN", "MGGA_C_R2SCAN"}:
-                    raise NotImplementedError(
-                        "canonical r2SCAN-3c requires the audited r2SCAN electronic graph"
-                    )
-                method = (
-                    "r2scan-uks"
-                    if supplied_method_ir.spin == "polarized"
-                    else "r2scan-rks"
-                )
 
             from .ks import AUTOMATIC_SCF_DOMAIN, SCF_DOMAIN, KsOptions
 
