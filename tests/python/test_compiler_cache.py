@@ -84,9 +84,7 @@ def test_compiler_cache_rejects_uncached_compilation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("PATH", "/test/bin")
-    monkeypatch.setattr(
-        compiler_cache.shutil, "which", lambda _name, *, path: None
-    )
+    monkeypatch.setattr(compiler_cache.shutil, "which", lambda _name, *, path: None)
     with pytest.raises(RuntimeError, match="python -m pip install sccache"):
         compiler_cache.cached_compiler_command(["c++", "-c", "x.cpp"])
 
@@ -101,9 +99,7 @@ def test_cpu_and_cuda_adapters_wrap_cache_miss_commands(
         wrapped.append(command)
         return ["verified-cache", *command]
 
-    def compile_run(
-        command: list[str], timeout: float, *, label: str
-    ) -> CompileResult:
+    def compile_run(command: list[str], timeout: float, *, label: str) -> CompileResult:
         assert timeout > 0 and label in {"C++", "NVCC"}
         launched.append(command)
         return CompileResult(0, False, 0.01, "", "")
@@ -117,18 +113,14 @@ def test_cpu_and_cuda_adapters_wrap_cache_miss_commands(
 
     monkeypatch.setattr(cuda_adapter, "cached_compiler_command", wrap)
     monkeypatch.setattr(cuda_adapter, "run_compiler", compile_run)
-    cuda = CudaCompilerAdapter(
-        Path("/opt/cuda/bin/nvcc"), cuda_target_info("sm_120")
-    )
+    cuda = CudaCompilerAdapter(Path("/opt/cuda/bin/nvcc"), cuda_target_info("sm_120"))
     cuda.compile(tmp_path / "x.cu", tmp_path / "x.o")
     assert launched[-1][0] == "verified-cache"
     assert wrapped[-1][0] == "/opt/cuda/bin/nvcc"
 
     link_commands: list[list[str]] = []
 
-    def link_run(
-        command: list[str], **_: Any
-    ) -> subprocess.CompletedProcess[str]:
+    def link_run(command: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
         link_commands.append(command)
         return subprocess.CompletedProcess(command, 0, "", "")
 

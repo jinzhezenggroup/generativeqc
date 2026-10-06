@@ -59,8 +59,7 @@ def _resolve_compiler_cache(path_environment: str) -> CompilerCacheLauncher:
     detail = f" ({'; '.join(failures)})" if failures else ""
     raise RuntimeError(
         "no usable compiler cache launcher found; install sccache with "
-        "`python -m pip install sccache` or install ccache"
-        + detail
+        "`python -m pip install sccache` or install ccache" + detail
     )
 
 
