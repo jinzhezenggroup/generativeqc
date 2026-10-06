@@ -294,6 +294,11 @@ def ks_resource_request(
         raise NotImplementedError(
             "KS planning requires a compiler-resolved native KS execution plan"
         ) from error
+    if model.execution_plan.post_scf:
+        raise NotImplementedError(
+            "KS planning supports electronic contributions only; "
+            "post-SCF corrections require a separate resource owner"
+        )
     if "tau" in model.functional.ingredients:
         raise NotImplementedError(
             "KS planning does not yet account for tau-dependent native XC workspace"

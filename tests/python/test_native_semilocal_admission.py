@@ -207,3 +207,21 @@ def test_native_device_xc_selector_falls_back_for_unsupported_graph() -> None:
         contract=SimpleNamespace(request=SimpleNamespace(observable="potential")),
     )
     assert not _native_device_xc(program, object(), object())
+
+
+@pytest.mark.parametrize("backend", ["cpu", "cuda"])
+@pytest.mark.parametrize("include_forces", [False, True])
+def test_ks_planning_rejects_unaccounted_intrinsic_post_scf_owner(
+    backend: str, include_forces: bool
+) -> None:
+    from generativeqc.resources_ks import ks_resource_request
+
+    with pytest.raises(NotImplementedError, match="post-SCF corrections"):
+        ks_resource_request(
+            [[("H", (0.0, 0.0, -0.7)), ("H", (0.0, 0.0, 0.7))]],
+            method="pbe-d4-rks",
+            backend=backend,
+            basis="sto-3g",
+            ks_options=KsOptions(grid=GridSpec()),
+            include_forces=include_forces,
+        )
