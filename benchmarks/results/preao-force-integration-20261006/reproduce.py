@@ -109,6 +109,7 @@ def main() -> None:
             assert hashlib.sha256(payload).hexdigest() == entry["sha256"]
             (directory / name).write_bytes(payload)
         result = verify(directory)
+    arguments.output.parent.mkdir(parents=True, exist_ok=True)
     arguments.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
 
 
