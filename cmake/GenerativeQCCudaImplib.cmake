@@ -7,11 +7,53 @@
 # needs the proprietary provider shared libraries and the final ELF carries no
 # CUDA provider DT_NEEDED entries.
 
-function(generativeqc_write_cuda_symbol_file output_path)
-  file(WRITE "${output_path}" "")
-  foreach(symbol IN LISTS ARGN)
-    file(APPEND "${output_path}" "${symbol}\n")
-  endforeach()
+include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/GenerativeQCGenerated.cmake")
+
+function(generativeqc_register_cuda_implib_codegen
+         sources_variable codegen_target_variable output_dir base load_name implib_target implib_root)
+  set(symbols ${ARGN})
+  string(REGEX REPLACE "[^A-Za-z0-9_]" "_" implib_key "${base}")
+  set(codegen_target "generativeqc_cuda_implib_${implib_key}_${implib_target}_codegen")
+  set(outputs
+      "${output_dir}/${base}.tramp.S"
+      "${output_dir}/${base}.init.c")
+
+  # One build-graph owner per provider/architecture. Multiple DSOs can consume
+  # the same generated sources without rerunning Python during configure.
+  if(NOT TARGET ${codegen_target})
+    file(MAKE_DIRECTORY "${output_dir}")
+    set(symbol_file "${output_dir}/${base}.symbols")
+    set(symbol_text "")
+    foreach(symbol IN LISTS symbols)
+      string(APPEND symbol_text "${symbol}\n")
+    endforeach()
+    # Keep the tiny curated symbol inventory in CMake's generation phase while
+    # deferring Python/template expansion to the normal incremental build graph.
+    file(GENERATE OUTPUT "${symbol_file}" CONTENT "${symbol_text}")
+
+    generativeqc_register_generated_sources(
+      NAME ${codegen_target}
+      GENERATOR "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cuda_implib.py"
+      OUTPUTS ${outputs}
+      DEPENDS
+        "${symbol_file}"
+        "${implib_root}/arch/${implib_target}/config.ini"
+        "${implib_root}/arch/${implib_target}/table.S.tpl"
+        "${implib_root}/arch/${implib_target}/trampoline.S.tpl"
+        "${implib_root}/arch/common/init.c.tpl"
+      ARGS
+        --base-name "${base}"
+        --symbol-list "${symbol_file}"
+        --load-name "${load_name}"
+        --target "${implib_target}"
+        --implib-root "${implib_root}"
+        --outdir "${output_dir}"
+      COMMENT "Generating ${load_name} lazy CUDA imports")
+  endif()
+
+  set(${sources_variable} "${outputs}" PARENT_SCOPE)
+  set(${codegen_target_variable} "${codegen_target}" PARENT_SCOPE)
 endfunction()
 
 function(generativeqc_attach_cuda_implib target)
@@ -28,9 +70,7 @@ function(generativeqc_attach_cuda_implib target)
   endif()
 
   set(implib_root "${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/implib")
-  set(generator "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cuda_implib.py")
   set(output_dir "${CMAKE_CURRENT_BINARY_DIR}/generated/cuda_implib")
-  file(MAKE_DIRECTORY "${output_dir}")
 
   # Object-level names after CUDA header macro expansion. Keep these curated:
   # -z defs on the final wheel target turns any newly introduced CUDA host API
@@ -142,20 +182,11 @@ function(generativeqc_attach_cuda_implib target)
   set(sonames libcudart.so.12 libcublas.so.12 libcusolver.so.11)
   set(symbol_sets GENERATIVEQC_CUDART_SYMBOLS GENERATIVEQC_CUBLAS_SYMBOLS GENERATIVEQC_CUSOLVER_SYMBOLS)
   foreach(base soname symbol_set IN ZIP_LISTS bases sonames symbol_sets)
-    set(symbol_file "${output_dir}/${base}.symbols")
-    generativeqc_write_cuda_symbol_file("${symbol_file}" ${${symbol_set}})
-    execute_process(
-      COMMAND "${Python3_EXECUTABLE}" "${generator}"
-              --base-name "${base}"
-              --symbol-list "${symbol_file}"
-              --load-name "${soname}"
-              --target "${implib_target}"
-              --implib-root "${implib_root}"
-              --outdir "${output_dir}"
-      COMMAND_ERROR_IS_FATAL ANY)
-    target_sources(${target} PRIVATE
-      "${output_dir}/${base}.tramp.S"
-      "${output_dir}/${base}.init.c")
+    generativeqc_register_cuda_implib_codegen(
+      generated_sources codegen_target "${output_dir}" "${base}" "${soname}"
+      "${implib_target}" "${implib_root}" ${${symbol_set}})
+    add_dependencies(${target} ${codegen_target})
+    target_sources(${target} PRIVATE ${generated_sources})
   endforeach()
 
   target_include_directories(${target} BEFORE PRIVATE
@@ -180,17 +211,11 @@ function(generativeqc_attach_cuda_driver_implib target)
     message(FATAL_ERROR "Unsupported CUDA driver import architecture")
   endif()
   set(output_dir "${CMAKE_CURRENT_BINARY_DIR}/generated/cuda_driver_implib")
-  file(MAKE_DIRECTORY "${output_dir}")
-  set(symbol_file "${output_dir}/libcuda.so.symbols")
-  generativeqc_write_cuda_symbol_file("${symbol_file}" cuGetErrorString cuMemGetAddressRange_v2)
-  execute_process(
-    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_cuda_implib.py"
-      --base-name libcuda.so --symbol-list "${symbol_file}" --load-name libcuda.so.1
-      --target "${implib_target}"
-      --implib-root "${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/implib"
-      --outdir "${output_dir}"
-    COMMAND_ERROR_IS_FATAL ANY)
-  target_sources(${target} PRIVATE
-    "${output_dir}/libcuda.so.tramp.S" "${output_dir}/libcuda.so.init.c")
+  set(implib_root "${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/implib")
+  generativeqc_register_cuda_implib_codegen(
+    generated_sources codegen_target "${output_dir}" libcuda.so libcuda.so.1
+    "${implib_target}" "${implib_root}" cuGetErrorString cuMemGetAddressRange_v2)
+  add_dependencies(${target} ${codegen_target})
+  target_sources(${target} PRIVATE ${generated_sources})
   target_link_libraries(${target} PRIVATE ${CMAKE_DL_LIBS})
 endfunction()
