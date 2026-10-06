@@ -471,9 +471,9 @@ cudaError_t launch_angular_force_passes(
                                           static_cast<int>(Range), PairDerivatives>
           <<<grid, block, shared_bytes, stream>>>(
               batch, screening_tolerance, shell_pair_bounds, shell_pair_density_bounds, pair_order,
-              block_bounds, system_bounds, nullptr, 0U, class_state, schwarz, density, active, output,
-              cursor, nullptr, coulomb_coefficient, exchange_coefficient, Range, omega, 0.0, false,
-              Range == DirectRangeOperator::Long, domain);
+              block_bounds, system_bounds, nullptr, 0U, class_state, schwarz, density, active,
+              output, cursor, nullptr, coulomb_coefficient, exchange_coefficient, Range, omega, 0.0,
+              false, Range == DirectRangeOperator::Long, domain);
     };
     if constexpr (Order == 8 && Range == DirectRangeOperator::FullSources) {
       if (materialized_pair_derivative_available(batch))
