@@ -35,6 +35,9 @@ from .cuda_plan import (
 )
 from .cuda_providers import tensor_lowering_diagnostics
 from .cuda_reduction import (
+    DEFAULT_REDUCTION_LOWERING,
+    ReductionLoweringBinding,
+    cooperative_reduction_eligible,
     cooperative_reduction_provider,
     cooperative_reduction_shared_bytes,
     streamed_reduction_fusion_groups,
@@ -58,8 +61,6 @@ class TensorScheduleSpace:
     # Qualification-only by default: #783 evidence shows a memory win but a
     # runtime/compile regression before cooperative reduction lowering lands.
     stream_reductions: tuple[bool, ...] = field(default=(False,), kw_only=True)
-    # Qualification-only CUB/CCCL pilot; production/default remains generated.
-    reduction_provider: tuple[str, ...] = field(default=("generated",), kw_only=True)
     # Qualification-only until complete-endpoint evidence promotes donation.
     inplace_donation: tuple[bool, ...] = field(default=(False,), kw_only=True)
     direct_gemm: tuple[bool, ...] = (True, False)
@@ -167,7 +168,10 @@ class TensorScreeningPolicy:
 DEFAULT_SCREENING_POLICY = TensorScreeningPolicy()
 
 
-def execution_key(plan: TensorPlan) -> str:
+def execution_key(
+    plan: TensorPlan,
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> str:
     """Ignore requested knobs that do not alter this plan's executable work.
 
     In particular, tile sizes do not affect direct GEMM; oversized packing
@@ -175,6 +179,8 @@ def execution_key(plan: TensorPlan) -> str:
     Aliases, lifetimes, allocations, outputs and target identity remain checked.
     This key only avoids redundant tuning, never replaces an artifact key.
     """
+    if not isinstance(reduction_lowering, ReductionLoweringBinding):
+        raise TypeError("execution key requires a typed reduction lowering binding")
     payload = plan.to_payload()
     payload.pop("schedule")
     # Planning diagnostics are provenance, not executable work. Physical layout
@@ -198,10 +204,10 @@ def execution_key(plan: TensorPlan) -> str:
         if any(step.node.op in ("reduce", "einsum") for step in generic_steps)
         else None
     )
-    payload["reduction_provider"] = (
-        plan.schedule.reduction_provider
+    payload["reduction_lowering"] = (
+        reduction_lowering.to_payload()
         if any(
-            cooperative_reduction_provider(plan, index) is not None
+            cooperative_reduction_eligible(plan, index)
             for index in range(len(plan.steps))
         )
         else None
@@ -280,7 +286,7 @@ def _scalar_reduction_promotion_rejections(plan: TensorPlan) -> tuple[str, ...]:
         if (
             step.virtual
             or step.gemm != "none"
-            or cooperative_reduction_provider(plan, index) is not None
+            or cooperative_reduction_eligible(plan, index)
         ):
             continue
         node = step.node
@@ -403,8 +409,13 @@ def _effective_arithmetic_work(plan: TensorPlan) -> tuple[int, int, int]:
     return effective, virtual_evaluations, rematerialized
 
 
-def estimate_schedule(plan: TensorPlan) -> dict:
+def estimate_schedule(
+    plan: TensorPlan,
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING,
+) -> dict:
     """Reuse exact capacity accounting and expose bounded, calibratable cost proxies."""
+    if not isinstance(reduction_lowering, ReductionLoweringBinding):
+        raise TypeError("schedule estimates require a typed reduction lowering binding")
     live_values, registers = [], 0
     materialized = 0
     shared_bytes = 0
@@ -414,7 +425,10 @@ def estimate_schedule(plan: TensorPlan) -> dict:
             for child in step.inputs
         )
         live_values.append(live)
-        shared_bytes = max(shared_bytes, cooperative_reduction_shared_bytes(plan, i))
+        shared_bytes = max(
+            shared_bytes,
+            cooperative_reduction_shared_bytes(plan, i, reduction_lowering),
+        )
         if not step.virtual and step.node.op not in ("input", "constant"):
             materialized += step.node.spec.size * step.node.spec.itemsize
             estimate = 16 + 2 * live + 2 * len(step.node.spec.shape)
@@ -429,7 +443,13 @@ def estimate_schedule(plan: TensorPlan) -> dict:
             elif step.gemm == "packed":
                 estimate += 2 * (plan.schedule.staging_width - 1)
             registers = max(registers, estimate)
-    source_bytes = len(emit_cuda(plan, embed_static_data=False).encode("utf-8"))
+    source_bytes = len(
+        emit_cuda(
+            plan,
+            embed_static_data=False,
+            reduction_lowering=reduction_lowering,
+        ).encode("utf-8")
+    )
     resident = _resident_blocks(plan, registers, shared_bytes)
     traffic = plan.semantic_traffic
     occupancy = resident * plan.schedule.threads / plan.target.maximum_threads_per_sm
@@ -456,7 +476,7 @@ def estimate_schedule(plan: TensorPlan) -> dict:
         precision_widened_accumulation_terms=widened_accumulation_terms,
     )
     batch = plan.batch_schedule
-    lowering = tensor_lowering_diagnostics(plan)
+    lowering = tensor_lowering_diagnostics(plan, reduction_lowering)
     lowering_providers = (
         ",".join(typing.cast("list[str]", lowering["providers"])) or "none"
     )
@@ -558,10 +578,16 @@ class ScheduleCandidate:
     estimates: dict | None = None
     equivalent_to: str | None = None
     precision_schedule: dict | None = None
+    reduction_lowering: ReductionLoweringBinding = DEFAULT_REDUCTION_LOWERING
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reduction_lowering, ReductionLoweringBinding):
+            raise TypeError("schedule candidate requires a typed reduction lowering")
 
     def to_payload(self) -> typing.Any:
         row = {
             "requested_schedule": asdict(self.requested),
+            "reduction_lowering": self.reduction_lowering.to_payload(),
             "status": self.status,
             "stage": self.stage,
         }
@@ -594,6 +620,7 @@ def plan_schedule_search(
     limits: typing.Any = DEFAULT_SEARCH_LIMITS,
     *,
     precision_programs: typing.Any = None,
+    reduction_lowerings: typing.Any = None,
 ) -> typing.Any:
     """Plan, deduplicate and statically prune without compiling or allocating."""
     if not isinstance(limits, TensorSearchLimits):
@@ -604,18 +631,29 @@ def plan_schedule_search(
         if precision_programs is None
         else tuple(islice(precision_programs, limits.maximum_candidates + 1))
     )
+    lowerings = (
+        (DEFAULT_REDUCTION_LOWERING,)
+        if reduction_lowerings is None
+        else tuple(islice(reduction_lowerings, limits.maximum_candidates + 1))
+    )
     if (
         not schedules
         or not programs
-        or len(schedules) * len(programs) > limits.maximum_candidates
+        or not lowerings
+        or len(schedules) * len(programs) * len(lowerings)
+        > limits.maximum_candidates
     ):
         raise ValueError(
-            "schedule/precision product exceeds the candidate limit or is empty"
+            "schedule/precision/lowering product exceeds the candidate limit or is empty"
         )
     if any(not isinstance(s, TensorSchedule) for s in schedules):
         raise TypeError("search requires TensorSchedule candidates")
     if any(not isinstance(program, Program) for program in programs):
         raise TypeError("precision variants must be TensorIR Programs")
+    if any(
+        not isinstance(lowering, ReductionLoweringBinding) for lowering in lowerings
+    ):
+        raise TypeError("reduction lowerings must be typed bindings")
     baseline_abi = _program_abi(baseline.program)
     resolved = []
     for program in programs:
@@ -630,7 +668,9 @@ def plan_schedule_search(
             )
         resolved.append((program, precision.to_payload()))
 
-    seen = {execution_key(baseline): baseline.identity}
+    seen = {
+        execution_key(baseline, DEFAULT_REDUCTION_LOWERING): baseline.identity
+    }
     candidates = []
     for program, precision in resolved:
         for requested in schedules:
@@ -645,72 +685,78 @@ def plan_schedule_search(
                     provider_bytes=baseline.provider_bytes,
                 )
             except ValueError as error:
-                candidates.append(
-                    ScheduleCandidate(
-                        requested,
-                        None,
-                        "pruned",
-                        "legality",
-                        str(error),
-                        precision_schedule=precision,
+                for lowering in lowerings:
+                    candidates.append(
+                        ScheduleCandidate(
+                            requested,
+                            None,
+                            "pruned",
+                            "legality",
+                            str(error),
+                            precision_schedule=precision,
+                            reduction_lowering=lowering,
+                        )
                     )
-                )
                 continue
-            key = execution_key(plan)
-            if key in seen:
+            for lowering in lowerings:
+                key = execution_key(plan, lowering)
+                if key in seen:
+                    candidates.append(
+                        ScheduleCandidate(
+                            requested,
+                            plan,
+                            "pruned",
+                            "duplicate",
+                            "equivalent executable plan",
+                            equivalent_to=seen[key],
+                            precision_schedule=precision,
+                            reduction_lowering=lowering,
+                        )
+                    )
+                    continue
+                seen[key] = plan.identity
+                try:
+                    estimates = estimate_schedule(plan, lowering)
+                except ValueError as error:
+                    candidates.append(
+                        ScheduleCandidate(
+                            requested,
+                            plan,
+                            "pruned",
+                            "legality",
+                            str(error),
+                            precision_schedule=precision,
+                            reduction_lowering=lowering,
+                        )
+                    )
+                    continue
+                reasons = list(estimates["static_promotion_rejections"])
+                if estimates["generated_source_bytes"] > limits.maximum_source_bytes:
+                    reasons.append("generated source exceeds compile-cost budget")
+                if estimates["estimated_registers_per_thread"] > min(
+                    plan.target.tuning_maximum_registers,
+                    plan.target.maximum_registers_per_thread,
+                ):
+                    reasons.append("estimated register pressure exceeds target policy")
+                if (
+                    estimates["resident_blocks_upper_bound"]
+                    < limits.minimum_resident_blocks
+                ):
+                    reasons.append(
+                        "estimated occupancy cannot satisfy resident-block policy"
+                    )
                 candidates.append(
                     ScheduleCandidate(
                         requested,
                         plan,
-                        "pruned",
-                        "duplicate",
-                        "equivalent executable plan",
-                        equivalent_to=seen[key],
+                        "pruned" if reasons else "ready",
+                        "static-resource",
+                        "; ".join(reasons) if reasons else None,
+                        estimates,
                         precision_schedule=precision,
+                        reduction_lowering=lowering,
                     )
                 )
-                continue
-            seen[key] = plan.identity
-            try:
-                estimates = estimate_schedule(plan)
-            except ValueError as error:
-                candidates.append(
-                    ScheduleCandidate(
-                        requested,
-                        plan,
-                        "pruned",
-                        "legality",
-                        str(error),
-                        precision_schedule=precision,
-                    )
-                )
-                continue
-            reasons = list(estimates["static_promotion_rejections"])
-            if estimates["generated_source_bytes"] > limits.maximum_source_bytes:
-                reasons.append("generated source exceeds compile-cost budget")
-            if estimates["estimated_registers_per_thread"] > min(
-                plan.target.tuning_maximum_registers,
-                plan.target.maximum_registers_per_thread,
-            ):
-                reasons.append("estimated register pressure exceeds target policy")
-            if (
-                estimates["resident_blocks_upper_bound"]
-                < limits.minimum_resident_blocks
-            ):
-                reasons.append(
-                    "estimated occupancy cannot satisfy resident-block policy"
-                )
-            candidates.append(
-                ScheduleCandidate(
-                    requested,
-                    plan,
-                    "pruned" if reasons else "ready",
-                    "static-resource",
-                    "; ".join(reasons) if reasons else None,
-                    estimates,
-                    precision_schedule=precision,
-                )
-            )
     return tuple(candidates)
 
 
