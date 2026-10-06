@@ -281,18 +281,25 @@ CoulombAuxiliary fill_range_coulomb(unsigned maximum_angular, double exponent, c
                                     const Vec3& center, CoulombRange range, double omega) {
   if (range == CoulombRange::Full)
     throw std::invalid_argument("range ERI helper requires short- or long-range operator");
-  if (product[0].derivative.size() != 0 || center[0].derivative.size() != 0)
-    throw std::logic_error("value-only range ERI helper cannot publish nuclear derivatives");
   if (maximum_angular > 13)
     throw std::invalid_argument("range ERI angular order exceeds validated radial moments");
 
-  std::array<double, 14> moments{};
-  if (!range_moments(maximum_angular, exponent * distance_squared(product, center).value, exponent,
-                     range, omega, moments.data()))
+  const Jet argument = exponent * distance_squared(product, center);
+  const bool derivatives = !argument.derivative.empty();
+  std::array<double, 15> moments{};
+  const unsigned radial_maximum = maximum_angular + (derivatives ? 1U : 0U);
+  if (!bounded_range_moments<14>(radial_maximum, argument.value, exponent, range, omega,
+                                 moments.data()))
     throw std::invalid_argument("invalid range-separated ERI radial inputs");
   std::vector<Jet> radial;
   radial.reserve(static_cast<std::size_t>(maximum_angular) + 1);
-  for (unsigned n = 0; n <= maximum_angular; ++n) radial.emplace_back(moments[n], 0);
+  for (unsigned n = 0; n <= maximum_angular; ++n) {
+    Jet moment(moments[n], argument.derivative.size());
+    if (derivatives)
+      for (std::size_t coordinate = 0; coordinate < argument.derivative.size(); ++coordinate)
+        moment.derivative[coordinate] = -moments[n + 1] * argument.derivative[coordinate];
+    radial.push_back(std::move(moment));
+  }
   return fill_coulomb_recurrence(maximum_angular, exponent, product, center, radial);
 }
 
@@ -546,7 +553,7 @@ Jet production_eri_cartesian(double alpha, const Vec3& a,
                                  delta, d, angular_d);
 }
 
-double primitive_range_eri_cartesian(double alpha, const Vec3& a,
+Jet primitive_range_eri_cartesian(double alpha, const Vec3& a,
                                      const molecule::CartesianComponent& angular_a, double beta,
                                      const Vec3& b, const molecule::CartesianComponent& angular_b,
                                      double gamma, const Vec3& c,
@@ -572,7 +579,7 @@ double primitive_range_eri_cartesian(double alpha, const Vec3& a,
   const CoulombAuxiliary auxiliary =
       fill_range_coulomb(maximum, rho, product_p, product_q, range, omega);
 
-  Jet value(0.0, 0);
+  Jet value(0.0, a[0].derivative.size());
   for (unsigned t = 0; t <= angular_a[0] + angular_b[0]; ++t) {
     for (unsigned u = 0; u <= angular_a[1] + angular_b[1]; ++u) {
       for (unsigned v = 0; v <= angular_a[2] + angular_b[2]; ++v) {
@@ -595,7 +602,7 @@ double primitive_range_eri_cartesian(double alpha, const Vec3& a,
     }
   }
   const double prefactor = 2.0 * std::pow(std::numbers::pi, 2.5) / (p * q * std::sqrt(p + q));
-  return prefactor * value.value;
+  return prefactor * value;
 }
 
 struct AoView {
@@ -1198,10 +1205,16 @@ std::vector<double> contract_weighted_density_fitting_derivative(
   }
   return result;
 }
-DensityFittingIntegralData build_density_fitting_integrals(const core::System& orbital_system,
-                                                           const core::System& auxiliary_system,
-                                                           bool include_derivatives) {
+DensityFittingIntegralData build_density_fitting_integrals(
+    const core::System& orbital_system, const core::System& auxiliary_system,
+    bool include_derivatives, CoulombRange range, double omega) {
   require_matching_density_fitting_geometry(orbital_system, auxiliary_system);
+  if (range == CoulombRange::Full) {
+    if (omega != 0.0)
+      throw std::invalid_argument("full-range density fitting requires zero omega");
+  } else if (!std::isfinite(omega) || omega <= 0.0) {
+    throw std::invalid_argument("range-separated density fitting requires positive finite omega");
+  }
 
   DensityFittingIntegralData cartesian;
   cartesian.nbf = molecule::cartesian_ao_count(orbital_system);
@@ -1211,6 +1224,7 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
   const std::vector<AoView> auxiliary_aos = expand_cartesian_aos(auxiliary_system);
 
   const bool generated_supported =
+      range == CoulombRange::Full &&
       std::all_of(orbital_aos.begin(), orbital_aos.end(),
                   [](const AoView& ao) { return ao.shell->angular_momentum <= 3; }) &&
       std::all_of(auxiliary_aos.begin(), auxiliary_aos.end(),
@@ -1399,12 +1413,19 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
           for (const core::Primitive& second_primitive : second_auxiliary.shell->primitives) {
             const double weight =
                 component_factor * first_primitive.coefficient * second_primitive.coefficient;
-            value =
-                value + weight * primitive_eri_cartesian(first_primitive.exponent, first_center,
-                                                         first_auxiliary.angular, 0.0, first_center,
-                                                         zero_angular, second_primitive.exponent,
-                                                         second_center, second_auxiliary.angular,
-                                                         0.0, second_center, zero_angular);
+            value = value +
+                    weight *
+                        (range == CoulombRange::Full
+                             ? primitive_eri_cartesian(
+                                   first_primitive.exponent, first_center, first_auxiliary.angular,
+                                   0.0, first_center, zero_angular, second_primitive.exponent,
+                                   second_center, second_auxiliary.angular, 0.0, second_center,
+                                   zero_angular)
+                             : primitive_range_eri_cartesian(
+                                   first_primitive.exponent, first_center, first_auxiliary.angular,
+                                   0.0, first_center, zero_angular, second_primitive.exponent,
+                                   second_center, second_auxiliary.angular, 0.0, second_center,
+                                   zero_angular, range, omega));
           }
         }
         metric[matrix_index(p, q, cartesian.naux)] = std::move(value);
@@ -1433,11 +1454,19 @@ DensityFittingIntegralData build_density_fitting_integrals(const core::System& o
                                       second_primitive.coefficient *
                                       auxiliary_primitive.coefficient;
                 value = value +
-                        weight * primitive_eri_cartesian(
-                                     first_primitive.exponent, first_center, first_ao.angular,
-                                     second_primitive.exponent, second_center, second_ao.angular,
-                                     auxiliary_primitive.exponent, auxiliary_center,
-                                     auxiliary_ao.angular, 0.0, auxiliary_center, zero_angular);
+                        weight *
+                            (range == CoulombRange::Full
+                                 ? primitive_eri_cartesian(
+                                       first_primitive.exponent, first_center, first_ao.angular,
+                                       second_primitive.exponent, second_center, second_ao.angular,
+                                       auxiliary_primitive.exponent, auxiliary_center,
+                                       auxiliary_ao.angular, 0.0, auxiliary_center, zero_angular)
+                                 : primitive_range_eri_cartesian(
+                                       first_primitive.exponent, first_center, first_ao.angular,
+                                       second_primitive.exponent, second_center, second_ao.angular,
+                                       auxiliary_primitive.exponent, auxiliary_center,
+                                       auxiliary_ao.angular, 0.0, auxiliary_center, zero_angular,
+                                       range, omega));
               }
             }
           }
