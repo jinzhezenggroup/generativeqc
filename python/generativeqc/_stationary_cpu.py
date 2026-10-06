@@ -53,13 +53,13 @@ from generativeqc_compiler.xc.grid_native import NativeGridContraction
 from generativeqc_compiler.xc.grid_response import partition_response
 from generativeqc_compiler.xc.native import NativeContractionProgram
 
-from .ks import uses_molecular_nonlocal_domain
 from ._dft_gradient import (
     StationaryDerivativeContract,
     _native_ao_atoms,
     native_ao_geometry_identity,
 )
 from ._stationary_rsh_cpu import RangeExchangeExecutor
+from .ks import uses_molecular_nonlocal_domain
 from .nonlocal_runtime import NativeNonlocalPairProvider
 
 
