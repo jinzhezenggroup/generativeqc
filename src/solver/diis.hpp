@@ -61,8 +61,7 @@ class Diis {
             result[i] += coefficients[row] * history_.vectors()[row][i];
         return {std::move(result), true};
       }
-      if (action == detail::DiisCoefficientAction::RetainCurrent)
-        return {std::move(vector), false};
+      if (action == detail::DiisCoefficientAction::RetainCurrent) return {std::move(vector), false};
       history_.retire_oldest();
       ++restarts_;
     }
