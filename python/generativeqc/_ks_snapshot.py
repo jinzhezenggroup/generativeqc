@@ -972,6 +972,7 @@ class NativeKsSnapshot:
                 f"native-{self.backend}-{coulomb_approximation}-j-"
                 f"{exchange_approximation}-k-fp64"
             )
+        method = self._batch._calculator._method_name
         provider_payload = {
             "provider": provider_name,
             "owner": owner,
