@@ -15,7 +15,11 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_cuda_wheel_imports_are_linker_discovered() -> None:
     cmake = (ROOT / "cmake/GenerativeQCCudaImplib.cmake").read_text()
     assert "tools/link_cuda_implib.py" in cmake
-    assert "RULE_LAUNCH_LINK" in cmake
+    assert "CXX_LINKER_LAUNCHER" in cmake
+    assert "CUDA_LINKER_LAUNCHER" in cmake
+    assert "RULE_LAUNCH_LINK" not in cmake
+    assert "add_library(generativeqc_cuda_wheel_imports INTERFACE)" in cmake
+    assert "target_link_options(generativeqc_cuda_wheel_imports INTERFACE" in cmake
     assert "GENERATIVEQC_CUDART_SYMBOLS" not in cmake
     assert "GENERATIVEQC_CUBLAS_SYMBOLS" not in cmake
     assert "GENERATIVEQC_CUSOLVER_SYMBOLS" not in cmake
