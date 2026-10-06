@@ -296,8 +296,9 @@ for the algebraic rationale and qualification evidence.
 orbital/auxiliary systems and a conventional physical RHF reference. The
 internal `run_rccsd_native_state` entry accepts an optional correlation auxiliary
 system to compose native CUDA RHF, this source, and the native DF CCSD solver.
-Public descriptors still reject DF; native DF triples, Lambda and forces are
-not registered by this entry.
+This lower-level entry does not register public capabilities by itself; the
+public DfRccsdt provider uses the higher-level `run_df_ccsdt_native`
+composition for energy and forces.
 The value source accepts orbital shells through f and auxiliary shells through
 g. The shared capability check runs before RHF. Existing through-f values use
 Rys quadrature; g auxiliary values use compiler-generated Gaussian moment
