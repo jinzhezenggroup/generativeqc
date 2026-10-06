@@ -3,7 +3,7 @@ import typing
 
 import numpy as np
 import pytest
-from generativeqc import Calculator, Primitive, Shell
+from generativeqc import Calculator, GridSpec, KsOptions, Primitive, Shell
 
 
 def _cuda_tolerances() -> tuple[float, float]:
@@ -105,6 +105,9 @@ def test_cuda_minimal_pbe_rks_matches_cpu_reference() -> None:
     options = {
         "method": "pbe-rks",
         "basis": basis,
+        "ks_options": KsOptions(
+            grid=GridSpec(radial_points=12, angular_polar=4, angular_azimuth=8)
+        ),
         "energy_tolerance": 1.0e-10,
         "density_tolerance": 1.0e-8,
     }
