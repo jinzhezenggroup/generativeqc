@@ -1399,7 +1399,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
           execution_plan_.automatic_program
               ? "#1122"
               : (dft::semilocal_family_requires_tau(execution_plan_.semilocal_family) ? "#164"
-                                                                                     : "#163");
+                                                                                      : "#163");
       throw MethodError(GENERATIVEQC_STATUS_NOT_IMPLEMENTED,
                         std::string(method_name) +
                             " KS nuclear gradients are tracked separately in issue " + issue);
@@ -1538,8 +1538,7 @@ class KsPreparedCalculation final : public PreparedCalculation {
                         options_.semilocal_correlation_scale};
       if (range_correction_) identity.model.range_correction = range_correction_->strategy();
       if (nonlocal_) identity.model.nonlocal_correlation = nonlocal_->parameters();
-      if (dft::semilocal_family_uses_molecular_nonlocal_domain(
-              execution_plan_.semilocal_family))
+      if (dft::semilocal_family_uses_molecular_nonlocal_domain(execution_plan_.semilocal_family))
         identity.model.nonlocal_density_domain = dft::nlc::Vv10DensityDomain::MolecularV1;
       dft::KsPhysicalState physical{identity,
                                     true,
