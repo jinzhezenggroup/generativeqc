@@ -45,7 +45,7 @@ def interleaved_drain(classes: list[int], workers: int, seed: int) -> Counter[in
     heads, links = publish(classes, order)
     # Each worker retains a class after success, exactly as a warp leader does.
     states = [
-        dict(bucket=i % BUCKETS, phase="load", observed=EMPTY, visited=0)
+        {"bucket": i % BUCKETS, "phase": "load", "observed": EMPTY, "visited": 0}
         for i in range(workers)
     ]
     visits: Counter[int] = Counter()
