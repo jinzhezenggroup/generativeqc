@@ -155,9 +155,10 @@ void cross_overlap(const core::System& target, const core::System& source,
  * implementation remains the independent correctness oracle for CUDA DF
  * integral-generation kernels.
  */
-DensityFittingIntegralData build_density_fitting_integrals(const core::System& orbital_system,
-                                                           const core::System& auxiliary_system,
-                                                           bool include_derivatives = true);
+DensityFittingIntegralData build_density_fitting_integrals(
+    const core::System& orbital_system, const core::System& auxiliary_system,
+    bool include_derivatives = true, CoulombRange range = CoulombRange::Full,
+    double omega = 0.0);
 
 /** Contract public-basis DF derivative weights directly into nuclear coordinates.
  *
